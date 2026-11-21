@@ -6756,6 +6756,9 @@ looked at and none skipped or loosened.
 
 ## NX-528 Supertonic 3 is not in the image (2026-11-21; before the public launch)
 
+*Superseded in part by NX-529 (2026-11-21): Supertonic 3 stays out of the image, and now downloads into
+`/persist/voice-models` once the person agrees to Open RAIL-M in Settings.*
+
 - `whombat.voice.supertonic.model` defaults to null, so the image carries no Dutch voice model and the voice service's
   health lists only English. `checks.voice-config` asserts that the service starts without it; `checks.voice-speech`
   still builds the model and checks Dutch speech, so the voice comes back working.
@@ -6768,3 +6771,37 @@ looked at and none skipped or loosened.
 - What changes for a box: a Dutch answer at the desk is spoken by the English voice, as before NX-476. Dutch speech
   recognition (Parakeet, Whisper) is unchanged. The voice service, `supertonic-speak` and the model's package stay in
   the repository; an image that sets the option takes on the licence's terms for its users.
+
+## NX-529 Supertonic 3 downloads on opt-in into `/persist/voice-models` (2026-11-21; Whombat desk-display-talk.md DK-T26)
+
+- **Engine in the image, weights out of the image**: `supertonic-speak` (`nix/packages/voice-engines/supertonic-speak.cpp`,
+  GPL-3.0-only, linking `libsherpa-onnx-c-api.so`) stays in the image because it contains no Supertone code or model
+  weights; BigScience Open RAIL-M governs only the Supertonic 3 weights. `whombat.voice.supertonic.model` stays `null`
+  by default, so the image carries no Supertonic 3 files, while `whombat-voice` always starts with
+  `--supertonic ${cfg.kokoro.package}/bin/supertonic-speak --supertonic-speakers 1,8` (and passes `--supertonic-model`
+  only if an image explicitly sets one).
+- **Multi-file model fetcher**: `models.Manifest` (`appliance/voice/internal/models`) accepts either a single-file
+  entry (`file`, `url`, `size`, `sha256`) or a directory entry (`dir`, `files: [{ name, url, size, sha256 }]`) with
+  strict checks (known ids, no path traversal or `.part` names, no duplicate targets or filenames, HTTPS or loopback
+  test URLs, positive sizes summing within `VoiceModelMaxBytes`, lowercase hex SHA-256). `whombat-voice-models`
+  (`appliance/voice/internal/fetch`) downloads a multi-file model into staging directory `.<dir>.part` (`0o750`,
+  inheriting group `whombat-voice` from `/persist/voice-models`'s `2750`), resuming mid-file with HTTP `Range` and
+  skipping files already verified by SHA-256 across restarts, checks free space before starting, publishes atomically
+  by renaming `.<dir>.part` to `<dir>` only after every file passes size and SHA-256 verification, and removes both
+  paths on `remove`.
+- **Pinned manifest**: `voice-models.json` (`nix/packages/voice-models/default.nix`) lists `parakeet`, `whisper`, and
+  `supertonic` (`dir: "supertonic-3-int8"`): the seven sherpa-onnx int8 files from
+  `csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11` (`cca5a0e6`) plus `LICENSE` from
+  `Supertone/supertonic-3` (`3cadd1ee`), totalling 145 310 775 bytes, so the Open RAIL-M licence travels with the
+  model. Downloaded files live in `/persist/voice-models/supertonic-3-int8`, surviving appliance updates (subvolume
+  excluded from backups; re-downloaded if needed).
+- **Dynamic loading and STT guard**: `engine.Supertonic` uses `--supertonic-model` when set, otherwise resolves
+  `supertonic` from `--manifest` and `--models` (`models.Present`) on each health and TTS call, so Dutch turns on as
+  soon as the download completes and turns off when removed, with no service restart. `engine.STT.bin` matches only
+  `parakeet` and `whisper` so `supertonic` never appears as a speech-to-text model.
+- **Checks**: Go unit tests in `models`, `fetch`, and `engine`; `checks.voice-config` verifies `supertonic-speak` and
+  `--supertonic-speakers 1,8` are wired with no `--supertonic-model` and that `voice-models.json` lists `supertonic`
+  with `LICENSE`; `checks.voice-speech` runs `whombat-voice` without `--supertonic-model` and verifies English-only
+  before placement, Dutch speech after symlinking the model directory, and English-only again after removal;
+  `vm-tests/voice.nix` verifies multi-file download, permissions, dynamic health toggle, and removal inside the real
+  systemd sandboxes.

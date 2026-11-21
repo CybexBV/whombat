@@ -1371,20 +1371,24 @@ Setup and operation: `docs/github.md`.
   message is the burrow's. Signed events carry ids, sizes and hashes, never names or bytes.
 - **Voice typing** (`apps/server/src/voice/`, [dictation.md](docs/decisions/dictation.md)): the person speaks in a
   composer and the box turns the recording into text with its own speech models. The settings (on, speech model,
-  language) are the box's one `voice_typing` row, changed in one signed commit by `voice.update`. The speech service
-  (`whombat-voice`, `WHOMBAT_VOICE_SOCKET`) says in its health which models it runs and on which graphics chip; the
-  model fetcher (`whombat-voice-models`, `WHOMBAT_VOICE_MODELS_SOCKET`) downloads them. The server asks the fetcher for
-  what the settings and the desk's Talk want at start and after every change, never removes anything by itself, and
-  while a model downloads reads it every 2 s and tells the person with `voice.changed`. A recording is a `dictation`
-  upload: kept in memory, checked like any upload, sent to the speech service with the model, the language and (for
-  Whisper) the names the person may say, and answered in `stream_done` as text; the audio and the text are never
-  stored or logged. The desk's Talk mic is voice typing too: the desk socket's `hear` turns its recording into text
-  the same way (allowed by Talk's own switch) for Talk's box, and the person sends the words as a question. Talk says
-  its answers aloud with the speech service (Kokoro in the voice the person chose); an answer in Dutch, told by its
-  words, is written out as it is said (numbers, times, names like pve-02) and said in the service's Dutch voice
-  (Supertonic 3) of the same kind, when the service's health lists Dutch (the image has no Dutch voice: the
-  appliance's nixos.md NX-528)
-  ([desk-display-talk.md](docs/decisions/desk-display-talk.md)). `WHOMBAT_VOICE=fake` brings a fake speech service and a fake fetcher whose downloads take a few seconds.
+  language, and the opt-in Dutch voice agreement — who agreed, when, and the Open RAIL-M licence version) are the box's
+  one `voice_typing` row, changed in signed commits by `voice.update` and `voice.setDutchVoice` (which is blocked from
+  the assistant). The speech service (`whombat-voice`, `WHOMBAT_VOICE_SOCKET`) says in its health which speech-to-text
+  models and speech languages it runs and on which graphics chip; the model fetcher (`whombat-voice-models`,
+  `WHOMBAT_VOICE_MODELS_SOCKET`) downloads both single-file speech-to-text models and the multi-file Supertonic 3 Dutch
+  voice (pinned URLs, per-file SHA-256, resumable, with its `LICENSE`) into `/persist/voice-models`. The server asks
+  the fetcher for what the settings and the desk's Talk want at start and after every change — fetching `supertonic`
+  only after the person agrees in Settings, removing it when Dutch voice is off, and never removing speech-to-text
+  models by itself — and while a model downloads reads it every 2 s and tells the person with `voice.changed`. A
+  recording is a `dictation` upload: kept in memory, checked like any upload, sent to the speech service with the
+  model, the language and (for Whisper) the names the person may say, and answered in `stream_done` as text; the audio
+  and the text are never stored or logged. The desk's Talk mic is voice typing too: the desk socket's `hear` turns its
+  recording into text the same way (allowed by Talk's own switch) for Talk's box, and the person sends the words as a
+  question. Talk says its answers aloud with the speech service (Kokoro in the voice the person chose); an answer in
+  Dutch, told by its words, is written out as it is said (numbers, times, names like pve-02) and said in the service's
+  Dutch voice (Supertonic 3) of the same kind when installed, falling back to English Kokoro when absent or if Dutch
+  synthesis fails ([desk-display-talk.md](docs/decisions/desk-display-talk.md), appliance `nixos.md` NX-529).
+  `WHOMBAT_VOICE=fake` brings a fake speech service and a fake fetcher whose downloads take a few seconds.
 - **Notifications** (`domain/message-notify.ts`): one rule decides what notifies the person, at their level for the
   room; the agent and Whombat's signers are never notified. Do not disturb and quiet hours hold push back.
 - **Home** (`apps/server/src/home/`): `home.overview` (the things, Done recently with Undo, widgets, health, and the
