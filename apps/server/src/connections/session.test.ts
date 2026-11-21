@@ -565,3 +565,128 @@ describe('two-step sign-in asked once (SG-09)', () => {
     ]);
   });
 });
+
+/* Cookie-based sessions (qBittorrent and Frigate) ------------------------------------------------------------------- */
+
+const QBT_SESSION: SessionAuth = {
+  type: 'session',
+  login: {
+    method: 'POST',
+    path: '/api/v2/auth/login',
+    encoding: 'form',
+    body: { username: '{username}', password: '{secret}' },
+  },
+  tokenCookie: 'SID',
+  ttlSeconds: 3600,
+  apply: { type: 'cookie', name: 'SID' },
+  logout: { method: 'POST', path: '/api/v2/auth/logout' },
+  failures: [
+    { status: [200], bodyPattern: '^\\s*Fails\\.?\\s*$', reason: 'refused' },
+    { status: [403], bodyPattern: 'banned', reason: 'locked' },
+  ],
+};
+
+const FRIGATE_SESSION: SessionAuth = {
+  type: 'session',
+  login: {
+    method: 'POST',
+    path: '/api/login',
+    body: { user: '{username}', password: '{secret}' },
+  },
+  tokenCookie: 'frigate_token',
+  ttlSeconds: 3600,
+  apply: { type: 'cookie', name: 'frigate_token' },
+  logout: { method: 'GET', path: '/api/logout' },
+};
+
+describe('cookie-based session sign-ins', () => {
+  it('signs in to a qBittorrent-style form endpoint, keeps the SID cookie, handles Fails. and banned, and logs out', async () => {
+    let banned = false;
+    stub = await startStub((req) => {
+      if (req.path === '/api/v2/auth/login' && req.method === 'POST') {
+        if (banned) return { status: 403, body: 'User IP is banned for too many failed login attempts' };
+        const form = req.form();
+        if (form.username === 'admin' && form.password === APP_PASSWORD) {
+          return {
+            status: 200,
+            headers: { 'Set-Cookie': 'SID=qbt-cookie-42; HttpOnly; Path=/; SameSite=Strict' },
+            body: 'Ok.',
+          };
+        }
+        return { status: 200, body: 'Fails.' };
+      }
+      if (req.path === '/api/v2/auth/logout' && req.method === 'POST') return { status: 200, body: '' };
+      return { status: 404 };
+    });
+
+    const made = await signInSession(send, {
+      entry: { ...NAS_ENTRY, name: 'qBittorrent' },
+      auth: QBT_SESSION,
+      baseUrl: stub.url,
+      secret: APP_PASSWORD,
+      fields: { username: 'admin' },
+      now: NOW,
+    });
+    expect(made).toEqual({ token: 'qbt-cookie-42', expiresAt: new Date(NOW.getTime() + 3_600_000) });
+    expect(sessionCredential(QBT_SESSION.apply, made.token)).toEqual({
+      headers: { Cookie: 'SID=qbt-cookie-42' },
+      query: {},
+    });
+
+    await signOutSession(send, { auth: QBT_SESSION, baseUrl: stub.url, token: made.token });
+    expect(stub.calls('POST /api/v2/auth/logout')[0]?.headers.cookie).toBe('SID=qbt-cookie-42');
+
+    const wrong = (await signInSession(send, {
+      entry: { ...NAS_ENTRY, name: 'qBittorrent' },
+      auth: QBT_SESSION,
+      baseUrl: stub.url,
+      secret: 'wrong',
+      fields: { username: 'admin' },
+      now: NOW,
+    }).catch((e: unknown) => e)) as SessionError;
+    expect(wrong.reason).toBe('refused');
+    expect(accountRefused(wrong)).toBe(true);
+
+    banned = true;
+    const locked = (await signInSession(send, {
+      entry: { ...NAS_ENTRY, name: 'qBittorrent' },
+      auth: QBT_SESSION,
+      baseUrl: stub.url,
+      secret: APP_PASSWORD,
+      fields: { username: 'admin' },
+      now: NOW,
+    }).catch((e: unknown) => e)) as SessionError;
+    expect(locked.reason).toBe('locked');
+    expect(accountRefused(locked)).toBe(false);
+  });
+
+  it('signs in to a Frigate-style JSON endpoint and reads frigate_token from Set-Cookie', async () => {
+    stub = await startStub((req) => {
+      if (req.path === '/api/login' && req.method === 'POST') {
+        const body = req.json();
+        if (body?.user === 'admin' && body?.password === APP_PASSWORD) {
+          return {
+            status: 200,
+            headers: { 'Set-Cookie': ['frigate_token=jwt.payload.sig; HttpOnly; Path=/; Secure'] },
+            json: { message: 'Login successful' },
+          };
+        }
+        return { status: 401, json: { message: 'Login failed' } };
+      }
+      if (req.path === '/api/logout' && req.method === 'GET') return { status: 200 };
+      return { status: 404 };
+    });
+
+    const made = await signInSession(send, {
+      entry: { ...NAS_ENTRY, name: 'Frigate' },
+      auth: FRIGATE_SESSION,
+      baseUrl: stub.url,
+      secret: APP_PASSWORD,
+      fields: { username: 'admin' },
+      now: NOW,
+    });
+    expect(made.token).toBe('jwt.payload.sig');
+    await signOutSession(send, { auth: FRIGATE_SESSION, baseUrl: stub.url, token: made.token });
+    expect(stub.calls('GET /api/logout')[0]?.headers.cookie).toBe('frigate_token=jwt.payload.sig');
+  });
+});

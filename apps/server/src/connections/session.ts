@@ -175,7 +175,7 @@ export async function signInSession(
   if (res.status === 404) throw new SessionError('missing', res.status, 'There is no sign-in there.');
   if (res.status < 200 || res.status >= 300)
     throw new SessionError('other', res.status, `The sign-in answered ${res.status}.`);
-  const token = sessionAnswerToken(input.auth, text);
+  const token = sessionAnswerToken(input.auth, text, res.headers['set-cookie']);
   if (!token || /[\r\n]/.test(token))
     throw asksTwoStep(jsonOf(res))
       ? new SessionError('two_step', res.status, 'The account asks for a second factor.')

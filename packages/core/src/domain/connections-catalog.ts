@@ -93,6 +93,7 @@ export {
   ConnectionToolDef,
   ConnectionToolTier,
   ConnectionTransport,
+  CookieName,
   catalogCheckFor,
   checkFailure,
   DiscoveryProbe,
@@ -795,7 +796,7 @@ export function fillLoginTemplate(
   return missing ? null : out;
 }
 
-/** The headers and query a session token goes on a request with (CT-470), as the session's `apply` says. */
+/** The headers and query a session token goes on a request with, as the session's `apply` says. */
 export function sessionCredential(
   apply: SessionApply,
   token: string,
@@ -807,6 +808,8 @@ export function sessionCredential(
       return { headers: { [apply.name]: apply.template.replaceAll('{token}', token) }, query: {} };
     case 'query':
       return { headers: {}, query: { [apply.name]: token } };
+    case 'cookie':
+      return { headers: { Cookie: `${apply.name}=${token}` }, query: {} };
   }
 }
 
@@ -965,7 +968,12 @@ export function sessionLoginRequest(
   const isGet = auth.login.method === 'GET';
   const query = isGet ? { ...filledQuery, ...added } : filledQuery;
   const body = isGet ? filledBody : { ...filledBody, ...added };
-  const accept = auth.tokenXmlTag !== undefined ? 'application/xml, text/xml' : 'application/json';
+  const accept =
+    auth.tokenXmlTag !== undefined
+      ? 'application/xml, text/xml'
+      : auth.tokenCookie !== undefined
+        ? '*/*'
+        : 'application/json';
   const path = withQueryText(auth.login.path, query);
   if (auth.login.method === 'GET') return { method: 'GET', path, headers: { accept }, body: null };
   const form = auth.login.encoding === 'form';
@@ -1062,21 +1070,51 @@ export function sessionAnswerMatches(match: SessionAnswerMatch, body: string): b
   return answerTexts(match, body, json).some((t) => match.values.includes(t));
 }
 
-/** The session token in a sign-in answer's text (CT-707): JSON at `tokenJsonPath` or the `tokenXmlTag` element. */
+/**
+ * The value of a named cookie from one or more `Set-Cookie` response headers, or null when absent, cleared, or
+ * unusable. If the same cookie name appears more than once, the last header wins.
+ */
+export function cookieHeaderValue(
+  setCookie: string | readonly string[] | undefined,
+  name: string,
+): string | null {
+  if (!setCookie) return null;
+  const headers = typeof setCookie === 'string' ? [setCookie] : setCookie;
+  let found: string | null = null;
+  for (const header of headers) {
+    const pair = header.split(';', 1)[0] ?? '';
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    if (pair.slice(0, eq).trim() !== name) continue;
+    let raw = pair.slice(eq + 1).trim();
+    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);
+    found = raw === '' ? null : raw;
+  }
+  if (found === null || found.includes(';')) return null;
+  return usableToken(found);
+}
+
+/** The session token in a sign-in answer: from `Set-Cookie` (`tokenCookie`), JSON (`tokenJsonPath`) or XML (`tokenXmlTag`). */
 export function sessionAnswerToken(
   auth: Extract<TokenAuth, { type: 'session' }>,
   body: string,
+  setCookie?: string | readonly string[],
 ): string | null {
+  if (auth.tokenCookie !== undefined) return cookieHeaderValue(setCookie, auth.tokenCookie);
   return sessionToken(auth, auth.tokenXmlTag !== undefined ? body : parseJsonText(body));
 }
 
-/** `sessionExpiresAt` of a sign-in answer's text (CT-707): its JSON, or the ttl for an XML answer. */
+/** `sessionExpiresAt` of a sign-in answer's text: its JSON, or the ttl for XML or cookie-only answers. */
 export function sessionAnswerExpiresAt(
   auth: Extract<TokenAuth, { type: 'session' }>,
   body: string,
   now: number,
 ): number {
-  return sessionExpiresAt(auth, auth.tokenXmlTag !== undefined ? undefined : parseJsonText(body), now);
+  const answer =
+    auth.tokenXmlTag !== undefined || (auth.tokenCookie !== undefined && auth.expiresJsonPath === undefined)
+      ? undefined
+      : parseJsonText(body);
+  return sessionExpiresAt(auth, answer, now);
 }
 
 /**
@@ -1137,8 +1175,11 @@ export function sessionLoginFailure(
 ): { reason: SessionLoginFailureReason; text: string } | null {
   for (const f of auth.failures ?? []) {
     if (f.status && (status === undefined || !f.status.includes(status))) continue;
-    if (sessionAnswerMatches(f, body))
-      return { reason: f.reason, text: f.text ?? sessionLoginFailureText(entry, f.reason) };
+    const matched =
+      f.bodyPattern !== undefined
+        ? new RegExp(f.bodyPattern, 'i').test(body)
+        : f.values !== undefined && sessionAnswerMatches({ json: f.json, xml: f.xml, values: f.values }, body);
+    if (matched) return { reason: f.reason, text: f.text ?? sessionLoginFailureText(entry, f.reason) };
   }
   return null;
 }
@@ -1215,8 +1256,8 @@ export function tokenAuthProblem(entry: CatalogEntry, auth: TokenAuth): string |
         if (id !== 'secret' && !entry.fields.some((f) => f.id === id)) return `There is no field {${id}}.`;
     if (auth.login.method === 'GET' && Object.keys(auth.login.body).length > 0)
       return 'A GET sign-in sends its values in the query.';
-    if ((auth.tokenJsonPath === undefined) === (auth.tokenXmlTag === undefined))
-      return 'The token is read from JSON or from XML, one of them.';
+    if ([auth.tokenJsonPath, auth.tokenXmlTag, auth.tokenCookie].filter((x) => x !== undefined).length !== 1)
+      return 'The token is read from JSON, XML or a cookie, one of them.';
     if (Object.values(auth.logout?.query ?? {}).some((t) => sessionTemplateFields(t).length > 0))
       return 'The sign-out takes no values from the sign-in.';
     const two = auth.twoStep;
