@@ -3,9 +3,7 @@
   "format": 1,
   "schemaBase": 76,
   "postgres": {
-    "majors": [
-      17
-    ]
+    "majors": [17]
   },
   "runtime": {
     "readsFrom": "0000_baseline",
