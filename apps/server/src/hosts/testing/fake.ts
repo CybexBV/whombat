@@ -584,6 +584,16 @@ export class FakeHostsService implements ManageHost {
         path: `${api}/servers/*/diagnose`,
         handler: (r, [id]) => this.#diagnose(id as string, r),
       },
+      {
+        method: 'GET',
+        path: `${api}/servers/*/disk-usage`,
+        handler: (r, [id]) => this.#diskUsage(id as string, r),
+      },
+      {
+        method: 'POST',
+        path: `${api}/servers/*/disk-usage`,
+        handler: (r, [id]) => this.#diskUsage(id as string, r),
+      },
       { method: 'GET', path: `${api}/hub`, handler: () => ok(this.#hubInfo()) },
       { method: 'GET', path: `${api}/hub/backup`, handler: (r) => this.#hubBackup(r) },
       { method: 'POST', path: `${api}/hub/agents/move`, handler: (r) => this.#moveAgents(r) },
@@ -1078,6 +1088,62 @@ export class FakeHostsService implements ManageHost {
       output: `${body.check} on ${id}: all good`,
       truncated: false,
     });
+  }
+
+  #diskUsage(id: string, r: FakeRequest): FakeAnswer {
+    if (!this.#exists(id)) return problem(404, 'server_not_found', 'No such server.');
+    const detail = this.details[id];
+    if (r.method === 'GET') {
+      const items = Array.isArray(detail?.disk_usage) ? detail.disk_usage : [];
+      return ok({ server: id, items });
+    }
+    const role = r.role;
+    if (role === 'viewer') return problem(403, 'insufficient_role', 'Requires operator access.');
+    const rc = (detail?.server as Json | undefined)?.remote_control as Json | undefined;
+    if (rc && (rc.diagnose === false || rc.agent_diagnose === false))
+      return problem(403, 'diagnose_disabled', 'Diagnostics are turned off for this server.');
+    const body = (r.body ?? {}) as { mount?: string };
+    const mount = typeof body.mount === 'string' && body.mount.trim() ? body.mount.trim() : '/';
+    const measuredAt = new Date().toISOString();
+    const result: Json = {
+      mount,
+      fs_type: 'ext4',
+      device: '/dev/nvme0n1p2',
+      measured_at: measuredAt,
+      duration_ms: 340,
+      total_bytes: 500_000_000_000,
+      used_bytes: 380_000_000_000,
+      categories: [
+        {
+          key: 'container_images',
+          label: 'Container images',
+          bytes: 42_000_000_000,
+          reclaimable_bytes: 12_000_000_000,
+          detail: '14 images, 4 unused',
+        },
+        {
+          key: 'container_build_cache',
+          label: 'Container build cache',
+          bytes: 18_000_000_000,
+          reclaimable_bytes: 18_000_000_000,
+        },
+        { key: 'container_volumes', label: 'Container volumes', bytes: 24_000_000_000 },
+        { key: 'container_logs', label: 'Container logs', bytes: 3_500_000_000 },
+        { key: 'journal', label: 'System journal', bytes: 6_200_000_000 },
+        { key: 'package_cache', label: 'Package caches', bytes: 2_100_000_000, detail: 'apt' },
+      ],
+      folders: [
+        { path: '/var/lib/docker', bytes: 87_500_000_000 },
+        { path: '/var/backups', bytes: 64_000_000_000 },
+        { path: '/var/log/journal', bytes: 6_200_000_000 },
+      ],
+    };
+    if (detail) {
+      const existing = Array.isArray(detail.disk_usage) ? (detail.disk_usage as Json[]) : [];
+      detail.disk_usage = [result, ...existing.filter((x) => x.mount !== mount)];
+    }
+    this.emit('server.disk_usage', { id, mount });
+    return ok({ server: id, ok: true, ...result });
   }
 
   #exec(id: string, r: FakeRequest): FakeAnswer {

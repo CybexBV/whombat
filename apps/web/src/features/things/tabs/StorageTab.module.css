@@ -12,6 +12,14 @@
   list-style: none;
 }
 
+.note {
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+}
+
 .part {
   display: grid;
   grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 90px;

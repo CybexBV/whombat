@@ -644,6 +644,18 @@ describe('the Servers connection', () => {
     expect(JSON.parse(list.content ?? '{}').checks.length).toBe(4);
     const ran = await call('server_diagnose', { server: 'basalt', check: 'smart' });
     expect(JSON.parse(ran.content ?? '{}')).toMatchObject({ ok: true, server: 'basalt' });
+    const usage = await call('server_disk_usage', { server: 'basalt', mount: '/' });
+    expect(JSON.parse(usage.content ?? '{}')).toMatchObject({
+      ok: true,
+      server: 'basalt',
+      mount: '/',
+    });
+    const detail = await as('GET', '/servers/basalt');
+    expect(detail.status).toBe(200);
+    expect((detail.body.diskUsage as { mount: string }[] | undefined)?.[0]?.mount).toBe('/');
+    const routeUsage = await as('POST', '/servers/basalt/disk-usage', { mount: '/' });
+    expect(routeUsage.status).toBe(200);
+    expect(routeUsage.body).toMatchObject({ ok: true, mount: '/' });
     const bad = await call('server_detail', { server: 'nope' });
     expect(bad.status).toBe('failed');
     expect(bad.message).toContain('There’s no server “nope”');

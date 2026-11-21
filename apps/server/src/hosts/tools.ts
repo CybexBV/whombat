@@ -36,6 +36,7 @@ import {
   remoteControlFromAgent,
   str,
   toHostAlert,
+  toHostDiskUsage,
   toHostGuest,
   toHostGuestConfig,
   toHostManageResult,
@@ -150,6 +151,7 @@ export const SERVERS_TOOL_ARGS: Readonly<Record<string, readonly string[]>> = {
   alerts_list: ['server'],
   alert_snooze: ['alert', 'minutes', 'note'],
   server_diagnose: ['server', 'check', 'args'],
+  server_disk_usage: ['server', 'mount'],
   server_command: ['server', 'command', 'reason'],
   server_add: ['address', 'username', 'control', 'name'],
   ...MANAGE_TOOL_ARGS,
@@ -821,6 +823,59 @@ const TOOLS: Adapter = {
           })
         : await s.hosts.call<unknown>({ path, actor: s.actor('operator') });
       return output({ ...(camelOut(raw) as Record<string, unknown>), server: id });
+    });
+    return out as CallOutput;
+  },
+
+  async server_disk_usage(ctx, args) {
+    const s = await scope(ctx);
+    const server = req(args, 'server');
+    const mount = opt(args, 'mount');
+    if (mount !== null) {
+      if (
+        mount.length > 512 ||
+        !mount.startsWith('/') ||
+        [...mount].some((c) => c.charCodeAt(0) < 0x20) ||
+        mount.split('/').includes('..')
+      )
+        throw new ConnectionArgumentError('mount: an absolute mount point path like / or /var/lib/docker.');
+    }
+    const toGb = (bytes: number) => Math.round((bytes / 1e9) * 100) / 100;
+    const out = await run({ server }, async () => {
+      const { id } = await resolveServer(s, server);
+      const raw = await s.hosts.call<unknown>({
+        method: 'POST',
+        path: `${HOSTS_API}/servers/${seg(id)}/disk-usage`,
+        body: mount ? { mount } : {},
+        actor: s.actor('operator'),
+        timeoutMs: 65_000,
+      });
+      const du = toHostDiskUsage(raw, s.call.services.clock());
+      return output({
+        server: id,
+        ok: du.ok !== false,
+        ...(du.code ? { code: du.code } : {}),
+        ...(du.message ? { message: du.message } : {}),
+        mount: du.mount,
+        ...(du.fsType ? { fsType: du.fsType } : {}),
+        measuredAt: du.measuredAt,
+        totalGb: toGb(du.totalBytes),
+        usedGb: toGb(du.usedBytes),
+        ...(du.partial ? { partial: true } : {}),
+        ...(du.skippedSpunDown?.length ? { skippedSpunDown: du.skippedSpunDown } : {}),
+        categories: du.categories.map((c) => ({
+          key: c.key,
+          label: c.label,
+          gb: toGb(c.bytes),
+          ...(c.reclaimableBytes ? { reclaimableGb: toGb(c.reclaimableBytes) } : {}),
+          ...(c.detail ? { detail: c.detail } : {}),
+        })),
+        folders: du.folders.map((f) => ({
+          path: f.path,
+          gb: toGb(f.bytes),
+          ...(f.partial ? { partial: true } : {}),
+        })),
+      });
     });
     return out as CallOutput;
   },

@@ -7,15 +7,18 @@
  * and the disks with SMART and wear. Every level is `@whombat/client/hosts`' (`diskUsedLevel`, `wearLevel`).
  */
 import {
+  commitOutcomeText,
   DASH,
   detailGuests,
   diskHealth,
   diskUsedLevel,
+  formatAgoIso,
   formatGb,
   formatInt,
   formatPct,
   formatTemp,
   hasContents,
+  hostErrorInfo,
   hostTone,
   type SpacePart,
   type SpaceTile,
@@ -25,7 +28,8 @@ import {
   spaceUse,
   spaceVolumes,
 } from '@whombat/client/hosts';
-import { useHostManageRead } from '@whombat/client/hosts/react';
+import { useHostManageRead, useHostsChange } from '@whombat/client/hosts/react';
+import { api } from '@whombat/core/contracts';
 import type { HostDisk, HostServerDetail, HostStorage } from '@whombat/core/domain';
 import { type CSSProperties, useMemo, useState } from 'react';
 import { cx } from '../../../components/cx';
@@ -77,50 +81,139 @@ function SpaceTiles({ tiles }: { tiles: readonly SpaceTile[] }) {
 const PART_COLORS: Record<SpacePart['kind'], string> = {
   machine: 'var(--chart1)',
   app: 'var(--chart2)',
+  category: 'var(--chart3)',
+  folder: 'var(--chart4)',
   rest: 'var(--line2)',
 };
 
-const PART_WORDS: Record<SpacePart['kind'], string | null> = { machine: 'machine', app: 'app', rest: null };
+const PART_WORDS: Record<SpacePart['kind'], string | null> = {
+  machine: 'machine',
+  app: 'app',
+  category: null,
+  folder: 'folder',
+  rest: null,
+};
 
 /**
- * What uses the space (SST-11): the machines' and apps' own disks, biggest first, each a link to its page, its size and
- * a bar against the biggest, and “Everything else” last. No measurement of its own: these are the figures the server
- * reports.
+ * What uses the space: the machines' and apps' own disks, biggest first, each a link to its page, its size and a bar
+ * against the biggest. When a recent on-request disk breakdown exists, it replaces “Everything else” with the measured
+ * categories and largest folders and shows when it was measured; a person can also run a fresh check on demand.
  */
-function SpaceUseCard({ serverId, detail }: { serverId: string; detail: HostServerDetail }) {
+function SpaceUseCard({
+  burrow,
+  serverId,
+  detail,
+  now,
+}: {
+  burrow: string;
+  serverId: string;
+  detail: HostServerDetail;
+  now: number;
+}) {
+  const volumes = useMemo(() => spaceVolumes(detail.health?.volumes ?? []), [detail.health?.volumes]);
   const use = useMemo(
-    () => spaceUse({ guests: detailGuests(detail), volumes: spaceVolumes(detail.health?.volumes ?? []) }),
-    [detail],
+    () =>
+      spaceUse({
+        guests: detailGuests(detail),
+        volumes,
+        diskUsage: detail.diskUsage,
+        now,
+      }),
+    [detail, volumes, now],
   );
-  if (!use) return null;
-  const biggest = Math.max(...use.parts.map((p) => p.gb), 1);
+  const measure = useHostsChange(api.hosts.diskUsage);
+  const [note, setNote] = useState<string | null>(null);
+  const canMeasure =
+    detail.server.remoteControl.diagnose !== false &&
+    detail.server.agent.connected !== false &&
+    volumes.length > 0;
+
+  async function onMeasure() {
+    setNote(null);
+    try {
+      const r = await measure.mutateAsync({ params: { burrow, serverId }, body: {} });
+      if (r.status !== 'ok') {
+        setNote(commitOutcomeText(r));
+        return;
+      }
+      if (r.data.ok === false || r.data.code) {
+        setNote(r.data.message ?? 'Skipped because the backing disk is spun down.');
+      }
+    } catch (err) {
+      setNote(hostErrorInfo(err).message);
+    }
+  }
+
+  if (!use && !canMeasure) return null;
+
+  const metaParts: string[] = [];
+  if (use?.measuredAt) {
+    metaParts.push(`Measured ${formatAgoIso(use.measuredAt, now)}`);
+    if (use.measuredMount && volumes.length > 1) metaParts.push(use.measuredMount);
+    if (use.partial) metaParts.push('partial');
+  } else if (use) {
+    metaParts.push('Machines’ and apps’ own disks');
+  } else {
+    metaParts.push('On request');
+  }
+
+  const action = canMeasure ? (
+    <button
+      type="button"
+      className={styles.cardLink}
+      disabled={measure.isPending}
+      onClick={() => void onMeasure()}
+    >
+      {measure.isPending ? 'Checking…' : use?.measuredAt ? 'Check again' : 'Check what fills it'}
+    </button>
+  ) : undefined;
+
+  const biggest = use ? Math.max(...use.parts.map((p) => p.gb), 1) : 1;
   return (
-    <Card title="What uses the space" meta="Machines’ and apps’ own disks">
-      <ul className={space.parts}>
-        {use.parts.map((p) => {
-          const name = <span className={space.partName}>{p.label}</span>;
-          const kind = PART_WORDS[p.kind];
-          return (
-            <li key={p.id} className={space.part} data-part={p.id}>
-              <span className={space.partLabel}>
-                <i className={space.swatch} style={{ background: PART_COLORS[p.kind] }} aria-hidden="true" />
-                {p.guestId ? (
-                  <AppLink href={serverGuestHref(serverId, p.guestId)} className={space.partLink}>
-                    {name}
-                  </AppLink>
-                ) : (
-                  name
-                )}
-                {kind && p.guestId ? <span className={space.partKind}>{kind}</span> : null}
+    <Card title="What uses the space" meta={metaParts.join(' · ')} link={action}>
+      {note ? (
+        <p className={space.note} role="status">
+          {note}
+        </p>
+      ) : null}
+      {use ? (
+        <ul className={space.parts}>
+          {use.parts.map((p) => {
+            const name = (
+              <span className={cx(space.partName, p.kind === 'folder' && styles.mono)} title={p.label}>
+                {p.label}
               </span>
-              <span className={space.partBar} aria-hidden="true">
-                <i style={{ width: `${(p.gb / biggest) * 100}%`, background: PART_COLORS[p.kind] }} />
-              </span>
-              <span className={space.partSize}>{formatGb(p.gb)}</span>
-            </li>
-          );
-        })}
-      </ul>
+            );
+            const kind = PART_WORDS[p.kind];
+            const sub = p.guestId ? kind : (p.detail ?? kind);
+            return (
+              <li key={p.id} className={space.part} data-part={p.id}>
+                <span className={space.partLabel}>
+                  <i
+                    className={space.swatch}
+                    style={{ background: PART_COLORS[p.kind] }}
+                    aria-hidden="true"
+                  />
+                  {p.guestId ? (
+                    <AppLink href={serverGuestHref(serverId, p.guestId)} className={space.partLink}>
+                      {name}
+                    </AppLink>
+                  ) : (
+                    name
+                  )}
+                  {sub ? <span className={space.partKind}>{sub}</span> : null}
+                </span>
+                <span className={space.partBar} aria-hidden="true">
+                  <i style={{ width: `${(p.gb / biggest) * 100}%`, background: PART_COLORS[p.kind] }} />
+                </span>
+                <span className={space.partSize}>{formatGb(p.gb)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className={space.note}>Check what fills a disk on request without waking sleeping drives.</p>
+      )}
     </Card>
   );
 }
@@ -266,7 +359,7 @@ export function StorageTab({ burrow, detail }: { burrow: string; detail: HostSer
           </table>
         </Card>
       ) : null}
-      <SpaceUseCard serverId={detail.server.id} detail={detail} />
+      <SpaceUseCard burrow={burrow} serverId={detail.server.id} detail={detail} now={now} />
       <Card title="Disks" meta={detail.disks.length ? `${detail.disks.length} in this server` : undefined}>
         {detail.disks.length ? (
           <table className={styles.table}>

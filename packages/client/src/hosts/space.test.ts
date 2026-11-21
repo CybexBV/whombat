@@ -59,6 +59,105 @@ describe('spaceUse', () => {
   it('says nothing when no machine or app reports its disk', () => {
     expect(spaceUse({ guests: [guest('a', 'plex', 'docker', 0)], volumes: [] })).toBeNull();
   });
+
+  it('replaces Everything else with a recent breakdown and records when it was measured', () => {
+    const measuredAt = new Date(NOW - 10 * 60_000).toISOString();
+    const use = spaceUse({
+      guests: [guest('b', 'homeassistant', 'pve', 288), guest('a', 'plex', 'docker', 128)],
+      volumes: [volume('/', 1130, 1590, null)],
+      now: NOW,
+      diskUsage: [
+        {
+          mount: '/',
+          measuredAt,
+          totalBytes: 1590e9,
+          usedBytes: 1130e9,
+          categories: [
+            {
+              key: 'container_images',
+              label: 'Container images',
+              bytes: 180e9,
+              reclaimableBytes: 40e9,
+              detail: '14 images, 4 unused',
+            },
+            { key: 'container_build_cache', label: 'Container build cache', bytes: 60e9 },
+            { key: 'journal', label: 'System journal', bytes: 12e9 },
+            // Already represented by the listed VM above, so omitted to avoid double-counting.
+            { key: 'vm_disks', label: 'VM disks', bytes: 288e9 },
+          ],
+          folders: [
+            // Overlaps Docker categories -> omitted.
+            { path: '/var/lib/docker', bytes: 240e9 },
+            // Separate large folder -> kept.
+            { path: '/srv/backups', bytes: 320e9 },
+          ],
+        },
+      ],
+    });
+    expect(use?.measuredAt).toBe(measuredAt);
+    expect(use?.measuredMount).toBe('/');
+    expect(use?.parts.map((p) => [p.label, p.kind, Math.round(p.gb)])).toEqual([
+      ['homeassistant', 'machine', 288],
+      ['plex', 'app', 128],
+      ['/srv/backups', 'folder', 320],
+      ['Container images', 'category', 180],
+      ['Container build cache', 'category', 60],
+      ['System journal', 'category', 12],
+      ['Other', 'rest', 142],
+    ]);
+    expect(use?.parts.find((p) => p.id === 'cat:container_images')?.detail).toContain('reclaimable');
+  });
+
+  it('ignores stale breakdowns older than 24 h and falls back to Everything else', () => {
+    const staleAt = new Date(NOW - 25 * 60 * 60_000).toISOString();
+    const use = spaceUse({
+      guests: [guest('b', 'homeassistant', 'pve', 288)],
+      volumes: [volume('/', 1130, 1590, null)],
+      now: NOW,
+      diskUsage: [
+        {
+          mount: '/',
+          measuredAt: staleAt,
+          totalBytes: 1590e9,
+          usedBytes: 1130e9,
+          categories: [{ key: 'journal', label: 'System journal', bytes: 50e9 }],
+          folders: [],
+        },
+      ],
+    });
+    expect(use?.measuredAt).toBeUndefined();
+    expect(use?.parts.map((p) => p.label)).toEqual(['homeassistant', 'Everything else']);
+  });
+
+  it('shows a recent breakdown even on servers with no guest disk figures', () => {
+    const measuredAt = new Date(NOW - 5 * 60_000).toISOString();
+    const use = spaceUse({
+      guests: [],
+      volumes: [volume('/', 200, 500, null)],
+      now: NOW,
+      diskUsage: [
+        {
+          mount: '/',
+          measuredAt,
+          totalBytes: 500e9,
+          usedBytes: 200e9,
+          partial: true,
+          categories: [
+            { key: 'vm_disks', label: 'VM disks', bytes: 90e9 },
+            { key: 'package_cache', label: 'Package caches', bytes: 5e9, detail: 'apt' },
+          ],
+          folders: [{ path: '/srv/media', bytes: 80e9 }],
+        },
+      ],
+    });
+    expect(use?.partial).toBe(true);
+    expect(use?.parts.map((p) => [p.label, p.kind])).toEqual([
+      ['VM disks', 'category'],
+      ['/srv/media', 'folder'],
+      ['Package caches', 'category'],
+      ['Other', 'rest'],
+    ]);
+  });
 });
 
 describe('spaceTiles', () => {
