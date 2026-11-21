@@ -18,6 +18,7 @@ import {
   type PaperlessSnapshot,
   pageOf,
   paperlessSkipped,
+  paperlessVerdict,
   paperlessView,
   parseAdded,
   parseFailed,
@@ -508,5 +509,18 @@ describe('Paperless-ngx’s buttons (SD-07, SD-08)', () => {
     net.actAs.mockRejectedValueOnce(new ApiError('forbidden', 'refused'));
     await expect(runSanityCheck(ctx, {})).rejects.toThrow(/refused/);
     expect(net.actAs).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives a calm verdict and Ask chips on Inbox, Library and Checks', () => {
+    const s = snapshot();
+    const v = view(s);
+    expect(v.verdict).toContain('failed');
+    expect(panel(v, 'inbox', 'gallery')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'library', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'checks', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+
+    const calm = snapshot({ failed: [], failedCount: 0, inboxCount: 0, total: 42 });
+    expect(paperlessVerdict(calm)).toMatch(/42 documents.*nothing waiting/);
+    expect(paperlessVerdict({ ...calm, inboxCount: 2 })).toMatch(/2 documents in the inbox/);
   });
 });

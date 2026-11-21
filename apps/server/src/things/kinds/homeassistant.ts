@@ -673,6 +673,64 @@ function runsToday(runs: readonly Date[], now: Date, timeZone: string): number {
   return runs.filter((r) => dayKey(r, timeZone) === today).length;
 }
 
+/** Questions for the “In Home Assistant” card. */
+export function haInventoryQuestions(s: HaSnapshot): string[] {
+  const out: string[] = [];
+  if (notLoading(s).length) out.push('Why aren’t some integrations loading?');
+  if ((s.counts?.unavailable ?? 0) > 0) out.push('Which devices and sensors aren’t answering?');
+  out.push('Which integrations are filling the log?', 'What ran most in Home Assistant today?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Controls card. */
+export function haControlsQuestions(): string[] {
+  return [
+    'Which lights or switches are on right now?',
+    'Are any doors or windows open?',
+    'What changed in the house lately?',
+  ];
+}
+
+/** Questions for the Backups card. */
+export function haBackupQuestions(s: HaSnapshot): string[] {
+  const out: string[] = [];
+  if ((localBackups(s)?.oldBytes ?? 0) >= 1e9) out.push('Which old Home Assistant backups can I remove?');
+  out.push('When did Home Assistant last back up?', 'How much space do Home Assistant backups take?');
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while Home Assistant has no active problem. */
+export function haVerdict(s: HaSnapshot, house: HaHouseRead | null): string {
+  if (s.recoveryMode) return 'Home Assistant started in recovery mode.';
+  const failed = notLoading(s).filter((e) => e.state !== 'setup_retry').length;
+  if (failed > 0)
+    return clip(
+      `${plural(failed, 'integration')} ${failed === 1 ? 'isn’t' : 'aren’t'} loading in Home Assistant.`,
+      200,
+    );
+  const parts: string[] = [];
+  const ints = integrationCounts(s);
+  if (ints && ints.total > 0) {
+    const retrying = notLoading(s).length;
+    parts.push(
+      retrying
+        ? `${thousands(ints.loaded)} of ${thousands(ints.total)} integrations are loaded`
+        : `all ${thousands(ints.total)} integrations are loaded`,
+    );
+  }
+  const people = house?.house?.people ?? [];
+  if (people.length > 0) {
+    const home = people.filter((p) => p.state === 'home').length;
+    parts.push(home === 0 ? 'nobody is home' : home === 1 ? '1 person is home' : `${home} people are home`);
+  } else if (house?.house?.automationCount) {
+    parts.push(`${plural(house.house.automationCount, 'automation')} ready`);
+  }
+  return clip(
+    parts.length ? `Home Assistant is fine: ${parts.join(' and ')}.` : 'Home Assistant is running fine.',
+    200,
+  );
+}
+
 /**
  * Inventory, “In Home Assistant”: its areas and devices with what came in this week, its automations with how often
  * they ran today, its integrations with how many don't load. Each line opens its page in Home Assistant.
@@ -732,7 +790,14 @@ export function haInventory(s: HaSnapshot, house: HaHouseRead | null, ctx: HaCtx
       }),
     );
   }
-  return items.length ? inventory({ id: 'inventory', title: 'In Home Assistant', items }) : null;
+  return items.length
+    ? inventory({
+        id: 'inventory',
+        title: 'In Home Assistant',
+        ask: { questions: haInventoryQuestions(s) },
+        items,
+      })
+    : null;
 }
 
 /** The Controls as Live draws them: the builder gives the slot's place and width. */
@@ -860,6 +925,7 @@ function haMore(
       id: 'backups',
       place: 'main',
       title: 'Backups',
+      ask: { questions: haBackupQuestions(s) },
       link: { kind: 'tab', label: 'All backups', tab: 'backups' },
       items: backups,
       empty: 'No backups yet.',
@@ -881,7 +947,9 @@ export function haSlots(
   const h = house?.house ?? null;
   const who = h?.people.length ? whoIsHome(h.people, ctx.now, ctx.timeZone) : null;
   const out = slotPanels({
-    live: controls ? liveControls(controlsOf(controls)) : null,
+    live: controls
+      ? liveControls({ ...controlsOf(controls), ask: { questions: haControlsQuestions() } })
+      : null,
     inventory: haInventory(s, house, ctx),
     shelf: haCameras(house, parts),
     trend: h?.automationCount && house?.runs ? haWeek(house.runs, ctx.now, ctx.timeZone) : null,
@@ -1439,7 +1507,17 @@ export function haView(
   parts: HaParts = NO_PARTS,
 ): Pick<
   KindView,
-  'kpis' | 'charts' | 'machine' | 'notices' | 'panels' | 'slots' | 'tabs' | 'facts' | 'status' | 'problem'
+  | 'kpis'
+  | 'charts'
+  | 'machine'
+  | 'notices'
+  | 'panels'
+  | 'slots'
+  | 'tabs'
+  | 'facts'
+  | 'status'
+  | 'problem'
+  | 'verdict'
 > {
   const tabs: ThingPageTab[] = [];
   if (s.entries)
@@ -1518,6 +1596,7 @@ export function haView(
     ...haSlots(s, m, ctx, parts),
     tabs,
     facts: haFacts(s, ctx.now),
+    verdict: haVerdict(s, parts.house),
     ...(s.notAdmin
       ? {
           problem:

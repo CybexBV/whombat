@@ -1341,6 +1341,67 @@ function taskItems(input: TrueNasInput): ThingPageItem[] {
     }));
 }
 
+/** Questions for the Storage card. */
+export function truenasStorageQuestions(s: TrueNasSnapshot): string[] {
+  const out: string[] = [];
+  if (s.pools.some((p) => !p.healthy)) out.push('Why isn’t my storage pool healthy?');
+  if (s.tasks.some((t) => t.result === 'failed')) out.push('Why did a snapshot or copy task fail?');
+  out.push('What is taking the most space on TrueNAS?', 'When was each pool last checked for damage?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Apps card. */
+export function truenasAppQuestions(s: TrueNasSnapshot): string[] {
+  const out: string[] = [];
+  const crashed = (s.apps ?? []).find((a) => a.state === 'CRASHED');
+  if (crashed) out.push(clip(`Why did ${crashed.name} crash on TrueNAS?`, 200));
+  out.push('Which TrueNAS apps have updates waiting?', 'Which apps use the most memory?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Disks card. */
+export function truenasDiskQuestions(s: TrueNasSnapshot): string[] {
+  const out: string[] = [];
+  const warm = s.disks.some((d) => {
+    const t = s.temps.get(d.name);
+    return t !== undefined && !!tempTone(t, d.ssd);
+  });
+  if (warm) out.push('Why are my TrueNAS disks running warm?');
+  out.push('Are all my TrueNAS disks healthy?', 'Which disk is running hottest?');
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while TrueNAS has no active problem. */
+export function truenasVerdict(s: TrueNasSnapshot): string {
+  const unhealthy = s.pools.filter((p) => !p.healthy);
+  if (unhealthy.length === 1) {
+    const p = unhealthy[0] as TnPool;
+    return clip(`Pool ${p.name} is ${stateWord(p.status).toLowerCase()}.`, 200);
+  }
+  if (unhealthy.length > 1) return clip(`${unhealthy.length} of ${s.pools.length} pools need a look.`, 200);
+  const crashed = (s.apps ?? []).filter((a) => a.state === 'CRASHED').length;
+  if (crashed > 0) return clip(`${plural(crashed, 'app')} crashed on TrueNAS.`, 200);
+  const active = s.pools.find(scrubbing);
+  const space = truenasSpace(s);
+  if (s.pools.length > 0) {
+    const lead =
+      s.pools.length === 1
+        ? `Pool ${s.pools[0]?.name} is healthy`
+        : `All ${s.pools.length} pools are healthy`;
+    if (active) {
+      const doing = active.scan?.kind === 'RESILVER' ? 'rebuilding' : 'being checked';
+      return clip(`${lead} and ${active.name} is ${doing}.`, 200);
+    }
+    if (space) return clip(`${lead}, with ${bytes(Math.max(0, space.total - space.used))} free.`, 200);
+    return clip(`${lead}.`, 200);
+  }
+  if (s.apps?.length) {
+    const running = s.apps.filter((a) => a.state === 'RUNNING').length;
+    return clip(`TrueNAS is fine: ${running} of ${plural(s.apps.length, 'app')} running.`, 200);
+  }
+  return 'TrueNAS is running fine.';
+}
+
 /**
  * The page's TrueNAS part (SD-51), in slots: Live (the work running now with its bar, then the apps, crashed first, with
  * Start or Stop), Inventory “Storage” (each pool with Check now, the disks, the snapshot and copy tasks), the Trend of
@@ -1364,6 +1425,7 @@ export function truenasView(input: TrueNasInput): KindView {
       id: 'disks',
       title: 'Disks',
       meta: plural(s.disks.length, 'disk'),
+      ask: { questions: truenasDiskQuestions(s) },
       columns: [
         { key: 'disk', label: 'Disk' },
         { key: 'pool', label: 'Pool' },
@@ -1385,6 +1447,7 @@ export function truenasView(input: TrueNasInput): KindView {
           id: 'apps',
           title: work.length && !apps.length ? 'Running now' : 'Apps',
           ...(meta ? { meta } : {}),
+          ask: { questions: truenasAppQuestions(s) },
           shape: 'square',
           items: live.slice(0, LIVE_MAX),
           ...(live.length > LIVE_MAX ? { total: live.length } : {}),
@@ -1398,6 +1461,7 @@ export function truenasView(input: TrueNasInput): KindView {
           id: 'pools',
           title: 'Storage',
           ...(space ? { meta: usedOf(space.used, space.total) } : {}),
+          ask: { questions: truenasStorageQuestions(s) },
           items: lines,
         })
       : null,
@@ -1428,6 +1492,7 @@ export function truenasView(input: TrueNasInput): KindView {
     open: { label: 'Open TrueNAS', url },
     actions: [],
     readAt: s.readAt,
+    verdict: truenasVerdict(s),
     // A scrub or a copy moves its bar: the page asks again sooner.
     ...(work.length ? { refreshS: 30 } : {}),
     suggestions: ['Biggest datasets', 'Snapshots per dataset', 'Disk temperatures this week'],

@@ -805,6 +805,49 @@ function favouriteItems(input: ImmichInput): ThingGalleryItem[] {
   });
 }
 
+/** Questions for the Working on card. */
+export function immichJobsQuestions(s: ImmichSnapshot): string[] {
+  const out: string[] = [];
+  if ((s.queues ?? []).some((q) => q.failed > 0)) out.push('Why did some Immich jobs fail?');
+  if ((s.queues ?? []).some((q) => q.paused && q.waiting > 0))
+    out.push('Should I resume the paused Immich queue?');
+  out.push('What is Immich working on right now?', 'How long will the waiting jobs take?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the In Immich card. */
+export function immichLibraryQuestions(s: ImmichSnapshot): string[] {
+  const out = ['Which videos take the most space in Immich?', 'How many photos were added this month?'];
+  if (s.disk) out.push('How much room is left for new photos?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Who uses most space card. */
+export function immichPeopleQuestions(): string[] {
+  return ['Who added the most photos this month?', 'Is anyone close to their storage quota?'];
+}
+
+/** One calm sentence for the head while Immich has no active problem. */
+export function immichVerdict(s: ImmichSnapshot): string {
+  if (s.integrity && (s.integrity.missing || s.integrity.mismatched)) {
+    const n = s.integrity.missing + s.integrity.mismatched;
+    return clip(`${plural(n, 'file')} ${n === 1 ? 'has' : 'have'} a problem on Immich’s disk.`, 200);
+  }
+  const failed = (s.queues ?? []).reduce((a, q) => a + q.failed, 0);
+  if (failed > 0) return clip(`Immich has ${plural(failed, 'failed job')}.`, 200);
+  const paused = (s.queues ?? []).find((q) => q.paused && q.waiting > 0);
+  if (paused)
+    return clip(`${queueName(paused.name)} is paused with ${plural(paused.waiting, 'job')} waiting.`, 200);
+  const waiting = waitingOf(s.queues ?? []);
+  const active = (s.queues ?? []).reduce((a, q) => a + q.active, 0);
+  const parts: string[] = [];
+  if (s.counts) parts.push(`${thousands(s.counts.photos + s.counts.videos)} photos and videos`);
+  if (waiting || active) parts.push(`${plural(waiting + active, 'job')} in progress`);
+  else if (s.queues) parts.push('all jobs are caught up');
+  if (!parts.length && s.disk) parts.push(`${bytes(Math.max(0, s.disk.size - s.disk.used))} free`);
+  return clip(parts.length ? `Immich is fine: ${parts.join(' and ')}.` : 'Immich is running fine.', 200);
+}
+
 /** Working on (Live): the queues with something to do, paused and failed first, with Resume on a paused one. */
 function workingOn(input: ImmichInput) {
   const { snapshot: s, url } = input;
@@ -817,6 +860,7 @@ function workingOn(input: ImmichInput) {
     id: 'jobs',
     title: 'Working on',
     ...(waiting ? { meta: `${thousands(waiting)} waiting` } : {}),
+    ask: { questions: immichJobsQuestions(s) },
     link: { kind: 'url', label: 'Open jobs', url: `${url}/admin/jobs-status` },
     items: [...busy]
       .sort((a, b) => order(a) - order(b) || b.waiting - a.waiting)
@@ -937,6 +981,7 @@ function library(input: ImmichInput, added: { photos: number | null; videos: num
     id: 'library',
     title: c.mine ? 'In your library' : 'In Immich',
     ...(c.mine ? { meta: 'This account only' } : {}),
+    ask: { questions: immichLibraryQuestions(s) },
     items: [
       lineOf('photos', c.photos, c.photoBytes, added.photos),
       lineOf('videos', c.videos, c.videoBytes, added.videos),
@@ -980,6 +1025,7 @@ function whoUsesMost(input: ImmichInput) {
   return people({
     title: 'Who uses most space',
     meta: plural(users.length, 'person', 'people'),
+    ask: { questions: immichPeopleQuestions() },
     items: users.map((p) => {
       const tone = p.quota ? fullTone((p.usage / p.quota) * 100) : undefined;
       return {
@@ -1097,6 +1143,7 @@ export function immichView(input: ImmichInput): KindView {
     open: { label: 'Open Immich', url },
     actions: [],
     readAt: s.readAt,
+    verdict: immichVerdict(s),
     suggestions: ['Photos per month', 'Biggest videos', 'Who added the most'],
   };
 }
