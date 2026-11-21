@@ -201,7 +201,7 @@ pnpm --filter @whombat/mobile publish:ios
 
 Each published APK's bundle source map and R8 mapping stay beside it, in `<dir>/sourcemaps/<versionCode>-<rev>.map` and
 `.mapping.txt` (the newest 30 builds; control serves only the APK `latest.json` names): they turn an error note's
-frames back into the code's.
+frames back into the code's. Only what that run's build wrote is kept, so `--skip-build` keeps none.
 
 `--env dev` is still accepted until the move to production is done; it goes with DEV.
 
