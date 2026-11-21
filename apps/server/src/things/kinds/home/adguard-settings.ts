@@ -24,7 +24,7 @@ export interface AdGuardSettingsState {
   filtering: { enabled: boolean; interval: number } | null;
   safebrowsing: boolean | null;
   parental: boolean | null;
-  safesearch: { enabled: boolean; raw: Record<string, unknown> } | null;
+  safesearch: boolean | null;
   querylog: { enabled: boolean; interval: number; anonymizeIp: boolean; raw: Record<string, unknown> } | null;
   stats: { enabled: boolean; interval: number; raw: Record<string, unknown> } | null;
 }
@@ -56,7 +56,7 @@ export function parseAdGuardSettings(parts: {
         : null,
     safebrowsing: sb && typeof sb.enabled === 'boolean' ? sb.enabled : null,
     parental: par && typeof par.enabled === 'boolean' ? par.enabled : null,
-    safesearch: ss && typeof ss.enabled === 'boolean' ? { enabled: ss.enabled, raw: { ...ss } } : null,
+    safesearch: ss && typeof ss.enabled === 'boolean' ? ss.enabled : null,
     querylog:
       ql && typeof ql.enabled === 'boolean' && qlInterval !== null
         ? {
@@ -124,8 +124,6 @@ function durationWords(v: SettingValue): string {
   const h = Math.max(1, Math.round(ms / HOUR_MS));
   return h === 1 ? '1 hour' : `${h} hours`;
 }
-
-const SAFE_ENGINES = ['bing', 'duckduckgo', 'google', 'pixabay', 'yandex', 'youtube'] as const;
 
 export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[] = [
   {
@@ -197,18 +195,10 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'safesearch',
     group: 'protection',
     label: 'Safe search',
-    help: 'Keep explicit results out of Google, YouTube and other search engines.',
-    kind: 'switch',
-    read: (s) => s.safesearch?.enabled,
-    write: (v, s) => {
-      const enabled = asBool(v) === true;
-      const raw = { ...(s.safesearch?.raw ?? {}) };
-      const anyOn = SAFE_ENGINES.some((e) => raw[e] === true);
-      if (enabled && !anyOn) for (const e of SAFE_ENGINES) raw[e] = true;
-      return { method: 'PUT', path: '/control/safesearch/settings', body: { ...raw, enabled } };
-    },
-    sentence: (v) =>
-      asBool(v) ? 'Safe search is now on in AdGuard Home.' : 'Safe search is now off in AdGuard Home.',
+    help: 'Keep explicit results out of Google, YouTube and other search engines. Engine choices stay in AdGuard Home.',
+    kind: 'elsewhere',
+    read: (s) => s.safesearch ?? undefined,
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
   },
   {
     id: 'querylog_enabled',

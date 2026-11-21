@@ -291,7 +291,7 @@ func TestDepthLimitAndEntryCapMarkPartial(t *testing.T) {
 	writeBytes(t, filepath.Join(root, "a/shallow.bin"), 8192)
 	writeBytes(t, filepath.Join(root, "a/b/c/deep.bin"), 128*1024)
 
-	mounts := []mountInfo{{MountPoint: "/", FSType: "ext4", Source: "/dev/sda1"}}
+	mounts := []mountInfo{{MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
 	r := newTestRunner(t, root, mounts, nil)
 
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/", MaxDepth: 2})
@@ -366,7 +366,11 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	})
 
 	mounts := []mountInfo{{MountPoint: "/", FSType: "zfs", Source: "rpool/ROOT/pve-1"}}
-	r := newTestRunner(t, root, mounts, nil)
+	inv := &proto.Report{
+		Pools: []proto.Pool{{Name: "rpool", Disks: []string{"nvme0n1"}}},
+		Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
+	}
+	r := newTestRunner(t, root, mounts, inv)
 	// Point directly to our temp unix socket (bypassing r.root prefix via abs seam check).
 	r.dockerSockets = nil
 	r.root = root
@@ -444,7 +448,7 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 
 func TestConcurrencyGuardReturnsBusy(t *testing.T) {
 	root := t.TempDir()
-	mounts := []mountInfo{{MountPoint: "/", FSType: "ext4", Source: "/dev/sda1"}}
+	mounts := []mountInfo{{MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
 	r := newTestRunner(t, root, mounts, nil)
 
 	started := make(chan struct{})
@@ -896,6 +900,160 @@ func TestFallbackBackingDisksPartitionLVMMdraidAndUnknownStandby(t *testing.T) {
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/ssd"})
 	if resp.Code != "" || len(resp.Folders) == 0 {
 		t.Fatalf("/srv/ssd: %+v", resp)
+	}
+}
+
+func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "tank/media/movie.mkv"), 16*1024)
+	writeBytes(t, filepath.Join(root, "srv/no-sysfs/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "srv/bad-sysfs/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "srv/unresolved-dm/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "mnt/disk2/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "mnt/user/file.bin"), 16*1024)
+
+	if err := os.MkdirAll(filepath.Join(root, "sys/block/sdb/queue"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdb/queue/rotational"), []byte("?\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/tank/media", FSType: "zfs", Source: "tank/media", MajMin: "0:45"},
+		{ID: 2, MountPoint: "/srv/no-sysfs", FSType: "ext4", Source: "/dev/sda1"},
+		{ID: 3, MountPoint: "/srv/bad-sysfs", FSType: "ext4", Source: "/dev/sdb1"},
+		{ID: 4, MountPoint: "/srv/unresolved-dm", FSType: "xfs", Source: "/dev/dm-9"},
+		{ID: 5, MountPoint: "/mnt/user", FSType: "fuse.shfs", Source: "shfs"},
+	}
+
+	var statfsCalled atomic.Int32
+	var probed []string
+	var inv *proto.Report
+	r := newTestRunner(t, root, mounts, nil)
+	r.inventory = func() *proto.Report { return inv }
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		return standbyAwake
+	}
+
+	// 1. ZFS mount with nil inventory: backing disks unknown -> skipped without touching mount.
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
+	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("zfs without inventory: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on ZFS mount without pool inventory")
+	}
+
+	// 2. ZFS mount with inventory that has no disks for that pool -> still skipped without touching mount.
+	inv = &proto.Report{
+		Pools: []proto.Pool{{Name: "tank", Disks: nil}},
+	}
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
+	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("zfs with empty pool disks: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on ZFS mount with empty pool disks")
+	}
+
+	// 3. ZFS mount with pool disks whose rotational state is missing -> skipped without touching mount.
+	inv = &proto.Report{
+		Pools: []proto.Pool{{Name: "tank", Disks: []string{"sdc"}}},
+	}
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || !strings.Contains(resp.Message, "disk type") {
+		t.Fatalf("zfs with unknown rotational disk: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 || len(probed) != 0 {
+		t.Fatalf("touched ZFS mount or probed unknown rotational disk: statfs=%d probed=%v", statfsCalled.Load(), probed)
+	}
+
+	// 4. ZFS mount with usable pool inventory and confirmed awake HDD -> probed and scanned cleanly.
+	inv = &proto.Report{
+		Pools: []proto.Pool{{Name: "tank", Disks: []string{"sdc"}}},
+		Disks: []proto.Disk{{Device: "sdc", Type: "hdd"}},
+	}
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
+	if resp.Code != "" || !slices.Equal(probed, []string{"sdc"}) {
+		t.Fatalf("zfs with awake HDD: resp=%+v probed=%v", resp, probed)
+	}
+	inv = nil
+	probed = nil
+	statfsCalled.Store(0)
+
+	// 5. Block device whose /sys/block/<dev>/queue/rotational cannot be read -> skipped without waking.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/no-sysfs"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sda"}) || !strings.Contains(resp.Message, "disk type") {
+		t.Fatalf("/srv/no-sysfs: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 || len(probed) != 0 {
+		t.Fatalf("touched /srv/no-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
+	}
+
+	// 6. Malformed queue/rotational -> skipped without waking.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/bad-sysfs"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || !strings.Contains(resp.Message, "disk type") {
+		t.Fatalf("/srv/bad-sysfs: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 || len(probed) != 0 {
+		t.Fatalf("touched /srv/bad-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
+	}
+
+	// 7. Stacked device (dm-9) with no resolvable slaves and no inventory -> skipped without waking.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
+	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("/srv/unresolved-dm: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on unresolved dm-9")
+	}
+
+	// 7b. Multi-PV dm-10 spanning an NVMe partition AND an unresolved md9 -> skipped rather than passing blind on md9.
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/block/dm-10/slaves"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../nvme0n1p1", filepath.Join(root, "sys/class/block/dm-10/slaves/nvme0n1p1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../md9", filepath.Join(root, "sys/class/block/dm-10/slaves/md9")); err != nil {
+		t.Fatal(err)
+	}
+	rMixed := newTestRunner(t, root, []mountInfo{{ID: 7, MountPoint: "/srv/unresolved-dm", FSType: "xfs", Source: "/dev/dm-10"}}, nil)
+	rMixed.statfs = r.statfs
+	resp = rMixed.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
+	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("multi-PV dm-10 with unresolved md9: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on multi-PV dm-10 with unresolved md9")
+	}
+
+	// 8. Unraid fuse.shfs without disks.ini or inventory -> skipped without waking.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/user"})
+	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("shfs without metadata: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on shfs without metadata")
+	}
+
+	// 9. Unraid awake array disk via disks.ini (/dev/md2p1) scans cleanly without sysfs for md2 or sdc.
+	if err := os.MkdirAll(filepath.Join(root, "var/local/emhttp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "var/local/emhttp/disks.ini"), []byte("[\"disk2\"]\nname=\"disk2\"\ndevice=\"sdc\"\ntype=\"Data\"\nspundown=\"0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r2 := newTestRunner(t, root, []mountInfo{{ID: 6, MountPoint: "/mnt/disk2", FSType: "xfs", Source: "/dev/md2p1"}}, nil)
+	resp = r2.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/disk2"})
+	if resp.Code != "" {
+		t.Fatalf("awake Unraid /mnt/disk2: %+v", resp)
 	}
 }
 

@@ -193,15 +193,16 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 	defer cancel()
 
 	// Check spun-down disks BEFORE touching the mount point at all, so sleeping
-	// drives (or rotational drives whose spin state cannot be determined) are
-	// never woken by a statfs or directory read.
-	if check := r.spunDownDisksFor(wctx, mount, target); len(check.spun) > 0 || len(check.unknown) > 0 {
+	// drives (or mounts whose backing devices, disk types or spin states cannot
+	// be established) are never woken by a statfs or directory read.
+	if check := r.spunDownDisksFor(wctx, mount, target); check.shouldSkip() {
 		sort.Strings(check.spun)
 		sort.Strings(check.unknown)
-		skipped := unionSorted(check.spun, check.unknown)
+		sort.Strings(check.unknownRotational)
+		skipped := unionSorted(check.spun, check.unknown, check.unknownRotational)
 		return proto.DiskUsageResponse{
 			Code:            CodeSpunDown,
-			Message:         formatStandbySkipMessage(mount, check.spun, check.unknown),
+			Message:         formatStandbySkipMessage(mount, check.spun, check.unknown, check.unknownRotational, check.unknownBacking),
 			Mount:           mount,
 			FSType:          target.FSType,
 			Device:          target.Source,
@@ -565,36 +566,35 @@ func formatDiskNames(disks []string) string {
 	}
 }
 
-func formatStandbySkipMessage(mount string, spun, unknown []string) string {
-	switch {
-	case len(spun) > 0 && len(unknown) > 0:
-		return fmt.Sprintf(
-			"Skipped %s because %s spun down and the spin state of %s could not be checked; sleeping disks are not woken.",
-			mount, formatDiskList(spun), formatDiskNames(unknown),
-		)
-	case len(unknown) > 0:
-		return fmt.Sprintf(
-			"Skipped %s because the spin state of %s could not be checked; sleeping disks are not woken.",
-			mount, formatDiskNames(unknown),
-		)
-	default:
+func formatStandbySkipMessage(mount string, spun, unknown, unknownRotational []string, unknownBacking bool) string {
+	var reasons []string
+	if len(spun) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%s spun down", formatDiskList(spun)))
+	}
+	if len(unknown) > 0 {
+		reasons = append(reasons, fmt.Sprintf("the spin state of %s could not be checked", formatDiskNames(unknown)))
+	}
+	if len(unknownRotational) > 0 {
+		reasons = append(reasons, fmt.Sprintf("the disk type of %s could not be checked", formatDiskNames(unknownRotational)))
+	}
+	if len(reasons) == 0 && unknownBacking {
+		reasons = append(reasons, "its backing disks could not be identified")
+	}
+	if len(reasons) == 0 {
 		return fmt.Sprintf("Skipped %s because %s spun down; sleeping disks are not woken.", mount, formatDiskList(spun))
 	}
+	return fmt.Sprintf("Skipped %s because %s; sleeping disks are not woken.", mount, strings.Join(reasons, " and "))
 }
 
-func unionSorted(a, b []string) []string {
-	seen := make(map[string]bool, len(a)+len(b))
-	out := make([]string, 0, len(a)+len(b))
-	for _, s := range a {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	for _, s := range b {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
+func unionSorted(lists ...[]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, list := range lists {
+		for _, s := range list {
+			if !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
 		}
 	}
 	sort.Strings(out)

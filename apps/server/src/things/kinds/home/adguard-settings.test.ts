@@ -125,6 +125,16 @@ describe('AdGuard Home declared settings', () => {
     expect(by('filter_update_interval')).toMatchObject({ value: 'Every day', choose: { current: 24 } });
     expect(by('safebrowsing')).toMatchObject({ value: 'On', on: true });
     expect(by('parental')).toMatchObject({ value: 'Off', on: false });
+    expect(by('safesearch')).toMatchObject({
+      value: 'Off',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('safesearch')?.toggle).toBeUndefined();
+    expect(by('safesearch')?.on).toBeUndefined();
+    ag.store.safesearch.enabled = true;
+    const enabledRows = panels().flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
+    expect(enabledRows.find((r) => r.id === 'safesearch')?.value).toBe('On');
+    ag.store.safesearch.enabled = false;
     expect(by('querylog_interval')).toMatchObject({
       value: '7 days',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -165,10 +175,6 @@ describe('AdGuard Home declared settings', () => {
       ignored: ['example.com'],
     });
 
-    await act(ctx, { target: 'safesearch', value: true });
-    expect(ag.store.safesearch.enabled).toBe(true);
-    expect(ag.store.safesearch.google).toBe(true);
-
     await act(ctx, { target: 'parental', value: true });
     expect(ag.store.calls.some((c) => c.method === 'POST' && c.path === '/control/parental/enable')).toBe(
       true,
@@ -178,6 +184,7 @@ describe('AdGuard Home declared settings', () => {
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_access', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'safesearch', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'querylog_interval', value: 2_592_000_000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'stats_interval', value: 604_800_000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'filter_update_interval', value: 999 })).rejects.toThrow();
@@ -211,5 +218,6 @@ describe('AdGuard Home declared settings', () => {
     expect(
       await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filter_update_interval', value: 5 }),
     ).toBeNull();
+    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'safesearch', value: true })).toBeNull();
   });
 });

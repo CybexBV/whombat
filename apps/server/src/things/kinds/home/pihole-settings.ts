@@ -70,16 +70,18 @@ const patchConfig = (config: Record<string, unknown>) => ({
 
 const BLOCKING_MODES: SettingChoice[] = [
   { value: 'NULL', label: 'Empty address (0.0.0.0)', note: 'default and fastest' },
+  { value: 'IP_NODATA_AAAA', label: 'Pi-hole’s IPv4 address', note: 'empty answer for IPv6' },
+  { value: 'IP', label: 'Pi-hole’s address', note: 'IPv4 and IPv6' },
   { value: 'NXDOMAIN', label: 'Domain not found', note: 'NXDOMAIN' },
   { value: 'NODATA', label: 'No records', note: 'NODATA' },
-  { value: 'ZERO', label: 'Empty address (IPv4 only)' },
 ];
 
 const BLOCKING_SHORT: Record<string, string> = {
   NULL: '0.0.0.0',
+  IP_NODATA_AAAA: 'Pi-hole’s IPv4 address',
+  IP: 'Pi-hole’s address',
   NXDOMAIN: 'NXDOMAIN',
   NODATA: 'NODATA',
-  ZERO: 'IPv4 0.0.0.0',
 };
 
 const PRIVACY_LEVELS: SettingChoice[] = [

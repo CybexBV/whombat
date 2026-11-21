@@ -22,41 +22,70 @@ const (
 	standbyAsleep
 )
 
+type rotationalState int
+
+const (
+	rotationalUnknown rotationalState = iota
+	rotationalNo
+	rotationalYes
+)
+
 type standbyCheckResult struct {
-	spun    []string
-	unknown []string
+	spun              []string
+	unknown           []string
+	unknownRotational []string
+	unknownBacking    bool
+}
+
+func (c standbyCheckResult) shouldSkip() bool {
+	return len(c.spun) > 0 || len(c.unknown) > 0 || len(c.unknownRotational) > 0 || c.unknownBacking
 }
 
 // spunDownDisksFor returns the names of any backing disks of mount that are
-// currently spun down, plus any rotational backing disks whose spin state could
-// not be confirmed. It reads only RAM/sysfs metadata and non-waking standby
-// queries so sleeping drives are never spun up.
+// currently spun down, plus any backing disks whose rotational or spin state
+// could not be confirmed, or flags unknownBacking when no backing disks could
+// be established at all. It reads only RAM/sysfs metadata and non-waking
+// standby queries so sleeping drives are never spun up.
 func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target mountInfo) standbyCheckResult {
+	// Virtual/RAM mounts (such as Unraid's tmpfs /var/log) have no physical disks.
+	if target.Virtual || target.FSType == "tmpfs" {
+		return standbyCheckResult{}
+	}
+
 	spun := map[string]bool{}
 	spunDevs := map[string]bool{}
 	unraidAwake := map[string]bool{}
 	unknown := map[string]bool{}
+	unknownRotational := map[string]bool{}
+	var backing []string
+	var rotational map[string]bool
 
 	// 1. Unraid's emhttp state in RAM (/var/local/emhttp/disks.ini) knows every
 	// array and pool disk's spin state without touching any drive.
+	unraidFound := false
 	if r.isUnraid() {
-		r.checkUnraidSpunDown(mount, spun, spunDevs, unraidAwake)
+		var unraidDevs []string
+		unraidFound, unraidDevs = r.checkUnraidSpunDown(mount, spun, spunDevs, unraidAwake, unknown)
+		backing = append(backing, unraidDevs...)
 	}
 
 	// 2. Check the latest inventory report for backing disks and Standby flags.
-	var backing []string
-	var rotational map[string]bool
+	invBacking := 0
 	if r.inventory != nil {
 		if rep := r.inventory(); rep != nil {
 			rotational = make(map[string]bool, len(rep.Disks))
 			for _, d := range rep.Disks {
-				if d.Type != "" {
-					rotational[d.Device] = d.Type == "hdd"
+				switch d.Type {
+				case "hdd":
+					rotational[d.Device] = true
+				case "ssd", "nvme":
+					rotational[d.Device] = false
 				}
 			}
 			for _, fs := range rep.Filesystems {
 				if filepath.Clean(fs.Mount) == mount {
 					backing = append(backing, fs.Disks...)
+					invBacking += len(fs.Disks)
 				}
 			}
 			if target.FSType == "zfs" {
@@ -64,6 +93,7 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 				for _, p := range rep.Pools {
 					if p.Name == pool {
 						backing = append(backing, p.Disks...)
+						invBacking += len(p.Disks)
 					}
 				}
 			}
@@ -80,7 +110,9 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			// Also cross-check Unraid report state in case disks.ini wasn't present
 			// (for example in unit tests with a synthetic inventory).
 			if rep.Unraid != nil {
-				r.checkUnraidReportSpunDown(mount, backingSet, rep.Unraid, spun, spunDevs)
+				uDevs := r.checkUnraidReportSpunDown(mount, backingSet, rep.Unraid, spun, spunDevs, rotational)
+				backing = append(backing, uDevs...)
+				invBacking += len(uDevs)
 			}
 		}
 	}
@@ -88,21 +120,39 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 	// 3. Fallback: derive backing physical disks from the mount's source (and
 	// major:minor) via sysfs so partitions, LVM, dm-crypt and mdraid mounts are
 	// checked even without a prior inventory report.
-	for _, dev := range r.backingDisksFromSource(target) {
+	srcDevs, srcUnresolved := r.backingDisksFromSource(target)
+	for _, dev := range srcDevs {
 		backing = append(backing, dev)
 	}
 
+	hasBacking := unraidFound
+	for _, dev := range backing {
+		if dev != "" {
+			hasBacking = true
+			break
+		}
+	}
+	unresolvedBacking := srcUnresolved && !unraidFound && invBacking == 0
+
 	// 4. Live non-waking standby check for rotational backing disks not already
-	// marked spun down (smartctl -n standby / hdparm -C). If a rotational disk's
-	// state cannot be determined, skip rather than walk and risk waking it.
+	// marked spun down (smartctl -n standby / hdparm -C). If a backing disk's
+	// rotational state or spin state cannot be determined, skip rather than walk
+	// and risk waking it.
 	checked := map[string]bool{}
 	for _, dev := range backing {
 		if dev == "" || checked[dev] || spun[dev] || spunDevs[dev] {
 			continue
 		}
 		checked[dev] = true
-		if !r.isRotational(dev, rotational) {
+		switch r.rotationalStateOf(dev, rotational) {
+		case rotationalNo:
 			continue
+		case rotationalUnknown:
+			if !unraidAwake[dev] {
+				unknownRotational[dev] = true
+			}
+			continue
+		case rotationalYes:
 		}
 		state := standbyUnknown
 		if r.checkStandby != nil {
@@ -134,32 +184,54 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			res.unknown = append(res.unknown, k)
 		}
 	}
+	if len(unknownRotational) > 0 {
+		res.unknownRotational = make([]string, 0, len(unknownRotational))
+		for k := range unknownRotational {
+			res.unknownRotational = append(res.unknownRotational, k)
+		}
+	}
+	if (!hasBacking || unresolvedBacking) && len(spun) == 0 && len(unknown) == 0 && len(unknownRotational) == 0 {
+		res.unknownBacking = true
+	}
 	return res
 }
 
-func (r *Runner) isRotational(dev string, rotational map[string]bool) bool {
+func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool) rotationalState {
 	if rotational != nil {
 		if h, ok := rotational[dev]; ok {
-			return h
+			if h {
+				return rotationalYes
+			}
+			return rotationalNo
 		}
 	}
 	if strings.HasPrefix(dev, "nvme") {
-		return false
+		return rotationalNo
 	}
 	// Reading /sys/block/<dev>/queue/rotational reads kernel state only.
 	b, err := os.ReadFile(r.hostPath(filepath.Join("/sys/block", dev, "queue/rotational")))
 	if err != nil {
-		return false
+		return rotationalUnknown
 	}
-	return strings.TrimSpace(string(b)) == "1"
+	switch strings.TrimSpace(string(b)) {
+	case "1":
+		return rotationalYes
+	case "0":
+		return rotationalNo
+	default:
+		return rotationalUnknown
+	}
 }
 
 // backingDisksFromSource derives underlying physical block devices from a
 // mount's source path and major:minor via sysfs (partition -> disk; LVM/dm/md
 // -> member disks recursively). Reads only /dev symlinks and /sys metadata.
-func (r *Runner) backingDisksFromSource(target mountInfo) []string {
+// unresolved is true if any stacked or virtual device could not be resolved to
+// physical backing disks.
+func (r *Runner) backingDisksFromSource(target mountInfo) ([]string, bool) {
 	var seeds []string
 	seenSeed := map[string]bool{}
+	unresolved := false
 	addSeed := func(name string) {
 		if name == "" || name == "." || name == "/" || strings.Contains(name, "/") || seenSeed[name] {
 			return
@@ -175,7 +247,7 @@ func (r *Runner) backingDisksFromSource(target mountInfo) []string {
 			if dm := r.findDMByName(base); dm != "" {
 				addSeed(dm)
 			} else {
-				addSeed(base)
+				unresolved = true
 			}
 		} else {
 			// Also handle /dev/<vg>/<lv> -> dm/name when /dev symlink isn't present.
@@ -185,7 +257,7 @@ func (r *Runner) backingDisksFromSource(target mountInfo) []string {
 				if dm := r.findDMByName(dmName); dm != "" {
 					addSeed(dm)
 				} else {
-					addSeed(base)
+					unresolved = true
 				}
 			} else {
 				addSeed(base)
@@ -225,8 +297,10 @@ func (r *Runner) backingDisksFromSource(target mountInfo) []string {
 			return
 		}
 
-		// 3. Leaf block device: ignore virtual/non-disk leaves.
+		// 3. Leaf block device: unresolved virtual/stacked leaves cannot confirm
+		// their physical backing disks.
 		if isVirtualLeafBlock(name) {
+			unresolved = true
 			return
 		}
 		if !found[name] {
@@ -238,7 +312,7 @@ func (r *Runner) backingDisksFromSource(target mountInfo) []string {
 	for _, s := range seeds {
 		walk(s)
 	}
-	return out
+	return out, unresolved
 }
 
 func (r *Runner) resolveDevPath(devPath string) string {
@@ -385,7 +459,7 @@ func allLowerLetters(s string) bool {
 }
 
 func isVirtualLeafBlock(name string) bool {
-	for _, prefix := range []string{"loop", "ram", "zram", "nbd", "sr", "fd", "nullb"} {
+	for _, prefix := range []string{"loop", "ram", "zram", "nbd", "sr", "fd", "nullb", "dm-", "md", "bcache"} {
 		if strings.HasPrefix(name, prefix) {
 			return true
 		}
@@ -395,12 +469,16 @@ func isVirtualLeafBlock(name string) bool {
 
 // checkUnraidSpunDown reads /var/local/emhttp/disks.ini (in tmpfs) and records
 // any spun-down disk that backs mount, as well as devices explicitly known awake.
-func (r *Runner) checkUnraidSpunDown(mount string, spun, spunDevs, awake map[string]bool) {
+// It reports whether any populated Unraid slot backed mount and returns those
+// slot device names.
+func (r *Runner) checkUnraidSpunDown(mount string, spun, spunDevs, awake, unknown map[string]bool) (bool, []string) {
 	b, err := os.ReadFile(r.hostPath("/var/local/emhttp/disks.ini"))
 	if err != nil {
-		return
+		return false, nil
 	}
 	secs := parseSimpleINI(b)
+	found := false
+	var devs []string
 	for sec, kv := range secs {
 		if sec == "" {
 			continue
@@ -414,60 +492,78 @@ func (r *Runner) checkUnraidSpunDown(mount string, spun, spunDevs, awake map[str
 			continue
 		}
 		dev := kv["device"]
+		if kv["status"] == "DISK_NP" || (dev == "" && kv["spundown"] == "") {
+			continue
+		}
+		found = true
 		switch kv["spundown"] {
 		case "1":
 			spun[name] = true
 			if dev != "" {
 				spunDevs[dev] = true
+				devs = append(devs, dev)
 			}
 		case "0":
 			if dev != "" {
 				awake[dev] = true
+				devs = append(devs, dev)
+			}
+		default:
+			if dev != "" {
+				devs = append(devs, dev)
+			} else {
+				unknown[name] = true
 			}
 		}
 	}
+	return found, devs
 }
 
-func (r *Runner) checkUnraidReportSpunDown(mount string, backingSet map[string]bool, u *proto.Unraid, spun, spunDevs map[string]bool) {
+func (r *Runner) checkUnraidReportSpunDown(mount string, backingSet map[string]bool, u *proto.Unraid, spun, spunDevs, rotational map[string]bool) []string {
 	if u == nil {
-		return
+		return nil
+	}
+	var devs []string
+	record := func(d proto.UnraidDisk, matches bool) {
+		if !matches {
+			return
+		}
+		if d.Status == "empty" || d.StatusRaw == "DISK_NP" {
+			return
+		}
+		if d.Device != "" && d.Rotational != nil && rotational != nil {
+			if _, ok := rotational[d.Device]; !ok {
+				rotational[d.Device] = *d.Rotational
+			}
+		}
+		if d.SpunDown {
+			spun[d.Name] = true
+			if d.Device != "" {
+				spunDevs[d.Device] = true
+				devs = append(devs, d.Device)
+			}
+			return
+		}
+		if d.Device != "" {
+			devs = append(devs, d.Device)
+		}
 	}
 	for _, d := range u.Array.Disks {
-		if !d.SpunDown {
-			continue
-		}
 		typ := "Data"
 		if d.Slot == proto.UnraidSlotParity {
 			typ = "Parity"
 		}
-		if unraidDiskBacksMount(mount, d.Name, typ, "") || (d.Device != "" && backingSet[d.Device]) {
-			spun[d.Name] = true
-			if d.Device != "" {
-				spunDevs[d.Device] = true
-			}
-		}
+		record(d, unraidDiskBacksMount(mount, d.Name, typ, "") || (d.Device != "" && backingSet[d.Device]))
 	}
 	for _, p := range u.Pools {
 		for _, d := range p.Disks {
-			if !d.SpunDown {
-				continue
-			}
-			if unraidDiskBacksMount(mount, d.Name, "Cache", p.Name) || (d.Device != "" && backingSet[d.Device]) {
-				spun[d.Name] = true
-				if d.Device != "" {
-					spunDevs[d.Device] = true
-				}
-			}
+			record(d, unraidDiskBacksMount(mount, d.Name, "Cache", p.Name) || (d.Device != "" && backingSet[d.Device]))
 		}
 	}
-	if u.Flash != nil && u.Flash.SpunDown {
-		if unraidDiskBacksMount(mount, u.Flash.Name, "Flash", "") || (u.Flash.Device != "" && backingSet[u.Flash.Device]) {
-			spun[u.Flash.Name] = true
-			if u.Flash.Device != "" {
-				spunDevs[u.Flash.Device] = true
-			}
-		}
+	if u.Flash != nil {
+		record(*u.Flash, unraidDiskBacksMount(mount, u.Flash.Name, "Flash", "") || (u.Flash.Device != "" && backingSet[u.Flash.Device]))
 	}
+	return devs
 }
 
 // unraidDiskBacksMount reports whether an Unraid disk/pool slot backs mount.
