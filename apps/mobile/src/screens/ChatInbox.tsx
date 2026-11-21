@@ -47,6 +47,7 @@ import {
 import { CHAT_COPY } from '../data/chatRoom';
 import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
+import { pullSettled } from '../data/pullRefresh';
 import { threadQuery } from '../data/threadPages';
 import { SETTLE_COPY } from '../data/threadSettle';
 import { showToast } from '../data/toast';
@@ -201,14 +202,16 @@ export function ChatInbox({
   );
   // Elsewhere than iPhone a row's menu is a sheet, for the row it was opened on.
   const [menuFor, setMenuFor] = useState<{ rootId: string; spec: NativeMenuSpec } | null>(null);
-  // A pull spins until the reads it asked for have answered (or failed: the pill then says so).
+  // A pull spins until the reads it asked for have answered or failed, or until they wait to get online: they go on
+  // by themselves then, and the pill says “Updating…” meanwhile. Either way the pill says what came of it.
   const [pulling, setPulling] = useState(false);
   const refresh = () => {
     setPulling(true);
-    void Promise.allSettled([
-      threads.read.refetch(),
-      qc.invalidateQueries({ queryKey: queryKeys.scope('chats.unread') }),
-    ]).finally(() => setPulling(false));
+    void pullSettled(
+      qc,
+      [threads.read.refetch(), qc.invalidateQueries({ queryKey: queryKeys.scope('chats.unread') })],
+      [{ queryKey: queryKeys.scope('chats.threads') }, { queryKey: queryKeys.scope('chats.unread') }],
+    ).then(() => setPulling(false));
   };
 
   const renderItem = ({ item }: { item: InboxRow }) => {
