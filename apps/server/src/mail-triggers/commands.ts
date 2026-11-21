@@ -10,6 +10,7 @@ import {
   ConnectorProvider,
   MAIL_BODY_CAP,
   MailAttachment,
+  MissingMailAttachmentReason,
   newId,
   safeDisplayName,
 } from '@whombat/core';
@@ -178,7 +179,10 @@ export const recordMailReceived = defineCommand({
     snippet: z.string().max(500),
     body: z.string().max(MAIL_BODY_CAP),
     bodyTruncated: z.boolean().default(false),
-    attachments: z.array(MailAttachment).max(100).default([]),
+    attachments: z
+      .array(MailAttachment.extend({ missingReason: MissingMailAttachmentReason.optional() }))
+      .max(100)
+      .default([]),
     stagedAttachments: z.array(StagedMailAttachment).max(10).default([]),
     receivedAt: z.string().datetime(),
     cursor: MailProviderCursorSchema.optional(),

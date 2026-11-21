@@ -1,4 +1,12 @@
-import { type AutomationStep, blockedEventFields, type JsonObject, keyLabel, newId } from '@whombat/core';
+import {
+  type AutomationStep,
+  blockedEventFields,
+  type JsonObject,
+  keyLabel,
+  MissingMailAttachment,
+  missingAttachmentsText,
+  newId,
+} from '@whombat/core';
 import { and, asc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
 import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
@@ -230,6 +238,15 @@ export async function executeDispatchAgent({
       runId: run.id,
     },
   });
+  const missingParsed = MissingMailAttachment.array()
+    .max(20)
+    .safeParse((run.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
+  const missingNote = missingParsed.success && missingParsed.data.length > 0 ? missingAttachmentsText(missingParsed.data) : '';
+  const stepInputSummary = workspace
+    ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
+    : missingNote
+      ? `Asked ${agent.name} · ${missingNote}`
+      : `Asked ${agent.name}`;
   await updateStep(
     tx,
     run.id,
@@ -239,7 +256,7 @@ export async function executeDispatchAgent({
       state: 'waiting',
       dispatchId,
       promptMessageId: posted.id,
-      inputSummary: workspace ? `Asked ${agent.name} · ${checkoutWords(workspace)}` : `Asked ${agent.name}`,
+      inputSummary: stepInputSummary,
       output: {
         agentId: agent.id,
         instructions: prompt,

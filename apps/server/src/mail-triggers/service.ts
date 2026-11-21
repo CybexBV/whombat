@@ -365,18 +365,47 @@ export class MailTriggerService {
           height: number | null;
         };
       }[] = [];
-      for (const att of full.attachments.slice(0, MAIL_HANDOVER_MAX_ATTACHMENTS)) {
-        if (!att.id || att.size > maxAttBytes) continue;
+      const recordedAttachments: (typeof full.attachments[number] & {
+        missingReason?: 'too_large' | 'unsupported_type' | 'download_failed' | 'too_many';
+      })[] = [];
+      for (let i = 0; i < full.attachments.length; i++) {
+        const att = full.attachments[i];
+        if (!att) continue;
+        if (i >= MAIL_HANDOVER_MAX_ATTACHMENTS) {
+          recordedAttachments.push({ ...att, missingReason: 'too_many' });
+          continue;
+        }
+        if (!att.id) {
+          recordedAttachments.push({ ...att, missingReason: 'download_failed' });
+          continue;
+        }
+        if (att.size > maxAttBytes) {
+          recordedAttachments.push({ ...att, missingReason: 'too_large' });
+          continue;
+        }
         try {
           const downloaded = await workspace.mailAttachment(token, {
             messageId: full.id,
             attachmentId: att.id,
           });
           const bytes = Buffer.from(downloaded.contentBase64, 'base64');
-          if (bytes.length === 0 || bytes.length > maxAttBytes) continue;
+          if (bytes.length > maxAttBytes) {
+            recordedAttachments.push({ ...att, missingReason: 'too_large' });
+            continue;
+          }
+          if (bytes.length === 0) {
+            recordedAttachments.push({ ...att, missingReason: 'download_failed' });
+            continue;
+          }
           const fileName = att.name || downloaded.name || 'attachment';
           const sniffed = sniffBuffer(bytes, fileName);
-          if (!sniffed.ok) continue;
+          if (!sniffed.ok) {
+            recordedAttachments.push({
+              ...att,
+              missingReason: sniffed.reason === 'image_too_large' ? 'too_large' : 'unsupported_type',
+            });
+            continue;
+          }
           const staged = await this.services.files.store.stage([bytes], { maxBytes: maxAttBytes });
           stagedAttachments.push({
             name: fileName,
@@ -384,7 +413,9 @@ export class MailTriggerService {
             staged,
             sniffed: sniffed.value,
           });
+          recordedAttachments.push(att);
         } catch (err) {
+          recordedAttachments.push({ ...att, missingReason: 'download_failed' });
           this.services.log.warn(
             {
               connectionId,
@@ -415,7 +446,7 @@ export class MailTriggerService {
             snippet: full.snippet.slice(0, 500),
             body: full.body,
             bodyTruncated: full.bodyTruncated,
-            attachments: full.attachments,
+            attachments: recordedAttachments,
             stagedAttachments,
             receivedAt: safeIso(full.date, now),
           },

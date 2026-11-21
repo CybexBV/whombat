@@ -1346,6 +1346,20 @@ export const AutomationRunStep = z.object({
 });
 export type AutomationRunStep = z.infer<typeof AutomationRunStep>;
 
+export const MissingMailAttachmentReason = z.enum([
+  'too_large',
+  'unsupported_type',
+  'download_failed',
+  'too_many',
+]);
+export type MissingMailAttachmentReason = z.infer<typeof MissingMailAttachmentReason>;
+
+export const MissingMailAttachment = z.object({
+  name: z.string().min(1).max(255),
+  reason: MissingMailAttachmentReason,
+});
+export type MissingMailAttachment = z.infer<typeof MissingMailAttachment>;
+
 export const AutomationRun = z.object({
   id: AutomationRunId,
   number: z.number().int().positive(),
@@ -1369,6 +1383,8 @@ export const AutomationRun = z.object({
   error: z.string().max(1000).nullable(),
   /** Tokens agents reported in this run's dispatches (null: nobody reported usage). */
   tokens: z.number().int().nonnegative().nullable(),
+  /** Incoming-mail attachments that couldn't be handed over to this run (too large, unknown type, download failed, too many). */
+  missingAttachments: z.array(MissingMailAttachment).max(20).optional(),
   steps: z.array(AutomationRunStep),
 });
 export type AutomationRun = z.infer<typeof AutomationRun>;

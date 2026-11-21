@@ -9,6 +9,7 @@ import {
   mailFromMatches,
   mailTriggerMatches,
   mailWhenText,
+  missingAttachmentsText,
 } from './mail.js';
 import { triggerMatches } from './match.js';
 import { automationFlow, definitionGrants, planSections } from './plan.js';
@@ -441,5 +442,31 @@ describe('mail automation safety restrictions', () => {
         conversationId: 'cnv_chat',
       }),
     ).toContain('repository checkout');
+  });
+
+  it('formats missing attachments for both the fenced prompt and the run page', () => {
+    expect(missingAttachmentsText([{ name: 'huge.pdf', reason: 'too_large' }])).toBe(
+      'Attachment didn’t come along: “huge.pdf” (too large).',
+    );
+    expect(
+      missingAttachmentsText([
+        { name: 'huge.pdf', reason: 'too_large' },
+        { name: 'broken.png', reason: 'unsupported_type' },
+        { name: 'lost.pdf', reason: 'download_failed' },
+      ]),
+    ).toContain('These attachments didn’t come along:');
+
+    const fenced = fenceMailContent({
+      mailbox: 'you@example.com',
+      from: 'billing@example.com',
+      subject: 'Invoice with oversized file',
+      body: 'See attached.',
+      attachments: [
+        { name: 'good.pdf', mimeType: 'application/pdf', size: 120 },
+        { name: 'huge.pdf', mimeType: 'application/pdf', size: 50_000_000, notAttached: 'too large' },
+      ],
+    });
+    expect(fenced).toContain('huge.pdf (application/pdf, 50000000 bytes — not attached: too large)');
+    expect(fenced).toContain('Not attached (didn’t come along): huge.pdf (too large)');
   });
 });

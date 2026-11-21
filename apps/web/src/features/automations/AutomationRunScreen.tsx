@@ -19,6 +19,7 @@ import {
   chatThreadHref,
   formatClock,
   formatRecent,
+  missingAttachmentsText,
   stepKindLabel,
   type TrackerWords,
   UNKNOWN_TRACKER_WORDS,
@@ -411,6 +412,11 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
             {run.error}
           </p>
         )}
+        {run.missingAttachments?.length ? (
+          <p className={`${styles.note} ${styles.noteWarn}`} data-missing-attachments="">
+            {missingAttachmentsText(run.missingAttachments)}
+          </p>
+        ) : null}
 
         {fromTrackerItem(run) && (
           <TrackerItemSection burrow={burrow} runId={run.id} timeZone={viewer.timeZone} words={words} />

@@ -14,6 +14,7 @@ import {
   definitionHash,
   EXTERNAL_STEP_KINDS,
   type JsonObject,
+  MissingMailAttachment,
   nextFireAfter,
   topics,
   validateDefinition,
@@ -371,33 +372,41 @@ export async function toRuns(db: Db, rows: readonly AutomationRunRow[]): Promise
   const runsByDispatch = groupRows(runRows, (r) => r.dispatchId);
   const approvalNumbers = new Map(approvalRows.map((a) => [a.id, a.number]));
   const automationNames = new Map(names.map((a) => [a.id, a.name]));
-  return rows.map((row) => ({
-    id: row.id,
-    number: row.number,
-    burrowId: row.burrowId,
-    automationId: row.automationId,
-    automationName: automationNames.get(row.automationId) ?? 'Automation',
-    version: row.version,
-    status: row.status,
-    trigger: row.trigger,
-    conversationId: row.conversationId,
-    threadRootId: row.threadRootId,
-    causalDepth: row.causalDepth,
-    startedById: row.startedById,
-    test: row.test,
-    createdAt: iso(row.createdAt),
-    startedAt: isoOrNull(row.startedAt),
-    finishedAt: isoOrNull(row.finishedAt),
-    error: row.error,
-    tokens: tokens.get(row.id) ?? null,
-    steps: (stepsByRun.get(row.id) ?? []).map((s) =>
-      toStep(
-        s,
-        (runsByDispatch.get(s.dispatchId) ?? []).map((r) => r.number),
-        s.approvalId ? (approvalNumbers.get(s.approvalId) ?? null) : null,
+  return rows.map((row) => {
+    const missingParsed = MissingMailAttachment.array()
+      .max(20)
+      .safeParse((row.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
+    const missingAttachments =
+      missingParsed.success && missingParsed.data.length > 0 ? missingParsed.data : undefined;
+    return {
+      id: row.id,
+      number: row.number,
+      burrowId: row.burrowId,
+      automationId: row.automationId,
+      automationName: automationNames.get(row.automationId) ?? 'Automation',
+      version: row.version,
+      status: row.status,
+      trigger: row.trigger,
+      conversationId: row.conversationId,
+      threadRootId: row.threadRootId,
+      causalDepth: row.causalDepth,
+      startedById: row.startedById,
+      test: row.test,
+      createdAt: iso(row.createdAt),
+      startedAt: isoOrNull(row.startedAt),
+      finishedAt: isoOrNull(row.finishedAt),
+      error: row.error,
+      tokens: tokens.get(row.id) ?? null,
+      ...(missingAttachments ? { missingAttachments } : {}),
+      steps: (stepsByRun.get(row.id) ?? []).map((s) =>
+        toStep(
+          s,
+          (runsByDispatch.get(s.dispatchId) ?? []).map((r) => r.number),
+          s.approvalId ? (approvalNumbers.get(s.approvalId) ?? null) : null,
+        ),
       ),
-    ),
-  }));
+    };
+  });
 }
 
 export async function loadRunRow(db: Db, runId: string): Promise<AutomationRunRow> {

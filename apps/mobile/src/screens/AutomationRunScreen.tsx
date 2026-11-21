@@ -11,6 +11,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { automationRunLabel, automationTrackerWords } from '@whombat/client';
 import { useApiMutation, useAutomationRun } from '@whombat/client/react';
+import { missingAttachmentsText } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { type ReactNode, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
@@ -130,6 +131,11 @@ export function AutomationRunScreen({ route, navigation }: Props) {
               {run.error ? (
                 <Text size={14} lh={1.42} color={theme.colors.bad}>
                   {run.error}
+                </Text>
+              ) : null}
+              {run.missingAttachments?.length ? (
+                <Text size={14} lh={1.42} color={toneColor(theme, 'warn')}>
+                  {missingAttachmentsText(run.missingAttachments)}
                 </Text>
               ) : null}
               {data.automation.deletedAt ? (

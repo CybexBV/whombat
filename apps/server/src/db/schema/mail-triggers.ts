@@ -1,9 +1,14 @@
-import type { MailAttachment } from '@whombat/core';
+import type { MailAttachment, MissingMailAttachmentReason } from '@whombat/core';
 import { sql } from 'drizzle-orm';
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { MailProviderCursor } from '../../connectors/types';
 import { connections } from './connectors';
 import { burrows } from './tenancy';
+
+export type StoredMailAttachment = MailAttachment & {
+  /** Set when the attachment couldn't be handed over to the run. */
+  missingReason?: MissingMailAttachmentReason;
+};
 
 /**
  * Per-mailbox high-water mark for mail-triggered automations. Updated only through the commit pipeline so a mailbox
@@ -55,7 +60,7 @@ export const mailTriggerItems = pgTable(
     snippet: text('snippet').notNull(),
     body: text('body').notNull(),
     bodyTruncated: boolean('body_truncated').notNull().default(false),
-    attachments: jsonb('attachments').$type<MailAttachment[]>().notNull().default([]),
+    attachments: jsonb('attachments').$type<StoredMailAttachment[]>().notNull().default([]),
     /** Ready Whombat attachment ids handed over from the matched email for the run's thread prompt. */
     attachmentIds: text('attachment_ids').array().notNull().default([]),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),

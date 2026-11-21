@@ -2474,4 +2474,100 @@ describe('mail-arrives automations', () => {
       await pollAndSettle();
     }
   });
+
+  it('marks attachments that could not be handed over in the run scope, agent prompt, and run detail', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['missing-attachments'],
+    });
+    const origAttachment = fake.mailAttachment.bind(fake);
+    const attSpy = vi.spyOn(fake, 'mailAttachment').mockImplementation(async (token, input) => {
+      if (input.attachmentId === 'att_fail_dl') {
+        throw new GoogleApiError(500, 'Download error', 'other');
+      }
+      return origAttachment(token, input);
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      const okPdf = Buffer.from('%PDF-1.4\nValid invoice\n%%EOF');
+      // Corrupt PNG header triggers sniffBuffer malformed_image -> unsupported_type.
+      const badPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_missing_att',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'missing-attachments test',
+        body: 'Four files attached.',
+        messageId: '<missing-att@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [
+          {
+            id: 'att_good',
+            name: 'good.pdf',
+            mimeType: 'application/pdf',
+            size: okPdf.length,
+            contentBase64: okPdf.toString('base64'),
+          },
+          {
+            id: 'att_huge',
+            name: 'huge.pdf',
+            mimeType: 'application/pdf',
+            size: 50 * 1024 * 1024,
+            contentBase64: okPdf.toString('base64'),
+          },
+          {
+            id: 'att_corrupt',
+            name: 'broken.png',
+            mimeType: 'image/png',
+            size: badPng.length,
+            contentBase64: badPng.toString('base64'),
+          },
+          {
+            id: 'att_fail_dl',
+            name: 'lost.pdf',
+            mimeType: 'application/pdf',
+            size: okPdf.length,
+            contentBase64: okPdf.toString('base64'),
+          },
+        ],
+      });
+      expect(await pollAndSettle()).toBe(1);
+
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      const scope = (runRow?.scope ?? {}) as Record<string, unknown>;
+
+      // Run detail (for the run page) and stripped scope both expose the 3 missing attachments.
+      expect(run.missingAttachments).toEqual([
+        { name: 'huge.pdf', reason: 'too_large' },
+        { name: 'broken.png', reason: 'unsupported_type' },
+        { name: 'lost.pdf', reason: 'download_failed' },
+      ]);
+      expect(scope.missingAttachments).toEqual(run.missingAttachments);
+      // Step summary also surfaces the missing attachments.
+      expect(run.steps[0]?.inputSummary).toContain('huge.pdf');
+      expect(run.steps[0]?.inputSummary).toContain('didn’t come along');
+
+      // Agent prompt mentions every missing file and why it didn't come along, while attaching only good.pdf.
+      const [dispatch] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, run.steps[0]?.dispatchId as string));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      expect(ctx.attachments.map((a) => a.name)).toEqual(['good.pdf']);
+      const prompt = ctx.trigger?.text ?? '';
+      expect(prompt).toContain('Not attached (didn’t come along):');
+      expect(prompt).toContain('huge.pdf (too large)');
+      expect(prompt).toContain('broken.png (unknown file type)');
+      expect(prompt).toContain('lost.pdf (couldn’t be downloaded)');
+    } finally {
+      attSpy.mockRestore();
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
 });
