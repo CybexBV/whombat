@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createQueryPersister,
   KEPT_CONVERSATIONS,
+  KEPT_WIDGET_POINTS,
   MAX_AGE_MS,
   MAX_CHARS,
   type PersistedQueries,
@@ -205,6 +206,71 @@ describe('the last-seen burrow (AP-717)', () => {
     expect(conversationsOf(lean)).toEqual(['cv_1']);
     qc.setQueryData(key('agent.get'), { agent: { handle: 'x'.repeat(MAX_CHARS) } });
     expect(snapshotJson(qc, 'acc', 1)).toBeNull();
+  });
+
+  it('keeps what today’s tabs open with: Chat’s threads, what is new, the rooms and the Overview', () => {
+    const qc = new QueryClient();
+    const chat = { room: 'chat', state: 'open', conversationId: 'cv_chat' };
+    qc.setQueryData([...key('chats.threads', { burrow: 'burrow-hq' }, chat), 'infinite'], {
+      pages: [
+        { threads: [{ rootId: 'msg_new' }], next: 'c1' },
+        { threads: [{ rootId: 'msg_old' }], next: null },
+      ],
+      pageParams: [undefined, 'c1'],
+    });
+    // A server's own threads, read on its page on the way: not what a tab opens with.
+    qc.setQueryData(
+      [
+        ...key(
+          'chats.threads',
+          { burrow: 'burrow-hq' },
+          { room: 'chat', subjectKind: 'server', subjectId: 's1' },
+        ),
+        'infinite',
+      ],
+      { pages: [{ threads: [{ rootId: 'msg_server' }], next: null }], pageParams: [undefined] },
+    );
+    qc.setQueryData(key('chats.unread', { burrow: 'burrow-hq' }, { room: 'chat' }), {
+      conversationId: 'cv_chat',
+      threads: [{ rootId: 'msg_new', unread: 2 }],
+    });
+    qc.setQueryData(key('chats.list'), { chats: [{ id: 'cv_chat', unread: 2 }] });
+    qc.setQueryData(key('home.overview'), { needsYou: [{ id: 'ny_1' }], widgets: [] });
+    const snap = snapshotQueries(qc, 'acc', 1);
+    const ids = snap?.state.queries.map((q) => q.queryKey[1]).sort();
+    expect(ids).toEqual(['chats.list', 'chats.threads', 'chats.unread', 'home.overview']);
+    const threads = snap?.state.queries.find((q) => q.queryKey[1] === 'chats.threads');
+    // The newest page only.
+    expect(JSON.stringify(threads?.state.data)).toContain('msg_new');
+    expect(JSON.stringify(threads?.state.data)).not.toContain('msg_old');
+  });
+
+  it('keeps a pinned widget’s whole day with fewer readings, and leaves the cache as it is', () => {
+    const qc = new QueryClient();
+    const points = Array.from({ length: 1440 }, (_, i) => ({ t: `p${i}`, values: { cpu: i } }));
+    const overview = {
+      widgets: [
+        { id: 'wg_1', points },
+        { id: 'wg_2', points: points.slice(0, 3) },
+      ],
+    };
+    qc.setQueryData(key('home.overview'), overview);
+    const snap = snapshotQueries(qc, 'acc', 1);
+    const kept = snap?.state.queries[0]?.state.data as typeof overview;
+    expect(kept.widgets[0]?.points).toHaveLength(KEPT_WIDGET_POINTS);
+    expect(kept.widgets[0]?.points[0]?.t).toBe('p0');
+    expect(kept.widgets[0]?.points.at(-1)?.t).toBe('p1439');
+    expect(kept.widgets[1]?.points).toHaveLength(3);
+    expect(qc.getQueryData<typeof overview>(key('home.overview'))?.widgets[0]?.points).toHaveLength(1440);
+  });
+
+  it('too large: the Overview goes before any conversation', () => {
+    const qc = seeded();
+    qc.setQueryData(key('home.overview'), { needsYou: [{ id: 'x'.repeat(MAX_CHARS) }], widgets: [] });
+    const snap = snapshotQueries(qc, 'acc', 1);
+    const ids = snap?.state.queries.map((q) => q.queryKey[1]);
+    expect(ids).not.toContain('home.overview');
+    expect(conversationsOf(snap)).toEqual(['cv_1']);
   });
 
   it('keeps the conversations on screen and the most recent ones, not every one in the cache', () => {

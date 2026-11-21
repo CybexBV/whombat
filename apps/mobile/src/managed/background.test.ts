@@ -8,11 +8,16 @@ import {
   BACKGROUND_GRACE_MS,
   BUSY_RETRY_MS,
   createBackgroundRelease,
+  createBoxReach,
   createFreshness,
   FAILED_READ_RETRY_MS,
   failedReadDue,
+  type NetSnapshot,
+  networkKey,
+  PUSH_HOLD_MS,
   QUIET_READ_MS,
   retryFailedReads,
+  WAKE_CHECK_AFTER_MS,
 } from './background';
 
 const OPEN = { status: 'open', info: {} } as unknown as ConnectionState;
@@ -32,6 +37,7 @@ function fakeSession(busy = () => false) {
     },
     connect: vi.fn(() => set({ status: 'connecting', attempt: 0 })),
     reconnectNow: vi.fn(),
+    probe: vi.fn(),
     suspend: vi.fn(() => {
       if (busy()) return false;
       set({ status: 'idle' });
@@ -130,6 +136,190 @@ describe('the connection in the background (AP-925)', () => {
     release.foreground();
     expect(session.connect).not.toHaveBeenCalled();
     release.dispose();
+  });
+});
+
+describe('a connection opened a moment ago, on going to the background', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** A session that opens (as seen by the release) `ago` ms before the app goes to the background. */
+  async function openedAgo(ago: number, keep = async () => false, busy = () => false) {
+    const { session, set } = fakeSession(busy);
+    set({ status: 'connecting', attempt: 0 });
+    const release = createBackgroundRelease({ session, keep, now: () => Date.now() });
+    set(OPEN);
+    await vi.advanceTimersByTimeAsync(ago);
+    return { session, set, release };
+  }
+
+  it('is let go at once, so the box does not hold the reply’s push', async () => {
+    const { session, release } = await openedAgo(PUSH_HOLD_MS - 1000);
+    release.background();
+    await settle();
+    expect(session.suspend).toHaveBeenCalledTimes(1);
+    expect(session.state()).toEqual({ status: 'idle' });
+    release.dispose();
+  });
+
+  it('an older one keeps the grace', async () => {
+    const { session, release } = await openedAgo(PUSH_HOLD_MS);
+    release.background();
+    await settle();
+    expect(session.suspend).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(BACKGROUND_GRACE_MS);
+    await settle();
+    expect(session.state()).toEqual({ status: 'idle' });
+    release.dispose();
+  });
+
+  it('kept by a waiting message or a live activity, it waits the grace', async () => {
+    let kept = true;
+    const { session, release } = await openedAgo(1000, async () => kept);
+    release.background();
+    await settle();
+    expect(session.suspend).not.toHaveBeenCalled();
+    kept = false;
+    await vi.advanceTimersByTimeAsync(BUSY_RETRY_MS);
+    await settle();
+    expect(session.suspend).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(BACKGROUND_GRACE_MS - BUSY_RETRY_MS);
+    await settle();
+    expect(session.state()).toEqual({ status: 'idle' });
+    release.dispose();
+  });
+
+  it('with work under way, asked again soon', async () => {
+    let busy = true;
+    const { session, release } = await openedAgo(
+      1000,
+      async () => false,
+      () => busy,
+    );
+    release.background();
+    await settle();
+    expect(session.suspend).toHaveBeenCalledTimes(1);
+    expect(session.state().status).toBe('open');
+    busy = false;
+    await vi.advanceTimersByTimeAsync(BUSY_RETRY_MS);
+    await settle();
+    expect(session.state()).toEqual({ status: 'idle' });
+    release.dispose();
+  });
+
+  it('back before the check answered, it stays', async () => {
+    let answer: (kept: boolean) => void = () => {};
+    const keep = () => new Promise<boolean>((resolve) => (answer = resolve));
+    const { session, release } = await openedAgo(1000, keep);
+    release.background();
+    release.foreground();
+    answer(false);
+    await settle();
+    expect(session.suspend).not.toHaveBeenCalled();
+    release.dispose();
+  });
+});
+
+describe('a connection that says it is open when the app comes back', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('is checked after a while away', async () => {
+    const { session } = fakeSession();
+    const release = createBackgroundRelease({ session, keep: async () => true });
+    release.background();
+    await vi.advanceTimersByTimeAsync(WAKE_CHECK_AFTER_MS);
+    release.foreground();
+    expect(session.probe).toHaveBeenCalledTimes(1);
+    expect(session.reconnectNow).not.toHaveBeenCalled();
+    release.dispose();
+  });
+
+  it('is trusted after a quick look elsewhere, and on a foreground without a background', async () => {
+    const { session } = fakeSession();
+    const release = createBackgroundRelease({ session, keep: async () => false });
+    release.background();
+    await vi.advanceTimersByTimeAsync(WAKE_CHECK_AFTER_MS - 1);
+    release.foreground();
+    await vi.advanceTimersByTimeAsync(WAKE_CHECK_AFTER_MS);
+    release.foreground();
+    expect(session.probe).not.toHaveBeenCalled();
+    release.dispose();
+  });
+});
+
+describe('whether box reads run, and NetInfo as a hint (createBoxReach)', () => {
+  const wifi = (ip: string, internet: boolean | null = true): NetSnapshot => ({
+    type: 'wifi',
+    isConnected: true,
+    isInternetReachable: internet,
+    details: { ipAddress: ip },
+  });
+  const none: NetSnapshot = { type: 'none', isConnected: false, isInternetReachable: false };
+
+  function reach() {
+    const { session, set } = fakeSession();
+    set({ status: 'connecting', attempt: 0 });
+    const online: boolean[] = [];
+    const r = createBoxReach({ session, setOnline: (on) => online.push(on) });
+    return { session, set, online, r };
+  }
+
+  it('runs reads over an open connection on a Wi-Fi without internet', () => {
+    const { set, online, r } = reach();
+    r.net(wifi('10.100.0.7', false));
+    expect(online.at(-1)).toBe(false);
+    set(OPEN);
+    expect(online.at(-1)).toBe(true);
+    // The connection drops: the phone's own check counts again.
+    set({ status: 'reconnecting', attempt: 1, reason: 'lost', retryAt: 0 });
+    expect(online.at(-1)).toBe(false);
+    r.dispose();
+  });
+
+  it('says each change once', () => {
+    const { set, online, r } = reach();
+    r.net(wifi('10.100.0.7'));
+    r.net(wifi('10.100.0.7'));
+    set(OPEN);
+    expect(online).toEqual([true]);
+    r.dispose();
+  });
+
+  it('checks an open connection when the network changes, not when NetInfo repeats itself', () => {
+    const { session, set, r } = reach();
+    r.net(wifi('10.100.0.7', null));
+    set(OPEN);
+    r.net(wifi('10.100.0.7', true));
+    r.net(wifi('10.100.0.7', true));
+    expect(session.probe).not.toHaveBeenCalled();
+    r.net({ type: 'cellular', isConnected: true, isInternetReachable: true, details: {} });
+    expect(session.probe).toHaveBeenCalledTimes(1);
+    r.net(wifi('10.100.0.9'));
+    expect(session.probe).toHaveBeenCalledTimes(2);
+    expect(session.reconnectNow).not.toHaveBeenCalled();
+    r.dispose();
+  });
+
+  it('dials now on getting a network back while not open', () => {
+    const { session, set, r } = reach();
+    set({ status: 'reconnecting', attempt: 4, reason: 'offline', retryAt: 0 });
+    r.net(none);
+    expect(session.reconnectNow).not.toHaveBeenCalled();
+    // A LAN without internet reaches the box all the same.
+    r.net(wifi('10.100.0.7', false));
+    expect(session.reconnectNow).toHaveBeenCalledTimes(1);
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).toHaveBeenCalledTimes(2);
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).toHaveBeenCalledTimes(2);
+    r.dispose();
+  });
+
+  it('names a network by its kind and address', () => {
+    expect(networkKey(wifi('10.100.0.7'))).toBe('wifi|10.100.0.7');
+    expect(networkKey(none)).toBeNull();
+    expect(networkKey({ type: 'cellular', isConnected: null })).toBe('cellular|');
   });
 });
 

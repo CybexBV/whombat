@@ -364,6 +364,13 @@ export interface ApplianceSession {
    */
   suspend?(): boolean;
   /**
+   * Check that the open connection still answers: one `ping`, and no `pong` within a short wait (the stall check's,
+   * 2.5 s) makes it lost and dialed again at once, its subscriptions resuming from their cursors. A phone back from the
+   * background or on another network may hold a socket that died silently while the session still says it is open.
+   * Nothing while not open, or while such a check is already out. The secure transport only.
+   */
+  probe?(): void;
+  /**
    * Dial the bulk connection now, beside the interactive one, so the first photo doesn't wait for a second handshake
    * after the screen asked for it (AP-4406). Once, while connecting or open; a download that finds it failed waits for
    * the interactive connection as before. The secure transport only.

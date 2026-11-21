@@ -289,3 +289,64 @@ describe('the bulk connection, warmed beside the interactive one (AP-4406)', () 
     expect(appliance.stats().open).toBe(0);
   });
 });
+
+describe('checking an open connection when the phone comes back (probe)', () => {
+  // A long backoff: a reconnect that waited it out would not come within the test's wait.
+  const slowBackoff = { backoff: { initialMs: 60_000, maxMs: 60_000 } };
+
+  it('replaces a connection that died silently, at once and without the backoff', async () => {
+    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
+    session.connect();
+    await opened(session);
+    appliance.faults.stall();
+    session.probe?.();
+    await until(() => appliance.stats().connects === 2, 1000);
+    await opened(session);
+  });
+
+  it('replaces one whose pings go unanswered while older answers still come', async () => {
+    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
+    session.connect();
+    await opened(session);
+    appliance.faults.mutePongs();
+    session.probe?.();
+    await until(() => appliance.stats().connects === 2, 1000);
+    appliance.faults.mutePongs(false);
+    await opened(session);
+  });
+
+  it('keeps a connection that answers', async () => {
+    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
+    session.connect();
+    await opened(session);
+    session.probe?.();
+    session.probe?.();
+    await sleep(80);
+    expect(appliance.stats().connects).toBe(1);
+    expect(session.state().status).toBe('open');
+  });
+
+  it('does nothing while the session is not open', async () => {
+    const { appliance, session } = setup({}, { stallMs: 20 });
+    session.probe?.();
+    await sleep(40);
+    expect(appliance.stats().connects).toBe(0);
+    expect(session.state().status).toBe('idle');
+  });
+
+  it('does not lengthen the stall check that follows', async () => {
+    const { appliance, session } = setup({}, { stallMs: 40 });
+    session.connect();
+    await opened(session);
+    appliance.faults.stall();
+    session.probe?.();
+    await until(() => appliance.stats().connects === 2, 1000);
+    await opened(session);
+    // A read stuck on the new connection is found after about 2 × 40 ms, not twice that.
+    appliance.faults.stall();
+    const started = Date.now();
+    await session.call(api.health.get, EMPTY);
+    expect(Date.now() - started).toBeLessThan(140);
+    expect(appliance.stats().connects).toBe(3);
+  });
+});
