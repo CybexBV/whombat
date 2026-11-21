@@ -50,12 +50,18 @@ func parseMountinfo(b []byte) []mountInfo {
 		if sep < 0 || sep+2 >= len(f) {
 			continue
 		}
+		id, _ := strconv.Atoi(f[0])
+		parentID, _ := strconv.Atoi(f[1])
+		majMin := f[2]
 		mp := unescapeMount(f[4])
 		fsType := f[sep+1]
 		src := unescapeMount(f[sep+2])
 		remote := remoteFSTypes[fsType]
 		virtual := !remote && !localFSTypes[fsType]
 		out = append(out, mountInfo{
+			ID:         id,
+			ParentID:   parentID,
+			MajMin:     majMin,
 			MountPoint: mp,
 			FSType:     fsType,
 			Source:     src,

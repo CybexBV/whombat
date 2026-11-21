@@ -96,6 +96,7 @@ import {
   wavPeak,
 } from '../voice/speech';
 import { loadVoiceSettings } from '../voice/store';
+import { wantsDutchVoice } from '../voice/view';
 import { dutchSpeechText, speechLanguage } from './dutch-speech';
 import {
   type DeskTalkServer,
@@ -337,6 +338,8 @@ export interface DeskTalkDeps {
   health(): Promise<VoiceAbility>;
   /** Voice typing's speech model and language, which the desk hears with too (dictation.md). */
   voiceSettings?(): Promise<VoiceSttSettings>;
+  /** Whether the saved opt-in Dutch voice setting is on (with the current licence agreement). */
+  dutchVoiceOn?(): Promise<boolean>;
   timers: DeskTalkTimers;
   timings: DeskTalkTimings;
   log: Logger;
@@ -356,6 +359,7 @@ export function createDeskTalk(
     voice: () => voiceFor(services),
     health: () => voiceHealth(services),
     voiceSettings: () => loadVoiceSettings(services.db),
+    dutchVoiceOn: () => loadVoiceSettings(services.db).then(wantsDutchVoice),
     timers,
     timings,
     log: services.log,
@@ -640,9 +644,10 @@ export function createDeskTalkWith(deps: DeskTalkDeps): DeskTalks {
       // The person's voice when the service has it (DK-S53); a voice it doesn't list would be refused.
       const chosen = (await Promise.resolve(host.speechVoice?.()).catch(() => null)) ?? null;
       const named = chosen && can.voices?.includes(chosen) ? chosen : undefined;
-      // A Dutch answer in the service's Dutch voice of the same kind, written out as it is said; falls back to English
-      // if Dutch speech isn't installed or stopped being available mid-flight.
-      if (can.languages?.includes('nl') && speechLanguage(text) === 'nl') {
+      // A Dutch answer in the service's Dutch voice only while the saved setting is on (not merely when files exist),
+      // falling back to English if Dutch speech isn't installed or stopped being available mid-flight.
+      const dutchOn = (await deps.dutchVoiceOn?.().catch(() => false)) === true;
+      if (dutchOn && can.languages?.includes('nl') && speechLanguage(text) === 'nl') {
         try {
           return await voice.tts(dutchSpeechText(text), named, 'nl');
         } catch (err) {

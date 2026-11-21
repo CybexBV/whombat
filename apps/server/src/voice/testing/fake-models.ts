@@ -20,7 +20,7 @@ import {
   type VoiceModelsState,
 } from '@whombat/control-contracts/local';
 import { VOICE_DOWNLOAD_MODELS, type VoiceDownloadModel, type VoiceModelProblem } from '@whombat/core/domain';
-import type { VoiceModelsPort } from '../models';
+import { VoiceModelsCallError, type VoiceModelsPort } from '../models';
 
 /** The downloads' sizes, as the release pins them (Parakeet, Whisper, Supertonic 3). */
 export const FAKE_MODEL_SIZES: Readonly<Record<VoiceDownloadModel, number>> = {
@@ -42,6 +42,10 @@ export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceDownlo
 export class FakeVoiceModels implements VoiceModelsPort {
   /** The next download of that model fails with this problem (once). */
   readonly failNext: Partial<Record<VoiceDownloadModel, VoiceModelProblem>> = {};
+  /** Fail the next N `remove(model)` calls as if the fetcher were temporarily unreachable. */
+  readonly failNextRemove: Partial<Record<VoiceDownloadModel, number>> = {};
+  /** When true, `state()` throws as if the fetcher were temporarily unreachable. */
+  unreachable = false;
   /** What it was asked, in order. */
   readonly calls: FakeVoiceModelsCall[] = [];
   readonly #models = new Map<VoiceDownloadModel, VoiceModelState>();
@@ -86,7 +90,14 @@ export class FakeVoiceModels implements VoiceModelsPort {
     return [...this.#models.values()].filter((m) => m.state === 'ready').map((m) => m.id);
   }
 
+  /** Sets leftover partial bytes on an absent model (e.g. an interrupted opt-in download after restart). */
+  setPartial(model: VoiceDownloadModel, received: number): void {
+    const m = this.#model(model);
+    this.#set(model, { id: model, state: 'absent', size: m.size, received });
+  }
+
   async state(): Promise<VoiceModelsState> {
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     return {
       v: 1,
       models: [...this.#models.values()].map((m) => ({ ...m })),
@@ -96,6 +107,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
 
   async fetch(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'fetch', model });
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     const m = this.#model(model);
     if (m.state === 'absent' || m.state === 'failed') {
       this.#set(model, { id: model, state: 'waiting', size: m.size, received: m.received });
@@ -107,6 +119,12 @@ export class FakeVoiceModels implements VoiceModelsPort {
 
   async remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'remove', model });
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
+    const failCount = this.failNextRemove[model] ?? 0;
+    if (failCount > 0) {
+      this.failNextRemove[model] = failCount - 1;
+      throw new VoiceModelsCallError(0, 'unavailable', 'remove failed');
+    }
     const m = this.#model(model);
     const queued = this.#queue.indexOf(model);
     if (queued >= 0) this.#queue.splice(queued, 1);

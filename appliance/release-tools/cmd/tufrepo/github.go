@@ -184,6 +184,9 @@ func runGitHub(cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
+		if cmd == "pause" {
+			fmt.Fprintf(os.Stderr, "tufrepo: note: %s\n", devtuf.ChannelPauseScopeNote)
+		}
 		return printJSON(res)
 	case "gh-continue":
 		var ids []string
@@ -260,6 +263,9 @@ func runGitHub(cmd string, args []string) error {
 		}
 		if err != nil {
 			return err
+		}
+		if cmd == "gh-pause" {
+			fmt.Fprintf(os.Stderr, "tufrepo: note: %s\n", devtuf.ChannelPauseScopeNote)
 		}
 		return printJSON(map[string]any{"github": res, "channel": pr})
 	case "gh-rotate":

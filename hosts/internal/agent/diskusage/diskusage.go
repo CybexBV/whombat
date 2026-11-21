@@ -10,6 +10,7 @@ package diskusage
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,11 +46,23 @@ const (
 
 // mountInfo describes one mounted filesystem known to the kernel.
 type mountInfo struct {
+	ID         int
+	ParentID   int
+	MajMin     string
 	MountPoint string
 	FSType     string
 	Source     string
 	Remote     bool
 	Virtual    bool
+}
+
+// mountScope resolves path ownership against the active visible mount table
+// using mountinfo mount IDs so probes and walks never touch another mount
+// (including same-device bind mounts).
+type mountScope struct {
+	target      mountInfo
+	visible     []mountInfo
+	otherMounts map[string]bool
 }
 
 // fsStat is the usable capacity and used bytes of one filesystem (df style).
@@ -70,10 +83,14 @@ type Runner struct {
 	dockerSockets  []string
 	listMounts     func() ([]mountInfo, error)
 	statfs         func(path string) (fsStat, error)
-	checkStandby   func(ctx context.Context, dev string) bool
+	lstat          func(path string) (fs.FileInfo, error)
+	readDir        func(logicalPath string) ([]fs.DirEntry, error)
+	statMountID    func(logicalPath string) (uint64, bool)
+	checkStandby   func(ctx context.Context, dev string) standbyState
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
 	maxEntries     int
+	hangGrace      time.Duration
 	setLowPriority func()
 	isUnraid       func() bool
 }
@@ -141,7 +158,7 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		}
 	}
 
-	target, found := findMount(mounts, mount)
+	scope, found := buildMountScope(mounts, mount)
 	if !found {
 		return proto.DiskUsageResponse{
 			Code:       CodeInvalid,
@@ -150,6 +167,7 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			MeasuredAt: start,
 		}
 	}
+	target := scope.target
 	if target.Remote {
 		return proto.DiskUsageResponse{
 			Code:       CodeInvalid,
@@ -175,61 +193,36 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 	defer cancel()
 
 	// Check spun-down disks BEFORE touching the mount point at all, so sleeping
-	// drives are never woken by a statfs or directory read.
-	if spun := r.spunDownDisksFor(wctx, mount, target); len(spun) > 0 {
-		sort.Strings(spun)
+	// drives (or rotational drives whose spin state cannot be determined) are
+	// never woken by a statfs or directory read.
+	if check := r.spunDownDisksFor(wctx, mount, target); len(check.spun) > 0 || len(check.unknown) > 0 {
+		sort.Strings(check.spun)
+		sort.Strings(check.unknown)
+		skipped := unionSorted(check.spun, check.unknown)
 		return proto.DiskUsageResponse{
 			Code:            CodeSpunDown,
-			Message:         fmt.Sprintf("Skipped %s because %s spun down; sleeping disks are not woken.", mount, formatDiskList(spun)),
+			Message:         formatStandbySkipMessage(mount, check.spun, check.unknown),
 			Mount:           mount,
 			FSType:          target.FSType,
 			Device:          target.Source,
 			MeasuredAt:      start,
 			DurationMs:      r.now().UTC().Sub(start).Milliseconds(),
-			SkippedSpunDown: spun,
+			SkippedSpunDown: skipped,
 		}
 	}
 
 	hostPath := r.hostPath(mount)
-	rootInfo, err := os.Lstat(hostPath)
-	if err != nil {
-		return proto.DiskUsageResponse{
-			Code:       CodeFailed,
-			Message:    fmt.Sprintf("Could not read %s.", mount),
-			Mount:      mount,
-			FSType:     target.FSType,
-			Device:     target.Source,
-			MeasuredAt: start,
-			DurationMs: r.now().UTC().Sub(start).Milliseconds(),
-		}
-	}
-	rootDev, ok := statDev(rootInfo)
-	if !ok {
-		return proto.DiskUsageResponse{
-			Code:       CodeFailed,
-			Message:    fmt.Sprintf("Could not identify the filesystem device for %s.", mount),
-			Mount:      mount,
-			FSType:     target.FSType,
-			Device:     target.Source,
-			MeasuredAt: start,
-			DurationMs: r.now().UTC().Sub(start).Milliseconds(),
-		}
-	}
 
-	var totalBytes, usedBytes uint64
-	if st, err := r.statfs(hostPath); err == nil {
-		totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
-	}
-
-	// Build the set of other mount points beneath this mount so the walker skips
-	// them without even calling Lstat (which could wake a sleeping disk or stall
-	// on an unresponsive network mount).
-	otherMounts := childMountSet(mounts, mount)
-
-	// Run the scan on a dedicated OS thread at lowest CPU and I/O priority.
+	// Run the entire mount probe and scan on a dedicated OS thread at lowest CPU
+	// and I/O priority, and select on wctx.Done() so a hung filesystem read
+	// never wedges this request or leaves r.busy stuck.
 	// Keeping the goroutine locked when it exits tells the Go runtime to
 	// retire the lowered-priority thread instead of reusing it for normal work.
 	type scanOut struct {
+		errCode    string
+		errMsg     string
+		totalBytes uint64
+		usedBytes  uint64
 		walk       walkResult
 		categories []proto.DiskUsageCategory
 		catPartial bool
@@ -240,6 +233,26 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		if r.setLowPriority != nil {
 			r.setLowPriority()
 		}
+		rootInfo, err := r.doLstat(hostPath)
+		if err != nil {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
+			return
+		}
+		rootDev, ok := statDev(rootInfo)
+		if !ok {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not identify the filesystem device for %s.", mount)}
+			return
+		}
+		var rootMntID uint64
+		if id, ok := r.mountIDAt(mount, 0, false); ok {
+			rootMntID = id
+		}
+
+		var totalBytes, usedBytes uint64
+		if st, err := r.statfs(hostPath); err == nil {
+			totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
+		}
+
 		// Give specialised category probes up to 40% of the budget (at least 4s)
 		// so container/ZFS queries finish even on huge filesystems, then spend the
 		// rest walking folders.
@@ -248,18 +261,67 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			catBudget = min(4*time.Second, timeout)
 		}
 		cctx, ccancel := context.WithTimeout(wctx, catBudget)
-		cats, catPartial := r.collectCategories(cctx, mount, target, rootDev, otherMounts)
+		cats, catPartial := r.collectCategories(cctx, scope, rootDev, rootMntID)
 		ccancel()
 
-		w := r.walkMount(wctx, mount, rootDev, maxDepth, otherMounts)
-		done <- scanOut{walk: w, categories: cats, catPartial: catPartial}
+		w := r.walkMount(wctx, scope, rootDev, rootMntID, maxDepth)
+		done <- scanOut{
+			totalBytes: totalBytes,
+			usedBytes:  usedBytes,
+			walk:       w,
+			categories: cats,
+			catPartial: catPartial,
+		}
 	}()
 
-	res := <-done
+	var res scanOut
+	timedOut := false
+	select {
+	case res = <-done:
+	case <-wctx.Done():
+		// Give the worker a short grace window to unwind and return partial
+		// results already collected, while refusing to wedge if a syscall hangs.
+		grace := r.hangGrace
+		if grace <= 0 {
+			grace = 500 * time.Millisecond
+		}
+		timer := time.NewTimer(grace)
+		select {
+		case res = <-done:
+			timer.Stop()
+		case <-timer.C:
+			timedOut = true
+		}
+	}
+
 	finished := r.now().UTC()
 	durMs := finished.Sub(start).Milliseconds()
 	if durMs < 0 {
 		durMs = 0
+	}
+
+	if timedOut {
+		return proto.DiskUsageResponse{
+			Code:       CodeFailed,
+			Message:    fmt.Sprintf("Timed out while reading %s.", mount),
+			Mount:      mount,
+			FSType:     target.FSType,
+			Device:     target.Source,
+			MeasuredAt: finished,
+			DurationMs: durMs,
+			Partial:    true,
+		}
+	}
+	if res.errCode != "" {
+		return proto.DiskUsageResponse{
+			Code:       res.errCode,
+			Message:    res.errMsg,
+			Mount:      mount,
+			FSType:     target.FSType,
+			Device:     target.Source,
+			MeasuredAt: finished,
+			DurationMs: durMs,
+		}
 	}
 
 	return proto.DiskUsageResponse{
@@ -268,8 +330,8 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		Device:     target.Source,
 		MeasuredAt: finished,
 		DurationMs: durMs,
-		TotalBytes: totalBytes,
-		UsedBytes:  usedBytes,
+		TotalBytes: res.totalBytes,
+		UsedBytes:  res.usedBytes,
 		Partial:    res.walk.partial || res.catPartial,
 		Categories: res.categories,
 		Folders:    res.walk.folders,
@@ -324,32 +386,150 @@ func (r *Runner) detectUnraid() bool {
 	return false
 }
 
-func findMount(mounts []mountInfo, target string) (mountInfo, bool) {
-	// If several entries share the same mountpoint (overmounts), the last one
-	// in mountinfo is the active mount on top.
-	var matched mountInfo
+func (r *Runner) doLstat(path string) (fs.FileInfo, error) {
+	if r.lstat != nil {
+		return r.lstat(path)
+	}
+	return os.Lstat(path)
+}
+
+func buildMountScope(mounts []mountInfo, targetMount string) (mountScope, bool) {
+	if len(mounts) == 0 {
+		return mountScope{}, false
+	}
+	norm := make([]mountInfo, len(mounts))
+	maxID := 0
+	for i, m := range mounts {
+		m.MountPoint = filepath.Clean(m.MountPoint)
+		if m.ID > maxID {
+			maxID = m.ID
+		}
+		norm[i] = m
+	}
+	for i := range norm {
+		if norm[i].ID == 0 {
+			maxID++
+			norm[i].ID = maxID
+		}
+	}
+
+	byID := make(map[int]mountInfo, len(norm))
+	lastByMP := make(map[string]int, len(norm))
+	for _, m := range norm {
+		byID[m.ID] = m
+		lastByMP[m.MountPoint] = m.ID
+	}
+
+	covered := map[int]bool{}
+	for _, m := range norm {
+		if m.ParentID != 0 {
+			if p, ok := byID[m.ParentID]; ok && p.ID != m.ID && p.MountPoint == m.MountPoint {
+				covered[p.ID] = true
+			}
+		}
+		if lastByMP[m.MountPoint] != m.ID {
+			covered[m.ID] = true
+		}
+	}
+
+	hidden := func(m mountInfo) bool {
+		if covered[m.ID] {
+			return true
+		}
+		cur := m
+		for depth := 0; depth < 64; depth++ {
+			if cur.ParentID == 0 {
+				return false
+			}
+			p, ok := byID[cur.ParentID]
+			if !ok || p.ID == cur.ID {
+				return false
+			}
+			if covered[p.ID] && p.MountPoint != cur.MountPoint {
+				return true
+			}
+			cur = p
+		}
+		return false
+	}
+
+	visible := make([]mountInfo, 0, len(norm))
+	var target mountInfo
 	found := false
-	for _, m := range mounts {
-		if filepath.Clean(m.MountPoint) == target {
-			matched = m
+	for _, m := range norm {
+		if hidden(m) {
+			continue
+		}
+		visible = append(visible, m)
+		if m.MountPoint == targetMount {
+			target = m
 			found = true
 		}
 	}
-	return matched, found
-}
+	if !found {
+		return mountScope{}, false
+	}
 
-func childMountSet(mounts []mountInfo, target string) map[string]bool {
-	out := map[string]bool{}
-	for _, m := range mounts {
-		mp := filepath.Clean(m.MountPoint)
-		if mp == target {
+	otherMounts := map[string]bool{}
+	for _, m := range visible {
+		if m.ID == target.ID {
 			continue
 		}
-		if hasPathPrefix(mp, target) {
-			out[mp] = true
+		if hasPathPrefix(m.MountPoint, target.MountPoint) {
+			otherMounts[m.MountPoint] = true
 		}
 	}
-	return out
+	return mountScope{
+		target:      target,
+		visible:     visible,
+		otherMounts: otherMounts,
+	}, true
+}
+
+func (s mountScope) ownerMount(logicalPath string) (mountInfo, bool) {
+	p := filepath.Clean(logicalPath)
+	if !strings.HasPrefix(p, "/") {
+		return mountInfo{}, false
+	}
+	var best mountInfo
+	bestLen := -1
+	for _, m := range s.visible {
+		if hasPathPrefix(p, m.MountPoint) && len(m.MountPoint) > bestLen {
+			best = m
+			bestLen = len(m.MountPoint)
+		}
+	}
+	return best, bestLen >= 0
+}
+
+func (s mountScope) containsPath(logicalPath string) bool {
+	p := filepath.Clean(logicalPath)
+	if !strings.HasPrefix(p, "/") {
+		return false
+	}
+	if !hasPathPrefix(p, s.target.MountPoint) {
+		return false
+	}
+	if s.target.MountPoint == "/" {
+		for vr := range virtualRoots {
+			if hasPathPrefix(p, vr) {
+				return false
+			}
+		}
+	}
+	owner, ok := s.ownerMount(p)
+	return ok && owner.ID == s.target.ID
+}
+
+func (s mountScope) isOtherMount(logicalPath string) bool {
+	p := filepath.Clean(logicalPath)
+	if s.otherMounts[p] {
+		return true
+	}
+	if s.target.MountPoint == "/" && virtualRoots[p] {
+		return true
+	}
+	return !s.containsPath(p)
 }
 
 func hasPathPrefix(p, prefix string) bool {
@@ -370,4 +550,53 @@ func formatDiskList(disks []string) string {
 	default:
 		return strings.Join(disks[:len(disks)-1], ", ") + " and " + disks[len(disks)-1] + " are"
 	}
+}
+
+func formatDiskNames(disks []string) string {
+	switch len(disks) {
+	case 0:
+		return "a backing disk"
+	case 1:
+		return disks[0]
+	case 2:
+		return disks[0] + " and " + disks[1]
+	default:
+		return strings.Join(disks[:len(disks)-1], ", ") + " and " + disks[len(disks)-1]
+	}
+}
+
+func formatStandbySkipMessage(mount string, spun, unknown []string) string {
+	switch {
+	case len(spun) > 0 && len(unknown) > 0:
+		return fmt.Sprintf(
+			"Skipped %s because %s spun down and the spin state of %s could not be checked; sleeping disks are not woken.",
+			mount, formatDiskList(spun), formatDiskNames(unknown),
+		)
+	case len(unknown) > 0:
+		return fmt.Sprintf(
+			"Skipped %s because the spin state of %s could not be checked; sleeping disks are not woken.",
+			mount, formatDiskNames(unknown),
+		)
+	default:
+		return fmt.Sprintf("Skipped %s because %s spun down; sleeping disks are not woken.", mount, formatDiskList(spun))
+	}
+}
+
+func unionSorted(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	for _, s := range b {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

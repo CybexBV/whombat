@@ -105,6 +105,12 @@ function fetcherDown(err: unknown): never {
   throw err;
 }
 
+/** Whether the fetcher still holds any complete or partial files for the opt-in Dutch voice model. */
+function dutchHasFiles(fetched: readonly VoiceModelState[] | null): boolean {
+  const m = fetched?.find((x) => x.id === 'supertonic');
+  return m !== undefined && (m.state !== 'absent' || m.received > 0);
+}
+
 export class VoiceTypingService {
   readonly #services: Services;
   readonly #timings: VoiceTypingTimings;
@@ -120,6 +126,11 @@ export class VoiceTypingService {
   #tellTimer: NodeJS.Timeout | null = null;
   #pollTimer: NodeJS.Timeout | null = null;
   #startTimer: NodeJS.Timeout | null = null;
+  #removeTimer: NodeJS.Timeout | null = null;
+  /** Set when Dutch voice was turned off but removal has not yet succeeded at the fetcher. */
+  #dutchRemovePending = false;
+  /** Next wait before retrying a failed Dutch voice removal (pollMs, doubled up to five minutes). */
+  #dutchRemoveWait = 0;
   /** The start's next check: `startRetryMs`, doubled each time up to five minutes. */
   #startWait = 0;
   #offBus: (() => void) | null = null;
@@ -154,8 +165,9 @@ export class VoiceTypingService {
     this.#closed = true;
     this.#offBus?.();
     this.#offBus = null;
-    for (const timer of [this.#tellTimer, this.#pollTimer, this.#startTimer]) if (timer) clearTimeout(timer);
-    this.#tellTimer = this.#pollTimer = this.#startTimer = null;
+    for (const timer of [this.#tellTimer, this.#pollTimer, this.#startTimer, this.#removeTimer])
+      if (timer) clearTimeout(timer);
+    this.#tellTimer = this.#pollTimer = this.#startTimer = this.#removeTimer = null;
   }
 
   /** `voice.get`. */
@@ -194,6 +206,7 @@ export class VoiceTypingService {
     if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
     return this.#serial(async () => {
       if (input.on) {
+        this.#clearDutchRemovalRetry();
         await externalEffect(
           'voice.fetch_model',
           () => (fetcher as NonNullable<typeof fetcher>).fetch('supertonic'),
@@ -202,15 +215,17 @@ export class VoiceTypingService {
           },
         ).catch(fetcherDown);
       } else if (fetcher) {
-        await externalEffect('voice.remove_model', () => fetcher.remove('supertonic')).catch(
-          (err: unknown) => {
-            this.#services.log.warn(
-              { err: String(err) },
-              'voice: Dutch voice files weren’t removed yet; will retry when the fetcher answers',
-            );
-          },
-        );
-        forgetVoiceHealth(this.#services);
+        try {
+          await externalEffect('voice.remove_model', () => fetcher.remove('supertonic'));
+          this.#clearDutchRemovalRetry();
+          forgetVoiceHealth(this.#services);
+        } catch (err: unknown) {
+          this.#dutchRemovePending = true;
+          this.#services.log.warn(
+            { err: String(err) },
+            'voice: Dutch voice files weren’t removed yet; will retry until removal succeeds',
+          );
+        }
       }
       return this.#check('now', { ensure: false });
     });
@@ -395,17 +410,20 @@ export class VoiceTypingService {
     let asked = false;
     for (const model of facts.fetched) {
       if (model.id === 'supertonic' && !dutchWanted) {
-        // Turning Dutch voice off removes its files; clean up any leftover files if an earlier removal didn't reach the fetcher.
-        if (model.state !== 'absent') {
+        // Turning Dutch voice off removes all files, including leftover partial files (state 'absent' with received > 0),
+        // and retries until removal succeeds.
+        if (model.state !== 'absent' || model.received > 0 || this.#dutchRemovePending) {
           try {
             await externalEffect('voice.remove_model', () => fetcher.remove('supertonic'));
+            this.#clearDutchRemovalRetry();
             forgetVoiceHealth(this.#services);
             this.#services.log.info({ model: model.id }, 'voice: removed disabled Dutch voice model');
             asked = true;
           } catch (err) {
+            this.#dutchRemovePending = true;
             this.#services.log.warn(
               { err: String(err), model: model.id },
-              'voice: disabled Dutch voice model wasn’t removed',
+              'voice: disabled Dutch voice model wasn’t removed; will retry',
             );
           }
         }
@@ -436,18 +454,52 @@ export class VoiceTypingService {
    */
   #follow(facts: VoiceFacts): void {
     const moving = (facts.fetched ?? []).some((m) => m.state === 'downloading' || m.state === 'waiting');
-    if (!moving || this.#pollTimer || this.#closed) return;
-    this.#pollTimer = setTimeout(
+    if (moving && !this.#pollTimer && !this.#closed) {
+      this.#pollTimer = setTimeout(
+        () =>
+          outsideCommandScope(() => {
+            this.#pollTimer = null;
+            void this.#serial(() => this.#check('changed', { retry: false })).catch((err) =>
+              this.#services.log.debug({ err: String(err) }, 'voice typing: the downloads weren’t read'),
+            );
+          }),
+        this.#timings.pollMs,
+      );
+      this.#pollTimer.unref?.();
+    }
+    const needsDutchRemove =
+      voiceModelsFor(this.#services) !== null &&
+      !wantsDutchVoice(facts.settings) &&
+      (this.#dutchRemovePending || dutchHasFiles(facts.fetched));
+    if (!needsDutchRemove) {
+      this.#clearDutchRemovalRetry();
+      return;
+    }
+    if (this.#removeTimer || this.#closed) return;
+    this.#dutchRemoveWait = Math.min(
+      START_RETRY_MAX_MS,
+      this.#dutchRemoveWait ? this.#dutchRemoveWait * 2 : this.#timings.pollMs,
+    );
+    this.#removeTimer = setTimeout(
       () =>
         outsideCommandScope(() => {
-          this.#pollTimer = null;
+          this.#removeTimer = null;
           void this.#serial(() => this.#check('changed', { retry: false })).catch((err) =>
-            this.#services.log.debug({ err: String(err) }, 'voice typing: the downloads weren’t read'),
+            this.#services.log.debug({ err: String(err) }, 'voice: Dutch voice removal retry failed'),
           );
         }),
-      this.#timings.pollMs,
+      this.#dutchRemoveWait,
     );
-    this.#pollTimer.unref?.();
+    this.#removeTimer.unref?.();
+  }
+
+  #clearDutchRemovalRetry(): void {
+    this.#dutchRemovePending = false;
+    this.#dutchRemoveWait = 0;
+    if (this.#removeTimer) {
+      clearTimeout(this.#removeTimer);
+      this.#removeTimer = null;
+    }
   }
 
   /**

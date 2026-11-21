@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -601,8 +602,17 @@ func TestPauseAndResumeCommands(t *testing.T) {
 	if err := runGitHub("pause", []string{"--dir", dir, "--channel", "beta"}); err == nil {
 		t.Fatal("accepted unknown channel")
 	}
-	if err := runGitHub("pause", []string{"--dir", dir, "--key-file", prodKeyFile}); err != nil {
+	out, errOut, err := captureOutput(t, func() error {
+		return runGitHub("pause", []string{"--dir", dir, "--key-file", prodKeyFile})
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out, "pause-aware") || !strings.Contains(out, "older boxes keep updating") {
+		t.Fatalf("pause stdout missing scope note: %s", out)
+	}
+	if !strings.Contains(errOut, "pause-aware") || !strings.Contains(errOut, "older boxes keep updating") {
+		t.Fatalf("pause stderr missing scope note: %s", errOut)
 	}
 	r, err := devtuf.Load(dir, devtuf.Options{})
 	if err != nil {
@@ -655,8 +665,17 @@ func TestGitHubPauseAndResumeCommands(t *testing.T) {
 	if err := runGitHub("gh-init", append(append([]string{}, common...), "--remote", origin)); err != nil {
 		t.Fatal(err)
 	}
-	if err := runGitHub("gh-pause", common); err != nil {
+	out, errOut, err := captureOutput(t, func() error {
+		return runGitHub("gh-pause", common)
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out, "pause-aware") || !strings.Contains(out, "older boxes keep updating") {
+		t.Fatalf("gh-pause stdout missing scope note: %s", out)
+	}
+	if !strings.Contains(errOut, "pause-aware") || !strings.Contains(errOut, "older boxes keep updating") {
+		t.Fatalf("gh-pause stderr missing scope note: %s", errOut)
 	}
 	r, err := devtuf.Load(dir, devtuf.Options{})
 	if err != nil || !r.ChannelPaused(trust.ChannelProduction) {
@@ -669,4 +688,39 @@ func TestGitHubPauseAndResumeCommands(t *testing.T) {
 	if err != nil || r.ChannelPaused(trust.ChannelProduction) {
 		t.Fatalf("after gh-resume: paused=%v err=%v", r != nil && r.ChannelPaused(trust.ChannelProduction), err)
 	}
+}
+
+func captureOutput(t *testing.T, fn func() error) (stdout, stderr string, err error) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	outR, outW, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
+	}
+	errR, errW, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		_ = outR.Close()
+		_ = outW.Close()
+		t.Fatal(pipeErr)
+	}
+	os.Stdout, os.Stderr = outW, errW
+	outDone := make(chan string, 1)
+	errDone := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(outR)
+		outDone <- string(b)
+	}()
+	go func() {
+		b, _ := io.ReadAll(errR)
+		errDone <- string(b)
+	}()
+	err = fn()
+	_ = outW.Close()
+	_ = errW.Close()
+	os.Stdout, os.Stderr = origOut, origErr
+	stdout = <-outDone
+	stderr = <-errDone
+	_ = outR.Close()
+	_ = errR.Close()
+	return stdout, stderr, err
 }

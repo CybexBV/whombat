@@ -458,14 +458,38 @@ func TestFetchMultiResumesMidFileAndAcrossRestart(t *testing.T) {
 		t.Fatal("final dir exposed before all files verified")
 	}
 	cancel()
-	// Restart fetcher over same dir with c.bin now available: a.onnx and b.onnx must NOT be requested again.
+	// supertonic is never persisted to .wanted.json, and even if a pre-upgrade
+	// .wanted.json names it, startup must not resume it until the server asks again.
+	if b, err := os.ReadFile(filepath.Join(f.Dir, wantedFile)); err == nil && strings.Contains(string(b), local.VoiceModelSupertonic) {
+		t.Fatalf("supertonic written to %s: %s", wantedFile, b)
+	}
+	if err := os.WriteFile(filepath.Join(f.Dir, wantedFile), []byte(`["supertonic"]`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	// Restart fetcher over same dir with c.bin now available: must NOT auto-resume.
 	files["c.bin"].mu.Lock()
 	files["c.bin"].status = 0
+	cBefore := len(files["c.bin"].ranges)
 	files["c.bin"].mu.Unlock()
 	g := &Fetcher{Manifest: f.Manifest, Dir: f.Dir, Client: f.Client, Free: f.Free, Backoff: func(int) time.Duration { return 10 * time.Millisecond }}
 	start(t, g)
-	if got := g.State().Models[0].Received; got < int64(len(files["a.onnx"].body)+len(files["b.onnx"].body)) {
-		t.Fatalf("lost partial progress on restart: %d", got)
+	time.Sleep(50 * time.Millisecond)
+	s := g.State().Models[0]
+	if s.State != local.VoiceModelStateAbsent {
+		t.Fatalf("supertonic auto-resumed at startup: %+v", s)
+	}
+	if s.Received < int64(len(files["a.onnx"].body)+len(files["b.onnx"].body)) {
+		t.Fatalf("lost partial progress on restart: %d", s.Received)
+	}
+	files["c.bin"].mu.Lock()
+	cAfterStartup := len(files["c.bin"].ranges)
+	files["c.bin"].mu.Unlock()
+	if cAfterStartup != cBefore {
+		t.Fatalf("supertonic requested c.bin at startup without Fetch: before=%d after=%d", cBefore, cAfterStartup)
+	}
+	// When the server asks again (setting still on), it resumes without re-downloading a.onnx or b.onnx.
+	if err := g.Fetch(local.VoiceModelSupertonic); err != nil {
+		t.Fatal(err)
 	}
 	until(t, g, "ready")
 	if !models.Present(g.Dir, m) {

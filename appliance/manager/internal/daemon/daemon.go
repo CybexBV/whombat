@@ -660,14 +660,18 @@ func (d *Daemon) engineLoop(ctx context.Context) {
 	}
 }
 
-// refreshTUF refreshes TUF metadata and records the verified channel pause state in the journal.
-// A failed refresh (wrong key, expired metadata, outage) leaves the previous state untouched.
+// refreshTUF refreshes TUF metadata and immediately records a channel pause in the journal so pre-activation work stops
+// right away. Clearing a pause waits until the newest release has been offered (tufLoop, CheckNow), so a held bad
+// release cannot be driven into drain or activation before a fix replaces it. A failed refresh (wrong key, expired
+// metadata, outage) leaves the previous state untouched.
 func (d *Daemon) refreshTUF(ctx context.Context) (*trust.Repo, error) {
 	repo, err := d.TUF.Refresh(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.syncChannelPause(repo)
+	if repo.ChannelPaused {
+		d.syncChannelPause(repo)
+	}
 	return repo, nil
 }
 
@@ -706,11 +710,18 @@ func (d *Daemon) tufLoop(ctx context.Context) {
 			}
 			if d.newestUpdates() {
 				// A community box, or one with a channel, takes the newest release of what it just verified (MG-136, LNK-20).
+				// Offer the newest release before clearing a paused state and waking the engine, so a fix published while
+				// paused replaces any held candidate before drain or activation can proceed.
 				if _, err := d.offerLatest(ctx, repo, false); err != nil {
 					d.warnOnce("newest release not offered; the installed release keeps running", err)
 				} else {
 					d.clearErr("newest release not offered; the installed release keeps running")
+					if !repo.ChannelPaused {
+						d.syncChannelPause(repo)
+					}
 				}
+			} else if !repo.ChannelPaused {
+				d.syncChannelPause(repo)
 			}
 		}
 		select {
@@ -779,11 +790,19 @@ type checkReply struct {
 func (d *Daemon) CheckNow(ctx context.Context) (*broker.CheckResult, error) {
 	if d.newestUpdates() {
 		// A community box (MG-136): its own repository, refreshed now, and its newest release offered.
+		// Offer the newest release before clearing a paused state and waking the engine.
 		repo, err := d.refreshTUF(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("the update repository: %w", err)
 		}
-		return d.offerLatest(ctx, repo, true)
+		res, err := d.offerLatest(ctx, repo, true)
+		if err != nil {
+			return nil, err
+		}
+		if !repo.ChannelPaused {
+			d.syncChannelPause(repo)
+		}
+		return res, nil
 	}
 	if d.Control == nil {
 		// No channel and no control this start: nobody assigns this box a release (newestUpdates).
