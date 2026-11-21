@@ -23,7 +23,7 @@ import { loadPrincipalRow } from '../read/principals';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
-import { fallbackWhere } from './model-fallback';
+import { fallbackWhere, noteModelFallback } from './model-fallback';
 
 const t = useTestServer({ seed: true, app: true });
 const AUTH = { authorization: 'Bearer dev-runner-token' };
@@ -314,5 +314,59 @@ describe('the model fallback (ME-05)', () => {
       kind: 'account',
       name: 'Mara',
     });
+  });
+
+  it('is not cleared when a background Look or non-main model turn finishes cleanly', async () => {
+    await beat(CLAUDE_MODELS);
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'sonnet', effort: 'high' },
+    });
+    // Record a main-model fallback warning for Fable.
+    await turn({
+      outcome: 'done',
+      modelFallback: { model: 'fable', detail: 'model unavailable' },
+    });
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    const [maraRow] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
+    const account = maraRow?.accountId ?? null;
+    const baseRow = {
+      agentId: IDS.dusty,
+      burrowId: t.burrowId,
+      gatewayProvider: null,
+      onBehalfOfAccountId: account,
+    };
+
+    // Background-model dispatch completing cleanly keeps the main-model fallback warning.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(
+        tx,
+        { ...baseRow, trigger: 'look', runtime: { provider: 'claude', model: 'sonnet' } },
+        { outcome: 'done', ran: { model: 'sonnet' } },
+        new Date(),
+      ),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // A background Look completing cleanly keeps it even without a dispatch runtime override.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(tx, { ...baseRow, trigger: 'look', runtime: null }, { outcome: 'done' }, new Date()),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // Any turn whose reported ran.model differs from the agent's main model keeps it.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(
+        tx,
+        { ...baseRow, trigger: 'mention', runtime: null },
+        { outcome: 'done', ran: { model: 'sonnet' } },
+        new Date(),
+      ),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // A main-model turn finishing cleanly clears the warning.
+    await turn({ outcome: 'done', ran: { model: 'fable', effort: 'high', fast: false } });
+    expect((await profile('dusty')).modelFallback).toBeNull();
   });
 });

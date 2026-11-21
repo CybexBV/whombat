@@ -109,18 +109,6 @@ export function automationDispatchRuntime(
 }
 
 /**
- * The runtime for a Look or care plan research turn: automatic Looks and care plans (not asked for by the person) use
- * the background model when one is set; Looks the person asked to handle and approved fixes keep the main model.
- */
-export function lookDispatchRuntime(
-  agent: Pick<AgentModelRuntime, 'provider' | 'backgroundModel'>,
-  opts: { trigger: DispatchTrigger; askedById?: string | null },
-): ChatRuntime | null {
-  if (opts.trigger !== 'look' || opts.askedById) return null;
-  return backgroundTurnRuntime(agent);
-}
-
-/**
  * The runtime a turn runs on: its agent's, with provider, model, effort and fast taken from the dispatch's resolved
  * runtime (absent there: the tool's default, automatic, the model's own speed).
  */
