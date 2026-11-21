@@ -58,7 +58,7 @@ export interface DeskCalmSourceOptions {
    * The manager's update facts as it last pushed them (the managed runtime's `dispatcher.facts.update`); without it (a
    * box without a manager) Whombat never says it's updating.
    */
-  updateFacts?: () => Pick<UpdateFacts, 'state'> | null | undefined;
+  updateFacts?: () => Pick<UpdateFacts, 'state' | 'paused'> | null | undefined;
   /** How long a glance waits for a read that isn't kept yet before going on without it. */
   waitMs?: number;
   /** The hosts service (tests give their own); the process's otherwise. */
@@ -134,11 +134,14 @@ export class KeptReads {
 }
 
 /** The update the manager is doing now (DK-118): fetching, installing or restarting into a release; else null. */
-export function updateStateOf(facts: Pick<UpdateFacts, 'state'> | null | undefined): UpdateNow | null {
+export function updateStateOf(
+  facts: Pick<UpdateFacts, 'state' | 'paused'> | null | undefined,
+): UpdateNow | null {
   switch (facts?.state) {
     case 'Assigned':
     case 'Downloading':
-      return 'downloading';
+      // A paused channel stops pre-activation downloads; don't show the box as downloading.
+      return facts.paused ? null : 'downloading';
     case 'Activating':
       return 'installing';
     case 'Verifying':
