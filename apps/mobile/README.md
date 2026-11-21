@@ -169,6 +169,10 @@ asked for in one of their conversations), an approval they can decide — show a
   background or killed. On iOS ActivityKit hands the app an activity's push token and a push-to-start token, but the
   app doesn't send them anywhere yet, so an iPhone's activity updates only while the app runs.
 
+Settings → Notifications says on Android what Android holds back although notifications are allowed (a channel turned
+off, the app's battery use restricted, Live Updates off), with a button to the page that turns it back on
+(`deliveryStatus` in `modules/whombat-live`, read when the row shows and when the app comes back to the foreground).
+
 An ongoing notification goes 10 minutes after its last update; the app reconciles on every push and on coming to the
 foreground (MN-02). Inbox pushes open their screen — with the tabs beneath it (MN-01) — (needs-you rows open the
 approval) and mark the row read; a row read in the app or on another device takes its notification out of the shade
