@@ -768,7 +768,7 @@ published automation details read their definition and publisher from one versio
 
 - **Made by talking to the agent** (`automations/plans.ts`): in the person's Chat the agent proposes an automation, or a
   change to one, with `draft_automation` (a recipe or a definition; `automation_read` lists the person's automations, the
-  tracker connections a trigger can name and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
+  tracker connections and connected mailboxes a trigger can name, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
   `automation_plan` card (`automation_plans`, one waiting per automation; a newer plan replaces it). The card's sections
   are written from the definition by core's `planSections`, and a change lists what differs from the live version.
   Turning a plan on publishes exactly its definition with the keys its steps need (`definitionGrants`); Not now sets it
@@ -787,11 +787,21 @@ published automation details read their definition and publisher from one versio
 - **Recipes**: `AutomationRecipe` makes an ordinary definition with the tested steps (assess, fix, review, pull request,
   merge); the agent proposes one when it fits.
 - **Triggers** read the signed `events` table after a durable cursor (messages, reactions, mirrored pull requests
-  and issues of watched repositories, report trackers' reports), plus schedules (cron in a time zone) and Run now. Webhook
-  triggers are refused: nothing from outside reaches the box. Runs are deduplicated by automation, version and
-  trigger; an automation-caused event carries a causal depth and deep chains start nothing.
+  and issues of watched repositories, report trackers' reports, matched incoming emails of watched mailboxes), plus
+  schedules (cron in a time zone) and Run now. Webhook triggers are refused: nothing from outside reaches the box. Runs
+  are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
+  start nothing.
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
   retaining each trigger's daylight-saving policies and the bounded search.
+- **Mail triggers** (`apps/server/src/mail-triggers/`): `MailTriggerService` watches only connected mailboxes
+  (`connections` with `mail`) that have a live `mail` automation — via Gmail History API, Microsoft Graph delta or IMAP
+  IDLE with `UIDVALIDITY`/`lastUid` + `BODYSTRUCTURE` and a 60 s safety poll. It reads headers and attachment metadata
+  first and calls `mailRead` only when a message matches a live trigger (`from` address or domain, `subjectContains`,
+  `hasAttachment`, `attachmentTypes`). High-water marks (`mail_cursors`) and deduplicated matched messages
+  (`mail_trigger_items`) commit through the pipeline with content-free signed `mail.received` events; first watches
+  baseline without firing and newly published automations ignore earlier mail. Every sender-controlled field reaches the
+  agent only inside defused `[[mail …]] … [[/mail]]` outsider-content fences (`packages/core/src/text/fence.ts`), while
+  writes still run under the person's keys and approval cards.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
