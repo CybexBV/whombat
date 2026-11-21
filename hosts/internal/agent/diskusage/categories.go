@@ -19,9 +19,9 @@ import (
 )
 
 // collectCategories measures known storage consumers that live on the requested
-// mount (same st_dev, or same ZFS pool). Every category is optional and bounded
-// by ctx.
-func (r *Runner) collectCategories(ctx context.Context, mount string, target mountInfo, rootDev uint64, otherMounts map[string]bool) ([]proto.DiskUsageCategory, bool) {
+// mount (checked against the mount table before any stat, then st_dev and mount
+// ID). Every category is optional and bounded by ctx.
+func (r *Runner) collectCategories(ctx context.Context, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool) {
 	var cats []proto.DiskUsageCategory
 	partial := false
 
@@ -32,7 +32,7 @@ func (r *Runner) collectCategories(ctx context.Context, mount string, target mou
 	}
 
 	// 1. Container engine (Docker / Podman via unix socket HTTP API).
-	dockerCats, dockerPartial := r.collectDocker(ctx, rootDev, otherMounts)
+	dockerCats, dockerPartial := r.collectDocker(ctx, scope, rootDev, rootMntID)
 	for _, c := range dockerCats {
 		add(c)
 	}
@@ -45,7 +45,7 @@ func (r *Runner) collectCategories(ctx context.Context, mount string, target mou
 		seen := map[inodeKey]struct{}{}
 		var jBytes uint64
 		for _, dir := range []string{"/var/log/journal", "/run/log/journal"} {
-			b, p := r.walkDirBytes(ctx, dir, rootDev, 4, otherMounts, seen)
+			b, p := r.walkDirBytes(ctx, scope, dir, rootDev, rootMntID, 4, seen)
 			jBytes += b
 			if p {
 				partial = true
@@ -84,7 +84,7 @@ func (r *Runner) collectCategories(ctx context.Context, mount string, target mou
 				partial = true
 				break
 			}
-			b, p := r.walkDirBytes(ctx, pd.path, rootDev, 5, otherMounts, seen)
+			b, p := r.walkDirBytes(ctx, scope, pd.path, rootDev, rootMntID, 5, seen)
 			if p {
 				partial = true
 			}
@@ -107,7 +107,7 @@ func (r *Runner) collectCategories(ctx context.Context, mount string, target mou
 	// 4. VM disks and snapshots where known (ZFS datasets/zvols/snapshots, plus
 	// libvirt, Proxmox, Incus and Unraid directories on this mount).
 	if ctx.Err() == nil {
-		vmDisks, vmSnaps, vmPartial := r.collectVMAndSnapshots(ctx, mount, target, rootDev, otherMounts)
+		vmDisks, vmSnaps, vmPartial := r.collectVMAndSnapshots(ctx, scope, rootDev, rootMntID)
 		if vmPartial {
 			partial = true
 		}
@@ -150,13 +150,14 @@ type dockerSystemDF struct {
 	} `json:"BuildCache"`
 }
 
-func (r *Runner) collectDocker(ctx context.Context, rootDev uint64, otherMounts map[string]bool) ([]proto.DiskUsageCategory, bool) {
+func (r *Runner) collectDocker(ctx context.Context, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool) {
 	var out []proto.DiskUsageCategory
 	partial := false
 
 	dockerRoot := "/var/lib/docker"
 	sock := r.findDockerSocket()
 	var df *dockerSystemDF
+	var rootOnMount, volOnMount bool
 
 	if sock != "" && ctx.Err() == nil {
 		client := unixHTTPClient(sock, 10*time.Second)
@@ -164,20 +165,22 @@ func (r *Runner) collectDocker(ctx context.Context, rootDev uint64, otherMounts 
 		if err := dockerGet(ctx, client, "/info", &info); err == nil && info.DockerRootDir != "" {
 			dockerRoot = filepath.Clean(info.DockerRootDir)
 		}
-		// Only query /system/df if Docker's root or its volumes dir sits on this mount.
-		rootOnMount := r.onDevice(dockerRoot, rootDev)
-		volOnMount := r.onDevice(filepath.Join(dockerRoot, "volumes"), rootDev)
+		volDir := filepath.Join(dockerRoot, "volumes")
+		// Check mount table before any stat, then verify st_dev and mount ID.
+		rootOnMount = r.pathInScope(scope, dockerRoot, rootDev, rootMntID)
+		volOnMount = r.pathInScope(scope, volDir, rootDev, rootMntID)
 		if rootOnMount || volOnMount {
 			var res dockerSystemDF
 			if err := dockerGet(ctx, client, "/system/df", &res); err == nil {
 				df = &res
 			}
 		}
+	} else {
+		rootOnMount = r.pathInScope(scope, dockerRoot, rootDev, rootMntID)
+		volOnMount = r.pathInScope(scope, filepath.Join(dockerRoot, "volumes"), rootDev, rootMntID)
 	}
 
-	rootOnMount := r.onDevice(dockerRoot, rootDev)
 	volDir := filepath.Join(dockerRoot, "volumes")
-	volOnMount := r.onDevice(volDir, rootDev)
 
 	if df != nil {
 		if rootOnMount {
@@ -214,7 +217,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDev uint64, otherMounts 
 			volBytes, volReclaim, unknown := summarizeDockerVolumes(df)
 			if unknown && volBytes == 0 && ctx.Err() == nil {
 				seen := map[inodeKey]struct{}{}
-				b, p := r.walkDirBytes(ctx, volDir, rootDev, 6, otherMounts, seen)
+				b, p := r.walkDirBytes(ctx, scope, volDir, rootDev, rootMntID, 6, seen)
 				volBytes = b
 				if p {
 					partial = true
@@ -231,11 +234,11 @@ func (r *Runner) collectDocker(ctx context.Context, rootDev uint64, otherMounts 
 		}
 	}
 
-	// Container logs: <DockerRootDir>/containers/*/*-json.log* (and /var/log/containers
+	// Container logs: <DockerRootDir>/containers/*/*-json.log* (and /var/log/pods
 	// if present on this mount). Always measure directly on disk because Docker
 	// /system/df does not separate container logs from writable layers.
 	if ctx.Err() == nil {
-		logBytes, logPartial := r.collectContainerLogs(ctx, dockerRoot, rootDev, otherMounts)
+		logBytes, logPartial := r.collectContainerLogs(ctx, scope, dockerRoot, rootDev, rootMntID)
 		if logPartial {
 			partial = true
 		}
@@ -307,28 +310,28 @@ func summarizeDockerVolumes(df *dockerSystemDF) (total, reclaimable uint64, anyU
 	return total, reclaimable, anyUnknown
 }
 
-func (r *Runner) collectContainerLogs(ctx context.Context, dockerRoot string, rootDev uint64, otherMounts map[string]bool) (uint64, bool) {
+func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (uint64, bool) {
 	var total uint64
 	partial := false
 	seen := map[inodeKey]struct{}{}
 
 	containersDir := filepath.Join(dockerRoot, "containers")
-	if r.onDevice(containersDir, rootDev) {
-		ents, err := os.ReadDir(r.hostPath(containersDir))
+	if r.pathInScope(scope, containersDir, rootDev, rootMntID) {
+		ents, err := r.readDirInScope(scope, containersDir, rootDev, rootMntID)
 		if err == nil {
 			for _, e := range ents {
 				if ctx.Err() != nil {
 					partial = true
 					break
 				}
-				if !e.IsDir() {
+				if e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
 					continue
 				}
 				sub := joinLogical(containersDir, e.Name())
-				if otherMounts[sub] {
+				if scope.isOtherMount(sub) {
 					continue
 				}
-				files, err := os.ReadDir(r.hostPath(sub))
+				files, err := r.readDirInScope(scope, sub, rootDev, rootMntID)
 				if err != nil {
 					continue
 				}
@@ -340,6 +343,10 @@ func (r *Runner) collectContainerLogs(ctx context.Context, dockerRoot string, ro
 					if f.Type()&os.ModeSymlink != 0 {
 						continue
 					}
+					child := joinLogical(sub, name)
+					if scope.isOtherMount(child) {
+						continue
+					}
 					fi, err := f.Info()
 					if err != nil || !fi.Mode().IsRegular() {
 						continue
@@ -347,6 +354,11 @@ func (r *Runner) collectContainerLogs(ctx context.Context, dockerRoot string, ro
 					dev, ok := statDev(fi)
 					if !ok || dev != rootDev {
 						continue
+					}
+					if rootMntID != 0 {
+						if id, ok := r.mountIDAt(child, 0, false); ok && id != rootMntID {
+							continue
+						}
 					}
 					if ino, nlink, ok := statInode(fi); ok && nlink > 1 {
 						k := inodeKey{dev: dev, ino: ino}
@@ -364,8 +376,8 @@ func (r *Runner) collectContainerLogs(ctx context.Context, dockerRoot string, ro
 	}
 
 	// Kubernetes / CRI container logs if present on this mount.
-	if ctx.Err() == nil && r.onDevice("/var/log/pods", rootDev) {
-		b, p := r.walkDirBytes(ctx, "/var/log/pods", rootDev, 4, otherMounts, seen)
+	if ctx.Err() == nil {
+		b, p := r.walkDirBytes(ctx, scope, "/var/log/pods", rootDev, rootMntID, 4, seen)
 		total += b
 		if p {
 			partial = true
@@ -416,10 +428,11 @@ func dockerGet(ctx context.Context, client *http.Client, path string, out any) e
 
 // ---- VM disks & snapshots --------------------------------------------------------------
 
-func (r *Runner) collectVMAndSnapshots(ctx context.Context, mount string, target mountInfo, rootDev uint64, otherMounts map[string]bool) (disks, snaps proto.DiskUsageCategory, partial bool) {
+func (r *Runner) collectVMAndSnapshots(ctx context.Context, scope mountScope, rootDev, rootMntID uint64) (disks, snaps proto.DiskUsageCategory, partial bool) {
 	disks = proto.DiskUsageCategory{Key: proto.DiskCatVMDisks, Label: "VM disks"}
 	snaps = proto.DiskUsageCategory{Key: proto.DiskCatVMSnapshots, Label: "Snapshots"}
 
+	target := scope.target
 	// ZFS pools report zvols (VM disks) and snapshots accurately without walking files.
 	if target.FSType == "zfs" && target.Source != "" && r.runCmd != nil {
 		if zDisks, zSnaps, ok := r.collectZFS(ctx, target.Source); ok {
@@ -463,10 +476,7 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, mount string, target
 			partial = true
 			break
 		}
-		if !r.onDevice(dir, rootDev) {
-			continue
-		}
-		b, p := r.walkDirBytes(ctx, dir, rootDev, 6, otherMounts, seen)
+		b, p := r.walkDirBytes(ctx, scope, dir, rootDev, rootMntID, 6, seen)
 		if p {
 			partial = true
 		}
@@ -480,10 +490,7 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, mount string, target
 			partial = true
 			break
 		}
-		if !r.onDevice(dir, rootDev) {
-			continue
-		}
-		b, p := r.walkDirBytes(ctx, dir, rootDev, 4, otherMounts, snapSeen)
+		b, p := r.walkDirBytes(ctx, scope, dir, rootDev, rootMntID, 4, snapSeen)
 		if p {
 			partial = true
 		}
@@ -556,15 +563,6 @@ func pruneNestedPaths(set map[string]bool) []string {
 		}
 	}
 	return out
-}
-
-func (r *Runner) onDevice(logicalPath string, rootDev uint64) bool {
-	fi, err := os.Lstat(r.hostPath(logicalPath))
-	if err != nil || fi.Mode()&os.ModeSymlink != 0 {
-		return false
-	}
-	dev, ok := statDev(fi)
-	return ok && dev == rootDev
 }
 
 func lookTool(name string) (string, error) {

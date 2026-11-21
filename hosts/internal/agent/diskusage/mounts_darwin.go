@@ -26,13 +26,14 @@ func hostMounts() ([]mountInfo, error) {
 		return nil, err
 	}
 	out := make([]mountInfo, 0, n)
-	for _, st := range buf[:n] {
+	for i, st := range buf[:n] {
 		mp := cstrBytes(st.Mntonname[:])
 		fsType := cstrBytes(st.Fstypename[:])
 		src := cstrBytes(st.Mntfromname[:])
 		remote := darwinRemoteFSTypes[fsType] || (st.Flags&unix.MNT_LOCAL == 0)
 		virtual := !remote && !darwinLocalFSTypes[fsType]
 		out = append(out, mountInfo{
+			ID:         i + 1,
 			MountPoint: mp,
 			FSType:     fsType,
 			Source:     src,

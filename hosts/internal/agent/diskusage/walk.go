@@ -2,13 +2,16 @@ package diskusage
 
 import (
 	"context"
+	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"rackoon/internal/proto"
 )
+
+var errWrongMount = errors.New("path is outside target mount")
 
 type inodeKey struct {
 	dev uint64
@@ -38,7 +41,88 @@ var virtualRoots = map[string]bool{
 	"/run":  true,
 }
 
-func (r *Runner) walkMount(ctx context.Context, mount string, rootDev uint64, maxDepth int, otherMounts map[string]bool) walkResult {
+func (r *Runner) mountIDAt(logicalPath string, fdMntID uint64, fdHasMntID bool) (uint64, bool) {
+	if r.statMountID != nil {
+		return r.statMountID(logicalPath)
+	}
+	if r.root != "" {
+		return 0, false
+	}
+	if fdHasMntID {
+		return fdMntID, true
+	}
+	return hostStatMountID(r.hostPath(logicalPath))
+}
+
+// pathInScope checks that logicalPath lies inside scope (using mountinfo mount
+// IDs before any stat) and walks every component from the mount root down to
+// logicalPath without following symlinks, verifying st_dev and mount ID match.
+func (r *Runner) pathInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) bool {
+	p := filepath.Clean(logicalPath)
+	if !scope.containsPath(p) {
+		return false
+	}
+	target := scope.target.MountPoint
+	steps := []string{target}
+	if p != target {
+		rel := strings.TrimPrefix(p, target)
+		rel = strings.TrimPrefix(rel, "/")
+		cur := target
+		for _, seg := range strings.Split(rel, "/") {
+			if seg == "" {
+				continue
+			}
+			cur = joinLogical(cur, seg)
+			steps = append(steps, cur)
+		}
+	}
+	for i, cur := range steps {
+		if i > 0 && scope.isOtherMount(cur) {
+			return false
+		}
+		fi, err := r.doLstat(r.hostPath(cur))
+		if err != nil || fi.Mode()&fs.ModeSymlink != 0 {
+			return false
+		}
+		dev, ok := statDev(fi)
+		if !ok || dev != rootDev {
+			return false
+		}
+		if rootMntID != 0 {
+			if id, ok := r.mountIDAt(cur, 0, false); ok && id != rootMntID {
+				return false
+			}
+		}
+		if i < len(steps)-1 && !fi.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Runner) readDirInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) ([]fs.DirEntry, error) {
+	p := filepath.Clean(logicalPath)
+	if !scope.containsPath(p) {
+		return nil, errWrongMount
+	}
+	f, dev, fdMntID, fdHasMntID, err := openDirNoFollow(r.hostPath(p))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if dev != rootDev {
+		return nil, errWrongMount
+	}
+	if rootMntID != 0 {
+		if id, ok := r.mountIDAt(p, fdMntID, fdHasMntID); ok && id != rootMntID {
+			return nil, errWrongMount
+		}
+	}
+	return f.ReadDir(-1)
+}
+
+func (r *Runner) walkMount(ctx context.Context, scope mountScope, rootDev, rootMntID uint64, maxDepth int) walkResult {
+	mount := scope.target.MountPoint
 	maxEntries := r.maxEntries
 	if maxEntries <= 0 {
 		maxEntries = DefaultMaxEntries
@@ -55,7 +139,7 @@ func (r *Runner) walkMount(ctx context.Context, mount string, rootDev uint64, ma
 			node.partial = true
 			return node
 		}
-		ents, err := os.ReadDir(r.hostPath(logicalPath))
+		ents, err := r.readDirInScope(scope, logicalPath, rootDev, rootMntID)
 		if err != nil {
 			return node
 		}
@@ -84,9 +168,9 @@ func (r *Runner) walkMount(ctx context.Context, mount string, rootDev uint64, ma
 				continue
 			}
 
-			// Skip other mount points and virtual roots BEFORE Lstat so a
+			// Skip other mount points (including bind mounts) and virtual roots BEFORE Lstat so a
 			// sleeping disk or stalled network mount below this mount is never touched.
-			if otherMounts[childLogical] || (mount == "/" && virtualRoots[childLogical]) {
+			if scope.isOtherMount(childLogical) {
 				continue
 			}
 
@@ -103,6 +187,11 @@ func (r *Runner) walkMount(ctx context.Context, mount string, rootDev uint64, ma
 			if !hasDev || dev != rootDev {
 				// Never cross onto another filesystem.
 				continue
+			}
+			if rootMntID != 0 {
+				if id, ok := r.mountIDAt(childLogical, 0, false); ok && id != rootMntID {
+					continue
+				}
 			}
 
 			if mode.IsDir() {
@@ -231,16 +320,17 @@ func pickLargestFolders(root *dirNode, maxDepth, limit int) []proto.DiskUsageFol
 	return out
 }
 
-// walkDirBytes measures allocated bytes inside one targeted directory on rootDev,
-// bounded by ctx, depth and entry cap. Used for known category directories such
-// as the systemd journal, package caches and VM image directories.
-func (r *Runner) walkDirBytes(ctx context.Context, logicalDir string, rootDev uint64, maxDepth int, otherMounts map[string]bool, seen map[inodeKey]struct{}) (bytes uint64, partial bool) {
-	info, err := os.Lstat(r.hostPath(logicalDir))
-	if err != nil || !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
+// walkDirBytes measures allocated bytes inside one targeted directory on the
+// target mount, bounded by ctx, depth and entry cap. It checks the mount table
+// before any stat or read so paths on other mounts (including bind mounts) are
+// never touched.
+func (r *Runner) walkDirBytes(ctx context.Context, scope mountScope, logicalDir string, rootDev, rootMntID uint64, maxDepth int, seen map[inodeKey]struct{}) (bytes uint64, partial bool) {
+	cleanDir := filepath.Clean(logicalDir)
+	if !r.pathInScope(scope, cleanDir, rootDev, rootMntID) {
 		return 0, false
 	}
-	dev, ok := statDev(info)
-	if !ok || dev != rootDev {
+	info, err := r.doLstat(r.hostPath(cleanDir))
+	if err != nil || !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
 		return 0, false
 	}
 
@@ -252,7 +342,7 @@ func (r *Runner) walkDirBytes(ctx context.Context, logicalDir string, rootDev ui
 			partial = true
 			return
 		}
-		ents, err := os.ReadDir(r.hostPath(p))
+		ents, err := r.readDirInScope(scope, p, rootDev, rootMntID)
 		if err != nil {
 			return
 		}
@@ -270,7 +360,7 @@ func (r *Runner) walkDirBytes(ctx context.Context, logicalDir string, rootDev ui
 				continue
 			}
 			child := joinLogical(p, e.Name())
-			if otherMounts[child] {
+			if scope.isOtherMount(child) {
 				continue
 			}
 			ci, err := e.Info()
@@ -280,6 +370,11 @@ func (r *Runner) walkDirBytes(ctx context.Context, logicalDir string, rootDev ui
 			cdev, ok := statDev(ci)
 			if !ok || cdev != rootDev {
 				continue
+			}
+			if rootMntID != 0 {
+				if id, ok := r.mountIDAt(child, 0, false); ok && id != rootMntID {
+					continue
+				}
 			}
 			if ci.IsDir() {
 				if depth >= maxDepth {
@@ -304,7 +399,7 @@ func (r *Runner) walkDirBytes(ctx context.Context, logicalDir string, rootDev ui
 			bytes += allocatedBytes(ci)
 		}
 	}
-	walk(filepath.Clean(logicalDir), 0)
+	walk(cleanDir, 0)
 	return bytes, partial
 }
 

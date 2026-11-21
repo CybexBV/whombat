@@ -3,9 +3,35 @@
 package diskusage
 
 import (
+	"errors"
 	"io/fs"
+	"os"
 	"syscall"
 )
+
+func openDirNoFollow(path string) (*os.File, uint64, uint64, bool, error) {
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	f := os.NewFile(uintptr(fd), path)
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, 0, 0, false, err
+	}
+	dev, ok := statDev(fi)
+	if !ok {
+		_ = f.Close()
+		return nil, 0, 0, false, errors.New("missing device id")
+	}
+	mntID, hasMntID := fdStatMountID(int(f.Fd()))
+	return f, dev, mntID, hasMntID, nil
+}
+
+func isSymlinkLoopErr(err error) bool {
+	return errors.Is(err, syscall.ELOOP)
+}
 
 func statDev(fi fs.FileInfo) (uint64, bool) {
 	st, ok := fi.Sys().(*syscall.Stat_t)

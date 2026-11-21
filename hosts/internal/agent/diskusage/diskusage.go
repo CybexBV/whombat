@@ -10,6 +10,7 @@ package diskusage
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -45,11 +46,23 @@ const (
 
 // mountInfo describes one mounted filesystem known to the kernel.
 type mountInfo struct {
+	ID         int
+	ParentID   int
+	MajMin     string
 	MountPoint string
 	FSType     string
 	Source     string
 	Remote     bool
 	Virtual    bool
+}
+
+// mountScope resolves path ownership against the active visible mount table
+// using mountinfo mount IDs so probes and walks never touch another mount
+// (including same-device bind mounts).
+type mountScope struct {
+	target      mountInfo
+	visible     []mountInfo
+	otherMounts map[string]bool
 }
 
 // fsStat is the usable capacity and used bytes of one filesystem (df style).
@@ -70,6 +83,8 @@ type Runner struct {
 	dockerSockets  []string
 	listMounts     func() ([]mountInfo, error)
 	statfs         func(path string) (fsStat, error)
+	lstat          func(path string) (fs.FileInfo, error)
+	statMountID    func(logicalPath string) (uint64, bool)
 	checkStandby   func(ctx context.Context, dev string) bool
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
@@ -141,7 +156,7 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		}
 	}
 
-	target, found := findMount(mounts, mount)
+	scope, found := buildMountScope(mounts, mount)
 	if !found {
 		return proto.DiskUsageResponse{
 			Code:       CodeInvalid,
@@ -150,6 +165,7 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			MeasuredAt: start,
 		}
 	}
+	target := scope.target
 	if target.Remote {
 		return proto.DiskUsageResponse{
 			Code:       CodeInvalid,
@@ -191,7 +207,7 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 	}
 
 	hostPath := r.hostPath(mount)
-	rootInfo, err := os.Lstat(hostPath)
+	rootInfo, err := r.doLstat(hostPath)
 	if err != nil {
 		return proto.DiskUsageResponse{
 			Code:       CodeFailed,
@@ -215,16 +231,15 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			DurationMs: r.now().UTC().Sub(start).Milliseconds(),
 		}
 	}
+	var rootMntID uint64
+	if id, ok := r.mountIDAt(mount, 0, false); ok {
+		rootMntID = id
+	}
 
 	var totalBytes, usedBytes uint64
 	if st, err := r.statfs(hostPath); err == nil {
 		totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
 	}
-
-	// Build the set of other mount points beneath this mount so the walker skips
-	// them without even calling Lstat (which could wake a sleeping disk or stall
-	// on an unresponsive network mount).
-	otherMounts := childMountSet(mounts, mount)
 
 	// Run the scan on a dedicated OS thread at lowest CPU and I/O priority.
 	// Keeping the goroutine locked when it exits tells the Go runtime to
@@ -248,10 +263,10 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			catBudget = min(4*time.Second, timeout)
 		}
 		cctx, ccancel := context.WithTimeout(wctx, catBudget)
-		cats, catPartial := r.collectCategories(cctx, mount, target, rootDev, otherMounts)
+		cats, catPartial := r.collectCategories(cctx, scope, rootDev, rootMntID)
 		ccancel()
 
-		w := r.walkMount(wctx, mount, rootDev, maxDepth, otherMounts)
+		w := r.walkMount(wctx, scope, rootDev, rootMntID, maxDepth)
 		done <- scanOut{walk: w, categories: cats, catPartial: catPartial}
 	}()
 
@@ -324,32 +339,150 @@ func (r *Runner) detectUnraid() bool {
 	return false
 }
 
-func findMount(mounts []mountInfo, target string) (mountInfo, bool) {
-	// If several entries share the same mountpoint (overmounts), the last one
-	// in mountinfo is the active mount on top.
-	var matched mountInfo
+func (r *Runner) doLstat(path string) (fs.FileInfo, error) {
+	if r.lstat != nil {
+		return r.lstat(path)
+	}
+	return os.Lstat(path)
+}
+
+func buildMountScope(mounts []mountInfo, targetMount string) (mountScope, bool) {
+	if len(mounts) == 0 {
+		return mountScope{}, false
+	}
+	norm := make([]mountInfo, len(mounts))
+	maxID := 0
+	for i, m := range mounts {
+		m.MountPoint = filepath.Clean(m.MountPoint)
+		if m.ID > maxID {
+			maxID = m.ID
+		}
+		norm[i] = m
+	}
+	for i := range norm {
+		if norm[i].ID == 0 {
+			maxID++
+			norm[i].ID = maxID
+		}
+	}
+
+	byID := make(map[int]mountInfo, len(norm))
+	lastByMP := make(map[string]int, len(norm))
+	for _, m := range norm {
+		byID[m.ID] = m
+		lastByMP[m.MountPoint] = m.ID
+	}
+
+	covered := map[int]bool{}
+	for _, m := range norm {
+		if m.ParentID != 0 {
+			if p, ok := byID[m.ParentID]; ok && p.ID != m.ID && p.MountPoint == m.MountPoint {
+				covered[p.ID] = true
+			}
+		}
+		if lastByMP[m.MountPoint] != m.ID {
+			covered[m.ID] = true
+		}
+	}
+
+	hidden := func(m mountInfo) bool {
+		if covered[m.ID] {
+			return true
+		}
+		cur := m
+		for depth := 0; depth < 64; depth++ {
+			if cur.ParentID == 0 {
+				return false
+			}
+			p, ok := byID[cur.ParentID]
+			if !ok || p.ID == cur.ID {
+				return false
+			}
+			if covered[p.ID] && p.MountPoint != cur.MountPoint {
+				return true
+			}
+			cur = p
+		}
+		return false
+	}
+
+	visible := make([]mountInfo, 0, len(norm))
+	var target mountInfo
 	found := false
-	for _, m := range mounts {
-		if filepath.Clean(m.MountPoint) == target {
-			matched = m
+	for _, m := range norm {
+		if hidden(m) {
+			continue
+		}
+		visible = append(visible, m)
+		if m.MountPoint == targetMount {
+			target = m
 			found = true
 		}
 	}
-	return matched, found
-}
+	if !found {
+		return mountScope{}, false
+	}
 
-func childMountSet(mounts []mountInfo, target string) map[string]bool {
-	out := map[string]bool{}
-	for _, m := range mounts {
-		mp := filepath.Clean(m.MountPoint)
-		if mp == target {
+	otherMounts := map[string]bool{}
+	for _, m := range visible {
+		if m.ID == target.ID {
 			continue
 		}
-		if hasPathPrefix(mp, target) {
-			out[mp] = true
+		if hasPathPrefix(m.MountPoint, target.MountPoint) {
+			otherMounts[m.MountPoint] = true
 		}
 	}
-	return out
+	return mountScope{
+		target:      target,
+		visible:     visible,
+		otherMounts: otherMounts,
+	}, true
+}
+
+func (s mountScope) ownerMount(logicalPath string) (mountInfo, bool) {
+	p := filepath.Clean(logicalPath)
+	if !strings.HasPrefix(p, "/") {
+		return mountInfo{}, false
+	}
+	var best mountInfo
+	bestLen := -1
+	for _, m := range s.visible {
+		if hasPathPrefix(p, m.MountPoint) && len(m.MountPoint) > bestLen {
+			best = m
+			bestLen = len(m.MountPoint)
+		}
+	}
+	return best, bestLen >= 0
+}
+
+func (s mountScope) containsPath(logicalPath string) bool {
+	p := filepath.Clean(logicalPath)
+	if !strings.HasPrefix(p, "/") {
+		return false
+	}
+	if !hasPathPrefix(p, s.target.MountPoint) {
+		return false
+	}
+	if s.target.MountPoint == "/" {
+		for vr := range virtualRoots {
+			if hasPathPrefix(p, vr) {
+				return false
+			}
+		}
+	}
+	owner, ok := s.ownerMount(p)
+	return ok && owner.ID == s.target.ID
+}
+
+func (s mountScope) isOtherMount(logicalPath string) bool {
+	p := filepath.Clean(logicalPath)
+	if s.otherMounts[p] {
+		return true
+	}
+	if s.target.MountPoint == "/" && virtualRoots[p] {
+		return true
+	}
+	return !s.containsPath(p)
 }
 
 func hasPathPrefix(p, prefix string) bool {

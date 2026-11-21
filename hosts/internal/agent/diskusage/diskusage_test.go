@@ -3,6 +3,7 @@ package diskusage
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -504,5 +505,187 @@ func TestStandbyFromSmartctl(t *testing.T) {
 	}
 	if standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":0,"messages":[]}}`)) {
 		t.Error("active disk flagged as standby")
+	}
+}
+
+func TestStaysInsideRequestedMountNestedAndBindMounts(t *testing.T) {
+	root := t.TempDir()
+
+	// Files on /, /mnt/user (array), /mnt/cache/nested (NFS), /mnt/cache/bind (same-dev bind),
+	// and real files on /mnt/cache itself.
+	writeBytes(t, filepath.Join(root, "var/log/journal/mid/system.journal"), 64*1024)
+	writeBytes(t, filepath.Join(root, "var/cache/apt/archives/pkg.deb"), 64*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/c1/c1-json.log"), 64*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/libvirt/images/root-vm.qcow2"), 64*1024)
+	writeBytes(t, filepath.Join(root, "mnt/user/domains/array-vm.qcow2"), 128*1024)
+	writeBytes(t, filepath.Join(root, "mnt/cache/nested/vms/nfs-vm.qcow2"), 256*1024)
+	writeBytes(t, filepath.Join(root, "mnt/cache/bind/vms/bind-vm.qcow2"), 256*1024)
+	writeBytes(t, filepath.Join(root, "mnt/cache/domains/cache-vm.qcow2"), 32*1024)
+
+	// Intermediate symlink inside /mnt/cache pointing to /mnt/user: must never be followed.
+	if err := os.Symlink(filepath.Join(root, "mnt/user"), filepath.Join(root, "mnt/cache/esc")); err != nil {
+		t.Fatal(err)
+	}
+
+	mounts := []mountInfo{
+		{ID: 20, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 30, ParentID: 20, MountPoint: "/mnt/cache", FSType: "btrfs", Source: "/dev/nvme0n1p1"},
+		{ID: 31, ParentID: 30, MountPoint: "/mnt/cache/nested", FSType: "nfs4", Source: "10.100.0.10:/export", Remote: true},
+		// Same-device bind mount beneath /mnt/cache: same st_dev in tests and on Linux, different mountinfo ID.
+		{ID: 32, ParentID: 30, MountPoint: "/mnt/cache/bind", FSType: "btrfs", Source: "/dev/nvme0n1p1"},
+		{ID: 33, ParentID: 20, MountPoint: "/mnt/user", FSType: "fuse.shfs", Source: "shfs"},
+	}
+
+	inv := &proto.Report{
+		Libvirt: &proto.Platform{
+			Libvirt: &proto.LibvirtDetail{
+				Pools: []proto.LibvirtPool{
+					{Name: "nfs", Type: "fs", Path: "/mnt/cache/nested/vms", Active: true},
+					{Name: "bind", Type: "dir", Path: "/mnt/cache/bind/vms", Active: true},
+					{Name: "esc", Type: "dir", Path: "/mnt/cache/esc/domains", Active: true},
+					{Name: "cache", Type: "dir", Path: "/mnt/cache/domains", Active: true},
+				},
+				Folders: &proto.LibvirtFolders{Domains: "/mnt/user/domains"},
+			},
+		},
+	}
+
+	r := newTestRunner(t, root, mounts, inv)
+	var mu sync.Mutex
+	var statted []string
+	r.lstat = func(path string) (fs.FileInfo, error) {
+		rel, err := filepath.Rel(root, path)
+		if err == nil {
+			logical := "/" + filepath.ToSlash(rel)
+			if rel == "." {
+				logical = "/"
+			}
+			mu.Lock()
+			statted = append(statted, logical)
+			mu.Unlock()
+		}
+		return os.Lstat(path)
+	}
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/cache"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+
+	// No stat may ever touch paths outside /mnt/cache or beneath nested/bind mounts.
+	for _, p := range statted {
+		if !hasPathPrefix(p, "/mnt/cache") {
+			t.Errorf("lstat escaped /mnt/cache to %q", p)
+		}
+		if hasPathPrefix(p, "/mnt/cache/nested") {
+			t.Errorf("lstat touched nested mount %q", p)
+		}
+		if hasPathPrefix(p, "/mnt/cache/bind") {
+			t.Errorf("lstat touched bind mount %q", p)
+		}
+		if p == "/mnt/cache/esc/domains" {
+			t.Errorf("lstat followed intermediate symlink to %q", p)
+		}
+	}
+
+	for _, f := range resp.Folders {
+		if hasPathPrefix(f.Path, "/mnt/cache/nested") || hasPathPrefix(f.Path, "/mnt/cache/bind") {
+			t.Errorf("folder walk crossed into nested/bind mount: %+v", f)
+		}
+	}
+	byKey := map[string]proto.DiskUsageCategory{}
+	for _, c := range resp.Categories {
+		byKey[c.Key] = c
+	}
+	if _, ok := byKey[proto.DiskCatJournal]; ok {
+		t.Errorf("journal on / leaked into /mnt/cache scan: %+v", byKey[proto.DiskCatJournal])
+	}
+	if _, ok := byKey[proto.DiskCatPackageCache]; ok {
+		t.Errorf("package cache on / leaked into /mnt/cache scan: %+v", byKey[proto.DiskCatPackageCache])
+	}
+	if _, ok := byKey[proto.DiskCatContainerLogs]; ok {
+		t.Errorf("container logs on / leaked into /mnt/cache scan: %+v", byKey[proto.DiskCatContainerLogs])
+	}
+	vm := byKey[proto.DiskCatVMDisks]
+	if vm.Bytes < 32*1024 || vm.Bytes >= 128*1024 {
+		t.Errorf("vm_disks = %+v, want only /mnt/cache/domains (~32 KiB)", vm)
+	}
+}
+
+func TestRootScanSkipsBindMountedDockerAndMountIDMismatch(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/c1/c1-json.log"), 64*1024)
+	writeBytes(t, filepath.Join(root, "srv/same-dev-bind/big.bin"), 256*1024)
+	writeBytes(t, filepath.Join(root, "srv/raced-bind/big.bin"), 256*1024)
+	writeBytes(t, filepath.Join(root, "srv/keep/data.bin"), 24*1024)
+
+	// /var/lib/libvirt is a symlink to /mnt/user/libvirt: scanning / must not follow it.
+	writeBytes(t, filepath.Join(root, "mnt/user/libvirt/images/vm.qcow2"), 128*1024)
+	if err := os.MkdirAll(filepath.Join(root, "var/lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "mnt/user/libvirt"), filepath.Join(root, "var/lib/libvirt")); err != nil {
+		t.Fatal(err)
+	}
+
+	mounts := []mountInfo{
+		{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 11, ParentID: 10, MountPoint: "/var/lib/docker", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 12, ParentID: 10, MountPoint: "/srv/same-dev-bind", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 13, ParentID: 10, MountPoint: "/mnt/user", FSType: "fuse.shfs", Source: "shfs"},
+	}
+
+	r := newTestRunner(t, root, mounts, nil)
+	// Simulate a same-device bind mount at /srv/raced-bind not listed in mountinfo:
+	// statMountID catches it by mount ID even though st_dev is identical.
+	r.statMountID = func(logicalPath string) (uint64, bool) {
+		if hasPathPrefix(logicalPath, "/srv/raced-bind") {
+			return 99, true
+		}
+		return 10, true
+	}
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+
+	for _, c := range resp.Categories {
+		if c.Key == proto.DiskCatContainerLogs || c.Key == proto.DiskCatVMDisks {
+			t.Errorf("category %q crossed bind mount or symlink: %+v", c.Key, c)
+		}
+	}
+	var total uint64
+	for _, f := range resp.Folders {
+		if hasPathPrefix(f.Path, "/srv/same-dev-bind") || hasPathPrefix(f.Path, "/srv/raced-bind") || hasPathPrefix(f.Path, "/var/lib/docker") {
+			t.Errorf("walk crossed into bind mount: %+v", f)
+		}
+		total += f.Bytes
+	}
+	if total < 24*1024 || total >= 128*1024 {
+		t.Errorf("total walked bytes = %d, want ~24 KiB (folders=%+v)", total, resp.Folders)
+	}
+}
+
+func TestBuildMountScopeOvermountAndMountIDs(t *testing.T) {
+	mounts := []mountInfo{
+		{ID: 20, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 30, ParentID: 20, MountPoint: "/mnt/data", FSType: "ext4", Source: "/dev/sda1"},
+		{ID: 31, ParentID: 30, MountPoint: "/mnt/data/hidden-child", FSType: "ext4", Source: "/dev/sdb1"},
+		{ID: 32, ParentID: 30, MountPoint: "/mnt/data", FSType: "xfs", Source: "/dev/sdc1"},
+		{ID: 33, ParentID: 32, MountPoint: "/mnt/data/bind", FSType: "xfs", Source: "/dev/sdc1"},
+	}
+	scope, ok := buildMountScope(mounts, "/mnt/data")
+	if !ok {
+		t.Fatal("expected /mnt/data to resolve")
+	}
+	if scope.target.ID != 32 || scope.target.FSType != "xfs" {
+		t.Fatalf("target = %+v, want overmount ID 32 (xfs)", scope.target)
+	}
+	if !scope.containsPath("/mnt/data/hidden-child/file") {
+		t.Error("child under covered mount should not hide path on active overmount")
+	}
+	if scope.containsPath("/mnt/data/bind/file") {
+		t.Error("bind mount under active overmount should be excluded by mount ID")
 	}
 }
