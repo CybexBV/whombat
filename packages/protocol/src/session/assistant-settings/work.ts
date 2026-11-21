@@ -1,0 +1,266 @@
+import type { OperationName } from '../operations.js';
+import type { AssistantSetting } from './types.js';
+import { ask, change, guarded, NONE, never, read } from './types.js';
+
+/**
+ * Servers and services, what Whombat watches, automations, schedules and website feedback. Work items (messages,
+ * chats, runs, pull requests, files, feedback reports…) are not settings: the assistant has its own tools for them.
+ */
+export const WORK_SETTINGS = {
+  'activity.list': NONE,
+
+  'automations.acceptPlan': NONE,
+  'automations.cancelRun': NONE,
+  'automations.create': NONE,
+  'automations.declinePlan': NONE,
+  'automations.delete': ask('automations', 'Delete an automation'),
+  'automations.discardDraft': NONE,
+  'automations.export': NONE,
+  'automations.get': read('automations', 'Read an automation and how it is set up'),
+  'automations.list': read('automations', 'Read the automations and whether each is on'),
+  'automations.pauseRun': NONE,
+  'automations.publish': NONE,
+  'automations.resumeRun': NONE,
+  'automations.reviewStep': NONE,
+  'automations.run': NONE,
+  'automations.runNow': NONE,
+  'automations.runs': NONE,
+  'automations.samples': NONE,
+  'automations.saveDraft': NONE,
+  'automations.setEnabled': change('automations', 'Turn an automation on or off'),
+  'automations.setKeys': never('automations', 'Choose what an automation may do'),
+  'automations.templates': NONE,
+  // Its address and secret are shown once, so the person does it on the page.
+  'automations.webhook': never('automations', 'Turn an automation’s web address on or off'),
+
+  'canvases.addComment': NONE,
+
+  'canvases.collabToken': NONE,
+  'canvases.content': NONE,
+  'canvases.create': NONE,
+  'canvases.get': NONE,
+  'canvases.list': NONE,
+  'canvases.resolveComment': NONE,
+
+  'changes.list': NONE,
+  'changes.undo': NONE,
+
+  // Which AI answers in a chat is the one setting of the chat ops.
+  'chats.archive': NONE,
+  'chats.clear': NONE,
+  'chats.list': NONE,
+  'chats.markUnread': NONE,
+  'chats.place': NONE,
+  'chats.readThread': NONE,
+  'chats.rename': NONE,
+  'chats.runtime': read('agent.ai', 'Read which AI answers in Chat and which models are ready'),
+  'chats.setThreadRuntime': ask('agent.ai', 'Choose which AI answers in a chat thread'),
+  'chats.settle': NONE,
+  'chats.settleFinished': NONE,
+  'chats.start': NONE,
+  'chats.threads': NONE,
+  'chats.unarchive': NONE,
+  'chats.unread': NONE,
+
+  // Links are the assistant's through `share_link`, on the person's yes; stopping them is the person's.
+  'shares.create': NONE,
+  'shares.list': NONE,
+  'shares.preview': NONE,
+  'shares.stop': NONE,
+  'shares.stopAll': NONE,
+
+  // The person's prompts (Whombat prompts.md): the assistant keeps and changes them on the person's word; using one is
+  // the person's own press, and removing asks first.
+  'prompts.list': read('you.prompts', 'Read your prompts: their titles, words and where each ran'),
+  'prompts.create': change('you.prompts', 'Keep words as a prompt, under a title'),
+  'prompts.save': change(
+    'you.prompts',
+    'Change a prompt: its title, words, whether it is for a repository, its AI',
+  ),
+  'prompts.remove': ask('you.prompts', 'Remove a prompt'),
+  'prompts.restore': ask('you.prompts', 'Bring back the prompts Whombat shipped, as shipped'),
+  'prompts.projects': NONE,
+  'prompts.use': NONE,
+  'councils.goAhead': NONE,
+  'councils.stop': NONE,
+  'delegations.pick': NONE,
+  'delegations.start': NONE,
+  'delegations.stopTask': NONE,
+  'delegations.setAi': NONE,
+  'delegations.models': NONE,
+  'delegations.stop': NONE,
+  'councils.resetSetup': ask('agent.council', 'Go back to Whombat’s own choice for the council'),
+  'councils.saveSetup': change('agent.council', 'Change the council: its AIs, models, effort and score'),
+  'councils.setup': read('agent.council', 'Read the council: who sits on it, with which model and effort'),
+
+  'conversations.bootstrap': NONE,
+  'conversations.get': NONE,
+  'conversations.handoffAnswer': NONE,
+  'conversations.handoffSend': NONE,
+  'conversations.handoffs': NONE,
+  'conversations.list': NONE,
+  'conversations.markRead': NONE,
+  'conversations.pins': NONE,
+  'conversations.setNotify': change('you.notifications', 'Choose how a conversation notifies you'),
+  'conversations.update': NONE,
+
+  'deployments.environments': NONE,
+  'deployments.list': NONE,
+
+  'deviceSkills.decide': never('overview', 'Choose what a device connection may do and switch it on'),
+  'deviceSkills.decline': never('overview', 'Decline a proposed device connection'),
+
+  'dispatches.cancel': NONE,
+  'dispatches.retry': NONE,
+
+  'feedback.createIntegration': change('advanced.feedback', 'Add a website that sends feedback'),
+  'feedback.decide': NONE,
+  'feedback.getIntegration': read('advanced.feedback', 'Read a website’s feedback setup'),
+  'feedback.getReport': NONE,
+  'feedback.listIntegrations': read('advanced.feedback', 'Read the websites that send feedback'),
+  'feedback.redactReport': NONE,
+  'feedback.requestHandoff': NONE,
+  'feedback.retryAssessment': NONE,
+  'feedback.setAssessment': change('advanced.feedback', 'Pause or resume assessing feedback automatically'),
+  'feedback.setIntake': change('advanced.feedback', 'Turn feedback intake on or off'),
+  'feedback.setReportStatus': NONE,
+  'feedback.updateIntegration': change('advanced.feedback', 'Change a website’s feedback setup'),
+
+  'files.list': NONE,
+  'files.remove': NONE,
+  'files.save': NONE,
+  'files.summary': NONE,
+  'files.update': NONE,
+
+  'home.overview': NONE,
+
+  'hosts.ackAlert': change('overview', 'Acknowledge or snooze a server alert'),
+  'hosts.addressChange': read(
+    'overview',
+    'Read whether this Whombat’s address changed and who hasn’t found it',
+  ),
+  'hosts.agentSettings': read('overview', 'Read whether server agents update by themselves'),
+  // Enrolling a server, its sign-in console and its install are flows the person walks through.
+  'hosts.approveEnrollment': NONE,
+  'hosts.closeConsole': NONE,
+  // What a check looks at, and switching it off, ask: Whombat would look somewhere else, or stop watching.
+  'hosts.createCheck': guarded(change('overview', 'Add a check on a server or website'), {
+    'body.target': 'ask',
+  }),
+  'hosts.createConsole': NONE,
+  'hosts.createEnrollment': NONE,
+  'hosts.createMaintenance': change('overview', 'Mute server alerts for a while'),
+  'hosts.fleet': read('overview', 'Read all servers and how they are doing'),
+  'hosts.getGuest': read('overview', 'Read a virtual machine or container'),
+  'hosts.getInstall': NONE,
+  'hosts.getRepoint': NONE,
+  'hosts.getServer': read('overview', 'Read a server and how it is doing'),
+  'hosts.getTask': read('overview', 'Read how a server task went'),
+  'hosts.guestAction': ask('overview', 'Start, stop, restart or snapshot a virtual machine or container'),
+  'hosts.guestMetrics': read('overview', 'Read a guest’s charts'),
+  'hosts.inspect': read('overview', 'Look inside a server: services, disks, network and more'),
+  'hosts.listAlerts': read('overview', 'Read the server alerts'),
+  'hosts.listChecks': read('overview', 'Read the checks on servers and websites'),
+  'hosts.listEnrollments': NONE,
+  'hosts.listGuests': read('overview', 'Read the virtual machines and containers of a server'),
+  'hosts.listMaintenance': read('overview', 'Read when server alerts are muted'),
+  'hosts.manage': ask('overview', 'Change a Proxmox, Incus, unRAID or KVM server or guest'),
+  'hosts.manageRead': read('overview', 'Read a guest’s settings, backups, storage and tasks'),
+  'hosts.rejectEnrollment': NONE,
+  'hosts.removeCheck': ask('overview', 'Remove a check'),
+  'hosts.removeMaintenance': ask('overview', 'Remove a muted period for server alerts'),
+  'hosts.removeServer': ask('overview', 'Remove a server from Whombat'),
+  'hosts.repoint': NONE,
+  // A Mac's screen: the assistant has its own tools for it (mac_screen, mac_ui).
+  'hosts.screen': NONE,
+  'hosts.screenLook': NONE,
+  'hosts.serverAction': ask('overview', 'Restart or shut down a server'),
+  'hosts.serverMetrics': read('overview', 'Read a server’s charts'),
+  'hosts.serverSettings': read('overview', 'Read a server’s group, place and remote-control switches'),
+  // The person types the password on the page.
+  'hosts.startInstall': never('overview', 'Set up a server by signing in to it once'),
+  'hosts.status': read('overview', 'Read how the servers are doing'),
+  'hosts.unackAlert': ask('overview', 'Take back an acknowledged or snoozed server alert'),
+  'hosts.updateAgent': ask('overview', 'Update a server’s agent now'),
+  'hosts.updateAgentSettings': ask('overview', 'Keep server agents up to date by themselves, or stop'),
+  'hosts.updateCheck': guarded(change('overview', 'Change a check or switch it off'), {
+    'body.target': 'ask',
+    'body.enabled': 'ask',
+  }),
+  // Its switches include letting Whombat restart the server.
+  'hosts.updateServer': ask(
+    'overview',
+    'Rename a server or change its group, place, parent or remote-control switches',
+  ),
+
+  'looks.fix': NONE,
+  'looks.get': NONE,
+  'looks.handle': NONE,
+
+  'messages.delete': NONE,
+  'messages.edit': NONE,
+  'messages.get': NONE,
+  'messages.list': NONE,
+  'messages.jobAnswers': NONE,
+  'messages.more': NONE,
+  'messages.pin': NONE,
+  'messages.react': NONE,
+  'messages.send': NONE,
+  'messages.thread': NONE,
+
+  'needsYou.discuss': NONE,
+  'needsYou.ignore': NONE,
+  'needsYou.snooze': NONE,
+
+  'plans.addStep': NONE,
+  'plans.create': NONE,
+  'plans.createCanvas': NONE,
+  'plans.get': NONE,
+  'plans.list': NONE,
+  'plans.removeStep': NONE,
+  'plans.startStep': NONE,
+  'plans.update': NONE,
+  'plans.updateStep': NONE,
+
+  'prs.file': NONE,
+  'prs.get': NONE,
+  'prs.list': NONE,
+  'prs.merge': NONE,
+
+  'runs.get': NONE,
+  'runs.list': NONE,
+  'runs.log': NONE,
+  'runs.pause': NONE,
+  'runs.resume': NONE,
+  'runs.retry': NONE,
+  'runs.takeOver': NONE,
+
+  'schedules.list': read('advanced.schedules', 'Read what the assistant does on a schedule'),
+  'schedules.pause': change('advanced.schedules', 'Pause a schedule'),
+  'schedules.remove': ask('advanced.schedules', 'End a schedule for good'),
+  'schedules.resume': change('advanced.schedules', 'Resume a paused schedule'),
+
+  'search.ask': NONE,
+  'search.getAnswer': NONE,
+  'search.postAnswer': NONE,
+  'search.query': NONE,
+
+  'things.action': ask('overview', 'Change a service’s setting, or run an action on it like Restart'),
+  'things.page': read('overview', 'Read how a connection or device is doing'),
+  'things.quiet': change('overview', 'Ignore or snooze a Worth a look line'),
+  'things.setWatch': change('overview', 'Stop or start watching a check on a connection or device'),
+  'things.watch': read('overview', 'Read what Whombat watches on a connection or device'),
+
+  'tracker.decide': NONE,
+  'tracker.item': NONE,
+  'tracker.update': NONE,
+
+  'uploads.create': NONE,
+  'uploads.discard': NONE,
+
+  'watch.acknowledge': NONE,
+  'watch.list': NONE,
+
+  'work.needsYou': NONE,
+  'work.overview': NONE,
+} as const satisfies Partial<Record<OperationName, AssistantSetting>>;

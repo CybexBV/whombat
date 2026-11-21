@@ -1,0 +1,7 @@
+{
+ "development": true,
+ "warning": "DEVELOPMENT KEY - NEVER USE FOR PRODUCTION RELEASES OR ASSIGNMENTS",
+ "role": "clients",
+ "keyid": "7205851f612937b31efe37fe00ed0a4e85dec16d952b98cffd9e7fd1d3c5b6d2",
+ "ed25519Seed": "zdpI+kqIuccwhETz4HCm4k3XIwpEFKflIkKguVbpxFw="
+}

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div ref="{{ refRoot }}" style="position:relative;width:100%;height:100%;container-type:size;overflow:hidden;">
+<div style="position:absolute;inset:0;transform:{{ stageT }};transform-origin:50% 40%;filter:{{ filt }};">
+<div ref="{{ refBody }}" style="position:absolute;inset:0;transform-origin:50% 100%;">
+
+<sc-if value="{{ isB }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:11cqw;top:67cqw;width:78cqw;height:60cqw;border-radius:50% 50% 45% 45% / 42% 42% 58% 58%;background:{{ g.sweater }};box-shadow:inset -3cqw -2cqw 6cqw rgba(20,12,6,.22), inset 2cqw 2cqw 4cqw rgba(255,255,255,.16);"></div>
+<div style="position:absolute;left:31cqw;top:63.5cqw;width:38cqw;height:9cqw;border-radius:50%;background:{{ g.neck }};box-shadow:0 .8cqw 1.4cqw rgba(20,12,6,.2), inset 0 .8cqw 1cqw rgba(255,255,255,.18);"></div>
+<sc-if value="{{ showBadge }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;left:63cqw;top:78cqw;width:5.6cqw;height:5.6cqw;border-radius:50%;background:radial-gradient(circle at 38% 32%, #ffffff, #f1eadf 55%, #d6ccbd);box-shadow:0 .4cqw .6cqw rgba(20,12,6,.25);display:flex;align-items:center;justify-content:center;"><div style="width:45%;height:30%;border-radius:50%;background:#2b221d;"></div></div></sc-if>
+</sc-if>
+<sc-if value="{{ isA }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:6cqw;top:64cqw;width:88cqw;height:64cqw;border-radius:50% 50% 45% 45% / 45% 45% 55% 55%;background:{{ g.furBody }};box-shadow:inset -3cqw -2cqw 6cqw rgba(20,12,6,.25), inset 2cqw 2cqw 4cqw rgba(255,244,230,.14);"></div>
+<div style="position:absolute;left:33cqw;top:72cqw;width:34cqw;height:24cqw;border-radius:50%;background:{{ g.muzzle }};opacity:.92;"></div>
+</sc-if>
+<sc-if value="{{ isC }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:14cqw;top:69cqw;width:72cqw;height:58cqw;border-radius:50% 50% 45% 45% / 45% 45% 55% 55%;background:radial-gradient(ellipse 90% 80% at 34% 18%, #ffffff, #eee8df 45%, #c7beb2);box-shadow:inset -3cqw -2cqw 5cqw rgba(20,12,6,.14);"></div>
+<div style="position:absolute;left:40cqw;top:60cqw;width:20cqw;height:12cqw;border-radius:3cqw;background:linear-gradient(90deg, #121010, #34302d 45%, #151312);"></div>
+<div style="position:absolute;left:34cqw;top:66cqw;width:32cqw;height:6cqw;border-radius:50%;background:{{ g.accentGloss }};box-shadow:0 .6cqw 1cqw rgba(20,12,6,.2);"></div>
+</sc-if>
+
+<sc-if value="{{ hasPencil }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ isB }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:25.3cqw;top:68.5cqw;width:4cqw;height:18cqw;transform:rotate(7deg);filter:drop-shadow(.3cqw .4cqw .5cqw rgba(20,12,6,.3));"><div style="position:absolute;left:0;top:0;width:100%;height:18%;clip-path:polygon(50% 0, 100% 100%, 0 100%);background:linear-gradient(180deg, #2f2a27 0%, #2f2a27 30%, #efd6a8 31%, #e3c592 100%);"></div><div style="position:absolute;left:0;top:18%;width:100%;height:82%;background:linear-gradient(90deg, #c38c2c, #f2c35a 38%, #e6b34a 62%, #b77f23);"></div></div>
+<div style="position:absolute;left:22cqw;top:81cqw;width:13cqw;height:10cqw;border-radius:.6cqw .6cqw 2.4cqw 2.4cqw;background:{{ g.collar }};box-shadow:0 .5cqw .9cqw rgba(20,12,6,.22), inset 0 .6cqw .8cqw rgba(255,255,255,.14);"><div style="position:absolute;left:8%;right:8%;top:14%;border-top:.3cqw dashed rgba(255,255,255,.35);"></div></div>
+</sc-if></sc-if>
+<sc-if value="{{ hasPencil }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ isA }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:25.3cqw;top:67.5cqw;width:4cqw;height:18cqw;transform:rotate(7deg);filter:drop-shadow(.3cqw .4cqw .5cqw rgba(20,12,6,.3));"><div style="position:absolute;left:0;top:0;width:100%;height:18%;clip-path:polygon(50% 0, 100% 100%, 0 100%);background:linear-gradient(180deg, #2f2a27 0%, #2f2a27 30%, #efd6a8 31%, #e3c592 100%);"></div><div style="position:absolute;left:0;top:18%;width:100%;height:82%;background:linear-gradient(90deg, #c38c2c, #f2c35a 38%, #e6b34a 62%, #b77f23);"></div></div>
+<div style="position:absolute;left:22cqw;top:80cqw;width:13cqw;height:10cqw;border-radius:.6cqw .6cqw 2.4cqw 2.4cqw;background:{{ g.collar }};box-shadow:0 .5cqw .9cqw rgba(20,12,6,.22), inset 0 .6cqw .8cqw rgba(255,255,255,.14);"><div style="position:absolute;left:8%;right:8%;top:14%;border-top:.3cqw dashed rgba(255,255,255,.35);"></div></div>
+</sc-if></sc-if>
+
+<sc-if value="{{ hasBowtie }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:41cqw;top:70.5cqw;width:10.5cqw;height:9cqw;clip-path:polygon(0 0, 100% 38%, 100% 62%, 0 100%);background:linear-gradient(160deg,#fbf6ee,#e4d9c9 60%,#c4b6a2);"></div>
+<div style="position:absolute;left:51.5cqw;top:70.5cqw;width:10.5cqw;height:9cqw;clip-path:polygon(0 38%, 100% 0, 100% 100%, 0 62%);background:linear-gradient(200deg,#f1e9dd,#d8ccba 60%,#b8a994);"></div>
+<div style="position:absolute;left:48.6cqw;top:72.5cqw;width:5.8cqw;height:5cqw;border-radius:1.4cqw;background:linear-gradient(180deg,#fffaf2,#d9cdbb);box-shadow:0 .3cqw .6cqw rgba(20,12,6,.25);"></div>
+</sc-if>
+
+<sc-if value="{{ hasClipboard }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:70cqw;top:77cqw;width:21cqw;height:28cqw;transform:rotate(12deg);border-radius:1.6cqw;background:linear-gradient(135deg,#d3a36a,#b0814c 60%,#8e6436);box-shadow:-.6cqw 1cqw 1.8cqw rgba(20,12,6,.3);">
+<div style="position:absolute;left:9%;top:9%;right:9%;bottom:4%;border-radius:.6cqw;background:linear-gradient(180deg,#fffdf8,#efe7da);"><div style="position:absolute;left:14%;right:14%;top:22%;height:44%;background:repeating-linear-gradient(180deg, rgba(43,34,29,.35) 0 .6cqw, transparent .6cqw 3.2cqw);"></div></div>
+<div style="position:absolute;left:30%;top:-4%;width:40%;height:11%;border-radius:1cqw;background:linear-gradient(180deg,#4a4440,#2f2a27);"></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasRosette }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:22cqw;top:87cqw;width:5cqw;height:12cqw;transform:rotate(12deg);clip-path:polygon(0 0,100% 0,100% 100%,50% 84%,0 100%);background:linear-gradient(90deg,#b88d35,#e2bd62 50%,#b88d35);"></div>
+<div style="position:absolute;left:27.5cqw;top:87cqw;width:5cqw;height:12cqw;transform:rotate(-12deg);clip-path:polygon(0 0,100% 0,100% 100%,50% 84%,0 100%);background:linear-gradient(90deg,#a87e2c,#d6b057 50%,#a87e2c);"></div>
+<div style="position:absolute;left:20.5cqw;top:78cqw;width:13.5cqw;height:13.5cqw;border-radius:50%;background:repeating-conic-gradient(#e9c56c 0 12deg,#c79e45 12deg 24deg);box-shadow:0 .6cqw 1.2cqw rgba(20,12,6,.3);"><div style="position:absolute;inset:20%;border-radius:50%;background:radial-gradient(circle at 38% 32%,#fff6dc,#ecd08a 60%,#c9a24e);"></div></div>
+</sc-if>
+
+<sc-if value="{{ hasMegaphone }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:77cqw;top:63cqw;width:22cqw;height:15cqw;transform:rotate(-24deg);transform-origin:0 50%;filter:drop-shadow(0 .8cqw 1cqw rgba(20,12,6,.3));">
+<div style="position:absolute;left:22%;top:58%;width:13%;height:62%;border-radius:.8cqw;background:linear-gradient(90deg,#4a4440,#2f2a27);transform:rotate(18deg);"></div>
+<div style="position:absolute;left:0;top:0;bottom:0;right:6%;clip-path:polygon(0 34%,100% 0,100% 100%,0 66%);background:linear-gradient(180deg,#fdf9f2,#e8dfd1 55%,#c9bca9);"><div style="position:absolute;left:50%;top:0;width:14%;height:100%;background:{{ g.accentGloss }};"></div></div>
+<div style="position:absolute;right:0;top:-2%;width:16%;height:104%;border-radius:50%;background:linear-gradient(90deg,#3a3430,#1e1a18);"><div style="position:absolute;left:20%;top:10%;width:54%;height:80%;border-radius:50%;background:{{ g.accentGloss }};"></div></div>
+</div>
+</sc-if>
+
+
+
+<sc-if value="{{ hasDock }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:62cqw;top:86cqw;width:19cqw;height:13cqw;transform:rotate(-30deg);transform-origin:0 50%;filter:drop-shadow(0 .8cqw 1cqw rgba(20,12,6,.3));">
+<div style="position:absolute;left:0;top:0;bottom:0;right:6%;clip-path:polygon(0 34%,100% 0,100% 100%,0 66%);background:linear-gradient(180deg,#fdf9f2,#e8dfd1 55%,#c9bca9);"><div style="position:absolute;left:50%;top:0;width:14%;height:100%;background:{{ g.accentGloss }};"></div></div>
+<div style="position:absolute;right:0;top:-2%;width:16%;height:104%;border-radius:50%;background:linear-gradient(90deg,#3a3430,#1e1a18);"><div style="position:absolute;left:20%;top:10%;width:54%;height:80%;border-radius:50%;background:{{ g.accentGloss }};"></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasCalc }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:19cqw;top:77cqw;width:17cqw;height:22cqw;transform:rotate(-9deg);border-radius:2.2cqw;background:linear-gradient(160deg,#fbf7f0,#e6dccd 60%,#cbbca7);box-shadow:0 1cqw 1.6cqw rgba(20,12,6,.3), inset 0 -.6cqw .8cqw rgba(20,12,6,.12);">
+<div style="position:absolute;left:12%;right:12%;top:9%;height:21%;border-radius:1cqw;background:#2b221d;"><div style="position:absolute;left:10%;right:10%;top:22%;bottom:22%;border-radius:.5cqw;background:{{ g.display }};"></div></div>
+<div style="position:absolute;left:10%;right:10%;top:38%;bottom:8%;background:radial-gradient(circle at 50% 50%, #3a322d 0 34%, transparent 37%) 0 0 / 33.334% 33.334%;"></div>
+<div style="position:absolute;left:70.2%;top:78%;width:13%;height:10%;border-radius:50%;background:{{ g.accentGloss }};"></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasVest }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:36cqw;top:65cqw;width:28cqw;height:24cqw;clip-path:polygon(0 0,100% 0,50% 100%);background:{{ c.deep }};"></div>
+<div style="position:absolute;left:38cqw;top:65cqw;width:24cqw;height:20.5cqw;clip-path:polygon(0 0,100% 0,50% 100%);background:linear-gradient(180deg,#fbf7f0,#e2d7c7);"></div>
+<div style="position:absolute;left:39cqw;top:67cqw;width:10.5cqw;height:8cqw;clip-path:polygon(0 0,100% 10%,78% 100%);background:linear-gradient(160deg,#ffffff,#ddd1bf);"></div>
+<div style="position:absolute;left:50.5cqw;top:67cqw;width:10.5cqw;height:8cqw;clip-path:polygon(0 10%,100% 0,22% 100%);background:linear-gradient(200deg,#f6efe4,#d2c5b1);"></div>
+<div style="position:absolute;left:48.6cqw;top:90cqw;width:2.8cqw;height:2.8cqw;border-radius:50%;background:radial-gradient(circle at 38% 32%,#f3dc9c,#c2a46a 60%,#8f7b55);"></div>
+<div style="position:absolute;left:48.6cqw;top:95.5cqw;width:2.8cqw;height:2.8cqw;border-radius:50%;background:radial-gradient(circle at 38% 32%,#f3dc9c,#c2a46a 60%,#8f7b55);"></div>
+</sc-if>
+
+<sc-if value="{{ hasBubble }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:62cqw;top:71cqw;width:22cqw;height:17cqw;transform:rotate(-6deg);filter:drop-shadow(0 .8cqw 1cqw rgba(20,12,6,.3));">
+<div style="position:absolute;left:16%;bottom:0;width:24%;height:30%;clip-path:polygon(0 100%,25% 0,100% 0);background:#e2d7c7;"></div>
+<div style="position:absolute;left:0;top:0;right:0;bottom:16%;border-radius:50%;background:radial-gradient(ellipse at 38% 30%,#ffffff,#f3ece1 55%,#d8ccba);display:flex;align-items:center;justify-content:center;gap:1.2cqw;">
+<div style="width:4.2cqw;height:4.2cqw;border-radius:50% 0 50% 50%;background:{{ g.accentGloss }};"></div>
+<div style="width:4.2cqw;height:4.2cqw;border-radius:50% 0 50% 50%;background:{{ g.accentGloss }};"></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasMagnet }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:64cqw;top:74cqw;width:16cqw;height:18cqw;transform:rotate(22deg);filter:drop-shadow(0 .8cqw 1cqw rgba(20,12,6,.32));">
+<div style="position:absolute;inset:0;box-sizing:border-box;border:4.6cqw solid #efe6d8;border-top:none;border-radius:0 0 8cqw 8cqw;"></div>
+<div style="position:absolute;left:0;top:-1cqw;width:4.6cqw;height:4.4cqw;border-radius:.6cqw;background:linear-gradient(90deg,#4a4440,#2f2a27);"></div>
+<div style="position:absolute;right:0;top:-1cqw;width:4.6cqw;height:4.4cqw;border-radius:.6cqw;background:linear-gradient(90deg,#4a4440,#2f2a27);"></div>
+</div>
+</sc-if>
+</div>
+<div ref="{{ refHead }}" style="position:absolute;inset:0;transform-origin:50% 72%;">
+<div style="position:absolute;inset:0;transform:rotate({{ tilt }}deg);transform-origin:50% 62%;">
+
+
+<sc-if value="{{ isB }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:11.5cqw;top:21cqw;width:15cqw;height:17.5cqw;border-radius:50% 50% 48% 48% / 58% 58% 42% 42%;transform:rotate(-52deg);background:{{ g.ear }};box-shadow:inset -1cqw -1cqw 2cqw rgba(20,12,6,.25);"><div style="position:absolute;left:24%;top:22%;width:52%;height:56%;border-radius:50%;background:{{ g.earInner }};"></div></div>
+<div style="position:absolute;left:74cqw;top:21.5cqw;width:14cqw;height:16.5cqw;border-radius:50% 50% 48% 48% / 58% 58% 42% 42%;transform:rotate(52deg);background:{{ g.ear }};box-shadow:inset -1cqw -1cqw 2cqw rgba(20,12,6,.3);"><div style="position:absolute;left:24%;top:22%;width:52%;height:56%;border-radius:50%;background:{{ g.earInner }};"></div></div>
+</sc-if>
+<sc-if value="{{ isA }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:8cqw;top:11cqw;width:21cqw;height:24cqw;border-radius:50% 50% 48% 48% / 58% 58% 42% 42%;transform:rotate(-30deg);background:{{ g.ear }};box-shadow:inset -1cqw -1cqw 2cqw rgba(20,12,6,.25);"><div style="position:absolute;left:24%;top:22%;width:52%;height:56%;border-radius:50%;background:{{ g.earInner }};"></div></div>
+<div style="position:absolute;left:72cqw;top:11.5cqw;width:19.5cqw;height:23cqw;border-radius:50% 50% 48% 48% / 58% 58% 42% 42%;transform:rotate(30deg);background:{{ g.ear }};box-shadow:inset -1cqw -1cqw 2cqw rgba(20,12,6,.3);"><div style="position:absolute;left:24%;top:22%;width:52%;height:56%;border-radius:50%;background:{{ g.earInner }};"></div></div>
+</sc-if>
+<sc-if value="{{ isC }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:22cqw;top:10cqw;width:12cqw;height:9cqw;border-radius:40%;transform:rotate(-35deg);background:{{ g.accentGloss }};box-shadow:inset -.8cqw -.8cqw 1.4cqw rgba(20,12,6,.25);"></div>
+<div style="position:absolute;left:66cqw;top:10cqw;width:12cqw;height:9cqw;border-radius:40%;transform:rotate(35deg);background:{{ g.accentGloss }};box-shadow:inset -.8cqw -.8cqw 1.4cqw rgba(20,12,6,.3);"></div>
+</sc-if>
+
+<sc-if value="{{ hasBand }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:11cqw;top:7cqw;width:78cqw;height:40cqw;box-sizing:border-box;border:{{ bandW }}cqw solid #2f2a27;border-bottom:none;border-radius:50% 50% 0 0 / 100% 100% 0 0;"></div>
+</sc-if>
+
+<sc-if value="{{ isB }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:15cqw;top:15cqw;width:70cqw;height:56cqw;border-radius:44% 44% 43% 43% / 44% 44% 56% 56%;background:{{ g.head }};box-shadow:inset -1cqw -.4cqw 1.2cqw rgba(255,236,214,.2), inset -4cqw -5cqw 8cqw rgba(30,18,10,.3), inset 2.5cqw 3cqw 5cqw rgba(255,244,230,.2), 0 1.6cqw 2.4cqw rgba(20,12,6,.22);"></div>
+<div style="position:absolute;left:30cqw;top:44.5cqw;width:45cqw;height:22.5cqw;border-radius:50%;background:{{ g.muzzle }};box-shadow:inset -1.5cqw -2cqw 3cqw rgba(60,40,20,.14);"></div>
+<div style="position:absolute;left:35.5cqw;top:40cqw;width:33.5cqw;height:14.5cqw;border-radius:36% 36% 46% 46% / 42% 42% 58% 58%;background:radial-gradient(ellipse at 38% 30%, #6d5b50 0%, #2b221d 42%, #17120f 100%);box-shadow:0 1cqw 1.4cqw rgba(30,18,10,.28);"><div style="position:absolute;left:18%;top:14%;width:30%;height:26%;border-radius:50%;background:rgba(255,255,255,.34);filter:blur(.4cqw);"></div></div>
+</sc-if>
+<sc-if value="{{ isA }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:11cqw;top:14cqw;width:78cqw;height:58cqw;border-radius:47% 47% 45% 45% / 50% 50% 50% 50%;background:{{ g.head }};box-shadow:inset -1cqw -.4cqw 1.2cqw rgba(255,236,214,.2), inset -4cqw -5cqw 8cqw rgba(30,18,10,.3), inset 2.5cqw 3cqw 5cqw rgba(255,244,230,.2), 0 1.6cqw 2.4cqw rgba(20,12,6,.22);"></div>
+<div style="position:absolute;left:26cqw;top:42cqw;width:52cqw;height:27cqw;border-radius:50%;background:{{ g.muzzle }};box-shadow:inset -1.5cqw -2cqw 3cqw rgba(60,40,20,.14);"></div>
+<div style="position:absolute;left:33cqw;top:39.5cqw;width:38cqw;height:15.5cqw;border-radius:40% 40% 48% 48% / 50% 50% 50% 50%;background:radial-gradient(ellipse at 38% 30%, #6d5b50 0%, #2b221d 42%, #17120f 100%);box-shadow:0 1cqw 1.4cqw rgba(30,18,10,.28);"><div style="position:absolute;left:18%;top:14%;width:30%;height:26%;border-radius:50%;background:rgba(255,255,255,.34);filter:blur(.4cqw);"></div></div>
+</sc-if>
+
+
+
+<sc-if value="{{ isW }}" hint-placeholder-val="{{ true }}">
+<div ref="{{ refEyes }}" style="position:absolute;inset:0;">
+<div style="position:absolute;left:32.5cqw;top:34.3cqw;width:{{ eyeL }}cqw;height:{{ eyeL }}cqw;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 40% 35%, #4a3c34, #16120f 60%);box-shadow:0 .3cqw .5cqw rgba(0,0,0,.25);"><div style="position:absolute;left:22%;top:14%;width:32%;height:32%;border-radius:50%;background:#ffffff;"></div><div ref="{{ refLidL }}" style="position:absolute;left:0;top:0;width:100%;height:{{ lid }}%;background:{{ g.lid }};border-bottom:.5cqw solid {{ c.brow }};"></div></div>
+<div style="position:absolute;left:62.8cqw;top:34.6cqw;width:{{ eyeR }}cqw;height:{{ eyeR }}cqw;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 40% 35%, #4a3c34, #16120f 60%);box-shadow:0 .3cqw .5cqw rgba(0,0,0,.25);"><div style="position:absolute;left:22%;top:14%;width:32%;height:32%;border-radius:50%;background:#ffffff;"></div><div ref="{{ refLidR }}" style="position:absolute;left:0;top:0;width:100%;height:{{ lid }}%;background:{{ g.lid }};border-bottom:.5cqw solid {{ c.brow }};"></div></div>
+</div>
+<div ref="{{ refBrows }}" style="position:absolute;inset:0;">
+<div style="position:absolute;left:32cqw;top:28.6cqw;width:8cqw;height:1.9cqw;border-radius:1cqw;background:{{ c.brow }};transform:translateY({{ ex.lY }}cqw) rotate({{ ex.lR }}deg);"></div>
+<div style="position:absolute;left:62cqw;top:28.6cqw;width:7.4cqw;height:1.9cqw;border-radius:1cqw;background:{{ c.brow }};transform:translateY({{ ex.rY }}cqw) rotate({{ ex.rR }}deg);"></div>
+</div>
+<div ref="{{ refMouth }}" style="position:absolute;inset:0;transform-origin:52.5cqw 57.5cqw;">
+<sc-if value="{{ smile }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:52.5cqw;top:56cqw;width:{{ ex.mw }}cqw;height:{{ ex.mh }}cqw;transform:translateX(-50%);box-sizing:border-box;border-bottom:.95cqw solid #2b221d;border-radius:0 0 50% 50% / 0 0 100% 100%;"></div>
+</sc-if>
+<sc-if value="{{ flat }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:49cqw;top:59cqw;width:7cqw;height:.95cqw;border-radius:1cqw;background:#2b221d;transform:rotate(-5deg);"></div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isC }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:20cqw;top:10cqw;width:60cqw;height:57cqw;border-radius:50%;background:radial-gradient(ellipse at 36% 26%, #ffffff, #eee8df 45%, #c4bbaf);box-shadow:inset -3cqw -4cqw 7cqw rgba(30,18,10,.14), 0 1.6cqw 2.4cqw rgba(20,12,6,.2);"></div>
+<div style="position:absolute;left:25cqw;top:29cqw;width:51cqw;height:22cqw;border-radius:11cqw;background:radial-gradient(ellipse at 40% 20%, #4a4440, #1d1a18 55%, #0f0d0c);box-shadow:inset 0 -1cqw 2cqw rgba(0,0,0,.4);"><div style="position:absolute;left:12%;top:10%;width:40%;height:16%;border-radius:4cqw;background:rgba(255,255,255,.16);"></div></div>
+<div style="position:absolute;left:38cqw;top:36.5cqw;width:4.2cqw;height:7.5cqw;border-radius:2.2cqw;background:{{ c.accentLight }};box-shadow:0 0 2.4cqw {{ c.accent }}, 0 0 .8cqw {{ c.accent }};"></div>
+<div style="position:absolute;left:59cqw;top:36.5cqw;width:4.2cqw;height:7.5cqw;border-radius:2.2cqw;background:{{ c.accentLight }};box-shadow:0 0 2.4cqw {{ c.accent }}, 0 0 .8cqw {{ c.accent }};"></div>
+</sc-if>
+
+<sc-if value="{{ hasRound }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:16cqw;top:36.6cqw;width:13cqw;height:1.1cqw;border-radius:1cqw;background:#2f2a27;"></div>
+<div style="position:absolute;left:72.5cqw;top:36.6cqw;width:11cqw;height:1.1cqw;border-radius:1cqw;background:#2f2a27;"></div>
+<div style="position:absolute;left:29cqw;top:31cqw;width:14cqw;height:14cqw;box-sizing:border-box;border-radius:50%;border:1.3cqw solid #2f2a27;background:rgba(255,255,255,.07);"></div>
+<div style="position:absolute;left:59.5cqw;top:31.5cqw;width:13.2cqw;height:13.2cqw;box-sizing:border-box;border-radius:50%;border:1.3cqw solid #2f2a27;background:rgba(255,255,255,.07);"></div>
+<div style="position:absolute;left:42.6cqw;top:35.6cqw;width:17.3cqw;height:3cqw;box-sizing:border-box;border-top:1.2cqw solid #2f2a27;border-radius:50% 50% 0 0 / 100% 100% 0 0;"></div>
+</sc-if>
+
+<sc-if value="{{ hasHalf }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:16cqw;top:38.4cqw;width:13.5cqw;height:.9cqw;border-radius:1cqw;background:#b89a5e;"></div>
+<div style="position:absolute;left:72.5cqw;top:38.4cqw;width:11cqw;height:.9cqw;border-radius:1cqw;background:#b89a5e;"></div>
+<div style="position:absolute;left:29.5cqw;top:38cqw;width:13.2cqw;height:7.2cqw;box-sizing:border-box;border:1cqw solid #c2a46a;border-radius:0 0 6.6cqw 6.6cqw / 0 0 7cqw 7cqw;background:rgba(255,255,255,.1);"></div>
+<div style="position:absolute;left:60cqw;top:38cqw;width:12.6cqw;height:7cqw;box-sizing:border-box;border:1cqw solid #c2a46a;border-radius:0 0 6.3cqw 6.3cqw / 0 0 7cqw 7cqw;background:rgba(255,255,255,.1);"></div>
+<div style="position:absolute;left:42.5cqw;top:38.2cqw;width:17.8cqw;height:1cqw;border-radius:1cqw;background:#c2a46a;"></div>
+</sc-if>
+
+<sc-if value="{{ hasPhones }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:5cqw;top:33cqw;width:13cqw;height:23cqw;border-radius:6cqw / 7.5cqw;background:linear-gradient(90deg, #45403c, #2f2a27 55%, #1e1a18);box-shadow:0 1cqw 1.6cqw rgba(20,12,6,.3);"><div style="position:absolute;left:18%;top:16%;width:52%;height:68%;border-radius:4cqw / 5cqw;background:{{ g.accentGloss }};"></div></div>
+<div style="position:absolute;left:83cqw;top:34cqw;width:11cqw;height:21cqw;border-radius:5cqw / 7cqw;background:linear-gradient(90deg, #2f2a27, #1e1a18);box-shadow:0 1cqw 1.6cqw rgba(20,12,6,.3);"><div style="position:absolute;left:34%;top:16%;width:48%;height:68%;border-radius:3.5cqw / 5cqw;background:{{ g.accentGloss }};"></div></div>
+</sc-if>
+
+<sc-if value="{{ hasHeadset }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:84cqw;top:38cqw;width:7cqw;height:12cqw;border-radius:3.5cqw;background:linear-gradient(90deg, #2f2a27, #1e1a18);"></div>
+<div style="position:absolute;left:12.6cqw;top:50cqw;width:30cqw;height:12cqw;box-sizing:border-box;border-left:1.3cqw solid #2f2a27;border-bottom:1.3cqw solid #2f2a27;border-bottom-left-radius:100% 100%;"></div>
+<div style="position:absolute;left:39.6cqw;top:58.5cqw;width:5cqw;height:5cqw;border-radius:50%;background:{{ g.accentGloss }};box-shadow:0 .4cqw .8cqw rgba(20,12,6,.3);"></div>
+<div style="position:absolute;left:7cqw;top:37cqw;width:10.5cqw;height:15.5cqw;border-radius:5cqw / 6cqw;background:linear-gradient(90deg, #45403c, #2f2a27 55%, #1e1a18);box-shadow:0 1cqw 1.6cqw rgba(20,12,6,.3);"><div style="position:absolute;left:20%;top:18%;width:50%;height:64%;border-radius:3cqw / 4cqw;background:{{ g.accentGloss }};"></div></div>
+</sc-if>
+
+
+<sc-if value="{{ hasAntenna }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:59cqw;top:4cqw;width:1.3cqw;height:12cqw;border-radius:1cqw;background:linear-gradient(90deg, #8f7b55, #e0cc9e 45%, #9d8760);transform:rotate(14deg);transform-origin:50% 100%;"></div>
+<div ref="{{ refBeacon }}" style="position:absolute;left:58.8cqw;top:.6cqw;width:6.2cqw;height:6.2cqw;border-radius:50%;background:radial-gradient(circle at 38% 32%, #ffffff, {{ c.accentLight }} 30%, {{ c.accent }});box-shadow:0 0 3cqw {{ c.accent }};"></div>
+<div style="position:absolute;left:55.5cqw;top:13.8cqw;width:8cqw;height:4cqw;border-radius:50% 50% 20% 20% / 100% 100% 20% 20%;background:linear-gradient(180deg, #4a4440, #2f2a27);"></div>
+</sc-if>
+
+<sc-if value="{{ hasBeret }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:47cqw;top:3.2cqw;width:3cqw;height:4.4cqw;border-radius:1.5cqw 1.5cqw .6cqw .6cqw;background:#3a3230;transform:rotate(-10deg);"></div>
+<div style="position:absolute;left:23cqw;top:5.5cqw;width:56cqw;height:17cqw;border-radius:50% 50% 44% 44% / 62% 62% 38% 38%;transform:rotate(-7deg);background:radial-gradient(ellipse 80% 90% at 36% 26%, #6a5d55, #3a3230 50%, #211c1a);box-shadow:0 1.2cqw 1.6cqw rgba(20,12,6,.3), inset 0 -1cqw 1.4cqw rgba(0,0,0,.3);"></div>
+<div style="position:absolute;left:29cqw;top:18cqw;width:44cqw;height:3.4cqw;border-radius:50%;transform:rotate(-7deg);background:linear-gradient(180deg,#2c2522,#191513);"></div>
+</sc-if>
+
+<sc-if value="{{ hasMega2 }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:53cqw;top:44cqw;width:46cqw;height:29.5cqw;transform:rotate(-14deg);transform-origin:0 50%;filter:drop-shadow(0 1cqw 1.4cqw rgba(20,12,6,.34));">
+<div style="position:absolute;left:20%;top:62%;width:11%;height:52%;border-radius:1cqw;background:linear-gradient(90deg,#4a4440,#2f2a27);transform:rotate(14deg);"></div>
+<div style="position:absolute;left:0;top:36%;width:9%;height:28%;border-radius:1cqw;background:linear-gradient(180deg,#4a4440,#2f2a27);"></div>
+<div style="position:absolute;left:6%;top:0;bottom:0;right:7%;clip-path:polygon(0 36%,100% 0,100% 100%,0 64%);background:linear-gradient(180deg,#fdf9f2,#e8dfd1 55%,#c9bca9);"><div style="position:absolute;left:46%;top:0;width:15%;height:100%;background:{{ g.accentGloss }};"></div></div>
+<div style="position:absolute;right:0;top:-3%;width:17%;height:106%;border-radius:50%;background:linear-gradient(90deg,#3a3430,#1e1a18);"><div style="position:absolute;left:20%;top:10%;width:54%;height:80%;border-radius:50%;background:{{ g.accentGloss }};"></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasShade }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:20cqw;top:21.2cqw;width:60cqw;height:1.1cqw;border-radius:1cqw;background:#b89a5e;"></div>
+<div style="position:absolute;left:22cqw;top:14cqw;width:56cqw;height:10cqw;border-radius:40% 40% 50% 50% / 30% 30% 70% 70%;background:linear-gradient(180deg,rgba(88,78,70,.55),rgba(43,34,29,.82));border-bottom:.8cqw solid #c2a46a;box-shadow:0 1.2cqw 1.6cqw rgba(20,12,6,.2);"><div style="position:absolute;left:12%;top:18%;width:40%;height:20%;border-radius:50%;background:rgba(255,255,255,.22);"></div></div>
+</sc-if>
+
+<sc-if value="{{ hasVisor }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:14cqw;top:20cqw;width:72cqw;height:1.4cqw;border-radius:1cqw;background:#2f2a27;"></div>
+<div style="position:absolute;left:11cqw;top:15.5cqw;width:78cqw;height:12cqw;border-radius:46% 46% 50% 50% / 40% 40% 60% 60%;background:{{ g.visor }};border-bottom:.9cqw solid {{ c.deep }};box-shadow:0 1.4cqw 1.8cqw rgba(20,12,6,.22);"><div style="position:absolute;left:14%;top:16%;width:44%;height:22%;border-radius:50%;background:rgba(255,255,255,.3);"></div></div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:240,&quot;height&quot;:240},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;architect&quot;,&quot;developer&quot;,&quot;researcher&quot;,&quot;reviewer&quot;,&quot;operator&quot;,&quot;support&quot;,&quot;designer&quot;,&quot;finance&quot;,&quot;assistant&quot;,&quot;legal&quot;,&quot;sales&quot;,&quot;marketing&quot;],&quot;default&quot;:&quot;support&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;dir&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A&quot;,&quot;B&quot;,&quot;C&quot;],&quot;default&quot;:&quot;B&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;crop&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;bust&quot;,&quot;head&quot;],&quot;default&quot;:&quot;bust&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;acc&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Override&quot;},&quot;expr&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Override&quot;},&quot;silhouette&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;animate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;},&quot;attention&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;hover&quot;,&quot;selected&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Motion&quot;},&quot;intensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0,&quot;max&quot;:2,&quot;step&quot;:0.1,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Motion&quot;},&quot;followCursor&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+const PAL = {
+  architect:  { accent: '#5491c4', deep: '#3b6d99', fur: 'cocoa', acc: 'pencil',       expr: 'thoughtful' },
+  developer:  { accent: '#5aa37a', deep: '#3e7b58', fur: 'ash',   acc: 'headphones',   expr: 'focused' },
+  researcher: { accent: '#8f7fc9', deep: '#6a5aa3', fur: 'sandy', acc: 'roundGlasses', expr: 'curious' },
+  reviewer:   { accent: '#c9765f', deep: '#9f5540', fur: 'cocoa', acc: 'halfGlasses',  expr: 'amused' },
+  operator:   { accent: '#b99346', deep: '#8d6d2d', fur: 'ash',   acc: 'antenna',      expr: 'calm' },
+  support:    { accent: '#3fa0a6', deep: '#2b777c', fur: 'sandy', acc: 'headset',      expr: 'warm' },
+  designer:   { accent: '#ac6bbd', deep: '#89409c', fur: 'cocoa', acc: 'beret',        expr: 'playful' },
+  finance:    { accent: '#6eaa50', deep: '#4b7934', fur: 'ash',   acc: 'calculator',   expr: 'assured' },
+  assistant:  { accent: '#a6ad43', deep: '#74792a', fur: 'sandy', acc: 'clipboard',    expr: 'eager' },
+  legal:      { accent: '#6c7ec6', deep: '#3c52aa', fur: 'cocoa', acc: 'bowtie',       expr: 'composed' },
+  sales:      { accent: '#c65d6e', deep: '#a33346', fur: 'sandy', acc: 'rosette',      expr: 'confident' },
+  marketing:  { accent: '#bf639e', deep: '#9c3a78', fur: 'ash',   acc: 'megaphone2',   expr: 'beaming' },
+};
+const FUR = {
+  cocoa: { fur: '#7d6353', muzzle: '#dcc6ab', inner: '#b58c78', brow: '#46372d' },
+  ash:   { fur: '#8c857f', muzzle: '#e0d8cd', inner: '#bb9c92', brow: '#4c4541' },
+  sandy: { fur: '#b3977a', muzzle: '#eddfc9', inner: '#cc9f87', brow: '#6a5442' },
+};
+const EXPR = {
+  thoughtful: { lR: 2, rR: -2, lY: -.6, rY: -.6, lid: 14, mw: 10, mh: 3.8, tilt: 1.5 },
+  focused:    { lR: 3, rR: -3, lY: -.2, rY: -.2, lid: 20, mw: 9.5, mh: 3.6, tilt: 0 },
+  curious:    { lR: 1, rR: -1, lY: -1.8, rY: -1.8, lid: 0, mw: 10, mh: 4, tilt: 3.5, eye: 1.08 },
+  amused:     { lR: 3, rR: -6, lY: -.6, rY: -2.4, lid: 12, mw: 10.5, mh: 4, tilt: -2 },
+  calm:       { lR: 2, rR: -2, lY: -.4, rY: -.4, lid: 30, mw: 11, mh: 4.2, tilt: 0 },
+  warm:       { lR: 3, rR: -3, lY: -1.2, rY: -1.2, lid: 4, mw: 14, mh: 5, tilt: 2 },
+  playful:    { lR: 5, rR: -2, lY: -1.4, rY: -.4, lid: 8, mw: 12, mh: 4.6, tilt: -3 },
+  steady:     { lR: 1, rR: -1, lY: -.3, rY: -.3, lid: 22, mw: 9, mh: 3.4, tilt: 0 },
+  eager:      { lR: 2, rR: -2, lY: -1.6, rY: -1.6, lid: 0, mw: 12.5, mh: 4.8, tilt: 2.5, eye: 1.04 },
+  composed:   { lR: 1, rR: -1, lY: -.2, rY: -.2, lid: 18, mw: 9, mh: 3.2, tilt: -1 },
+  confident:  { lR: 4, rR: -4, lY: -.8, rY: -.8, lid: 10, mw: 15, mh: 5.2, tilt: -1.5 },
+  bright:     { lR: 2, rR: -2, lY: -2, rY: -2, lid: 2, mw: 13, mh: 5, tilt: 3 },
+  assured:    { lR: 1.5, rR: -1.5, lY: -.9, rY: -.9, lid: 16, mw: 12.5, mh: 4.4, tilt: -1.5 },
+  beaming:    { lR: 3, rR: -3, lY: -1.4, rY: -1.4, lid: 18, mw: 14.5, mh: 5.4, tilt: 2.5 },
+};
+const hx = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => { const A = hx(a), B = hx(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
+
+const RM = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = x => x * x * (3 - 2 * x);
+const PTR = window.__whombatPtr || (window.__whombatPtr = (() => {
+  const p = { x: 0, y: 0, has: false };
+  addEventListener('pointermove', e => { p.x = e.clientX; p.y = e.clientY; p.has = true; }, { passive: true });
+  return p;
+})());
+const PARTS = ['body', 'head', 'eyes', 'brows', 'mouth'];
+
+class Component extends DCLogic {
+  els = {};
+  rf = {};
+  ref(k) { return this.rf[k] || (this.rf[k] = el => { this.els[k] = el; }); }
+  componentDidMount() { this.sync(); }
+  componentDidUpdate(pp) {
+    if (this.m && this.props.attention === 'selected' && pp.attention !== 'selected') { this.m.greet = this.m.t; this.m.tg = { x: 0, y: 0 }; }
+    this.sync();
+  }
+  componentWillUnmount() { this.stop(); }
+  sync() {
+    const on = !!this.props.animate && !RM;
+    if (on && !this.raf) this.start(); else if (!on && this.raf) this.stop();
+  }
+  start() {
+    this.m = { t: 0, last: performance.now(), P: rnd(4.1, 5), ph: rnd(0, 6.28), s1: rnd(0, 6.28), s2: rnd(0, 6.28),
+      eg: { x: 0, y: 0 }, hg: { x: 0, y: 0 }, tg: { x: 0, y: 0 }, nextLook: rnd(0.6, 3),
+      nextBlink: rnd(0.5, 3.5), blinkAt: -1, dbl: false, al: 0, alv: 0, greet: -10, vis: true };
+    if (window.IntersectionObserver && this.els.root) {
+      this.io = new IntersectionObserver(es => { if (this.m) this.m.vis = es[es.length - 1].isIntersecting; });
+      this.io.observe(this.els.root);
+    }
+    const loop = now => { this.raf = requestAnimationFrame(loop); this.tick(now); };
+    this.raf = requestAnimationFrame(loop);
+  }
+  stop() {
+    cancelAnimationFrame(this.raf); this.raf = null;
+    if (this.io) this.io.disconnect(); this.io = null;
+    const E = this.els;
+    PARTS.forEach(k => { if (E[k]) E[k].style.transform = ''; });
+    ['lidL', 'lidR'].forEach(k => { if (E[k]) E[k].style.height = this.lidBase + '%'; });
+    if (E.beacon) E.beacon.style.opacity = '';
+  }
+  blink(t, sel) {
+    const m = this.m;
+    m.blinkAt = t; m.dbl = Math.random() < 0.12;
+    m.nextBlink = t + rnd(2.4, 5.8);
+  }
+  tick(now) {
+    const m = this.m, E = this.els;
+    const dt = Math.min(0.05, (now - m.last) / 1000); m.last = now;
+    if (!m.vis || document.hidden) return;
+    m.t += dt; const t = m.t;
+    const I = this.props.intensity ?? 1;
+    const att = this.props.attention || 'idle', hov = att === 'hover', sel = att === 'selected';
+    const follow = (this.props.followCursor ?? true) && (hov || sel) && PTR.has && E.root;
+    if (follow) {
+      const r = E.root.getBoundingClientRect();
+      m.tg.x = clamp((PTR.x - (r.left + r.width / 2)) / (r.width * 1.6), -1, 1);
+      m.tg.y = clamp((PTR.y - (r.top + r.height * 0.4)) / (r.height * 1.6), -1, 1);
+    } else if (t > m.nextLook) {
+      const glance = Math.random() < (sel ? 0.25 : 0.45);
+      const nx = glance ? rnd(0.5, 0.95) * (Math.random() < 0.5 ? -1 : 1) : rnd(-0.2, 0.2);
+      const ny = glance ? rnd(-0.35, 0.45) : rnd(-0.1, 0.15);
+      if (Math.abs(nx - m.tg.x) > 0.6 && m.blinkAt < 0 && Math.random() < 0.4) this.blink(t);
+      m.tg = { x: nx, y: ny };
+      m.nextLook = t + (glance ? rnd(0.7, 1.6) : rnd(1.8, 4.2));
+    }
+    const fe = 1 - Math.exp(-dt * 22), fh = 1 - Math.exp(-dt * 2.6);
+    m.eg.x += (m.tg.x - m.eg.x) * fe; m.eg.y += (m.tg.y - m.eg.y) * fe;
+    m.hg.x += (m.tg.x - m.hg.x) * fh; m.hg.y += (m.tg.y - m.hg.y) * fh;
+
+    if (m.blinkAt < 0 && t > m.nextBlink) this.blink(t);
+    let bl = 0;
+    if (m.blinkAt >= 0) {
+      const p = (t - m.blinkAt) / 0.19;
+      if (p >= 1) { if (m.dbl) { m.dbl = false; m.blinkAt = t + 0.06; } else m.blinkAt = -1; }
+      else if (p > 0) bl = p < 0.38 ? ease(p / 0.38) : 1 - ease((p - 0.38) / 0.62);
+    }
+
+    const tgt = sel ? 1 : hov ? 0.55 : 0;
+    m.alv += ((tgt - m.al) * 70 - m.alv * 13) * dt; m.al += m.alv * dt;
+    const al = m.al;
+    const gt = t - m.greet;
+    const nod = gt < 1.8 ? Math.exp(-gt * 3.2) * Math.sin(gt * Math.PI * 2 * 1.3) : 0;
+    const flash = gt < 0.7 ? Math.sin(Math.PI * gt / 0.7) : 0;
+
+    const b = (1 - Math.cos(2 * Math.PI * t / m.P + m.ph)) / 2;
+    const sw = 0.6 * Math.sin(2 * Math.PI * t / 7.3 + m.s1) + 0.4 * Math.sin(2 * Math.PI * t / 11.9 + m.s2);
+    const f = n => n.toFixed(3);
+
+    if (E.body) E.body.style.transform = `translateY(${f(-0.45 * b * I - 0.25 * al)}cqw) scale(${f(1 + 0.004 * b * I)}, ${f(1 + 0.012 * b * I + 0.006 * al)})`;
+    if (E.head) E.head.style.transform = `translate(${f(0.35 * sw * I + 0.6 * m.hg.x * I)}cqw, ${f(-0.55 * b * I - 1.1 * al + 0.9 * nod + 0.4 * m.hg.y * I)}cqw) rotate(${f(1.1 * sw * I + 0.9 * m.hg.x * I)}deg)`;
+    if (E.eyes) E.eyes.style.transform = `translate(${f(0.75 * m.eg.x * I)}cqw, ${f(0.55 * m.eg.y * I)}cqw)`;
+    if (E.brows) E.brows.style.transform = `translate(${f(0.45 * m.eg.x * I)}cqw, ${f(-0.9 * al - 1.1 * flash + 0.25 * m.eg.y * I)}cqw)`;
+    if (E.mouth) E.mouth.style.transform = `translateX(${f(0.4 * m.eg.x * I)}cqw) scale(${f(1 + 0.14 * al)}, ${f(1 + 0.12 * al)})`;
+    const base = this.lidBase || 0;
+    const lid = clamp(base * (1 - 0.35 * al) + Math.max(0, m.eg.y) * 10 * I, 0, 100);
+    const lh = f(lid + (100 - lid) * bl) + '%';
+    if (E.lidL) E.lidL.style.height = lh;
+    if (E.lidR) E.lidR.style.height = lh;
+    if (E.beacon) E.beacon.style.opacity = f(0.72 + 0.28 * (0.5 + 0.5 * Math.sin(2 * Math.PI * t / 2.2)));
+  }
+  renderVals() {
+    const role = PAL[this.props.role] ? this.props.role : 'support';
+    const dir = this.props.dir || 'B';
+    const P = PAL[role], F = FUR[P.fur], e = EXPR[this.props.expr] || EXPR[P.expr];
+    const W = '#ffffff', K = '#1a120c';
+    const c = {
+      accent: P.accent, deep: P.deep, accentLight: mix(P.accent, W, .45), brow: F.brow,
+    };
+    const furL = mix(F.fur, W, .22), furD = mix(F.fur, K, .32);
+    const g = {
+      head: `radial-gradient(ellipse 85% 95% at 36% 24%, ${furL} 0%, ${F.fur} 48%, ${furD} 100%)`,
+      ear: `radial-gradient(ellipse at 40% 30%, ${furL}, ${F.fur} 55%, ${furD})`,
+      earInner: `radial-gradient(ellipse at 50% 40%, ${mix(F.inner, W, .2)}, ${F.inner} 60%, ${mix(F.inner, K, .25)})`,
+      muzzle: `radial-gradient(ellipse at 42% 28%, ${mix(F.muzzle, W, .3)}, ${mix(F.muzzle, F.fur, .18)} 55%, ${mix(F.muzzle, F.fur, .5)})`,
+      lid: `linear-gradient(180deg, ${furL}, ${F.fur})`,
+      furBody: `radial-gradient(ellipse 90% 80% at 34% 18%, ${furL}, ${F.fur} 45%, ${furD})`,
+      sweater: `radial-gradient(ellipse 90% 80% at 34% 16%, ${mix(P.accent, W, .3)}, ${P.accent} 45%, ${P.deep})`,
+      collar: `linear-gradient(180deg, ${mix(P.deep, W, .18)}, ${P.deep} 60%, ${mix(P.deep, K, .25)})`,
+      visor: `linear-gradient(180deg, ${mix(P.accent, W, .35)}d9, ${P.accent}e6 60%, ${P.deep}f2)`,
+      accentGloss: `radial-gradient(ellipse at 38% 30%, ${mix(P.accent, W, .4)}, ${P.accent} 50%, ${P.deep})`,
+      display: `linear-gradient(90deg, ${mix(P.accent, W, .62)}, ${mix(P.accent, W, .38)})`,
+    };
+    const isC = dir === 'C', isA = dir === 'A', isB = !isA && !isC;
+    const acc = isC ? '' : (this.props.acc || P.acc);
+    g.neck = acc === 'vest' ? 'linear-gradient(180deg,#fffaf2,#e6dccd 60%,#cdbfaa)' : g.collar;
+    const eyeScale = (e.eye || 1) * (isA ? 0.8 : 1);
+    this.lidBase = e.lid;
+    return {
+      refRoot: this.ref('root'), refBody: this.ref('body'), refHead: this.ref('head'), refEyes: this.ref('eyes'),
+      refBrows: this.ref('brows'), refMouth: this.ref('mouth'), refLidL: this.ref('lidL'), refLidR: this.ref('lidR'), refBeacon: this.ref('beacon'),
+      c, g, ex: e, isA, isB, isC, isW: !isC,
+      tilt: e.tilt,
+      lid: e.lid,
+      eyeL: +(7 * eyeScale).toFixed(2), eyeR: +(6.4 * eyeScale).toFixed(2),
+      smile: !e.flat, flat: !!e.flat,
+      hasPencil: acc === 'pencil', hasPhones: acc === 'headphones', hasHeadset: acc === 'headset',
+      hasRound: acc === 'roundGlasses', hasHalf: acc === 'halfGlasses', hasAntenna: acc === 'antenna',
+      hasBeret: acc === 'beret', hasVisor: acc === 'visor', hasClipboard: acc === 'clipboard',
+      hasBowtie: acc === 'bowtie', hasRosette: acc === 'rosette', hasMegaphone: acc === 'megaphone',
+      hasShade: acc === 'shade', hasCalc: acc === 'calculator', hasVest: acc === 'vest',
+      hasDock: acc === 'megaphoneDock', hasMega2: acc === 'megaphone2',
+      showBadge: acc !== 'megaphoneDock', hasBubble: acc === 'bubble', hasMagnet: acc === 'magnet',
+      hasBand: acc === 'headphones' || acc === 'headset',
+      bandW: acc === 'headphones' ? 3.2 : 1.6,
+      stageT: this.props.crop === 'head' ? 'translateY(8cqw) scale(1.05)' : 'translateY(6cqw) scale(.9)',
+      filt: this.props.silhouette ? 'brightness(0) opacity(.86)' : 'none',
+    };
+  }
+}
+</script>
+</body>
+</html>

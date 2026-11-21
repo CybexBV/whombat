@@ -1,0 +1,225 @@
+/**
+ * Quiet notices (contracts 0.122.0, CT-1060…CT-1066; Whombat quiet-notices.md QN-01…QN-24): what kind of line each
+ * “Worth a look” line is, which check and item it is about, what Ignore would do to it, and whether it is quiet now.
+ *
+ * Every line is a Problem (`problem`: something is wrong that the assistant can look into), Only you (`you`: only a
+ * person can do it — sign in again, pay, approve, replace a disk, decide) or a Heads-up (`fyi`: a forecast, an update,
+ * plain information) (QN-01, QN-02). A problem colours the dot and keeps “Look into it”; only-you colours the dot and
+ * leads to where it is done; a heads-up shows on its page only.
+ *
+ * Every line names its check (`unifi.device_offline`, `conn.signin`, `host.disk.space_high`) and, when it is about one
+ * item, that item (QN-03). People who may manage the thing can Ignore a line until it changes (`QUIET_LIFTS`), be
+ * reminded tomorrow, or stop watching a check for one item or the whole thing (QN-10…QN-13). Quiet is shared for the
+ * whole Whombat (QN-14) and stays inside Whombat (QN-16). What Whombat watches (`ThingWatch`) lists every check of a
+ * thing with what is excepted (QN-15).
+ *
+ * Everything here is optional on the wire: absent where it doesn't apply.
+ */
+import { z } from 'zod';
+import { PrincipalId } from '../ids.js';
+import { Timestamp } from './common.js';
+
+/* CT-1060 Kinds of line, checks, Ignore --------------------------------------------------------------------------- */
+
+/** Problem · Only you · Heads-up (QN-01), in the order their words are listed. */
+export const NOTICE_NATURES = ['problem', 'you', 'fyi'] as const;
+export const NoticeNature = z.enum(NOTICE_NATURES);
+export type NoticeNature = z.infer<typeof NoticeNature>;
+
+/**
+ * How an Ignore ends by itself (QN-11): `fixed` when the check saw it back to normal twice in a row (only where that
+ * part was actually read), `newer` when there is a newer one (a newer version, another failure, a different set of
+ * items), `period` when the window it is about resets (the week, the month; `NoticeIgnore.until`). Whatever the way, it
+ * ends early when the line gets worse (amber to red, a higher band).
+ */
+export const QUIET_LIFTS = ['fixed', 'newer', 'period'] as const;
+export const QuietLifts = z.enum(QUIET_LIFTS);
+export type QuietLifts = z.infer<typeof QuietLifts>;
+
+/**
+ * A check's id (QN-03): `<area>.<what>` in lower case, at least two parts joined by dots, digits and underscores
+ * inside (`unifi.device_offline`, `conn.signin`, `host.disk.space_high`, `host.hint.system.updates`). Stable across
+ * releases: it is also the check's switch in What Whombat watches.
+ */
+export const NOTICE_CHECK_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
+export const NoticeCheck = z.string().max(80).regex(NOTICE_CHECK_RE);
+export type NoticeCheck = z.infer<typeof NoticeCheck>;
+
+/**
+ * The item a line is about, as the server keeps it across reads (QN-03): `device:<UniFi id>`, a container's name, an
+ * invoice's id. Opaque to clients: they send it back as they got it.
+ */
+export const NoticeSubjectId = z.string().min(1).max(160);
+export type NoticeSubjectId = z.infer<typeof NoticeSubjectId>;
+
+/** The item with its name as people know it (“Hallway AP”). */
+export const NoticeSubject = z.object({ id: NoticeSubjectId, name: z.string().min(1).max(80) });
+export type NoticeSubject = z.infer<typeof NoticeSubject>;
+
+/** Which line: its check, and its item when it is about one (absent: the thing as a whole). */
+export const NoticeRef = z.object({ check: NoticeCheck, subject: NoticeSubjectId.optional() });
+export type NoticeRef = z.infer<typeof NoticeRef>;
+
+/**
+ * What Ignore would do (QN-10, QN-11): how it ends, and when you'll hear again in the check's own words, a sentence
+ * (“Until it’s back online.”, “Until it’s renewed.”, “Until the week resets.”), drawn under Ignore in the ⋯ menu.
+ * `until`: with `period`, when the window resets. Present only for people who may quiet the line (owners and managers;
+ * a server's: owners): a line without it has no ⋯ menu.
+ */
+export const NoticeIgnore = z.object({
+  lifts: QuietLifts,
+  words: z.string().min(1).max(60),
+  until: Timestamp.optional(),
+});
+export type NoticeIgnore = z.infer<typeof NoticeIgnore>;
+
+/** Who quieted a line or switched a check off, as the line names them (“Ignored by John …”). */
+export const QuietBy = z.object({ id: PrincipalId, name: z.string().min(1).max(80) });
+export type QuietBy = z.infer<typeof QuietBy>;
+
+/** A quiet line is `ignored` (until it changes) or `snoozed` (Remind me tomorrow). */
+export const QUIET_STATES = ['ignored', 'snoozed'] as const;
+export const QuietState = z.enum(QUIET_STATES);
+export type QuietState = z.infer<typeof QuietState>;
+
+/**
+ * The line is quiet (QN-14): drawn greyed at the bottom of Worth a look with `quietLine` (“Ignored by John until it’s
+ * back online”) and Undo; it counts for no dot, reason, badge, desk, Watch or Needs you. `words` lower case, without a
+ * full stop (“until it’s back online”, “until tomorrow 09:00”); `until` when it ends at a time (a snooze, a period);
+ * `by` absent when Whombat doesn't know who (the hosts service's own acknowledgement).
+ */
+export const NoticeQuiet = z.object({
+  state: QuietState,
+  words: z.string().min(1).max(60),
+  until: Timestamp.optional(),
+  by: QuietBy.optional(),
+  at: Timestamp,
+});
+export type NoticeQuiet = z.infer<typeof NoticeQuiet>;
+
+/** Remind me tomorrow: until this hour tomorrow in the Whombat's time zone (QN-12, Home's snooze). */
+export const QUIET_SNOOZE_HOUR = 9;
+
+/**
+ * A line's kind (QN-01): its own `nature`, else as the line reads — `info` a heads-up, a line whose link asks the
+ * assistant a problem, any other an only-you.
+ */
+export function noticeNature(n: {
+  nature?: NoticeNature;
+  tone: 'bad' | 'warn' | 'info';
+  link?: { kind: string };
+}): NoticeNature {
+  if (n.nature) return n.nature;
+  if (n.tone === 'info') return 'fyi';
+  return n.link?.kind === 'ask' ? 'problem' : 'you';
+}
+
+/**
+ * The words of Ignore, Remind me tomorrow and Stop watching (QN-10…QN-15), on the web and the phone alike. Holes:
+ * `{title}` the line's title, `{name}` an item's or a person's name, `{words}` a quiet line's words (lower case).
+ * `fillQuietWords` fills them; `quietLine` and `stopWatchingLabel` give the composed lines.
+ */
+export const QUIET_WORDS = {
+  /** The ⋯ button's label. */
+  menu: 'More for {title}',
+  ignore: 'Ignore',
+  snooze: 'Remind me tomorrow',
+  stop: 'Stop watching {name}',
+  stopThis: 'Stop watching this',
+  ignored: 'Ignored by {name} {words}',
+  snoozed: 'Snoozed by {name} {words}',
+  /** A line quieted by someone Whombat can't name (the hosts service's own acknowledgement). */
+  ignoredBare: 'Ignored {words}',
+  snoozedBare: 'Snoozed {words}',
+  undo: 'Undo',
+  toastIgnored: 'Ignored. You’ll hear if it changes.',
+  toastSnoozed: 'I’ll remind you tomorrow.',
+  toastStopped: 'Whombat stopped watching {name}.',
+  toastWatched: 'Whombat watches {name} now.',
+  watchTitle: 'What Whombat watches',
+  watchNot: 'Not for:',
+  always: 'always',
+  watchEmpty: 'Nothing to watch here yet.',
+  natures: { problem: 'Problem', you: 'Only you', fyi: 'Heads-up' } satisfies Record<NoticeNature, string>,
+} as const;
+
+/** Fills `{hole}`s of a quiet word; a hole without a value stays as it is. */
+export function fillQuietWords(template: string, values: Readonly<Record<string, string>>): string {
+  return template.replace(/\{([a-z]+)\}/g, (hole, key: string) =>
+    Object.hasOwn(values, key) ? String(values[key]) : hole,
+  );
+}
+
+/** A quiet line's grey words (QN-14): “Ignored by John until it’s back online”, “Snoozed until tomorrow 09:00”. */
+export function quietLine(q: Pick<NoticeQuiet, 'state' | 'words' | 'by'>): string {
+  const w = QUIET_WORDS;
+  if (q.by)
+    return fillQuietWords(q.state === 'ignored' ? w.ignored : w.snoozed, { name: q.by.name, words: q.words });
+  return fillQuietWords(q.state === 'ignored' ? w.ignoredBare : w.snoozedBare, { words: q.words });
+}
+
+/** The ⋯ menu's last line: “Stop watching Hallway AP”, or “Stop watching this” for a line about the whole thing. */
+export function stopWatchingLabel(subject?: { name: string }): string {
+  return subject ? fillQuietWords(QUIET_WORDS.stop, { name: subject.name }) : QUIET_WORDS.stopThis;
+}
+
+/**
+ * Ignore's sentence as a quiet line's words: “Until it’s back online.” → “until it’s back online” (the first letter
+ * lower case, the closing full stop left out), so the server words `NoticeQuiet.words` from `NoticeIgnore.words`.
+ */
+export function quietWordsOf(ignoreWords: string): string {
+  const t = ignoreWords.trim().replace(/\.+$/, '');
+  return t.charAt(0).toLowerCase() + t.slice(1);
+}
+
+/* CT-1062 What Whombat watches ------------------------------------------------------------------------------------ */
+
+/** What is excepted from a check (QN-13…QN-15): switched off, ignored or snoozed. */
+export const WATCH_EXCEPTION_STATES = ['stopped', 'ignored', 'snoozed'] as const;
+export const WatchExceptionState = z.enum(WATCH_EXCEPTION_STATES);
+export type WatchExceptionState = z.infer<typeof WatchExceptionState>;
+
+/**
+ * One item a check is off, ignored or snoozed for, with Undo (“Not for: Garage AP until it’s back · Attic AP always”).
+ * `subject` absent: the check as a whole is ignored or snoozed (a check switched off as a whole is `ThingWatchCheck.off`).
+ * `words` lower case: “until it’s back”, “until tomorrow 09:00”, `QUIET_WORDS.always` for one switched off.
+ */
+export const ThingWatchException = z.object({
+  subject: NoticeSubject.optional(),
+  state: WatchExceptionState,
+  words: z.string().max(60).optional(),
+  until: Timestamp.optional(),
+  by: QuietBy.optional(),
+  at: Timestamp,
+});
+export type ThingWatchException = z.infer<typeof ThingWatchException>;
+
+/** At most this many exceptions under one check, and checks on one thing. */
+export const THING_WATCH_EXCEPTIONS_MAX = 100;
+export const THING_WATCH_CHECKS_MAX = 120;
+
+/**
+ * One switch of What Whombat watches (QN-15): the check in plain words (“Access points and switches going offline”),
+ * its kind of line, whether it is on, whether its lines are about one item each (`perItem`: Stop watching can be for
+ * one item), who switched it off and when (`off`, only while `on` is false), and its exceptions.
+ */
+export const ThingWatchCheck = z.object({
+  check: NoticeCheck,
+  name: z.string().min(1).max(80),
+  nature: NoticeNature,
+  on: z.boolean(),
+  perItem: z.boolean(),
+  off: z.object({ by: QuietBy.optional(), at: Timestamp }).optional(),
+  exceptions: z.array(ThingWatchException).max(THING_WATCH_EXCEPTIONS_MAX),
+});
+export type ThingWatchCheck = z.infer<typeof ThingWatchCheck>;
+
+/**
+ * A thing's What Whombat watches (`things.watch`): every check it can raise, also while it raises none, and whether the
+ * caller may change them (owners and managers; a server's: owners). Look only and guests see the list without switches.
+ */
+export const ThingWatch = z.object({
+  checks: z.array(ThingWatchCheck).max(THING_WATCH_CHECKS_MAX),
+  mayChange: z.boolean(),
+});
+export type ThingWatch = z.infer<typeof ThingWatch>;

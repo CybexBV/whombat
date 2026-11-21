@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskTalkRef.json",
+  "title": "DeskTalkRef",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{8,64}$"
+    }
+  },
+  "required": [
+    "v",
+    "id"
+  ],
+  "additionalProperties": false
+}

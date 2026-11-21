@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.whombat'
+version = '0.1.0'
+
+android {
+  namespace "com.whombat.fold"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // Jetpack WindowManager: where the fold is and whether the phone is half open, as callbacks (window-java).
+  implementation 'androidx.window:window:1.3.0'
+  implementation 'androidx.window:window-java:1.3.0'
+  implementation 'androidx.core:core:1.13.1'
+}

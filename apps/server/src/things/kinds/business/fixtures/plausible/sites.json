@@ -1,0 +1,7 @@
+{
+  "sites": [
+    { "domain": "example.com", "timezone": "Europe/Amsterdam" },
+    { "domain": "shop.example.com", "timezone": "Europe/Amsterdam" }
+  ],
+  "meta": { "after": null, "before": null, "limit": 100 }
+}

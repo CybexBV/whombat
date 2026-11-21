@@ -1,0 +1,50 @@
+[
+  {
+    "id": "chat-list",
+    "theme": "light",
+    "file": "phone-web-1405-chat-list-light.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "thread",
+    "theme": "light",
+    "file": "phone-web-1405-thread-light.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "approval",
+    "theme": "light",
+    "file": "phone-web-1405-approval-light.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "overview",
+    "theme": "light",
+    "file": "phone-web-1405-overview-light.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "chat-list",
+    "theme": "dark",
+    "file": "phone-web-1405-chat-list-dark.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "thread",
+    "theme": "dark",
+    "file": "phone-web-1405-thread-dark.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "approval",
+    "theme": "dark",
+    "file": "phone-web-1405-approval-dark.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  },
+  {
+    "id": "overview",
+    "theme": "dark",
+    "file": "phone-web-1405-overview-dark.png",
+    "date": "2026-09-23T12:05:00.000Z"
+  }
+]

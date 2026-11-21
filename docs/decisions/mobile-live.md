@@ -1,0 +1,64 @@
+# Workstream: mobile-live (mobile push + live activities)
+
+TODO 9.4, mobile side: the `whombat-live` native module (Android Live Update notifications, iOS ActivityKit),
+push registration and handling, the in-app realtime path, the mobile run screen, reading inbox rows when
+opened, and the dark splash. Builds on `notifications.md` (server push, `LiveActivityBroadcaster`) and
+`mobile-app.md` (MA-20: the seam). How to build, run and test: `apps/mobile/README.md` ("Push and live
+activities"), `docs/push-setup.md`.
+
+## Decisions
+
+| # | Decision | Why |
+|---|---|---|
+| ML-01 | **The copy lives in core, native only renders.** `LiveActivityPush` gained `display: LiveActivityDisplay` (`key`, `kind`, `number`, `label`, `tone`, `title`, `text`, `progress`, `segments`, `chip`, `ongoing`, `actions`). `runLiveActivity(run, agentName)` / `approvalLiveActivity(approval, requesterName)` in `@whombat/core` build the contract object, the display and whether it has ended; the server's pushes and the app's realtime updates both use them, and the Kotlin notification / Swift widget render the display without building copy. | One source for "RUN · LIVE", "NEEDS A PERSON", "Dusty · 2 of 3 conditions met": a push and a realtime update of the same run cannot disagree, and Kotlin/Swift copy cannot drift from TypeScript. |
+| ML-02 | One activity per `liveActivityRef()` (`run:<runId>`, `approval:<approvalId>`) on every path: the Android notification tag, the iOS attributes `key`, the FCM `collapseKey` (was the payload kind, which let one run's update replace another's). | A push and an in-app update replace the same notification. |
+| ML-03 | **Who sees a run's activity:** the person who asked; when an agent asked (Hazel's review asked Banjo), the people in the run's conversation (`runLiveActivityAudience`, used by the server and the app). Approvals: the `person_approves` approvers (unchanged, now `approvalLiveActivityAudience`). | The demo's run is asked by Hazel, an agent: under "the asker only" no person would ever see it. |
+| ML-04 | **When an activity ends:** a run when done, failed **or taken over**; an approval when executed, **failed** or declined (`isRunActivityEnded`, `isApprovalActivityEnded` via `approvalPhase`). The last state stays as a dismissible notification (Android `setTimeoutAfter` 30 min) / on the Lock Screen (iOS `dismissal-date` +30 min). | A taken-over run or a failed deploy was left "live" forever. |
+| ML-05 | **Throttled updates are not dropped:** the broadcaster still sends at most one update per activity per 2 s, but the latest update inside a window goes out when it closes (cancelled if the activity ends first). | Found on the emulator: the checks-green and Hazel-approved changes landed in one window after an update, so the approval's activity stayed at "0 of 3 conditions met" for good. |
+| ML-06 | **Android renders pushes natively.** `WhombatMessagingService` (FCM `MESSAGING_EVENT`, priority 1 over expo-notifications' service) turns a `liveActivity` payload into the ongoing notification and any other Whombat payload into an inbox notification, with the app closed, in the background or open. expo-notifications is used for permission and the device token (`getDevicePushTokenAsync`), not for rendering. | Live activities must update while the app is not running; a headless-JS path would be slower and die with the process. |
+| ML-07 | Android 16: `Notification.ProgressStyle` — one segment for a run, one per condition for an approval (conditions met = progress), a tracker icon, `setShortCriticalText` (`62%`, `2/3`) and `android.requestPromotedOngoing`. Below 16: `NotificationCompat` with a progress bar and the same fields. Channels: "Runs in progress" (low, silent), "Needs you" (high: approvals and needs-you pushes), "Mentions and agent updates" (default). | Runs should not buzz; things that wait for a person should. |
+| ML-08 | **Superseded by ML-18.** **Approve opens the app.** The notification's Approve action (and the iOS widget's) opens `whombat://approvals/N?decide=approve`; the approval screen approves once if the viewer still may (then shows APPROVED · DEPLOYING with Undo). It requires unlocking (`setAuthenticationRequired`). No background HTTP from the notification. | A signed decision stays on the one authenticated write path, the session token never leaves the secure store, the person sees the result and can undo, and it works the same on iOS. A background action would need native token storage and would leave a stale "approving" state when no push follows. |
+| ML-09 | A deep link that arrives while the activity is being recreated (task in recents, process killed) is kept: `WhombatLivePackage` sets the activity's intent to the new one in `onNewIntent`, so `Linking.getInitialURL()` returns it. | Found on the emulator: the cold Approve opened the task's old screen (the inbox or a run) and the link was lost. |
+| ML-10 | Inbox pushes open their screen through one URL: `whombat://open?path=<web path>&burrow=<slug>&notification=<id>` (built natively on Android, from the APNs keys on iOS). The linking layer maps the web path to the app screen (`?approval=N` → the approval, `/runs/N` → the run, DM, channel, agent, search; otherwise the inbox) and marks the row read. The server's APNs alerts now carry `burrow` and `notificationId`. | Needs-you notifications open the approval detail; opening a notification reads it, like opening the row in the inbox. |
+| ML-11 | **In-app path:** `LiveActivityBridge` renders `run.updated` / `approval.updated` for the viewer at once, and after every completed reload of the runs and approvals lists (start, foreground, socket resync) shows current activities fresh, gives on-screen ones that ended meanwhile their last state and dismisses the rest. It runs in server mode only (the fixture world stays quiet). | Android freezes backgrounded apps within seconds (cached-app freezer), so the socket path only covers the app while it is open; pushes cover the rest, and the reconcile covers a device without pushes. |
+| ML-12 | Push registration: permission is asked right after signing in to a server; the FCM (Android) / APNs (iOS) token goes to `devices.register` (the server upserts by token), rotations to `devices.update`, iOS push-to-start and activity tokens to `devices.update({ liveActivityToken })` / `devices.registerLiveActivity`; sign-out removes the device and dismisses every notification (sign-out tasks with a 3 s cap). Without Firebase config the registration reports `unavailable` and nothing is sent. | Contract endpoints already existed (`notifications.md`). |
+| ML-13 | **iOS:** one attributes type, `WhombatLiveAttributes` (`IOS_LIVE_ACTIVITY_ATTRIBUTES`), whose `ContentState` is the display, so a device has a single push-to-start token for runs and approvals. APNs live-activity pushes use the `<bundle id>.push-type.liveactivity` topic for both update and push-to-start tokens (the server used the bare bundle id / a `.push-to-start-token` suffix), `attributes-type: WhombatLiveAttributes`, `attributes: { key, kind, number, burrow }`, an `alert` on start and a `dismissal-date` on end. The widget extension target is added by `modules/whombat-live/app.plugin.cjs` (checked with `expo prebuild --platform ios` on Linux: target, sources, embed phase, dependency, Info.plist keys, `aps-environment`); it has not been compiled. | ActivityKit's push-to-start token is per attributes type; Apple's live-activity topic contract. |
+| ML-14 | **Development push without Firebase:** the server's `FCM_RELAY_URL` (refused in production) posts each FCM message to a local relay instead of Google; `apps/mobile/scripts/push.mjs relay` hands it to the emulator through a debug-only broadcast receiver that calls the same handler as the FCM service; a debug app built with `EXPO_PUBLIC_WHOMBAT_PUSH_RELAY=1` registers a `dev-relay:` token when FCM is unavailable. `push.mjs inject <file>` delivers one payload. | The whole path — broadcaster, audience, devices, FCM message, native rendering — runs on an emulator with the app killed. |
+| ML-15 | Native accent colors come from the tokens: Android gets them from JS (`WhombatLive.configure`, kept in SharedPreferences for background pushes; the Kotlin fallbacks mirror them), the widget's Swift palette mirrors the light/dark theme tokens; `content.test.ts` checks both against `@whombat/tokens`. The Android small icon is the Whombat mark (the mock header's ellipse). | Tokens are the only color source (CLAUDE.md); native code cannot import them. |
+| ML-16 | The mobile run screen (not mocked) follows the approval screen: 112 dp agent, mono label with the live dot, title 25/700, `Banjo · #billing-v2 · 11:22`; a progress card (bar, "Now: …", tests in tone, branch and diff, "Asked by Hazel in #billing-v2"); STEPS as a grouped list with the desktop's markers; LIVE LOG as the code block with the last 8 lines; a sticky "Branch room" when the PR room is known. It subscribes to `run:<id>`. | B-05: unmocked screens follow the nearest mocked pattern. |
+| ML-17 | Splash and window background follow the theme: `expo-splash-screen` with Clover on `bg` light / dark, and `activityBackground` in `values-night` (`plugins/with-dark-window-background.cjs`); `app-config.test.ts` checks the colors against the tokens. | A dark-mode launch flashed the light background. |
+| ML-18 | **The approval's live button says Review and only opens the approval.** The action keeps its wire value `approve` (core's `LiveActivityAction`), but Android's notification action and the iOS widget's button read “Review” and open `whombat://approvals/N` with nothing added; the person approves on the approval screen. Android still asks to unlock first. Replaces ML-08's `?decide=approve`, which the app's link handling strips on purpose so no link can decide anything. | A button labelled Approve that only opened the approval, where the person had to tap Approve again, said something that didn't happen. |
+
+## Contract and shared-file changes
+
+- `@whombat/core`: `LiveActivityDisplay`, `LiveActivityAction`, `LiveActivityPush.display` (required), and
+  `contracts/live-activity.ts` (builders, audiences, end rules, `liveActivityPush`, `IOS_LIVE_ACTIVITY_ATTRIBUTES`,
+  `liveActivityAttributes`). Tests: `live-activity.test.ts`, `contracts.test.ts`.
+- `@whombat/client`: `useMarkNotificationsRead` + `markInboxRead` reducer (additive).
+- Server: `domain/live-activity.ts` (core builders, run audience, trailing throttle), `push/fcm.ts` (per-activity
+  collapse key, `FCM_RELAY_URL`), `push/apns.ts` (topic, attributes type, content state, alert keys), `config.ts`
+  (`FCM_RELAY_URL`).
+- `docs/push-setup.md`, `docs/decisions/notifications.md` (pointer to ML-03…ML-05, ML-13).
+
+## Verified on the emulator (Android 16, API 36, 368 × 822 dp)
+
+Against a local server with the seeded world, the scripted runner and `pnpm demo:play`, signed in as Mara:
+
+- App open: the run's notification followed the run (55 % → 70 % → 80 %, "Now: Round VAT before formatting",
+  "Now: Run the billing test suite", 38 → 41 of 41) and ended as `RUN · DONE` at 100 %; the approval went to
+  "2 of 3 conditions met" with Approve / Details and three segments.
+- App killed (`am kill`), pushes through `FCM_RELAY_URL` + `push.mjs relay`: every update arrived and rendered,
+  the run ended, the approval reached 2 of 3 (after ML-05).
+- Approve on the notification (app open, and cold after ML-09): the approval screen opened, approved ("you · just
+  now"), the notification went `APPROVED · DEPLOYING` → `DEPLOYED` (ended).
+- Needs-you push injected with the app killed: tapping it opened the approval and set the row's `read_at`.
+- Tapping the run notification opened `whombat://runs/1907`; dark mode splash and run screen.
+- This emulator image (Android 16 base, BE2A.250530) has the ProgressStyle API but not the Live Update
+  promotion UI (`android.app.ui_rich_ongoing` is absent), so the notifications carry
+  `android.requestPromotedOngoing` but are not promoted here; promotion needs Android 16 QPR1 or later.
+
+## Known gaps
+
+- No Firebase project on this machine: real FCM delivery (and `google-services.json` in the build) is untested.
+- iOS has not been compiled or run (no macOS here); see `apps/mobile/README.md` "iOS" for the steps.
+- The broadcaster's throttle state is per server process (NT-05).

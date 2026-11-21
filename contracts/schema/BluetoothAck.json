@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/BluetoothAck.json",
+  "title": "BluetoothAck",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    }
+  },
+  "required": [
+    "v"
+  ]
+}

@@ -1,0 +1,41 @@
+# The Whombat appliance host (NixOS). Every module is on by default once imported; profiles
+# (nix/profiles/*) choose the boot/storage flavour. Decisions: docs/decisions/nixos.md (NX-nn).
+{
+  imports = [
+    ./options.nix
+    ./environment.nix
+    ./base.nix
+    ./kernel.nix
+    ./users.nix
+    ./persist.nix
+    ./storage.nix
+    ./postgres.nix
+    ./slices.nix
+    ./runtime.nix
+    ./manager.nix
+    ./boot.nix
+    ./network.nix
+    ./dns.nix
+    ./wifi.nix
+    ./sandbox.nix
+    ./provisioning.nix
+    ./backup.nix
+    ./providers.nix
+    ./hermes.nix
+    ./console.nix
+    ./kiosk.nix
+    ./power.nix
+    ./image-info.nix
+    ./notices.nix
+    ./licence.nix
+    ./vault-wall.nix
+    ./agent.nix
+    ./containers.nix
+    ./hosts.nix
+    ./voice.nix
+    ./presence.nix
+    ./bluetooth.nix
+    ./support.nix
+    ./tailscale.nix
+  ];
+}

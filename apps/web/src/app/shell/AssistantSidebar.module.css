@@ -1,0 +1,590 @@
+/* The one-Whombat sidebar, from `.side` in docs/design-handoff/one-whombat/index.html (sizes and weights 1:1). */
+
+.side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--size-sidebar);
+  min-height: 0;
+  padding: 18px 12px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--side);
+}
+
+/* The places and the lists scroll between the burrow and the bottom (AP-2274); the side padding moves inside, so a row's
+   focus ring isn't cut at the edge. */
+.lists {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -12px;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+}
+
+/* The burrow alone, with room under it before the first place (John, 2026-10-19; sidebar.md AP-2600). */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 8px 28px;
+}
+
+.logo {
+  width: auto;
+}
+
+.burrow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 700 17px var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* With other Whombats the burrow is a button that opens them (whombat-switcher.md AP-3081): the same place and size, a
+   chevron at its end, the `sel` background on hover and while open. */
+.switcher {
+  position: relative;
+  flex: none;
+  margin-bottom: 22px;
+}
+
+.brandButton {
+  width: 100%;
+  margin: -4px 0 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-button-small);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.brandButton:hover,
+.brandOpen {
+  background: var(--sel);
+}
+
+.brandChevron {
+  flex: none;
+  color: var(--mut);
+}
+
+.whombats {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: var(--z-pane);
+  min-width: 280px;
+  padding: 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  box-shadow: var(--shadow-modal);
+}
+
+.whombatsKicker {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--mut);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.whombatsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.whombat,
+.whombatAction {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-button-small);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.whombat:hover,
+.whombatHere,
+.whombatAction:hover {
+  background: var(--sel);
+}
+
+/* A Whombat this browser still has to be set up on: a dashed ring where the others have their status dot. */
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dotNew {
+  width: 9px;
+  height: 9px;
+  border: 1.5px dashed var(--brand);
+}
+
+.whombatText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.whombatText b,
+.whombatText small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.whombatText b {
+  font: 600 15px var(--font-sans);
+}
+
+.whombatText small {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.whombatTick {
+  flex: none;
+  color: var(--ink2);
+}
+
+.whombatAction {
+  color: var(--ink2);
+  font: 400 14.5px var(--font-sans);
+}
+
+.whombatAction svg {
+  color: var(--mut);
+}
+
+/* Ask Neo at the bottom, above the person (AP-2274). */
+.ask,
+.ask:hover {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 9px;
+  border-radius: var(--radius-button);
+  background: var(--btn);
+  color: var(--btnfg);
+  font: 600 14.5px var(--font-sans);
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The nine places (final-shell-web.md): 44px rows, 20px icons, 15px labels. */
+.navRow,
+.navRow:hover {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--radius-button);
+  color: var(--ink2);
+  font: 400 15px / 1.35 var(--font-sans);
+  text-decoration: none;
+}
+
+.navLabel {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.navRow:hover,
+.thing:hover,
+.conv:hover,
+.menuOpen {
+  background: var(--sel);
+}
+
+.on,
+.on:hover {
+  background: var(--sel);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.count {
+  margin-left: auto;
+  color: var(--mut);
+  font: 500 11px var(--font-mono);
+}
+
+/* The text flips with the theme as the fill does (`btnfg`: light on light theme's dark red, dark on dark's salmon). */
+.badge {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bad);
+  color: var(--btnfg);
+  font-weight: 600;
+}
+
+/* Watch's badge in its worst open item's colour (AP-2601): amber, or grey for hints only. */
+.badge_warn {
+  background: var(--warn);
+}
+
+.badge_info {
+  background: var(--sel);
+  color: var(--ink2);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 10px 6px;
+  color: var(--mut);
+}
+
+.labelText {
+  margin: 0;
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* SERVERS and CONNECTIONS as tabs (sidebar-tabs.md): the headings' mono face, the open one in ink over a 1.5px line,
+   the `+` at the row's end. Doubled classes: the shared Tabs stylesheet can load after this one. */
+.listTabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.listTabList.listTabList {
+  flex: 1;
+  gap: 14px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.listTab.listTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 -1px;
+  padding: 6px 0 7px;
+  border-bottom-width: 1.5px;
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.listTab.listTab:hover {
+  color: var(--ink2);
+}
+
+.listTab.listTab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tabDot {
+  vertical-align: -1px;
+  transform: scale(0.85);
+}
+
+/* The other tab's rows that aren't fine, under a dashed line: a problem never hides behind a tab. */
+.carried {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line2);
+}
+
+.labelAdd,
+.labelAdd:hover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: -2px -2px -2px 0;
+  border-radius: var(--radius-tag);
+  color: var(--mut);
+}
+
+.labelAdd:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.thing,
+.thing:hover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5.5px 10px;
+  border-radius: var(--radius-button-small);
+  color: var(--ink2);
+  font: 400 14.5px var(--font-sans);
+  text-decoration: none;
+}
+
+.thingIcon {
+  flex: none;
+  color: var(--mut);
+}
+
+.thingName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A row being renamed: the name is a box in its place; the line under it (a hint or why not) moves the icon up. */
+.renaming,
+.renaming:hover {
+  align-items: flex-start;
+  background: var(--sel);
+}
+
+.renaming > .thingIcon {
+  margin-top: 3px;
+}
+
+/* What tells two of a kind apart (“Hetzner Cloud dev”): quieter than the name. */
+.thingNote {
+  color: var(--mut);
+}
+
+.conv,
+.conv:hover {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-button-small);
+  color: var(--ink2);
+  font: 400 14px var(--font-sans);
+  text-decoration: none;
+}
+
+.convTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* With its hover too: `.conv:hover` sets the quiet weight, and the open or unread chat lost its bold under the pointer. */
+.bold,
+.bold:hover {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Chat's and Feedback's unread count at the row's end (chat-channel.md AP-2401). */
+.navRow .unread {
+  margin-left: auto;
+}
+
+.unread {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--btn);
+  color: var(--btnfg);
+  font: var(--type-mono-badge);
+  text-align: center;
+}
+
+.me {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+/* The person: face and name, a button that opens the account menu. */
+.user {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user:hover,
+.user[aria-expanded="true"] {
+  background: var(--sel);
+}
+
+.userText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.userText b {
+  overflow: hidden;
+  font: 600 14.5px var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.userText small {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: var(--z-pane);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  box-shadow: var(--shadow-toast);
+}
+
+.menuItem,
+.menuItem:hover {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--sel);
+}
+
+.menuItem:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.menuDivider {
+  margin: 6px 4px;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.navRow:focus-visible,
+.thing:focus-visible,
+.conv:focus-visible,
+.ask:focus-visible,
+.user:focus-visible,
+.brandButton:focus-visible,
+.whombat:focus-visible,
+.whombatAction:focus-visible,
+.labelAdd:focus-visible,
+.listTab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* The drawer on a narrow screen (ShellLayout's DRAWER_MEDIA): wider, and every row and button a 44px target. The
+   right padding leaves room for the drawer's close button beside the burrow. */
+@media (max-width: 1023.98px) {
+  /* In the Places drawer, under its heading: the places first; the burrow's switcher (with other Whombats) and the
+     person at the bottom. The burrow's name alone says nothing the drawer needs. */
+  .side {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    padding-top: 0;
+    border-right: 0;
+  }
+
+  .side > .brand {
+    display: none;
+  }
+
+  .switcher {
+    order: 2;
+    margin: 0 0 8px;
+  }
+
+  .me {
+    order: 3;
+  }
+
+  .thing,
+  .thing:hover,
+  .conv,
+  .conv:hover {
+    min-height: 44px;
+    font-size: 15.5px;
+  }
+
+  .listTab.listTab {
+    min-height: 44px;
+  }
+
+  .labelAdd,
+  .labelAdd:hover {
+    width: 44px;
+    height: 44px;
+    margin: 0 -12px 0 0;
+  }
+
+  .menuItem,
+  .menuItem:hover {
+    min-height: 44px;
+  }
+}

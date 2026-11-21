@@ -1,0 +1,184 @@
+{
+  "$schema": "whombat.product-manifest-annotations/1",
+  "productVersion": "2026.11.15-rc.515",
+  "tupleDigest": "sha256:014b5fc1fb391b089dd98b3f80b0e37d44c1056eab417204b4cab58c4b1e292b",
+  "buildRun": "2026-11-15-1720",
+  "placeholders": [
+    {
+      "path": "tuple.runtime.storePath, tuple.runtime.narHash",
+      "reason": "the runtime Nix closure is not built yet; storePath is a deterministic fake and narHash is the source tarball digest",
+      "owner": "W2-NX / W2-RT"
+    },
+    {
+      "path": "tuple.providers[*]",
+      "reason": "provider bundles are not built yet; identities are placeholders",
+      "owner": "W3-PV"
+    },
+    {
+      "path": "tuple.host, tuple.manager",
+      "reason": "no NixOS system generation or manager closure is built by the harness; storePath is a deterministic fake, narHash the binary tarball digest (manager) or a fake (host)",
+      "owner": "W2-NX / W1-MG"
+    },
+    {
+      "path": "tuple.runtime.hostAbi, tuple.host.abi",
+      "reason": "host ABI levels are not defined yet; 1 is a placeholder",
+      "owner": "W2-NX"
+    },
+    {
+      "path": "upgradePaths",
+      "reason": "no earlier managed release exists; the legacy self-hosted import is a migration tool, not a device upgrade path",
+      "owner": "orchestrator"
+    }
+  ],
+  "providerBundles": [
+    {
+      "provider": "scripted",
+      "version": "0.0.0-dev",
+      "placeholder": true,
+      "note": "the deterministic ScriptedProvider ships inside the runtime; no separate bundle exists"
+    },
+    {
+      "provider": "codex",
+      "version": "0.0.0-placeholder",
+      "placeholder": true,
+      "note": "pinned official Codex bundle not built yet (W3-PV)"
+    },
+    {
+      "provider": "claude",
+      "version": "0.0.0-placeholder",
+      "placeholder": true,
+      "note": "pinned official Claude Code bundle not built yet (W3-PV)"
+    }
+  ],
+  "components": [
+    {
+      "id": "whombat-contracts",
+      "repository": "Whombat",
+      "ref": "contracts-v4.0.0",
+      "commit": "1d675321bd0d55785be74d1dfd9b6e267574d5bc",
+      "contracts": {
+        "vendored": [],
+        "goModule": null,
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "whombat-relay",
+      "repository": "whombat-relay",
+      "ref": "main",
+      "commit": "b0ce1e8b7ec26bace5ed8947b68f717292637872",
+      "contracts": {
+        "vendored": [],
+        "goModule": "0.5.0",
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "whombat-api",
+      "repository": "whombat-api",
+      "ref": "main",
+      "commit": "12e8db0f97df5168043204a721de228412760ee6",
+      "contracts": {
+        "vendored": [
+          "4.0.0"
+        ],
+        "goModule": null,
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "whombat-runtime",
+      "repository": "Whombat",
+      "ref": "main",
+      "commit": "935c63bd574193348b445761190b0b2544d8b6a4",
+      "contracts": {
+        "vendored": [],
+        "goModule": null,
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "whombat-app",
+      "repository": "Whombat",
+      "ref": "main",
+      "commit": "935c63bd574193348b445761190b0b2544d8b6a4",
+      "contracts": {
+        "vendored": [],
+        "goModule": null,
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "appliance-manager",
+      "repository": "whombat-appliance",
+      "ref": "main",
+      "commit": "b666dcfaaf21a9512d620aa203526fbdb5773482",
+      "contracts": {
+        "vendored": [
+          "4.0.0"
+        ],
+        "goModule": "3.18.0",
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "appliance-backup",
+      "repository": "whombat-appliance",
+      "ref": "main",
+      "commit": "b666dcfaaf21a9512d620aa203526fbdb5773482",
+      "contracts": {
+        "vendored": [
+          "4.0.0"
+        ],
+        "goModule": "3.18.0",
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": []
+    },
+    {
+      "id": "appliance-provisioning",
+      "repository": "whombat-appliance",
+      "ref": "main",
+      "commit": "b666dcfaaf21a9512d620aa203526fbdb5773482",
+      "contracts": {
+        "vendored": [
+          "4.0.0"
+        ],
+        "goModule": "3.18.0",
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": [
+        "the NixOS flake, image and VM tests (nixos branch, merged into appliance main) are qualified by W2-NX (vm-tests/), not by this harness"
+      ]
+    },
+    {
+      "id": "whombat-hosts",
+      "repository": "whombat-hosts",
+      "ref": "main",
+      "commit": "b8c8c7483d938dd27cfb8781f5299131ab99986c",
+      "contracts": {
+        "vendored": [],
+        "goModule": null,
+        "sumsMatchRelease": null
+      },
+      "built": true,
+      "notes": [
+        "the hosts service (formerly Rackoon; Whombat ONE-11): the DEV image's whombat-hosts.service and the dev stack's hosts service"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+/*
+ * The verdict under a server's or a machine's name, and the page's one Technical details fold (Whombat
+ * server-pages.md). Tokens only.
+ */
+
+.verdict {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: 72ch;
+  margin: -4px 0 0;
+  color: var(--ink);
+  font: 400 16px / 1.45 var(--font-sans);
+}
+
+/* The dot sits on the first line's middle. */
+.dot {
+  display: inline-flex;
+  flex: none;
+  transform: translateY(-1px);
+}
+
+.fold {
+  display: grid;
+  gap: 14px;
+}
+
+.foldButton {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px 6px 6px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink2);
+  font: 500 14px var(--font-sans);
+  cursor: pointer;
+}
+
+.foldButton:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.foldButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.foldBody {
+  display: grid;
+  gap: 18px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.facts dt {
+  margin-bottom: 3px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--ink);
+  font: 500 14.5px var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.facts dd.mono {
+  font: 400 13.5px var(--font-mono);
+}

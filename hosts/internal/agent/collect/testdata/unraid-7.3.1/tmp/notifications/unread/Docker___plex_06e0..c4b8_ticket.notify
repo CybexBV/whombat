@@ -1,0 +1,5 @@
+timestamp=1791245412
+event="Docker - plex [06e0..c4b8]"
+subject="Notice [BLACKBOX] - Version update 06e0..c4b8"
+description="A new version of plex is available"
+importance="normal"

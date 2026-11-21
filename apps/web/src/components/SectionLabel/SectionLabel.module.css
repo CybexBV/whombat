@@ -1,0 +1,40 @@
+.label {
+  display: block;
+  margin: 0;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.md {
+  font: var(--type-label);
+  letter-spacing: var(--type-label-tracking);
+}
+
+.sm {
+  font: var(--type-label-small);
+  letter-spacing: var(--type-label-small-tracking);
+}
+
+.mut {
+  color: var(--mut);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.brand {
+  color: var(--brand);
+}
+
+.ink {
+  color: var(--ink);
+}

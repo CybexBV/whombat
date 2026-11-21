@@ -1,0 +1,24 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 20 visible nodes
+@e1 [application] "Whombat"
+@e2 [text] "Chat"
+@e3 [button] "More in Chat"
+@e4 [scroll-area] [scrollable]
+  [content above scroll-area hidden]
+@e5 [other] "Mara Okafor, 13:52. Why is pve-02 using so much memory?"
+@e6 [button] "pve-02, Needs a look"
+@e7 [link] "3 replies, Waiting for you, open the thread"
+@e8 [other] "Mara Okafor, 14:04. Is there new firmware for the access points?"
+@e9 [link] "Neo is looking into it, open the thread"
+@e10 [text-view] "Ask Neo anything" [editable]
+@e11 [button] "Choose how Neo answers"
+@e12 [button] "Dictate"
+@e13 [button] "Send" [disabled]
+@e14 [tab-bar] "Tab Bar"
+@e15 [button] "Chat" [selected]
+@e16 [button] "Inbox"
+@e17 [button] "Overview"
+@e18 [button] "Automations"
+@e19 [button] "Settings"
+@e20 [toolbar] "Toolbar"

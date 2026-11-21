@@ -1,0 +1,68 @@
+{
+  "$comment": "Schema compatibility of every migration (docs/decisions/managed-db.md MD-01…MD-12; apps/server/src/db/compat.ts). A migration's version is schemaBase + its journal position: this chain's baseline stands for the 76 migrations of the chain before it, so it is version 77 and versions never go down (docs/decisions/report-trackers.md). readers/writers: the oldest binary schema (a migration tag) that can still read/write the schema the migration produces. Classes: expand, backfill, contract, incompatible.",
+  "format": 1,
+  "schemaBase": 76,
+  "postgres": {
+    "majors": [17]
+  },
+  "runtime": {
+    "readsFrom": "0000_baseline",
+    "writesFrom": "0000_baseline"
+  },
+  "migrations": {
+    "0000_baseline": {
+      "class": "incompatible",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The whole schema of a new Whombat in one migration, at version 77. A database of the chain before it is refused with the release that moves it across (db/compat.ts)."
+    },
+    "0001_web_search": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Web search's two nullable columns on burrows (docs/decisions/web-search.md); the release before it reads and writes past them."
+    },
+    "0002_tracker_fix_release": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A followed fix's production release (docs/decisions/report-trackers.md): one nullable jsonb column on tracker_fixes; the release before it reads and writes past it."
+    },
+    "0003_job_result": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A job's result as a message (docs/decisions/t3code.md): a nullable jsonb column on messages and a nullable text column on t3_watches; the release before it reads and writes past them."
+    },
+    "0004_repo_icons": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A repository's own icon for the Chat list (docs/decisions/chat-inbox.md): a new table repo_icons and a partial index on automation_runs.thread_root_id; the release before it never reads them."
+    },
+    "0005_prompt_merge": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A prompt's “Merge into main when it’s done” (docs/decisions/prompts.md): a boolean column with a default on prompts and a nullable jsonb column on t3_watches; the release before it reads and writes past them."
+    },
+    "0006_tracker_separate": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "What a tracker offers of the part it releases on its own, and whether a followed fix changes it (docs/decisions/report-trackers.md): a nullable jsonb column on tracker_cursors and a nullable text column on tracker_fixes; the release before it reads and writes past them."
+    },
+    "0007_own_address": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The own address (docs/decisions/own-address.md): three new tables (the box's certificates, foreign certificates, box passkey user handles), nullable columns on appliance_passkeys and appliance_state with one defaulted switch, and an existing box marked as started with the shared route; the release before it reads and writes past them."
+    },
+    "0008_link": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Whombat Link (docs/decisions/whombat-link.md): a phone's own push token and the handle control gave the box for it on appliance_endpoints, and the Link stop the owner was pushed about on appliance_state, all nullable; the release before it reads and writes past them."
+    }
+  }
+}

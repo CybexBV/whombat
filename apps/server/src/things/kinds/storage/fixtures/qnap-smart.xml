@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<QDocRoot version="1.0">
+<authPassed><![CDATA[1]]></authPassed>
+<Disk_Info>
+<entry>
+<HDNo><![CDATA[1]]></HDNo>
+<Model><![CDATA[WDC WD40EFRX-68N32N0]]></Model>
+<Health><![CDATA[OK]]></Health>
+<Temperature><oC><![CDATA[34]]></oC><oF><![CDATA[93]]></oF></Temperature>
+<Capacity><![CDATA[3.64 TB]]></Capacity>
+<Serial><![CDATA[WD-XXXX1]]></Serial>
+<hd_is_ssd><![CDATA[0]]></hd_is_ssd>
+</entry>
+<entry>
+<HDNo><![CDATA[2]]></HDNo>
+<Model><![CDATA[WDC WD40EFRX-68N32N0]]></Model>
+<Health><![CDATA[Warning]]></Health>
+<Temperature><oC><![CDATA[57]]></oC><oF><![CDATA[135]]></oF></Temperature>
+<Capacity><![CDATA[3.64 TB]]></Capacity>
+<Serial><![CDATA[WD-XXXX2]]></Serial>
+<hd_is_ssd><![CDATA[0]]></hd_is_ssd>
+</entry>
+<entry>
+<HDNo><![CDATA[3]]></HDNo>
+<Model><![CDATA[--]]></Model>
+<Health><![CDATA[--]]></Health>
+<Temperature><oC><![CDATA[--]]></oC><oF><![CDATA[--]]></oF></Temperature>
+<Capacity><![CDATA[--]]></Capacity>
+</entry>
+<entry>
+<HDNo><![CDATA[4]]></HDNo>
+<Model><![CDATA[Samsung SSD 870 EVO 1TB]]></Model>
+<Health><![CDATA[Abnormal]]></Health>
+<Temperature><oC><![CDATA[38]]></oC><oF><![CDATA[100]]></oF></Temperature>
+<Capacity><![CDATA[931.51 GB]]></Capacity>
+<Serial><![CDATA[S6PXXX]]></Serial>
+<hd_is_ssd><![CDATA[1]]></hd_is_ssd>
+</entry>
+</Disk_Info>
+</QDocRoot>

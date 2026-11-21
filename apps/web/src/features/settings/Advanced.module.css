@@ -1,0 +1,90 @@
+/*
+ * Settings → Advanced (Whombat settings-groups.md STG-03): the folded list — Settings' bordered-row cards, each row a
+ * link to its page with This Whombat's AT A GLANCE chevron — and a page's head with the way back.
+ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.intro {
+  margin: -6px 0 0;
+  max-width: 40em;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+/* A row is one link to its page: the row's look, the chevron at the end. */
+.row {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--sf2);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--mut);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin: -6px 0 -12px -2px;
+  color: var(--mut);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.line {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink2);
+}

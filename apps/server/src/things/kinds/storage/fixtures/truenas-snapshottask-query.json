@@ -1,0 +1,21 @@
+[
+  {
+    "id": 1,
+    "dataset": "tank/docs",
+    "enabled": true,
+    "state": {
+      "state": "FINISHED",
+      "datetime": {
+        "$date": 1792609200000
+      }
+    }
+  },
+  {
+    "id": 2,
+    "dataset": "tank/photos",
+    "enabled": true,
+    "state": {
+      "state": "PENDING"
+    }
+  }
+]

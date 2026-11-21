@@ -1,0 +1,268 @@
+.frame {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Chat's or Feedback's thread beside its list (chat-inbox-web.md): the screen is its 392px list column, the pane the
+   rest. Keep in sync with INBOX_LIST_WIDTH (features/chats/inboxNav.ts). */
+.main[data-beside] {
+  flex: none;
+  width: 392px;
+}
+
+/* Thread focus mode (AP-304): the screen stays mounted under the full-width thread. */
+.main[hidden] {
+  display: none;
+}
+
+/* The sidebar and the pane sit in the frame as they are (wrappers for the drawer's inert and focus wiring). */
+.sidebarSlot,
+.paneSlot {
+  display: contents;
+}
+
+/* Below 1024 px (WE-15, keep in sync with DRAWER_MEDIA in ShellLayout.tsx): the sidebar is the Places drawer. */
+.drawerBar,
+.scrim,
+.drawerHead {
+  display: none;
+}
+
+@media (max-width: 1023.98px) {
+  /* The drawer: min(85vw, 320px), full height, rounded on its open side; Places and Close first. */
+  .sidebarSlot {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    /* Over the panes (--z-pane 5), under the modals (--z-modal 20). */
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    width: min(85vw, 320px);
+    border-right: 1px solid var(--line2);
+    border-radius: 0 var(--radius-modal) var(--radius-modal) 0;
+    background: var(--side);
+    overflow: hidden;
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      transform var(--duration-toggle) ease-out,
+      visibility 0s linear var(--duration-toggle);
+  }
+
+  .sidebarSlot[data-open] {
+    visibility: visible;
+    transform: none;
+    transition: transform var(--duration-toggle) ease-out;
+  }
+
+  .scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    display: block;
+    background: var(--ov);
+  }
+
+  .drawerHead {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 12px 8px 24px;
+  }
+
+  .drawerHeading {
+    margin: 0;
+    color: var(--ink);
+    font: 700 19px / 1.3 var(--font-sans);
+  }
+
+  /* Doubled: the icon button's own stylesheet may load after this one. */
+  .drawerClose.drawerClose {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-color: transparent;
+    color: var(--ink2);
+  }
+
+  .drawerClose.drawerClose:hover {
+    background: var(--sel);
+  }
+
+  /* One 56px bar: Places, Search, and what needs the person at the end. */
+  .drawerBar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 56px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .drawerBarEnd {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .drawerButton {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: none;
+    color: var(--ink2);
+    font: 400 14px var(--font-sans);
+    cursor: pointer;
+  }
+
+  .drawerButton:hover {
+    background: var(--sel);
+  }
+
+  .drawerButton:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  .pendingSidebar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarSlot,
+  .sidebarSlot[data-open] {
+    transition: none;
+  }
+}
+
+.pendingSidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  width: var(--size-sidebar);
+  padding-top: 16px;
+  border-right: 1px solid var(--line);
+  background: var(--side);
+}
+
+.pendingHeader {
+  padding: 0 16px 14px;
+}
+
+.pendingSearch {
+  padding: 0 16px 14px;
+}
+
+.errorMain {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.realtimeIndicator {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: var(--z-toast);
+  padding: 6px 12px;
+  border-radius: var(--radius-small);
+  background: var(--sf2);
+  border: 1px solid var(--line);
+  color: var(--mut);
+  font-size: 12.5px;
+}
+
+/* Agents can't reply yet (AgentsBlockedNotice; not in the mocks): one quiet line above the screen. */
+.notice {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 13.5px;
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+}
+
+.noticeLink {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.noticeLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* An action in a notice that isn't a link (“Add a passkey”, AP-794): the link's look on a real button. */
+.noticeButton {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.noticeButton:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.noticeButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The second, quieter action (“Not now”, “OK”). */
+.noticeQuiet {
+  color: var(--mut);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.noticeQuiet:hover:not(:disabled) {
+  color: var(--ink);
+}

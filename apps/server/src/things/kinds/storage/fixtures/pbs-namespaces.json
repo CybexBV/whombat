@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "ns": ""
+    },
+    {
+      "ns": "lab",
+      "comment": "Test machines"
+    }
+  ]
+}

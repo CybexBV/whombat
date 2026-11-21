@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "android": {
+    "modules": ["com.whombat.transfer.WhombatTransferModule"]
+  },
+  "apple": {
+    "modules": ["WhombatTransferModule"]
+  }
+}

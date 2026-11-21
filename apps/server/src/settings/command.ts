@@ -1,0 +1,209 @@
+/**
+ * `change_setting` (docs/decisions/assistant-settings.md): the assistant asking to change one of the person's settings,
+ * through the commit pipeline so the `settings.change` key decides. Go ahead runs it at once (the tool runs the op after
+ * this commits); Ask me first, and every destructive change or one the settings map says always asks, puts a card in
+ * the thread, and the person's yes runs it once, as them, and wakes the assistant there with the result; Just watch
+ * refuses it. The card's words are the settings map's and the op's own input, never the assistant's.
+ */
+import type { Grant, Tier } from '@whombat/core';
+import {
+  assistantAccessFor,
+  assistantSetting,
+  createOperationAllowlist,
+  pageWords,
+  type SettingsPageId,
+} from '@whombat/protocol/session';
+import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import { answerAfterApproval, grantedResult } from '../approvals/result';
+import { approvalThread } from '../approvals/wake';
+import { defineCommand, type KeyRequirement } from '../commit/types';
+import type { Db } from '../db/client';
+import { accounts, approvals, principals } from '../db/schema/index';
+import { conflict } from '../lib/errors';
+import { sessionDispatcherOf } from '../managed/dispatcher-ref';
+import { loadConversationRow } from '../read/conversations';
+import { loadGrants } from '../read/principals';
+import type { Services } from '../services';
+
+/** The key every settings change needs. */
+export const SETTINGS_KEY = 'settings.change' as const;
+
+/** Most lines the card shows of the change's input. */
+const PREVIEW_LINES = 6;
+const PREVIEW_VALUE = 60;
+
+let allowlist: ReturnType<typeof createOperationAllowlist> | null = null;
+const specOf = (op: string) => {
+  allowlist ??= createOperationAllowlist();
+  return allowlist.get(op);
+};
+
+/**
+ * Whether this change asks the person every time, whatever the key says: destructive, the map says so, or the input
+ * sets a part the map guards (a check's address, switching it off).
+ */
+export function alwaysAsks(op: string, input?: unknown): boolean {
+  return assistantAccessFor(op, input) === 'ask' || specOf(op)?.destructive === true;
+}
+
+/** The tier that decides this change: none without the key (Just watch), at most Ask for one that always asks, else the key's own. */
+export function changeTier(held: Tier | null, op: string, input?: unknown): Tier {
+  if (!held || held === 'cannot') return 'cannot';
+  if (alwaysAsks(op, input)) return 'ask';
+  return held;
+}
+
+/**
+ * The change's input as the card shows it: `key: value` lines of what it sets, leaving out the Whombat's own slug,
+ * values cut short. Nothing secret reaches here (secret ops are never the assistant's).
+ */
+export function previewLines(input: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const walk = (value: unknown, path: string) => {
+    if (out.length >= PREVIEW_LINES) return;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (path === 'params' && k === 'burrow') continue;
+        walk(v, ['params', 'body', 'query'].includes(path) || path === '' ? k : `${path}.${k}`);
+      }
+      return;
+    }
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    out.push(`${path}: ${text.length > PREVIEW_VALUE ? `${text.slice(0, PREVIEW_VALUE - 1)}…` : text}`);
+  };
+  for (const part of ['params', 'query', 'body'] as const) if (part in input) walk(input[part], part);
+  if (!('params' in input) && !('body' in input) && !('query' in input)) walk(input, '');
+  return out;
+}
+
+const Input = z.object({
+  op: z.string().min(3).max(80),
+  input: z.record(z.string(), z.unknown()),
+  conversationId: z.string().min(1).max(64).nullable(),
+  /**
+   * What the card shows instead of the input's lines, when the input is ids a person can't read: Whombat's own words for
+   * them (the things a bring-back picks, by their titles in the backup), never the assistant's.
+   */
+  lines: z.array(z.string().max(120)).max(PREVIEW_LINES).optional(),
+  /** The card's title in Whombat's words for this change (“Change a Plex setting”), in place of the map's. */
+  title: z.string().min(1).max(160).optional(),
+});
+
+export const changeSetting = defineCommand({
+  name: 'change_setting',
+  schema: Input,
+  async requiredKey(input, { db, actor }): Promise<KeyRequirement> {
+    const e = assistantSetting(input.op);
+    const words = input.title ?? e.words ?? input.op;
+    const where = pageWords((e.page ?? 'you.profile') as SettingsPageId, actor.shortName).where;
+    const held = (await loadGrants(db, actor.id)).find((g) => g.keyId === SETTINGS_KEY)?.tier ?? null;
+    const grants: Grant[] = [
+      { agentId: actor.id, keyId: SETTINGS_KEY, tier: changeTier(held, input.op, input.input) },
+    ];
+    const conversation = input.conversationId ? await loadConversationRow(db, input.conversationId) : null;
+    const lower = words.charAt(0).toLowerCase() + words.slice(1);
+    return {
+      keyId: SETTINGS_KEY,
+      grants,
+      attempt: `change a setting (${lower})`,
+      action: {
+        type: 'custom',
+        params: { name: 'settings_change', keyId: SETTINGS_KEY, data: { op: input.op, words, where } },
+      },
+      where: conversation ? 'Chat' : null,
+      conversationId: conversation?.id ?? null,
+      approval: {
+        title: words.slice(0, 160),
+        question: `${words}?`.slice(0, 160),
+        target: where,
+        whatHappens: [`In ${where}`, ...(input.lines ?? previewLines(input.input))],
+        explainer: alwaysAsks(input.op, input.input)
+          ? `${actor.shortName} always asks before this change. If you approve, it runs once, as you.`
+          : `${actor.shortName} asks before changing your settings. If you approve, it runs once, as you.`,
+        cardText: `I need your yes before I change this: ${lower}.`,
+      },
+    };
+  },
+  async apply(_tx, ctx, input) {
+    const access = assistantAccessFor(input.op, input.input);
+    if (access !== 'change' && access !== 'ask') throw conflict(`${input.op} isn’t a setting to change.`);
+    await ctx.emit({
+      type: 'setting.changed',
+      kind: 'System',
+      text: null,
+      where: null,
+      payload: { op: input.op, deferred: ctx.approvalId !== null },
+    });
+    if (ctx.approvalId) {
+      // Approved after asking: the change runs once, as the person who said yes, after this commit; the assistant is
+      // woken with the result in the card's thread to tell them.
+      const services = ctx.services;
+      const call = {
+        burrowId: ctx.burrow.id,
+        agentId: ctx.actor.id,
+        approvalId: ctx.approvalId,
+        op: input.op,
+        input: input.input,
+        conversationId: input.conversationId,
+      };
+      ctx.after(() => runApprovedChange(services, call));
+    }
+    return { deferred: ctx.approvalId !== null };
+  },
+});
+
+async function approverAccount(db: Db, approvalId: string) {
+  const [row] = await db
+    .select({ account: accounts })
+    .from(approvals)
+    .innerJoin(principals, eq(principals.id, approvals.decidedById))
+    .innerJoin(accounts, eq(accounts.id, principals.accountId))
+    .where(eq(approvals.id, approvalId));
+  return row?.account ?? null;
+}
+
+/** A change the person approved: run once as them, and the assistant woken with what happened. */
+export async function runApprovedChange(
+  services: Services,
+  call: {
+    burrowId: string;
+    agentId: string;
+    approvalId: string;
+    op: string;
+    input: Record<string, unknown>;
+    conversationId: string | null;
+  },
+): Promise<void> {
+  const account = await approverAccount(services.db, call.approvalId);
+  const dispatcher = sessionDispatcherOf(services);
+  const answer =
+    account && dispatcher
+      ? await dispatcher.runForAssistant(account, call.agentId, call.op, call.input)
+      : ({ type: 'error', message: 'This Whombat can’t run its settings now.' } as const);
+  const result =
+    answer.type === 'result'
+      ? grantedResult('done', JSON.stringify(answer.output ?? null))
+      : answer.type === 'redacted'
+        ? grantedResult('done', 'Done.')
+        : grantedResult('failed', answer.message);
+  if (!call.conversationId) return;
+  const threadRootId = await approvalThread(services.db, call.approvalId, call.conversationId).catch(
+    () => null,
+  );
+  await answerAfterApproval(services, {
+    burrowId: call.burrowId,
+    agentId: call.agentId,
+    approvalId: call.approvalId,
+    postIn: call.conversationId,
+    threadRootId,
+    result,
+  }).catch((err: unknown) =>
+    services.log.warn(
+      { err: err instanceof Error ? err.name : 'error', op: call.op },
+      'could not answer an approved settings change',
+    ),
+  );
+}
+
+export const SETTINGS_COMMANDS = [changeSetting];

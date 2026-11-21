@@ -1,0 +1,7 @@
+{
+ "development": true,
+ "warning": "DEVELOPMENT KEY - NEVER USE FOR PRODUCTION RELEASES OR ASSIGNMENTS",
+ "role": "snapshot",
+ "keyid": "c3c061789f8c3a00329a05e816c95920d7b94269bc20e8dfb2d832a9c0386abe",
+ "ed25519Seed": "OuNMUVSSocbHL4zTxWTHG+SmAzFPurdJnhqGcYdT8+E="
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "indexer": "DrunkenSlug",
+    "state": "DISABLED_SYSTEM_TEMPORARY",
+    "level": 1,
+    "disabledUntil": "2026-10-21T19:50:49.521Z",
+    "lastError": "Error while communicating with indexer DrunkenSlug. Server returned: Failed to connect to /172.20.0.1:2. Code: 0",
+    "apiResetTime": null,
+    "downloadResetTime": null,
+    "apiHits": 1,
+    "apiHitLimit": 1000,
+    "downloadHits": 0,
+    "downloadHitLimit": null,
+    "vipExpirationDate": null
+  },
+  {
+    "indexer": "NZBgeek",
+    "state": "DISABLED_SYSTEM_TEMPORARY",
+    "level": 1,
+    "disabledUntil": "2026-10-21T19:50:49.521Z",
+    "lastError": "Error while communicating with indexer NZBgeek. Server returned: Failed to connect to /172.20.0.1:1. Code: 0",
+    "apiResetTime": null,
+    "downloadResetTime": null,
+    "apiHits": 1,
+    "apiHitLimit": 100,
+    "downloadHits": 0,
+    "downloadHitLimit": 50,
+    "vipExpirationDate": "2026-10-30"
+  },
+  {
+    "indexer": "NZBFinder",
+    "state": "DISABLED_USER",
+    "level": 0,
+    "disabledUntil": null,
+    "lastError": null,
+    "apiResetTime": null,
+    "downloadResetTime": null,
+    "apiHits": 0,
+    "apiHitLimit": null,
+    "downloadHits": 0,
+    "downloadHitLimit": null,
+    "vipExpirationDate": null
+  }
+]

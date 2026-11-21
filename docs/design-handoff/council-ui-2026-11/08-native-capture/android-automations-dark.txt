@@ -1,0 +1,23 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 18 visible nodes (52 total)
+Collapsed 34 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "Automations, What Neo does on its own. To make one or change one, tell Neo., AUTOMATIONS · 3, ONLY TELLS YOU, Remove, Pause, Check last night’s backups and post one line here., Every weekday at 08:30 · Active, Next, Thu 24 Sep at 08:30, Schedule, Check the billing repository, Every weekday at 08:00, On, ·, Last run 11:40, done, GitHub · lumio/billing, Review billing pull requests, A new pull request on lumio/billing, Waiting for you, Run #5 is waiting for a yes., Acme Desk, Assess and fix tracker reports, A new report in a tracker connection, Tell Neo what to do on its own…" [scrollable]
+  [content below scroll-area hidden]
+@e5 [button] "Tell Neo…"
+@e8 [button] "Assess and fix tracker reports, on. A new report in a tracker connection. Last run 11:40, done. Last 5 runs: 4 done, 1 skipped."
+@e15 [button] "Review billing pull requests, waiting for you. A new pull request on lumio/billing. Run #5 is waiting for a yes."
+@e22 [button] "Check the billing repository, on. Every weekday at 08:00. Last run 11:40, done. Last 5 runs: 5 done."
+@e30 [group] "Check last night’s backups and post one line here. Only tells you. Every weekday at 08:30 · Active."
+@e32 [group] "Active"
+@e34 [group] "Next: Thu 24 Sep at 08:30"
+@e37 [button] "Pause"
+@e39 [button] "Remove"
+@e41 [group] "Chat, 1 new"
+@e42 [text] "1"
+@e44 [group] "Inbox, 3 new"
+@e45 [text] "3"
+@e47 [group] "Overview"
+@e49 [group] "Automations" [selected]
+@e51 [group] "Settings"

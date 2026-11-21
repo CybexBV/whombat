@@ -1,0 +1,39 @@
+/* “More detail” under an error: a quiet link-coloured summary, the raw words in the mono meta face (they are code). */
+.more {
+  margin: 4px 0 0;
+}
+
+.more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--brand);
+  font: var(--type-meta-small);
+  list-style: none;
+  cursor: pointer;
+}
+
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.more > summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-tag);
+}
+
+.more > summary svg {
+  transition: transform var(--duration-toggle) ease;
+}
+
+.more[open] > summary svg {
+  transform: rotate(90deg);
+}
+
+.said {
+  margin: 4px 0 0;
+  color: var(--mut);
+  font: var(--type-mono-meta);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,247 @@
+/*
+ * Stream WI's own pieces (incus-unraid-wi.md): the “This Whombat” chip and line, Incus tables' second lines, the
+ * configuration's key/value rows, an instance's log and the leases under a network. Classes are prefixed `wi` so they
+ * never meet Things.module.css's or the other streams'.
+ */
+
+.wiSelf {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--brand) 13%, transparent);
+  color: var(--brand);
+  font: 500 11px var(--font-mono);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.wiSelfHead {
+  padding: 3px 10px;
+  font-size: 12px;
+  vertical-align: 0;
+}
+
+.wiProject {
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.wiProject::before {
+  content: "· ";
+}
+
+.wiSelfLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--brand) 6%, var(--sf));
+  color: var(--ink2);
+  font: 400 14px / 1.45 var(--font-sans);
+}
+
+.wiSelfLine svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.wiSelfLine b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.wiSub {
+  display: block;
+  overflow: hidden;
+  max-width: 420px;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiMono {
+  font: 400 13px var(--font-mono);
+}
+
+.wiActs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.wiActs .wiSerious {
+  color: var(--bad);
+}
+
+.wiFrom {
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  white-space: nowrap;
+}
+
+.wiLock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+  white-space: nowrap;
+}
+
+.wiKey {
+  flex: none;
+  width: 190px;
+  overflow: hidden;
+  color: var(--ink2);
+  font: 400 13px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiRaw {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 400 13px / 1.45 var(--font-mono);
+}
+
+.wiChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wiChip {
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 400 12.5px var(--font-mono);
+  white-space: nowrap;
+}
+
+.wiLog {
+  height: 460px;
+  margin: 0 20px 18px;
+  overflow-y: auto;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.wiLog:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.wiToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.wiLeases {
+  padding: 4px 0 6px 28px;
+}
+
+.wiLeases table td,
+.wiLeases table th {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.wiNoteRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink2);
+  font: 400 14px var(--font-sans);
+}
+
+.wiNoteRow svg {
+  flex: none;
+  color: var(--warn);
+}
+
+.wiNoteRow > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.wiTwist {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 500 14px var(--font-mono);
+  cursor: pointer;
+}
+
+.wiTwist svg {
+  color: var(--mut);
+  transition: transform var(--duration-toggle, 120ms);
+}
+
+.wiTwist[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.wiTwist:focus-visible {
+  border-radius: var(--radius-small);
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.wiImages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px 16px;
+}
+
+.wiImages label span {
+  white-space: nowrap;
+}
+
+.wiNotes {
+  margin: 0;
+  padding: 2px 20px 16px;
+  color: var(--ink);
+  font: 400 14.5px / 1.5 var(--font-sans);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wiPreset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* A row's links stack in a narrow card (the `card` container, Things.module.css; less-is-more.md AP-1754). */
+@container card (max-width: 519px) {
+  .wiActs {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .wiSub {
+    max-width: 100%;
+  }
+}

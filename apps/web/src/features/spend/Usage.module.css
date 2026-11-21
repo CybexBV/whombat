@@ -1,0 +1,195 @@
+/*
+ * Usage (16-final/usage): the window chooser, the window in DM Mono, the two numbers in their cards, the plain
+ * definition, when it was prepared, then More folded under them.
+ */
+
+.windows {
+  display: flex;
+  min-width: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.window {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.window[aria-pressed="true"] {
+  border-color: var(--btn);
+  background: var(--btn);
+  color: var(--btnfg);
+}
+
+.window:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.span {
+  margin: -8px 0 0;
+  font: 400 12px / 1.5 var(--font-mono);
+  color: var(--ink2);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: -6px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 26px 26px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-large);
+  background: var(--sf);
+}
+
+.tileLabel {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.number {
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.unit {
+  font: 400 13px var(--font-mono);
+  color: var(--ink2);
+}
+
+.none {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.meta {
+  font: 400 12px / 1.5 var(--font-mono);
+  color: var(--ink2);
+}
+
+.definition {
+  max-width: 50em;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.prepared {
+  margin: -8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.more {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-large);
+  background: var(--sf);
+}
+
+.moreSummary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 12px 22px;
+  font-size: 15px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.moreSummary::-webkit-details-marker {
+  display: none;
+}
+
+.moreSummary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: var(--radius-card-large);
+}
+
+.moreChevron {
+  color: var(--ink2);
+  transition: transform var(--duration-toggle, 120ms);
+}
+
+.more[open] .moreChevron {
+  transform: rotate(90deg);
+}
+
+.moreBody {
+  display: flex;
+  flex-direction: column;
+  margin: 0 22px;
+  padding-bottom: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.moreSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 0;
+}
+
+.moreSection + .moreSection {
+  border-top: 1px solid var(--line);
+}
+
+.moreTitle {
+  margin: 0 0 2px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.moreLine {
+  max-width: 50em;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+
+.moreStrong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .tiles {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .tile {
+    padding: 20px 20px 22px;
+  }
+}

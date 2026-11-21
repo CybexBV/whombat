@@ -1,0 +1,7 @@
+{"data":[
+ {"upid":"UPID:pve1:0000A1B2:0012C3D4:6ACDF000:vzdump::root@pam:","node":"pve1","pid":41394,"pstart":1229780,"starttime":1791880000,"type":"vzdump","id":"","user":"root@pam"},
+ {"upid":"UPID:pve2:00003A10:00098F21:6ACDE8B0:qmstart:300:root@pam:","node":"pve2","pid":14864,"pstart":626465,"starttime":1791878320,"endtime":1791878321,"type":"qmstart","id":"300","user":"root@pam","status":"start failed: QEMU exited with code 1"},
+ {"upid":"UPID:pve1:00003A11:00098F22:6ACDE8A0:qmigrate:101:root@pam:","node":"pve1","pid":14865,"pstart":626466,"starttime":1791878304,"endtime":1791878400,"type":"qmigrate","id":"101","user":"root@pam","status":"OK"},
+ {"upid":"UPID:pve1:00003A12:00098F23:6ACDE890:vzdump::root@pam:","node":"pve1","pid":14866,"pstart":626467,"starttime":1791878288,"endtime":1791878500,"type":"vzdump","id":"","user":"root@pam","status":"WARNINGS: 1"},
+ {"upid":"UPID:pve1:00001111:00001111:6AC00000:vzdump:100:root@pam:","node":"pve1","pid":4369,"pstart":4369,"starttime":1791000000,"endtime":1791000100,"type":"vzdump","id":"100","user":"root@pam","status":"job errors"}
+]}

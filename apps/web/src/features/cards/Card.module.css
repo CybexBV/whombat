@@ -1,0 +1,129 @@
+/*
+ * Chat card frame and shared pieces — README "Chat cards": max-width 640px, 16px radius, 1px line,
+ * sf background, 18–20px padding. Values follow the card templates in Whombat Desktop.dc.html.
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  max-width: var(--max-card);
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
+}
+
+/* Commits and receipts are lighter lists: 14px radius, 6px × 18px padding. */
+.list {
+  border-radius: var(--radius-panel);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.label {
+  font: var(--type-label);
+  letter-spacing: var(--type-label-tracking);
+  color: var(--mut);
+}
+
+/* Right side of the header: "Due 14 Oct", "14 sources · 3 tested" (mono 500 11px, no tracking). */
+.meta {
+  font: var(--type-mono-badge);
+  color: var(--mut);
+}
+
+/* Right side of the header: "feat/invoice-pdf", "billing/pdf/format.ts:42" (mono 400 12px). */
+.metaMono {
+  font: var(--type-mono-meta);
+  color: var(--mut);
+}
+
+.title {
+  margin: 0;
+  font: var(--type-card-title);
+  letter-spacing: var(--type-card-title-tracking);
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Links styled as the mock's card buttons (Button `md`: 8×14px, 14px, 10px radius). */
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: var(--radius-button);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.actionSm {
+  padding: 7px 12px;
+  font-size: 13.5px;
+}
+
+.primary,
+.primary:hover {
+  border: none;
+  background: var(--btn);
+  color: var(--btnfg);
+  font-weight: 600;
+}
+
+.secondary,
+.secondary:hover {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--ink);
+}
+
+.toneOk {
+  color: var(--ok);
+}
+
+.toneWarn {
+  color: var(--warn);
+}
+
+.toneBad {
+  color: var(--bad);
+}
+
+.toneNeutral {
+  color: var(--mut);
+}
+
+.add {
+  color: var(--ok);
+}
+
+.del {
+  color: var(--bad);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.bare {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

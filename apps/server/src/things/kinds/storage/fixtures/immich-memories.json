@@ -1,0 +1,88 @@
+[
+  {
+    "id": "4b1c2d3e-5f60-4a7b-8c9d-0e1f2a3b4c5d",
+    "type": "on_this_day",
+    "data": { "year": 2020 },
+    "createdAt": "2026-10-21T00:00:00.000Z",
+    "updatedAt": "2026-10-21T00:00:00.000Z",
+    "memoryAt": "2020-10-21T00:00:00.000Z",
+    "showAt": "2026-10-21T00:00:00.000Z",
+    "hideAt": "2026-10-22T00:00:00.000Z",
+    "isSaved": false,
+    "ownerId": "0c1d2e3f-4a5b-4c6d-8e7f-a0b1c2d3e4f5",
+    "assets": [
+      {
+        "id": "a1000000-0000-4000-8000-000000000001",
+        "type": "IMAGE",
+        "originalFileName": "IMG_0412.JPG",
+        "localDateTime": "2020-10-21T14:12:00.000Z",
+        "isTrashed": false,
+        "width": 4032,
+        "height": 3024
+      }
+    ]
+  },
+  {
+    "id": "5c2d3e4f-6071-4b8c-9d0e-1f2a3b4c5d6e",
+    "type": "on_this_day",
+    "data": { "year": 2023 },
+    "createdAt": "2026-10-21T00:00:00.000Z",
+    "updatedAt": "2026-10-21T00:00:00.000Z",
+    "memoryAt": "2023-10-21T00:00:00.000Z",
+    "showAt": "2026-10-21T00:00:00.000Z",
+    "hideAt": "2026-10-22T00:00:00.000Z",
+    "isSaved": false,
+    "ownerId": "0c1d2e3f-4a5b-4c6d-8e7f-a0b1c2d3e4f5",
+    "assets": [
+      {
+        "id": "a2000000-0000-4000-8000-000000000001",
+        "type": "IMAGE",
+        "originalFileName": "PXL_20231021_101500.jpg",
+        "localDateTime": "2023-10-21T10:15:00.000Z",
+        "isTrashed": false,
+        "exifInfo": { "city": "Texel", "country": "Netherlands" }
+      },
+      {
+        "id": "a2000000-0000-4000-8000-000000000002",
+        "type": "VIDEO",
+        "originalFileName": "PXL_20231021_101800.mp4",
+        "localDateTime": "2023-10-21T10:18:00.000Z",
+        "isTrashed": false
+      },
+      {
+        "id": "a2000000-0000-4000-8000-000000000003",
+        "type": "IMAGE",
+        "originalFileName": "PXL_20231021_102000.jpg",
+        "localDateTime": "2023-10-21T10:20:00.000Z",
+        "isTrashed": true
+      },
+      {
+        "id": "a2000000-0000-4000-8000-000000000004",
+        "type": "IMAGE",
+        "originalFileName": "PXL_20231021_160200.jpg",
+        "localDateTime": "2023-10-21T16:02:00.000Z",
+        "isTrashed": false,
+        "exifInfo": { "city": "De Koog", "country": "Netherlands" }
+      }
+    ]
+  },
+  {
+    "id": "6d3e4f50-7182-4c9d-8e0f-2a3b4c5d6e7f",
+    "type": "birthday",
+    "data": { "year": 2019, "personName": "Mara" },
+    "createdAt": "2026-10-21T00:00:00.000Z",
+    "updatedAt": "2026-10-21T00:00:00.000Z",
+    "memoryAt": "2019-10-21T00:00:00.000Z",
+    "isSaved": false,
+    "ownerId": "0c1d2e3f-4a5b-4c6d-8e7f-a0b1c2d3e4f5",
+    "assets": [
+      {
+        "id": "a3000000-0000-4000-8000-000000000001",
+        "type": "IMAGE",
+        "originalFileName": "IMG_9001.JPG",
+        "localDateTime": "2019-10-21T12:00:00.000Z",
+        "isTrashed": false
+      }
+    ]
+  }
+]

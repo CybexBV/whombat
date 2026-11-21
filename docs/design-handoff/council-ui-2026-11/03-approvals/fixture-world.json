@@ -1,0 +1,2825 @@
+{
+  "assistant": "Neo",
+  "face": "neo",
+  "avatar": "operator-bust.svg",
+  "now": "2026-09-23T09:22:00.000Z",
+  "timeZone": "Europe/Amsterdam",
+  "tonight": "2026-09-24T01:00:00.000Z",
+  "worlds": {
+    "everyday": {
+      "approval": {
+        "id": "apr_zfs-cache",
+        "number": 902,
+        "burrowId": "bur_burrow-hq",
+        "requesterId": "prn_dusty",
+        "keyId": "connections.write",
+        "action": {
+          "type": "connection_call",
+          "params": {
+            "connectionId": "con_servers",
+            "handle": "servers",
+            "tool": "server_command",
+            "toolHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "words": "limit the ZFS cache on pve-02 to 16 GB",
+            "server": {
+              "id": "pve-02",
+              "name": "pve-02"
+            }
+          }
+        },
+        "title": "Limit the ZFS cache on pve-02 to 16 GB",
+        "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+        "target": "servers · server_command",
+        "whatHappens": [
+          "pve-02 restarts once to apply it"
+        ],
+        "explainer": "Restarting a server always asks a person.",
+        "summary": "Neo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.",
+        "conditions": [
+          {
+            "id": "person",
+            "label": "A person says yes",
+            "met": false,
+            "kind": "person_approves",
+            "approverIds": [
+              "prn_mara"
+            ]
+          }
+        ],
+        "state": "pending",
+        "decidedById": null,
+        "decidedAt": null,
+        "execution": {
+          "state": "idle",
+          "startedAt": null,
+          "finishedAt": null,
+          "durationMs": null,
+          "resultUrl": null,
+          "error": null
+        },
+        "executedAt": null,
+        "conversationId": "cnv_pr482",
+        "messageId": "msg_pr482-dusty-1125",
+        "involvedIds": [],
+        "eventId": "evt_9f18",
+        "createdAt": "2026-09-23T07:44:00.000Z"
+      },
+      "keyLabel": "Change things in connected services",
+      "states": {
+        "pending": {
+          "view": {
+            "phase": "needs_person",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "NEEDS A PERSON",
+            "tone": "warn",
+            "mobileLabel": "NEEDS A PERSON",
+            "pendingBorder": true,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Neo won’t do it without a person.",
+            "mobileMessage": "Neo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.",
+            "short": "Neo is waiting for a person to approve.",
+            "inboxDone": null,
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "you",
+                "mobileNote": "Waiting for you",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": {
+              "needs": "Neo needs your OK",
+              "yes": "Yes, do it",
+              "now": "Yes, now",
+              "later": "Yes, tonight",
+              "no": "No",
+              "details": "Technical details"
+            },
+            "lasting": {
+              "link": "Don’t ask again for pve-02…",
+              "title": "Let Neo do this on pve-02 without asking?",
+              "body": "Next time it does it and tells you after. You can change this in Settings.",
+              "confirm": "Let Neo do it",
+              "keep": "Keep asking"
+            },
+            "canApprove": true,
+            "canDecline": true,
+            "canUndo": false,
+            "logPill": {
+              "text": "WAITING ON A PERSON",
+              "tone": "warn"
+            },
+            "logDecided": {
+              "text": "Nobody yet. Neo is waiting.",
+              "tone": "warn"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Needs you"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": null
+        },
+        "scheduled": {
+          "view": {
+            "phase": "executing",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "APPROVED · DOING IT",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · DOING IT",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Neo is doing it now. You’ll get a note here when it’s done.",
+            "mobileMessage": "Neo is doing it now. You’ll get a note here when it’s done.",
+            "short": "Mara approved. Neo is doing it.",
+            "inboxDone": "Approved · doing it",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": {
+            "state": "scheduled",
+            "text": "Scheduled for tonight, 03:00",
+            "tone": "ok"
+          }
+        },
+        "running": {
+          "view": {
+            "phase": "executing",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "APPROVED · DOING IT",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · DOING IT",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Neo is doing it now. You’ll get a note here when it’s done.",
+            "mobileMessage": "Neo is doing it now. You’ll get a note here when it’s done.",
+            "short": "Mara approved. Neo is doing it.",
+            "inboxDone": "Approved · doing it",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": {
+            "state": "running",
+            "text": "Running",
+            "tone": "ok"
+          }
+        },
+        "done": {
+          "view": {
+            "phase": "executed",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "DONE",
+            "tone": "ok",
+            "mobileLabel": "DONE",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Done.",
+            "mobileMessage": "Done.",
+            "short": "Done 1 hour ago. Mara approved.",
+            "inboxDone": "Done",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "done",
+              "label": "Done"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": {
+            "state": "done",
+            "text": "Done · 09:46",
+            "tone": "ok"
+          }
+        },
+        "declined": {
+          "view": {
+            "phase": "declined",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "DECLINED",
+            "tone": "bad",
+            "mobileLabel": "DECLINED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Declined. Neo won’t do it.",
+            "mobileMessage": "Neo won’t do it.",
+            "short": "Declined by Mara.",
+            "inboxDone": "Declined",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "declined",
+                "mobileNote": "declined",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "DECLINED BY MARA",
+              "tone": "bad"
+            },
+            "logDecided": {
+              "text": "Mara Okafor declined at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Declined"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": {
+            "state": "declined",
+            "text": "You said no · 09:46",
+            "tone": "mut"
+          }
+        },
+        "failed": {
+          "view": {
+            "phase": "failed",
+            "title": "Limit the ZFS cache on pve-02 to 16 GB",
+            "question": "Limit the ZFS cache on pve-02 to 16 GB?",
+            "target": "servers · server_command",
+            "actionNote": null,
+            "label": "DO IT FAILED",
+            "tone": "bad",
+            "mobileLabel": "DO IT FAILED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and do it",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve and do it"
+              },
+              {
+                "scope": "agent",
+                "label": "Don’t ask again on pve-02"
+              }
+            ],
+            "message": "Do it failed. The server did not accept the command.",
+            "mobileMessage": "Do it failed. The server did not accept the command.",
+            "short": "Do it failed. The server did not accept the command.",
+            "inboxDone": "Do it failed",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "pve-02 restarts once to apply it"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Failed"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is doing it.",
+              "decline": "Declined. Neo won’t do it.",
+              "always": "Approved. Whombat won’t ask again on pve-02."
+            }
+          },
+          "answer": {
+            "state": "failed",
+            "text": "It didn’t work",
+            "tone": "bad"
+          }
+        }
+      }
+    },
+    "command": {
+      "approval": {
+        "id": "apr_zfs-cache",
+        "number": 902,
+        "burrowId": "bur_burrow-hq",
+        "requesterId": "prn_dusty",
+        "keyId": "deploy.production",
+        "action": {
+          "type": "run_command",
+          "params": {
+            "command": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"",
+            "category": "deploy_production",
+            "target": "web-1",
+            "reason": "Deploy the invoice PDF change to the billing server."
+          }
+        },
+        "title": "Run a command on the production server web-1",
+        "question": "Run a command on the production server web-1?",
+        "target": "web-1 · Deploy to production",
+        "whatHappens": [
+          "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+        ],
+        "explainer": "",
+        "summary": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”",
+        "conditions": [
+          {
+            "id": "person",
+            "label": "A person says yes",
+            "met": false,
+            "kind": "person_approves",
+            "approverIds": [
+              "prn_mara"
+            ]
+          }
+        ],
+        "state": "pending",
+        "decidedById": null,
+        "decidedAt": null,
+        "execution": {
+          "state": "idle",
+          "startedAt": null,
+          "finishedAt": null,
+          "durationMs": null,
+          "resultUrl": null,
+          "error": null
+        },
+        "executedAt": null,
+        "conversationId": "cnv_pr482",
+        "messageId": "msg_pr482-dusty-1125",
+        "involvedIds": [],
+        "eventId": "evt_9f18",
+        "createdAt": "2026-09-23T07:44:00.000Z"
+      },
+      "keyLabel": "Deploy to production",
+      "states": {
+        "pending": {
+          "view": {
+            "phase": "needs_person",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "NEEDS A PERSON",
+            "tone": "warn",
+            "mobileLabel": "NEEDS A PERSON",
+            "pendingBorder": true,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Neo won’t run the command without a person.",
+            "mobileMessage": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”",
+            "short": "Neo is waiting for a person to approve.",
+            "inboxDone": null,
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "you",
+                "mobileNote": "Waiting for you",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": true,
+            "canDecline": true,
+            "canUndo": false,
+            "logPill": {
+              "text": "WAITING ON A PERSON",
+              "tone": "warn"
+            },
+            "logDecided": {
+              "text": "Nobody yet. Neo is waiting.",
+              "tone": "warn"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Needs you"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": null
+        },
+        "scheduled": {
+          "view": {
+            "phase": "executing",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "APPROVED · RUNNING THE COMMAND",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · RUNNING THE COMMAND",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Allowed once. Neo runs the command in its turn.",
+            "mobileMessage": "Allowed once. Neo runs the command in its turn.",
+            "short": "Mara approved. Neo is running the command.",
+            "inboxDone": "Approved · running the command",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": {
+            "state": "scheduled",
+            "text": "Scheduled for tonight, 03:00",
+            "tone": "ok"
+          }
+        },
+        "running": {
+          "view": {
+            "phase": "executing",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "APPROVED · RUNNING THE COMMAND",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · RUNNING THE COMMAND",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Allowed once. Neo runs the command in its turn.",
+            "mobileMessage": "Allowed once. Neo runs the command in its turn.",
+            "short": "Mara approved. Neo is running the command.",
+            "inboxDone": "Approved · running the command",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": {
+            "state": "running",
+            "text": "Running",
+            "tone": "ok"
+          }
+        },
+        "done": {
+          "view": {
+            "phase": "executed",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "RAN",
+            "tone": "ok",
+            "mobileLabel": "RAN",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Allowed once. Neo ran the command.",
+            "mobileMessage": "Allowed once. Neo ran the command.",
+            "short": "Ran 1 hour ago. Mara approved.",
+            "inboxDone": "Ran",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "done",
+              "label": "Ran"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": {
+            "state": "done",
+            "text": "Done · 09:46",
+            "tone": "ok"
+          }
+        },
+        "declined": {
+          "view": {
+            "phase": "declined",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "DECLINED",
+            "tone": "bad",
+            "mobileLabel": "DECLINED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Declined. Neo won’t run the command.",
+            "mobileMessage": "Neo won’t run the command.",
+            "short": "Declined by Mara.",
+            "inboxDone": "Declined",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "declined",
+                "mobileNote": "declined",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "DECLINED BY MARA",
+              "tone": "bad"
+            },
+            "logDecided": {
+              "text": "Mara Okafor declined at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Declined"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": {
+            "state": "declined",
+            "text": "You said no · 09:46",
+            "tone": "mut"
+          }
+        },
+        "failed": {
+          "view": {
+            "phase": "failed",
+            "title": "Run a command on the production server web-1",
+            "question": "Run a command on the production server web-1?",
+            "target": "web-1 · Deploy to production",
+            "actionNote": null,
+            "label": "RUN THE COMMAND FAILED",
+            "tone": "bad",
+            "mobileLabel": "RUN THE COMMAND FAILED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Allow once",
+            "mobileCta": "Allow once",
+            "declineCta": "Don’t allow",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Allow once"
+              },
+              {
+                "scope": "task",
+                "label": "Allow for this task"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow for Neo"
+              }
+            ],
+            "message": "Run the command failed. The server did not accept the command.",
+            "mobileMessage": "Run the command failed. The server did not accept the command.",
+            "short": "Run the command failed. The server did not accept the command.",
+            "inboxDone": "Run the command failed",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Run “rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"”"
+              }
+            ],
+            "content": {
+              "label": "COMMAND",
+              "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\""
+            },
+            "why": "Deploy the invoice PDF change to the billing server.",
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Failed"
+            },
+            "toasts": {
+              "approve": "Allowed once. Neo runs the command now.",
+              "decline": "Declined. Neo won’t run the command."
+            }
+          },
+          "answer": {
+            "state": "failed",
+            "text": "It didn’t work",
+            "tone": "bad"
+          }
+        }
+      }
+    },
+    "deploy": {
+      "approval": {
+        "id": "apr_staging-482",
+        "number": 12,
+        "burrowId": "bur_burrow-hq",
+        "requesterId": "prn_dusty",
+        "keyId": "deploy.staging",
+        "action": {
+          "type": "deploy",
+          "params": {
+            "environment": "staging",
+            "service": "billing-api",
+            "ref": "feat/invoice-pdf",
+            "sha": null,
+            "prNumber": 482
+          }
+        },
+        "title": "Deploy feat/invoice-pdf to staging",
+        "question": "Deploy feat/invoice-pdf to staging?",
+        "target": "staging · billing-api",
+        "whatHappens": [
+          "Build 7be20f, the latest commit on feat/invoice-pdf",
+          "Run migrations. There are none in this change.",
+          "Roll billing-api to staging, 2 of 2 pods",
+          "Roll back on its own if errors stay above 1% for 5 minutes"
+        ],
+        "explainer": "Neo holds a staging key that only turns when you approve. If you approve now, the deploy waits for the other two conditions and goes out on its own.",
+        "summary": "Neo builds 7be20f and rolls billing-api to staging, 2 of 2 pods. It rolls back on its own if errors stay above 1% for 5 minutes.",
+        "conditions": [
+          {
+            "id": "checks",
+            "label": "Checks pass on the latest commit",
+            "met": false,
+            "kind": "checks_pass",
+            "prNumber": 482,
+            "headSha": "e9f114",
+            "state": "running",
+            "passed": 38,
+            "total": 41,
+            "fixing": true
+          },
+          {
+            "id": "review",
+            "label": "Mara approves the PR",
+            "met": false,
+            "kind": "review_approved",
+            "prNumber": 482,
+            "reviewerId": "prn_mara",
+            "reviewState": "changes_requested",
+            "reviewedAt": "2026-09-23T09:20:00.000Z"
+          },
+          {
+            "id": "person",
+            "label": "You say yes",
+            "met": false,
+            "kind": "person_approves",
+            "approverIds": [
+              "prn_mara"
+            ]
+          }
+        ],
+        "state": "pending",
+        "decidedById": null,
+        "decidedAt": null,
+        "execution": {
+          "state": "idle",
+          "startedAt": null,
+          "finishedAt": null,
+          "durationMs": null,
+          "resultUrl": null,
+          "error": null
+        },
+        "executedAt": null,
+        "conversationId": "cnv_pr482",
+        "messageId": "msg_pr482-dusty-1125",
+        "involvedIds": [],
+        "eventId": "evt_9f18",
+        "createdAt": "2026-09-23T09:25:00.000Z"
+      },
+      "keyLabel": "Deploy to staging",
+      "states": {
+        "pending": {
+          "view": {
+            "phase": "needs_person",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "NEEDS A PERSON",
+            "tone": "warn",
+            "mobileLabel": "NEEDS A PERSON",
+            "pendingBorder": true,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Neo won’t deploy without a person. Approve now and it goes out once the first two are green.",
+            "mobileMessage": "Neo builds 7be20f and rolls billing-api to staging, 2 of 2 pods. It rolls back on its own if errors stay above 1% for 5 minutes.",
+            "short": "Neo is waiting for a person to approve the staging deploy.",
+            "inboxDone": null,
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "you",
+                "mobileNote": "Waiting for you",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": true,
+            "canDecline": true,
+            "canUndo": false,
+            "logPill": {
+              "text": "WAITING ON A PERSON",
+              "tone": "warn"
+            },
+            "logDecided": {
+              "text": "Nobody yet. Neo is holding the deploy.",
+              "tone": "warn"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Needs you"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": null
+        },
+        "scheduled": {
+          "view": {
+            "phase": "waiting",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "APPROVED · WAITING FOR CHECKS",
+            "tone": "warn",
+            "mobileLabel": "APPROVED · WAITING FOR CHECKS",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Approved. Neo deploys as soon as checks are green and Mara signs off.",
+            "mobileMessage": "Approved. Neo deploys as soon as checks are green and Mara signs off.",
+            "short": "Mara approved. Waiting for checks and Mara.",
+            "inboxDone": "Approved · waiting for checks and Mara",
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": {
+            "state": "scheduled",
+            "text": "Scheduled for tonight, 03:00",
+            "tone": "ok"
+          }
+        },
+        "running": {
+          "view": {
+            "phase": "executing",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "APPROVED · DEPLOYING",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · DEPLOYING",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Neo is rolling billing-api to staging. You’ll get a note here when it’s live, usually in about two minutes.",
+            "mobileMessage": "Neo is rolling billing-api to staging. You’ll get a note here when it’s live, usually in about two minutes.",
+            "short": "Mara approved. Neo is deploying to staging.",
+            "inboxDone": "Approved · deploying",
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": {
+            "state": "running",
+            "text": "Running",
+            "tone": "ok"
+          }
+        },
+        "done": {
+          "view": {
+            "phase": "executed",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "DEPLOYED",
+            "tone": "ok",
+            "mobileLabel": "DEPLOYED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Deployed to staging.",
+            "mobileMessage": "Deployed to staging.",
+            "short": "Deployed to staging 1 hour ago. Mara approved.",
+            "inboxDone": "Deployed",
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "done",
+              "label": "Deployed"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": {
+            "state": "done",
+            "text": "Done · 09:46",
+            "tone": "ok"
+          }
+        },
+        "declined": {
+          "view": {
+            "phase": "declined",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "DECLINED",
+            "tone": "bad",
+            "mobileLabel": "DECLINED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Declined. Neo won’t deploy this commit.",
+            "mobileMessage": "Neo won’t deploy this commit.",
+            "short": "Declined by Mara.",
+            "inboxDone": "Declined",
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "declined",
+                "mobileNote": "declined",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "DECLINED BY MARA",
+              "tone": "bad"
+            },
+            "logDecided": {
+              "text": "Mara Okafor declined at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Declined"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": {
+            "state": "declined",
+            "text": "You said no · 09:46",
+            "tone": "mut"
+          }
+        },
+        "failed": {
+          "view": {
+            "phase": "failed",
+            "title": "Deploy feat/invoice-pdf to staging",
+            "question": "Deploy feat/invoice-pdf to staging?",
+            "target": "staging · billing-api",
+            "actionNote": null,
+            "label": "DEPLOY FAILED",
+            "tone": "bad",
+            "mobileLabel": "DEPLOY FAILED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve in advance",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": [
+              {
+                "scope": "once",
+                "label": "Approve in advance"
+              },
+              {
+                "scope": "agent",
+                "label": "Always allow Neo to deploy"
+              }
+            ],
+            "message": "Deploy to staging failed. The server did not accept the command.",
+            "mobileMessage": "Deploy to staging failed. The server did not accept the command.",
+            "short": "Deploy to staging failed. The server did not accept the command.",
+            "inboxDone": "Deploy failed",
+            "mobileContext": "Neo · 11:25",
+            "conditions": [
+              {
+                "id": "checks",
+                "kind": "checks_pass",
+                "met": false,
+                "label": "Checks pass on the latest commit",
+                "mobileLabel": "Checks pass on e9f114",
+                "note": "38 of 41 · fixing",
+                "mobileNote": "38 of 41 · fixing",
+                "mark": ""
+              },
+              {
+                "id": "review",
+                "kind": "review_approved",
+                "met": false,
+                "label": "Mara approves the PR",
+                "mobileLabel": "Mara approves the PR",
+                "note": "changes requested",
+                "mobileNote": "changes requested",
+                "mark": ""
+              },
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "You say yes",
+                "mobileLabel": "You say yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Build 7be20f, the latest commit on feat/invoice-pdf"
+              },
+              {
+                "n": "02",
+                "text": "Run migrations. There are none in this change."
+              },
+              {
+                "n": "03",
+                "text": "Roll billing-api to staging, 2 of 2 pods"
+              },
+              {
+                "n": "04",
+                "text": "Roll back on its own if errors stay above 1% for 5 minutes"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Failed"
+            },
+            "toasts": {
+              "approve": "Approved in advance. Neo will deploy when checks are green.",
+              "decline": "Declined. Neo won’t deploy this commit.",
+              "always": "Approved. From now on Neo may deploy without asking."
+            }
+          },
+          "answer": {
+            "state": "failed",
+            "text": "It didn’t work",
+            "tone": "bad"
+          }
+        }
+      }
+    },
+    "mail": {
+      "approval": {
+        "id": "apr_zfs-cache",
+        "number": 902,
+        "burrowId": "bur_burrow-hq",
+        "requesterId": "prn_dusty",
+        "keyId": "mail.send",
+        "action": {
+          "type": "mail_send",
+          "params": {
+            "connectionEmail": "mara@example.com",
+            "to": [
+              "priya@northwind.example"
+            ],
+            "cc": [],
+            "bcc": [],
+            "subject": "Invoice 1042",
+            "bodyPreview": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara",
+            "body": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara",
+            "draftId": "d1"
+          }
+        },
+        "title": "Send an email to priya@northwind.example",
+        "question": "Send an email to priya@northwind.example?",
+        "target": "Gmail · mara@example.com",
+        "whatHappens": [
+          "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+        ],
+        "explainer": "",
+        "summary": "Send “Invoice 1042” from mara@example.com to priya@northwind.example",
+        "conditions": [
+          {
+            "id": "person",
+            "label": "A person says yes",
+            "met": false,
+            "kind": "person_approves",
+            "approverIds": [
+              "prn_mara"
+            ]
+          }
+        ],
+        "state": "pending",
+        "decidedById": null,
+        "decidedAt": null,
+        "execution": {
+          "state": "idle",
+          "startedAt": null,
+          "finishedAt": null,
+          "durationMs": null,
+          "resultUrl": null,
+          "error": null
+        },
+        "executedAt": null,
+        "conversationId": "cnv_pr482",
+        "messageId": "msg_pr482-dusty-1125",
+        "involvedIds": [],
+        "eventId": "evt_9f18",
+        "createdAt": "2026-09-23T07:44:00.000Z"
+      },
+      "keyLabel": "Send emails",
+      "states": {
+        "pending": {
+          "view": {
+            "phase": "needs_person",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "NEEDS A PERSON",
+            "tone": "warn",
+            "mobileLabel": "NEEDS A PERSON",
+            "pendingBorder": true,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Neo won’t send the email without a person.",
+            "mobileMessage": "Send “Invoice 1042” from mara@example.com to priya@northwind.example",
+            "short": "Neo is waiting for a person to approve.",
+            "inboxDone": null,
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "you",
+                "mobileNote": "Waiting for you",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": {
+              "needs": "Neo needs your OK",
+              "yes": "Yes, do it",
+              "now": "Yes, now",
+              "later": "Yes, tonight",
+              "no": "No",
+              "details": "Technical details"
+            },
+            "lasting": null,
+            "canApprove": true,
+            "canDecline": true,
+            "canUndo": false,
+            "logPill": {
+              "text": "WAITING ON A PERSON",
+              "tone": "warn"
+            },
+            "logDecided": {
+              "text": "Nobody yet. Neo is waiting.",
+              "tone": "warn"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Needs you"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": null
+        },
+        "scheduled": {
+          "view": {
+            "phase": "executing",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "APPROVED · SENDING THE EMAIL",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · SENDING THE EMAIL",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Neo is sending the email now. You’ll get a note here when it’s done.",
+            "mobileMessage": "Neo is sending the email now. You’ll get a note here when it’s done.",
+            "short": "Mara approved. Neo is sending the email.",
+            "inboxDone": "Approved · sending the email",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": {
+            "state": "scheduled",
+            "text": "Scheduled for tonight, 03:00",
+            "tone": "ok"
+          }
+        },
+        "running": {
+          "view": {
+            "phase": "executing",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "APPROVED · SENDING THE EMAIL",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · SENDING THE EMAIL",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Neo is sending the email now. You’ll get a note here when it’s done.",
+            "mobileMessage": "Neo is sending the email now. You’ll get a note here when it’s done.",
+            "short": "Mara approved. Neo is sending the email.",
+            "inboxDone": "Approved · sending the email",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": {
+            "state": "running",
+            "text": "Running",
+            "tone": "ok"
+          }
+        },
+        "done": {
+          "view": {
+            "phase": "executed",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "SENT",
+            "tone": "ok",
+            "mobileLabel": "SENT",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Sent.",
+            "mobileMessage": "Sent.",
+            "short": "Sent 1 hour ago. Mara approved.",
+            "inboxDone": "Sent",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "done",
+              "label": "Sent"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": {
+            "state": "done",
+            "text": "Done · 09:46",
+            "tone": "ok"
+          }
+        },
+        "declined": {
+          "view": {
+            "phase": "declined",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "DECLINED",
+            "tone": "bad",
+            "mobileLabel": "DECLINED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Declined. Neo won’t send the email.",
+            "mobileMessage": "Neo won’t send the email.",
+            "short": "Declined by Mara.",
+            "inboxDone": "Declined",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "declined",
+                "mobileNote": "declined",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "DECLINED BY MARA",
+              "tone": "bad"
+            },
+            "logDecided": {
+              "text": "Mara Okafor declined at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Declined"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": {
+            "state": "declined",
+            "text": "You said no · 09:46",
+            "tone": "mut"
+          }
+        },
+        "failed": {
+          "view": {
+            "phase": "failed",
+            "title": "Send an email to priya@northwind.example",
+            "question": "Send an email to priya@northwind.example?",
+            "target": "Gmail · mara@example.com",
+            "actionNote": null,
+            "label": "SEND THE EMAIL FAILED",
+            "tone": "bad",
+            "mobileLabel": "SEND THE EMAIL FAILED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Approve and send the email",
+            "mobileCta": "Approve",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Send the email failed. The server did not accept the command.",
+            "mobileMessage": "Send the email failed. The server did not accept the command.",
+            "short": "Send the email failed. The server did not accept the command.",
+            "inboxDone": "Send the email failed",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example"
+              }
+            ],
+            "content": {
+              "label": "MESSAGE",
+              "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara"
+            },
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Failed"
+            },
+            "toasts": {
+              "approve": "Approved. Neo is sending the email.",
+              "decline": "Declined. Neo won’t send the email."
+            }
+          },
+          "answer": {
+            "state": "failed",
+            "text": "It didn’t work",
+            "tone": "bad"
+          }
+        }
+      }
+    },
+    "key": {
+      "approval": {
+        "id": "apr_zfs-cache",
+        "number": 902,
+        "burrowId": "bur_burrow-hq",
+        "requesterId": "prn_dusty",
+        "keyId": "web.browse",
+        "action": {
+          "type": "grant_key",
+          "params": {
+            "keyId": "web.browse"
+          }
+        },
+        "title": "Give Neo “Browse the web”",
+        "question": "Give Neo “Browse the web”?",
+        "target": "keys · Neo",
+        "whatHappens": [
+          "Give Neo “Browse the web”, to use without asking"
+        ],
+        "explainer": "",
+        "summary": "Give Neo “Browse the web”, to use without asking",
+        "conditions": [
+          {
+            "id": "person",
+            "label": "A person says yes",
+            "met": false,
+            "kind": "person_approves",
+            "approverIds": [
+              "prn_mara"
+            ]
+          }
+        ],
+        "state": "pending",
+        "decidedById": null,
+        "decidedAt": null,
+        "execution": {
+          "state": "idle",
+          "startedAt": null,
+          "finishedAt": null,
+          "durationMs": null,
+          "resultUrl": null,
+          "error": null
+        },
+        "executedAt": null,
+        "conversationId": "cnv_pr482",
+        "messageId": "msg_pr482-dusty-1125",
+        "involvedIds": [],
+        "eventId": "evt_9f18",
+        "createdAt": "2026-09-23T07:44:00.000Z"
+      },
+      "keyLabel": "Browse the web",
+      "states": {
+        "pending": {
+          "view": {
+            "phase": "needs_person",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "NEEDS A PERSON",
+            "tone": "warn",
+            "mobileLabel": "NEEDS A PERSON",
+            "pendingBorder": true,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Neo can’t get a key without a person.",
+            "mobileMessage": "Give Neo “Browse the web”, to use without asking",
+            "short": "Neo is waiting for a person to approve.",
+            "inboxDone": null,
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "you",
+                "mobileNote": "Waiting for you",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": true,
+            "canDecline": true,
+            "canUndo": false,
+            "logPill": {
+              "text": "WAITING ON A PERSON",
+              "tone": "warn"
+            },
+            "logDecided": {
+              "text": "Nobody yet. Neo is waiting.",
+              "tone": "warn"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Needs you"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": null
+        },
+        "scheduled": {
+          "view": {
+            "phase": "executing",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "APPROVED · GIVING THE KEY",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · GIVING THE KEY",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Giving Neo “Browse the web” now.",
+            "mobileMessage": "Giving Neo “Browse the web” now.",
+            "short": "Mara approved. Giving Neo “Browse the web”.",
+            "inboxDone": "Approved · giving the key",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": {
+            "state": "scheduled",
+            "text": "Scheduled for tonight, 03:00",
+            "tone": "ok"
+          }
+        },
+        "running": {
+          "view": {
+            "phase": "executing",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "APPROVED · GIVING THE KEY",
+            "tone": "ok",
+            "mobileLabel": "APPROVED · GIVING THE KEY",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Giving Neo “Browse the web” now.",
+            "mobileMessage": "Giving Neo “Browse the web” now.",
+            "short": "Mara approved. Giving Neo “Browse the web”.",
+            "inboxDone": "Approved · giving the key",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "gate",
+              "label": "Approved"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": {
+            "state": "running",
+            "text": "Running",
+            "tone": "ok"
+          }
+        },
+        "done": {
+          "view": {
+            "phase": "executed",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "GIVEN",
+            "tone": "ok",
+            "mobileLabel": "GIVEN",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Given. Neo can use “Browse the web” from its next turn.",
+            "mobileMessage": "Given. Neo can use “Browse the web” from its next turn.",
+            "short": "Given 1 hour ago. Mara approved.",
+            "inboxDone": "Given",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": false,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "done",
+              "label": "Given"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": {
+            "state": "done",
+            "text": "Done · 09:46",
+            "tone": "ok"
+          }
+        },
+        "declined": {
+          "view": {
+            "phase": "declined",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "DECLINED",
+            "tone": "bad",
+            "mobileLabel": "DECLINED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Declined. Neo won’t get “Browse the web”.",
+            "mobileMessage": "Neo won’t get “Browse the web”.",
+            "short": "Declined by Mara.",
+            "inboxDone": "Declined",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": false,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "declined",
+                "mobileNote": "declined",
+                "mark": ""
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "DECLINED BY MARA",
+              "tone": "bad"
+            },
+            "logDecided": {
+              "text": "Mara Okafor declined at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Declined"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": {
+            "state": "declined",
+            "text": "You said no · 09:46",
+            "tone": "mut"
+          }
+        },
+        "failed": {
+          "view": {
+            "phase": "failed",
+            "title": "Give Neo “Browse the web”",
+            "question": "Give Neo “Browse the web”?",
+            "target": "keys · Neo",
+            "actionNote": null,
+            "label": "GIVE THE KEY FAILED",
+            "tone": "bad",
+            "mobileLabel": "GIVE THE KEY FAILED",
+            "pendingBorder": false,
+            "kicker": "NEO IS ASKING",
+            "cta": "Give Neo “Browse the web”",
+            "mobileCta": "Give “Browse the web”",
+            "declineCta": "Decline",
+            "scopeChoices": null,
+            "message": "Give the key failed. The server did not accept the command.",
+            "mobileMessage": "Give the key failed. The server did not accept the command.",
+            "short": "Give the key failed. The server did not accept the command.",
+            "inboxDone": "Give the key failed",
+            "mobileContext": "Neo · 09:44",
+            "conditions": [
+              {
+                "id": "person",
+                "kind": "person_approves",
+                "met": true,
+                "label": "A person says yes",
+                "mobileLabel": "A person says yes",
+                "note": "Mara · 09:46",
+                "mobileNote": "you · 09:46",
+                "mark": "✓"
+              }
+            ],
+            "whatHappens": [
+              {
+                "n": "01",
+                "text": "Give Neo “Browse the web”, to use without asking"
+              }
+            ],
+            "content": null,
+            "why": null,
+            "ask": null,
+            "lasting": null,
+            "canApprove": false,
+            "canDecline": false,
+            "canUndo": true,
+            "logPill": {
+              "text": "APPROVED BY MARA",
+              "tone": "ok"
+            },
+            "logDecided": {
+              "text": "Mara Okafor approved at 09:46",
+              "tone": "neutral"
+            },
+            "planStep": {
+              "state": "blocked",
+              "label": "Failed"
+            },
+            "toasts": {
+              "approve": "Approved. Giving Neo “Browse the web”.",
+              "decline": "Declined. Neo won’t get “Browse the web”."
+            }
+          },
+          "answer": {
+            "state": "failed",
+            "text": "It didn’t work",
+            "tone": "bad"
+          }
+        }
+      }
+    }
+  }
+}

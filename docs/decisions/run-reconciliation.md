@@ -1,0 +1,20 @@
+# Unfinished runs recover from durable state
+
+John asked to fix a run left live after its pull request merged and to prevent similar stale statuses.
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| RCN-01 | **Live runs are the durable recovery queue.** The runtime sweep reconciles live runs without attention every 15 seconds, including its first housekeeping tick after startup. The turn-end hook uses the same reconciliation command for prompt recovery. A lost hook or dependency wake cannot permanently hide an unfinished run. | Completed dispatches do not have expiring leases; sweeping leases alone cannot find abandoned runs. No second queue or protocol is needed: unfinished state is already durable. |
+| RCN-02 | **Approvals retain the asking dispatch and run**, captured from the authenticated dispatch scope when created. Yes and no continue a live run in run mode with its tools. A push approval keeps the exact approved commit’s checkout and its restricted write permissions, ahead of the run’s earlier write permission. Paused and taken-over runs are not resumed by approvals. When the asking turn starts exactly one run, that association can be resolved; several runs are never reduced to the newest guess. Migration backfill requires exactly one active run turn in the same conversation, thread and person at the request's time. | A follow-up in the right thread can still lose the run's identity. Ambiguous historical records must not attach unrelated work. |
+| RCN-03 | **Only the run's dependencies keep it waiting.** Its queued/active turns, the turn that started it, its schedules, its checks and its approvals count. Approved actions still awaiting conditions, a deferred time or execution remain dependencies. Declines and execution failures do not. Questions use the asking dispatch; older unlinked questions must match the turn's conversation, thread and time. | The one agent can work in several Chat threads independently; its other activity cannot mask an abandoned run or provide that run's question. |
+| RCN-04 | **Reconciliation rechecks under the commit lock and queues recovery atomically.** A stale callback cannot act for a newer turn. First abandonment wakes once; subsequent abandonment needs a person. A cancelled final turn gets attention without being restarted. Finished, paused, taken-over and already-attention runs are preserved. The consumed recovery attempt stays consumed when a person answers; Resume/Try again keep their existing reset rules. | A stall marker without a saved recovery job, a race with new work, or repeated sweeps must not create lost work or retry loops. |
+| RCN-05 | **Approval changes advance linked activity revisions and publish activity updates in the same commit.** Equal-sequence reports have strictly increasing update times, including changes in the same millisecond. | Open feeds and incremental catch-up must agree with a full read of approval-derived status. The existing activity event and cursor suffice on web and phone. |
+| RCN-06 | **Recovery inspects existing evidence before acting.** A merged pull request does not automatically complete an arbitrary task. The step and evidence gates stay in force, and the recovery prompt says not to repeat a completed external action to repair bookkeeping. | The remaining goal might include deployment or other work. Honest attention is preferable to invented success or repeated side effects. |
+
+No contract changes or new app states. The existing run attention presentation supplies the visible outcome when
+recovery cannot finish. A valid long-running dependency remains a wait, with its existing result/schedule mechanism;
+elapsed time alone does not fail it.
+
+`runtime/run-recovery.int.test.ts` covers the combined initial stall, answer, approvals and continuations, lost hooks,
+concurrent sweeps, unrelated threads, execution failure, decline, person controls and historical stranded records.
+`runtime/activity.int.test.ts` checks the live event and cursor update. These extend existing Postgres fixtures.

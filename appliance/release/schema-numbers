@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The schema numbers of a runtime bundle's release tuple: `reads writes count` from its migrations' compat.json and
+# its release manifest (Whombat docs/decisions/managed-db.md MD-03; report-trackers.md for schemaBase). A version is
+# the chain's schemaBase (absent: 0) plus a migration's position, so a chain that replaces an older one with a new
+# baseline keeps numbering after it and the schema never goes down for the manager. `writes` is the newest migration's
+# version, `reads` runtime.readsFrom's.
+#
+#   release/schema-numbers <compat.json> <release-manifest.json>
+set -euo pipefail
+die() { printf 'schema-numbers: %s\n' "$*" >&2; exit 1; }
+compat=${1:?compat.json}
+manifest=${2:?release-manifest.json}
+mapfile -t tags < <(jq -r '.migrations | keys[]' "$compat" | LC_ALL=C sort)
+count=${#tags[@]}
+[ "$count" -gt 0 ] || die "$compat lists no migrations"
+base=$(jq -r '.schemaBase // 0' "$compat")
+[[ $base =~ ^[0-9]+$ ]] || die "$compat's schemaBase is not a version: $base"
+[ "$count" = "$(jq -r '.schema.migrations | length' "$manifest")" ] || die "compat.json and release-manifest.json disagree on the migrations"
+[ "${tags[-1]}" = "$(jq -r '.schema.latest' "$manifest")" ] || die "the latest migration isn't compat.json's last"
+readsFrom=$(jq -er '.runtime.readsFrom' "$compat")
+reads=0
+for i in "${!tags[@]}"; do [ "${tags[$i]}" = "$readsFrom" ] && reads=$((base + i + 1)); done
+[ "$reads" -gt 0 ] || die "compat.json's readsFrom $readsFrom is not one of its migrations"
+printf '%s %s %s\n' "$reads" "$((base + count))" "$count"

@@ -1,0 +1,16 @@
+# A site that blocks the browser says so (AP-877…AP-880)
+
+John, 2026-10-08, on his box's Bol.com Vault login: Test sign-in said “It didn’t answer within 30 seconds.” The sign-in
+page in fact sends the browser on to a page that answers 403 (“IP address is blocked … possible abuse”) and holds it
+back from a headless browser for minutes: the site was turning the Whombat's browser away, and the words blamed the
+wrong thing. Whombat `docs/decisions/browser.md` BT-53…BT-57 have the runtime's rules (a page that answers 403 or 429
+and keeps to it is `blocked`, and an agent stops instead of retrying); contracts 0.64.0 (CT-317) add `blocked` to
+`VAULT_SIGN_IN_OUTCOMES`, `VAULT_CHECK_OUTCOMES` and `BROWSER_REFUSAL_CODES`, with core's words “The site blocked the
+Whombat’s browser (403).”
+
+| ID | Decision | Why |
+|---|---|---|
+| AP-877 | **Contracts 0.64.0.** The vendored contracts move to 0.64.0 (`SESSION_API_LEVEL` 38, window 36…39), so the app's minor goes to 0.54.0. Nothing in web or Android switches over `VaultCheckOutcome`, `VaultSignInOutcome` or `BrowserRefusalCode` (both show the summary the runtime wrote), so the typecheck flagged nothing; there is no feature name to add to `FEATURE_NAMES` (CT-317 has none: an older runtime never answers `blocked`). The recovery vectors read 0.64.0. | The level bump is what makes it a minor. |
+| AP-878 | **The Vault entry says to do the step yourself.** A website login's CONNECTION shows, under its check line, the hint (`styles.hint`, `VAULT_TEXT.blockedHint`) verbatim: “This site turns automated browsers away, so agents can’t sign in there. Do this step yourself.” — when this Test sign-in answered `blocked`, or the stored check is failing with a summary in core's words for it (`signInBlocked` in `model.ts`: it starts with `vaultSignInSummary('blocked')` without its full stop, with or without the status). Not while a Test sign-in runs. | The check line already says what happened; the hint says what to do, since trying again doesn't help. The entry's `check` on the wire has no outcome (only `status`, `summary`, `checkedAt`, `toolCount`; the runtime keeps the outcome to itself), so a stored `blocked` check is known by core's own words rather than copy kept here. A `check.outcome` in the entry's contract would be the cleaner signal; contracts 0.64.0 were already released, so it waits for a later contracts change. |
+| AP-879 | **Tests and what is not covered.** A fixture-app test answers Test sign-in with `blocked` (the hint shows) and with `still_asks` (it doesn't), the fake keeping the recorded check as the runtime does; a unit test for `signInBlocked` on stored checks (with and without the status, another failure, a reached check). Not done: no screenshot against a reference (an existing hint style under an existing line, and DEV is fast), and no Android change: a website login's Test sign-in is on the web (AP-237), and the phone's check line shows the runtime's summary, which already says the site blocked the browser. | DEV is fast; the rule is a plain comparison and the copy sits in one place. |
+| AP-880 | **Released as whombat-app 0.54.0** (minor: contracts 0.64.0 raise the session API level): version bump, tag `app-v0.54.0`, `pnpm release:dist` from the tag, the APK on DEV downloads. | Like 0.53.0. |

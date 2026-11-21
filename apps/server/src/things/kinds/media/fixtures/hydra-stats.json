@@ -1,0 +1,39 @@
+{
+  "after": "2026-09-21T19:45:54.725739181Z",
+  "before": "2026-10-21T19:45:54.725739691Z",
+  "includeDisabled": false,
+  "numberOfConfiguredIndexers": 3,
+  "numberOfEnabledIndexers": 0,
+  "indexerApiAccessStats": [],
+  "indexerDownloadShares": [],
+  "searchesPerDayOfWeek": [
+    {
+      "day": "Mon",
+      "count": 0
+    },
+    {
+      "day": "Tue",
+      "count": 0
+    },
+    {
+      "day": "Wed",
+      "count": 0
+    },
+    {
+      "day": "Thu",
+      "count": 0
+    },
+    {
+      "day": "Fri",
+      "count": 0
+    },
+    {
+      "day": "Sat",
+      "count": 0
+    },
+    {
+      "day": "Sun",
+      "count": 0
+    }
+  ]
+}

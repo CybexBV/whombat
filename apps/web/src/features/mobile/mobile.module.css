@@ -1,0 +1,654 @@
+/*
+ * The “Mobile app” page and the `/auth/phone` landing (AP-521…AP-528): the sign-in frame (AuthLayout) with
+ * settings' card language — sf cards with a line border and 16–20px radii, mono section labels, the onboarding's
+ * numbered step dots, and the approval card's 1.5px warn border while a phone waits for a person. Tokens only; the
+ * QR code's fixed plate colors live in `components/QrCode`.
+ */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-xlarge);
+  background: var(--sf);
+  overflow: hidden;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.note {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink2);
+  font: var(--type-secondary);
+  line-height: 1.5;
+}
+
+/*
+ * Settings → Phone app, inside the app: the page's own 720px column (its card keeps the proportions it has on `/mobile`),
+ * and the reassurance as a quiet line under Get the app, where `/mobile` has it in Hazel's bubble.
+ */
+.inApp {
+  max-width: 720px;
+}
+
+.inAppTip {
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-secondary);
+  line-height: 1.5;
+}
+
+.back {
+  display: flex;
+}
+
+.back a,
+.back button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font: var(--type-small);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.back a:hover,
+.back button:hover {
+  color: var(--ink);
+}
+
+/* The sub's words for a wide screen and for a phone's own screen (the narrow one can't scan itself). */
+.narrowOnly {
+  display: none;
+}
+
+/* Sign in on your phone ------------------------------------------------------------------------------------- */
+
+/* Why a fresh code is on screen, at the top of the card: a phone that wasn't let in reads in the bad colour. */
+.cardNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: var(--type-meta);
+  line-height: 1.45;
+}
+
+.cardNoticeBad {
+  color: var(--bad);
+}
+
+.cardNoticeIcon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/*
+ * The sign-in card keeps one height through its states (the QR card's, at desktop widths), so the page around it
+ * doesn't jump when a phone scans, asks or is let in.
+ */
+.signInArea {
+  min-height: 342px;
+}
+
+.signIn {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding: 24px;
+}
+
+.qrColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The QR code on its light plate (the plate's corners round off the code's quiet zone). */
+.plate {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  line-height: 0;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 262px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  padding: 24px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  text-align: center;
+}
+
+.slotScanned {
+  border-style: solid;
+  border-color: var(--line);
+}
+
+.scannedIcon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--sf);
+  color: var(--ok);
+}
+
+.slotTitle {
+  margin: 0;
+  color: var(--ink);
+  font: var(--type-name);
+  text-wrap: balance;
+}
+
+.slotMeta {
+  margin: 0;
+  color: var(--mut);
+  font: var(--type-meta-small);
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+.spinner,
+.spinnerInline {
+  display: inline-block;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--line2);
+  border-top-color: var(--ink2);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+.spinnerInline {
+  width: 11px;
+  height: 11px;
+  margin-right: 7px;
+  border-width: 1.5px;
+  vertical-align: -1px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Still: the big one keeps its arc (it reads as “working”), the inline one goes (the text ends in “…”). */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+
+  .spinnerInline {
+    display: none;
+  }
+}
+
+.countdown {
+  color: var(--mut);
+  font: var(--type-mono-meta-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--ink);
+  font: var(--type-heading-23);
+  letter-spacing: var(--type-heading-23-tracking);
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.stepDot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--btn);
+  color: var(--btnfg);
+  font: 500 12px var(--font-mono);
+}
+
+.stepDone .stepDot {
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.stepTitle {
+  color: var(--ink);
+  font: 600 15px var(--font-sans);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.stepBody {
+  color: var(--mut);
+  font: var(--type-meta);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.into {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: var(--type-meta);
+  line-height: 1.45;
+}
+
+/* A phone asks to come in ------------------------------------------------------------------------------------ */
+
+.confirm {
+  gap: 18px;
+  padding: 22px 24px 24px;
+  border: 1.5px solid var(--warn);
+}
+
+.confirmHead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.confirmText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.confirmTitle {
+  margin: 0;
+  color: var(--ink);
+  font: var(--type-heading-23);
+  letter-spacing: var(--type-heading-23-tracking);
+  overflow-wrap: anywhere;
+}
+
+/* Focus lands on the question so keyboards and screen readers start there; it isn't a control, so no ring. */
+.confirmTitle:focus {
+  outline: none;
+}
+
+/* The same card inside Settings → Devices: set in from the card's edges, a little tighter. */
+.confirmCompact {
+  gap: 16px;
+  margin: 14px 18px;
+  padding: 18px 20px 20px;
+  border-radius: var(--radius-card);
+}
+
+.confirmMeta {
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-meta);
+  line-height: 1.45;
+}
+
+.fingerprint {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: var(--radius-panel);
+  background: var(--sf2);
+}
+
+.fingerprintLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-small);
+}
+
+.fingerprintValue {
+  color: var(--ink);
+  font: 500 24px var(--font-mono);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.fingerprintHint {
+  color: var(--mut);
+  font: var(--type-meta-small);
+}
+
+.confirmNote {
+  margin: 0;
+  color: var(--bad);
+  font: var(--type-meta);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.confirmActions {
+  margin-top: auto;
+}
+
+/* Let in ------------------------------------------------------------------------------------------------------ */
+
+.success {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.successIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.successText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 440px;
+}
+
+.successActions {
+  justify-content: center;
+}
+
+/* No code could be made: the whole card says why, with Try again (no steps that need a code). */
+.errorCard {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.errorIcon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--sf2);
+  color: var(--bad);
+}
+
+.successBody {
+  margin: 0 0 10px;
+  color: var(--ink2);
+  font: var(--type-secondary);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+/* Get the app ------------------------------------------------------------------------------------------------- */
+
+/* A phone that's in has the app: nothing more to get. */
+.stack:has(.success) .downloadFirst {
+  display: none;
+}
+
+.downloadRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.appTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+.downloadText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.downloadName {
+  color: var(--ink);
+  font: var(--type-name);
+}
+
+.downloadMeta {
+  color: var(--mut);
+  font: var(--type-mono-meta);
+}
+
+.downloadNote {
+  color: var(--mut);
+  font: var(--type-meta);
+  line-height: 1.45;
+}
+
+.downloadButton {
+  flex: none;
+}
+
+/* The iPhone app, under the Android one. */
+.downloadRowNext {
+  border-top: 1px solid var(--line);
+}
+
+.downloadHint {
+  margin: 0;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: var(--type-meta);
+  line-height: 1.5;
+}
+
+/* The `/auth/phone` landing ---------------------------------------------------------------------------------- */
+
+.landingOpen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.landingLine {
+  margin: 0;
+  color: var(--mut);
+  font: var(--type-meta);
+  line-height: 1.5;
+}
+
+/* On a phone's own screen only: open the app here instead of scanning. */
+.openHere {
+  display: none;
+}
+
+/*
+ * Narrow (a phone's own screen): the app first, then opening it on this phone, then the code for another phone over
+ * its steps; full-width actions. Once a phone scanned the code, what it's doing comes first again.
+ */
+
+@media (max-width: 720px) {
+  .wideOnly {
+    display: none;
+  }
+
+  .narrowOnly {
+    display: inline;
+  }
+
+  .downloadFirst {
+    order: -1;
+  }
+
+  .stack:has(
+      .confirm,
+      .success,
+      .cardNotice,
+      [data-step="scanned"],
+      [data-step="lookingUp"],
+      [data-step="error"]
+    )
+    .downloadFirst {
+    order: 0;
+  }
+
+  .signInArea {
+    min-height: 0;
+  }
+
+  .openHere {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+
+  .openHereText {
+    color: var(--mut);
+    font: var(--type-meta);
+  }
+
+  .openHere > a {
+    width: 100%;
+  }
+
+  .cardNotice {
+    padding: 12px 20px;
+  }
+
+  .signIn {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    padding: 20px;
+  }
+
+  .downloadRow {
+    flex-wrap: wrap;
+  }
+
+  .downloadButton {
+    width: 100%;
+  }
+
+  .actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+/* Buttons and the way back are 44px targets on a phone or a touch screen. */
+@media (max-width: 720px), (pointer: coarse) {
+  .actions > *,
+  .downloadButton,
+  .openHere > a,
+  .errorCard > button,
+  .landingOpen > a {
+    min-height: 44px;
+  }
+
+  .back a,
+  .back button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

@@ -1,0 +1,29 @@
+name: whombat
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whombat
+      POSTGRES_PASSWORD: whombat
+      POSTGRES_DB: whombat
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U whombat -d whombat']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:51025:1025'
+      - '127.0.0.1:58025:8025'
+
+volumes:
+  pgdata:

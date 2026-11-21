@@ -1,0 +1,42 @@
+# A logo and a page for a connection set up by talking (CLK)
+
+John, 2026-11-05 (main checkout): “When we add a new connection via api or mcp I want Whombat / Dusty to find a logo it
+can use (research online and svg is preferred) and research if it can use sensors or other things from the new
+connection to build a dashboard for the connection.” After the options were laid out: “Go”. Builds on
+`connect-by-talking.md` (Custom entries `custom_mcp`, `custom_api`), `marks.md` (logos as path shapes) and
+`service-slots.md` (a service's page in slots).
+
+Code: `packages/core/src/domain/thing-logo.ts` (`ThingLogo`), `packages/core/src/domain/connection-page.ts` (the page
+recipe), `packages/core/src/contracts/mcp-connection-look.ts` (`connection_look`), `apps/server/src/things/logo/`
+(finding, fetching and drawing a logo), `apps/server/src/things/recipe/` (the page a recipe builds),
+`apps/server/src/connections/look.ts` (the tool and the command), the plugin's `whombat:connection-pages` skill.
+
+| # | Decision | Why |
+|---|---|---|
+| CLK-01 | **A Custom connection may have a logo of its own and a page of its own**, both kept on the connection (`catalog_connections.logo`, `.page`, migration 0044) and both the assistant's to set, test and remove with one tool, `connection_look`. Catalog services keep their bundled marks and their kinds' pages. | A service Whombat has no entry for is shown like the ones it knows, without a release per service. |
+| CLK-02 | **A logo is vector only, drawn as path shapes** (`ThingLogo`: a viewBox and at most 64 filled or stroked paths, each with a colour, an even-odd rule and an opacity), exactly as the bundled marks are drawn on the web and the phone. Whombat's server turns an SVG into those shapes: it keeps `path`, `rect`, `circle`, `ellipse`, `line`, `polyline` and `polygon` in groups, applies their transforms, resolves fills from attributes, styles and simple class rules, takes a gradient's middle colour, and refuses an SVG with text, pictures, masks, scripts or more than it draws (64 shapes, 60,000 characters of path). A PNG or JPEG is never used. | Nothing from another site ever runs or loads in an app: the apps draw numbers in a path, not someone's file. Raster logos look blurry beside the bundled ones and can't follow dark mode. |
+| CLK-03 | **A logo in one dark or light colour follows the text colour** (`currentColor`), as the bundled marks published in flat black or white do. | Otherwise a black logo vanishes in dark mode. |
+| CLK-04 | **Whombat looks for a logo itself when a Custom connection is made**, in the background after Connect, from the service's own sources only: an MCP server's own icons (`serverInfo.icons` from `initialize`, an SVG on the server's own site or a `data:` SVG), then the SVG icon the service's website names (`<link rel="icon" type="image/svg+xml">`, `/favicon.svg`) on the address's host and on the site above it (`mcp.linear.app` → `linear.app`). The first that turns into shapes is kept, with where it came from. | Those sources are the service's own, so the logo is right; a guess by name from an icon set could be another brand's. |
+| CLK-05 | **The assistant finds a better one when there is none or it isn't right**: the skill names the sets to try first — Simple Icons, dashboard-icons (homarr-labs), svgl — and the brand's own press page, by their SVG addresses. `connection_look` with `logo` (an https address of an SVG) fetches it through `lib/outbound.ts` (public addresses only, no redirects, 512 KB, no credentials sent), turns it into shapes and keeps it; `logo: "none"` goes back to the generic mark. | The assistant can judge which brand is meant; Whombat checks what it gets. |
+| CLK-06 | **A page recipe** (`ConnectionPage`) says what to read and where each value goes, in the slots every service page uses: `reads` (an MCP tool the server marks read-only, or a GET path of the API, each with how often), and `live` (a list of what happens now), `counts` (Inventory lines), `trend` (a reading per day, from Whombat's own readings), `list` (anything else, below the slots), `facts` (the head's first facts) and `warnings`. A value is named by a path into the read's JSON (`data.items.0.name`, `*` for every item of a list) with a format (number, percent, bytes, duration, date, ago, count, yes/no, text). | Like a service's kind, without code: the page looks as a known service's does on a phone, a foldable and a desktop, and a recipe can't do anything but read. |
+| CLK-07 | **Only reads, as the connection, with the kinds' rules**: a recipe's MCP tool must be one of the connection's tools that the server marks read-only (`readOnlyHint`), an API read a GET; each read has the kinds' deadline and size cap and is cached for its `everyS` (30 s to an hour, 60 by default); a page shows the last reading while a newer one comes (`latestRead`). A recipe works at Look only. | A page that is opened often, or read by the health pass every five minutes, never changes anything in the service. |
+| CLK-08 | **The health pass keeps the readings a recipe's trend and counts need** as the connection's points (`pg:<id>`), so a trend fills in day by day and a count can say what changed on last week; the card's facts are its first counts. | The service may keep no history; Whombat's own does, like the generic page's answer times. |
+| CLK-09 | **A recipe's warnings use two checks of What Whombat watches**: `page.broken` for what the service reports as down, broken or at risk (starts on) and `page.heads_up` for everything else (starts off); a warning says which with `important`, and is a line in Worth a look while its condition holds (above, below, equal to or not equal to a value, or present). | Every check says whether it starts on (watch-defaults.md); a check per recipe line can't be in the shared table, and two kinds of line are what the rule tells apart. |
+| CLK-10 | **Try before save**: `connection_look` without `save` reads everything the recipe asks, and answers with what each slot would show (titles and values) and each problem in words (a read refused, a path that finds nothing, a tool that isn't a read), so the assistant fixes its paths before the person sees the page; `save: true` keeps it only when it shows something and nothing is wrong. `page: null` removes the page. | The person never sees a broken page; the assistant sees the service's real answers. |
+| CLK-11 | **Setting a logo or a page is a signed change** (`catalog_connection.set_look` through the commit pipeline, a `connection.changed` event naming who did it), with no key: it changes Whombat's page of the connection, not the service. Home and the page update at once. | All writes go through the pipeline; the person can see who changed their page. |
+| CLK-12 | **Connected wakes the assistant to finish the job**: the line that tells it a Custom connection is connected also says to give it a logo and a page with the `whombat:connection-pages` skill, then tell the person in a sentence. A catalog service's connect says nothing of it. | “Connect X” ends with X looking like a known service, without the person asking twice. |
+| CLK-13 | **The contract is additive**: `ThingSummary.logo`, `ThingPage.logo` and `CatalogConnectionView.logo` are optional; an older app draws the generic mark. The apps draw a logo wherever they draw a connection's mark (`thingMark`), so the sidebar, Home, Connections and the page head all show it. No contracts release: no other repository reads these. | One change, every place. |
+
+## Not now
+
+- A raster logo traced into shapes, or a letter on a tile when nothing is found.
+- A logo for a catalog service that has none bundled.
+- A recipe's buttons (an action on the service): pages made by recipes only read.
+- An MCP server's own interface (MCP Apps, `ui://`): it would not look like Whombat and would need a web view on the phone.
+- The person editing a recipe themselves; they ask the assistant.
+
+## Rows for DECISIONS.md
+
+| # | Decision |
+|---|---|
+| CLK-01…CLK-13 | **A connection set up by talking gets a logo and a page of its own**: Whombat takes the service's own SVG logo when it has one and the assistant finds a better one, turned into path shapes the apps draw; the assistant writes a page recipe that reads only (read-only MCP tools, GET paths) into the shared slots, tries it before saving, and its warnings use two checks of What Whombat watches. (`connection-looks.md`) |

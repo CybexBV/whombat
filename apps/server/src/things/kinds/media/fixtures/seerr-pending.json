@@ -1,0 +1,85 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 12,
+    "results": 2,
+    "page": 1
+  },
+  "serviceErrors": {
+    "radarr": [],
+    "sonarr": [
+      {
+        "id": 0,
+        "name": "Sonarr"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": 2,
+      "status": 1,
+      "createdAt": "2026-10-21T19:43:52.000Z",
+      "updatedAt": "2026-10-21T19:43:52.000Z",
+      "type": "movie",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [],
+      "seasonCount": 0,
+      "requestedBy": {
+        "id": 3,
+        "displayName": "Ben",
+        "username": "Ben",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "media": {
+        "id": 2,
+        "mediaType": "movie",
+        "tmdbId": 969681,
+        "tvdbId": null,
+        "status": 2,
+        "status4k": 1,
+        "downloadStatus": [],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": null,
+        "serviceId": null,
+        "mediaAddedAt": "2026-10-21T19:43:52.000Z",
+        "updatedAt": "2026-10-21T19:43:52.000Z"
+      }
+    },
+    {
+      "id": 1,
+      "status": 1,
+      "createdAt": "2026-10-21T19:43:52.000Z",
+      "updatedAt": "2026-10-21T19:43:52.000Z",
+      "type": "movie",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [],
+      "seasonCount": 0,
+      "requestedBy": {
+        "id": 2,
+        "displayName": "Anna",
+        "username": "Anna",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "media": {
+        "id": 1,
+        "mediaType": "movie",
+        "tmdbId": 1170608,
+        "tvdbId": null,
+        "status": 2,
+        "status4k": 1,
+        "downloadStatus": [],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": null,
+        "serviceId": null,
+        "mediaAddedAt": "2026-10-21T19:43:52.000Z",
+        "updatedAt": "2026-10-21T19:43:52.000Z"
+      }
+    }
+  ]
+}

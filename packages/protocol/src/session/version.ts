@@ -1,0 +1,110 @@
+/**
+ * The session protocol's version and capability negotiation (MA-08; contracts 1.0, CT-1260, Whombat hermes-engine.md
+ * HE-52): one rule — a client and a box speak the same major, or they don't talk.
+ *
+ * `hello.versions` names the majors a client speaks (one); the box answers `welcome` with its version when it speaks
+ * that major, and otherwise `error{unsupported_version}` with `UnsupportedVersionDetails` and closes. `whoMustUpdate`
+ * says which side is behind, and the client says so in plain words (`VERSION_REFUSAL_COPY`). Within a major, minors
+ * differ freely: a newer minor only adds (CT-14), and an op a box doesn't have yet is `unknown_op`. There are no
+ * feature lists, API levels or windows.
+ */
+import { z } from 'zod';
+import { SESSION_MAX_CAPABILITIES } from '../limits.js';
+
+export const ProtocolVersion = z.object({
+  major: z.number().int().min(1).max(65_535),
+  minor: z.number().int().min(0).max(65_535),
+});
+export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
+
+/**
+ * This package's session protocol version: major 5 since contracts 4.0 (Whombat report-trackers.md): one tracker's
+ * operations, kinds and tools became every report tracker's (`tracker.item`, `tracker.update`, `tracker.decide`, the
+ * `tracker` trigger and steps, `tracker_item` and `tracker_read`), and the feedback's connected-system source went
+ * (`feedback.moveSource`, `feedback.setSourceToken`, `feedback.replyToReporter`, a report's `external`). A 3.x app or box
+ * (major 4) and a 4.0 one refuse each other with `unsupported_version`. Major 4 was contracts 3.x (CT-1540; Whombat one-person.md OP-14): a
+ * Whombat is one person's and the agent has no computer, so session operations went (`enroll.invite.*`,
+ * `enroll.reenroll.*`, `admins.*`, `presence.*`, `members.*`, `computers.*`, `agent.setCredentialSource`,
+ * `signins.org*`, the skills' share ops), others changed meaning (the screen sign-in without an email, the backup's
+ * `settings` category, `HostInfo.services`) and `services.*` came. A 2.x app or box (major 3) and a 3.0 one refuse each
+ * other with `unsupported_version`. Major 3 was contracts 2.x (CT-1432; Whombat hermes-skills.md HSK-14):
+ * Settings → Skills runs on Hermes's own skills, hub and scanner, so session operations went (`skills.importPreview`,
+ * `skills.importCommit`, `skills.stage` and its `skill-archive` upload, Whombat's own `skills.hubSearch`) and the
+ * library's answer changed meaning. A 1.x app or box (major 2) and a 2.0 one refuse each other with
+ * `unsupported_version` and say who must update, through the same check as any other mismatch. Major 2 was contracts
+ * 1.x (CT-1260; its minor 1 since 1.1, CT-1310), major 1 contracts 0.x. The minor counts additions within the major:
+ * minor 1 (contracts 3.1) brought voice typing (`voice.*`, the `dictation` upload); minor 2 (contracts 3.7) the screens'
+ * `photo` and `board` views and widgets of the person's own accounts (`account:` refs), which a box sends only to a
+ * session at minor 2 or later (Whombat desk-display.md DK-161); minor 3 (contracts 3.8) settling threads
+ * (`chats.settle`, `chats.settleFinished`, the `chat.settled` frame) and the Hermes version in the appliance's status;
+ * minor 4 (contracts 3.9) automations made by talking to the agent: the `automation_plan` card and
+ * `automations.acceptPlan` / `declinePlan` (Whombat automation-chat.md); minor 5 (contracts 3.10) a thread that settled
+ * when the problem the assistant looked into went away (`ThreadSettle.how` `resolved`, Whombat look-research.md); minor 6
+ * (contracts 3.12) tracker feature requests put to the person: the `feature_request` card and `tracker.decide` (Whombat
+ * report-trackers.md TA-44, TA-45); minor 7 backups v2: `backup.overview`, a paged `backup.checkpoints`,
+ * `backup.letAssistantSetUp`, and a backup file's upload without the whole file's sha256 up front, which an app leaves
+ * out only for a box at minor 7 or later (Whombat backup-options.md CT-1690…CT-1699); the passkey as the key to the
+ * backups (`backup.passkeyKey.set` / `remove`, `backup.paperCopy.confirm`, `backup.findKits`, the summary's
+ * `bringBack`; backup-passkey.md CT-1670…); what a backup left out and why a restore stopped (the summary's and a
+ * backup's `incomplete`, the restore state's `reason`; CT-1700…); and getting one thing back from a backup
+ * (`backup.look`, `backup.lookContents`, `backup.lookBring`, `backup.lookClose`; backup-look.md BKO-40…); minor 8
+ * (contracts 3.16) the restore state's `newPassword` (who can change the backups' password after a lost or stolen
+ * Whombat) and names of up to 80 characters on a kit found on the network (Whombat backup-passkey.md BPK-15…);
+ * minor 10 (contracts 3.18) shared links: `shares.preview`, `shares.create`, `shares.list`, `shares.stop` and
+ * `shares.stopAll` (Whombat share-links.md); minor 11 (contracts 3.20) Code, the place for software work: `chats.place`,
+ * the `chat.placed` frame and a thread's `place`, `code` and `work` (Whombat one-chat.md). In major 5, minor 1 is the
+ * local claim's proof round (`enroll.claim.local.prove`): an app names the person only to a box that proved it knows
+ * the letters on its screen, and a box refuses an app below it (`claim_update_app`; Whombat whombat-link.md); minor 2 is
+ * the claim link in a page's `hello` at the box's own address (`hello.claimLink`), for the places an unclaimed box keeps
+ * for the visitor who has it (Whombat own-address.md).
+ */
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 2 };
+
+/** `stream.download`, `events`, … */
+export const Capability = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_.-]*$/);
+export const Capabilities = z.array(Capability).max(SESSION_MAX_CAPABILITIES);
+
+/** Capabilities of the session protocol. Unknown capabilities are ignored, never an error. */
+export const CAPABILITIES = {
+  events: 'events',
+  download: 'stream.download',
+  upload: 'stream.upload',
+  export: 'stream.export',
+  collab: 'stream.collab',
+  /** Consoles through the session (0.80.1, CT-350): `open{spec: {kind: 'console'}}`. */
+  console: 'stream.console',
+  enroll: 'enroll',
+  recovery: 'recovery',
+} as const;
+export const ALL_CAPABILITIES: readonly string[] = Object.values(CAPABILITIES);
+
+/**
+ * The version a session runs at: the box's major when the client offered it, at the lower of the two minors; null
+ * when the client didn't (`unsupported_version`).
+ */
+export function negotiateVersion(
+  offered: readonly ProtocolVersion[],
+  ours: ProtocolVersion = SESSION_PROTOCOL,
+): ProtocolVersion | null {
+  const theirs = offered.find((v) => v.major === ours.major);
+  return theirs ? { major: ours.major, minor: Math.min(ours.minor, theirs.minor) } : null;
+}
+
+/** Capabilities both sides announced (order of `ours`, duplicates removed). */
+export function negotiateCapabilities(ours: readonly string[], theirs: readonly string[]): string[] {
+  const set = new Set(theirs);
+  return [...new Set(ours.filter((c) => set.has(c)))];
+}
+
+/**
+ * What a person sees when the app and the box don't speak the same major (`whoMustUpdate`): `client`, the app is behind;
+ * `appliance`, the box is.
+ */
+export const VERSION_REFUSAL_COPY = {
+  client: 'Update the app to use this Whombat.',
+  appliance: 'This Whombat needs an update to work with this app.',
+} as const;

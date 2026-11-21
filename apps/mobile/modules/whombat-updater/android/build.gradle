@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.whombat'
+version = '0.1.0'
+
+android {
+  namespace "com.whombat.updater"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // FileProvider: the downloaded APK goes to Android's installer as a content:// URI (android-self-update.md AP-813).
+  implementation 'androidx.core:core:1.13.1'
+}

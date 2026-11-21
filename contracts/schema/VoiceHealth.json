@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceHealth.json",
+  "title": "VoiceHealth",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "stt": {
+      "type": "boolean"
+    },
+    "tts": {
+      "type": "boolean"
+    },
+    "microphone": {
+      "type": "boolean"
+    },
+    "speaker": {
+      "type": "boolean"
+    },
+    "voices": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      }
+    },
+    "models": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "parakeet",
+          "whisper"
+        ]
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[\\x20-\\x7e]{1,200}$"
+        },
+        "backend": {
+          "type": "string",
+          "const": "vulkan"
+        },
+        "memoryMiB": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        }
+      },
+      "required": [
+        "name",
+        "backend"
+      ]
+    },
+    "languages": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "en",
+          "nl"
+        ]
+      }
+    }
+  },
+  "required": [
+    "v",
+    "stt",
+    "tts",
+    "microphone",
+    "speaker"
+  ]
+}

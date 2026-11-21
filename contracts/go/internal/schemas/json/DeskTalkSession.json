@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskTalkSession.json",
+  "title": "DeskTalkSession",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "open": {
+      "type": "boolean"
+    },
+    "messages": {
+      "maxItems": 40,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,64}$"
+          },
+          "from": {
+            "type": "string",
+            "enum": [
+              "you",
+              "assistant"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "maxLength": 40,
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+          },
+          "paragraphs": {
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,600}$"
+            }
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "ask": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "waiting",
+                  "approved",
+                  "denied"
+                ]
+              }
+            },
+            "required": [
+              "number",
+              "state"
+            ]
+          },
+          "talk": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,64}$"
+          },
+          "audio": {
+            "type": "boolean"
+          },
+          "thing": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+              },
+              "mark": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "^[a-z0-9][a-z0-9._-]*$"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warn",
+                  "bad",
+                  "off"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+              },
+              "cpu": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -100,
+                    "maximum": 1000
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "value",
+                  "tone"
+                ]
+              },
+              "memory": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -100,
+                    "maximum": 1000
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "value",
+                  "tone"
+                ]
+              },
+              "temp": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -100,
+                    "maximum": 1000
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "value",
+                  "tone"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "disk": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -100,
+                    "maximum": 1000
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "value",
+                  "tone"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "mark",
+              "state",
+              "note"
+            ]
+          },
+          "task": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "ok",
+                  "warning",
+                  "error",
+                  "lost"
+                ]
+              },
+              "startedAt": {
+                "type": "string",
+                "maxLength": 40,
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "endedAt": {
+                "type": "string",
+                "maxLength": 40,
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+              },
+              "result": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,600}$"
+              }
+            },
+            "required": [
+              "title",
+              "state",
+              "startedAt"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "from",
+          "at",
+          "paragraphs"
+        ]
+      }
+    },
+    "earlier": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "until": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "working": {
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "doing": {
+          "type": "string",
+          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+        }
+      },
+      "required": [
+        "since"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "open",
+    "messages",
+    "earlier"
+  ]
+}

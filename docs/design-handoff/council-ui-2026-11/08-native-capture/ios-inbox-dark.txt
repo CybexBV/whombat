@@ -1,0 +1,18 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 15 nodes
+@e1 [application] "Whombat"
+@e2 [scroll-area] [scrollable]
+@e3 [text] "Inbox"
+@e4 [text] "NEEDS YOU · 3"
+@e5 [button] "Problem: blackbox’s disk array failed. Your files have no protection now."
+@e6 [button] "Needs a look: Restart arnica-prod-nest-01? It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds."
+@e7 [button] "Heat pump: what may I change? It reads fine already."
+@e8 [button] "Settled · 0"
+@e9 [tab-bar] "Tab Bar"
+@e10 [button] "Chat"
+@e11 [button] "Inbox" [selected]
+@e12 [button] "Overview"
+@e13 [button] "Automations"
+@e14 [button] "Settings"
+@e15 [toolbar] "Toolbar"

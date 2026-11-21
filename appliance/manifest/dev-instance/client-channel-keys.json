@@ -1,0 +1,13 @@
+{
+ "v": 1,
+ "env": "local",
+ "keys": [
+  {
+   "kid": "clients-local-b09ae3ae447a",
+   "publicKey": "699e1b3206cebcda534a96144ae4fcd9f83e36bc10b20674659f5a85a4e9d36b",
+   "state": "active",
+   "notBefore": null,
+   "notAfter": null
+  }
+ ]
+}

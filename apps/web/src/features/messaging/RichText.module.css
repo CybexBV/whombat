@@ -1,0 +1,324 @@
+/*
+ * Formatted message text (docs/decisions/rich-messages.md RM-02, AP-321): the message row's body plus headings,
+ * lists and task items, quotes, tables, code and links, in the same 16/1.55 rhythm. Code blocks are CodeBlock's.
+ */
+.heading {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+/* A modest chat scale: `#` is a card title, `##` the large body, `###` the body in bold, then smaller and muted. */
+.h1 {
+  font: var(--type-card-title);
+  line-height: 1.3;
+}
+
+.h2 {
+  font: var(--type-body-large);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.h3 {
+  font: var(--type-body);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.h4 {
+  font: var(--type-secondary);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.h5,
+.h6 {
+  color: var(--mut);
+  font: var(--type-small);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.mention {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.link {
+  color: var(--brand);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.code {
+  padding: 1px 5px;
+  border-radius: var(--radius-tag);
+  background: var(--sf2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  white-space: break-spaces;
+}
+
+.quote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line2);
+  color: var(--mut);
+}
+
+/* A quote in a quote (`> >`) keeps its own bar, a step in. */
+.quote .quote {
+  padding-left: 10px;
+}
+
+/* Task items (CT-149): a read-only checkbox instead of the bullet, the text its label. */
+.taskList {
+  padding-left: 2px;
+  list-style: none;
+}
+
+.taskList .list:not(.taskList) {
+  padding-left: 46px;
+}
+
+.task::marker {
+  content: none;
+}
+
+.taskLabel {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.checkbox {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 4px 0 0;
+  accent-color: var(--brand);
+  cursor: default;
+}
+
+.checkbox:disabled {
+  opacity: 1;
+}
+
+.checkbox:checked + span {
+  color: var(--mut);
+}
+
+.taskList .taskList {
+  padding-left: 23px;
+}
+
+/* Tables (CT-149): scroll sideways inside the message, header on sf2, rows ruled, every other one tinted. */
+.tableWrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  width: fit-content;
+}
+
+.tableWrap:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.table {
+  border-collapse: collapse;
+  font: var(--type-secondary);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.table th,
+.table td {
+  min-width: 64px;
+  max-width: 420px;
+  padding: 7px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  background: var(--sf2);
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.table td {
+  border-top: 1px solid var(--line);
+}
+
+.table th + th,
+.table td + td {
+  border-left: 1px solid var(--line);
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--sel);
+}
+
+.table .alignLeft {
+  text-align: left;
+}
+
+.table .alignCenter {
+  text-align: center;
+}
+
+.table .alignRight {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.rule {
+  height: 1px;
+  border: none;
+  background: var(--line);
+}
+
+/* Resets without specificity, so the spacing below always wins. */
+:where(.rich) :where(p, h3, h4, h5, h6, ul, ol, blockquote, pre, hr, table) {
+  margin: 0;
+}
+
+.rich > * + *,
+.quote > * + * {
+  margin-top: 10px;
+}
+
+.rich > .heading:not(:first-child) {
+  margin-top: 16px;
+}
+
+.list li + li,
+.list li > * + * {
+  margin-top: 4px;
+}
+
+.list li::marker {
+  color: var(--mut);
+}
+
+/* Images in the text (CT-90, AP-101): the attachment thumbnail's frame, never wider than the column or 360px tall.
+   A button opens the lightbox. */
+.imageButton {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  cursor: zoom-in;
+}
+
+.imageButton:focus-visible,
+.codeToggle:focus-visible,
+.imageChip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+}
+
+.link .image {
+  border-radius: var(--radius-card);
+}
+
+/* A remote image the hosted build can't load: the attachment chip's shape, linking to it. */
+.imageChip,
+.imageChip:hover {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(100%, 420px);
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.imageChip:hover {
+  border-color: var(--line2);
+}
+
+.imageChipIcon {
+  flex: none;
+  color: var(--mut);
+}
+
+.imageChipAlt {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.imageChipHost {
+  flex: none;
+  color: var(--mut);
+  font: var(--type-mono-meta-small);
+  letter-spacing: var(--type-mono-meta-small-tracking);
+}
+
+/* An SVG drawing: the picture, then “View code” / “Hide code” and the code block. */
+.svg {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.svg .imageButton {
+  padding: 8px;
+}
+
+.codeToggle {
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--mut);
+  font: var(--type-mono-meta);
+  cursor: pointer;
+}
+
+.codeToggle:hover {
+  color: var(--ink);
+}
+
+.svgCode {
+  align-self: stretch;
+}

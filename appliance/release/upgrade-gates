@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+# release/upgrade-gates — install a candidate as an update of the releases boxes run, in VMs (UP-C2, UP-F2; NX-110…NX-117).
+#
+#   release/upgrade-gates --candidate <build.json> [--previous <build.json|release id> …] [--gates 1,2,…]
+#                         [--out <upgrade-gates.json>] [--jobs N] [--no-lock] [--keep-state] [--state <folder>]
+#                         [--break-candidate runtime|rollback] [--reused-host <build.json|release id>]
+#
+# The candidate is a release/build build of this repository (its build.json: `source.rev`, the tuple), built from
+# its commit (its flake, wherever the commit is: release/lib/source.sh), or from this working tree when the build was
+# `--allow-dirty` (then its runtime and manager must still be the build's). The gates are this tree's (NX-118), so a
+# candidate built before a gate existed is gated too. A runtime-only candidate (`class: runtime`) runs the host of the release it reuses (`reusedHostFrom`;
+# --reused-host, default ~/.cache/whombat-releases/<that id>/build.json), built from that release's commit; when that
+# release is runtime-only too, the host release it reuses in turn (IN-128). The previous
+# releases (default vm-tests/upgrade-gates/previous.json: N−1 then N−2, from the migration baseline on, IN-415) are built
+# from their recorded commits, so their runtime and manager are the published store paths (`matchesPublished`); a
+# release id means ~/.cache/whombat-releases/<id>/build.json. With fewer than two (previous.json may be empty), the
+# gates that update from a missing release are recorded as not applicable: 1, 4 and 6 without N−1, 2 without N−2.
+#
+# Gates (vm-tests/upgrade-gates/default.nix): 1 N−1 → candidate · 2 N−2 → candidate · 3 fresh install from the
+# candidate's ISO · 4 a candidate failing verification rolls back to N−1 · 5 migration classes (checks.update-migration)
+# · 6 runtime-only on N−1's host, then a host release keeping that runtime · 7 restore drill (checks.restore-drill).
+# For a runtime-only candidate gates 3 and 6 are recorded as not applicable. Gate 5 updates from the migration test's
+# baseline release (vm-tests/common/migration-baseline.nix): the repository names none, so WHOMBAT_MIGRATION_BASELINE
+# names the maintainers' file; without one gate 5 is recorded as not applicable.
+#
+# Builds (images, the gate repository, the ISO, the drivers) are Nix derivations, cached across runs. One evaluation;
+# then up to --jobs gates (default 3) at a time, longest first, each building its driver and running it outside the Nix
+# sandbox with its VM state under ~/.cache/wb-tmp (not the daemon's tmpfs), the next starting as soon as one ends
+# (NX-126). --state <folder> keeps each gate's VM state in <folder>/<gate> instead: for a folder that must hold it (a
+# lease's workspace on the build server) and whose own name is long, since the VMs' sockets are paths of at most 107
+# bytes and the test network's switch binds them under the folder's real name. The run holds ~/.cache/wb-tmp/robust-updates-heavy.lock from its first build to its last gate (10–15
+# minutes); --no-lock only for a caller that holds the lock itself (release/ship validate doesn't: it lets the runner
+# take it). A previous release that is runtime-only is reached from the release whose host it runs.
+#
+# --break-candidate is the gates' self-test: the candidate broken on purpose (its runtime never starts: gate 1 must fail;
+# its update helper can't roll back: gate 4 must fail). The record says so (`breakCandidate`) and is never `ok`.
+#
+# Writes <out> (default: upgrade-gates.json next to the candidate's build.json):
+#   {v: 1, releaseId, buildSha256, previous: [{releaseId, rev, runtimeStorePath, matchesPublished}],
+#    gates: [{id, name, ok, seconds, buildSeconds, log, notApplicable?}], ok, at, runner: {rev, dirty},
+#    runtimeOnly?, reusedHost?: {releaseId, rev, hostStorePath, matchesPublished}}
+# and the gates' logs in <out>.logs/. Exit 0 when every selected gate passed, 1 when one failed, 2 on usage errors.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root=$(cd "$here/.." && pwd)
+# shellcheck source=release/lib/source.sh
+. "$here/lib/source.sh"
+export NIX_CONFIG="${NIX_CONFIG:-}"$'\n'"experimental-features = nix-command flakes"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"
+mkdir -p "$TMPDIR"
+releases=${WHOMBAT_RELEASES:-$HOME/.cache/whombat-releases}
+lock=${WB_HEAVY_LOCK:-$HOME/.cache/wb-tmp/robust-updates-heavy.lock}
+
+die() {
+  echo "upgrade-gates: $*" >&2
+  exit 2
+}
+t0=$(date +%s)
+say() { echo "upgrade-gates: [$(($(date +%s) - t0))s] $*" >&2; }
+usage() {
+  sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//' >&2
+  exit 2
+}
+
+candidate=
+previous=()
+gates=1,2,3,4,5,6,7
+out=
+jobs=3
+use_lock=true
+keep=false
+stateRoot=
+breakMode=
+reusedArg=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --candidate) candidate=${2:?}; shift 2 ;;
+    --previous) previous+=("${2:?}"); shift 2 ;;
+    --gates) gates=${2:?}; shift 2 ;;
+    --out) out=${2:?}; shift 2 ;;
+    --jobs) jobs=${2:?}; shift 2 ;;
+    --no-lock) use_lock=false; shift ;;
+    --keep-state) keep=true; shift ;;
+    --state) stateRoot=${2:?}; shift 2 ;;
+    --break-candidate) breakMode=${2:?}; shift 2 ;;
+    --reused-host) reusedArg=${2:?}; shift 2 ;;
+    -h | --help) usage ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+[ -n "$candidate" ] || usage
+[ -f "$candidate" ] || die "--candidate $candidate: no such build.json"
+candidate=$(realpath "$candidate")
+[[ $jobs =~ ^[1-9]$ ]] || die "--jobs must be 1…9"
+[ -z "$stateRoot" ] || [ -d "$stateRoot" ] || die "--state $stateRoot: no such folder"
+case $breakMode in "" | runtime | rollback) ;; *) die "--break-candidate is runtime or rollback" ;; esac
+IFS=, read -ra selected <<<"$gates"
+for g in "${selected[@]}"; do [[ $g =~ ^[1-7]$ ]] || die "unknown gate $g (1…7)"; done
+
+buildOf() {
+  local p=$1
+  if [ -f "$p" ]; then realpath "$p"
+  elif [ -f "$releases/$p/build.json" ]; then echo "$releases/$p/build.json"
+  else die "previous release $p: no build.json (neither a file nor $releases/$p/build.json)"
+  fi
+}
+if [ ${#previous[@]} -eq 0 ]; then
+  mapfile -t previous < <(jq -r '.previous[]' "$root/vm-tests/upgrade-gates/previous.json")
+fi
+# The host release a runtime-only build runs: the release it reuses, or, when that one is runtime-only too (a
+# runtime-only release on production's current runtime-only release, `release/ship build --reuse-host <it>`), the host
+# release at the end of that chain (IN-128).
+hostBuildOf() {
+  local b=$1 seen=0
+  while [ "$(jq -r '.class // "host"' "$b")" = runtime ]; do
+    local from
+    from=$(jq -r '.reusedHostFrom // empty' "$b")
+    [ -n "$from" ] || die "$(jq -r .releaseId "$b") is runtime-only but its build.json names no reusedHostFrom"
+    b=$(buildOf "$from")
+    seen=$((seen + 1))
+    [ $seen -lt 20 ] || die "reusedHostFrom chain of $1 doesn't end in a host release"
+  done
+  echo "$b"
+}
+prevBuilds=()
+for p in "${previous[@]}"; do prevBuilds+=("$(buildOf "$p")"); done
+# A runtime-only previous release comes with the release whose host it runs (NX-126).
+prevArgs=$(for b in "${prevBuilds[@]}"; do
+  if [ "$(jq -r '.class // "host"' "$b")" = runtime ]; then
+    jq -n --arg b "$b" --arg r "$(hostBuildOf "$b")" '{build: $b, reusedHost: $r}'
+  else
+    jq -n --arg b "$b" '$b'
+  fi
+done | jq -s .)
+
+jq -e '.v == 1 and .releaseId and .source.rev and .tuple.runtime.storePath' "$candidate" >/dev/null ||
+  die "$candidate is not a release/build build.json"
+id=$(jq -r .releaseId "$candidate")
+out=${out:-$(dirname "$candidate")/upgrade-gates.json}
+out=$(realpath -m "$out")
+logs=$out.logs
+repo=$(cd "$(git -C "$root" rev-parse --git-common-dir)/.." && pwd)
+
+# The candidate's source: its commit, or this tree when it was built with uncommitted changes.
+rev=$(jq -r .source.rev "$candidate")
+if [ "$(jq -r .source.dirty "$candidate")" = true ]; then
+  [ "$(git -C "$root" rev-parse HEAD)" = "$rev" ] ||
+    die "$id was built from $rev with uncommitted changes; this tree is at $(git -C "$root" rev-parse --short HEAD)"
+  candFlake=$(source_tree_flake)
+  say "$id: built with uncommitted changes, gating this tree ($root)"
+else
+  candFlake=$(source_flake "$rev") || die "$rev, the source of $id, can't be found"
+fi
+
+# Short: the driver's QEMU monitor and shell sockets live in the gates' state directories (AF_UNIX paths ≤ 107 bytes).
+mkdir -p "$TMPDIR/ug" "$logs"
+run=$(mktemp -d "$TMPDIR/ug/XXXX")
+echo "$id $(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$run/what"
+# A runtime-only candidate: the release whose host it runs.
+reused=
+if [ "$(jq -r '.class // "host"' "$candidate")" = runtime ]; then
+  from=$(jq -r '.reusedHostFrom // empty' "$candidate")
+  [ -n "$from" ] || die "$id is runtime-only but its build.json names no reusedHostFrom"
+  reused=$(buildOf "${reusedArg:-$from}")
+  [ "$(jq -r .releaseId "$reused")" = "$from" ] || die "--reused-host $reusedArg is $(jq -r .releaseId "$reused"), $id reuses $from"
+  reused=$(hostBuildOf "$reused")
+  hostId=$(jq -r .releaseId "$reused")
+  if [ "$hostId" = "$from" ]; then
+    say "$id is runtime-only: the host and manager of $from, its own runtime"
+  else
+    say "$id is runtime-only: it reuses $from, itself runtime-only on $hostId's host — the host and manager of $hostId, its own runtime"
+  fi
+elif [ -n "$reusedArg" ]; then
+  die "--reused-host: $id is a host release"
+fi
+
+# The gates: this tree's (legacyPackages.x86_64-linux.upgradeGates), told what to gate through a file. A clean tree by
+# its commit, else as it is.
+if [ -z "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
+  runnerRev=$(git -C "$root" rev-parse HEAD) runnerDirty=false
+  gatesFlake=$(source_flake "$runnerRev")
+else
+  runnerRev=$(git -C "$root" rev-parse HEAD) runnerDirty=true
+  gatesFlake=$(source_tree_flake)
+  say "the gates come from this tree with uncommitted changes ($root)"
+fi
+# Each earlier release's flake, by the commit its build.json records: the commit may be in this checkout or only in an
+# archive, with the appliance at a repository's top or in Whombat's appliance/ folder (release/lib/source.sh).
+flakes='{}'
+while IFS= read -r b; do
+  [ -n "$b" ] || continue
+  r=$(jq -er .source.rev "$b")
+  f=$(source_flake "$r") || die "$r, the source of $(jq -r .releaseId "$b"), can't be found"
+  flakes=$(jq -c --arg r "$r" --arg f "$f" '.[$r] = $f' <<<"$flakes")
+done < <(printf '%s\n' "${prevBuilds[@]}" "$reused"; jq -r '.[] | objects | .reusedHost' <<<"$prevArgs")
+args=$run/args.json
+jq -n --arg c "$candidate" --arg cf "$candFlake" --arg r "$reused" --arg repo "$repo" --arg b "$breakMode" \
+  --argjson prev "$prevArgs" --argjson flakes "$flakes" \
+  '{candidate: $c, candidateFlake: $cf, previous: $prev, repository: $repo, flakes: $flakes}
+   + (if $r == "" then {} else {reusedHost: $r} end) + (if $b == "" then {} else {breakCandidate: $b} end)' >"$args"
+export WHOMBAT_UPGRADE_GATES=$args
+inst="$gatesFlake#legacyPackages.x86_64-linux.upgradeGates"
+gatesNix() {
+  local what=$1
+  shift
+  nix "$what" --impure "$@"
+}
+
+# One evaluation: the record and every gate's driver (derivation and output), NX-126.
+record=$run/record.json
+say "evaluating the gates of $id against ${previous[*]:-no previous release}"
+gatesNix eval --json "$inst" --apply 'g: g.record // {
+  drivers = builtins.mapAttrs (_: t: { drv = t.driver.drvPath; out = t.driver.outPath; }) g.gates; }' >"$record"
+jq -e '.candidate.matchesBuild' "$record" >/dev/null ||
+  die "the candidate's runtime or manager isn't the build's ($(jq -c .candidate "$record")): the source changed since $id was built"
+jq -r '.previous[] | "  \(.releaseId) (\(.rev[0:9])): runtime \(.runtimeStorePath) — matches the published release: \(.matchesPublished)"' "$record" >&2
+if [ -n "$reused" ]; then
+  jq -e '.candidate.reusedHost.matchesPublished' "$record" >/dev/null ||
+    die "the reused host's release, rebuilt from its commit, isn't the published one ($(jq -c .candidate.reusedHost "$record"))"
+fi
+
+# Gates that don't apply to this candidate (a runtime-only one: 3 and 6) are recorded as such, not run.
+torun=()
+for g in "${selected[@]}"; do
+  na=$(jq -r --arg g "$g" '.notApplicable[$g] // empty' "$record")
+  if [ -n "$na" ]; then
+    say "gate $g: $na"
+    jq -n --arg id "$g" --arg na "$na" '{id: $id, name: "", ok: true, notApplicable: $na, seconds: 0, log: null}' >"$run/result-$g.json"
+  else
+    torun+=("$g")
+  fi
+done
+
+# The heavy lock, held from the first build to the last gate (a run is 10–15 minutes, NX-126); --no-lock for a caller
+# that holds it.
+if $use_lock; then
+  exec 9>>"$lock"
+  say "waiting for the heavy lock ($lock)"
+  flock 9
+fi
+
+for g in "${torun[@]}"; do
+  jq -e --arg g "$g" '.drivers | has($g)' "$record" >/dev/null || die "gate $g doesn't exist for this candidate ($(jq -c .gates "$record"))"
+done
+
+# One gate: build its driver (what it needs: the previous releases' disks, the repository, the ISO, the runtimes — Nix
+# builds what other gates share once and makes the others wait for it), then run it outside the sandbox, VM state in the
+# run directory, output to its log.
+runGate() {
+  local g=$1 drv driver state=$run/g$1 log=$logs/gate-$1.log start built end rc=0
+  [ -z "$stateRoot" ] || state=$stateRoot/$1
+  drv=$(jq -r --arg g "$g" '.drivers[$g].drv' "$record")
+  driver=$(jq -r --arg g "$g" '.drivers[$g].out' "$record")
+  rm -rf "$state"
+  mkdir -p "$state/out"
+  start=$(date +%s)
+  if ! nix build -L --max-jobs 4 --no-link "$drv^out" >"$logs/build-$g.log" 2>&1; then
+    tail -20 "$logs/build-$g.log" >"$log"
+    rc=1
+  fi
+  built=$(date +%s)
+  if [ $rc = 0 ]; then
+    (
+      cd "$state"
+      export TMPDIR=$state XDG_RUNTIME_DIR=$state
+      "$driver/bin/nixos-test-driver" --output_directory "$state/out"
+    ) >"$log" 2>&1 || rc=$?
+  fi
+  end=$(date +%s)
+  jq -n --arg id "$g" --arg name "$(jq -r --arg g "$g" '.gates[$g]' "$record")" --argjson ok "$([ $rc = 0 ] && echo true || echo false)" \
+    --argjson s $((end - built)) --argjson b $((built - start)) --arg log "$log" \
+    '{id: $id, name: $name, ok: $ok, seconds: $s, buildSeconds: $b, log: $log}' >"$run/result-$g.json"
+  if [ $rc = 0 ]; then say "gate $g passed ($((built - start)) s build, $((end - built)) s run)"
+  else say "gate $g FAILED ($((built - start)) s build, $((end - built)) s run): $log"; fi
+  $keep || rm -rf "$state"
+}
+
+# The gates, longest first, --jobs at a time; a gate starts as soon as one finishes (4: a rollback; 5: the migration
+# classes; 2: N−2's two updates; then the short ones). Gates 5 and 7 need no repository or disk: they start while the
+# others' builds run.
+order=()
+for g in 4 5 7 2 6 1 3; do
+  for t in "${torun[@]}"; do [ "$t" = "$g" ] && order+=("$g"); done
+done
+for g in "${order[@]}"; do
+  while [ "$(jobs -rp | wc -l)" -ge "$jobs" ]; do wait -n || true; done
+  say "gate $g: $(jq -r --arg g "$g" '.gates[$g]' "$record")"
+  runGate "$g" &
+done
+wait
+if $use_lock; then flock -u 9; exec 9>&-; fi
+
+jq -n --arg id "$id" --arg sha "$(sha256sum "$candidate" | cut -d' ' -f1)" --slurpfile rec "$record" \
+  --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --argjson gates "$(for g in "${selected[@]}"; do cat "$run/result-$g.json"; done | jq -s .)" \
+  --arg rr "$runnerRev" --argjson rd "$runnerDirty" \
+  '{v: 1, releaseId: $id, buildSha256: $sha,
+    previous: [$rec[0].previous[] | {releaseId, rev, runtimeStorePath, matchesPublished}],
+    gates: $gates,
+    ok: (($gates | all(.ok)) and ($rec[0].previous | all(.matchesPublished)) and $rec[0].breakCandidate == null
+      and ($rec[0].candidate.reusedHost.matchesPublished // true)),
+    at: $at,
+    runner: {rev: $rr, dirty: $rd}}
+    + (if $rec[0].runtimeOnly then {runtimeOnly: true, reusedHost: $rec[0].candidate.reusedHost} else {} end)
+    + (if $rec[0].breakCandidate then {breakCandidate: $rec[0].breakCandidate} else {} end)' >"$out.tmp"
+mv "$out.tmp" "$out"
+say "wrote $out"
+jq -r '.gates[] | "  gate \(.id) \(if .notApplicable then "n/a   " elif .ok then "ok    " else "FAILED" end) \(.seconds)s (+\(.buildSeconds // 0)s build)  \(.notApplicable // .name)"' "$out" >&2
+say "done"
+jq -e .ok "$out" >/dev/null || exit 1

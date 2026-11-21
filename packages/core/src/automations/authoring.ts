@@ -1,0 +1,34 @@
+/**
+ * How the agent writes an automation (Whombat automation-chat.md): the reference `automation_read` hands it,
+ * so the tool list it is served on every turn stays short. The definition's schema (`AutomationDefinition`) and the
+ * recipe's (`AutomationRecipe`) are the truth; `draft_automation` answers every problem, so this only has to get the
+ * agent close.
+ */
+
+export const AUTOMATION_AUTHORING_GUIDE = `How to write an automation for draft_automation. Give either recipe (simplest: one agent step, Whombat adds the tested steps) or definition (anything else). Never both.
+
+Recipe: {when, job, instructions, conversationId, repo?, replyOnGitHub?, fix?, writeBack?, replyToCustomer?, decideFeatures?, t3?, t3Review?}
+- when: {kind:"github", repo:"owner/name", events:["issue_opened"|"pr_opened"|"pr_updated"|"checks_failed"], drafts?:false, bots?:false} | {kind:"schedule", schedule:{kind:"cron", expr:"0 9 * * 1-5"}|{kind:"interval", everyMinutes:60}, timeZone:"Europe/Amsterdam"} | {kind:"message", contains:["word"], includeReplies?:false} | {kind:"tracker", connectionId:"con_…", itemKinds:["bug","feature"]} | {kind:"manual"}
+- A tracker's connectionId is one of this answer’s trackerConnections (a report tracker such as a ticket system); none means no tracker is connected yet: the person adds it in Settings → Connections. Whombat fills in the tracker's words.
+- A tracker report’s steps work for a stranger and reach no connection but T3 Code. Where code work goes to T3 Code, give t3 (its handle) and repo: Whombat writes the steps that look into the code (after the report is sorted: garbage and questions answered without it), fix it on a new branch and have another model review it in that thread, so your instructions only say what to assess and answer, never to hand every report to T3 Code. t3Review: {model, effort?} only when the person names the model that reviews (ids and efforts as T3 Code’s orchestrator_capabilities lists them); without it a model of another provider reviews. Without T3 Code, repo gives a read-only copy. Each tracker installation (development, production) is its own connection: one automation each.
+- job: "assess" (GitHub, trackers) | "review" (pull requests) | "answer" (messages, trackers) | "check" (a repo, with repo) | "custom"
+- instructions: what you are asked each time, in plain words. conversationId: the person's Chat (this conversation).
+- fix (GitHub issues, tracker bugs; only when the person asked for fixing): {mode:"ask"|"auto", minImportance:"high", maxPerDay:5, merge?:"checks"}. auto fixes a GitHub issue alone only when sure and small, a tracker report every bug at least minImportance you recommend fixing; anything else asks. merge:"checks" merges after the review once checks pass. A tracker fix needs repo (the product's repository, owner/name).
+- replyOnGitHub: also post your answer on the issue or pull request. writeBack / replyToCustomer: trackers only.
+- decideFeatures (trackers with replyToCustomer and feature requests; on unless the person says otherwise): each feature request comes to the person as a card with your value from 1 to 10 to approve, decline or ask the customer about (with fix and repo also approve and build), and the customer hears the decision.
+
+Definition: {version:1, conversationId, triggers:[1-4], steps:[1-20], limits?:{maxRunsPerDay:50, maxConcurrentRuns:1, runTimeoutMinutes:10080}}
+Triggers:
+- {kind:"github", event:"issue_opened"|"pr_opened"|"pr_updated"|"checks_completed"|"review_submitted"|"branch_pushed", repo, branch?, checksState?:"passed"|"failed", drafts?, bots?}
+- {kind:"schedule", schedule:{kind:"cron", expr}|{kind:"interval", everyMinutes>=5}, timeZone, overlap?:"skip"|"queue"|"cancel_previous", missed?:"skip"|"run_once"}
+- {kind:"message_posted", conversationId, contains?:[], includeReplies?} · {kind:"reaction_added", conversationId, value:"🐛"}
+- {kind:"tracker", connectionId, event:"item_opened"|"reporter_replied", itemKinds?} · {kind:"manual"}
+Steps (each {id:"lower_snake", name?:"plain words the person reads", kind, …}):
+- dispatch_agent {prompt, thread?:"run"|"top", workspace?:{repo, access:"read"|"write", branch?, base?, pullRequest?:"{{trigger.number}}"}, assessment?:true, verdict?:true}: you, asked prompt. write: on your own branch (feat/…), succeeds only with new commits. verdict only for a step that reviews work: its reply must start with “Approve” or “Changes needed” (steps.<id>.verdict "approve"|"changes_needed") and any other reply fails the step. The step ends with your reply and can’t schedule: work it hands on (T3 Code) it waits for, so give a step that waits for long work timeoutMinutes (any step has it; an agent step's is 60 unless given, at most 1440).
+- post_message {text} · wait {minutes} · condition {if, else?:"stop"|{skipTo}}: if reads trigger.* and steps.<id>.* (text, reply, verdict, assessment.kind/importance/confidence/size); contains(), startsWith(), ==, &&, ||, !.
+- request_approval {title, details, onDecline?:"stop"|"continue"}: waits for the person's yes.
+- open_pull_request {repo, branch, title, body?} · merge_pull_request {repo, number:"{{steps.pr.prNumber}}"} · github_comment {repo, number:"{{trigger.number}}", text:"{{steps.ask.reply}}"}
+- tracker_update {connectionId, report:"{{trigger.reportId}}", from:<assessment step>} · tracker_reply {connectionId, report, from, decision?} · tracker_decision {connectionId, report, from, build?}
+Templates fill in as plain text: {{trigger.text}}, {{trigger.number}}, {{trigger.title}}, {{trigger.url}}, {{steps.<id>.text}}, {{steps.<id>.reply}}, {{run.number}}.
+
+Keys: turning it on lets it comment, open pull requests, merge and write to the tracker on its own, as its steps need. Put a key in asks (pr.comment, pr.open, merge, report.update, report.reply) when the person wants to say yes each time; the card shows it.`;

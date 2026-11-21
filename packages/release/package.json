@@ -1,0 +1,32 @@
+{
+  "name": "@whombat/release",
+  "license": "AGPL-3.0-only",
+  "version": "4.11.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Release tuples, the product integration manifest, update journal states, signed assignments and compatibility checks.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@whombat/core": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

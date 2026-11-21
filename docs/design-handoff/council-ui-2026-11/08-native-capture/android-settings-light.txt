@@ -1,0 +1,22 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 18 visible nodes (45 total)
+Collapsed 27 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "Settings, Theme, VERSION, This app, 3.73.0 · build 3073000, Advanced, Model, keys, skills, spend and more, Screens, 3 screens, This Whombat, Demo world on this phone, Connections, 5 connected, Neo, Claude Code, Dark, Light, System, MO, Mara Okafor, Your photo" [scrollable]
+@e4 [button] "Mara Okafor, Your photo"
+@e10 [radiobutton] "System" [selected]
+@e12 [radiobutton] "Light"
+@e14 [radiobutton] "Dark"
+@e16 [button] "Neo, Claude Code"
+@e19 [button] "Connections, 5 connected"
+@e22 [button] "This Whombat, Demo world on this phone"
+@e25 [button] "Screens, 3 screens"
+@e28 [button] "Advanced, Model, keys, skills, spend and more"
+@e34 [group] "Chat, 1 new"
+@e35 [text] "1"
+@e37 [group] "Inbox, 3 new"
+@e38 [text] "3"
+@e40 [group] "Overview"
+@e42 [group] "Automations"
+@e44 [group] "Settings" [selected]

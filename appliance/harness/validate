@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# harness/validate — the main validation suite (docs/runbooks/acceptance.md). Implementation: src/validate/validate.ts.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"; mkdir -p "$TMPDIR"
+[ -d "$here/node_modules" ] || (cd "$here" && pnpm install --frozen-lockfile >&2)
+exec node "$here/src/validate/validate.ts" "$@"

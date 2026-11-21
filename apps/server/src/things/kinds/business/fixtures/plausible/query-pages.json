@@ -1,0 +1,9 @@
+{
+  "results": [
+    { "metrics": [30], "dimensions": ["/"] },
+    { "metrics": [12], "dimensions": ["/pricing"] },
+    { "metrics": [6], "dimensions": ["/blog/hello-world"] }
+  ],
+  "meta": {},
+  "query": { "site_id": "example.com", "dimensions": ["event:page"] }
+}

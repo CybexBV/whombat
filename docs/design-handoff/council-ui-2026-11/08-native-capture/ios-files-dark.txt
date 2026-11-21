@@ -1,0 +1,9 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 6 nodes
+@e1 [application] "Whombat"
+@e2 [button] "Back"
+@e3 [scroll-area] [scrollable]
+@e4 [text] "Files"
+@e5 [text] "Files shared in your conversations. You see the ones in conversations you’re in."
+@e6 [toolbar] "Toolbar"

@@ -1,0 +1,64 @@
+/*
+ * Pictures of what changed (ShotPictures.tsx): the council's final card and a delegation task's row. Each screen's name,
+ * its picture at the width it is given, the hint and the numbered notes.
+ */
+
+.shot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.shot + .shot {
+  margin-top: 8px;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.picture {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--sf2);
+  cursor: zoom-in;
+}
+
+.picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hint {
+  margin: 0;
+  font: var(--type-meta-small);
+  color: var(--mut);
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.notes li::marker {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+}

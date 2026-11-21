@@ -1,0 +1,1 @@
+ALTER TABLE "tracker_fixes" ADD COLUMN "release" jsonb;

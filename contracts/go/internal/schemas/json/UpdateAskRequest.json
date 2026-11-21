@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/UpdateAskRequest.json",
+  "title": "UpdateAskRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "askFirst": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "v",
+    "askFirst"
+  ],
+  "additionalProperties": false
+}

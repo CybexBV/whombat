@@ -1,0 +1,1084 @@
+/*
+ * The widgets (DK-131): each in the form it has room for, in the screen's logical pixels (the screen scales the whole).
+ * Sizes are the mockups' (`desk-widgets/src/kit.css`); colours only through the dark tokens: `--ok` fine, `--warn` to
+ * look at, `--bad` wrong, `--brand` the assistant and time. No shadows on cards: the box draws in software.
+ */
+
+.w {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-xlarge);
+  background: var(--sf);
+  color: var(--ink);
+  text-align: left;
+}
+
+.w > * {
+  flex: none;
+}
+
+.bare {
+  border-color: transparent;
+  background: transparent;
+}
+
+.flush {
+  padding: 0;
+}
+
+.w[data-tone="bad"] {
+  border-color: color-mix(in srgb, var(--bad) 60%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bad) 12%, transparent),
+    color-mix(in srgb, var(--bad) 4%, transparent)
+  );
+}
+
+.w[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.w[data-tone="off"] {
+  opacity: 0.55;
+}
+
+/* Editing: Whombat's own bare widgets show where they are. */
+.editing.bare {
+  border: 1.5px dashed color-mix(in srgb, var(--ink) 13%, transparent);
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+}
+
+/* A widget that opens: the whole card is the button, under its own buttons. */
+.hit {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hit:focus-visible,
+.press:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.press {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.fill {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The header: mark, name · title, a few words on the right */
+
+.hd {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 24px;
+  color: var(--mut);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.hdName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hdName b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.hdRight {
+  margin-left: auto;
+  padding-left: 10px;
+  color: var(--mut);
+}
+
+.mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.markLetter {
+  background: var(--sf2);
+  color: var(--brand);
+}
+
+.markIcon {
+  background: var(--sf2);
+  color: var(--brand);
+}
+
+.face {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--face-dusty);
+  color: var(--bg);
+  font-weight: 800;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+
+/* The words */
+
+.big {
+  margin-top: 10px;
+  overflow: hidden;
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mid {
+  margin-top: 10px;
+  overflow: hidden;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+}
+
+.d {
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 15px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wrap {
+  white-space: normal;
+}
+
+.unit {
+  color: var(--mut);
+  font-weight: 500;
+}
+
+.lab {
+  color: color-mix(in srgb, var(--mut) 75%, var(--bg));
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.cOk {
+  color: var(--ok);
+}
+
+.cWarn {
+  color: var(--warn);
+}
+
+.cBad {
+  color: var(--bad);
+}
+
+.cOff {
+  color: var(--mut);
+}
+
+/* Bars and meters */
+
+.bar {
+  display: block;
+  height: 7px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 10%, var(--sf));
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ok);
+}
+
+.bar.cWarn i {
+  background: var(--warn);
+}
+
+.bar.cBad i {
+  background: var(--bad);
+}
+
+.bar.cSand i {
+  background: var(--brand);
+}
+
+.bar.cFace i {
+  background: var(--face-dusty);
+}
+
+.thin {
+  height: 4px;
+  margin-top: 8px;
+}
+
+/* A server's three lines (DK-152): the short name, the blocks and the percentage, 9 px apart. */
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.metersTight {
+  gap: 6px;
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 50px;
+  align-items: center;
+  gap: 12px;
+  height: 18px;
+}
+
+.meterKey {
+  color: var(--mut);
+  font: 500 11.5px / 15px var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.meter b {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The server cards' block bar (DK-152): blocks lit up to the value, the rest a dim track. */
+.blocks {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.blk {
+  height: 7px;
+  flex: 1;
+  border-radius: 1.5px;
+  background: color-mix(in srgb, var(--ink) 10%, var(--sf));
+}
+
+.blk[data-on] {
+  background: var(--ok);
+}
+
+.blocks.cWarn .blk[data-on] {
+  background: var(--warn);
+}
+
+.blocks.cBad .blk[data-on] {
+  background: var(--bad);
+}
+
+/* Lists */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.rw {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+}
+
+.rw:first-child {
+  border-top: 0;
+}
+
+.rwL {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rwS {
+  flex: none;
+  color: var(--mut);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.rwT {
+  flex: none;
+  width: 52px;
+  color: var(--brand);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.two {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+}
+
+.two b {
+  display: block;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.two > span:not(.bar) {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue b {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.check {
+  flex: none;
+  width: 18px;
+  color: var(--ok);
+}
+
+.step {
+  flex: none;
+  width: 18px;
+  color: var(--brand);
+}
+
+.light {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 18%, var(--sf));
+}
+
+.light[data-on] {
+  background: var(--warn);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+/* Something running that's fine (a server's VM), not a lamp: green. */
+.lightOk[data-on] {
+  background: var(--ok);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  margin-top: 10px;
+  color: color-mix(in srgb, var(--mut) 75%, var(--bg));
+  font-size: 16px;
+  text-align: center;
+}
+
+/* Pictures */
+
+.img {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--sf2);
+}
+
+.img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.posterLabel {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  left: 7px;
+  color: color-mix(in srgb, var(--ink) 92%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 50%);
+}
+
+.posterRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* Wide pictures (every camera) as a grid that fills the widget. */
+.posterGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.card {
+  display: flex;
+  gap: 16px;
+}
+
+.cardText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.cardTitle {
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cardBar > :first-child {
+  flex: 1;
+}
+
+.cardTime {
+  margin-top: 8px;
+  color: var(--mut);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Charts: SVG, drawn once per change */
+
+.spark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chartBox {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 24px;
+}
+
+.chartBox > svg {
+  position: absolute;
+  inset: 0;
+}
+
+/* Figures */
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+}
+
+.tileValue {
+  overflow: hidden;
+  font-size: 40px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.figRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.inline {
+  display: flex;
+  gap: 30px;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+.inline b {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.inline span {
+  margin-left: 5px;
+  color: var(--mut);
+  font-size: 15px;
+}
+
+.split {
+  display: flex;
+  flex: 1 1 0;
+  gap: 20px;
+  min-height: 0;
+}
+
+.splitLeft {
+  flex: none;
+  width: 40%;
+}
+
+.splitRight {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+/* Clock and How things are (bare) */
+
+.ck {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding-left: 4px;
+}
+
+.ckRow {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 26px;
+}
+
+.ckTime {
+  font-weight: 700;
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+}
+
+.colon {
+  position: relative;
+  top: -0.06em;
+  margin: 0 0.04em;
+}
+
+.ckDate {
+  margin-top: 12px;
+  color: var(--mut);
+  white-space: nowrap;
+}
+
+.ckRow .ckDate {
+  margin-top: 0;
+}
+
+.st {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+}
+
+.stHead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.stDot {
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.stDot[data-tone="busy"] {
+  background: var(--brand);
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.stDot[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.stDot[data-tone="bad"] {
+  background: var(--bad);
+}
+
+.stMore {
+  max-width: 400px;
+  margin-top: 10px;
+  color: var(--mut);
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.stMoreLine {
+  max-width: none;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What's going on (bare) */
+
+.nw {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.nwHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+}
+
+.nwDone {
+  color: var(--mut);
+  font-size: 16px;
+}
+
+.nwCards {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  margin-top: 10px;
+}
+
+.mc {
+  min-height: 0;
+  padding: 16px 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-large);
+  background: var(--sf);
+}
+
+.mc[data-pinned] {
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent);
+}
+
+.nwEmpty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  margin-top: 10px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius-card-large);
+  color: color-mix(in srgb, var(--mut) 75%, var(--bg));
+  font-size: 18px;
+}
+
+/* Servers (bare) */
+
+.sp {
+  display: grid;
+  gap: 10px;
+  height: 100%;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 14px 13px 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.chipHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.chipSpark {
+  height: 30px;
+  margin-top: 12px;
+}
+
+.chipSparkTall {
+  height: auto;
+  flex: 1;
+}
+
+.chipSay {
+  margin-top: 16px;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip[data-state="bad"] {
+  border-color: color-mix(in srgb, var(--bad) 60%, transparent);
+  background: color-mix(in srgb, var(--bad) 9%, transparent);
+}
+
+.chip[data-state="bad"] .chipSay {
+  color: var(--bad);
+}
+
+.chip[data-state="warn"] {
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
+}
+
+.chip[data-state="warn"] .chipSay {
+  color: var(--warn);
+}
+
+.chip[data-state="off"] {
+  opacity: 0.45;
+}
+
+.chip[data-state="off"] .chipSay {
+  color: var(--mut);
+}
+
+.chip[data-work="done"] .chipSay {
+  color: var(--ok);
+}
+
+.chip[data-work="next"] .chipSay {
+  color: var(--mut);
+}
+
+.chipTall {
+  display: flex;
+  flex-direction: column;
+}
+
+.chipMore {
+  display: grid;
+  place-items: center;
+  color: var(--mut);
+  font-size: 20px;
+}
+
+/* Camera */
+
+.cam {
+  position: absolute;
+  inset: 0;
+  background: var(--sf2);
+}
+
+.cam > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camTop {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  font-size: 15px;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 60%);
+}
+
+.camTime {
+  margin-left: auto;
+  color: var(--ink2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.camEvent {
+  position: absolute;
+  bottom: 14px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  font-size: 14px;
+}
+
+.live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bad) 25%, transparent);
+}
+
+.camLocked {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  color: var(--mut);
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Text */
+
+.body {
+  margin-top: 10px;
+  overflow: hidden;
+  color: var(--ink2);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.locked {
+  margin-top: 10px;
+  color: var(--mut);
+  font-size: 16px;
+}
+
+/* Photo: one picture filling the card, its words over a soft dark fade (DK-160) */
+
+.photoTop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 64px;
+  background: linear-gradient(180deg, rgb(0 0 0 / 42%), transparent);
+}
+
+.photoWords {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 42px 18px 14px;
+  background: linear-gradient(180deg, transparent, rgb(0 0 0 / 38%) 45%, rgb(0 0 0 / 62%));
+  text-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+}
+
+.photoCaption {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photoTime {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ink2);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photoWordsBig {
+  padding: 60px 22px 18px;
+}
+
+.photoWordsBig .photoCaption {
+  font-size: 24px;
+}
+
+.photoWordsBig .photoTime {
+  font-size: 16px;
+}
+
+/* Board: many small named tiles, each its tone's dot (DK-162), coloured as the server chips are */
+
+.board {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: color-mix(in srgb, var(--ink) 4%, var(--sf));
+  font-size: 14px;
+}
+
+.btStacked {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  column-gap: 9px;
+  row-gap: 3px;
+  padding: 0 13px;
+  font-size: 16px;
+}
+
+.btDot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.btL {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btV {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btStacked .btV {
+  grid-column: 2;
+  max-width: none;
+  font-size: 14px;
+}
+
+.bt[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, var(--sf));
+}
+
+.bt[data-tone="warn"] .btDot {
+  background: var(--warn);
+}
+
+.bt[data-tone="bad"] {
+  border-color: color-mix(in srgb, var(--bad) 60%, transparent);
+  background: color-mix(in srgb, var(--bad) 11%, var(--sf));
+}
+
+.bt[data-tone="bad"] .btDot {
+  background: var(--bad);
+}
+
+.bt[data-tone="off"] {
+  opacity: 0.45;
+}
+
+.bt[data-tone="off"] .btDot {
+  background: var(--mut);
+}
+
+.btMore {
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--mut);
+  font-size: 16px;
+}

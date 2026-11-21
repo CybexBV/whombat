@@ -1,0 +1,174 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 100,
+    "results": 4,
+    "page": 1
+  },
+  "results": [
+    {
+      "id": 4,
+      "status": 2,
+      "createdAt": "2026-10-21T19:43:53.000Z",
+      "updatedAt": "2026-10-21T19:44:31.000Z",
+      "type": "movie",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [],
+      "seasonCount": 0,
+      "requestedBy": {
+        "id": 3,
+        "displayName": "Ben",
+        "username": "Ben",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "modifiedBy": {
+        "id": 1,
+        "displayName": "admin",
+        "username": null,
+        "userType": 3,
+        "requestCount": 0
+      },
+      "media": {
+        "id": 4,
+        "mediaType": "movie",
+        "tmdbId": 1022789,
+        "tvdbId": null,
+        "status": 3,
+        "status4k": 1,
+        "downloadStatus": [
+          {
+            "externalId": 4,
+            "estimatedCompletionTime": "2026-10-21T19:44:38.000Z",
+            "mediaType": "movie",
+            "size": 2306867,
+            "sizeLeft": 2306867,
+            "status": "downloading",
+            "timeLeft": "00:00:00",
+            "title": "Inside.Out.2.2024.1080p.WEB.h264-GRP",
+            "downloadId": "8f190dbe-aa58-4540-864a-8314fb55350b"
+          }
+        ],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": 4,
+        "serviceId": 0,
+        "mediaAddedAt": "2026-10-21T19:43:53.000Z",
+        "updatedAt": "2026-10-21T19:44:32.000Z"
+      }
+    },
+    {
+      "id": 3,
+      "status": 4,
+      "createdAt": "2026-10-21T19:43:53.000Z",
+      "updatedAt": "2026-10-21T19:44:16.000Z",
+      "type": "tv",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [
+        {
+          "id": 1,
+          "seasonNumber": 24,
+          "status": 1
+        }
+      ],
+      "seasonCount": 1,
+      "requestedBy": {
+        "id": 2,
+        "displayName": "Anna",
+        "username": "Anna",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "modifiedBy": {
+        "id": 1,
+        "displayName": "admin",
+        "username": null,
+        "userType": 3,
+        "requestCount": 0
+      },
+      "media": {
+        "id": 3,
+        "mediaType": "tv",
+        "tmdbId": 4614,
+        "tvdbId": 72108,
+        "status": 3,
+        "status4k": 1,
+        "downloadStatus": [],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": null,
+        "serviceId": null,
+        "mediaAddedAt": "2026-10-21T19:43:52.000Z",
+        "updatedAt": "2026-10-21T19:44:16.000Z"
+      }
+    },
+    {
+      "id": 2,
+      "status": 1,
+      "createdAt": "2026-10-21T19:43:52.000Z",
+      "updatedAt": "2026-10-21T19:43:52.000Z",
+      "type": "movie",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [],
+      "seasonCount": 0,
+      "requestedBy": {
+        "id": 3,
+        "displayName": "Ben",
+        "username": "Ben",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "media": {
+        "id": 2,
+        "mediaType": "movie",
+        "tmdbId": 969681,
+        "tvdbId": null,
+        "status": 2,
+        "status4k": 1,
+        "downloadStatus": [],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": null,
+        "serviceId": null,
+        "mediaAddedAt": "2026-10-21T19:43:52.000Z",
+        "updatedAt": "2026-10-21T19:43:52.000Z"
+      }
+    },
+    {
+      "id": 1,
+      "status": 1,
+      "createdAt": "2026-10-21T19:43:52.000Z",
+      "updatedAt": "2026-10-21T19:43:52.000Z",
+      "type": "movie",
+      "is4k": false,
+      "isAutoRequest": false,
+      "seasons": [],
+      "seasonCount": 0,
+      "requestedBy": {
+        "id": 2,
+        "displayName": "Anna",
+        "username": "Anna",
+        "userType": 2,
+        "requestCount": 2
+      },
+      "media": {
+        "id": 1,
+        "mediaType": "movie",
+        "tmdbId": 1170608,
+        "tvdbId": null,
+        "status": 2,
+        "status4k": 1,
+        "downloadStatus": [],
+        "downloadStatus4k": [],
+        "ratingKey": null,
+        "externalServiceId": null,
+        "serviceId": null,
+        "mediaAddedAt": "2026-10-21T19:43:52.000Z",
+        "updatedAt": "2026-10-21T19:43:52.000Z"
+      }
+    }
+  ]
+}

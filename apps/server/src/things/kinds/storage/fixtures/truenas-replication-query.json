@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "name": "tank/docs - backup-nas",
+    "enabled": true,
+    "state": {
+      "state": "FINISHED",
+      "datetime": {
+        "$date": 1792598400000
+      },
+      "last_snapshot": "tank/docs@auto-2026-10-21_16-00"
+    }
+  },
+  {
+    "id": 2,
+    "name": "tank/photos - offsite",
+    "enabled": true,
+    "state": {
+      "state": "ERROR",
+      "datetime": {
+        "$date": 1792591200000
+      },
+      "error": "ssh: connect to host 203.0.113.9 port 22: Connection timed out"
+    }
+  },
+  {
+    "id": 3,
+    "name": "old",
+    "enabled": false,
+    "state": {
+      "state": "ERROR"
+    }
+  }
+]

@@ -1,0 +1,492 @@
+/* Remote console (SCREENS.md 5) and Screens wall (C8). Values from
+   design/static/server-incus-console-*.html and server-incus-screens.html. */
+
+/* ------------------------------------------------------------ console panel */
+
+.con {
+  border-top: 1px solid var(--line);
+}
+.con:first-child {
+  border-top: 0;
+}
+.con-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.con-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.con-state {
+  color: var(--ink-2);
+}
+.con-head .chip {
+  padding: 4px 12px;
+}
+.con-fs {
+  margin-left: auto;
+}
+.con-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px;
+}
+.con-main {
+  flex: 1 1 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.con-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.con-tool-right {
+  margin-left: auto;
+}
+/* Force stop / Stop: serious text, normal border (as in the mockup). */
+.con-toolbar .con-tool.is-serious {
+  color: var(--serious);
+  border-color: var(--line-strong);
+}
+
+/* The screen: 16:10, terminal background, the Tab stop of the console. */
+.con-screen {
+  position: relative;
+  container-type: inline-size;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--terminal-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.con-screen:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.con-screen:fullscreen {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.term-host {
+  position: absolute;
+  inset: 0;
+  padding: 2.4cqw 2.8cqw;
+}
+.term-host .xterm {
+  height: 100%;
+}
+.term-host .xterm-viewport {
+  /* xterm paints its own scrollbar area; keep it on the terminal background */
+  background-color: var(--terminal-bg) !important;
+}
+.term-host .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.term-host .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+.vnc-host,
+.spice-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.vnc-host canvas {
+  outline: none;
+}
+.spice-screen {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.spice-screen canvas {
+  display: block;
+  outline: none;
+}
+
+/* After a dropped connection the last screen stays visible, dimmed. */
+.con-screen.is-lost .term-host,
+.con-screen.is-lost .vnc-host,
+.con-screen.is-lost .spice-host {
+  opacity: 0.5;
+}
+
+/* Messages inside the screen (stopped, blocked, errors, connecting). */
+.con-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--terminal-bg);
+}
+.con-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.con-msg-ic {
+  width: max(22px, 3.6cqw);
+  height: max(22px, 3.6cqw);
+}
+.con-msg-text {
+  font-size: max(13px, 1.7cqw);
+  color: var(--ink-2);
+  max-width: 560px;
+  overflow-wrap: anywhere;
+}
+.con-msg-link {
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.con-spinner {
+  width: max(22px, 3cqw);
+  height: max(22px, 3cqw);
+}
+.spinner.spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+.btn-primary.btn-in-card {
+  min-height: 40px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.ic.ic-bold {
+  stroke-width: 2px;
+}
+
+/* Status line under the screen. */
+.con-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 13px;
+  min-height: 24px;
+}
+.con-status-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.con-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.con-lost {
+  color: var(--ink);
+  flex-wrap: wrap;
+}
+.con-reconnect {
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  min-height: 24px;
+}
+.con-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.con-chip {
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* Side list. */
+.con-side {
+  flex: 0 1 232px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.con-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2);
+  text-align: left;
+}
+.rail:hover,
+.rail.is-current {
+  background: var(--raised);
+}
+.rail.is-current {
+  color: var(--ink);
+  cursor: default;
+}
+.rail-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.rail-kind {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ Screens wall */
+
+.screens-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+  padding: 24px;
+  border-top: 1px solid var(--line);
+}
+.tile-item {
+  min-width: 0;
+}
+.tile {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  background: var(--bg);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.tile:hover {
+  border-color: var(--line-strong);
+  background: var(--raised);
+}
+.tile[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.tile-screen {
+  position: relative;
+  container-type: inline-size;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--terminal-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tile-screen img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.tile-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.tile-msg .ic {
+  width: max(22px, 3.6cqw);
+  height: max(22px, 3.6cqw);
+}
+.tile-msg-text {
+  font-size: max(12px, 1.7cqw);
+  overflow-wrap: anywhere;
+}
+.tile-stale {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--tooltip-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.tile-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  min-width: 0;
+  width: 100%;
+}
+.tile-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tile-kind {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ UI v2: side panel */
+
+.con.is-compact {
+  border-top: 1px solid var(--line);
+  position: sticky;
+  top: calc(var(--topbar-h) + 48px);
+}
+.con.is-compact .con-head {
+  padding: 10px 12px;
+  gap: 8px 10px;
+}
+.con.is-compact .con-name {
+  font-size: 14px;
+}
+.con.is-compact .con-head .chip {
+  padding: 1px 9px;
+}
+.con.is-compact .con-body {
+  padding: 12px;
+  gap: 10px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.con.is-compact .con-main {
+  flex: 1 1 auto;
+  width: 100%;
+}
+.con.is-compact .con-toolbar {
+  gap: 6px;
+}
+.con.is-compact .con-tool {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.con-head,
+.con-body {
+  min-width: 0;
+}
+.con-head {
+  padding: 12px 16px;
+  gap: 8px 12px;
+}
+.con-body {
+  padding: 16px;
+  gap: 16px;
+}
+.con-name {
+  font-size: 15px;
+}
+.rail {
+  min-height: 36px;
+  border-radius: 8px;
+}
+.screens-grid {
+  padding: 16px;
+}
+.trow.guest-row.is-selected {
+  background: var(--raised);
+}
+@media (max-width: 1100px) {
+  .con.is-compact {
+    position: static;
+  }
+}
+
+/* Terminal key row: only on touch screens, whose keyboards lack Esc, Tab, Ctrl and arrows. */
+.con-keys {
+  display: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+@media (pointer: coarse) {
+  .con-keys {
+    display: flex;
+  }
+  .con-keys .btn-ghost {
+    min-width: 40px;
+    justify-content: center;
+    font-family: var(--font-mono);
+  }
+}
+
+/* The hub closes idle consoles: a minute's warning. */
+.con-idle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.con-idle .ic {
+  color: var(--warning);
+}
+
+/* "Wider": the side panel takes the full width; the guest list hides. */
+.guests-split.has-console:has(> .con.is-wide) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.guests-split.has-console:has(> .con.is-wide) > .guests-card {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .con-wide {
+    display: none;
+  }
+}

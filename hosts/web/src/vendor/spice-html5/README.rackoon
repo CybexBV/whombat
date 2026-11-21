@@ -1,0 +1,34 @@
+spice-html5, vendored for Rackoon's SPICE console
+==================================================
+
+Upstream:  https://gitlab.freedesktop.org/spice/spice-html5
+Commit:    b372aab6e5ab3ce056f486d3bdcd3845f9e34aad (2026-09-21, "Remove the ES module polyfill")
+License:   LGPL-3.0-or-later (COPYING.LESSER, with the GPL text in COPYING);
+           thirdparty/ keeps its own (BSD/MIT style) notices.
+
+The files are the upstream src/ directory unchanged, except for the changes
+marked "RACKOON PATCH" and one added file:
+
+1. spiceconn.js: `new WebSocket(uri, 'binary')` became `createSocket(uri, 'binary')`
+   (rackoon-socket.js). Rackoon registers a factory for the session URL so each
+   SPICE channel (main, display, inputs, cursor, ...) becomes one channel of the
+   multiplexed console WebSocket (CONTRACT.md 4). Unknown URLs still get a real
+   WebSocket.
+2. display.js: the primary canvas is no longer focused automatically and the
+   host clipboard is not offered on first render. Keys are captured only after
+   the user clicks the screen (REMOTE-CONSOLE.md 10).
+3. main.js: clipboard sharing with the guest agent is off unless
+   `clipboard_sharing === true` on the main connection (Rackoon never sets it):
+   the browser clipboard is never read without a user gesture and guest-to-host
+   clipboard is opt-in (REMOTE-CONSOLE.md 6.7).
+4. display.js (bug fix, worth sending upstream): when the guest resets or
+   switches video modes, SURFACE_CREATE for the same surface id ran before the
+   queued SURFACE_DESTROY, which was then skipped; the stale canvas stayed on
+   top of the new one (frozen or black screen after a reboot). A surface that
+   is being replaced is now removed at once.
+5. rackoon-socket.js (added): the socket factory registry.
+6. main.d.ts, rackoon-socket.d.ts (added): TypeScript declarations for the parts
+   Rackoon calls.
+
+To update: copy upstream src/ over this directory, re-apply 1-4 (grep for
+RACKOON PATCH in the old copy) and test a SPICE console end to end.

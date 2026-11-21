@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RuntimePushRequest.json",
+  "title": "RuntimePushRequest",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "message",
+        "mention",
+        "approval",
+        "run",
+        "update",
+        "backup",
+        "security",
+        "generic"
+      ]
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 43,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "handles": {
+      "minItems": 1,
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 22,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      }
+    },
+    "collapseKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "ttlS": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+        },
+        "body": {
+          "type": "string",
+          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,160}$"
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "clear": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "ref",
+    "handles",
+    "ttlS"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskServersAnswer.json",
+  "title": "DeskServersAnswer",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "servers": {
+      "maxItems": 24,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+          },
+          "mark": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "bad",
+              "off"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+          },
+          "cpu": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -100,
+                "maximum": 1000
+              },
+              "tone": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warn",
+                  "bad"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "tone"
+            ]
+          },
+          "memory": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -100,
+                "maximum": 1000
+              },
+              "tone": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warn",
+                  "bad"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "tone"
+            ]
+          },
+          "temp": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -100,
+                "maximum": 1000
+              },
+              "tone": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warn",
+                  "bad"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "tone"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "disk": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -100,
+                "maximum": 1000
+              },
+              "tone": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "warn",
+                  "bad"
+                ]
+              }
+            },
+            "required": [
+              "value",
+              "tone"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "mark",
+          "state",
+          "note"
+        ]
+      }
+    },
+    "more": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    }
+  },
+  "required": [
+    "v",
+    "servers",
+    "more"
+  ]
+}

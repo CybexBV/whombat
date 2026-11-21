@@ -1,0 +1,15 @@
+{
+  "SPHardwareDataType": [
+    {
+      "_name": "hardware_overview",
+      "boot_rom_version": "20457.41.3",
+      "chip_type": "Apple M2 Ultra",
+      "machine_model": "Mac14,14",
+      "machine_name": "Mac Studio",
+      "model_number": "MQH63D/A",
+      "number_processors": "proc 24:0:16:8",
+      "os_loader_version": "20457.41.3",
+      "physical_memory": "64 GB"
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+/*
+ * A tracker's feature request card (docs/app/decisions/report-trackers.md): the automation plan card's frame
+ * and parts — the shared card with a line2 border, a mono label with its dot, the title, the fold on sf2, the buttons —
+ * with the value chip on the right of the label, the drafts as quotes and the two forms in place of the buttons. No
+ * mock draws it. Tokens only.
+ */
+
+/* `[data-card]` lifts these above the shared frame (Card.module.css loads after this file). */
+.card[data-card] {
+  padding: 15px 18px 14px;
+  border-color: var(--line2);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* The label with its dot, like the plan card's status: waiting in warn, decided in the outcome's tone. */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--type-label);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.mut {
+  color: var(--mut);
+}
+
+/* “7 of 10”: the run line's chip, as a pill; it hangs over the label's line so the title sits where the plan card's does. */
+.value {
+  flex: none;
+  margin: -4px 0;
+  padding: 2px 9px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  font: var(--type-mono-badge);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.title.title {
+  margin: 6px 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.from {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--mut);
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.why {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--mut);
+  overflow-wrap: anywhere;
+}
+
+/* “What the customer reads”: the plan card's fold, opened by a real button. */
+.fold {
+  margin-top: 12px;
+  padding: 10px 13px;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+}
+
+.foldTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.foldTitle:focus-visible {
+  border-radius: var(--radius-tag);
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.chevron {
+  color: var(--mut);
+  transform: rotate(-90deg);
+  transition: transform var(--duration-toggle);
+}
+
+.foldTitle[aria-expanded="true"] .chevron {
+  transform: none;
+}
+
+.reads {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.reads[hidden] {
+  display: none;
+}
+
+.read {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.readLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mut);
+}
+
+/* Exactly what the customer gets, signature included: plain text with its line breaks. */
+.quote {
+  margin: 0;
+  padding: 1px 0 1px 12px;
+  border-left: 3px solid var(--line2);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Decline's reason and Ask's question, in place of the buttons. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.form .actions {
+  margin-top: 4px;
+}
+
+.formLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 76px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  color: var(--ink);
+  font: 400 14.5px / 1.45 var(--font-sans);
+  resize: vertical;
+}
+
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.formHint {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mut);
+}
+
+/* How it was decided, in place of the buttons (the card opened from its line). */
+.outcome {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.outcomeLead {
+  font-weight: 600;
+}
+
+.outcomeDetail {
+  color: var(--ink2);
+}
+
+.problem {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--bad);
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--mut);
+}

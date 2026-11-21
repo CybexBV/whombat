@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RelayDownstreamMessage.json",
+  "title": "RelayDownstreamMessage",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "welcome"
+        },
+        "v": {
+          "type": "number",
+          "const": 1
+        },
+        "conn": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "heartbeatMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 120000
+        },
+        "maxMessage": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 16777216
+        },
+        "lease": {
+          "type": "object",
+          "properties": {
+            "renewWithinS": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            }
+          },
+          "required": [
+            "renewWithinS"
+          ]
+        }
+      },
+      "required": [
+        "t",
+        "v",
+        "conn",
+        "heartbeatMs",
+        "maxMessage"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "incoming"
+        },
+        "session": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "interactive",
+            "bulk",
+            "web",
+            "acme"
+          ]
+        },
+        "src": {
+          "type": "string",
+          "maxLength": 39,
+          "pattern": "^(((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,7})$"
+        }
+      },
+      "required": [
+        "t",
+        "session",
+        "class"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "drain"
+        },
+        "retryAfterMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000
+        }
+      },
+      "required": [
+        "t",
+        "retryAfterMs"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "ready"
+        }
+      },
+      "required": [
+        "t"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "renewed"
+        },
+        "lease": {
+          "type": "object",
+          "properties": {
+            "renewWithinS": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            }
+          },
+          "required": [
+            "renewWithinS"
+          ]
+        }
+      },
+      "required": [
+        "t",
+        "lease"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "string",
+          "const": "renew_refused"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "malformed",
+            "bad_header",
+            "unknown_kid",
+            "bad_signature",
+            "bad_claims",
+            "wrong_audience",
+            "wrong_issuer",
+            "wrong_role",
+            "wrong_worker",
+            "bad_lifetime",
+            "not_yet_valid",
+            "expired",
+            "replayed",
+            "replay_cache_full",
+            "appliance_mismatch",
+            "stale",
+            "rate"
+          ]
+        },
+        "lease": {
+          "type": "object",
+          "properties": {
+            "renewWithinS": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            }
+          },
+          "required": [
+            "renewWithinS"
+          ]
+        }
+      },
+      "required": [
+        "t",
+        "reason",
+        "lease"
+      ]
+    }
+  ]
+}

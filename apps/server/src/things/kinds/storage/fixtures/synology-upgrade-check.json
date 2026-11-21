@@ -1,0 +1,13 @@
+{
+  "data": {
+    "update": {
+      "available": true,
+      "reboot": "now",
+      "restart": "some",
+      "type": "nano",
+      "version": "DSM 7.3-81180"
+    },
+    "updateType": "major"
+  },
+  "success": true
+}

@@ -1,0 +1,52 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--ov);
+}
+
+.content {
+  max-height: 100%;
+  overflow-y: auto;
+  border-radius: var(--radius-modal);
+  background: var(--bg);
+  box-shadow: var(--shadow-modal);
+  color: var(--ink);
+}
+
+.content:focus {
+  outline: none;
+}
+
+.md {
+  width: min(100%, var(--size-modal));
+}
+
+.lg {
+  width: min(100%, var(--size-modal-wide));
+}
+
+/* A server's console. */
+.console {
+  width: min(100%, var(--size-modal-console));
+}
+
+.padded {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

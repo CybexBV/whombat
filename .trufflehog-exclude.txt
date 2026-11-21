@@ -1,0 +1,22 @@
+^contracts/vectors/
+^contracts/go/testdata/vectors/
+^contracts/conformance/src/[a-z-]+\.ts$
+^apps/mobile/src/data/guides\.test\.ts$
+^apps/server/src/managed/direct/__fixtures__/tailscale-cert-pair\.pem$
+^apps/server/src/managed/own-address/__fixtures__/own-address-pair\.pem$
+^apps/server/src/test/self-signed\.ts$
+^apps/web/src/features/vault/ssh\.test\.tsx$
+^packages/agent-runtime/src/hermes/hermes\.test\.ts$
+^packages/client/src/managed/billing\.test\.ts$
+^packages/control-contracts/src/remote-help\.test\.ts$
+^packages/core/src/contracts/vault-ssh\.test\.ts$
+^packages/core/src/skills/skills\.test\.ts$
+^packages/core/src/text/activity-redaction\.test\.ts$
+^packages/core/src/vault/ssh\.test\.ts$
+^packages/protocol/src/relay\.test\.ts$
+
+# >>> appliance/ and hosts/: written by scripts/ci/scanner_allowlists.py from the folders’ own lists
+^appliance/harness/vendor/whombat-contracts/4\.11\.0/whombat-contracts-(go|schema)-4\.11\.0\.tar\.gz$
+^hosts/internal/agent/broker/pve_allow_test\.go$
+^hosts/internal/agent/broker/unraid_manage_test\.go$
+# <<< appliance/ and hosts/

@@ -1,0 +1,58 @@
+{
+  "thumbnailGeneration": {
+    "jobCounts": {
+      "active": 2,
+      "completed": 0,
+      "failed": 0,
+      "delayed": 0,
+      "waiting": 118,
+      "paused": 0
+    },
+    "queueStatus": {
+      "isActive": true,
+      "isPaused": false
+    }
+  },
+  "metadataExtraction": {
+    "jobCounts": {
+      "active": 0,
+      "completed": 0,
+      "failed": 3,
+      "delayed": 0,
+      "waiting": 0,
+      "paused": 0
+    },
+    "queueStatus": {
+      "isActive": false,
+      "isPaused": false
+    }
+  },
+  "smartSearch": {
+    "jobCounts": {
+      "active": 0,
+      "completed": 0,
+      "failed": 0,
+      "delayed": 0,
+      "waiting": 0,
+      "paused": 412
+    },
+    "queueStatus": {
+      "isActive": false,
+      "isPaused": true
+    }
+  },
+  "faceDetection": {
+    "jobCounts": {
+      "active": 0,
+      "completed": 0,
+      "failed": 0,
+      "delayed": 0,
+      "waiting": 0,
+      "paused": 0
+    },
+    "queueStatus": {
+      "isActive": false,
+      "isPaused": false
+    }
+  }
+}

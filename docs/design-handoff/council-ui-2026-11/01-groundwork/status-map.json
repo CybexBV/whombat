@@ -1,0 +1,278 @@
+[
+  {
+    "wordFamily": "Not working",
+    "scale": "Thing health",
+    "note": "notWorking from status; red ring with inner dot",
+    "source": "packages/client/src/home/statusLevel.ts"
+  },
+  {
+    "wordFamily": "Offline",
+    "scale": "Thing health",
+    "note": "Shipped thing-specific wording for notWorking; do not turn it into a quiet grey state.",
+    "source": "packages/client/src/home/statusLevel.ts"
+  },
+  {
+    "wordFamily": "Needs a look",
+    "scale": "Thing health",
+    "note": "needsLook from status; amber dot. It never means “the person must answer”.",
+    "source": "packages/client/src/home/statusLevel.ts"
+  },
+  {
+    "wordFamily": "Learning",
+    "scale": "Thing health",
+    "note": "learning; hollow muted ring (web 8px; native 10pt).",
+    "source": "packages/client/src/home/statusLevel.ts"
+  },
+  {
+    "wordFamily": "Connected",
+    "scale": "Thing health",
+    "note": "connected; no standalone mark. A level pill retains its shipped small green dot.",
+    "source": "packages/client/src/home/statusLevel.ts"
+  },
+  {
+    "wordFamily": "Running (healthy server)",
+    "scale": "Thing health",
+    "note": "Shipped connected alias on server cards, from fleet status.",
+    "source": "packages/client/src/hosts/model.ts"
+  },
+  {
+    "wordFamily": "Disk array failed · Running warm · Running hot · {server statusNote}",
+    "scale": "Thing health / reason",
+    "note": "Use the status flag for the level; this is the thing’s supplied reason, not a fifth level.",
+    "source": "packages/client/src/hosts/model.ts"
+  },
+  {
+    "wordFamily": "Waiting for you",
+    "scale": "Thread stage, when waiting is true",
+    "note": "Wins over working, handed-over and settled flags. Elsewhere (automation/step/sign-in) it is a local workflow detail.",
+    "source": "packages/client/src/chat/rooms.ts"
+  },
+  {
+    "wordFamily": "{assistant} is working",
+    "scale": "Thread stage",
+    "note": "A flag-driven label in this review’s common scale. Shipped work rows use the more specific phrases below.",
+    "source": "packages/client/src/working.ts"
+  },
+  {
+    "wordFamily": "is thinking · is working · {progress}% · is answering T3 Code",
+    "scale": "Thread stage / working detail",
+    "note": "Only live run/typing metadata supplies this; never infer work from the prose of a reply.",
+    "source": "packages/client/src/working.ts"
+  },
+  {
+    "wordFamily": "{assistant} is looking into it · {assistant} is on it · I’m on it.",
+    "scale": "Thread stage / working detail",
+    "note": "Research state looking/fixing supplies work. A historic sentence alone supplies no current state.",
+    "source": "packages/client/src/home/needsYouList.ts"
+  },
+  {
+    "wordFamily": "Handed over",
+    "scale": "Thread stage",
+    "note": "Active handoff metadata; lower precedence than waiting or assistant work. Current UI often names T3 Code instead of a generic badge.",
+    "source": "packages/client/src/handoff.ts"
+  },
+  {
+    "wordFamily": "Settled · Settled by itself … · Settled when …",
+    "scale": "Thread stage / settlement detail",
+    "note": "Only settled state. Keep Settle and its Undo. Inbox Settled is a group, not thing health.",
+    "source": "packages/client/src/chat/settle.ts"
+  },
+  {
+    "wordFamily": "New reply",
+    "scale": "Unread decoration",
+    "note": "Unread flag only. Can accompany a stage and never changes thing health.",
+    "source": "packages/client/src/chat/unread.ts"
+  },
+  {
+    "wordFamily": "Needs you · N things need you",
+    "scale": "NEITHER — Inbox group/count",
+    "note": "Reserved for the Inbox. The count measures only the person’s group, not heads-ups or assistant work.",
+    "source": "packages/client/src/home/needsYouList.ts"
+  },
+  {
+    "wordFamily": "{assistant}’s on it",
+    "scale": "NEITHER — Inbox group",
+    "note": "Who acts next, not a health level. Individual rows can derive an assistant-working stage.",
+    "source": "packages/client/src/home/needsYouList.ts"
+  },
+  {
+    "wordFamily": "Heads-ups · Show N heads-ups · Hide heads-ups",
+    "scale": "NEITHER — folded information",
+    "note": "Never count or colour a health mark from fyi. Starts folded in Inbox / ordinary notices panels.",
+    "source": "packages/client/src/home/needsYouList.ts"
+  },
+  {
+    "wordFamily": "Later · Ignored · Snoozed · Reminded later",
+    "scale": "NEITHER — quieting detail",
+    "note": "A quieting state; no health escalation and no thread failed flag.",
+    "source": "packages/client/src/home/quiet.ts"
+  },
+  {
+    "wordFamily": "Worth a look",
+    "scale": "NEITHER — container heading",
+    "note": "Not a synonym for Needs a look. Can contain problem, person-only and information rows.",
+    "source": "apps/web/src/features/things/dashboard/NoticeStrip.tsx"
+  },
+  {
+    "wordFamily": "Problem: · Needs a look: · Only you · SOON",
+    "scale": "NEITHER — notice row/group",
+    "note": "Nature and grouping inside a panel. SOON currently exposes heads-ups in the service strip (UIR-70). The shared round’s folded rule needs a keeps-decision version beside any variant that reopens UIR-70.",
+    "source": "apps/web/src/features/things/dashboard/slots.ts"
+  },
+  {
+    "wordFamily": "NEEDS A PERSON · {assistant} needs your OK · {ASSISTANT} IS ASKING",
+    "scale": "NEITHER — approval detail",
+    "note": "A pending card supplies waiting only through its pending/viewer flags. The code-approval eyebrow remains contextual.",
+    "source": "apps/web/src/features/cards/ApprovalCard.tsx"
+  },
+  {
+    "wordFamily": "APPROVED · WAITING FOR CHECKS · READY TO DEPLOY · DEPLOYED · DECLINED",
+    "scale": "NEITHER — code approval outcome",
+    "note": "Card-level conditions/outcomes; never manufacture thread health. Red for Declined is a loudness mismatch to review, not a new thread flag.",
+    "source": "apps/web/src/features/approvals/ApprovalModal.tsx"
+  },
+  {
+    "wordFamily": "Scheduled for tonight, {time} · Running · Done · It didn’t work · You said no",
+    "scale": "NEITHER — everyday approval outcome",
+    "note": "Execution/decision state from approvalAnswer. A scheduled yes is not still waiting for the person.",
+    "source": "packages/client/src/cardDisplay.ts"
+  },
+  {
+    "wordFamily": "Approved by {person} · Declined by {person}",
+    "scale": "NEITHER — folded card outcome",
+    "note": "History, not current thread stage.",
+    "source": "packages/client/src/cardDisplay.ts"
+  },
+  {
+    "wordFamily": "Asked {assistant} · Asked a question",
+    "scale": "NEITHER — delegation question",
+    "note": "May be addressed to the assistant, not the person. Read question recipient/flags before choosing a stage.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Asked {assistant} to undo this · Asked {assistant} to try again.",
+    "scale": "NEITHER — request receipt",
+    "note": "Confirms a request, not completion. Do not read it as success.",
+    "source": "packages/client/src/runs.ts"
+  },
+  {
+    "wordFamily": "Asked {time} · Asked by {person} in {place}",
+    "scale": "NEITHER — time/attribution",
+    "note": "Not a state.",
+    "source": "apps/mobile/src/data/addServer.ts"
+  },
+  {
+    "wordFamily": "Not handed over yet · Not handed over",
+    "scale": "NEITHER — delegation preparation",
+    "note": "No active handoff yet.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Waiting its turn · Working · After N · Waits for N, which didn’t finish",
+    "scale": "NEITHER — delegation detail",
+    "note": "When a handoff is active its thread stage is Handed over; these are task details.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Needs your OK in T3 Code",
+    "scale": "Thread stage / waiting detail",
+    "note": "Only an outstanding person-directed approval supplies Waiting for you.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Waiting for checks · Checks failing",
+    "scale": "NEITHER — check detail",
+    "note": "Checks are running/failing inside the handoff. Do not invent a failed thread flag or a person decision.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Waiting to merge · Merging · Merged · Not merged",
+    "scale": "NEITHER — merge detail",
+    "note": "Follow the recorded merge state, not a task’s “done” wording.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "Done · Stopped · Ran into a problem · Ran out of time · N didn’t finish",
+    "scale": "NEITHER — delegation outcome",
+    "note": "An outcome can explain an unresolved thread; it is never a fifth stage named failed.",
+    "source": "packages/client/src/delegation.ts"
+  },
+  {
+    "wordFamily": "On · Off · Not on yet · Runs on its own",
+    "scale": "NEITHER — automation enablement",
+    "note": "Intentional off is calm and must stay legible; not a broken thing.",
+    "source": "packages/client/src/automationView.ts"
+  },
+  {
+    "wordFamily": "Queued · Running · Waiting · Paused · Done · Failed · Stopped · Skipped · Needs you",
+    "scale": "NEITHER — automation run detail",
+    "note": "The Needs you run label outside Inbox is flagged; legacy detail is retained here as evidence. A run’s Failed does not add a thread flag.",
+    "source": "packages/client/src/automationView.ts"
+  },
+  {
+    "wordFamily": "not yet · running · waiting · done · failed · skipped · stopped · blocked · uncertain",
+    "scale": "NEITHER — automation step detail",
+    "note": "uncertain is not “nothing happened”; never suggest a blind repeat of a non-idempotent action.",
+    "source": "apps/mobile/src/data/automations.ts"
+  },
+  {
+    "wordFamily": "Last run … · Next run … · No runs yet · Run #N is waiting for a yes.",
+    "scale": "NEITHER — automation evidence",
+    "note": "A timestamp and a link help find the run; do not infer Overview freshness from it.",
+    "source": "packages/client/src/automationView.ts"
+  },
+  {
+    "wordFamily": "RUN · LIVE · RUN · DONE · {run attention}",
+    "scale": "NEITHER — run card detail",
+    "note": "A live/attention flag may contribute working/waiting; label text alone cannot.",
+    "source": "apps/web/src/features/cards/RunCard.tsx"
+  },
+  {
+    "wordFamily": "Now · To do · Done · Waiting for you (plan step)",
+    "scale": "NEITHER — step detail",
+    "note": "A plan step’s state does not replace the parent thread flags.",
+    "source": "packages/client/src/home/workingOn.ts"
+  },
+  {
+    "wordFamily": "Turn failed · Tried again at … · Deploy … failed · Deployed …",
+    "scale": "NEITHER — recorded action outcome",
+    "note": "Keep outcome visible with a useful way forward; no failed thread flag.",
+    "source": "packages/client/src/cardDisplay.ts"
+  },
+  {
+    "wordFamily": "Assessing · Assessment failed · Assessment blocked · Assessment paused · Resolved",
+    "scale": "NEITHER — report detail",
+    "note": "Report/assessment state, not thing health or a person decision by wording alone.",
+    "source": "packages/client/src/cardDisplay.ts"
+  },
+  {
+    "wordFamily": "No longer needed. · Here’s what I’ll do … · Here’s what I did …",
+    "scale": "NEITHER — research/plan outcome",
+    "note": "Use research/plan state and actual steps. Historic done words do not settle a thread.",
+    "source": "packages/client/src/home/lookPlan.ts"
+  },
+  {
+    "wordFamily": "Quiet · Plenty free · Normal · {figure verdict}",
+    "scale": "NEITHER — metric verdict",
+    "note": "A resource observation, not a second health scale and not an assurance of fresh data.",
+    "source": "packages/client/src/hosts/dashboard.ts"
+  },
+  {
+    "wordFamily": "Checked {time} · Used today · up {duration} · 24 h avg",
+    "scale": "NEITHER — time/evidence",
+    "note": "Only Checked is about a check; use/uptime/range never prove the sample time.",
+    "source": "packages/client/src/home/thingPage.ts"
+  },
+  {
+    "wordFamily": "Not signed in · Sign in again · Connecting · Waiting for you to finish signing in…",
+    "scale": "NEITHER — sign-in workflow",
+    "note": "Derive the thing level from status separately. A sign-in step can wait on the person.",
+    "source": "packages/client/src/signins/copy.ts"
+  },
+  {
+    "wordFamily": "Loading… · Checking… · Couldn’t read … · Not checked yet",
+    "scale": "NEITHER — read state",
+    "note": "A lack of evidence must stay distinct from Connected and from “not working”.",
+    "source": "packages/client/src/home/statusLevel.ts"
+  }
+]

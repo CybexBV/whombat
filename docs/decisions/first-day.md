@@ -1,0 +1,77 @@
+# The first day (FDY)
+
+The “effortless” work of 2026-10-30 for John (stream first-day, branch `ef-first-day`): a new person gets from claiming
+the box to a useful assistant without any developer setup. The review's flows.md Journey 1 (1.1, 1.2, 1.4, 1.5), 7.1,
+Direction rules 1, 4 and 5, Top 10 #6, and visual.md's empty-world screens (`e0*`). Built on the claim's steps
+(`ManagedRoot`, the phone's `ManagedApp`), the AI sign-ins of Settings → AI (`features/ai`, `@whombat/client/signins`),
+the guides (assistant-guides.md), the network scan's own runs (desk-found.md DF-02), connect-in-chat's connect card and
+Add as a server (CIC-01…CIC-07, CIC-23), and the one Needs you list (needs-you-list.md).
+
+Code: `packages/client/src/managed/claim-steps.ts`, `backup-setup.ts` (`PROTECT_OTHER_KINDS`, `protectFoundPlace`),
+`packages/client/src/signins/steps.ts`; web `features/first-day/ConnectAiScreen.tsx` (route `/connect-ai`),
+`managed/ProtectPlaces.tsx`, `features/home/EmptyConnections.tsx`; phone `managed/ConnectAi.tsx`, `AiSignIn.tsx`,
+`openSignInPage.ts`, `ProtectPlaces.tsx`; server `guides/welcome.ts`, `connections/found-scans.ts` (`foundNowFor`,
+`claimFoundTold`, `tellFound`), `home/box-backup.ts`, `managed/box-backup.ts`, `managed/backup-tool.ts`; core
+`contracts/mcp-backup.ts`. Tests: `guides/welcome.test.ts`, `home/box-backup.test.ts`, `claim-steps.test.ts`,
+`signins/steps.test.ts`, `ConnectAiScreen.test.tsx`; Postgres: `guides/guides.int.test.ts` (the welcome after a scan,
+and the scan's message after a welcome without finds) and `home/home.int.test.ts` (the skipped-backup item and the
+assistant setting the place). No migration.
+
+## Connect your AI, a step of the claim (1.1, 7.1)
+
+| # | Decision | Why |
+|---|---|---|
+| FDY-01 | **The claim has three steps**: Claim · Protect your Whombat · Connect your AI, each “CLAIM · STEP n OF 3” (`claimStepKicker`). Connect your AI asks only while no provider is ready (signed in, nothing left to install, `connectAiStep`); a Whombat with one ready, or whose sign-ins can't be read, opens at once. **Later** opens the Whombat, where the line above Chat says the assistant can't work yet, as before. Once signed in: “Signed in to ChatGPT. {assistant} is ready.” and Continue. | 1.1: the one thing everything depends on was a thin amber line, not a step. |
+| FDY-02 | **On the web it is a page of the Whombat's own app** (`/connect-ai`, outside the shell like onboarding), with Settings → AI's own rows: `SignInRow` (ChatGPT's device code, Claude Code's console) and `ClientRow` (Claude Code installs when picked, as onboarding). The hosted claim's Protect step goes there instead of `/`. | The sign-in rows need the box's client, which only the app has; one flow everywhere. |
+| FDY-03 | **ChatGPT first, Claude Code second** (`CONNECT_AI_PROVIDERS`): ChatGPT needs nothing installed; each is a tile the person picks before its sign-in shows. | The one that always works comes first (chatgpt-no-client.md AP-5616). |
+| FDY-04 | **The phone signs in too** (replaces provider-subscriptions.md SUB-11 for the claim): the same two flows over the session (`AiSignInCard`) — ChatGPT's device code (copy the code, open OpenAI's page) and Claude Code's own sign-in (open claude.ai, approve, paste the code it shows back) — with the providers' pages in the in-app browser (`expo-web-browser`: Chrome Custom Tabs, Safari's view), the system browser in an app built before it. What the step shows is pure and shared (`deviceStep`, `consoleStep`). | 7.1: someone with only a phone couldn't make the assistant work. Neither flow needs a redirect into the app: the code goes through the clipboard, so both work on a phone. |
+| FDY-05 | **The phone's Settings → AI keeps its “on the web” line for now**: `AiSignInCard` is ready for it, placed by the lead with the settings stream's Settings (AP-5618 stays until then). | Settings belongs to the settings stream this wave. |
+
+## A welcome built from what the box found (1.2)
+
+| # | Decision | Why |
+|---|---|---|
+| FDY-10 | **The welcome names what the scan found** (`guides/welcome.ts`): “Hi Mara, I’m Dusty. I found Home Assistant, a UniFi gateway and a Debian server on your network. Want me to look after them?” Names as people say them (`spokenFind`: a UniFi gateway, a Synology NAS, a Proxmox server, a Debian server; a product's own name otherwise), every kind up to three (“two Proxmox servers”), else “7 things, like A, B and C”. Replaces assistant-guides.md AG-04's Email · Calendar · Files · Morning briefing card. | 1.2: the first card sent everyone into Google's developer setup; the scan already knows what is there. |
+| FDY-11 | **One button per find**, links to the places the assistant's connect card opens: the connect form filled in (the scan's address, Look only or Manage by risk, CIC-04), or Add a server for a computer, Proxmox VE, its Backup Server and Unraid (“Connect the UniFi gateway”, “Add the Debian server”; the address added when two read the same). Up to four, else three and “See all {n}” (Found on your network). The card is `done` at once. | A guide card locks at its first answer: links keep every find one tap away. |
+| FDY-12 | **Mail second**, its own card: “Other email (IMAP)” first (the IMAP connect form), “Gmail or Google Workspace” (the Google setup guide, AG-05), Maybe later. Calendar, files and the briefing leave the welcome: the suggestions (AG-11) and the person's own words reach them. The phone opens IMAP and See all on its own screens. | Google still needs the person's own Google Cloud app: reachable, not first. |
+| FDY-13 | **Nothing found yet**: a short welcome — “I can look after your servers, your network and your home, and help with your email. I’m looking around your network now and I’ll tell you what I find.” (“Tell me what you’d like me to look after.” when no first scan is coming) — then mail; the finds come later as **one** message with the same buttons (“I looked around your network and found …”), replacing desk-found.md DF-05's sentence with a Connections link. | The first scan takes about a minute after the claim. |
+| FDY-14 | **Named once**: the welcome after a finished scan and the scan's message share one claim of `connection_found_state.told_at`, in their transaction; the scan's message waits for the person's welcome. The welcome starts the burrow's automatic scan at once (`FoundScans.kick`), not within the minute. `start_guide('welcome')` builds the same welcome. | Two messages about the same finds would be noise. |
+
+## Backups of this Whombat without expert knowledge (1.4)
+
+| # | Decision | Why |
+|---|---|---|
+| FDY-20 | Extended by backup-options.md BKO-30 (“Let {assistant} set it up” is the person’s yes). **Protect your Whombat offers what is there first** (`ProtectPlaces`, web and phone): a NAS the scan found (Unraid, TrueNAS, Synology, QNAP, in the scan's order; not hidden or added as a server; asked again every 3 s while the first scan looks) with “Let {assistant} set it up”, then a USB disk named WHOMBAT-BACKUP in one tap, then a bucket, SFTP and a restic REST server folded under **Other places** (the form as it was). Skip for now stays, with “{assistant} suggests a place once it has looked around your network.” | 1.4: the step asked for S3 endpoints and `authorized_keys` first. |
+| FDY-21 | Extended by backup-options.md BKO-30 (held back while the claim’s “Let {assistant} set it up” waits) and BKO-32 (“Back up this Whombat to nas-01?”, no “every night”). **Skipped, it comes back as ONE Needs you item with the assistant's proposal** (kind `backup`, ref `backup:this-whombat`; `home/box-backup.ts`): “Back up this Whombat to nas-01 every night?”, the place it can reach — a server added that holds storage (Unraid, or named nas, backup, storage, files, data), then a NAS the scan found, then the server with most free storage, never the one this Whombat runs on; else a USB disk. Yes, do it · See other places (This Whombat's backups) · Ignore. Only while the backup service says nothing is set (an unknown status asks nothing); in the one list only, never in an older app's `needsYou`. | Direction rule 4: the box gets a destination from what is connected, proposed once. |
+| FDY-22 | **Yes, do it says the person's own words to the assistant** (`NeedsYouAction` kind `ask` with `text`: “Yes, back up this Whombat to nas-01 every night.”), as their message in a new thread, through both apps' Ask. | The person's yes is the request; the words are theirs, so they belong in the chat. |
+| FDY-23 | **`whombat_backup`**, the assistant's own tool in a turn for the person: the state, where backups go and the box's SSH key; sets a destination (`sftp`: host, user, folder, port; `disk`) only while none is set — moving backups stays the person's (Settings → This Whombat). It adds protection and moves nothing, so the person's yes needs no second ask. The signed `backup.destination_set` event carries their account and the assistant (`agentId`). Its description says how: make a user and folder on the server (`server_command`), add the key, then set. | There was no tool for it (flows.md §4); one yes, the assistant does the rest. |
+| FDY-24 | **The Whombat's side only, no manager change**: the destination is set through the Whombat server's backup socket, as Settings does (`setBackupDestination`, shared with `backup.configureDestination`). The managed runtime hands the backup service and the manager's last status to the rest of the server at its start (`useBoxBackup`); without a report the service is asked itself, kept a minute, and again right after a set. | The source and the tool need the box's backup state outside a session. |
+| FDY-25 | **What the appliance would need** for “a disk is plugged in” instead of “plug one in”: the backup service reporting an attached disk labelled WHOMBAT-BACKUP before it is set up — `BackupServiceStatus.disk: { present, sizeBytes }` in the manager's facts push (control-contracts local), or `HostDisks.backupCandidate` in `host.metrics`. Not built: the manager contract stays as it is. | Nothing reports the labelled disk until it is the destination. |
+
+## The empty first screens (1.5; visual.md `e0*`)
+
+| # | Decision | Why |
+|---|---|---|
+| FDY-30 | **No empty sections, one clear next step**: Connections with nothing connected, no servers and nothing pinned is one card, “Nothing connected yet”, with Add a connection (its page opens with Found on your network at its top); the corner button hides meanwhile. The sidebar leaves out SERVICES while nothing is connected. A first day's Chat holds the welcome, Needs you the backup proposal, and Automations already has one step (its composer). | The review's sparse world showed empty headings and errors. |
+| FDY-31 | **The first day in fixture mode**: `VITE_FIXTURE_FIRST_DAY=found\|looking` — the welcome in Chat as the Whombat posts it, the backup proposal in Needs you, nothing connected, done or automated yet (`firstDayFixtures.ts`). | The `e0*` shots were taken in a full world. |
+| FDY-32 | **One count from the claim to the agent on the box's page** (2026-11-20; the Easy-path test). The box's setup counted “STEP 4 OF 5” (5 = Connect your AI), then the app opened its own onboarding at “STEP 1 OF 3”: a claimed box has no Whombat (burrow) yet, so `/connect-ai` hands over to Name your Whombat. The setup is now seven steps everywhere on the box's page (`boxSetupSteps`): Claim your Whombat · Who are you? · Make its passkey (or Reach it from anywhere) · Protect your Whombat · Name your Whombat · Set up your AI · Meet your agent. The box setup's aside lists all seven; onboarding on the box's page (`managed.page.kind === 'box'`) shows the claim's four as done and counts on, “STEP 5 OF 7”. Onboarding elsewhere keeps its own three. `/connect-ai` after the setup, on a box that already has a Whombat, says Set up your AI's place (“STEP 6 OF 7”). | The count started over; a stranger thought the setup had restarted. |
+| FDY-33 | **Set up your AI doesn't pass silently** (2026-11-20; the Easy-path test). Continue waited for nothing: a person could go on without choosing, the step was ticked, and the line above Chat then said only “You haven’t signed in to ChatGPT yet”, as if the Whombat had chosen ChatGPT. Now Continue waits until an AI is signed in (`clientUsable`; a server that can't list them is as before); **Skip for now** beside it goes on, with “If you skip this, your agent can’t answer until you sign in. You can do it later in Settings → AI.” A skipped step isn't ticked. The line above Chat names every AI the person can choose (“Claude Code or ChatGPT”), installed or not. | Make the choice clear, or skip honestly; no default the person didn't pick. |
+
+## Not now
+
+- A Whombat-provided, Google-verified OAuth client (1.3): a policy and verification decision and work in control.
+- The one-QR claim that also enrols the phone (1.6).
+- The phone's Connections page with nothing connected (its own layout; not in the review's `e0*`), and placing
+  `AiSignInCard` in the phone's Settings → AI (FDY-05).
+- Remembering which found NAS the person picked in the claim step: the proposal's rule picks the same one (servers are
+  never added yet at the claim).
+
+## Rows for DECISIONS.md
+
+| # | Decision |
+|---|---|
+| FDY-01…FDY-05 | **Connect your AI is the claim's last step** (CLAIM · STEP 3 OF 3), on the web and the phone: ChatGPT's device code or Claude Code's own sign-in, the providers' pages in the phone's in-app browser; Later opens the Whombat with the line that the assistant can't work yet. (`first-day.md`) |
+| FDY-10…FDY-14 | **The welcome names what the network scan found**, one button per find (connect it, or add it as a server), then mail with other email (IMAP) before Google; with nothing found yet a short welcome, and the finds come later as one message. (`first-day.md`) |
+| FDY-20…FDY-25 | **Backups without expert knowledge**: the claim offers a NAS the scan found and a USB disk before buckets and SFTP; skipped, Needs you holds one proposal (“Back up this Whombat to nas-01 every night?”) whose yes the assistant carries out with `whombat_backup`. (`first-day.md`) |
+| FDY-30…FDY-31 | **First screens have one step, no empty sections** (Connections' empty card, no empty SERVICES). (`first-day.md`) |
+| FDY-32…FDY-33 | **One setup count on the box's page** (claim's four steps, then name, AI, agent: STEP n OF 7), and **Set up your AI** waits for a sign-in or an honest Skip for now. (`first-day.md`) |

@@ -1,0 +1,92 @@
+/*
+ * Settings → Agent → Running (one-person.md AP-5690; not in the mocks) and Keys' ALWAYS ALLOWED COMMANDS (AP-622): the
+ * settings page's rows. A service is its state's dot and its name, how long it runs and its link in mono under it,
+ * Stop on the right as on Danger zone's row; the confirm's Stop in the bad tone.
+ */
+
+.intro {
+  max-width: 38em;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.rowLine {
+  color: var(--mut);
+  font-size: 13px;
+}
+
+.link {
+  align-self: flex-start;
+  color: var(--ink2);
+  font: var(--type-mono-meta);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  color: var(--ink);
+}
+
+/* An always-allowed command in mono (wrapped, never wider than the panel). */
+.command {
+  color: var(--ink);
+  font: 400 13px / 1.45 var(--font-mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Without a container engine (development without Podman): the reason, quiet. */
+.reason {
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Stop in the confirm: the destructive primary, the bad tone filled. */
+.dangerPrimary:not(:disabled),
+.dangerPrimary:not(:disabled):hover {
+  border-color: var(--bad);
+  background: var(--bad);
+  color: var(--on-solid);
+}

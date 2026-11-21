@@ -1,0 +1,30 @@
+[
+  {
+    "id": 2,
+    "name": "api",
+    "full_name": "whombat/api",
+    "default_branch": "main",
+    "updated_at": "2026-10-21T19:41:38Z",
+    "html_url": "https://git.example.com/whombat/api",
+    "has_actions": true,
+    "archived": false,
+    "empty": false,
+    "owner": {
+      "login": "whombat"
+    }
+  },
+  {
+    "id": 1,
+    "name": "site",
+    "full_name": "whombat/site",
+    "default_branch": "main",
+    "updated_at": "2026-10-21T19:41:38Z",
+    "html_url": "https://git.example.com/whombat/site",
+    "has_actions": true,
+    "archived": false,
+    "empty": false,
+    "owner": {
+      "login": "whombat"
+    }
+  }
+]

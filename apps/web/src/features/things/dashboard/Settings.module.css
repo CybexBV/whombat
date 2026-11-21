@@ -1,0 +1,453 @@
+/*
+ * A service's settings, its change sheet and a card's Ask (Whombat service-settings.md SST-01…SST-09; mock
+ * service-dash-v2 screens 1–3). Tokens only.
+ */
+
+/* A card's Ask (SST-08): a quiet small button in its head. */
+.ask {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink2);
+  font: 500 13.5px var(--font-sans);
+  cursor: pointer;
+}
+
+.ask:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.askOpen {
+  border-color: var(--ink);
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.ask:focus-visible,
+.popChip:focus-visible,
+.popElse:focus-visible,
+.putBack:focus-visible,
+.elsewhere:focus-visible,
+.leadLink:focus-visible,
+.instead:focus-visible,
+.choice:has(.radio:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.pop {
+  position: fixed;
+  z-index: var(--z-modal);
+  padding: 14px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+  box-shadow: var(--shadow-modal);
+}
+
+.popHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 14.5px var(--font-sans);
+}
+
+.popList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.popChip {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 14.5px / 1.4 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.popChip:hover {
+  border-color: var(--line2);
+  background: var(--sel);
+}
+
+.popElse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: none;
+  color: var(--mut);
+  font: 400 14.5px var(--font-sans);
+  text-align: left;
+  cursor: text;
+}
+
+.popElse svg {
+  color: var(--ink2);
+}
+
+.popElse:hover {
+  color: var(--ink2);
+}
+
+/* The settings tab: two equal columns (Dashboard), a line first, “Something else?” last. */
+.lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--ink2);
+  font: 400 15.5px / 1.45 var(--font-sans);
+}
+
+.leadLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.leadLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+}
+
+.footWords {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.footTitle {
+  margin: 0;
+  font: 600 15px / 1.4 var(--font-sans);
+}
+
+.footWords span {
+  color: var(--mut);
+  font: 400 13.5px / 1.45 var(--font-sans);
+}
+
+.footAsk.footAsk {
+  flex: none;
+  border-radius: var(--radius-small);
+  font-weight: 600;
+}
+
+/* A settings card */
+.hint {
+  margin: -4px 0 0;
+  padding: 0 20px 12px;
+  color: var(--mut);
+  font: 400 13px / 1.45 var(--font-sans);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+/* Changed lately, and it can still be put back. */
+.rowFresh {
+  background: var(--hi);
+}
+
+.words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font: 600 15px / 1.4 var(--font-sans);
+}
+
+.help {
+  color: var(--mut);
+  font: 400 13.5px / 1.45 var(--font-sans);
+}
+
+.was {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--ink2);
+  font: 400 13px / 1.4 var(--font-sans);
+}
+
+.wasIcon {
+  flex: none;
+  color: var(--mut);
+}
+
+.putBack {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: 600 13px var(--font-sans);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.putBack:hover {
+  text-decoration-color: currentColor;
+}
+
+.putBack[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.value {
+  flex: none;
+  font: 600 14.5px var(--font-sans);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.switch {
+  flex: none;
+}
+
+.switchOff.switchOff {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.change.change {
+  flex: none;
+  height: 28px;
+  border-radius: var(--radius-small);
+  font-size: 13.5px;
+}
+
+.change[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Changed in the service itself (SST-05): its name as a small tag, a link to its own settings. */
+.elsewhere {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-tag);
+  color: var(--mut);
+  font: 500 10.5px var(--font-mono);
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+a.elsewhere:hover {
+  border-color: var(--ink2);
+  color: var(--ink);
+}
+
+/* The narrow card: the value and its control go under the words. */
+@container card (max-width: 419px) {
+  .row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .words {
+    flex-basis: 100%;
+  }
+
+  .value {
+    margin-right: auto;
+  }
+}
+
+/* The change sheet (SST-09, mock screen 3). */
+.sheet.sheet {
+  gap: 0;
+  padding: 24px;
+  background: var(--sf);
+}
+
+.sheetTitle {
+  margin: 0;
+  font: 700 22px / 1.25 var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.sheetHelp {
+  margin: 6px 0 8px;
+  color: var(--ink2);
+  font: 400 15px / 1.45 var(--font-sans);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.choices > legend + .choice {
+  margin-top: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  cursor: pointer;
+}
+
+.choice:hover {
+  border-color: var(--line2);
+}
+
+.choicePicked,
+.choicePicked:hover {
+  border-color: var(--ink);
+  background: var(--sel);
+}
+
+/* The radio as the mock draws it: a ring, filled thick when picked. */
+.radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 2px solid var(--line2);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.radio:checked {
+  border: 5px solid var(--ink);
+}
+
+.radio:focus-visible {
+  outline: none;
+}
+
+.choiceWords {
+  min-width: 0;
+  font: 400 15px / 1.4 var(--font-sans);
+}
+
+.choiceWords b {
+  font-weight: 600;
+}
+
+.choiceNote {
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.now {
+  flex: none;
+  margin-left: auto;
+  color: var(--mut);
+  font: 500 10.5px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sheetHint {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 400 14px / 1.45 var(--font-sans);
+}
+
+.sheetHintIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.sheetFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.instead {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: 600 14.5px var(--font-sans);
+  cursor: pointer;
+}
+
+.instead:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.instead:disabled {
+  color: var(--mut);
+  cursor: default;
+}

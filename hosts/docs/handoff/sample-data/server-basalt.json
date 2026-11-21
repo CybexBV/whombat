@@ -1,0 +1,673 @@
+{
+  "_note": "Sample fixture matching the mockup (Server detail, basalt). Fake data. Shapes are a proposal for GET /api/v1/servers/{id} and sub-resources.",
+  "as_of": "2026-10-11T14:00:00Z",
+  "server": {
+    "id": "basalt",
+    "group": "Production",
+    "status": "warning",
+    "status_note": "disk wear",
+    "roles": [
+      "kvm-host"
+    ],
+    "os": {
+      "name": "NixOS",
+      "version": "26.05",
+      "kernel": "6.18.44"
+    },
+    "cpu": {
+      "model": "EPYC 7443P",
+      "cores": 24,
+      "threads": 48
+    },
+    "memory": {
+      "total_gb": 256,
+      "type": "DDR4 ECC"
+    },
+    "uptime_s": 3567600,
+    "last_boot": "2026-08-31",
+    "address": "10.20.0.11",
+    "location": "Rack A · unit 4",
+    "agent": {
+      "version": "0.14.2",
+      "last_sync_s_ago": 8
+    }
+  },
+  "live": {
+    "refresh_interval_s": 10,
+    "cpu_pct": 34,
+    "cpu_user_pct": 22.4,
+    "cpu_system_pct": 9.2,
+    "cpu_iowait_pct": 2.4,
+    "load_avg": [
+      6.2,
+      5.8,
+      5.3
+    ],
+    "mem_pct": 61,
+    "mem_used_gb": 156,
+    "mem_cache_gb": 71,
+    "mem_free_gb": 29,
+    "swap_used_gb": 0.3,
+    "swap_total_gb": 16
+  },
+  "banner": {
+    "severity": "warning",
+    "title": "nvme1n1 wear is at 78%",
+    "detail": "936 of 1,200 TBW written. Plan a replacement.",
+    "link": "#storage"
+  },
+  "sensors": [
+    {
+      "id": "cpu_package",
+      "label": "CPU package",
+      "group": "cpu",
+      "source": "k10temp · Tctl",
+      "now_c": 64,
+      "max_24h_c": 79,
+      "limit_c": 85
+    },
+    {
+      "id": "board_vrm",
+      "label": "Board / VRM",
+      "group": "board",
+      "source": "nct6798 · SYSTIN",
+      "now_c": 57,
+      "max_24h_c": 61,
+      "limit_c": 90
+    },
+    {
+      "id": "nvme_hottest",
+      "label": "NVMe, hottest",
+      "group": "nvme",
+      "source": "nvme1n1 · composite",
+      "now_c": 49,
+      "max_24h_c": 54,
+      "limit_c": 75
+    },
+    {
+      "id": "dimm",
+      "label": "Memory modules",
+      "group": "memory",
+      "source": "jc42 · 4 sensors",
+      "now_c": 42,
+      "max_24h_c": 44,
+      "limit_c": 85
+    },
+    {
+      "id": "hdd_hottest",
+      "label": "HDD, hottest",
+      "group": "hdd",
+      "source": "sda · SMART",
+      "now_c": 36,
+      "max_24h_c": 38,
+      "limit_c": 55
+    }
+  ],
+  "disks": [
+    {
+      "device": "nvme0n1",
+      "type": "nvme",
+      "model": "Samsung 990 PRO 1 TB",
+      "role": "System · /, /nix",
+      "capacity_gb": 1000,
+      "used_gb": 440,
+      "wear_pct": 6,
+      "written_tb": 36,
+      "rated_tbw": 600,
+      "temp_c": 44,
+      "power_on_hours": 9846,
+      "health": "healthy"
+    },
+    {
+      "device": "nvme1n1",
+      "type": "nvme",
+      "model": "Samsung 990 PRO 2 TB",
+      "role": "Incus storage pool · /var/lib/incus",
+      "capacity_gb": 2000,
+      "used_gb": 1420,
+      "wear_pct": 78,
+      "written_tb": 936,
+      "rated_tbw": 1200,
+      "temp_c": 49,
+      "power_on_hours": 14210,
+      "health": "wear_high"
+    },
+    {
+      "device": "sda",
+      "type": "hdd",
+      "model": "Seagate Exos X18 16 TB",
+      "role": "tank, mirror member · /srv/tank",
+      "capacity_gb": 16000,
+      "used_gb": 10240,
+      "wear_pct": null,
+      "temp_c": 36,
+      "power_on_hours": 21904,
+      "health": "healthy"
+    },
+    {
+      "device": "sdb",
+      "type": "hdd",
+      "model": "Seagate Exos X18 16 TB",
+      "role": "tank, mirror member · /srv/tank",
+      "capacity_gb": 16000,
+      "used_gb": 10240,
+      "wear_pct": null,
+      "temp_c": 35,
+      "power_on_hours": 21901,
+      "health": "healthy"
+    }
+  ],
+  "virtualization": {
+    "stacks": [
+      "incus",
+      "libvirt"
+    ],
+    "capabilities": {
+      "kvm": {
+        "enabled": true,
+        "module": "kvm_amd",
+        "device": "/dev/kvm"
+      },
+      "cpu_virtualization": {
+        "type": "AMD-V",
+        "flag": "svm",
+        "nested_paging": true
+      },
+      "iommu": {
+        "enabled": true,
+        "groups": 14,
+        "vfio_pci_devices": 1
+      },
+      "nested": {
+        "enabled": true,
+        "module_param": "kvm_amd nested=1"
+      },
+      "hugepages": {
+        "reserved_gb": 32,
+        "page_size": "1G",
+        "count": 32
+      },
+      "ksm": {
+        "saved_gb": 3.1
+      },
+      "ballooning": {
+        "state": "idle"
+      }
+    },
+    "allocation": {
+      "vcpu_allocated": 22,
+      "host_threads": 48,
+      "vcpu_overcommit_ratio": 0.46,
+      "guest_memory_assigned_gb": 52,
+      "host_memory_gb": 256,
+      "guest_memory_in_use_gb": 41,
+      "disk_io_mbs": {
+        "total": 182,
+        "read": 61,
+        "write": 121
+      },
+      "network_mbps": {
+        "total": 640,
+        "rx": 410,
+        "tx": 230
+      }
+    }
+  },
+  "workloads": {
+    "docker": {
+      "running": 14,
+      "total": 16,
+      "cpu_pct": 11.2,
+      "memory_gb": 38,
+      "guests_shown": 8,
+      "guests": [
+        {
+          "id": "docker:prometheus",
+          "name": "prometheus",
+          "platform": "docker",
+          "kind": "container",
+          "image": "prom/prometheus",
+          "state": "running",
+          "cpu_pct": 12.4,
+          "memory_used_mb": 2150,
+          "memory_limit_mb": 4096,
+          "uptime_s": 3542400,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:nextcloud-app",
+          "name": "nextcloud-app",
+          "platform": "docker",
+          "kind": "container",
+          "image": "nextcloud",
+          "state": "running",
+          "cpu_pct": 6.7,
+          "memory_used_mb": 1434,
+          "memory_limit_mb": 2048,
+          "uptime_s": 777600,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:loki",
+          "name": "loki",
+          "platform": "docker",
+          "kind": "container",
+          "image": "grafana/loki",
+          "state": "running",
+          "cpu_pct": 4.8,
+          "memory_used_mb": 1229,
+          "memory_limit_mb": 2048,
+          "uptime_s": 3542400,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:grafana",
+          "name": "grafana",
+          "platform": "docker",
+          "kind": "container",
+          "image": "grafana/grafana",
+          "state": "running",
+          "cpu_pct": 3.1,
+          "memory_used_mb": 380,
+          "memory_limit_mb": 1024,
+          "uptime_s": 3542400,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:traefik",
+          "name": "traefik",
+          "platform": "docker",
+          "kind": "container",
+          "image": "traefik",
+          "state": "running",
+          "cpu_pct": 2.2,
+          "memory_used_mb": 96,
+          "memory_limit_mb": null,
+          "uptime_s": 1036800,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:mosquitto",
+          "name": "mosquitto",
+          "platform": "docker",
+          "kind": "container",
+          "image": "eclipse-mosquitto",
+          "state": "running",
+          "cpu_pct": 0.7,
+          "memory_used_mb": 18,
+          "memory_limit_mb": null,
+          "uptime_s": 3542400,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:redis",
+          "name": "redis",
+          "platform": "docker",
+          "kind": "container",
+          "image": "redis",
+          "state": "running",
+          "cpu_pct": 0.6,
+          "memory_used_mb": 54,
+          "memory_limit_mb": null,
+          "uptime_s": 3542400,
+          "last_exit": null,
+          "console": {
+            "available": false
+          }
+        },
+        {
+          "id": "docker:backup-job",
+          "name": "backup-job",
+          "platform": "docker",
+          "kind": "container",
+          "image": "restic/restic",
+          "state": "stopped",
+          "cpu_pct": null,
+          "memory_used_mb": null,
+          "memory_limit_mb": null,
+          "uptime_s": null,
+          "last_exit": "6 h ago",
+          "console": {
+            "available": false
+          }
+        }
+      ]
+    },
+    "incus": {
+      "running": 6,
+      "total": 7,
+      "containers": 4,
+      "vms": 2,
+      "cpu_pct": 14.6,
+      "memory_gb": 22,
+      "guests": [
+        {
+          "id": "incus:nixbuild",
+          "name": "nixbuild",
+          "platform": "incus",
+          "kind": "vm",
+          "image": "nixos/26.05",
+          "state": "running",
+          "vcpu": 8,
+          "cpu_pct": 21.5,
+          "memory_used_mb": 10035,
+          "memory_limit_mb": 16384,
+          "disk_read_mbs": 42.0,
+          "disk_write_mbs": 118.0,
+          "net_rx_mbps": 12.0,
+          "net_tx_mbps": 4.0,
+          "snapshots": 3,
+          "uptime_s": 518400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "spice",
+              "serial"
+            ],
+            "default_protocol": "spice",
+            "resolution": "1280x800"
+          }
+        },
+        {
+          "id": "incus:ci-runner",
+          "name": "ci-runner",
+          "platform": "incus",
+          "kind": "vm",
+          "image": "debian/13",
+          "state": "running",
+          "vcpu": 4,
+          "cpu_pct": 14.2,
+          "memory_used_mb": 5222,
+          "memory_limit_mb": 8192,
+          "disk_read_mbs": 8.0,
+          "disk_write_mbs": 31.0,
+          "net_rx_mbps": 86.0,
+          "net_tx_mbps": 22.0,
+          "snapshots": 2,
+          "uptime_s": 259200,
+          "console": {
+            "available": true,
+            "protocols": [
+              "spice",
+              "serial"
+            ],
+            "default_protocol": "spice",
+            "resolution": "1280x800"
+          }
+        },
+        {
+          "id": "incus:dev-shell",
+          "name": "dev-shell",
+          "platform": "incus",
+          "kind": "container",
+          "image": "nixos/26.05",
+          "state": "running",
+          "vcpu": 4,
+          "cpu_pct": 6.0,
+          "memory_used_mb": 1946,
+          "memory_limit_mb": 4096,
+          "disk_read_mbs": 1.0,
+          "disk_write_mbs": 3.0,
+          "net_rx_mbps": 3.0,
+          "net_tx_mbps": 1.0,
+          "snapshots": 1,
+          "uptime_s": 1555200,
+          "console": {
+            "available": true,
+            "protocols": [
+              "shell",
+              "tty"
+            ],
+            "default_protocol": "shell",
+            "resolution": "132x36"
+          }
+        },
+        {
+          "id": "incus:git-mirror",
+          "name": "git-mirror",
+          "platform": "incus",
+          "kind": "container",
+          "image": "alpine/3.22",
+          "state": "running",
+          "vcpu": 2,
+          "cpu_pct": 0.8,
+          "memory_used_mb": 128,
+          "memory_limit_mb": null,
+          "disk_read_mbs": 0.2,
+          "disk_write_mbs": 0.4,
+          "net_rx_mbps": 1.0,
+          "net_tx_mbps": 1.0,
+          "snapshots": 1,
+          "uptime_s": 3542400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "shell",
+              "tty"
+            ],
+            "default_protocol": "shell",
+            "resolution": "132x36"
+          }
+        },
+        {
+          "id": "incus:mqtt-bridge",
+          "name": "mqtt-bridge",
+          "platform": "incus",
+          "kind": "container",
+          "image": "debian/13",
+          "state": "running",
+          "vcpu": 1,
+          "cpu_pct": 0.4,
+          "memory_used_mb": 110,
+          "memory_limit_mb": null,
+          "disk_read_mbs": 0.1,
+          "disk_write_mbs": 0.2,
+          "net_rx_mbps": 0.4,
+          "net_tx_mbps": 0.4,
+          "snapshots": 0,
+          "uptime_s": 3542400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "shell",
+              "tty"
+            ],
+            "default_protocol": "shell",
+            "resolution": "132x36"
+          }
+        },
+        {
+          "id": "incus:dns",
+          "name": "dns",
+          "platform": "incus",
+          "kind": "container",
+          "image": "alpine/3.22",
+          "state": "running",
+          "vcpu": 1,
+          "cpu_pct": 0.3,
+          "memory_used_mb": 64,
+          "memory_limit_mb": null,
+          "disk_read_mbs": 0.0,
+          "disk_write_mbs": 0.1,
+          "net_rx_mbps": 2.0,
+          "net_tx_mbps": 2.0,
+          "snapshots": 0,
+          "uptime_s": 3542400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "shell",
+              "tty"
+            ],
+            "default_protocol": "shell",
+            "resolution": "132x36"
+          }
+        },
+        {
+          "id": "incus:scratch",
+          "name": "scratch",
+          "platform": "incus",
+          "kind": "container",
+          "image": "ubuntu/24.04",
+          "state": "stopped",
+          "vcpu": 2,
+          "cpu_pct": null,
+          "memory_used_mb": null,
+          "memory_limit_mb": null,
+          "disk_read_mbs": null,
+          "disk_write_mbs": null,
+          "net_rx_mbps": null,
+          "net_tx_mbps": null,
+          "snapshots": 2,
+          "uptime_s": null,
+          "console": {
+            "available": true,
+            "protocols": [
+              "shell",
+              "tty"
+            ],
+            "default_protocol": "shell",
+            "resolution": null
+          }
+        }
+      ]
+    },
+    "libvirt": {
+      "running": 3,
+      "total": 4,
+      "cpu_pct": 6.1,
+      "memory_gb": 15,
+      "guests": [
+        {
+          "id": "libvirt:opnsense",
+          "name": "opnsense",
+          "platform": "libvirt",
+          "kind": "vm",
+          "image": "q35 · OVMF",
+          "state": "running",
+          "vcpu": 4,
+          "cpu_pct": 17.2,
+          "memory_used_mb": 3686,
+          "memory_limit_mb": 8192,
+          "disk_read_mbs": 2.0,
+          "disk_write_mbs": 1.0,
+          "net_rx_mbps": 412.0,
+          "net_tx_mbps": 380.0,
+          "snapshots": 2,
+          "uptime_s": 3542400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "vnc",
+              "spice",
+              "serial"
+            ],
+            "default_protocol": "vnc",
+            "resolution": "1024x768"
+          }
+        },
+        {
+          "id": "libvirt:win11-test",
+          "name": "win11-test",
+          "platform": "libvirt",
+          "kind": "vm",
+          "image": "q35 · OVMF · TPM",
+          "state": "running",
+          "vcpu": 4,
+          "cpu_pct": 9.8,
+          "memory_used_mb": 7578,
+          "memory_limit_mb": 8192,
+          "disk_read_mbs": 28.0,
+          "disk_write_mbs": 64.0,
+          "net_rx_mbps": 6.0,
+          "net_tx_mbps": 2.0,
+          "snapshots": 1,
+          "uptime_s": 172800,
+          "console": {
+            "available": true,
+            "protocols": [
+              "vnc",
+              "spice"
+            ],
+            "default_protocol": "vnc",
+            "resolution": "1920x1080"
+          }
+        },
+        {
+          "id": "libvirt:haos",
+          "name": "haos",
+          "platform": "libvirt",
+          "kind": "vm",
+          "image": "q35 · OVMF",
+          "state": "running",
+          "vcpu": 2,
+          "cpu_pct": 5.4,
+          "memory_used_mb": 3174,
+          "memory_limit_mb": 4096,
+          "disk_read_mbs": 0.4,
+          "disk_write_mbs": 1.2,
+          "net_rx_mbps": 1.0,
+          "net_tx_mbps": 1.0,
+          "snapshots": 4,
+          "uptime_s": 3542400,
+          "console": {
+            "available": true,
+            "protocols": [
+              "vnc",
+              "spice",
+              "serial"
+            ],
+            "default_protocol": "vnc",
+            "resolution": "1024x768"
+          }
+        },
+        {
+          "id": "libvirt:truenas-lab",
+          "name": "truenas-lab",
+          "platform": "libvirt",
+          "kind": "vm",
+          "image": "q35 · OVMF",
+          "state": "stopped",
+          "vcpu": 4,
+          "cpu_pct": null,
+          "memory_used_mb": null,
+          "memory_limit_mb": null,
+          "disk_read_mbs": null,
+          "disk_write_mbs": null,
+          "net_rx_mbps": null,
+          "net_tx_mbps": null,
+          "snapshots": 0,
+          "uptime_s": null,
+          "console": {
+            "available": true,
+            "protocols": [
+              "vnc",
+              "spice",
+              "serial"
+            ],
+            "default_protocol": "vnc",
+            "resolution": null
+          }
+        }
+      ]
+    }
+  }
+}

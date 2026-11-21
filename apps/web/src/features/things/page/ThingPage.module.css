@@ -1,0 +1,177 @@
+/*
+ * A connection's or device's own page (connection-pages-web.md AP-1900…, dashboards-web.md AP-2050…): what the server
+ * page (`Things.module.css`) and the Summary renderer (`dashboard/`) don't have — the address pill, the runs-on links,
+ * the line that says why figures couldn't be read, Activity's “Show more”, the runs-on picker and the Settings tab.
+ * Tokens only; sizes and weights are the mock's.
+ */
+
+/* Head */
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.title {
+  margin: 0;
+  font: 700 30px var(--font-sans);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+@container page (max-width: 560px) {
+  .title {
+    font-size: 26px;
+  }
+}
+
+.addr {
+  padding: 1px 6px;
+  border: none;
+  border-radius: var(--radius-tag);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 400 12px var(--font-mono);
+  cursor: copy;
+}
+
+.addr:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.addr:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.runsOn {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.runsOn:hover {
+  color: var(--ink);
+}
+
+.runsOn .mono {
+  font: 400 13.5px var(--font-mono);
+}
+
+.factBtn {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.factBtnFirst {
+  margin-left: 0;
+}
+
+.factBtn:hover {
+  color: var(--ink);
+}
+
+.factBtn:focus-visible,
+.runsOn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* The tabs' counts: the mock's 6px after the label. */
+.tabs > button > span:last-child {
+  margin-left: 2px;
+}
+
+/* The line that says when the figures were read, or why not this time. */
+.problem {
+  margin: -6px 0 0;
+  color: var(--warn);
+  font: 400 13.5px var(--font-sans);
+}
+
+/* Activity: “Show more” under the list */
+
+.more {
+  display: flex;
+  justify-content: center;
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* The runs-on picker */
+
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink);
+  font: 400 14px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickRow:hover,
+.pickRow:focus-visible {
+  background: var(--sel);
+  outline: none;
+}
+
+.pickRow[aria-pressed="true"] {
+  background: var(--sel);
+  font-weight: 600;
+}
+
+.pickGuest {
+  padding-left: 30px;
+}
+
+.pickMain {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A server's row: its host name in the mono face, as the sidebar sets it. */
+.pickServer .pickMain {
+  font: 500 13.5px var(--font-mono);
+}
+
+.pickNote {
+  flex: none;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+}
+
+/* The Settings tab: Settings → Connections' sections, spaced as there (`.panel`), as wide as Settings. */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  max-width: 1040px;
+}

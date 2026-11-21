@@ -1,0 +1,54 @@
+{
+  "name": "@whombat/canvas-schema",
+  "license": "AGPL-3.0-only",
+  "version": "4.11.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./tiptap": "./src/tiptap.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./tiptap": {
+        "types": "./dist/tiptap.d.ts",
+        "default": "./dist/tiptap.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.31.3",
+    "@tiptap/extension-bold": "3.31.3",
+    "@tiptap/extension-code": "3.31.3",
+    "@tiptap/extension-document": "3.31.3",
+    "@tiptap/extension-hard-break": "3.31.3",
+    "@tiptap/extension-heading": "3.31.3",
+    "@tiptap/extension-italic": "3.31.3",
+    "@tiptap/extension-list": "3.31.3",
+    "@tiptap/extension-paragraph": "3.31.3",
+    "@tiptap/extension-text": "3.31.3",
+    "@tiptap/pm": "3.31.3",
+    "@tiptap/y-tiptap": "^3.0.9",
+    "@whombat/core": "workspace:*",
+    "lib0": "^0.2.117",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-transform": "^1.12.1",
+    "prosemirror-view": "^1.42.5",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.32"
+  }
+}

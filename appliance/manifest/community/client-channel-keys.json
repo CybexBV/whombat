@@ -1,0 +1,13 @@
+{
+ "v": 1,
+ "env": "dev",
+ "keys": [
+  {
+   "kid": "clients-dev-e4d2b7d21121",
+   "publicKey": "e3342a8bab9d97f8abd11b7a3425c3528a2093cb6b9578498f432ff4ee9419da",
+   "state": "active",
+   "notBefore": null,
+   "notAfter": null
+  }
+ ]
+}

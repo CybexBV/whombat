@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/ConsoleState.json",
+  "title": "ConsoleState",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "starting",
+        "waiting",
+        "claimable",
+        "backoff",
+        "claimed"
+      ]
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[ABCDEFGHJKMNPQRTVWXY]{4}$"
+    },
+    "url": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256,
+      "pattern": "^https?:[/][/][\\x21-\\x7e]+$"
+    },
+    "retryAt": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "lettersUntil": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "newLetters": {
+      "type": "boolean",
+      "const": true
+    },
+    "ipv6Only": {
+      "type": "boolean",
+      "const": true
+    },
+    "fallbackUrl": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256,
+      "pattern": "^https?:[/][/][\\x21-\\x7e]+$"
+    },
+    "burrows": {
+      "type": "object",
+      "properties": {
+        "first": {
+          "type": "string",
+          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}](?:(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,62}[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}])?$"
+        },
+        "more": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        }
+      },
+      "required": [
+        "first",
+        "more"
+      ]
+    },
+    "signIn": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[ABCDEFGHJKMNPQRTVWXY]{6}$"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}](?:(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,62}[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}])?$"
+        },
+        "device": {
+          "type": "string",
+          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}](?:(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,62}[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}])?$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "device",
+        "expiresAt"
+      ]
+    },
+    "alert": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "own_address_foreign"
+          ]
+        },
+        "since": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      },
+      "required": [
+        "kind",
+        "since"
+      ]
+    },
+    "reach": {
+      "type": "object",
+      "properties": {
+        "link": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "off",
+                "starting",
+                "on",
+                "grace",
+                "ended"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "pattern": "^[ABCDEFGHJKMNPQRTVWXY]{4}-[ABCDEFGHJKMNPQRTVWXY]{4}$"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 256,
+              "pattern": "^https:[/][/][\\x21-\\x7e]+$"
+            },
+            "expiresAt": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            "waitingForAddress": {
+              "type": "boolean"
+            },
+            "graceEndsAt": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        "tailscale": {
+          "type": "object",
+          "properties": {
+            "loginUrl": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 500,
+              "pattern": "^https?:[/][/][\\x21-\\x7e]+$"
+            },
+            "needsHttps": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "v",
+    "state",
+    "url"
+  ]
+}

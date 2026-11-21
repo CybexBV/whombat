@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceGpu.json",
+  "title": "VoiceGpu",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[\\x20-\\x7e]{1,200}$"
+    },
+    "backend": {
+      "type": "string",
+      "const": "vulkan"
+    },
+    "memoryMiB": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048576
+    }
+  },
+  "required": [
+    "name",
+    "backend"
+  ]
+}

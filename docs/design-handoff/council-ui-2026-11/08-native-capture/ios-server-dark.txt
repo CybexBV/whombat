@@ -1,0 +1,27 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 23 visible nodes
+@e1 [application] "Whombat"
+@e2 [button] "Back to Overview"
+@e3 [button] "More for pve-02"
+@e4 [scroll-area] [scrollable]
+  [content below scroll-area hidden]
+@e5 [cell] "pve-02, 1 to look at"
+@e6 [text] "pve-02 has a problem: CPU running warm."
+@e7 [cell] "pve-02: what to show"
+@e8 [other] "Summary" [selected]
+@e9 [other] "Machines"
+@e10 [other] "Backups"
+@e11 [button] "Processor: Quiet, 18 % in use. Last 24 hours: steady, with a peak"
+@e12 [button] "Memory: Plenty free, 23 GB free. Last 24 hours: steady"
+@e13 [cell] "Space: Plenty free, Full in about 5 months"
+@e14 [button] "Temperature: Normal, CPU package 71 °C. Last 24 hours: steady"
+@e15 [text] "WORTH A LOOK"
+@e16 [text] "1"
+@e17 [button] "Needs a look. CPU running warm. It sat above 75 °C for 40 minutes during the backup."
+@e18 [button] "More for CPU running warm"
+@e19 [button] "Show 1 heads-up"
+@e20 [text] "UPDATES"
+@e21 [button] "Updates: 4 updates waiting, 1 for security, checked 3 h ago"
+@e22 [button] "See backups"
+@e23 [toolbar] "Toolbar"

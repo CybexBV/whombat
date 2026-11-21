@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/TailscaleStateResponse.json",
+  "title": "TailscaleStateResponse",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "tailscale": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "off",
+            "starting",
+            "needs_sign_in",
+            "needs_approval",
+            "on",
+            "error"
+          ]
+        },
+        "loginUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 500,
+              "pattern": "^https?:[/][/][\\x21-\\x7e]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "addresses": {
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f:.]{2,45}$"
+          }
+        },
+        "tailnet": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "https": {
+          "type": "boolean"
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "not_running",
+                "unreachable",
+                "failed"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loginServer": {
+          "type": "string",
+          "maxLength": 300,
+          "pattern": "^https?:[/][/]([a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)*|\\[[0-9a-f:.]+\\])(:[0-9]{1,5})?([/][A-Za-z0-9._~-]+)*$"
+        }
+      },
+      "required": [
+        "state",
+        "loginUrl",
+        "name",
+        "addresses",
+        "tailnet",
+        "https",
+        "problem"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "tailscale"
+  ]
+}

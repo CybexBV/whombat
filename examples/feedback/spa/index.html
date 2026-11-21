@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://whombat.example.com; frame-src https://whombat.example.com; style-src 'self'; img-src 'self'">
+<title>Acme Shop</title>
+<link rel="stylesheet" href="/style.css">
+<script
+  src="https://whombat.example.com/embed/v1/widget.js"
+  data-site="fbs_REPLACEwithYourSiteId000"
+  data-theme="auto"
+  data-position="bottom-right"
+  defer
+></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header>
+  <strong>Acme Shop</strong>
+  <nav aria-label="Main">
+    <a href="/">Home</a>
+    <a href="/orders/123">Order 123</a>
+    <a href="/settings?token=secret#notifications">Settings</a>
+  </nav>
+</header>
+<main id="view" tabindex="-1"></main>
+</body>
+</html>

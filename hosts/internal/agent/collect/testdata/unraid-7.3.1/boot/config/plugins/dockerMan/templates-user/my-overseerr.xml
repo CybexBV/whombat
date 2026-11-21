@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>overseerr</Name>
+  <Repository>lscr.io/linuxserver/overseerr:latest</Repository>
+  <Registry>https://github.com/orgs/linuxserver/packages/container/package/overseerr</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/linuxserver/docker-overseerr/issues/new/choose</Support>
+  <Project>https://overseerr.dev/</Project>
+  <Category>Other:</Category>
+  <WebUI>http://[IP]:[PORT:5055]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/linuxserver/templates/master/unraid/overseerr.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/overseerr-logo.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1718726428</DateInstalled>
+  <DonateText>Donations</DonateText>
+  <DonateLink>https://www.linuxserver.io/donate</DonateLink>
+  <Requires/>
+</Container>

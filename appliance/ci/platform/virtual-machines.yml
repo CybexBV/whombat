@@ -1,0 +1,37 @@
+# Run by the maintainers' own CI (ci-platform on their build server, never for a fork's pull request), not by GitHub:
+# public repositories keep self-hosted jobs out of .github/workflows. Public CI is .github/workflows/public-ci.yml.
+name: virtual-machines
+on:
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: virtual-machines-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CI: 'true'
+  TMPDIR: /var/tmp/whombat-ci
+jobs:
+  qualification:
+    runs-on: [self-hosted, linux, x64, whombat, whombat-appliance]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exercise runtime, recovery and isolation in KVM
+        run: bash scripts/ci/virtual-machines.sh 2>&1 | tee "$RUNNER_TEMP/virtual-machines.log"
+      - name: Keep VM diagnostics locally
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/virtual-machines.log" ]; then
+            /opt/whombat-ci/bin/artifact save vm-log "$RUNNER_TEMP/virtual-machines.log"
+          fi
+          if [ -d "$RUNNER_TEMP/vm-results" ]; then
+            /opt/whombat-ci/bin/artifact save vm-results "$RUNNER_TEMP/vm-results"
+          fi

@@ -1,0 +1,21 @@
+# The assistant's runner (docs/ASSIST.md). The hub connects here
+# (RACKOON_ASSIST_SOCKET=/run/rackoon-assist.sock in /etc/rackoon/hub.env)
+# and systemd starts rackoon-assist@.service for the connection: the AI
+# command-line tools run under their own user and sandbox, away from the
+# hub's database and CA key.
+#
+#   install -m 0644 rackoon-assist.socket rackoon-assist@.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now rackoon-assist.socket
+[Unit]
+Description=Rackoon assistant runner socket
+
+[Socket]
+ListenStream=/run/rackoon-assist.sock
+# The hub's dynamic user has no fixed name to grant this to; the runner
+# holds no hub secrets and its tool calls go back to whoever connected.
+SocketMode=0666
+Accept=yes
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

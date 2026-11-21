@@ -1,0 +1,71 @@
+{
+  "ocs": {
+    "meta": {
+      "status": "ok",
+      "statuscode": 200,
+      "message": "OK"
+    },
+    "data": {
+      "nextcloud": {
+        "system": {
+          "version": "35.0.2.2",
+          "theme": "none",
+          "enable_avatars": "yes",
+          "enable_previews": "yes",
+          "memcache.local": "\\OC\\Memcache\\APCu",
+          "memcache.distributed": "none",
+          "filelocking.enabled": "yes",
+          "memcache.locking": "none",
+          "debug": "no",
+          "freespace": 1751786323968,
+          "cpuload": [12.46923828125, 13.62890625, 13.89208984375],
+          "cpunum": 64,
+          "mem_total": 2097152,
+          "mem_free": 1871872,
+          "swap_total": 2097152,
+          "swap_free": 2097152
+        },
+        "storage": {
+          "num_users": 1,
+          "num_disabled_users": 0,
+          "num_files": 0,
+          "num_storages": 0,
+          "num_storages_local": 1,
+          "num_storages_home": 1,
+          "num_storages_other": 0,
+          "size_appdata_storage": 0,
+          "num_files_appdata": 0
+        },
+        "shares": {
+          "num_shares": 0,
+          "num_shares_user": 0,
+          "num_shares_groups": 0,
+          "num_shares_link": 0,
+          "num_shares_mail": 0,
+          "num_shares_room": 0,
+          "num_shares_link_no_password": 0,
+          "num_fed_shares_sent": 0,
+          "num_fed_shares_received": 0
+        }
+      },
+      "server": {
+        "webserver": "Apache/2.4.69 (Debian)",
+        "database": {
+          "type": "sqlite3",
+          "version": "3.46.1",
+          "size": 2273280
+        }
+      },
+      "activeUsers": {
+        "last5minutes": 1,
+        "last1hour": 1,
+        "last24hours": 1,
+        "last7days": 1,
+        "last1month": 1,
+        "last3months": 1,
+        "last6months": 1,
+        "lastyear": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src",
+    "e2e-managed",
+    "e2e-box",
+    "visual",
+    "readme",
+    ".storybook",
+    "*.config.ts",
+    "hosted.ts",
+    "precompress.ts",
+    "boot-preload.ts",
+    "version-file.ts",
+    "e2e-runtime",
+    "css-modules"
+  ]
+}

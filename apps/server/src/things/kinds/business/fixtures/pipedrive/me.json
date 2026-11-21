@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "data": {
+    "id": 11,
+    "name": "Whombat",
+    "default_currency": "EUR",
+    "company_id": 77,
+    "company_name": "Example BV",
+    "company_domain": "example",
+    "timezone_name": "Europe/Amsterdam",
+    "is_admin": 1
+  }
+}

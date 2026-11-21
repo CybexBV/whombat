@@ -1,0 +1,166 @@
+{
+  "total_count": 7,
+  "workflow_runs": [
+    {
+      "id": 9005,
+      "name": "Main checks: 0123456",
+      "display_title": "Main checks: 0123456",
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_branch": "main",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 101,
+      "path": ".github/workflows/main.yml",
+      "run_number": 105,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T19:30:00Z",
+      "run_started_at": "2026-10-21T19:30:00Z",
+      "updated_at": "2026-10-21T19:45:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9005",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9005",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 9004,
+      "name": "PR checks",
+      "display_title": "Fix the login form",
+      "event": "pull_request",
+      "status": "queued",
+      "conclusion": null,
+      "head_branch": "fix/login",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 102,
+      "path": ".github/workflows/pr.yml",
+      "run_number": 104,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T19:40:00Z",
+      "run_started_at": "2026-10-21T19:40:00Z",
+      "updated_at": "2026-10-21T19:40:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9004",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9004",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 9003,
+      "name": "Main checks",
+      "display_title": "Show the plan card",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_branch": "main",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 101,
+      "path": ".github/workflows/main.yml",
+      "run_number": 103,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T18:00:00Z",
+      "run_started_at": "2026-10-21T18:00:00Z",
+      "updated_at": "2026-10-21T18:20:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9003",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9003",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 9002,
+      "name": "PR checks",
+      "display_title": "Fix the login form",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "head_branch": "fix/login",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 102,
+      "path": ".github/workflows/pr.yml",
+      "run_number": 102,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T17:00:00Z",
+      "run_started_at": "2026-10-21T17:00:00Z",
+      "updated_at": "2026-10-21T17:06:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9002",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9002",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 9001,
+      "name": "Main checks",
+      "display_title": "Main checks",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "head_branch": "main",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 101,
+      "path": ".github/workflows/main.yml",
+      "run_number": 101,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T15:00:00Z",
+      "run_started_at": "2026-10-21T15:00:00Z",
+      "updated_at": "2026-10-21T15:40:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9001",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9001",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 9000,
+      "name": "Main checks",
+      "display_title": "Main checks",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "head_branch": "main",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 101,
+      "path": ".github/workflows/main.yml",
+      "run_number": 100,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T12:00:00Z",
+      "run_started_at": "2026-10-21T12:00:00Z",
+      "updated_at": "2026-10-21T12:36:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/9000",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/9000",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    },
+    {
+      "id": 8999,
+      "name": "Nightly",
+      "display_title": "Nightly",
+      "event": "schedule",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_branch": "main",
+      "head_sha": "0123456789abcdef0123456789abcdef01234567",
+      "workflow_id": 103,
+      "path": ".github/workflows/nightly.yml",
+      "run_number": 99,
+      "run_attempt": 1,
+      "created_at": "2026-10-21T02:00:00Z",
+      "run_started_at": "2026-10-21T02:00:00Z",
+      "updated_at": "2026-10-21T02:10:00Z",
+      "html_url": "https://github.com/acme/web/actions/runs/8999",
+      "url": "https://api.github.com/repos/acme/web/actions/runs/8999",
+      "pull_requests": [],
+      "repository": {
+        "full_name": "acme/web"
+      }
+    }
+  ]
+}

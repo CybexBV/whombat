@@ -1,0 +1,29 @@
+{
+  "photos": 7,
+  "videos": 1,
+  "usage": 11262,
+  "usagePhotos": 6067,
+  "usageVideos": 5195,
+  "usageByUser": [
+    {
+      "userId": "7a97b4a7-1661-44e4-9a70-a0669791119f",
+      "userName": "Mara",
+      "photos": 6,
+      "videos": 1,
+      "usage": 9238,
+      "usagePhotos": 4043,
+      "usageVideos": 5195,
+      "quotaSizeInBytes": null
+    },
+    {
+      "userId": "df441653-6919-40e9-884a-921fb30ce0fd",
+      "userName": "Anna",
+      "photos": 1,
+      "videos": 0,
+      "usage": 2024,
+      "usagePhotos": 2024,
+      "usageVideos": 0,
+      "quotaSizeInBytes": 20000
+    }
+  ]
+}

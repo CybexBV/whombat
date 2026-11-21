@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/TailscaleOnRequest.json",
+  "title": "TailscaleOnRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "loginServer": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^https?:[/][/]([a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)*|\\[[0-9a-f:.]+\\])(:[0-9]{1,5})?([/][A-Za-z0-9._~-]+)*$"
+    }
+  },
+  "required": [
+    "v"
+  ],
+  "additionalProperties": false
+}

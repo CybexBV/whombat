@@ -1,0 +1,122 @@
+/* Same frame as the onboarding screen in docs/design-handoff/design/Whombat Desktop.dc.html. */
+
+.page {
+  display: grid;
+  grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 36px 32px;
+  border-right: 1px solid var(--line);
+  background: var(--side);
+}
+
+.tip {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.tipAvatar {
+  display: block;
+  flex: none;
+  width: 64px;
+  height: 64px;
+}
+
+.bubble {
+  max-width: 220px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px 14px 14px 4px;
+  background: var(--sf);
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px 40px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kicker {
+  color: var(--brand);
+  font: 500 12px var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 0;
+  font: var(--type-display-onboarding);
+  letter-spacing: var(--type-display-onboarding-tracking);
+  text-wrap: balance;
+}
+
+.sub {
+  max-width: 34em;
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-body-large);
+  text-wrap: pretty;
+}
+
+@media (max-width: 720px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aside {
+    display: none;
+  }
+}
+
+/* The fallback pages' one link or button (Not found, Something went wrong). */
+.inlineLink {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+
+.inlineLink:hover {
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+}

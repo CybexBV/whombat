@@ -1,0 +1,182 @@
+/*
+ * The assessor's card (Whombat Feedback FB-32; not in the mocks): the report card's frame and rhythm (18×20px, 12px
+ * gaps), its sf2 box language for the question, the card buttons for the options, and the report card's Details
+ * region for the folded assessment. `[data-card]` lifts these above the shared frame (Card.module.css loads after).
+ * Tokens only.
+ */
+.card[data-card] {
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.header {
+  align-items: center;
+}
+
+.verdict {
+  flex: none;
+}
+
+.decision {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+}
+
+/* The assessor's words: plain text, wrapped, never parsed. */
+.question {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The question is the fieldset's legend while there are options to pick. */
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fieldset > legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.decided {
+  margin: 0;
+  font: var(--type-mono-meta);
+  color: var(--mut);
+  overflow-wrap: anywhere;
+}
+
+.toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.chevron {
+  flex: none;
+  align-self: center;
+  color: var(--mut);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.open {
+  transform: none;
+}
+
+.toggleLabel {
+  flex: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.headline {
+  min-width: 0;
+  font: 400 12.5px var(--font-mono);
+  color: var(--mut);
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 -20px -18px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.row {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.rowLabel {
+  display: inline;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rowLabel::after {
+  content: ": ";
+}
+
+.rowText {
+  display: inline;
+  margin: 0;
+  color: var(--ink2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.evidenceList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.evidenceItem {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+
+.problem {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--bad);
+}

@@ -1,0 +1,695 @@
+{
+ "type": "sync",
+ "status": "Success",
+ "status_code": 200,
+ "operation": "",
+ "error_code": 0,
+ "error": "",
+ "metadata": [
+  {
+   "architecture": "x86_64",
+   "config": {
+    "image.description": "Debian trixie amd64 (20260730_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "12",
+    "limits.memory": "36GiB"
+   },
+   "devices": {},
+   "ephemeral": false,
+   "profiles": [
+    "default"
+   ],
+   "stateful": false,
+   "description": "",
+   "created_at": "2026-10-11T13:50:03.462230784Z",
+   "expanded_config": {
+    "image.description": "Debian trixie amd64 (20260730_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "12",
+    "limits.memory": "36GiB"
+   },
+   "expanded_devices": {},
+   "name": "job-1",
+   "status": "Running",
+   "status_code": 103,
+   "last_used_at": "2026-10-11T13:50:10.856623104Z",
+   "location": "none",
+   "type": "virtual-machine",
+   "project": "ci",
+   "backups": null,
+   "state": {
+    "status": "Running",
+    "status_code": 103,
+    "disk": {
+     "root": {
+      "usage": 26109747200,
+      "total": 128849018880
+     }
+    },
+    "memory": {
+     "usage": 37008809984,
+     "usage_peak": 0,
+     "total": 37798989824,
+     "swap_usage": 0,
+     "swap_usage_peak": 0
+    },
+    "network": {
+     "cqn54a38aa3": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.10",
+        "netmask": "24",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::10b8:44ff:fe3c:f71f",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 1558440314,
+       "bytes_sent": 5074545862,
+       "packets_received": 76630,
+       "packets_sent": 176773,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:01",
+      "host_name": "",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "cqt54a38aa3": {
+      "addresses": [
+       {
+        "family": "inet6",
+        "address": "fe80::80d5:45ff:feed:a215",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 1559513134,
+       "bytes_sent": 5074547495,
+       "packets_received": 76630,
+       "packets_sent": 176792,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:02",
+      "host_name": "",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "docker0": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.11",
+        "netmask": "16",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::42:aeff:feba:a9c9",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 85055726,
+       "bytes_sent": 372059527,
+       "packets_received": 170343,
+       "packets_sent": 212226,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:03",
+      "host_name": "",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "enp5s0": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.12",
+        "netmask": "24",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::1266:6aff:fee4:8e08",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 2589463875,
+       "bytes_sent": 2816617,
+       "packets_received": 122360,
+       "packets_sent": 36593,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:04",
+      "host_name": "tapb63dce1d",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "lo": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "netmask": "8",
+        "scope": "local"
+       },
+       {
+        "family": "inet6",
+        "address": "::1",
+        "netmask": "128",
+        "scope": "local"
+       }
+      ],
+      "counters": {
+       "bytes_received": 636934840,
+       "bytes_sent": 636934840,
+       "packets_received": 398248,
+       "packets_sent": 398248,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "",
+      "host_name": "",
+      "mtu": 65536,
+      "state": "up",
+      "type": "loopback"
+     },
+     "vethc2c1c41": {
+      "addresses": [
+       {
+        "family": "inet6",
+        "address": "fe80::94f0:9dff:feb5:9efe",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 87440528,
+       "bytes_sent": 372061230,
+       "packets_received": 170343,
+       "packets_sent": 212246,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:05",
+      "host_name": "",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     }
+    },
+    "pid": 145877,
+    "processes": 34,
+    "cpu": {
+     "usage": 1560966544000,
+     "allocated_time": 0
+    },
+    "started_at": "2026-10-11T15:50:10.570633552+02:00",
+    "os_info": {
+     "os": "Debian GNU/Linux",
+     "os_version": "13",
+     "kernel_version": "6.12.96+deb13-amd64",
+     "hostname": "job-1",
+     "fqdn": "localhost"
+    }
+   },
+   "snapshots": null
+  },
+  {
+   "architecture": "x86_64",
+   "config": {
+    "image.description": "Ubuntu noble amd64 (20260929_07:42)",
+    "image.os": "Ubuntu",
+    "image.release": "noble",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "devices": {},
+   "ephemeral": false,
+   "profiles": [
+    "default"
+   ],
+   "stateful": false,
+   "description": "",
+   "created_at": "2026-09-30T12:38:49.10300833Z",
+   "expanded_config": {
+    "image.description": "Ubuntu noble amd64 (20260929_07:42)",
+    "image.os": "Ubuntu",
+    "image.release": "noble",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "expanded_devices": {},
+   "name": "tmpl-c",
+   "status": "Stopped",
+   "status_code": 102,
+   "last_used_at": "1970-01-01T00:00:00Z",
+   "location": "none",
+   "type": "virtual-machine",
+   "project": "ci",
+   "backups": null,
+   "state": {
+    "status": "Stopped",
+    "status_code": 102,
+    "disk": {
+     "root": {
+      "usage": 6076870656,
+      "total": 128849018880
+     }
+    },
+    "memory": {
+     "usage": 0,
+     "usage_peak": 0,
+     "total": 0,
+     "swap_usage": 0,
+     "swap_usage_peak": 0
+    },
+    "network": null,
+    "pid": 0,
+    "processes": 0,
+    "cpu": {
+     "usage": 0,
+     "allocated_time": 0
+    },
+    "started_at": "0001-01-01T00:00:00Z",
+    "os_info": null
+   },
+   "snapshots": [
+    {
+     "name": "snap0"
+    }
+   ]
+  },
+  {
+   "architecture": "x86_64",
+   "config": {
+    "image.description": "Debian trixie amd64 (20260714_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "devices": {},
+   "ephemeral": false,
+   "profiles": [
+    "default"
+   ],
+   "stateful": false,
+   "description": "",
+   "created_at": "2026-09-07T13:17:30.802103527Z",
+   "expanded_config": {
+    "image.description": "Debian trixie amd64 (20260714_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "expanded_devices": {},
+   "name": "web",
+   "status": "Running",
+   "status_code": 103,
+   "last_used_at": "2026-09-25T11:55:57.99440029Z",
+   "location": "none",
+   "type": "container",
+   "project": "default",
+   "backups": null,
+   "state": {
+    "status": "Running",
+    "status_code": 103,
+    "disk": {
+     "root": {
+      "usage": 3172790272,
+      "total": 0
+     }
+    },
+    "memory": {
+     "usage": 358920192,
+     "usage_peak": 0,
+     "total": 2147483648,
+     "swap_usage": 0,
+     "swap_usage_peak": 0
+    },
+    "network": {
+     "eth0": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.13",
+        "netmask": "24",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::1266:6aff:febc:c4dd",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 77578074270,
+       "bytes_sent": 48999195612,
+       "packets_received": 49363806,
+       "packets_sent": 59063212,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:06",
+      "host_name": "vethaf3132c3",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "lo": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "netmask": "8",
+        "scope": "local"
+       },
+       {
+        "family": "inet6",
+        "address": "::1",
+        "netmask": "128",
+        "scope": "local"
+       }
+      ],
+      "counters": {
+       "bytes_received": 38667311096,
+       "bytes_sent": 38667311096,
+       "packets_received": 9309618,
+       "packets_sent": 9309618,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "",
+      "host_name": "",
+      "mtu": 65536,
+      "state": "up",
+      "type": "loopback"
+     },
+     "tailscale0": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.14",
+        "netmask": "32",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fd7a:115c:a1e0::d532:291f",
+        "netmask": "128",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::90cc:d1ce:a913:8d3",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 53844543726,
+       "bytes_sent": 539346766,
+       "packets_received": 10470584,
+       "packets_sent": 10293734,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "",
+      "host_name": "",
+      "mtu": 1280,
+      "state": "up",
+      "type": "point-to-point"
+     }
+    },
+    "pid": 9889,
+    "processes": 33,
+    "cpu": {
+     "usage": 15136012829000,
+     "allocated_time": 2000000000
+    },
+    "started_at": "2026-09-25T13:55:58.044505096+02:00",
+    "os_info": null
+   },
+   "snapshots": [
+    {
+     "name": "snap0"
+    },
+    {
+     "name": "snap1"
+    }
+   ]
+  },
+  {
+   "architecture": "x86_64",
+   "config": {
+    "image.description": "Debian trixie amd64 (20261011_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "devices": {},
+   "ephemeral": false,
+   "profiles": [
+    "default"
+   ],
+   "stateful": false,
+   "description": "",
+   "created_at": "2026-10-11T13:53:43.241444457Z",
+   "expanded_config": {
+    "image.description": "Debian trixie amd64 (20261011_05:24)",
+    "image.os": "Debian",
+    "image.release": "trixie",
+    "limits.cpu": "2",
+    "limits.memory": "2GiB"
+   },
+   "expanded_devices": {},
+   "name": "test-vm",
+   "status": "Running",
+   "status_code": 103,
+   "last_used_at": "2026-10-11T13:53:46.058874923Z",
+   "location": "none",
+   "type": "virtual-machine",
+   "project": "default",
+   "backups": null,
+   "state": {
+    "status": "Running",
+    "status_code": 103,
+    "disk": {
+     "root": {
+      "usage": 3686400,
+      "total": 10737418240
+     }
+    },
+    "memory": {
+     "usage": 239104000,
+     "usage_peak": 0,
+     "total": 2027606016,
+     "swap_usage": 0,
+     "swap_usage_peak": 0
+    },
+    "network": {
+     "enp5s0": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "192.0.2.15",
+        "netmask": "24",
+        "scope": "global"
+       },
+       {
+        "family": "inet6",
+        "address": "fe80::1266:6aff:fe91:4696",
+        "netmask": "64",
+        "scope": "link"
+       }
+      ],
+      "counters": {
+       "bytes_received": 138786,
+       "bytes_sent": 2934,
+       "packets_received": 1005,
+       "packets_sent": 31,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "02:00:00:00:00:07",
+      "host_name": "tap5e7100da",
+      "mtu": 1500,
+      "state": "up",
+      "type": "broadcast"
+     },
+     "lo": {
+      "addresses": [
+       {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "netmask": "8",
+        "scope": "local"
+       },
+       {
+        "family": "inet6",
+        "address": "::1",
+        "netmask": "128",
+        "scope": "local"
+       }
+      ],
+      "counters": {
+       "bytes_received": 0,
+       "bytes_sent": 0,
+       "packets_received": 0,
+       "packets_sent": 0,
+       "errors_received": 0,
+       "errors_sent": 0,
+       "packets_dropped_outbound": 0,
+       "packets_dropped_inbound": 0
+      },
+      "hwaddr": "",
+      "host_name": "",
+      "mtu": 65536,
+      "state": "up",
+      "type": "loopback"
+     }
+    },
+    "pid": 168506,
+    "processes": 11,
+    "cpu": {
+     "usage": 2819127000,
+     "allocated_time": 0
+    },
+    "started_at": "2026-10-11T15:53:45.870955002+02:00",
+    "os_info": {
+     "os": "Debian GNU/Linux",
+     "os_version": "13",
+     "kernel_version": "6.12.111+deb13-amd64",
+     "hostname": "test-vm",
+     "fqdn": "localhost"
+    }
+   },
+   "snapshots": null
+  },
+  {
+   "architecture": "x86_64",
+   "config": {
+    "limits.cpu": "4",
+    "limits.memory": "8GiB"
+   },
+   "devices": {},
+   "ephemeral": false,
+   "profiles": [
+    "default"
+   ],
+   "stateful": false,
+   "description": "",
+   "created_at": "2026-09-28T10:19:35.131397699Z",
+   "expanded_config": {
+    "limits.cpu": "4",
+    "limits.memory": "8GiB"
+   },
+   "expanded_devices": {},
+   "name": "app-prod",
+   "status": "Running",
+   "status_code": 103,
+   "last_used_at": "2026-10-02T11:58:19.155150231Z",
+   "location": "none",
+   "type": "virtual-machine",
+   "project": "default",
+   "backups": null,
+   "state": {
+    "status": "Running",
+    "status_code": 103,
+    "disk": {
+     "root": {
+      "usage": 48138420224,
+      "total": 137438953472
+     }
+    },
+    "memory": {
+     "usage": 0,
+     "usage_peak": 0,
+     "total": 0,
+     "swap_usage": 0,
+     "swap_usage_peak": 0
+    },
+    "network": {},
+    "pid": 2299661,
+    "processes": -1,
+    "cpu": {
+     "usage": 0,
+     "allocated_time": 0
+    },
+    "started_at": "2026-10-02T13:58:18.889618835+02:00",
+    "os_info": null
+   },
+   "snapshots": [
+    {
+     "name": "snap0"
+    },
+    {
+     "name": "snap1"
+    },
+    {
+     "name": "snap2"
+    },
+    {
+     "name": "snap3"
+    },
+    {
+     "name": "snap4"
+    },
+    {
+     "name": "snap5"
+    },
+    {
+     "name": "snap6"
+    },
+    {
+     "name": "snap7"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Whombat</title>
+    <!-- Icons and link preview: packages/brand (pnpm --filter @whombat/brand export-icons writes public/). -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1815" media="(prefers-color-scheme: dark)" />
+    <meta property="og:title" content="Whombat" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/whombat-og-1200x630.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Whombat" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- Fonts: this origin's copy of the design references' Google Fonts (src/app/fonts/fonts.css, preloaded by
+         vite.config preloadFonts; web-efficiency.md WE-05). -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

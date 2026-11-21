@@ -1,0 +1,610 @@
+/*
+ * A council (Whombat docs/decisions/council.md): the live run card's frame and head (Card.module.css,
+ * RunLiveCard.module.css). Here: the stage line and the steps under the title, the room with the elders and their
+ * plaques, the answers opened from a plaque, a provider's mark, the earlier rounds, the plan folded, and the final card's
+ * table, answers and the frame of its pictures (ShotPictures.module.css draws them). The delegation card borrows the
+ * frame and the chevron; its task rows have their own rules in DelegationCard.module.css.
+ */
+
+.card {
+  gap: 12px;
+}
+
+.stage {
+  margin: 0;
+  font: var(--type-meta);
+  color: var(--mut);
+}
+
+/* The council's room ----------------------------------------------------------------------------------------------- */
+
+/* The room and, under it, the answer opened from a plaque. */
+.council {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/*
+ * A burrow with a lamp in it, its arch over the elders, and one table across its foot. The elders and the plaques share
+ * one grid of seats, so each plaque stands under its elder.
+ */
+.room {
+  --seat-gap: 8px;
+  --room-side: 12px;
+
+  container-type: inline-size;
+  overflow: hidden;
+  padding-top: 16px;
+  border-radius:
+    999px 999px var(--radius-card) var(--radius-card) / 64px 64px var(--radius-card) var(--radius-card);
+  background:
+    radial-gradient(60% 70% at 50% 18%, var(--room-lamp), transparent 70%),
+    linear-gradient(to bottom, var(--room-top), var(--room-bottom));
+  box-shadow: inset 0 10px 24px var(--room-shade);
+}
+
+.elders,
+.bench {
+  display: grid;
+  grid-template-columns: repeat(var(--seats), minmax(0, 1fr));
+  column-gap: var(--seat-gap);
+  padding-inline: var(--room-side);
+}
+
+/* The thought dots and the sleeper's z take this colour. */
+.elder {
+  display: block;
+  min-width: 0;
+  color: var(--ink2);
+}
+
+.elder svg {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+/* The table: its top lit, its front, a darker edge. */
+.bench {
+  margin: 0;
+  padding-block: 14px 12px;
+  list-style: none;
+  background: linear-gradient(
+    to bottom,
+    var(--wood-top) 0 7px,
+    var(--wood) 7px calc(100% - 5px),
+    var(--wood-edge) calc(100% - 5px)
+  );
+}
+
+/* A member's plaque: paper in both themes, its words dark on it (4.5:1, contrast.test.ts). */
+.plaque {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 8px 9px;
+  border-radius: var(--radius-tag-large);
+  background: var(--plaque);
+  box-shadow: 0 1px 0 var(--wood-edge);
+  color: var(--plaque-ink);
+  text-align: center;
+}
+
+/* Didn't answer, failed or stopped: a dimmer plaque, its words as readable as ever. */
+.quiet {
+  background: var(--plaque-quiet);
+}
+
+/* A member's model, on a plaque and in the final card's answers and table. */
+.name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.plaque .name {
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--plaque-ink);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nameLink {
+  border-radius: var(--radius-tag);
+  text-decoration: none;
+}
+
+.nameLink:hover {
+  text-decoration: underline;
+}
+
+.company {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--plaque-mut);
+}
+
+/* Claude's or OpenAI's mark, else the company's first letter. */
+.companyMark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tag {
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+  background: var(--plaque-quiet);
+  font: var(--type-mono-badge);
+  color: var(--plaque-ink);
+}
+
+/* What the builder does now (a council from before its tasks went to T3 Code as a checklist). */
+.step {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--plaque-mut);
+}
+
+/* “Working · 58 min”; on a narrow card the time goes under the word. */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 3px;
+  font: var(--type-mono-meta);
+  color: var(--plaque-mut);
+}
+
+.elapsed {
+  white-space: nowrap;
+}
+
+.dot {
+  padding-inline: 0.5ch;
+}
+
+.result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: baseline;
+  justify-content: center;
+  margin-top: 3px;
+}
+
+.score {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--plaque-ink);
+}
+
+.agree,
+.changes {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agree {
+  color: var(--plaque-ok);
+}
+
+.changes {
+  color: var(--plaque-warn);
+}
+
+/* “Read its answer” on a plaque: a link-like button, underlined because it sits on paper, not on the card. */
+.read {
+  margin: 2px 0 0;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-tag-large);
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--plaque-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* A narrow card (a phone, a split pane): smaller plaques and a lower arch, so four seats still fit. */
+@container (max-width: 400px) {
+  .elders,
+  .bench {
+    --seat-gap: 5px;
+    --room-side: 6px;
+  }
+
+  .plaque {
+    padding: 6px 4px 7px;
+  }
+
+  .plaque .name {
+    font-size: 12px;
+  }
+
+  .company,
+  .step,
+  .read,
+  .agree,
+  .changes {
+    font-size: 11px;
+  }
+
+  .score {
+    font-size: 16px;
+  }
+
+  .status {
+    flex-direction: column;
+    font-size: 11px;
+  }
+
+  .dot {
+    display: none;
+  }
+}
+
+/* The answer opened from a plaque, under the room, a rule at its side. */
+.answer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line);
+}
+
+.answerOf {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* “The rest is in T3 Code”: a link to its thread. */
+.rest {
+  align-self: flex-start;
+  border-radius: var(--radius-tag-large);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink2);
+}
+
+.rest:hover {
+  color: var(--ink);
+}
+
+/*
+ * While a member thinks, its elder breathes slowly and three dots fade in turn over its head; one that didn't answer
+ * dozes. Nothing moves on a card's copy, once the council finished (no one thinks then) or with reduced motion.
+ */
+.elder[data-pose="thinking"] :global([data-elder="figure"]) {
+  animation: elder-breathe 4.5s ease-in-out infinite;
+}
+
+.elder[data-pose="thinking"] :global([data-elder^="dot"]) {
+  animation: elder-dot 1.8s ease-in-out infinite;
+}
+
+.elder[data-pose="thinking"] :global([data-elder="dot2"]) {
+  animation-delay: 0.3s;
+}
+
+.elder[data-pose="thinking"] :global([data-elder="dot3"]) {
+  animation-delay: 0.6s;
+}
+
+.council[data-still] .elder :global([data-elder]) {
+  animation: none;
+}
+
+@keyframes elder-breathe {
+  50% {
+    transform: translateY(1.5px);
+  }
+}
+
+@keyframes elder-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room .elder[data-pose] :global([data-elder]) {
+    animation: none;
+  }
+}
+
+/* A provider's mark (the final card's answers and score table) ------------------------------------------------------ */
+
+.slot {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sf2);
+}
+
+/* Any other provider: its first letter. */
+.glyph {
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink2);
+}
+
+/* Earlier rounds, at the foot's start: “Look 1 · 7 · 8 · 7”. */
+.earlier {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  font: var(--type-mono-meta);
+  color: var(--mut);
+  list-style: none;
+}
+
+/* The plan ---------------------------------------------------------------------------------------------------------- */
+
+.rich {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+
+/* The way to Settings → the assistant → Council, quieter than Stop beside it. */
+.changeCouncil {
+  flex: none;
+  border-radius: var(--radius-tag-large);
+  font-size: 13px;
+  color: var(--mut);
+  text-decoration: none;
+}
+
+.changeCouncil:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The final card ---------------------------------------------------------------------------------------------------- */
+
+.tableBox {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.table th,
+.table td {
+  padding: 6px 0 6px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table thead th {
+  padding-top: 0;
+  font: var(--type-label);
+  letter-spacing: var(--type-label-tracking);
+  color: var(--mut);
+  text-transform: uppercase;
+}
+
+.table tbody th {
+  padding-left: 0;
+  font-weight: 400;
+  text-align: left;
+}
+
+.table tbody tr {
+  border-top: 1px solid var(--line);
+}
+
+.table tbody td {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--mut);
+}
+
+/* The last round is the result. */
+.table tbody td.last {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.table thead th.last {
+  color: var(--ink2);
+}
+
+.rowName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chevron {
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  transform: none;
+}
+
+/* What changed: each screen's picture, full width, with its numbered notes (ShotPictures). */
+.pictures {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* The final card's answers under Details: who, their verdict in words, the answer itself. */
+.answerList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.answerItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.answerItem:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.answerWho {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.answerVerdict {
+  color: var(--ink2);
+  font-size: 13.5px;
+}
+
+/* The five steps under the title: a dot and a word each, a hairline between. Done:
+   a filled dot with a tick; now: the run line's green, its word in 600; next: an open dot, quiet words. */
+.track {
+  display: flex;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trackStep {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* The hairline from the step before to this one, behind the dots. */
+.trackStep + .trackStep::before {
+  position: absolute;
+  top: 5px;
+  right: calc(50% + 10px);
+  left: calc(-50% + 10px);
+  height: 1px;
+  background: var(--line2);
+  content: "";
+}
+
+.trackStep[data-state="done"] + .trackStep::before {
+  background: var(--progress);
+}
+
+.trackDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--line2);
+  border-radius: 50%;
+  background: var(--sf);
+  color: var(--sf);
+}
+
+.trackStep[data-state="done"] .trackDot {
+  border-color: var(--progress);
+  background: var(--progress);
+}
+
+.trackStep[data-state="now"] .trackDot {
+  border-color: var(--progress);
+  background: var(--progress);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--progress) 22%, transparent);
+}
+
+.trackWord {
+  color: var(--mut);
+  font-size: 11.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.trackStep[data-state="done"] .trackWord {
+  color: var(--ink2);
+}
+
+.trackStep[data-state="now"] .trackWord {
+  color: var(--ink);
+  font-weight: 600;
+}

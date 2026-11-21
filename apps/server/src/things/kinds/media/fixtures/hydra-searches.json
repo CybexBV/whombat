@@ -1,0 +1,50 @@
+{
+  "page": 1,
+  "limit": 20,
+  "totalElements": 2,
+  "totalPages": 1,
+  "entries": [
+    {
+      "id": -64771022,
+      "time": "2026-10-21T19:45:49.530040Z",
+      "source": "API",
+      "searchType": "TVSEARCH",
+      "category": "All",
+      "query": "ncis",
+      "title": null,
+      "author": null,
+      "season": 24,
+      "episode": "3",
+      "minAge": null,
+      "maxAge": null,
+      "minSize": null,
+      "maxSize": null,
+      "identifiers": [],
+      "selectedIndexers": [],
+      "username": null,
+      "ip": "172.20.0.1",
+      "userAgent": "Sonarr"
+    },
+    {
+      "id": -64771072,
+      "time": "2026-10-21T19:45:49.517650Z",
+      "source": "API",
+      "searchType": "SEARCH",
+      "category": "All",
+      "query": "dune",
+      "title": null,
+      "author": null,
+      "season": null,
+      "episode": null,
+      "minAge": null,
+      "maxAge": null,
+      "minSize": null,
+      "maxSize": null,
+      "identifiers": [],
+      "selectedIndexers": [],
+      "username": null,
+      "ip": "172.20.0.1",
+      "userAgent": "Other"
+    }
+  ]
+}

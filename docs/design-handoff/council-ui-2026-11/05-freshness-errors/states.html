@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Loading and empty states · Whombat mockups</title><link rel="stylesheet" href="style.css"><style>
+  main { padding: 24px 28px; } header { margin-bottom: 18px; } h1 { font-size: 1.75rem; } header p { margin-top: 6px; color: var(--ink2); font-size: .875rem; } .board { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; } .board h2 { font-size: 1rem; margin: 8px 0; } iframe { width: 100%; height: 270px; border: 0; } .board .empty-frame { height: 390px; } .board article { min-width: 0; } @media(max-width:800px) { .board { grid-template-columns: 1fr; } }
+</style></head><body><main><header><p class="eyebrow">05 · Component sheet · web and native content</p><h1>Loading has a shape. Empty has a way in.</h1><p>First-load placeholders only. A refresh keeps older values in place. Full pages and platform chrome: <a href="index.html">comparison viewer</a>.</p></header><div class="board" id="board"></div></main><script>
+const theme = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light';
+document.documentElement.dataset.theme = theme;
+document.getElementById('board').innerHTML = ['loading','empty'].flatMap(state => ['overview','server','automations'].map(screen => `<article><h2>${{overview:'Overview',server:'pve-02',automations:'Automations'}[screen]} · ${state === 'loading' ? 'first load' : 'empty'}</h2><iframe class="${state === 'empty' ? 'empty-frame' : ''}" title="${screen}, ${state}" src="mockup.html?screen=${screen}&state=${state}&fragment=1&theme=${theme}"></iframe></article>`)).join('');
+</script></body></html>

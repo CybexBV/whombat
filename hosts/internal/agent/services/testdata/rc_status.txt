@@ -1,0 +1,15 @@
+Runlevel: default
+ sshd                                                      [  started 3 day(s) ago (supervise-daemon) ]
+ crond                                                     [  started  ]
+ nginx                                                     [  crashed  ]
+ rackoon-agent                                             [  started 2 hour(s) ago (supervise-daemon) ]
+Runlevel: boot
+ hostname                                                  [  started  ]
+ networking                                                [  started  ]
+Runlevel: shutdown
+ killprocs                                                 [  stopped  ]
+Dynamic Runlevel: hotplugged
+Dynamic Runlevel: needed/wanted
+ localmount                                                [  started  ]
+Dynamic Runlevel: manual
+ docker                                                    [  started  ]

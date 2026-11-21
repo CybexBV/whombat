@@ -1,0 +1,3916 @@
+[
+  {
+    "file": "after-card-everyday-light.png",
+    "theme": "light",
+    "query": "surface=card&kind=everyday",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=card&kind=everyday&theme=light",
+      "date": "2026-11-06T13:32:31.908Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 34,
+      "minimum": 4.808,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "All approvals ↗",
+          "ratio": 4.808,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "03 · Approvals / Static mockup",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "‹ Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Light and dark use real tokens.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Technical details",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Everyday ask · web chat card · main version",
+          "ratio": 10.408,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "The full approval stays open. Technical details remain a separate disclosure.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14.5px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "servers · server_command",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "pve-02",
+          "ratio": 14.208,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "13px",
+          "shell": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Neo",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "No",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "03 · APPROVALS / STATIC MOCKUP\n\nEveryday ask · web chat card · main version\n\nAll approvals ↗\n‹ Chat\npve-02\nSettle\nNeo09:44\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\nBUILDABLE MAIN VERSION\nRead, then answer.\n\nThe action, permission and unmet conditions come before the answers.\n\nThe exact evening time is written out. No hover is needed.\n\nThe full approval stays open. Technical details remain a separate disclosure.\n\nFixture only · 23 Sep 2026\nLight and dark use real tokens."
+    },
+    "errors": []
+  },
+  {
+    "file": "after-web-code-command-light.png",
+    "theme": "light",
+    "query": "surface=web-board&group=code",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=web-board&group=code&theme=light",
+      "date": "2026-11-06T13:32:31.982Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 42,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "staging · billing-api",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Deploy to staging”",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv",
+          "ratio": 12.352,
+          "foreground": [
+            236,
+            228,
+            217
+          ],
+          "background": [
+            43,
+            34,
+            29
+          ],
+          "fontSize": "12.5px",
+          "shell": false,
+          "tag": "PRE"
+        },
+        {
+          "text": "Approve in advance",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Decline",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "WEB · EXISTING ACTION FIELDS, KEYS AND CONDITIONS\nEach kind keeps its own answers.\nServer command · chat card\n\nNEEDS A PERSON\n\nRun a command on the production server web-1\nWHAT WILL HAPPEN\n\nDeploy the invoice PDF change to the billing server.\n\nPERMISSION USED\n\n“Deploy to production”\n\nCOMMAND · WEB-1\nrsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"\n\nA person says yes\n· not yet\nyou\n\nAllow once\nAllow for this task\nAlways allow for Neo\nDon’t allow\nDetails\nCode / deploy · ApprovalDetails\n\nNEEDS A PERSON\n\nDeploy feat/invoice-pdf to staging?\nWHAT WILL HAPPEN\n\nBuild the latest commit on feat/invoice-pdf, then roll billing-api to staging\n\nRun migrations. There are none in this change.\nRoll billing-api to staging, 2 of 2 pods\nRoll back on its own if errors stay above 1% for 5 minutes\nPERMISSION USED\n\n“Deploy to staging”\n\nChecks pass on the latest commit\n· not yet\n38 of 41 · fixing\n\nMara approves the PR\n· not yet\nchanges requested\n\nYou say yes\n· not yet\nyou\n\nDecline\nApprove in advance\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-web-mail-key-light.png",
+    "theme": "light",
+    "query": "surface=web-board&group=mail",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=web-board&group=mail&theme=light",
+      "date": "2026-11-06T13:32:32.041Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 37,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "keys · Neo",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "“Browse the web”",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Give Neo “Browse the web”",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Details",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "WEB · EXISTING ACTION FIELDS, KEYS AND CONDITIONS\nEach kind keeps its own answers.\nMail send · chat card\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nTechnical details\nKey request · chat card\n\nNEEDS A PERSON\n\nGive Neo “Browse the web”\nWHAT WILL HAPPEN\n\nGive Neo “Browse the web”, to use without asking\n\nPERMISSION REQUESTED\n\n“Browse the web”\n\nA person says yes\n· not yet\nyou\n\nGive Neo “Browse the web”\nDetails\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-details-everyday-light.png",
+    "theme": "light",
+    "query": "surface=details&kind=everyday",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=details&kind=everyday&theme=light",
+      "date": "2026-11-06T13:32:32.105Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 19,
+      "minimum": 4.808,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "All approvals ↗",
+          "ratio": 4.808,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "03 · Approvals / Static mockup",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "servers · server_command",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Everyday ask · web ApprovalDetails · main version",
+          "ratio": 10.408,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Change things in connected services”",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, do it",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "No",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "03 · APPROVALS / STATIC MOCKUP\n\nEveryday ask · web ApprovalDetails · main version\n\nAll approvals ↗\nNEO IS ASKING\n✕\nLimit the ZFS cache on pve-02 to 16 GB?\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nA person says yes\n· not yet\nyou\n\nYes, do it\nNo\nDon’t ask again for pve-02…\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phones-general-light.png",
+    "theme": "light",
+    "query": "surface=phones",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phones&theme=light",
+      "date": "2026-11-06T13:32:32.176Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 59,
+      "minimum": 5.281,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "‹ Inbox",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "keys · Neo",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Waiting for you",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 6.059,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Browse the web”",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Give “Browse the web”",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Give Neo “Browse the web”?",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Decline",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "Everyday ask · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nLimit the ZFS cache on pve-02 to 16 GB?\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nDon’t ask again for pve-02…\nTechnical details\nYes, now\nYes, tonight\nNo\nCode / deploy · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 11:25\n\nDeploy feat/invoice-pdf to staging?\nWHAT WILL HAPPEN\n\nBuild the latest commit on feat/invoice-pdf, then roll billing-api to staging\n\nRun migrations. There are none in this change.\nRoll billing-api to staging, 2 of 2 pods\nRoll back on its own if errors stay above 1% for 5 minutes\nPERMISSION USED\n\n“Deploy to staging”\n\nChecks pass on e9f114\n· not yet\n38 of 41 · fixing\n\nMara approves the PR\n· not yet\nchanges requested\n\nYou say yes\n· not yet\nWaiting for you\n\nTechnical details\nDecline\nApprove\nKey request · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 09:44\n\nGive Neo “Browse the web”?\nWHAT WILL HAPPEN\n\nGive Neo “Browse the web”, to use without asking\n\nPERMISSION REQUESTED\n\n“Browse the web”\n\nA person says yes\n· not yet\nWaiting for you\n\nTechnical details\nDecline\nGive “Browse the web”"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phone-command-light.png",
+    "theme": "light",
+    "query": "surface=phone&kind=command",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=command&theme=light",
+      "date": "2026-11-06T13:32:32.246Z",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 14,
+      "minimum": 5.281,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "‹ Inbox",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Command · web-1",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 6.059,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Deploy to production”",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv",
+          "ratio": 12.352,
+          "foreground": [
+            236,
+            228,
+            217
+          ],
+          "background": [
+            43,
+            34,
+            29
+          ],
+          "fontSize": "12.5px",
+          "shell": false,
+          "tag": "PRE"
+        },
+        {
+          "text": "Allow once",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run a command on the production server web-1?",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "24px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Don’t allow",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 09:44\n\nRun a command on the production server web-1?\nWHAT WILL HAPPEN\n\nDeploy the invoice PDF change to the billing server.\n\nPERMISSION USED\n\n“Deploy to production”\n\nCOMMAND · WEB-1\nrsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"\n\nA person says yes\n· not yet\nWaiting for you\n\nAllow once\nAllow for this task\nAlways allow for Neo\nDon’t allow"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phone-mail-light.png",
+    "theme": "light",
+    "query": "surface=phone&kind=mail",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=mail&theme=light",
+      "date": "2026-11-06T13:32:32.294Z",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 11,
+      "minimum": 5.281,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "‹ Inbox",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Gmail · mara@example.com",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Waiting for you",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "No",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "11:22\n▰\n‹ Inbox\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nSend an email to priya@northwind.example?\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nTechnical details\nYes, now\nYes, tonight\nNo"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-open-message-variant-light.png",
+    "theme": "light",
+    "query": "surface=variants&group=mail",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=variants&group=mail&theme=light",
+      "date": "2026-11-06T13:32:32.351Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 40,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Message · Invoice 1042",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "No Cc or Bcc",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Send an email to priya@northwind.example",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        }
+      ],
+      "text": "ALTERNATIVES FOR REVIEW · NOT THE BUILDABLE MAIN VERSION\nKeep the decision boundary visible\n\nKeeps handle-it.md · message folded on the web card\n\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nTechnical details\n\nDecision for John — reopens handle-it.md\n\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nYes, now\nYes, tonight\nNo\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-new-data-variant-light.png",
+    "theme": "light",
+    "query": "surface=variants&group=data",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=variants&group=data&theme=light",
+      "date": "2026-11-06T13:32:32.404Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 46,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Don’t ask again for pve-02…",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "needs new data — reopens UIR-39, UIR-40",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "About 40 seconds.",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, tonight",
+          "ratio": 14.208,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "No",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "ALTERNATIVES FOR REVIEW · NOT THE BUILDABLE MAIN VERSION\nKeep the decision boundary visible\n\nKeeps UIR-39, UIR-40 · only existing fields\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\n\nneeds new data — reopens UIR-39, UIR-40\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nNeo suggests this\nYes, tonight\nCONSEQUENCES · NEEDS NEW DATA\n\nThe server and its machines will be unavailable while it restarts.\n\nCAN IT BE UNDONE? · NEEDS NEW DATA\n\nThe cache limit can be changed back. A restart cannot be taken back.\n\nHOW LONG IT STOPS · NEEDS NEW DATA\n\nAbout 40 seconds.\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-answered-states-light.png",
+    "theme": "light",
+    "query": "surface=states",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=states&theme=light",
+      "date": "2026-11-06T13:32:32.475Z",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 38,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "you",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "servers · server_command",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 10.222,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            241,
+            236,
+            228
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Execution detail — no thread flag",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Running",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Limit the ZFS cache on pve-02 to 16 GB",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        }
+      ],
+      "text": "SAME CARD · SHIPPED ANSWERED WORDS · NO PENDING FRAME AFTER ANSWERING\nOne answer, a clear next state\n\npending\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\n\nscheduled\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nScheduled for tonight, 03:00\n\nUndo\nTechnical details\n\nrunning\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nRunning\n\nTechnical details\n\ndone\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nDone · 09:46\n\nTechnical details\n\ndeclined\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nYou said no · 09:46\n\nUndo\nTechnical details\n\nExecution detail — no thread flag\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nIt didn’t work\n\nUndo\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-android-large-light.png",
+    "theme": "light",
+    "query": "surface=phone&kind=mail&platform=android&large=1",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=mail&platform=android&large=1&theme=light",
+      "date": "2026-11-06T13:32:32.543Z",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 9,
+      "minimum": 5.428,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "What will happen",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "22px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 6.059,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "24px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "31px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Send an email to priya@northwind.example?",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "48px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "No",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "30px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "11:22\n▰\n←\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nSend an email to priya@northwind.example?\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nTechnical details\nYes, now\nYes, tonight\nNo"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-card-everyday-dark.png",
+    "theme": "dark",
+    "query": "surface=card&kind=everyday",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=card&kind=everyday&theme=dark",
+      "date": "2026-11-06T13:32:32.635Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 34,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Technical details",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Light and dark use real tokens.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "03 · Approvals / Static mockup",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "‹ Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All approvals ↗",
+          "ratio": 9.379,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "servers · server_command",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "The full approval stays open. Technical details remain a separate disclosure.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14.5px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Everyday ask · web chat card · main version",
+          "ratio": 11.919,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "pve-02",
+          "ratio": 12.145,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "13px",
+          "shell": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "No",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Neo",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "03 · APPROVALS / STATIC MOCKUP\n\nEveryday ask · web chat card · main version\n\nAll approvals ↗\n‹ Chat\npve-02\nSettle\nNeo09:44\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\nBUILDABLE MAIN VERSION\nRead, then answer.\n\nThe action, permission and unmet conditions come before the answers.\n\nThe exact evening time is written out. No hover is needed.\n\nThe full approval stays open. Technical details remain a separate disclosure.\n\nFixture only · 23 Sep 2026\nLight and dark use real tokens."
+    },
+    "errors": []
+  },
+  {
+    "file": "after-web-code-command-dark.png",
+    "theme": "dark",
+    "query": "surface=web-board&group=code",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=web-board&group=code&theme=dark",
+      "date": "2026-11-06T13:32:32.693Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 42,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "staging · billing-api",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Deploy to staging”",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Decline",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Approve in advance",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv",
+          "ratio": 15.153,
+          "foreground": [
+            236,
+            228,
+            217
+          ],
+          "background": [
+            18,
+            15,
+            13
+          ],
+          "fontSize": "12.5px",
+          "shell": false,
+          "tag": "PRE"
+        }
+      ],
+      "text": "WEB · EXISTING ACTION FIELDS, KEYS AND CONDITIONS\nEach kind keeps its own answers.\nServer command · chat card\n\nNEEDS A PERSON\n\nRun a command on the production server web-1\nWHAT WILL HAPPEN\n\nDeploy the invoice PDF change to the billing server.\n\nPERMISSION USED\n\n“Deploy to production”\n\nCOMMAND · WEB-1\nrsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"\n\nA person says yes\n· not yet\nyou\n\nAllow once\nAllow for this task\nAlways allow for Neo\nDon’t allow\nDetails\nCode / deploy · ApprovalDetails\n\nNEEDS A PERSON\n\nDeploy feat/invoice-pdf to staging?\nWHAT WILL HAPPEN\n\nBuild the latest commit on feat/invoice-pdf, then roll billing-api to staging\n\nRun migrations. There are none in this change.\nRoll billing-api to staging, 2 of 2 pods\nRoll back on its own if errors stay above 1% for 5 minutes\nPERMISSION USED\n\n“Deploy to staging”\n\nChecks pass on the latest commit\n· not yet\n38 of 41 · fixing\n\nMara approves the PR\n· not yet\nchanges requested\n\nYou say yes\n· not yet\nyou\n\nDecline\nApprove in advance\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-web-mail-key-dark.png",
+    "theme": "dark",
+    "query": "surface=web-board&group=mail",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=web-board&group=mail&theme=dark",
+      "date": "2026-11-06T13:32:32.758Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 37,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "keys · Neo",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Browse the web”",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Details",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Give Neo “Browse the web”",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "WEB · EXISTING ACTION FIELDS, KEYS AND CONDITIONS\nEach kind keeps its own answers.\nMail send · chat card\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nTechnical details\nKey request · chat card\n\nNEEDS A PERSON\n\nGive Neo “Browse the web”\nWHAT WILL HAPPEN\n\nGive Neo “Browse the web”, to use without asking\n\nPERMISSION REQUESTED\n\n“Browse the web”\n\nA person says yes\n· not yet\nyou\n\nGive Neo “Browse the web”\nDetails\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-details-everyday-dark.png",
+    "theme": "dark",
+    "query": "surface=details&kind=everyday",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=details&kind=everyday&theme=dark",
+      "date": "2026-11-06T13:32:32.819Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 19,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "servers · server_command",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "03 · Approvals / Static mockup",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All approvals ↗",
+          "ratio": 9.379,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "“Change things in connected services”",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Everyday ask · web ApprovalDetails · main version",
+          "ratio": 11.919,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "No",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Yes, do it",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "03 · APPROVALS / STATIC MOCKUP\n\nEveryday ask · web ApprovalDetails · main version\n\nAll approvals ↗\nNEO IS ASKING\n✕\nLimit the ZFS cache on pve-02 to 16 GB?\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nA person says yes\n· not yet\nyou\n\nYes, do it\nNo\nDon’t ask again for pve-02…\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phones-general-dark.png",
+    "theme": "dark",
+    "query": "surface=phones",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phones&theme=dark",
+      "date": "2026-11-06T13:32:32.874Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 59,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Waiting for you",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "keys · Neo",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "‹ Inbox",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 9.325,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Browse the web”",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Decline",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Give Neo “Browse the web”?",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Give “Browse the web”",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "Everyday ask · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nLimit the ZFS cache on pve-02 to 16 GB?\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nDon’t ask again for pve-02…\nTechnical details\nYes, now\nYes, tonight\nNo\nCode / deploy · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 11:25\n\nDeploy feat/invoice-pdf to staging?\nWHAT WILL HAPPEN\n\nBuild the latest commit on feat/invoice-pdf, then roll billing-api to staging\n\nRun migrations. There are none in this change.\nRoll billing-api to staging, 2 of 2 pods\nRoll back on its own if errors stay above 1% for 5 minutes\nPERMISSION USED\n\n“Deploy to staging”\n\nChecks pass on e9f114\n· not yet\n38 of 41 · fixing\n\nMara approves the PR\n· not yet\nchanges requested\n\nYou say yes\n· not yet\nWaiting for you\n\nTechnical details\nDecline\nApprove\nKey request · iOS · static proposal\n11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 09:44\n\nGive Neo “Browse the web”?\nWHAT WILL HAPPEN\n\nGive Neo “Browse the web”, to use without asking\n\nPERMISSION REQUESTED\n\n“Browse the web”\n\nA person says yes\n· not yet\nWaiting for you\n\nTechnical details\nDecline\nGive “Browse the web”"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phone-command-dark.png",
+    "theme": "dark",
+    "query": "surface=phone&kind=command",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=command&theme=dark",
+      "date": "2026-11-06T13:32:32.940Z",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 14,
+      "minimum": 6.013,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Command · web-1",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "‹ Inbox",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "NEEDS A PERSON",
+          "ratio": 9.325,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "“Deploy to production”",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Don’t allow",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run a command on the production server web-1?",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "24px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Allow once",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "rsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv",
+          "ratio": 15.153,
+          "foreground": [
+            236,
+            228,
+            217
+          ],
+          "background": [
+            18,
+            15,
+            13
+          ],
+          "fontSize": "12.5px",
+          "shell": false,
+          "tag": "PRE"
+        }
+      ],
+      "text": "11:22\n▰\n‹ Inbox\n\nNEEDS A PERSON\n\nNeo · Chat · 09:44\n\nRun a command on the production server web-1?\nWHAT WILL HAPPEN\n\nDeploy the invoice PDF change to the billing server.\n\nPERMISSION USED\n\n“Deploy to production”\n\nCOMMAND · WEB-1\nrsync -az --delete --exclude node_modules dist/ deploy@web-1:/srv/billing/releases/2026-09-23 && ssh web-1 \"ln -sfn /srv/billing/releases/2026-09-23 /srv/billing/current && sudo systemctl restart billing-api\"\n\nA person says yes\n· not yet\nWaiting for you\n\nAllow once\nAllow for this task\nAlways allow for Neo\nDon’t allow"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-phone-mail-dark.png",
+    "theme": "dark",
+    "query": "surface=phone&kind=mail",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=mail&theme=dark",
+      "date": "2026-11-06T13:32:32.992Z",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 11,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Waiting for you",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Gmail · mara@example.com",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "‹ Inbox",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "17px",
+          "shell": true,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "No",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "11:22\n▰\n‹ Inbox\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nSend an email to priya@northwind.example?\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nTechnical details\nYes, now\nYes, tonight\nNo"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-open-message-variant-dark.png",
+    "theme": "dark",
+    "query": "surface=variants&group=mail",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=variants&group=mail&theme=dark",
+      "date": "2026-11-06T13:32:33.045Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 40,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Message · Invoice 1042",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "11px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "No Cc or Bcc",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Hi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve ",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Send an email to priya@northwind.example",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "ALTERNATIVES FOR REVIEW · NOT THE BUILDABLE MAIN VERSION\nKeep the decision boundary visible\n\nKeeps handle-it.md · message folded on the web card\n\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nTechnical details\n\nDecision for John — reopens handle-it.md\n\nSend an email to priya@northwind.example\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nYes, now\nYes, tonight\nNo\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-new-data-variant-dark.png",
+    "theme": "dark",
+    "query": "surface=variants&group=data",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=variants&group=data&theme=dark",
+      "date": "2026-11-06T13:32:33.105Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 46,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "Don’t ask again for pve-02…",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "About 40 seconds.",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "needs new data — reopens UIR-39, UIR-40",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, tonight",
+          "ratio": 12.145,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "No",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "ALTERNATIVES FOR REVIEW · NOT THE BUILDABLE MAIN VERSION\nKeep the decision boundary visible\n\nKeeps UIR-39, UIR-40 · only existing fields\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\n\nneeds new data — reopens UIR-39, UIR-40\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nNeo suggests this\nYes, tonight\nCONSEQUENCES · NEEDS NEW DATA\n\nThe server and its machines will be unavailable while it restarts.\n\nCAN IT BE UNDONE? · NEEDS NEW DATA\n\nThe cache limit can be changed back. A restart cannot be taken back.\n\nHOW LONG IT STOPS · NEEDS NEW DATA\n\nAbout 40 seconds.\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-answered-states-dark.png",
+    "theme": "dark",
+    "query": "surface=states",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=states&theme=dark",
+      "date": "2026-11-06T13:32:33.171Z",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 38,
+      "minimum": 5.515,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "servers · server_command",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "you",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Thursday, 24 September 2026 at 03:00 · Europe/Amsterdam.",
+          "ratio": 9.343,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            46,
+            41,
+            37
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Running",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Execution detail — no thread flag",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Limit the ZFS cache on pve-02 to 16 GB",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "· not yet",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ],
+      "text": "SAME CARD · SHIPPED ANSWERED WORDS · NO PENDING FRAME AFTER ANSWERING\nOne answer, a clear next state\n\npending\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nNeo needs your OK\n\nWHAT WILL HAPPEN\n\nNeo limits the ZFS cache on pve-02 to 16 GB. pve-02 restarts once to apply it.\n\nPERMISSION USED\n\n“Change things in connected services”\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nyou\n\nYes, now\nYes, tonight\nNo\nDon’t ask again for pve-02…\nTechnical details\n\nscheduled\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nScheduled for tonight, 03:00\n\nUndo\nTechnical details\n\nrunning\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nRunning\n\nTechnical details\n\ndone\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nDone · 09:46\n\nTechnical details\n\ndeclined\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nYou said no · 09:46\n\nUndo\nTechnical details\n\nExecution detail — no thread flag\n\nLimit the ZFS cache on pve-02 to 16 GB\n\nIt didn’t work\n\nUndo\nTechnical details"
+    },
+    "errors": []
+  },
+  {
+    "file": "after-android-large-dark.png",
+    "theme": "dark",
+    "query": "surface=phone&kind=mail&platform=android&large=1",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "measure": {
+      "url": "/docs/design-handoff/council-ui-2026-11/03-approvals/approvals.html?surface=phone&kind=mail&platform=android&large=1&theme=dark",
+      "date": "2026-11-06T13:32:33.238Z",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "threshold": 4.5,
+      "count": 9,
+      "minimum": 6.013,
+      "failures": [],
+      "skipped": [],
+      "pairs": [
+        {
+          "text": "What will happen",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "22px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Neo needs your OK",
+          "ratio": 9.325,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "24px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Send “Invoice 1042” from mara@example.com to priya@northwind.example",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "31px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "No",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "30px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Send an email to priya@northwind.example?",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "48px",
+          "shell": false,
+          "tag": "H2"
+        }
+      ],
+      "text": "11:22\n▰\n←\n\nNeo needs your OK\n\nNeo · Chat · 09:44\n\nSend an email to priya@northwind.example?\nWHAT WILL HAPPEN\n\nSend “Invoice 1042” from mara@example.com to priya@northwind.example\n\nPERMISSION USED\n\n“Send emails”\n\nCOPIES\n\nNo Cc or Bcc\n\nYes, tonight means\nThursday, 24 September 2026 at 03:00 · Europe/Amsterdam.\n\nA person says yes\n· not yet\nWaiting for you\n\nMESSAGE · INVOICE 1042\nHi Priya,\n\nInvoice 1042 for September is paid; the transfer went out this morning and should reach you by Friday.\n\nI’ve attached the remittance advice. Let me know if the amount doesn’t match what you expected.\n\nThanks,\nMara\nTechnical details\nYes, now\nYes, tonight\nNo"
+    },
+    "errors": []
+  }
+]

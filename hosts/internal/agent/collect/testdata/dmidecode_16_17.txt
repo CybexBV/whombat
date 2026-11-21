@@ -1,0 +1,169 @@
+# dmidecode 3.6
+Getting SMBIOS data from sysfs.
+SMBIOS 3.7.0 present.
+
+Handle 0x0015, DMI type 16, 23 bytes
+Physical Memory Array
+	Location: System Board Or Motherboard
+	Use: System Memory
+	Error Correction Type: Multi-bit ECC
+	Maximum Capacity: 4 TB
+	Error Information Handle: 0x0014
+	Number Of Devices: 4
+
+Handle 0x0019, DMI type 17, 100 bytes
+Memory Device
+	Array Handle: 0x0015
+	Error Information Handle: 0x0018
+	Total Width: 80 bits
+	Data Width: 64 bits
+	Size: 48 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL A
+	Type: DDR5
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 4800 MT/s
+	Manufacturer: Unknown
+	Serial Number: DIMM0001
+	Asset Tag: Not Specified
+	Part Number: F5-6000R3036G48GQ             
+	Rank: 2
+	Configured Memory Speed: 6000 MT/s
+	Minimum Voltage: 1.1 V
+	Maximum Voltage: 1.1 V
+	Configured Voltage: 1.1 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 5, Hex 0xCD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 48 GB
+	Cache Size: None
+	Logical Size: None
+	PMIC0 Manufacturer ID: Unknown
+	PMIC0 Device Type: Not Installed
+	RCD Manufacturer ID: Unknown
+	RCD Device Type: Not Installed
+
+Handle 0x001C, DMI type 17, 100 bytes
+Memory Device
+	Array Handle: 0x0015
+	Error Information Handle: 0x001B
+	Total Width: 80 bits
+	Data Width: 64 bits
+	Size: 48 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL C
+	Type: DDR5
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 4800 MT/s
+	Manufacturer: Unknown
+	Serial Number: DIMM0002
+	Asset Tag: Not Specified
+	Part Number: F5-6000R3036G48GQ             
+	Rank: 2
+	Configured Memory Speed: 6000 MT/s
+	Minimum Voltage: 1.1 V
+	Maximum Voltage: 1.1 V
+	Configured Voltage: 1.1 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 5, Hex 0xCD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 48 GB
+	Cache Size: None
+	Logical Size: None
+	PMIC0 Manufacturer ID: Unknown
+	PMIC0 Device Type: Not Installed
+	RCD Manufacturer ID: Unknown
+	RCD Device Type: Not Installed
+
+Handle 0x0020, DMI type 17, 100 bytes
+Memory Device
+	Array Handle: 0x0015
+	Error Information Handle: 0x001F
+	Total Width: 80 bits
+	Data Width: 64 bits
+	Size: 48 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL E
+	Type: DDR5
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 4800 MT/s
+	Manufacturer: Unknown
+	Serial Number: DIMM0004
+	Asset Tag: Not Specified
+	Part Number: F5-6000R3036G48GQ             
+	Rank: 2
+	Configured Memory Speed: 6000 MT/s
+	Minimum Voltage: 1.1 V
+	Maximum Voltage: 1.1 V
+	Configured Voltage: 1.1 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 5, Hex 0xCD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 48 GB
+	Cache Size: None
+	Logical Size: None
+	PMIC0 Manufacturer ID: Unknown
+	PMIC0 Device Type: Not Installed
+	RCD Manufacturer ID: Unknown
+	RCD Device Type: Not Installed
+
+Handle 0x0023, DMI type 17, 100 bytes
+Memory Device
+	Array Handle: 0x0015
+	Error Information Handle: 0x0022
+	Total Width: 80 bits
+	Data Width: 64 bits
+	Size: 48 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL G
+	Type: DDR5
+	Type Detail: Synchronous Registered (Buffered)
+	Speed: 4800 MT/s
+	Manufacturer: Unknown
+	Serial Number: DIMM0003
+	Asset Tag: Not Specified
+	Part Number: F5-6000R3036G48GQ             
+	Rank: 2
+	Configured Memory Speed: 6000 MT/s
+	Minimum Voltage: 1.1 V
+	Maximum Voltage: 1.1 V
+	Configured Voltage: 1.1 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 5, Hex 0xCD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 48 GB
+	Cache Size: None
+	Logical Size: None
+	PMIC0 Manufacturer ID: Unknown
+	PMIC0 Device Type: Not Installed
+	RCD Manufacturer ID: Unknown
+	RCD Device Type: Not Installed
+

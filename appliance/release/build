@@ -1,0 +1,470 @@
+#!/usr/bin/env bash
+# release/build — build one release of the self-installed image (NX-66…NX-69, PI-22; docs/runbooks/release-build.md).
+# (Called release/build before PI-22.)
+#
+#   release/build <prod|community> <releaseId> --runtime-stamp S [--out DIR] [--allow-dirty] [--iso]
+#                 [--nar-cache DIR] [--updates-url URL]
+#       A host release: the appliance toplevel with selfFactoryRelease = <releaseId>, its manager and runtime, and the
+#       `tufrepo export-release` directory (the release tuple and its closure indexes). No installer ISO
+#       unless `--iso` (UP-X15): `release/build iso <out dir>` builds it later.
+#   release/build <prod|community> <releaseId> --runtime-stamp S --reuse-host <previous build.json>
+#                 [--runtime-label L] [--out DIR] …
+#       A runtime-only release: the previous release's host and manager (not exported again, not rebuilt), this
+#       commit's runtime bundle. No ISO: installing stays the previous release's ISO, and the box updates from it.
+#   release/build iso <out dir>
+#       The installer ISO of a host build in <out dir> (UP-X15), from the source rev its build.json records; checks the
+#       ISO's installed system is the build's host store path; writes iso/<file>, iso/SHA256SUMS and iso.json (file,
+#       storePath, sha256, size, system). build.json is not rewritten (the records hash it). Nothing to do when the
+#       directory already has its ISO.
+#   release/build host-path <host build.json> [--rev R]
+#       Evaluation only (UP-X16, IN-156): this commit's (or R's) host toplevel as that host release would have been
+#       built — its release id, its runtime (the derivation its own commit evaluates, with its label) and its manager
+#       version. Prints {"host": <outPath>, "expected": <that host's store path>, "equal": …} on stdout.
+#
+# `prod` is the Whombat image, every box's (ONE-02: production, the GitHub repository's channels, manifest/prod/),
+# `community` the community edition (environment `dev`, manifest/community/: test keys only, never published, Whombat
+# HE-62; NX-445). The DEV image (`dev`, environment `local`) is gone: its builds are only read (host-path, iso, from
+# their own commits). Release ids (NX-67, PI-23, ONE-04): `whombat-YYYYMMDD.N`, community `whombat-community-YYYYMMDD.N`
+# (UP-X27; the `whombat-dev-…` and `pve-…` ids before them are only read, as earlier builds' ids).
+# `--updates-url URL` (community only): the update repository the image's manager reads (`<URL>metadata/`,
+# `<URL>targets/`) instead of the profile's: the install test's own (`release/community-repo`, NX-445). Recorded in
+# build.json; `release/build iso` builds the ISO with it.
+# `--runtime-stamp S` is the commit the runtime bundle says it is (its version `<package.json>-<commit time>.<rev>`,
+# its gitSha): a commit of this checkout or of an archive (`HEAD`, an id), or `<commit id>:<seconds since
+# 1970>:<UTC YYYYMMDDHHMMSS>` as an earlier build.json recorded it (`runtime.stamp`). The build never takes "this
+# commit" by itself: the same files under the same stamp are the very same runtime, so whoever makes the release
+# chooses whether the runtime is a new one (this commit) or the published one (its stamp). Recorded in build.json.
+# `--runtime-label L` rebuilds the runtime bundle as `<version>.L` (community only): a runtime-only release of the
+# same files, to prove that update path.
+# `--client-floor web=N,android=M,…` puts a client security floor in the tuple (CT-53, UP-B3d; platforms web, android,
+# ios, desktop, cli, the rest 0): the runtime refuses clients below it. `release/ship build --client-floor` passes it.
+# Releases carry closure indexes with per-path blobs only (UP-X14, UP-X23): the full `nix-store --export` closures
+# went with the managers before 0.3.0 that read them.
+# `--nar-cache DIR` (default ~/.cache/whombat-releases/nar, `WB_NAR_CACHE`): the compressed blobs, made once per NAR
+# hash across releases; the release directory's nar/ holds hard links into it.
+#
+# Output (default ~/.cache/whombat-releases/<releaseId>):
+#   release/        the export-release directory: release.json, *.paths.json, nar/ (blobs), SHA256SUMS (top-level
+#                   files only)
+#                   (what `deploy.sh release <id> <dir>` and `dev/publish-release <dir>` take)
+#   iso/, iso.json  with --iso or `release/build iso`: <name>.iso and SHA256SUMS (what `deploy.sh iso <id>
+#                   <iso>` takes); host releases only
+#   tuple.template.json, tuple.json, build.json (what was built: source, store paths, NAR hashes, sizes, indexes)
+#   gcroots/        garbage-collector roots for the runtime and, for a host release, the host and the manager
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root=$(cd "$here/.." && pwd)
+export NIX_CONFIG="${NIX_CONFIG:-}"$'\n'"experimental-features = nix-command flakes"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"
+mkdir -p "$TMPDIR"
+# Where a commit is and what its flake is called: this checkout or an archive, the appliance at a repository's top or
+# in Whombat's appliance/ folder.
+# shellcheck source=release/lib/source.sh
+. "$here/lib/source.sh"
+
+# The release function of the flake $1 (`lib.applianceRelease`; `lib.proxmoxRelease` in trees before PI-22), as a Nix
+# expression.
+release_fn() { echo "(let l = (builtins.getFlake \"$1\").lib; in l.applianceRelease or l.proxmoxRelease)"; }
+
+die() {
+  echo "build: $*" >&2
+  exit 1
+}
+
+# Whether the flake $1 gives a release its runtime's stamp (a tree of the merged repository). A tree from before it
+# reads its pinned Whombat by itself.
+takes_stamp() {
+  [ "$(nix eval --impure --json --expr "(builtins.getFlake \"$1\").lib.takesRuntimeStamp or false")" = true ]
+}
+
+# A runtime stamp as JSON {rev, time, date}, from `<rev>:<time>:<date>` or from a commit of this checkout or an
+# archive.
+stamp_json() {
+  local s=$1 repo rev time
+  if [[ $s =~ ^([0-9a-f]{40}):([1-9][0-9]{0,11}):([0-9]{14})$ ]]; then
+    [ "$(date -u -d "@${BASH_REMATCH[2]}" +%Y%m%d%H%M%S)" = "${BASH_REMATCH[3]}" ] ||
+      die "--runtime-stamp $s: ${BASH_REMATCH[3]} is not the time ${BASH_REMATCH[2]}"
+    jq -cn --arg rev "${BASH_REMATCH[1]}" --argjson time "${BASH_REMATCH[2]}" --arg date "${BASH_REMATCH[3]}" \
+      '{rev: $rev, time: $time, date: $date}'
+    return
+  fi
+  if rev=$(git -C "$root" rev-parse --verify -q "$s^{commit}"); then
+    repo=$root
+  else
+    [[ $s =~ ^[0-9a-f]{40}$ ]] || die "--runtime-stamp $s: not a commit here; name a full commit id or <rev>:<time>:<date>"
+    rev=$s
+    repo=$(source_find "$rev") || die "--runtime-stamp: the commit $rev can't be found"
+  fi
+  time=$(git -C "$repo" show -s --format=%ct "$rev")
+  jq -cn --arg rev "$rev" --argjson time "$time" --arg date "$(date -u -d "@$time" +%Y%m%d%H%M%S)" \
+    '{rev: $rev, time: $time, date: $date}'
+}
+
+# The stamp $1 (JSON) as an argument of the release function.
+stamp_arg() { jq -r '"runtimeStamp = { rev = \"\(.rev)\"; time = \(.time); date = \"\(.date)\"; };"' <<<"$1"; }
+
+# The same for the build.json $2 and the flake $1 its release is evaluated from: the stamp the build recorded when
+# the flake is given one, nothing for a tree from before the merge.
+recorded_stamp_arg() {
+  local flake=$1 b=$2 stamp
+  takes_stamp "$flake" || return 0
+  stamp=$(jq -ec '.runtime.stamp // empty' "$b") || die "$b records no runtime stamp (runtime.stamp), and its source needs one"
+  stamp_arg "$stamp"
+}
+say() { echo "build: $*" >&2; }
+usage() {
+  sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//' >&2
+  exit 2
+}
+
+# The installer ISO of the host build in $1 (UP-X15): built from the source rev its build.json records, its installed
+# system checked to be the build's host store path; iso/<file>, iso/SHA256SUMS and iso.json. Never build.json.
+build_iso() {
+  local dir=$1
+  local b="$dir/build.json"
+  [ -f "$b" ] || die "$dir has no build.json"
+  local id env rev label host
+  id=$(jq -er .releaseId "$b")
+  env=$(jq -er .env "$b")
+  [ "$(jq -r .class "$b")" = host ] ||
+    die "$id is a runtime-only release: it has no ISO of its own; build its host's ($(jq -r .tuple.host.version "$b"))"
+  if [ -f "$dir/iso.json" ]; then
+    say "$id has its ISO: $dir/iso/$(jq -r .file "$dir/iso.json")"
+    return 0
+  fi
+  if jq -e '.iso.file' "$b" >/dev/null 2>&1; then
+    say "$id has its ISO (built with the release): $dir/iso/$(jq -r .iso.file "$b")"
+    return 0
+  fi
+  [ "$(jq -r .source.dirty "$b")" = false ] || die "$id was built from uncommitted changes: its ISO can't be built from its source"
+  rev=$(jq -er .source.rev "$b")
+  local flake
+  flake=$(source_flake "$rev") || die "$rev, the source of $id, can't be found"
+  label=$(jq -r '.runtime.label // ""' "$b")
+  host=$(jq -er .tuple.host.storePath "$b")
+  local la= ua= updates
+  [ -z "$label" ] || la="runtimeLabel = \"$label\";"
+  updates=$(jq -r '.updatesUrl // ""' "$b")
+  [ -z "$updates" ] || ua="updatesUrl = \"$updates\";"
+  local sa
+  sa=$(recorded_stamp_arg "$flake" "$b")
+  local r="($(release_fn "$flake") { env = \"$env\"; releaseId = \"$id\"; $la $ua $sa })"
+  local sys
+  sys=$(nix eval --impure --raw --expr "$r.toplevel.outPath")
+  [ "$sys" = "$host" ] || die "$id's source $rev evaluates to the host $sys, not the build's $host"
+  say "building the installer ISO of $id from $rev"
+  local iso f
+  iso=$(nix build --impure --no-link --print-out-paths --expr "$r.iso")
+  # The installer's system is the toplevel evaluated above (installerWith … appliance). It sits inside the ISO's
+  # squashfs, where Nix sees no reference, so the check is on the build: the host is an output the ISO was built from.
+  nix-store -qR --include-outputs "$(nix-store -qd "$iso")" | grep -qxF "$host" || die "the ISO $iso wasn't built from $host"
+  f=$(nix eval --impure --raw --expr "$r.isoFile")
+  mkdir -p "$dir/iso"
+  cp --reflink=auto "$iso/iso/$f" "$dir/iso/$f.tmp"
+  chmod 0644 "$dir/iso/$f.tmp"
+  mv "$dir/iso/$f.tmp" "$dir/iso/$f"
+  (cd "$dir/iso" && sha256sum "$f" >SHA256SUMS)
+  jq -n --arg id "$id" --arg f "$f" --arg p "$iso" --arg s "$(cut -d' ' -f1 "$dir/iso/SHA256SUMS")" \
+    --argjson n "$(stat -c %s "$dir/iso/$f")" --arg sys "$host" --arg rev "$rev" \
+    --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{v: 1, releaseId: $id, file: $f, storePath: $p, sha256: $s, size: $n, system: $sys, source: {rev: $rev},
+      builtAt: $at}' >"$dir/iso.json.tmp"
+  mv "$dir/iso.json.tmp" "$dir/iso.json"
+  say "ISO: $dir/iso/$f"
+}
+
+# UP-X16 (IN-156): this commit's host toplevel as the host release whose build.json is $1 would have been built — its
+# release id, its runtime (the derivation its own source evaluates, with its label: the runtime's packaging moves with
+# every pin, so the pin alone wouldn't reproduce it) and its manager's version (which names the commit). Evaluation only.
+host_path() {
+  local b=$1 rev=$2
+  [ -f "$b" ] || die "host-path: no such build.json: $b"
+  local cls env id oldRev label mv expected rt la=
+  cls=$(jq -r .class "$b")
+  [ "$cls" = host ] || die "host-path: $b is a $cls release; name its host's build.json ($(jq -r .tuple.host.version "$b"))"
+  env=$(jq -er .env "$b")
+  case $env in dev | prod) ;; *) die "host-path: $b names environment $env" ;; esac
+  id=$(jq -er .releaseId "$b")
+  [[ $id =~ ^(whombat|pve)-(dev-)?[0-9]{8}\.[1-9][0-9]{0,3}$ ]] || die "host-path: bad release id $id"
+  [ "$(jq -er .tuple.host.version "$b")" = "$id" ] || die "host-path: $b's host is not its own release's"
+  [ "$(jq -r .source.dirty "$b")" = false ] || die "host-path: $id was built from uncommitted changes"
+  oldRev=$(jq -er .source.rev "$b")
+  label=$(jq -r '.runtime.label // ""' "$b")
+  [ -z "$label" ] || [[ $label =~ ^[a-z0-9][a-z0-9.-]{0,23}$ ]] || die "host-path: bad runtime label $label"
+  [ -z "$label" ] || la="runtimeLabel = \"$label\";"
+  mv=$(jq -er .tuple.manager.version "$b")
+  [[ $mv =~ ^[0-9A-Za-z.+-]{1,64}$ ]] || die "host-path: bad manager version $mv"
+  expected=$(jq -er .tuple.host.storePath "$b")
+  rt=$(jq -er .tuple.runtime.storePath "$b")
+  local oldFlake newFlake
+  oldFlake=$(source_flake "$oldRev") || die "host-path: $oldRev, the source of $id, can't be found"
+  rev=$(git -C "$root" rev-parse --verify "${rev:-HEAD}^{commit}" 2>/dev/null) || die "host-path: ${rev:-HEAD} is not a commit in $root"
+  newFlake=$(source_flake "$rev") || die "host-path: $rev holds no appliance"
+  say "host-path: the host of $id as $(git -C "$root" rev-parse --short "$rev") would build it"
+  # That host's runtime under the stamp its build recorded. This commit's image gets that runtime put in, so its own
+  # stamp only has to be one: the recorded one, or for a host from before the merge its Whombat commit.
+  local oldStamp newStamp=
+  oldStamp=$(recorded_stamp_arg "$oldFlake" "$b")
+  if takes_stamp "$newFlake"; then
+    newStamp=${oldStamp:-$(stamp_arg "$(jq -c '{rev: .runtime.whombatRev, time: 946684800, date: "20000101000000"}' "$b")")}
+  fi
+  local out got
+  out=$(nix eval --impure --json --expr "
+    let
+      old = $(release_fn "$oldFlake") { env = \"$env\"; releaseId = \"$id\"; $la $oldStamp };
+      rel = $(release_fn "$newFlake") { env = \"$env\"; releaseId = \"$id\"; $newStamp };
+      ver = p: p.overrideAttrs (o: { version = \"$mv\"; __intentionallyOverridingVersion = true; inherit (o) goModules; });
+      sys = rel.appliance.extendModules { modules = [ ({ pkgs, lib, ... }: {
+        whombat.runtime.package = lib.mkOverride 80 old.runtime;
+        whombat.manager.package = lib.mkOverride 80 (ver pkgs.whombat-manager);
+        whombat.helper.package = lib.mkOverride 80 (ver pkgs.whombat-update-helper);
+      }) ]; };
+    in { host = sys.config.system.build.toplevel.outPath; runtime = old.runtime.outPath; }")
+  got=$(jq -r .runtime <<<"$out")
+  [ "$got" = "$rt" ] || die "host-path: $oldRev evaluates $id's runtime to $got, not its build's $rt"
+  jq -c --arg e "$expected" '{host, expected: $e, equal: (.host == $e)}' <<<"$out"
+}
+
+case ${1:-} in
+  iso)
+    [ $# = 2 ] || usage
+    build_iso "$(cd "$2" && pwd)"
+    exit 0
+    ;;
+  host-path)
+    [ $# = 2 ] || [ $# = 4 ] || usage
+    hpRev=
+    if [ $# = 4 ]; then
+      [ "$3" = --rev ] || usage
+      hpRev=$4
+    fi
+    host_path "$2" "$hpRev"
+    exit 0
+    ;;
+esac
+
+[ $# -ge 2 ] || usage
+env=$1
+id=$2
+shift 2
+out=
+reuse=
+label=
+floor=
+updates=
+stamp=
+allow_dirty=false
+want_iso=false
+narCache=${WB_NAR_CACHE:-$HOME/.cache/whombat-releases/nar}
+while [ $# -gt 0 ]; do
+  case $1 in
+    --out) out=${2:?}; shift 2 ;;
+    --reuse-host) reuse=${2:?}; shift 2 ;;
+    --runtime-label) label=${2:?}; shift 2 ;;
+    --runtime-stamp) stamp=${2:?}; shift 2 ;;
+    --client-floor) floor=${2:?}; shift 2 ;;
+    --allow-dirty) allow_dirty=true; shift ;;
+    --iso) want_iso=true; shift ;;
+    --nar-cache) narCache=${2:?}; shift 2 ;;
+    --updates-url) updates=${2:?}; shift 2 ;;
+    -h | --help) usage ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+
+# NX-67, PI-23: the release id names environment, day and a counter; the day must be a real date. New builds are
+# whombat-…; a pve-… id is an earlier build's (tufrepo signs none any more).
+case $env in
+  prod) re='^whombat-([0-9]{8})\.[1-9][0-9]{0,3}$'; environment=prod ;;
+  community) re='^whombat-community-([0-9]{8})\.[1-9][0-9]{0,3}$'; environment=dev ;;
+  dev) die "the DEV image is gone (ONE-02): every release is the Whombat image, release/build prod whombat-YYYYMMDD.N" ;;
+  *) die "environment must be prod or community, not $env" ;;
+esac
+[[ $id =~ $re ]] || die "release id $id doesn't follow NX-67 ($env: ${re})"
+day=${BASH_REMATCH[1]}
+[ "$(date -u -d "$day" +%Y%m%d 2>/dev/null)" = "$day" ] || die "release id $id: $day is not a date"
+if [ -n "$reuse" ] && $want_iso; then die "--iso: a runtime-only release has no ISO of its own (install its host's)"; fi
+if [ -n "$updates" ]; then
+  [ "$env" = community ] || die "--updates-url is for community releases (prod has its update service)"
+  [[ $updates =~ ^https?://[A-Za-z0-9.:-]+(/[A-Za-z0-9._~-]+)*/$ ]] || die "--updates-url $updates: an http(s) base URL ending in /"
+fi
+[ -n "$stamp" ] ||
+  die "--runtime-stamp is missing: the commit the runtime says it is (HEAD for a new runtime, or the published runtime's stamp to keep it)"
+stampJson=$(stamp_json "$stamp")
+if [ -n "$label" ]; then
+  [ "$env" != prod ] || die "--runtime-label is for community releases (a prod runtime is new when its files are)"
+  [[ $label =~ ^[a-z0-9][a-z0-9.-]{0,23}$ ]] || die "bad --runtime-label $label"
+fi
+
+floorJson=null
+if [ -n "$floor" ]; then
+  floorJson='{"web":0,"android":0,"ios":0,"desktop":0,"cli":0}'
+  IFS=, read -r -a parts <<<"$floor"
+  for p in "${parts[@]}"; do
+    [[ $p =~ ^(web|android|ios|desktop|cli)=([0-9]{1,10})$ ]] || die "--client-floor: $p is not platform=build (web, android, ios, desktop, cli)"
+    [ "${BASH_REMATCH[2]}" -le 2147483647 ] || die "--client-floor: ${BASH_REMATCH[2]} is too large"
+    floorJson=$(jq -c --arg k "${BASH_REMATCH[1]}" --argjson v "${BASH_REMATCH[2]}" '.[$k] = $v' <<<"$floorJson")
+  done
+fi
+
+out=${out:-$HOME/.cache/whombat-releases/$id}
+if [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then die "$out exists and is not empty"; fi
+mkdir -p "$out"
+
+# The source is a commit, never a working tree (prod), so the release can be rebuilt from its build.json.
+rev=$(git -C "$root" rev-parse HEAD)
+dirty=false
+[ -z "$(git -C "$root" status --porcelain --untracked-files=no)" ] || dirty=true
+if $dirty; then
+  [ "$env" != prod ] || die "the tree has uncommitted changes: prod releases build from a commit"
+  $allow_dirty || die "the tree has uncommitted changes (--allow-dirty for a community release)"
+  flake=$(source_tree_flake)
+else
+  flake=$(source_flake "$rev")
+fi
+sourceRecord=$(source_record "$rev" "$dirty")
+say "$id ($env, environment $environment) from $rev$($dirty && echo ' + uncommitted changes')"
+
+labelArg=$(stamp_arg "$stampJson")
+[ -z "$label" ] || labelArg="$labelArg runtimeLabel = \"$label\";"
+[ -z "$updates" ] || labelArg="$labelArg updatesUrl = \"$updates\";"
+say "the runtime's stamp: $(jq -r '"\(.rev) of \(.date)"' <<<"$stampJson")"
+rel="($(release_fn "$flake") { env = \"$env\"; releaseId = \"$id\"; $labelArg })"
+build() { nix build --impure --no-link --print-out-paths --expr "$rel.$1"; }
+value() { nix eval --impure --raw --expr "$rel.$1"; }
+jqf() { jq -er "$@"; }
+
+[ "$(value environment)" = "$environment" ] || die "the $env image's environment is $(value environment), not $environment"
+
+tufrepo=$(nix build --no-link --print-out-paths "$flake#whombat-release-tools")/bin/tufrepo
+
+say "building the runtime bundle"
+runtime=$(build runtime)
+runtimeVersion=$(value runtime.version)
+# Nothing the repositories must never hold again is in what ships (the guard list's repository-wide rules; Whombat
+# report-trackers.md): the runtime bundle (its server, web page and migrations) as built, unpacked.
+"$root/../scripts/scan-artifacts.sh" "$runtime" || die "the runtime bundle holds a forbidden text"
+
+# The tuple's runtime facts come from the bundle itself.
+compat=$runtime/migrations/compat.json
+manifest=$runtime/share/whombat/release-manifest.json
+[ -f "$compat" ] && [ -f "$manifest" ] || die "$runtime is not a runtime bundle (no compat.json / release-manifest.json)"
+# The manager accepts the candidate only when the runtime reports the tuple's version (NX-71).
+[ "$(jq -r .version "$manifest")" = "$runtimeVersion" ] ||
+  die "the bundle reports version $(jq -r .version "$manifest"), not its Nix version $runtimeVersion (NX-71)"
+if [ "$(jq -r '.standIn // false' "$runtime/share/whombat/bundle.json" 2>/dev/null)" = true ]; then
+  die "$runtime is the stand-in runtime"
+fi
+# Versions are the chain's schemaBase plus a migration's position (Whombat report-trackers.md): release/schema-numbers.
+numbers=$("$here/schema-numbers" "$compat" "$manifest") || die "the bundle's schema numbers couldn't be read"
+read -r reads writes _ <<<"$numbers"
+# The session protocol the server speaks (contracts SESSION_PROTOCOL): {major*1000, major*1000+minor}.
+mapfile -t protos < <(grep -oE 'SESSION_PROTOCOL = \{ major: [0-9]+, minor: [0-9]+ \}' "$runtime/app/server.mjs" | sort -u)
+[ "${#protos[@]}" = 1 ] || die "can't read the session protocol from the server bundle (${#protos[@]} definitions)"
+[[ ${protos[0]} =~ major:\ ([0-9]+),\ minor:\ ([0-9]+) ]]
+pmin=$((BASH_REMATCH[1] * 1000))
+pmax=$((pmin + BASH_REMATCH[2]))
+hostAbi=$(nix eval --impure --json --expr "$rel.hostAbi")
+
+if [ -z "$reuse" ]; then
+  say "building the host toplevel and manager"
+  toplevel=$(build toplevel)
+  manager=$(build manager)
+  managerVersion=$(value manager.version)
+  [ "$(value appliance.config.whombat.provisioning.selfFactoryRelease)" = "$id" ] || die "selfFactoryRelease is not $id"
+  # The manager and the console's page (the installer and the box's screen) too.
+  consoleUi=$(nix build --no-link --print-out-paths "$flake#console-ui")
+  "$root/../scripts/scan-artifacts.sh" "$manager" "$consoleUi" || die "the manager or the console's page holds a forbidden text"
+  closure=$(nix-store -qR "$toplevel")
+  grep -qxF "$manager" <<<"$closure" || die "the manager $manager is not in the host closure"
+  grep -qxF "$runtime" <<<"$closure" || die "the runtime $runtime is not in the host closure (the profile's first bundle)"
+  # A release never ships agents nobody signed: a hub whose agents are other bytes than the committed manifest signs
+  # is built without one (nix/packages/hosts), and its servers would get no agent update.
+  if [ "$(nix eval --impure --json --expr "$rel.appliance.config.whombat.hosts.enable")" = true ]; then
+    hub=$(value appliance.config.whombat.hosts.package.outPath)
+    if [ ! -f "$hub/share/whombat-hosts/agent/manifest.json" ]; then
+      [ "$env" != prod ] || die "the hub $hub carries unsigned agents: sign them (the maintainers' sign-agents) and build from that commit"
+      say "the hub carries unsigned agents: it offers no agent update (fine for a community build)"
+    fi
+  fi
+  hostVersion=$id
+  hostNar=
+  managerNar=
+  reuseFlag=()
+else
+  [ -f "$reuse" ] || die "--reuse-host $reuse: no such build.json"
+  [ "$(jqf .env "$reuse")" = "$env" ] || die "$reuse is a $(jq -r .env "$reuse") release"
+  [ "$(jq -r '.updatesUrl // ""' "$reuse")" = "$updates" ] || die "$reuse was built for another update repository (--updates-url)"
+  jqf '.tuple.host.narHash and .tuple.manager.narHash' "$reuse" >/dev/null || die "$reuse has no host/manager NAR hashes"
+  toplevel=$(jqf .tuple.host.storePath "$reuse")
+  manager=$(jqf .tuple.manager.storePath "$reuse")
+  managerVersion=$(jqf .tuple.manager.version "$reuse")
+  hostVersion=$(jqf .tuple.host.version "$reuse")
+  hostNar=$(jqf .tuple.host.narHash "$reuse")
+  managerNar=$(jqf .tuple.manager.narHash "$reuse")
+  [ "$(jqf .tuple.host.abi "$reuse")" = "$hostAbi" ] || die "the reused host's ABI differs from this runtime's"
+  [ "$(jqf .tuple.runtime.storePath "$reuse")" != "$runtime" ] || die "the runtime is the reused release's: nothing to release"
+  reuseFlag=(--reuse-host)
+  say "reusing the host of $(jqf .releaseId "$reuse"): $toplevel"
+fi
+
+jq -n \
+  --arg id "$id" \
+  --arg rv "$runtimeVersion" --arg rp "$runtime" \
+  --argjson reads "$reads" --argjson writes "$writes" --argjson pmin "$pmin" --argjson pmax "$pmax" \
+  --argjson abi "$hostAbi" \
+  --arg hv "$hostVersion" --arg hp "$toplevel" --arg hn "$hostNar" \
+  --arg mv "$managerVersion" --arg mp "$manager" --arg mn "$managerNar" \
+  --argjson floor "$floorJson" \
+  '{releaseId: $id,
+    runtime: {version: $rv, storePath: $rp, narHash: "", schemaReads: {min: $reads, max: $writes},
+      schemaWrites: $writes, protocol: {min: $pmin, max: $pmax}, hostAbi: {min: $abi, max: $abi}},
+    providers: [],
+    host: {version: $hv, storePath: $hp, narHash: $hn, abi: $abi},
+    manager: {version: $mv, storePath: $mp, narHash: $mn}}
+    + (if $floor == null then {} else {clientFloor: $floor} end)' >"$out/tuple.template.json"
+
+# UP-X14, UP-X23: closure indexes with per-path blobs (compressed once per NAR hash into the cache). SHA256SUMS covers
+# the top-level files; nar/ is checked by tufrepo publish-release, blob by blob.
+mkdir -p "$narCache"
+say "exporting the release"
+"$tufrepo" export-release --out "$out/release" --template "$out/tuple.template.json" --nar-cache "$narCache" "${reuseFlag[@]}" >"$out/tuple.json"
+[ "$(jqf .releaseId "$out/release/release.json")" = "$id" ] || die "export-release wrote another release id"
+(cd "$out/release" && sha256sum --quiet -c SHA256SUMS) || die "the release directory doesn't match its SHA256SUMS"
+[ "$(jq '.indexes // [] | length' "$out/release/release.json")" -gt 0 ] || die "export-release exported no index"
+
+jq -n \
+  --arg id "$id" --arg env "$env" --arg environment "$environment" \
+  --argjson source "$sourceRecord" --arg label "$label" --arg updates "$updates" \
+  --arg reusedFrom "$([ -z "$reuse" ] || jq -r .releaseId "$reuse")" \
+  --arg pin "$(jq -r .gitSha "$runtime/share/whombat/bundle.json")" --argjson stamp "$stampJson" \
+  --slurpfile tuple "$out/tuple.json" --slurpfile release "$out/release/release.json" \
+  --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  '{v: 1, releaseId: $id, env: $env, environment: $environment,
+    class: (if $reusedFrom == "" then "host" else "runtime" end),
+    reusedHostFrom: (if $reusedFrom == "" then null else $reusedFrom end),
+    source: $source,
+    runtime: {whombatRev: $pin, stamp: $stamp, label: (if $label == "" then null else $label end)},
+    tuple: $tuple[0],
+    indexes: [($release[0].indexes // [])[] | {target, file, of: .meta.of, storePath: .meta.storePath,
+      narHash: .meta.narHash, closureSize: .meta.closureSize, paths: .meta.paths, downloadSize: .meta.downloadSize}],
+    iso: null, builtAt: $at}
+    + (if $updates == "" then {} else {updatesUrl: $updates} end)' >"$out/build.json"
+
+# What boxes run of this release stays in this machine's store while its folder does: a later release keeps a runtime
+# only when the published object is still here with the published hash, and nothing else holds it (the builds are
+# not linked anywhere). Pruning the folder lets the collector have them.
+mkdir -p "$out/gcroots"
+nix-store --add-root "$out/gcroots/runtime" --realise "$runtime" >/dev/null
+if [ -z "$reuse" ]; then
+  nix-store --add-root "$out/gcroots/host" --realise "$toplevel" >/dev/null
+  nix-store --add-root "$out/gcroots/manager" --realise "$manager" >/dev/null
+fi
+
+# The ISO only on request (UP-X15): release/build iso <out> builds it later, promote-prod and dev/devbox when
+# they need it.
+! $want_iso || build_iso "$out"
+
+say "done: $out"
+jq -c '{releaseId, class, host: .tuple.host.storePath, runtime: .tuple.runtime.storePath}' "$out/build.json"

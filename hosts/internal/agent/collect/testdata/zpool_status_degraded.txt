@@ -1,0 +1,60 @@
+  pool: tank
+ state: DEGRADED
+status: One or more devices could not be used because the label is missing or
+	invalid.  Sufficient replicas exist for the pool to continue
+	functioning in a degraded state.
+action: Replace the device using 'zpool replace'.
+   see: https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-4J
+  scan: scrub repaired 1M in 01:02:03 with 3 errors on Sun Oct  4 00:28:20 2026
+config:
+
+	NAME                      STATE     READ WRITE CKSUM
+	tank                      DEGRADED     0     0     0
+	  raidz1-0                DEGRADED     0     0     0
+	    /dev/sda1             ONLINE       0     0     2
+	    /dev/sdb1             FAULTED      12    3     0  too many errors
+	    11893473632745728734  UNAVAIL      0     0     0  was /dev/sdc1
+	logs
+	  /dev/nvme0n1p1          ONLINE       0     0     0
+	spares
+	  /dev/sdd1               AVAIL
+
+errors: 3 data errors, use '-v' for a list
+
+  pool: fast
+ state: ONLINE
+  scan: scrub in progress since Mon Oct 12 22:00:01 2026
+	1.20T / 2.00T scanned at 1.21G/s, 800G / 2.00T issued at 900M/s
+	0B repaired, 40.00% done, 00:10:00 to go
+config:
+
+	NAME              STATE     READ WRITE CKSUM
+	fast              ONLINE       0     0     0
+	  /dev/nvme1n1p1  ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: new
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+	The pool can still be used, but some features are unavailable.
+action: Enable all features using 'zpool upgrade'.
+  scan: none requested
+config:
+
+	NAME          STATE     READ WRITE CKSUM
+	new           ONLINE       0     0     0
+	  /dev/sde1   ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: old
+ state: ONLINE
+  scan: scrub canceled on Fri Oct  9 03:00:00 2026
+config:
+
+	NAME          STATE     READ WRITE CKSUM
+	old           ONLINE       0     0     0
+	  /dev/sdf1   ONLINE       0     0     0
+
+errors: No known data errors

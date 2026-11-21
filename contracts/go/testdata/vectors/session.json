@@ -1,0 +1,3008 @@
+{
+  "secretOps": [
+    "automations.webhook",
+    "backup.adopt",
+    "backup.configureDestination",
+    "backup.passkeyKey.set",
+    "backup.passkeyKey.verifyBegin",
+    "backup.passkeyKey.verifyConfirm",
+    "backups.create",
+    "backups.inspect",
+    "backups.restore",
+    "burrows.setLocalModel",
+    "burrows.testLocalModel",
+    "burrows.setWebSearch",
+    "canvases.collabToken",
+    "connections.create",
+    "connections.finishGoogle",
+    "connections.finishMicrosoft",
+    "connections.finishOAuth",
+    "connections.setSecret",
+    "connectors.imapConnect",
+    "connectors.setApp",
+    "connectors.setGoogleApp",
+    "connectors.setMicrosoftApp",
+    "desk.pair",
+    "desk.screen.add",
+    "desk.setPin",
+    "devices.register",
+    "devices.update",
+    "enroll.link.accept",
+    "enroll.link.create",
+    "enroll.pair.request",
+    "guides.act",
+    "host.mail.set",
+    "host.mail.test",
+    "host.wifi.join",
+    "hosts.createConsole",
+    "hosts.createEnrollment",
+    "hosts.screen",
+    "hosts.startInstall",
+    "recovery.kit.register",
+    "recovery.kit.rotate",
+    "remoteHelp.start",
+    "screen.unlock",
+    "signins.consoleRead",
+    "signins.consoleWrite",
+    "signins.loginStart",
+    "signins.loginSubmit",
+    "vault.create",
+    "vault.replaceSshKey",
+    "vault.setSecret",
+    "vault.setTotp"
+  ],
+  "description": "Session CONTROL messages (decodeClientMessage/decodeApplianceMessage): `expect` ok (with `output` when members were stripped), unknown_type or invalid. `inputs`: operation inputs, which stay strict.",
+  "messages": [
+    {
+      "name": "hello",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "hello with cachedAuthzGeneration and cachedAccountId",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        },
+        "cachedAuthzGeneration": 41,
+        "cachedAccountId": "acc_mara0001"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "hello from a newer minor: unknown members stripped at every level",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web",
+          "locale": "nl"
+        },
+        "resume": "x"
+      },
+      "expect": "ok",
+      "output": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        }
+      }
+    },
+    {
+      "name": "hello with a build number (CT-53)",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web",
+          "buildNumber": 2026100101
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "hello with the claim link of a page at the box’s own address (minor 2)",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        },
+        "claimLink": "kxmprt"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "hello with a claim link that isn’t six letters of the claim alphabet",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        },
+        "claimLink": "KXMPRT"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "hello with a build number as a string",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [
+          {
+            "major": 5,
+            "minor": 0
+          }
+        ],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web",
+          "buildNumber": "140"
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "unknown message type is skipped",
+      "direction": "client",
+      "json": {
+        "t": "teleport",
+        "to": "mars"
+      },
+      "expect": "unknown_type"
+    },
+    {
+      "name": "known type with a bad member is invalid",
+      "direction": "client",
+      "json": {
+        "t": "hello",
+        "versions": [],
+        "capabilities": [
+          "events"
+        ],
+        "client": {
+          "build": "web 2026.10.01",
+          "platform": "web"
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "open an attachment upload",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 3,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "attachment",
+            "burrow": "garden",
+            "attachmentId": "att_7Hq2mXk3"
+          },
+          "size": 1572864,
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "chunkSize": 262144
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a skill-archive upload, gone since 2.0 (CT-1430)",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 3,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "skill-archive",
+            "burrow": "garden",
+            "stagedArchiveId": "pst_7Hq2mXk3"
+          },
+          "size": 1572864,
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "chunkSize": 262144
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a pack-archive upload, gone since 0.113 (CT-817)",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 3,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "pack-archive",
+            "burrow": "garden",
+            "stagedArchiveId": "pst_7Hq2mXk3"
+          },
+          "size": 1572864,
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "chunkSize": 262144
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "upload to an unknown target type",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 3,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "host-path",
+            "burrow": "garden",
+            "path": "/etc/passwd"
+          },
+          "size": 1572864,
+          "sha256": "abababababababababababababababababababababababababababababababab",
+          "chunkSize": 262144
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "open a backup-file download, resuming at 40 MiB (CT-335)",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 7,
+        "spec": {
+          "kind": "download",
+          "resource": {
+            "type": "backup-file",
+            "burrow": "lumio-bv",
+            "backupFileId": "bkf_q3Vx9LpA0dZk"
+          },
+          "range": {
+            "start": 41943040
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "backup-file download with an attachment id",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 7,
+        "spec": {
+          "kind": "download",
+          "resource": {
+            "type": "backup-file",
+            "burrow": "lumio-bv",
+            "backupFileId": "att_1"
+          },
+          "range": {
+            "start": 41943040
+          }
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "open a thing’s picture by its ref (CT-1000)",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 11,
+        "spec": {
+          "kind": "download",
+          "resource": {
+            "type": "thing-image",
+            "burrow": "lumio-bv",
+            "thing": "connection:con_plex",
+            "ref": "eyJjIjoiY29uX3BsZXgiLCJzIjoiYyJ9.q3Vx9LpA0dZkT7mW2bNcYe"
+          }
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "a thing’s picture by a path instead of a ref",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 11,
+        "spec": {
+          "kind": "download",
+          "resource": {
+            "type": "thing-image",
+            "burrow": "lumio-bv",
+            "thing": "connection:con_plex",
+            "ref": "/library/metadata/1/thumb"
+          }
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "open a backup-file upload (CT-335)",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 9,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "backup-file",
+            "burrow": "lumio-bv",
+            "stagedBackupId": "bku_T7mW2bNcYe12"
+          },
+          "size": 1932735283,
+          "sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "chunkSize": 4194304
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "backup-file upload larger than the upload protocol’s 10 GiB",
+      "direction": "client",
+      "json": {
+        "t": "open",
+        "stream": 9,
+        "spec": {
+          "kind": "upload",
+          "target": {
+            "type": "backup-file",
+            "burrow": "lumio-bv",
+            "stagedBackupId": "bku_T7mW2bNcYe12"
+          },
+          "size": 10737418241,
+          "sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "chunkSize": 4194304
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "durable event",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "ephemeral": false,
+        "sub": "s1",
+        "cursor": "1:42",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "message.deleted",
+          "conversationId": "cnv_general",
+          "messageId": "msg_1"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "durable event with eventId/at from a newer appliance",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "ephemeral": false,
+        "sub": "s1",
+        "cursor": "1:42",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "message.deleted",
+          "conversationId": "cnv_general",
+          "messageId": "msg_1"
+        },
+        "eventId": "evt_1",
+        "at": "2026-10-01T12:00:00Z"
+      },
+      "expect": "ok",
+      "output": {
+        "t": "event",
+        "ephemeral": false,
+        "sub": "s1",
+        "cursor": "1:42",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "message.deleted",
+          "conversationId": "cnv_general",
+          "messageId": "msg_1"
+        }
+      }
+    },
+    {
+      "name": "durable event without a cursor",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "ephemeral": false,
+        "sub": "s1",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "message.deleted",
+          "conversationId": "cnv_general",
+          "messageId": "msg_1"
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "ephemeral event (no cursor)",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "ephemeral": true,
+        "sub": "s1",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "typing",
+          "conversationId": "cnv_general"
+        }
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "ephemeral event with a cursor: the cursor is stripped",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "ephemeral": true,
+        "sub": "s1",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "typing",
+          "conversationId": "cnv_general"
+        },
+        "cursor": "1:43"
+      },
+      "expect": "ok",
+      "output": {
+        "t": "event",
+        "ephemeral": true,
+        "sub": "s1",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "typing",
+          "conversationId": "cnv_general"
+        }
+      }
+    },
+    {
+      "name": "event without ephemeral",
+      "direction": "appliance",
+      "json": {
+        "t": "event",
+        "sub": "s1",
+        "cursor": "1:42",
+        "topic": "conv:cnv_general",
+        "event": {
+          "type": "message.deleted",
+          "conversationId": "cnv_general",
+          "messageId": "msg_1"
+        }
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "subscribed with denied topics",
+      "direction": "appliance",
+      "json": {
+        "t": "subscribed",
+        "sub": "s1",
+        "cursor": "1:40",
+        "denied": [
+          {
+            "topic": "burrow:bur_other",
+            "reason": "not_member"
+          }
+        ]
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "subscribed with an unknown denial reason",
+      "direction": "appliance",
+      "json": {
+        "t": "subscribed",
+        "sub": "s1",
+        "cursor": "1:40",
+        "denied": [
+          {
+            "topic": "burrow:bur_other",
+            "reason": "banned"
+          }
+        ]
+      },
+      "expect": "invalid"
+    }
+  ],
+  "errors": [
+    {
+      "name": "unsupported_version",
+      "json": {
+        "t": "error",
+        "code": "unsupported_version",
+        "message": "No common session protocol version.",
+        "retryable": false,
+        "details": {
+          "supported": {
+            "min": 5,
+            "max": 5
+          },
+          "appliance": {
+            "major": 5,
+            "minor": 0
+          }
+        }
+      },
+      "clientMajors": [
+        4
+      ],
+      "mustUpdate": "client"
+    },
+    {
+      "name": "client below the security floor (CT-53): same major, the client updates",
+      "json": {
+        "t": "error",
+        "code": "unsupported_version",
+        "message": "This version of the app is no longer supported. Update it to continue.",
+        "retryable": false,
+        "details": {
+          "supported": {
+            "min": 1,
+            "max": 1
+          },
+          "appliance": {
+            "major": 1,
+            "minor": 0
+          },
+          "code": "client_below_security_floor",
+          "floor": {
+            "platform": "android",
+            "minBuild": 140
+          }
+        }
+      },
+      "clientMajors": [
+        1
+      ],
+      "mustUpdate": "client",
+      "appCode": "client_below_security_floor"
+    },
+    {
+      "name": "result too large",
+      "json": {
+        "t": "error",
+        "id": "req_0123456789abcdef",
+        "code": "too_large",
+        "message": "The answer is larger than a session message; open an export stream for it.",
+        "retryable": false,
+        "details": {
+          "code": "use_export_stream"
+        }
+      },
+      "appCode": "use_export_stream"
+    },
+    {
+      "name": "managed refusal",
+      "json": {
+        "t": "error",
+        "id": "req_0123456789abcdef",
+        "code": "not_allowed",
+        "message": "Trusted access isn’t available on a managed Whombat.",
+        "retryable": false,
+        "details": {
+          "code": "managed.trusted_access",
+          "managed": true,
+          "reason": "trustedAccess"
+        }
+      },
+      "appCode": "managed.trusted_access"
+    },
+    {
+      "name": "claim backoff (CT-61)",
+      "json": {
+        "t": "error",
+        "id": "req_0123456789abcdef",
+        "code": "rate_limited",
+        "message": "Too many wrong codes. Try again in 4 min.",
+        "retryable": true,
+        "details": {
+          "code": "claim_backoff",
+          "retryAt": "2026-09-26T12:04:00Z"
+        }
+      },
+      "appCode": "claim_backoff"
+    },
+    {
+      "name": "screen sign-in backoff (CT-624)",
+      "json": {
+        "t": "error",
+        "id": "req_0123456789abcdef",
+        "code": "rate_limited",
+        "message": "Too many wrong codes. Try again in 4 min.",
+        "retryable": true,
+        "details": {
+          "code": "screen_backoff",
+          "retryAt": "2026-10-20T12:04:00Z"
+        }
+      },
+      "appCode": "screen_backoff"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "backups.create (CT-335)",
+      "op": "backups.create",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv"
+        },
+        "body": {
+          "categories": [
+            "agents",
+            "connections",
+            "vault"
+          ],
+          "password": "a long enough password"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "backups.create with a 9-character password",
+      "op": "backups.create",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv"
+        },
+        "body": {
+          "categories": [
+            "agents"
+          ],
+          "password": "123456789"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "backups.create with an unknown category",
+      "op": "backups.create",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv"
+        },
+        "body": {
+          "categories": [
+            "audit"
+          ],
+          "password": "a long enough password"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "backups.restore keeping what’s here",
+      "op": "backups.restore",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv",
+          "stagedBackupId": "bku_T7mW2bNcYe12"
+        },
+        "body": {
+          "password": "a long enough password",
+          "categories": [
+            "automations"
+          ],
+          "onDifferent": "keep"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "backups.restore with an unknown choice for different things",
+      "op": "backups.restore",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv",
+          "stagedBackupId": "bku_T7mW2bNcYe12"
+        },
+        "body": {
+          "password": "a long enough password",
+          "categories": [
+            "automations"
+          ],
+          "onDifferent": "merge"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "backups.stage of 6 GB with its sha256",
+      "op": "backups.stage",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv"
+        },
+        "body": {
+          "fileName": "lumio-bv-2026-10-11.wbk",
+          "size": 6000000000,
+          "sha256": "abababababababababababababababababababababababababababababababab"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "backups.stage with an unknown member (inputs stay strict)",
+      "op": "backups.stage",
+      "input": {
+        "params": {
+          "burrow": "lumio-bv"
+        },
+        "body": {
+          "fileName": "x.wbk",
+          "size": 10,
+          "path": "/etc/passwd"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim.begin (code)",
+      "op": "enroll.claim.begin",
+      "input": {
+        "claimId": "clm_8Hq2mXk3pZ",
+        "method": "code",
+        "share": "Qm9vbS1ib29tLWJvb20tYm9vbS1ib29tLWJvb20tYm9"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.claim.begin with an unknown method",
+      "op": "enroll.claim.begin",
+      "input": {
+        "claimId": "clm_8Hq2mXk3pZ",
+        "method": "qr",
+        "share": "Qm9vbS1ib29tLWJvb20tYm9vbS1ib29tLWJvb20tYm9"
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim.begin with a short share",
+      "op": "enroll.claim.begin",
+      "input": {
+        "claimId": "clm_8Hq2mXk3pZ",
+        "method": "card",
+        "share": "Qm9vbS1ib29t"
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim with the client’s confirmation tag (0.7)",
+      "op": "enroll.claim",
+      "input": {
+        "claimId": "clm_8Hq2mXk3pZ",
+        "method": "code",
+        "confirm": "dGFnLWNsaWVudC10YWctY2xpZW50LXRhZy1jbGllbnQ",
+        "account": {
+          "name": "Mara",
+          "email": "mara@example.com"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.claim with a claim secret (0.6 shape)",
+      "op": "enroll.claim",
+      "input": {
+        "claimSecret": "MZXW6YTBOI2DAMRTGQ3DMNZYHE",
+        "claimId": "clm_8Hq2mXk3pZ",
+        "account": {
+          "name": "Mara",
+          "email": "mara@example.com"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim without its method",
+      "op": "enroll.claim",
+      "input": {
+        "claimId": "clm_8Hq2mXk3pZ",
+        "confirm": "dGFnLWNsaWVudC10YWctY2xpZW50LXRhZy1jbGllbnQ",
+        "account": {
+          "name": "Mara",
+          "email": "mara@example.com"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.screen.request",
+      "op": "enroll.screen.request",
+      "input": {
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.screen.request naming the account (3.0: the account is the person’s, no email)",
+      "op": "enroll.screen.request",
+      "input": {
+        "email": "mara@example.com",
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.screen.begin",
+      "op": "enroll.screen.begin",
+      "input": {
+        "signinId": "scr_8Hq2mXk3pZ",
+        "share": "Qm9vbS1ib29tLWJvb20tYm9vbS1ib29tLWJvb20tYm9"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.screen.begin carrying the letters",
+      "op": "enroll.screen.begin",
+      "input": {
+        "signinId": "scr_8Hq2mXk3pZ",
+        "share": "Qm9vbS1ib29tLWJvb20tYm9vbS1ib29tLWJvb20tYm9",
+        "letters": "KXQMTR"
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.screen",
+      "op": "enroll.screen",
+      "input": {
+        "signinId": "scr_8Hq2mXk3pZ",
+        "confirm": "dGFnLWNsaWVudC10YWctY2xpZW50LXRhZy1jbGllbnQ"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.screen with a short sign-in id",
+      "op": "enroll.screen",
+      "input": {
+        "signinId": "scr_1",
+        "confirm": "dGFnLWNsaWVudC10YWctY2xpZW50LXRhZy1jbGllbnQ"
+      },
+      "valid": false
+    },
+    {
+      "name": "backup.runNow",
+      "op": "backup.runNow",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "enroll.passkey",
+      "op": "enroll.passkey",
+      "input": {
+        "nonce": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "response": {
+          "id": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "rawId": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "type": "public-key",
+          "response": {
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0",
+            "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAQ",
+            "signature": "MEUCIQDexample",
+            "userHandle": "d2IxOjEyRDNLb29XOXc2RFNWU0gzYzFlYTU3YUtadnQxdUFDaVFBNVREd3l6ZUJYRDlnalFzdEg"
+          },
+          "clientExtensionResults": {},
+          "authenticatorAttachment": "platform"
+        },
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.passkey with a 16-byte nonce",
+      "op": "enroll.passkey",
+      "input": {
+        "nonce": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "response": {
+          "id": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "rawId": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "type": "public-key",
+          "response": {
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0",
+            "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAQ",
+            "signature": "MEUCIQDexample",
+            "userHandle": "d2IxOjEyRDNLb29XOXc2RFNWU0gzYzFlYTU3YUtadnQxdUFDaVFBNVREd3l6ZUJYRDlnalFzdEg"
+          },
+          "clientExtensionResults": {},
+          "authenticatorAttachment": "platform"
+        },
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.passkey naming the account (the passkey decides)",
+      "op": "enroll.passkey",
+      "input": {
+        "nonce": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "response": {
+          "id": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "rawId": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "type": "public-key",
+          "response": {
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0",
+            "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAQ",
+            "signature": "MEUCIQDexample",
+            "userHandle": "d2IxOjEyRDNLb29XOXc2RFNWU0gzYzFlYTU3YUtadnQxdUFDaVFBNVREd3l6ZUJYRDlnalFzdEg"
+          },
+          "clientExtensionResults": {},
+          "authenticatorAttachment": "platform"
+        },
+        "accountId": "acc_mara0001",
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "passkey.register.begin",
+      "op": "passkey.register.begin",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "passkey.register",
+      "op": "passkey.register",
+      "input": {
+        "controlNonce": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "response": {
+          "id": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "rawId": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "type": "public-key",
+          "response": {
+            "clientDataJSON": "eyJ9",
+            "attestationObject": "o2NmbXRkbm9uZQ",
+            "transports": [
+              "internal",
+              "hybrid"
+            ]
+          },
+          "clientExtensionResults": {
+            "credProps": {
+              "rk": true
+            }
+          },
+          "authenticatorAttachment": "platform"
+        },
+        "name": "Pixel 9"
+      },
+      "valid": true
+    },
+    {
+      "name": "passkey.register without a name",
+      "op": "passkey.register",
+      "input": {
+        "controlNonce": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "response": {
+          "id": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "rawId": "q3Vx9LpA0dZkT7mW2bNcYe",
+          "type": "public-key",
+          "response": {
+            "clientDataJSON": "eyJ9",
+            "attestationObject": "o2NmbXRkbm9uZQ",
+            "transports": [
+              "internal",
+              "hybrid"
+            ]
+          },
+          "clientExtensionResults": {
+            "credProps": {
+              "rk": true
+            }
+          },
+          "authenticatorAttachment": "platform"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "passkeys.list",
+      "op": "passkeys.list",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "passkey.remove",
+      "op": "passkey.remove",
+      "input": {
+        "id": "q3Vx9LpA0dZkT7mW2bNcYe"
+      },
+      "valid": true
+    },
+    {
+      "name": "passkeys.policy",
+      "op": "passkeys.policy",
+      "input": {
+        "deviceBoundOnly": true
+      },
+      "valid": true
+    },
+    {
+      "name": "passkeys.policy without a value",
+      "op": "passkeys.policy",
+      "input": {},
+      "valid": false
+    },
+    {
+      "name": "skills.hubSearch browsing one source (CT-1413)",
+      "op": "skills.hubSearch",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "query": {
+          "source": "official"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "skills.hubSearch on ClawHub, which Whombat never asks",
+      "op": "skills.hubSearch",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "query": {
+          "q": "pdf",
+          "source": "clawhub"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "skills.hubInstall by a hub identifier (CT-1415)",
+      "op": "skills.hubInstall",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "body": {
+          "identifier": "anthropics/skills/skills/pdf"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "skills.hubInstall from a link",
+      "op": "skills.hubInstall",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "body": {
+          "identifier": "https://example.com/SKILL.md"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "skills.hubUpdate by name",
+      "op": "skills.hubUpdate",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "body": {
+          "name": "pdf"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "diagnostics.create",
+      "op": "diagnostics.create",
+      "input": {
+        "scopes": [
+          "versions",
+          "health",
+          "errors"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "diagnostics.create without scopes",
+      "op": "diagnostics.create",
+      "input": {
+        "scopes": []
+      },
+      "valid": false
+    },
+    {
+      "name": "diagnostics.create with an unknown scope (no raw logs)",
+      "op": "diagnostics.create",
+      "input": {
+        "scopes": [
+          "versions",
+          "logs"
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "diagnostics.preview",
+      "op": "diagnostics.preview",
+      "input": {
+        "bundleId": "dgb_7Hq2mXk3"
+      },
+      "valid": true
+    },
+    {
+      "name": "diagnostics.download",
+      "op": "diagnostics.download",
+      "input": {
+        "bundleId": "dgb_7Hq2mXk3"
+      },
+      "valid": true
+    },
+    {
+      "name": "diagnostics.list",
+      "op": "diagnostics.list",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "diagnostics.delete",
+      "op": "diagnostics.delete",
+      "input": {
+        "bundleId": "dgb_7Hq2mXk3"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.pair.lookup",
+      "op": "enroll.pair.lookup",
+      "input": {
+        "code": "1234-5678"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.pair.approve with the looked-up fingerprint",
+      "op": "enroll.pair.approve",
+      "input": {
+        "code": "1234-5678",
+        "approve": true,
+        "fingerprint": "3F2A-9C01-B7E4"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.pair.approve without a fingerprint (0.5.1 shape)",
+      "op": "enroll.pair.approve",
+      "input": {
+        "code": "1234-5678",
+        "approve": true
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.pair.approve with a lower-case fingerprint",
+      "op": "enroll.pair.approve",
+      "input": {
+        "code": "1234-5678",
+        "approve": true,
+        "fingerprint": "3f2a-9c01-b7e4"
+      },
+      "valid": false
+    },
+    {
+      "name": "push.resolve",
+      "op": "push.resolve",
+      "input": {
+        "ref": "q3Vx9LpA0dZkT7mW2bNcYe"
+      },
+      "valid": true
+    },
+    {
+      "name": "push.resolve with an id",
+      "op": "push.resolve",
+      "input": {
+        "ref": "ntf_123"
+      },
+      "valid": false
+    },
+    {
+      "name": "recovery.kit.rotate",
+      "op": "recovery.kit.rotate",
+      "input": {
+        "newRecoveryPublicKey": "abababababababababababababababababababababababababababababababab",
+        "currentKeySignature": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      },
+      "valid": true
+    },
+    {
+      "name": "recovery.kit.rotate without the current key’s signature",
+      "op": "recovery.kit.rotate",
+      "input": {
+        "newRecoveryPublicKey": "abababababababababababababababababababababababababababababababab"
+      },
+      "valid": false
+    },
+    {
+      "name": "backup.configureDestination",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "rest:https://backup.example.com/appliance/",
+        "restUser": "wb",
+        "restPassword": "secret-pass"
+      },
+      "valid": true
+    },
+    {
+      "name": "backup.configureDestination with credentials in the URL",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "rest:https://wb:secret@backup.example.com/appliance/"
+      },
+      "valid": false
+    },
+    {
+      "name": "backup.configureDestination to an S3 bucket (CT-142)",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "s3:https://s3.eu-central-1.example.com/wb-backups/box-1",
+        "s3AccessKeyId": "AKIAEXAMPLE",
+        "s3SecretAccessKey": "secret-key",
+        "s3Region": "eu-central-1"
+      },
+      "valid": true
+    },
+    {
+      "name": "backup.configureDestination to SFTP with a pinned host key (CT-142)",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "sftp:nas.local:/backups/whombat",
+        "sftpUser": "whombat",
+        "sftpHostKey": "nas.local ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+      },
+      "valid": true
+    },
+    {
+      "name": "backup.configureDestination with the user in the SFTP repository",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "sftp:whombat@nas.local:/backups/whombat"
+      },
+      "valid": false
+    },
+    {
+      "name": "backup.configureDestination to SFTP on another port (CT-146)",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "sftp://nas.local:2222//backups/whombat",
+        "sftpUser": "whombat"
+      },
+      "valid": true
+    },
+    {
+      "name": "backup.configureDestination to the labelled disk",
+      "op": "backup.configureDestination",
+      "input": {
+        "repository": "disk:"
+      },
+      "valid": true
+    },
+    {
+      "name": "backup.sshPublicKey",
+      "op": "backup.sshPublicKey",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "backup.sshPublicKey takes nothing",
+      "op": "backup.sshPublicKey",
+      "input": {
+        "rotate": true
+      },
+      "valid": false
+    },
+    {
+      "name": "push.handles.set",
+      "op": "push.handles.set",
+      "input": {
+        "handle": "hNd1e_0123456789abcdefgh"
+      },
+      "valid": true
+    },
+    {
+      "name": "push.handles.set with an unknown member",
+      "op": "push.handles.set",
+      "input": {
+        "handle": "hNd1e_0123456789abcdefgh",
+        "platform": "fcm"
+      },
+      "valid": false
+    },
+    {
+      "name": "appliance.status",
+      "op": "appliance.status",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "licence.status (0.10)",
+      "op": "licence.status",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "licence.refresh (0.10)",
+      "op": "licence.refresh",
+      "input": {},
+      "valid": true
+    },
+    {
+      "name": "licence.refresh with a token",
+      "op": "licence.refresh",
+      "input": {
+        "token": "a.b.c"
+      },
+      "valid": false
+    },
+    {
+      "name": "appliance.status with an unknown member",
+      "op": "appliance.status",
+      "input": {
+        "verbose": true
+      },
+      "valid": false
+    },
+    {
+      "name": "api op with an unknown top-level member",
+      "op": "burrows.get",
+      "input": {
+        "params": {
+          "burrow": "garden"
+        },
+        "extra": 1
+      },
+      "valid": false
+    },
+    {
+      "name": "signins.consoleStart (0.9)",
+      "op": "signins.consoleStart",
+      "input": {
+        "params": {},
+        "body": {
+          "provider": "claude",
+          "authMode": "subscription_cli",
+          "cols": 100,
+          "rows": 30
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "signins.consoleStart for another mode",
+      "op": "signins.consoleStart",
+      "input": {
+        "params": {},
+        "body": {
+          "provider": "claude",
+          "authMode": "api_key",
+          "cols": 100,
+          "rows": 30
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "signins.consoleStart with a command",
+      "op": "signins.consoleStart",
+      "input": {
+        "params": {},
+        "body": {
+          "provider": "claude",
+          "authMode": "subscription_cli",
+          "cols": 100,
+          "rows": 30,
+          "command": "sh"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "signins.consoleWrite (Enter)",
+      "op": "signins.consoleWrite",
+      "input": {
+        "params": {
+          "consoleId": "pcn_7Hq2mXk3pZ"
+        },
+        "body": {
+          "seq": 1,
+          "data": "\r"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "signins.consoleWrite above 4 KiB of UTF-8",
+      "op": "signins.consoleWrite",
+      "input": {
+        "params": {
+          "consoleId": "pcn_7Hq2mXk3pZ"
+        },
+        "body": {
+          "seq": 2,
+          "data": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "signins.consoleRead with a cursor and a wait",
+      "op": "signins.consoleRead",
+      "input": {
+        "params": {
+          "consoleId": "pcn_7Hq2mXk3pZ"
+        },
+        "query": {
+          "cursor": 512,
+          "waitMs": 20000
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "signins.consoleRead waiting too long",
+      "op": "signins.consoleRead",
+      "input": {
+        "params": {
+          "consoleId": "pcn_7Hq2mXk3pZ"
+        },
+        "query": {
+          "waitMs": 60000
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim.local.prove: the client’s tag alone",
+      "op": "enroll.claim.local.prove",
+      "input": {
+        "claimId": "lcl_8Hq2mXk3pZ",
+        "confirm": "Bq3x9b0kLk0b7c2uC2b1aZrJ0pW7k8mVf1eJm5mL0aQ"
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.claim.local.prove naming the person (nothing about them goes with the proofs)",
+      "op": "enroll.claim.local.prove",
+      "input": {
+        "claimId": "lcl_8Hq2mXk3pZ",
+        "confirm": "Bq3x9b0kLk0b7c2uC2b1aZrJ0pW7k8mVf1eJm5mL0aQ",
+        "account": {
+          "name": "Mara Okafor",
+          "email": "mara@lumio.example.org"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.claim.local makes the first owner",
+      "op": "enroll.claim.local",
+      "input": {
+        "claimId": "lcl_8Hq2mXk3pZ",
+        "account": {
+          "name": "Mara Okafor",
+          "email": "mara@lumio.example.org"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.claim.local in the form before the proof round (read, then answered claim_update_app)",
+      "op": "enroll.claim.local",
+      "input": {
+        "claimId": "lcl_8Hq2mXk3pZ",
+        "confirm": "Bq3x9b0kLk0b7c2uC2b1aZrJ0pW7k8mVf1eJm5mL0aQ",
+        "account": {
+          "name": "Mara Okafor",
+          "email": "mara@lumio.example.org"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "enroll.claim.local with the card method (a community box has no card)",
+      "op": "enroll.claim.local",
+      "input": {
+        "claimId": "lcl_8Hq2mXk3pZ",
+        "method": "card",
+        "confirm": "Bq3x9b0kLk0b7c2uC2b1aZrJ0pW7k8mVf1eJm5mL0aQ",
+        "account": {
+          "name": "Mara Okafor",
+          "email": "mara@lumio.example.org"
+        },
+        "endpoint": {
+          "label": "Firefox on Linux",
+          "platform": "web"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "enroll.link.accept",
+      "op": "enroll.link.accept",
+      "input": {
+        "secret": "Zm9vYmFyYmF6cXV4cXV1eDEyMzQ",
+        "endpoint": {
+          "label": "Pixel 9",
+          "platform": "android"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "host.tailscale.on with Headscale",
+      "op": "host.tailscale.on",
+      "input": {
+        "loginServer": "https://headscale.example.org"
+      },
+      "valid": true
+    },
+    {
+      "name": "host.tailscale.on back to Tailscale’s own",
+      "op": "host.tailscale.on",
+      "input": {
+        "loginServer": null
+      },
+      "valid": true
+    },
+    {
+      "name": "host.tailscale.on with a login server carrying a password",
+      "op": "host.tailscale.on",
+      "input": {
+        "loginServer": "https://admin:hunter2@headscale.example.org"
+      },
+      "valid": false
+    },
+    {
+      "name": "host.mail.set with STARTTLS and a login",
+      "op": "host.mail.set",
+      "input": {
+        "host": "smtp.example.org",
+        "port": 587,
+        "security": "starttls",
+        "username": "whombat@example.org",
+        "password": "an app password",
+        "from": "whombat@example.org",
+        "fromName": "Lumio Whombat"
+      },
+      "valid": true
+    },
+    {
+      "name": "host.mail.set with a login and no encryption",
+      "op": "host.mail.set",
+      "input": {
+        "host": "192.168.1.5",
+        "port": 25,
+        "security": "none",
+        "username": "whombat",
+        "password": "secret",
+        "from": "whombat@example.org"
+      },
+      "valid": false
+    }
+  ],
+  "diagnosticBundles": [
+    {
+      "name": "every scope",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": true,
+      "sha256": "af0d0da5e4f67ae41270ab2ace6d82989e9dd1a7547184b15a960a524064986f"
+    },
+    {
+      "name": "versions only",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        }
+      },
+      "valid": true,
+      "sha256": "e99c06599c00f5ee368b63e3831b18f871da7abd768ec50bbd86629fa39025a6"
+    },
+    {
+      "name": "a section that wasn’t chosen",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a chosen section missing",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "backup"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a health check with its detail text",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": false,
+              "detail": "connect /run/postgresql failed"
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a file path as an error code",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "/var/lib/whombat/relay.log",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "an environment dump",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        },
+        "env": {
+          "DATABASE_URL": "postgres://x"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a provider row naming whose sign-in it is",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready",
+              "ownerAccountId": "acc_mara0001"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "the backup failure reason",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload",
+            "reason": "host unreachable"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "messages.send",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            },
+            {
+              "code": "not_allowed",
+              "appCode": "managed.trusted_access",
+              "op": "agent.update",
+              "count": 1,
+              "lastAt": "2026-10-02T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a free-text operation name",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "health",
+          "updates",
+          "backup",
+          "connectivity",
+          "errors"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        },
+        "health": {
+          "status": "degraded",
+          "uptimeS": 86400,
+          "checks": [
+            {
+              "name": "db",
+              "ok": true
+            },
+            {
+              "name": "migrations",
+              "ok": true
+            },
+            {
+              "name": "sessionEndpoint",
+              "ok": false
+            }
+          ],
+          "external": [
+            {
+              "name": "relay",
+              "state": "degraded"
+            }
+          ],
+          "draining": false,
+          "quarantined": false,
+          "claimed": true,
+          "claimReported": true,
+          "recovery": {
+            "enrolled": true,
+            "kitVerified": true
+          },
+          "revocations": {
+            "pending": 0,
+            "applied": 2
+          },
+          "providers": [
+            {
+              "provider": "codex",
+              "authMode": "subscription",
+              "kind": "account",
+              "state": "ready"
+            }
+          ]
+        },
+        "updates": {
+          "state": "Healthy",
+          "current": "rt-2026.10.04-1",
+          "knownGood": "rt-2026.10.04-1",
+          "candidate": null,
+          "hold": false,
+          "readOnly": false,
+          "failure": null,
+          "deferredReason": null,
+          "lastCheckedAt": "2026-10-04T11:00:00Z",
+          "clientFloor": {
+            "web": 2026100401,
+            "android": 140,
+            "ios": 88,
+            "desktop": 0,
+            "cli": 0
+          }
+        },
+        "backup": {
+          "state": "failing",
+          "lastSuccessAt": "2026-10-03T02:00:00Z",
+          "ageS": 122400,
+          "coverage": [
+            "database",
+            "attachments"
+          ],
+          "unprotected": [
+            "identity"
+          ],
+          "relogin": [],
+          "lastFailure": {
+            "at": "2026-10-04T02:00:00Z",
+            "stage": "upload"
+          },
+          "recoverable": true
+        },
+        "connectivity": {
+          "relay": "connected",
+          "lastConnectedAt": "2026-10-04T09:12:00Z",
+          "lastErrorCode": "4401",
+          "activeSessions": 3,
+          "counters": {
+            "relayConnects": 14,
+            "relayDisconnects": 13,
+            "sessionsOpened": 210,
+            "sessionsRefusedVersion": 2,
+            "handshakeFailures": 1
+          }
+        },
+        "errors": {
+          "entries": [
+            {
+              "code": "unavailable",
+              "appCode": null,
+              "op": "SELECT * FROM messages",
+              "count": 4,
+              "lastAt": "2026-10-04T08:00:00Z"
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a duplicate scope",
+      "bundle": {
+        "format": "whombat-diagnostics/1",
+        "bundleId": "dgb_7Hq2mXk3",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "createdAt": "2026-10-04T12:00:00Z",
+        "expiresAt": "2026-10-11T12:00:00Z",
+        "windowS": 604800,
+        "scopes": [
+          "versions",
+          "versions"
+        ],
+        "versions": {
+          "runtimeVersion": "1.3.0",
+          "schemaVersion": 14,
+          "protocol": {
+            "major": 1,
+            "minor": 0
+          },
+          "releaseId": "rt-2026.10.04-1",
+          "providers": [
+            {
+              "provider": "codex",
+              "version": "0.44.0"
+            },
+            {
+              "provider": "claude",
+              "version": null
+            }
+          ]
+        }
+      },
+      "valid": false
+    }
+  ],
+  "pairingFingerprints": [
+    {
+      "peerId": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+      "fingerprint": "D473-2B05-9829"
+    },
+    {
+      "peerId": "12D3KooWNrPX9JcmH7DQVJDVr2AXRBHGLAE2Bowcs2hFgaBStMDa",
+      "fingerprint": "7B18-10D0-9B60"
+    }
+  ],
+  "passkeys": {
+    "userHandles": [
+      {
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "userHandle": "d2IxOjEyRDNLb29XOXc2RFNWU0gzYzFlYTU3YUtadnQxdUFDaVFBNVREd3l6ZUJYRDlnalFzdEg"
+      }
+    ],
+    "enroll": [
+      {
+        "nonce": "00000000000000000000000000000000ffffffffffffffffffffffffffffffff",
+        "endpoint": "12D3KooWNrPX9JcmH7DQVJDVr2AXRBHGLAE2Bowcs2hFgaBStMDa",
+        "challenge": "09lIUNXP0917YWs-byeZL3qmg8lpD8KggMxEHwBBd74"
+      }
+    ],
+    "register": [
+      {
+        "controlNonce": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "applianceNonce": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "appliance": "12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH",
+        "challenge": "CpizkhE5Pd1-Ajq8bB-mU_9lOEPkjjF5h1MTZfOX-oM"
+      }
+    ],
+    "remoteHelp": [
+      {
+        "nonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "endpoint": "12D3KooWNrPX9JcmH7DQVJDVr2AXRBHGLAE2Bowcs2hFgaBStMDa",
+        "level": "look",
+        "duration": "hour",
+        "challenge": "n87fkcKMJcffcBzIGoquIo0qjjcoL_mavYDzyxZAV58"
+      },
+      {
+        "nonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "endpoint": "12D3KooWNrPX9JcmH7DQVJDVr2AXRBHGLAE2Bowcs2hFgaBStMDa",
+        "level": "fix",
+        "duration": "hour",
+        "challenge": "VRaa-Xq_kwcB189c_kmSRptyEztcy7wm_6lWNoi5dgw"
+      },
+      {
+        "nonce": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+        "endpoint": "12D3KooWNrPX9JcmH7DQVJDVr2AXRBHGLAE2Bowcs2hFgaBStMDa",
+        "level": "fix",
+        "duration": "forever",
+        "challenge": "6c8_gfcL_U6ziozaDppreyxTpoWwvPVMSsYxFJE6384"
+      }
+    ]
+  }
+}

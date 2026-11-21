@@ -1,0 +1,21 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 18 nodes
+@e1 [application] "Whombat"
+@e2 [button] "Back to Chat"
+@e3 [other] "Why is pve-02 using so much memory?"
+@e4 [button] "pve-02, Needs a look"
+@e5 [scroll-area] [scrollable]
+@e6 [other] "Today · Wednesday 23 September"
+@e7 [cell] "Mara Okafor, 13:52. Why is pve-02 using so much memory?"
+@e8 [cell] "Neo, 13:53. It’s at 91%, but 38 GB of that is the ZFS cache, which gives memory back when a guest needs it. Nothing is short right now."
+@e9 [cell] "Mara Okafor, 13:58. Can you cap the cache at 16 GB?"
+@e10 [other] "Switched to ChatGPT"
+@e11 [cell] "Neo, 14:03, ChatGPT. Sure. It takes effect after a restart, so I’d do it tonight."
+@e12 [other] "Neo needs your OK, Limit the ZFS cache on pve-02 to 16 GB"
+@e13 [button] "Review and answer: Limit the ZFS cache on pve-02 to 16 GB"
+@e14 [button] "Choose how Neo answers"
+@e15 [text-view] "Reply…" [editable]
+@e16 [button] "Dictate"
+@e17 [button] "Send" [disabled]
+@e18 [toolbar] "Toolbar"

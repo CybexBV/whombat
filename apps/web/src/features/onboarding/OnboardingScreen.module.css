@@ -1,0 +1,259 @@
+.screen {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Aside ------------------------------------------------------------------------------------------ */
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 36px 32px;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.step[data-current="true"] {
+  background: var(--sf);
+}
+
+.stepDot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sf2);
+  color: var(--mut);
+  font: 500 12px var(--font-mono);
+}
+
+.stepDot[data-done="true"] {
+  background: var(--ok);
+  color: var(--on-solid);
+}
+
+.stepDot[data-current="true"] {
+  background: var(--btn);
+  color: var(--btnfg);
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stepTitle {
+  font: var(--type-name);
+}
+
+.stepDesc {
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.tipRow {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.tipAvatar {
+  width: 64px;
+  height: 64px;
+  flex: none;
+}
+
+.tipBubble {
+  padding: 12px 14px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--sf);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink2);
+  max-width: 220px;
+}
+
+/* Main --------------------------------------------------------------------------------------------- */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 32px;
+  width: 100%;
+  max-width: var(--max-onboarding);
+  margin: 0 auto;
+  padding: 56px 40px;
+}
+
+.headerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kicker {
+  font: 500 12px var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--brand);
+}
+
+.h1 {
+  margin: 0;
+  font: var(--type-display-onboarding);
+  letter-spacing: var(--type-display-onboarding-tracking);
+  text-wrap: balance;
+}
+
+.sub {
+  margin: 0;
+  font: var(--type-body-large);
+  color: var(--ink2);
+  max-width: 34em;
+  text-wrap: pretty;
+}
+
+/* Step 1: burrow name ------------------------------------------------------------------------------- */
+
+.nameBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.label {
+  font: 500 12px var(--font-mono);
+  color: var(--mut);
+}
+
+.urlPreview {
+  font: 400 13px var(--font-mono);
+  color: var(--mut);
+}
+
+.urlNote {
+  font-size: 12.5px;
+  color: var(--bad);
+}
+
+.urlRetry {
+  font-size: inherit;
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Footer -------------------------------------------------------------------------------------------- */
+
+/* Opening the burrow was refused (a crew name taken, PA-04): the field-note red, above the buttons. */
+.finishProblem {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--bad);
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+/* Back on the left; Skip for now (only while no AI is signed in) and the main button on the right. */
+.footerEnd {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Set up your AI without an AI signed in: what skipping means. */
+.aiLater {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mut);
+}
+
+.step[data-static] {
+  cursor: default;
+}
+
+.status {
+  padding: 32px;
+  color: var(--mut);
+}
+
+/* Meet your agent (one-agent.md AP-4954): its bust on its face's tint, the name, the five faces (Settings → Agent's tiles). */
+.meetAgent {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+}
+
+.meetBust {
+  display: flex;
+  flex: none;
+  width: 128px;
+  height: 128px;
+  border-radius: var(--radius-card-large);
+}
+
+.meetFields {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* How the picked character talks (agent-voices.md AP-5501): its name in the ink, then the line in the hints' grey. */
+.characterStyle {
+  margin: 0;
+  font: var(--type-small);
+  line-height: 1.45;
+  color: var(--mut);
+  text-wrap: pretty;
+}
+
+.characterName {
+  font-weight: 600;
+  color: var(--ink);
+}

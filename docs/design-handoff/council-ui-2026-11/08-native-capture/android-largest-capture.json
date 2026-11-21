@@ -1,0 +1,66 @@
+[
+  {
+    "platform": "android",
+    "id": "chat-list",
+    "theme": "light",
+    "file": "android-chat-list-light-largest.png",
+    "route": "whombat://chat",
+    "elapsed": 4.4
+  },
+  {
+    "platform": "android",
+    "id": "thread",
+    "theme": "light",
+    "file": "android-thread-light-largest.png",
+    "route": "whombat://threads/msg_chat-memory",
+    "elapsed": 4.29
+  },
+  {
+    "platform": "android",
+    "id": "approval",
+    "theme": "light",
+    "file": "android-approval-light-largest.png",
+    "route": "whombat://approvals/33",
+    "elapsed": 3.63
+  },
+  {
+    "platform": "android",
+    "id": "overview",
+    "theme": "light",
+    "file": "android-overview-light-largest.png",
+    "route": "whombat://connections",
+    "elapsed": 3.87
+  },
+  {
+    "platform": "android",
+    "id": "chat-list",
+    "theme": "dark",
+    "file": "android-chat-list-dark-largest.png",
+    "route": "whombat://chat",
+    "elapsed": 4.46
+  },
+  {
+    "platform": "android",
+    "id": "thread",
+    "theme": "dark",
+    "file": "android-thread-dark-largest.png",
+    "route": "whombat://threads/msg_chat-memory",
+    "elapsed": 4.35
+  },
+  {
+    "platform": "android",
+    "id": "approval",
+    "theme": "dark",
+    "file": "android-approval-dark-largest.png",
+    "route": "whombat://approvals/33",
+    "elapsed": 3.68
+  },
+  {
+    "platform": "android",
+    "id": "overview",
+    "theme": "dark",
+    "file": "android-overview-dark-largest.png",
+    "route": "whombat://connections",
+    "elapsed": 3.65
+  }
+]

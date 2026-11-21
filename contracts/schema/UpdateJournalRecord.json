@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/UpdateJournalRecord.json",
+  "title": "UpdateJournalRecord",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "Assigned",
+        "Downloading",
+        "Verified",
+        "Staged",
+        "WaitingForSafeBoundary",
+        "Activating",
+        "Verifying",
+        "Healthy",
+        "Failed",
+        "RolledBack",
+        "Quarantined",
+        "ForwardRepairRequired"
+      ]
+    },
+    "updateClass": {
+      "type": "string",
+      "enum": [
+        "runtime",
+        "host"
+      ]
+    },
+    "current": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "candidate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "knownGood": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "assignmentSequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "maxAttempts": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "maintenanceLock": {
+      "type": "boolean"
+    },
+    "health": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "database",
+              "session_endpoint",
+              "runner",
+              "relay_control",
+              "boot",
+              "manager"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": [
+          "check",
+          "ok",
+          "at"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "updatedAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4102444800
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "state",
+    "updateClass",
+    "current",
+    "candidate",
+    "knownGood",
+    "assignmentSequence",
+    "attempt",
+    "maxAttempts",
+    "maintenanceLock",
+    "health",
+    "updatedAt",
+    "failure"
+  ],
+  "additionalProperties": false
+}

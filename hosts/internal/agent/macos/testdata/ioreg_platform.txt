@@ -1,0 +1,26 @@
++-o J475dAP  <class IOPlatformExpertDevice, id 0x100000320, registered, matched, active, busy 0 (21846 ms), retain 42>
+    {
+      "IOPolledInterface" = "AppleARMWatchdogTimerHibernateHandler is not serializable"
+      "#address-cells" = <02000000>
+      "AAPL,phandle" = <01000000>
+      "IOBusyInterest" = "IOCommand is not serializable"
+      "target-type" = <"J475d">
+      "platform-name" = <7436303232000000000000000000000000000000000000000000000000000000>
+      "name" = <"device-tree">
+      "secure-root-prefix" = <"md">
+      "manufacturer" = <"Apple Inc.">
+      "target-sub-type" = <"J475dAP">
+      "compatible" = <"J475dAP","Mac14,14","AppleARM">
+      "config-number" = <00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000>
+      "IOPlatformSerialNumber" = "X02XX0000X"
+      "time-stamp" = <"Tue Oct 13 20:55:34 PDT 2026">
+      "clock-frequency" = <00366e01>
+      "model" = <"Mac14,14">
+      "device-tree-tag" = <"EmbeddedDeviceTrees-12661.41.1">
+      "IOConsoleSecurityInterest" = "IOCommand is not serializable"
+      "IONWInterrupts" = "IONWInterrupts"
+      "device_type" = <"bootrom">
+      "#size-cells" = <02000000>
+      "IOPlatformUUID" = "00000000-1111-4222-8333-444455556666"
+    }
+    

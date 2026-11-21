@@ -1,0 +1,28 @@
+{
+ "data": [
+  {
+   "content": "backup,rootdir,images,import,vztmpl,snippets,iso",
+   "active": 1,
+   "storage": "local",
+   "used_fraction": 0.197676285479889,
+   "total": 66433507328,
+   "enabled": 1,
+   "avail": 53284401152,
+   "shared": 0,
+   "used": 13132328960,
+   "type": "dir"
+  },
+  {
+   "content": "images,rootdir",
+   "active": 1,
+   "storage": "local-zfs",
+   "used_fraction": 0.0617,
+   "total": 377957122048,
+   "enabled": 1,
+   "avail": 354623389696,
+   "shared": 0,
+   "used": 23333732352,
+   "type": "zfspool"
+  }
+ ]
+}

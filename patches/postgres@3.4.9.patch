@@ -1,0 +1,304 @@
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..e0737100431bd5bb924aa0098457cddc9b24714e 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -252,6 +252,15 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+   }
+ 
+   function nextWrite(fn) {
++    // [whombat patch] closed() has nulled the socket (the server ended the session) and nothing reconnected it
++    // yet. Throwing here from setImmediate is an uncaughtException that exits the process; settle the pending
++    // queries with a catchable CONNECTION_CLOSED instead (porsager/postgres#1208, #1154, #1066; PR #1209).
++    if (!socket) {
++      nextWriteTimer !== null && clearImmediate(nextWriteTimer)
++      chunk = nextWriteTimer = null
++      error(Errors.connection('CONNECTION_CLOSED', options, socket))
++      return false
++    }
+     const x = socket.write(chunk, fn)
+     nextWriteTimer !== null && clearImmediate(nextWriteTimer)
+     chunk = nextWriteTimer = null
+@@ -425,6 +434,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    // [whombat patch] Drop the unsent bytes and the spent timer handle: a non-null nextWriteTimer stops write()
++    // from ever scheduling a flush again, so the next socket's StartupMessage would never be sent (PR #1215).
++    chunk = nextWriteTimer = null
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+@@ -438,6 +450,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    // [whombat patch] As in terminate(): bytes meant for the dead session must not reach the next socket
++    // (ahead of its StartupMessage), and a spent timer handle must not block its writes (PR #1215).
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +466,12 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    // [whombat patch] The dead session's query is settled now (above, or by the socket's 'error'). Forget it and
++    // its pending ErrorResponse and partial result: otherwise the next session's first ReadyForQuery replays
++    // the old backend's error (e.g. 57P01) onto the query that reconnected it (PRs #1215, #1229).
++    query = results = errorResponse = null
++    result = new Result()
++    rows = 0
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+@@ -561,7 +582,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+ 
+       if (needsTypes) {
+         initial.reserve && (initial = null)
+-        return fetchArrayTypes()
++        // [whombat patch] Nothing awaits this promise. When the fetch fails (e.g. the session is lost), errored()
++        // hands the error to the waiting query (`initial`; a reserve() waiter stays queued in the pool); the
++        // internal query's own rejection would be an unhandledRejection that exits the process
++        // (porsager/postgres#1223; PR #1241).
++        return fetchArrayTypes().catch(noop)
+       }
+ 
+       initial && !initial.reserve && execute(initial)
+diff --git a/cjs/src/index.js b/cjs/src/index.js
+index f09c61c7e998f411560b95c9a8e1ed6a97972c11..c1a8ef5e56120bdc80de50280d11ff0659f66095 100644
+--- a/cjs/src/index.js
++++ b/cjs/src/index.js
+@@ -202,6 +202,7 @@ function Postgres(a, b) {
+ 
+   async function reserve() {
+     const queue = Queue()
++    let closedError = null
+     const c = open.length
+       ? open.shift()
+       : await new Promise((resolve, reject) => {
+@@ -215,9 +216,20 @@ function Postgres(a, b) {
+       ? c.execute(queue.shift())
+       : move(c, reserved)
+     c.reserved.release = true
++    // [whombat patch] Called by onclose() when the server ends this session. The handle is dead for good: its
++    // queries reject with the close error instead of running on whatever session the pool reconnects this
++    // connection to (or throwing from nextWrite while it has none), and release() leaves the connection in the
++    // pool's closed queue instead of handing a dead one out as open (porsager/postgres#1208, #1199; PR #1240).
++    c.reserved.closed = error => {
++      closedError = error
++      while (queue.length)
++        queue.shift().reject(error)
++    }
+ 
+     const sql = Sql(handler)
+     sql.release = () => {
++      if (closedError)
++        return
+       c.reserved = null
+       onopen(c)
+     }
+@@ -225,6 +237,8 @@ function Postgres(a, b) {
+     return sql
+ 
+     function handler(q) {
++      if (closedError)
++        return q.reject(closedError)
+       c.queue === full
+         ? queue.push(q)
+         : c.execute(q) || move(c, full)
+@@ -236,13 +250,24 @@ function Postgres(a, b) {
+     const queries = Queue()
+     let savepoints = 0
+       , connection
++      , closedError = null
+       , prepare = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        // [whombat patch] The server ended the transaction's session. Besides rejecting begin(), mark the
++        // transaction dead and reject its queued queries: the callback may still run, and its later queries,
++        // including the automatic commit/rollback, must never reach the session the pool reconnects this
++        // connection to, where they would run in autocommit or inside another caller's transaction
++        // (porsager/postgres#1216, #1204; PR #1215).
++        new Promise((_, reject) => connection.onclose = error => {
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +315,8 @@ function Postgres(a, b) {
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
+@@ -420,6 +447,8 @@ function Postgres(a, b) {
+ 
+   function onclose(c, e) {
+     move(c, closed)
++    // [whombat patch] Tell a reserve() handle its session is gone before the pool takes the connection back.
++    c.reserved && c.reserved.closed && c.reserved.closed(e)
+     c.reserved = null
+     c.onclose && (c.onclose(e), c.onclose = null)
+     options.onclose && options.onclose(c.id)
+diff --git a/src/connection.js b/src/connection.js
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..b4b4900e1faec83dac3b380329b70fa22811ad16 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -252,6 +252,15 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+   }
+ 
+   function nextWrite(fn) {
++    // [whombat patch] closed() has nulled the socket (the server ended the session) and nothing reconnected it
++    // yet. Throwing here from setImmediate is an uncaughtException that exits the process; settle the pending
++    // queries with a catchable CONNECTION_CLOSED instead (porsager/postgres#1208, #1154, #1066; PR #1209).
++    if (!socket) {
++      nextWriteTimer !== null && clearImmediate(nextWriteTimer)
++      chunk = nextWriteTimer = null
++      error(Errors.connection('CONNECTION_CLOSED', options, socket))
++      return false
++    }
+     const x = socket.write(chunk, fn)
+     nextWriteTimer !== null && clearImmediate(nextWriteTimer)
+     chunk = nextWriteTimer = null
+@@ -425,6 +434,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    // [whombat patch] Drop the unsent bytes and the spent timer handle: a non-null nextWriteTimer stops write()
++    // from ever scheduling a flush again, so the next socket's StartupMessage would never be sent (PR #1215).
++    chunk = nextWriteTimer = null
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+@@ -438,6 +450,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    // [whombat patch] As in terminate(): bytes meant for the dead session must not reach the next socket
++    // (ahead of its StartupMessage), and a spent timer handle must not block its writes (PR #1215).
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +466,12 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    // [whombat patch] The dead session's query is settled now (above, or by the socket's 'error'). Forget it and
++    // its pending ErrorResponse and partial result: otherwise the next session's first ReadyForQuery replays
++    // the old backend's error (e.g. 57P01) onto the query that reconnected it (PRs #1215, #1229).
++    query = results = errorResponse = null
++    result = new Result()
++    rows = 0
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+@@ -561,7 +582,11 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+ 
+       if (needsTypes) {
+         initial.reserve && (initial = null)
+-        return fetchArrayTypes()
++        // [whombat patch] Nothing awaits this promise. When the fetch fails (e.g. the session is lost), errored()
++        // hands the error to the waiting query (`initial`; a reserve() waiter stays queued in the pool); the
++        // internal query's own rejection would be an unhandledRejection that exits the process
++        // (porsager/postgres#1223; PR #1241).
++        return fetchArrayTypes().catch(noop)
+       }
+ 
+       initial && !initial.reserve && execute(initial)
+diff --git a/src/index.js b/src/index.js
+index c7fba3dace20173f4cb13f3f138bb6d213b43683..9ad781ac701310703ec3592739d84f479c3599c5 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -202,6 +202,7 @@ function Postgres(a, b) {
+ 
+   async function reserve() {
+     const queue = Queue()
++    let closedError = null
+     const c = open.length
+       ? open.shift()
+       : await new Promise((resolve, reject) => {
+@@ -215,9 +216,20 @@ function Postgres(a, b) {
+       ? c.execute(queue.shift())
+       : move(c, reserved)
+     c.reserved.release = true
++    // [whombat patch] Called by onclose() when the server ends this session. The handle is dead for good: its
++    // queries reject with the close error instead of running on whatever session the pool reconnects this
++    // connection to (or throwing from nextWrite while it has none), and release() leaves the connection in the
++    // pool's closed queue instead of handing a dead one out as open (porsager/postgres#1208, #1199; PR #1240).
++    c.reserved.closed = error => {
++      closedError = error
++      while (queue.length)
++        queue.shift().reject(error)
++    }
+ 
+     const sql = Sql(handler)
+     sql.release = () => {
++      if (closedError)
++        return
+       c.reserved = null
+       onopen(c)
+     }
+@@ -225,6 +237,8 @@ function Postgres(a, b) {
+     return sql
+ 
+     function handler(q) {
++      if (closedError)
++        return q.reject(closedError)
+       c.queue === full
+         ? queue.push(q)
+         : c.execute(q) || move(c, full)
+@@ -236,13 +250,24 @@ function Postgres(a, b) {
+     const queries = Queue()
+     let savepoints = 0
+       , connection
++      , closedError = null
+       , prepare = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        // [whombat patch] The server ended the transaction's session. Besides rejecting begin(), mark the
++        // transaction dead and reject its queued queries: the callback may still run, and its later queries,
++        // including the automatic commit/rollback, must never reach the session the pool reconnects this
++        // connection to, where they would run in autocommit or inside another caller's transaction
++        // (porsager/postgres#1216, #1204; PR #1215).
++        new Promise((_, reject) => connection.onclose = error => {
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +315,8 @@ function Postgres(a, b) {
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
+@@ -420,6 +447,8 @@ function Postgres(a, b) {
+ 
+   function onclose(c, e) {
+     move(c, closed)
++    // [whombat patch] Tell a reserve() handle its session is gone before the pool takes the connection back.
++    c.reserved && c.reserved.closed && c.reserved.closed(e)
+     c.reserved = null
+     c.onclose && (c.onclose(e), c.onclose = null)
+     options.onclose && options.onclose(c.id)

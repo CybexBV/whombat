@@ -1,0 +1,6 @@
+Loading repository data...
+Reading installed packages...
+S | Repository             | Name            | Current Version | Available Version | Arch
+--+------------------------+-----------------+-----------------+-------------------+-------
+v | repo-sle-update        | curl            | 8.6.0-150600.4.6.1 | 8.6.0-150600.4.9.1 | x86_64
+v | repo-sle-update        | libcurl4        | 8.6.0-150600.4.6.1 | 8.6.0-150600.4.9.1 | x86_64

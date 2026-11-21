@@ -1,0 +1,229 @@
+# The public check of every pull request and of `main`, on GitHub's own runners only. No secrets, read-only token,
+# never `pull_request_target`. A pull request runs the jobs of the parts it changes (`changes`,
+# scripts/ci/changed_parts.py); a push to `main` runs them all. The last job, `public-ci`, is the one a pull request
+# must pass: it passes when every job before it passed or had nothing to do.
+#
+#   check              `pnpm check` (lint, notices, types, unit tests): everything outside appliance/ and hosts/
+#   contracts          the contracts' generated files and Go tests
+#   appliance-go       the appliance's Go tests (with `jq` and `dbus-daemon`, which some need); also for a change to
+#                      contracts/go, which it builds against
+#   appliance-harness  the appliance's integration harness, and its vendored contracts' checksums
+#   appliance-console  the console page
+#   hosts              the hosts service: `make ci` (lint, Go tests with the race detector, web tests, a full build)
+#   fixed-hashes       the hashes of what the NixOS build downloads were taken for this change's lockfiles and Go
+#                      modules (appliance/nix/fixed-hashes.json); no Nix needed
+#   secrets            a secret scan of the new commits
+#
+# The maintainers' longer suites (Postgres, browsers, Android, packaging, the NixOS builds and VM tests) run in their
+# own CI from ci/platform/.
+name: public-ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: public-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      check: ${{ steps.parts.outputs.check }}
+      contracts: ${{ steps.parts.outputs.contracts }}
+      appliance_go: ${{ steps.parts.outputs.appliance_go }}
+      appliance_harness: ${{ steps.parts.outputs.appliance_harness }}
+      appliance_console: ${{ steps.parts.outputs.appliance_console }}
+      hosts: ${{ steps.parts.outputs.hosts }}
+      fixed_hashes: ${{ steps.parts.outputs.fixed_hashes }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: The parts this change touches
+        id: parts
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 -I scripts/ci/changed_parts.py --event "$EVENT" --base "$BASE" --head "$HEAD"
+  check:
+    needs: changes
+    if: needs.changes.outputs.check == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+  contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: contracts/go/go.mod
+          cache-dependency-path: contracts/go/go.sum
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contracts:gen:check
+      - run: pnpm contracts:test:go
+  appliance-go:
+    needs: changes
+    if: needs.changes.outputs.appliance_go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: appliance
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: appliance/go.mod
+          cache-dependency-path: appliance/go.sum
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq jq dbus-daemon
+      - name: gofmt
+        run: out=$(gofmt -l $(git ls-files '*.go')); [ -z "$out" ] || { echo "gofmt needed:"; echo "$out"; exit 1; }
+      - run: go vet ./... && go test ./...
+      - name: The separate Go modules
+        run: |
+          for m in nix/packages/standins nix/packages/hosts/manifest-check; do
+            (cd "$m" && go vet ./... && go test ./...)
+          done
+  appliance-harness:
+    needs: changes
+    if: needs.changes.outputs.appliance_harness == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile && pnpm contracts:verify && pnpm check
+        working-directory: appliance/harness
+      - run: python3 -I -m unittest discover -s scripts/ci -p 'test_scanner_allowlists.py'
+        working-directory: appliance
+  appliance-console:
+    needs: changes
+    if: needs.changes.outputs.appliance_console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile && pnpm check
+        working-directory: appliance/console/ui
+  hosts:
+    needs: changes
+    if: needs.changes.outputs.hosts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: hosts
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      # Go, Node and pnpm at the versions hosts/mise.toml names.
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          working_directory: hosts
+      - run: cd web && mise exec -- pnpm install --frozen-lockfile
+      - run: make ci
+  # A change to a lockfile or to Go modules needs the hash of its download refreshed in the same change
+  # (appliance/scripts/ci/fixed-hashes.sh --refresh, which needs Nix: a maintainer adds it to an outside pull request).
+  fixed-hashes:
+    needs: changes
+    if: needs.changes.outputs.fixed_hashes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: appliance/scripts/ci/fixed-hashes.sh --check
+      - run: python3 -I -m unittest discover -s appliance/scripts/ci -p 'test_fixed_hashes.py'
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks and trufflehog at pinned versions
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" && cd "$RUNNER_TEMP"
+          curl -fsSL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz' | sha256sum -c -
+          curl -fsSL -o trufflehog.tgz https://github.com/trufflesecurity/trufflehog/releases/download/v3.99.7/trufflehog_3.99.7_linux_amd64.tar.gz
+          echo 'bdbea0508e439b144f49de14e775908de5f902f3d14ea7ae8354bae72b0b72ef  trufflehog.tgz' | sha256sum -c -
+          tar -xzf gitleaks.tgz -C bin gitleaks && tar -xzf trufflehog.tgz -C bin trufflehog
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+      - name: The allowlists carry those of appliance/ and hosts/
+        run: python3 -I scripts/ci/scanner_allowlists.py --check
+      - name: Scan the new commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # The commits this pull request or push adds; all of history when there is no earlier commit.
+          if [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$BASE^{commit}"; then
+            range="$BASE..$HEAD"; since=(--since-commit "$BASE")
+          else
+            range="$HEAD"; since=()
+          fi
+          gitleaks git . --config .gitleaks.toml --log-opts="$range" --no-banner --redact --exit-code 1
+          trufflehog git file://. "${since[@]}" --branch "$HEAD" --no-verification --no-update --fail \
+            --exclude-paths=.trufflehog-exclude.txt
+  # The one check a pull request must pass. A job that had nothing to do is skipped, and a skipped job must not hold
+  # a pull request up; a job that failed or was cancelled does.
+  public-ci:
+    name: public-ci
+    if: always()
+    needs: [changes, check, contracts, appliance-go, appliance-harness, appliance-console, hosts, fixed-hashes, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed or had nothing to do
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$RESULTS"
+          jq -e '.changes.result == "success" and .secrets.result == "success"
+            and all(.[]; .result == "success" or .result == "skipped")' <<<"$RESULTS" >/dev/null

@@ -1,0 +1,9 @@
+{
+  "results": [
+    { "metrics": [20], "dimensions": ["Direct / None"] },
+    { "metrics": [15], "dimensions": ["Google"] },
+    { "metrics": [4], "dimensions": ["DuckDuckGo"] }
+  ],
+  "meta": {},
+  "query": { "site_id": "example.com", "dimensions": ["visit:source"] }
+}

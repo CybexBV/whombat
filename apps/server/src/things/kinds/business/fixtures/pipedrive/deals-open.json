@@ -1,0 +1,54 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 301,
+      "title": "Foobar Holding – website",
+      "owner_id": 11,
+      "person_id": 41,
+      "org_id": 51,
+      "pipeline_id": 1,
+      "stage_id": 2,
+      "value": 12000,
+      "currency": "EUR",
+      "add_time": "2026-09-01T10:00:00Z",
+      "update_time": "2026-10-20T10:00:00Z",
+      "status": "open",
+      "is_deleted": false,
+      "won_time": null,
+      "lost_time": null,
+      "close_time": null
+    },
+    {
+      "id": 302,
+      "title": "Acme – support",
+      "owner_id": 11,
+      "person_id": 42,
+      "org_id": 52,
+      "pipeline_id": 1,
+      "stage_id": 1,
+      "value": 3000,
+      "currency": "USD",
+      "add_time": "2026-10-18T10:00:00Z",
+      "update_time": "2026-10-19T10:00:00Z",
+      "status": "open",
+      "is_deleted": false
+    },
+    {
+      "id": 303,
+      "title": "Jansen – partner",
+      "owner_id": 11,
+      "person_id": 43,
+      "org_id": null,
+      "pipeline_id": 2,
+      "stage_id": 5,
+      "value": 800,
+      "currency": "EUR",
+      "add_time": "2026-10-19T10:00:00Z",
+      "update_time": "2026-10-19T10:00:00Z",
+      "status": "open",
+      "is_deleted": false
+    }
+  ],
+  "additional_data": { "next_cursor": null }
+}

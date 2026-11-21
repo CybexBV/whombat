@@ -1,0 +1,29 @@
+{
+  "name": "@whombat/visual-tools",
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "ref-shot": "./src/shot.ts",
+    "visual-diff": "./src/diff.ts"
+  },
+  "scripts": {
+    "shot": "tsx src/shot.ts",
+    "diff": "tsx src/diff.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pngjs": "^6.0.5"
+  }
+}

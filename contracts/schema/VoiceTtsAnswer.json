@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceTtsAnswer.json",
+  "title": "VoiceTtsAnswer",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "audioWav": {
+      "type": "string",
+      "minLength": 60,
+      "maxLength": 8388608,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+    }
+  },
+  "required": [
+    "v",
+    "audioWav"
+  ]
+}

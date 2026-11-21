@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskUnlockRequest.json",
+  "title": "DeskUnlockRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "pin": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    }
+  },
+  "required": [
+    "v",
+    "pin"
+  ],
+  "additionalProperties": false
+}

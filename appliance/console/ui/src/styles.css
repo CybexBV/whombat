@@ -1,0 +1,108 @@
+/* Global base (the web app's global.css, dark theme only: CG-02). Colours, fonts, radii only through tokens. */
+@import "../vendor/whombat-app/tokens/tokens.css";
+@import "../vendor/whombat-app/fonts/fonts.css";
+
+/*
+ * The burrows' earth (CG-35): the old avatar family's fur colours, which app 0.28.0 dropped from the tokens with the
+ * drawn avatars (FA-DA07). They colour only the console's scenery (dirt, the lip, the sign's frame and posts), so
+ * they live here, once, as the console's own tokens.
+ */
+:root {
+  --earth: #7d6353;
+  --earth-light: #b3977a;
+  --earth-deep: #46372d;
+  /* The desk at night (DK-09, mockup 4): true black around the dim clock, as close to off as a lit panel gets. */
+  --night: #000;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+  user-select: none;
+}
+
+/*
+ * No pointer at rest, on every screen (CG-410): it would cover what the screen says. While a mouse moves
+ * (lib/pointer.ts), the page's own arrow, one everywhere, over the components' own hover cursors too. The kiosk's
+ * cursor theme is empty, so Chromium's own pointers are invisible and this arrow is the only one.
+ */
+html,
+html * {
+  /* biome-ignore lint/complexity/noImportantStyles: must win over every component rule */
+  cursor: none !important;
+}
+
+/* biome-ignore-start lint/complexity/noImportantStyles: must win over every component rule */
+html[data-pointer="shown"],
+html[data-pointer="shown"] * {
+  cursor:
+    url("./ui/pointer.svg") 3 2,
+    default !important;
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: must win over every component rule */
+
+input,
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+input::placeholder {
+  color: var(--placeholder);
+}
+
+:focus {
+  outline: none;
+}
+
+/* Keyboard first (CG-15): every focusable thing shows a clear ring. */
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat component styles */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat component styles */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat component styles */
+    transition-duration: 0.01ms !important;
+  }
+}

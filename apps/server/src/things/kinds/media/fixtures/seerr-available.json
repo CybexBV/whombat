@@ -1,0 +1,18 @@
+{
+  "pageInfo": {
+    "pages": 0,
+    "pageSize": 8,
+    "results": 0,
+    "page": 1
+  },
+  "serviceErrors": {
+    "radarr": [],
+    "sonarr": [
+      {
+        "id": 0,
+        "name": "Sonarr"
+      }
+    ]
+  },
+  "results": []
+}

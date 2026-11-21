@@ -1,0 +1,23 @@
+{
+  "code": "NORMAL",
+  "error": null,
+  "status": {
+    "current_version": {
+      "train": "TrueNAS-SCALE-Goldeye",
+      "profile": "GENERAL",
+      "matches_profile": true,
+      "version": "25.10.1"
+    },
+    "new_version": {
+      "train": "TrueNAS-SCALE-Goldeye",
+      "profile": "GENERAL",
+      "matches_profile": true,
+      "version": "25.10.2",
+      "manifest": {
+        "filename": "TrueNAS-SCALE-25.10.2.update"
+      },
+      "release_notes_url": "https://www.truenas.com/docs/scale/25.10/gettingstarted/scalereleasenotes/"
+    }
+  },
+  "update_download_progress": null
+}

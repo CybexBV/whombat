@@ -1,0 +1,294 @@
+{
+ "blockdevices": [
+  {
+   "name": "sda",
+   "kname": "sda",
+   "maj:min": "8:0",
+   "type": "disk",
+   "size": 18000207937536,
+   "model": "WDC WD181KFGX-68CKWN0",
+   "serial": "HDDSER0001",
+   "rota": true,
+   "tran": "sata",
+   "vendor": "ATA     ",
+   "children": [
+    {
+     "name": "sda1",
+     "kname": "sda1",
+     "maj:min": "8:1",
+     "type": "part",
+     "size": 18000197451776,
+     "model": null,
+     "serial": null,
+     "rota": true,
+     "tran": null,
+     "vendor": null
+    },
+    {
+     "name": "sda9",
+     "kname": "sda9",
+     "maj:min": "8:9",
+     "type": "part",
+     "size": 8388608,
+     "model": null,
+     "serial": null,
+     "rota": true,
+     "tran": null,
+     "vendor": null
+    }
+   ]
+  },
+  {
+   "name": "sdb",
+   "kname": "sdb",
+   "maj:min": "8:16",
+   "type": "disk",
+   "size": 18000207937536,
+   "model": "WDC WD181KFGX-68CKWN0",
+   "serial": "HDDSER0002",
+   "rota": true,
+   "tran": "sata",
+   "vendor": "ATA     ",
+   "children": [
+    {
+     "name": "sdb1",
+     "kname": "sdb1",
+     "maj:min": "8:17",
+     "type": "part",
+     "size": 18000197451776,
+     "model": null,
+     "serial": null,
+     "rota": true,
+     "tran": null,
+     "vendor": null
+    },
+    {
+     "name": "sdb9",
+     "kname": "sdb9",
+     "maj:min": "8:25",
+     "type": "part",
+     "size": 8388608,
+     "model": null,
+     "serial": null,
+     "rota": true,
+     "tran": null,
+     "vendor": null
+    }
+   ]
+  },
+  {
+   "name": "sdc",
+   "kname": "sdc",
+   "maj:min": "8:32",
+   "type": "disk",
+   "size": 0,
+   "model": "Virtual HDisk0",
+   "serial": "VIRT0003",
+   "rota": false,
+   "tran": "usb",
+   "vendor": "AMI     "
+  },
+  {
+   "name": "sr0",
+   "kname": "sr0",
+   "maj:min": "11:0",
+   "type": "rom",
+   "size": 1073741312,
+   "model": "Virtual CDROM0",
+   "serial": "VIRT0001",
+   "rota": false,
+   "tran": "usb",
+   "vendor": "AMI     "
+  },
+  {
+   "name": "nbd0",
+   "kname": "nbd0",
+   "maj:min": "43:0",
+   "type": "disk",
+   "size": 0,
+   "model": null,
+   "serial": null,
+   "rota": false,
+   "tran": null,
+   "vendor": null
+  },
+  {
+   "name": "zd0",
+   "kname": "zd0",
+   "maj:min": "230:0",
+   "type": "disk",
+   "size": 2771419136,
+   "model": null,
+   "serial": null,
+   "rota": false,
+   "tran": null,
+   "vendor": null
+  },
+  {
+   "name": "nvme1n1",
+   "kname": "nvme1n1",
+   "maj:min": "259:0",
+   "type": "disk",
+   "size": 4000787030016,
+   "model": "Samsung SSD 9100 PRO 4TB",
+   "serial": "NVMESER0002",
+   "rota": false,
+   "tran": "nvme",
+   "vendor": null,
+   "children": [
+    {
+     "name": "nvme1n1p1",
+     "kname": "nvme1n1p1",
+     "maj:min": "259:1",
+     "type": "part",
+     "size": 1073741824,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    },
+    {
+     "name": "nvme1n1p2",
+     "kname": "nvme1n1p2",
+     "maj:min": "259:2",
+     "type": "part",
+     "size": 34359738368,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null,
+     "children": [
+      {
+       "name": "md127",
+       "kname": "md127",
+       "maj:min": "9:127",
+       "type": "raid1",
+       "size": 34325135360,
+       "model": null,
+       "serial": null,
+       "rota": false,
+       "tran": null,
+       "vendor": null
+      }
+     ]
+    },
+    {
+     "name": "nvme1n1p3",
+     "kname": "nvme1n1p3",
+     "maj:min": "259:3",
+     "type": "part",
+     "size": 3965344095744,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    }
+   ]
+  },
+  {
+   "name": "nvme2n1",
+   "kname": "nvme2n1",
+   "maj:min": "259:4",
+   "type": "disk",
+   "size": 2000398934016,
+   "model": "Samsung SSD 990 PRO 2TB",
+   "serial": "NVMESER0003",
+   "rota": false,
+   "tran": "nvme",
+   "vendor": null,
+   "children": [
+    {
+     "name": "nvme2n1p1",
+     "kname": "nvme2n1p1",
+     "maj:min": "259:12",
+     "type": "part",
+     "size": 2000389406720,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    },
+    {
+     "name": "nvme2n1p9",
+     "kname": "nvme2n1p9",
+     "maj:min": "259:13",
+     "type": "part",
+     "size": 8388608,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    }
+   ]
+  },
+  {
+   "name": "nvme0n1",
+   "kname": "nvme0n1",
+   "maj:min": "259:5",
+   "type": "disk",
+   "size": 4000787030016,
+   "model": "Samsung SSD 9100 PRO 4TB",
+   "serial": "NVMESER0001",
+   "rota": false,
+   "tran": "nvme",
+   "vendor": null,
+   "children": [
+    {
+     "name": "nvme0n1p1",
+     "kname": "nvme0n1p1",
+     "maj:min": "259:9",
+     "type": "part",
+     "size": 1073741824,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    },
+    {
+     "name": "nvme0n1p2",
+     "kname": "nvme0n1p2",
+     "maj:min": "259:10",
+     "type": "part",
+     "size": 34359738368,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null,
+     "children": [
+      {
+       "name": "md127",
+       "kname": "md127",
+       "maj:min": "9:127",
+       "type": "raid1",
+       "size": 34325135360,
+       "model": null,
+       "serial": null,
+       "rota": false,
+       "tran": null,
+       "vendor": null
+      }
+     ]
+    },
+    {
+     "name": "nvme0n1p3",
+     "kname": "nvme0n1p3",
+     "maj:min": "259:11",
+     "type": "part",
+     "size": 3965344095744,
+     "model": null,
+     "serial": null,
+     "rota": false,
+     "tran": "nvme",
+     "vendor": null
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 21 visible nodes
+@e1 [application] "Whombat"
+@e2 [scroll-area] [scrollable]
+  [content below scroll-area hidden]
+@e3 [text] "Automations"
+@e4 [text] "What Neo does on its own. To make one or change one, tell Neo."
+@e5 [button] "Tell Neo…"
+@e6 [text] "AUTOMATIONS · 3"
+@e7 [button] "Assess and fix tracker reports, on. A new report in a tracker connection. Last run 11:40, done. Last 5 runs: 4 done, 1 skipped."
+@e8 [button] "Review billing pull requests, waiting for you. A new pull request on lumio/billing. Run #5 is waiting for a yes."
+@e9 [button] "Check the billing repository, on. Every weekday at 08:00. Last run 11:40, done. Last 5 runs: 5 done."
+@e10 [text] "ONLY TELLS YOU"
+@e11 [cell] "Check last night’s backups and post one line here. Only tells you. Every weekday at 08:30 · Active."
+@e12 [button] "Pause"
+@e13 [button] "Remove"
+@e14 [cell] "Summarize the week’s open incidents for the Friday review. Only tells you. Every Friday at 15:00 · Paused." [covered]
+@e15 [tab-bar] "Tab Bar"
+@e16 [button] "Chat"
+@e17 [button] "Inbox"
+@e18 [button] "Overview"
+@e19 [button] "Automations" [selected]
+@e20 [button] "Settings"
+@e21 [toolbar] "Toolbar"

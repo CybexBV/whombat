@@ -1,0 +1,102 @@
+/* Charts of servers' history (mock 2's CPU temperature, Home's Servers sparklines). Tokens only. */
+
+.plot {
+  position: relative;
+  min-width: 0;
+  border-radius: 4px;
+}
+
+.plot:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.svg text {
+  fill: var(--mut);
+  font: 400 11px var(--font-mono);
+}
+
+.grid {
+  stroke: var(--line2);
+  stroke-width: 1;
+}
+
+.limit {
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.8;
+}
+
+.line {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.area {
+  opacity: 0.12;
+  stroke: none;
+}
+
+.cross {
+  stroke: var(--line2);
+  stroke-width: 1;
+}
+
+.dot {
+  stroke: var(--sf);
+  stroke-width: 2;
+}
+
+.tip {
+  position: absolute;
+  z-index: 2;
+  padding: 7px 9px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-small);
+  background: var(--sf);
+  box-shadow: var(--shadow-chart-tip);
+  color: var(--mut);
+  font: 400 12px var(--font-sans);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tipTitle {
+  margin-bottom: 3px;
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tipRow i {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+}
+
+.tipRow b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* A Summary's chart cards: fainter gridlines (the dashboards mock). */
+.soft .grid {
+  stroke: var(--line);
+}
+
+/* Where the last value is heading. */
+.forecast {
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+}

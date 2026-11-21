@@ -1,0 +1,8 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 4 visible nodes (7 total)
+Collapsed 3 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back to Overview"
+@e3 [scroll-area] "Overview, That isn’t one of your connections., Open its settings" [scrollable]
+@e6 [button] "Open its settings"

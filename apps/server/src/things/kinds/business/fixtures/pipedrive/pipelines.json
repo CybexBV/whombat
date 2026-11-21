@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Sales",
+      "order_nr": 1,
+      "is_deleted": false,
+      "is_deal_probability_enabled": false,
+      "add_time": "2025-01-01T00:00:00Z",
+      "update_time": "2025-01-01T00:00:00Z",
+      "is_selected": true
+    },
+    {
+      "id": 2,
+      "name": "Partners",
+      "order_nr": 2,
+      "is_deleted": false,
+      "is_deal_probability_enabled": false,
+      "add_time": "2025-01-01T00:00:00Z",
+      "update_time": "2025-01-01T00:00:00Z",
+      "is_selected": false
+    }
+  ],
+  "additional_data": { "next_cursor": null }
+}

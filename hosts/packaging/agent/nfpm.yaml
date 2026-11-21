@@ -1,0 +1,38 @@
+# nfpm configuration for the Whombat agent .deb.
+# Build (from the repo root): make deb   (or: cd packaging/agent &&
+#   VERSION=0.1.0 ARCH=amd64 nfpm package -p deb -t ../../dist/)
+# The binary comes from `make agents` (dist/agent/whombat-agent-linux-$ARCH).
+name: whombat-agent
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: none
+section: admin
+priority: optional
+maintainer: Whombat <whombat@localhost>
+description: |
+  Whombat agent.
+  Reports host metrics, disks, sensors and guest inventory (Docker, Incus,
+  libvirt, Proxmox VE) to Whombat's hosts service over an outbound mTLS WebSocket, and
+  brokers guest consoles and power actions when enabled locally in
+  /etc/whombat-agent/agent.toml (off by default).
+recommends:
+  - smartmontools
+contents:
+  - src: ../../dist/agent/whombat-agent-linux-${ARCH}
+    dst: /usr/bin/whombat-agent
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ./whombat-agent.service
+    dst: /usr/lib/systemd/system/whombat-agent.service
+    file_info:
+      mode: 0644
+  - dst: /etc/whombat-agent
+    type: dir
+    file_info:
+      mode: 0700
+scripts:
+  postinstall: ./scripts/postinst.sh
+  preremove: ./scripts/prerm.sh
+  postremove: ./scripts/postrm.sh

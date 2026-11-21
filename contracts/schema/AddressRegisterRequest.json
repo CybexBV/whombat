@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/AddressRegisterRequest.json",
+  "title": "AddressRegisterRequest",
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "minLength": 11,
+      "maxLength": 32,
+      "pattern": "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$"
+    }
+  },
+  "required": [
+    "label"
+  ],
+  "additionalProperties": false
+}

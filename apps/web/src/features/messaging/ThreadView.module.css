@@ -1,0 +1,620 @@
+/* Thread pane contents from docs/design-handoff/design/Whombat Desktop.dc.html (`paneThread`). */
+
+.pane {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.context {
+  color: var(--mut);
+  font-size: 13px;
+}
+
+/* A Chat thread's head: “Thread” and its subject chip on one line (chat-channel.md AP-2409). */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* “4 replies” between a Chat thread's first message and its replies (the mock's `.sep`). */
+.repliesLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -8px 0;
+  color: var(--mut);
+  font: var(--type-meta-small);
+}
+
+.repliesLine::after {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  content: "";
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The list and, over its bottom edge, “Scroll to the end”. */
+.listArea {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 0;
+  padding: 22px 24px;
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+}
+
+/* T3 Code's face on its report: its mark on the ink tile, a face's size. */
+.markFace {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.time {
+  color: var(--mut);
+  font: var(--type-mono-meta-small);
+}
+
+.body {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.receipts {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+}
+
+.receipt,
+.receipt:hover {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.receiptNumber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-tag);
+  background: var(--sf2);
+  font: 500 10.5px var(--font-mono);
+}
+
+.receiptText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.receiptSource {
+  font-size: 14px;
+}
+
+a.receipt:hover .receiptSource {
+  color: var(--brand);
+}
+
+.receiptDetail {
+  color: var(--mut);
+  font: 400 11px var(--font-mono);
+}
+
+.list .typing {
+  padding-left: 44px;
+}
+
+/* What was handed to T3 Code (t3code-handoff.md AP-6613): under the replies' text, where the thinking line goes. */
+.handoffs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* T3 Code's line draws its mark in the faces' column itself; the job's parts sit under the replies' text. */
+.handoffs > :not([data-handoffs]) {
+  margin-left: 44px;
+}
+
+.replyDock {
+  flex: none;
+  padding: 0 20px 20px;
+}
+
+/*
+ * “Scroll to the end” (thread-scroll.md): a quiet pill on the surface over the list's bottom edge, centred on the reply
+ * column (in the full-width thread that column is the room's message width), its arrow after the words.
+ */
+.toEnd {
+  position: absolute;
+  bottom: 12px;
+  left: min(50%, calc(var(--max-messages) / 2));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+  box-shadow: var(--shadow-toast);
+  color: var(--ink2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  cursor: pointer;
+  animation: to-end-in 160ms ease-out;
+}
+
+.toEnd:hover {
+  background: var(--sf2);
+  color: var(--ink);
+}
+
+.toEnd:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.toEnd svg {
+  color: var(--mut);
+}
+
+.toEnd:hover svg {
+  color: var(--ink);
+}
+
+@keyframes to-end-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+
+/* A reply a link opened (WX-06): highlighted for a moment, as the pins pane does in the room (AP-445). */
+/* The link a moved card leaves under the words it was on (card-moves.md CM-07): quiet, like the meta line. */
+.movedLink {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  font: var(--type-meta);
+  cursor: pointer;
+}
+
+.movedLink:hover {
+  color: var(--ink2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.movedLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (pointer: coarse) {
+  .movedLink {
+    min-height: 44px;
+  }
+}
+
+/* A card as it was where the person talked about it (card-moves.md): one quiet line, opening it read-only. */
+.earlier {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.earlierLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.earlierToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font: var(--type-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.earlierToggle:hover {
+  color: var(--ink);
+}
+
+.earlierToggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.earlierChevron {
+  flex: none;
+  color: var(--mut);
+  transform: rotate(-90deg);
+  transition: transform 0.15s;
+}
+
+.earlierOpen {
+  transform: none;
+}
+
+/* Words only screen readers hear (the copy of an earlier card, which is inert). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (pointer: coarse) {
+  .earlierToggle {
+    min-height: 44px;
+  }
+}
+
+.row[data-flash] {
+  border-radius: var(--radius-small);
+  background: var(--hi);
+  box-shadow: 0 0 0 8px var(--hi);
+  transition:
+    background 0.4s,
+    box-shadow 0.4s;
+}
+
+/* Focus mode (docs/decisions/ui-improvements.md AP-304): the conversation column's geometry — a 76px header with
+   32px sides, then messages and the reply box in the 880px message column. */
+.focus .header {
+  padding: 16px 32px;
+}
+
+.focus .heading {
+  gap: 3px;
+}
+
+.focus .title {
+  font: var(--type-header-title);
+  letter-spacing: var(--type-header-title-tracking);
+}
+
+.back {
+  align-self: flex-start;
+  margin-bottom: 4px;
+  color: var(--mut);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.focus .list {
+  padding: 28px 32px 32px;
+}
+
+.focus .list > * {
+  max-width: calc(var(--max-messages) - 64px);
+}
+
+/* A row's slot reaches 10px past it on each side (WX-02): the row keeps the column's width. */
+.focus .list > [data-row-slot] {
+  max-width: calc(var(--max-messages) - 44px);
+}
+
+.focus .replyDock {
+  max-width: var(--max-messages);
+  padding: 0 32px 22px;
+}
+
+/* A Chat thread's Settle in its head (chat-settle.md AP-6150; the mock's `.hbtn.ok`): the check and the word in ok. */
+.settleButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin-right: 4px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  border-radius: var(--radius-button-small);
+  background: transparent;
+  color: var(--ok);
+  font: 500 13px var(--font-sans);
+  cursor: pointer;
+}
+
+.settleButton:hover {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
+/* A settled thread, open (AP-6154; the mock's `.state`): ✓ “Settled 2 hours ago” and Open again, in the ok tint. */
+.settledLine {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 24px 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--ok) 22%, transparent);
+  border-radius: var(--radius-button);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  color: var(--ink2);
+  font: var(--type-meta);
+}
+
+.settledLine > svg {
+  flex: none;
+  color: var(--ok);
+}
+
+.settledWhen {
+  flex: 1;
+  min-width: 0;
+}
+
+.openAgain {
+  flex: none;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  font: 600 13px var(--font-sans);
+  cursor: pointer;
+}
+
+.openAgain:hover {
+  background: var(--sel);
+}
+
+.replyHint {
+  margin: 8px 2px 0;
+  color: var(--mut);
+  font: 400 12px var(--font-sans);
+}
+
+.focus .settledLine {
+  max-width: calc(var(--max-messages) - 64px);
+  margin: 12px 32px 0;
+}
+
+/* A reply's card, without a box of its own: Answer finds the card that waits by it. */
+.cardSlot {
+  display: contents;
+}
+
+/*
+ * A room thread's head (docs/decisions/ui-refresh-chat.md): one row — “← Chat”, the subject chip, the question (shown
+ * once the first message has scrolled out of view), the number of replies in mono, Settle. No close button: the back
+ * link is the one way out, and Escape does the same.
+ */
+.header.roomHead {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 66px;
+  padding: 12px 28px;
+}
+
+.backLink {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 8px 0 4px;
+  border-radius: var(--radius-small);
+  color: var(--ink2);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.backLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.roomTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+
+.roomHead[data-title-shown] .roomTitle {
+  opacity: 1;
+  transform: none;
+}
+
+.count {
+  flex: none;
+  color: var(--mut);
+  font: 400 12px / 1 var(--font-mono);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .header.roomHead {
+    gap: 8px;
+    min-height: 58px;
+    padding: 6px 10px;
+  }
+
+  .backLink {
+    height: 44px;
+    padding: 0 10px 0 6px;
+  }
+
+  .count {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roomTitle {
+    transition: none;
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Above the first message that was new when the thread opened (chat-inbox-web.md): “NEW” in mono capitals between two
+   blue hairlines, the left one short, as the mock's. */
+.newLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--chart1);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.newLine::before,
+.newLine::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--chart1);
+  opacity: 0.5;
+}
+
+.newLine::before {
+  flex: 0 0 18px;
+}

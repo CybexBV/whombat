@@ -1,0 +1,32 @@
+{
+  "MediaContainer": {
+    "size": 1,
+    "totalSize": 1,
+    "Metadata": [
+      {
+        "Guid": [
+          {
+            "id": "tmdb://532133"
+          }
+        ],
+        "ratingKey": "5",
+        "key": "/library/metadata/5/children",
+        "parentRatingKey": "4",
+        "guid": "plex://season/6a63867cd57bbda5e601ead4",
+        "type": "season",
+        "title": "Season 24",
+        "parentTitle": "NCIS",
+        "index": 24,
+        "parentIndex": 1,
+        "parentYear": 2003,
+        "librarySectionID": 2,
+        "librarySectionTitle": "TV Shows",
+        "thumb": "/library/metadata/5/thumb/1792611700",
+        "parentThumb": "/library/metadata/4/thumb/1792611700",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611700,
+        "leafCount": 2
+      }
+    ]
+  }
+}

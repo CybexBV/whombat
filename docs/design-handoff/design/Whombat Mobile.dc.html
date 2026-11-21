@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ebe6de;color:#221d18;font-family:'Bricolage Grotesque',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#7d6353}a:hover{color:#221d18}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:28px;padding:36px 24px 56px;">
+<div style="width:100%;max-width:860px;display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;">
+<div style="display:flex;align-items:center;gap:10px;"><div style="width:22px;height:14px;border-radius:50%;background:#2b221d;"></div><span style="font-weight:700;font-size:19px;">Whombat mobile</span><span style="font:500 12px 'DM Mono',monospace;color:#6e655c;">Inbox · light and dark</span></div>
+<a href="Whombat Desktop.dc.html" style="font:500 12px 'DM Mono',monospace;text-decoration:none;">← Desktop app</a>
+</div>
+<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:40px;">
+<sc-for list="{{ phones }}" as="p" hint-placeholder-count="2">
+<div data-screen-label="{{ p.label }}" style="--bg:{{ p.t.bg }};--sf:{{ p.t.sf }};--sf2:{{ p.t.sf2 }};--ink:{{ p.t.ink }};--ink2:{{ p.t.ink2 }};--mut:{{ p.t.mut }};--line:{{ p.t.line }};--line2:{{ p.t.line2 }};--brand:{{ p.t.brand }};--btn:{{ p.t.btn }};--btnfg:{{ p.t.btnfg }};--ok:{{ p.t.ok }};--warn:{{ p.t.warn }};--bad:{{ p.t.bad }};width:390px;height:844px;flex:none;border-radius:56px;padding:11px;background:#141110;box-shadow:0 40px 80px -30px rgba(34,29,24,.45);">
+<div style="position:relative;width:100%;height:100%;border-radius:46px;overflow:hidden;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;">
+<div style="flex:none;height:50px;display:flex;align-items:center;justify-content:space-between;padding:6px 30px 0 34px;font-size:15px;font-weight:600;"><span>9:41</span><span style="position:absolute;left:50%;top:11px;transform:translateX(-50%);width:118px;height:34px;border-radius:20px;background:#000;"></span><span style="display:flex;gap:5px;align-items:center;"><span style="width:17px;height:10px;border-radius:2px;background:var(--ink);opacity:.9;"></span><span style="width:24px;height:11px;border-radius:3px;border:1.5px solid var(--ink);padding:1px;"><span style="display:block;width:70%;height:100%;border-radius:1px;background:var(--ink);"></span></span></span></div>
+
+<sc-if value="{{ p.isInbox }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;">
+<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;"><span style="font-size:34px;font-weight:700;letter-spacing:-.02em;">Inbox</span><span style="width:36px;height:36px;border-radius:50%;background:#d9c3a9;color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;">MO</span></div>
+<div style="display:flex;gap:6px;padding:10px 22px 14px;flex-wrap:wrap;">
+<sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.go }}" style="flex:none;padding:7px 13px;border-radius:999px;border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ f.t }}</button></sc-for>
+</div>
+<sc-for list="{{ p.sections }}" as="s" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;padding:0 16px 14px;">
+<span style="padding:8px 6px;font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">{{ s.title }}</span>
+<div style="display:flex;flex-direction:column;border-radius:20px;background:var(--sf);border:1px solid var(--line);overflow:hidden;">
+<sc-for list="{{ s.items }}" as="i" hint-placeholder-count="2">
+<div onClick="{{ i.open }}" style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);cursor:pointer;">
+<sc-if value="{{ i.a.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:44px;height:44px;"><dc-import name="WhombatAvatar" role="{{ i.a.role }}" style="width:100%;height:100%;display:block;" hint-size="44px,44px"></dc-import></div></sc-if>
+<sc-if value="{{ i.a.isHuman }}" hint-placeholder-val="{{ false }}"><div style="width:44px;height:44px;border-radius:50%;background:{{ i.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">{{ i.a.ini }}</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+<div style="display:flex;align-items:baseline;gap:6px;"><span style="font-size:15.5px;font-weight:600;">{{ i.a.name }}</span><span style="flex:1;min-width:0;font:400 11.5px 'DM Mono',monospace;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ i.where }}</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">{{ i.time }}</span></div>
+<span style="font-size:15px;line-height:1.42;color:var(--ink2);">{{ i.text }}</span>
+<sc-if value="{{ i.hasActions }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:8px;padding-top:8px;">
+<button onClick="{{ i.approve }}" style="min-height:44px;flex:1;border-radius:12px;border:none;background:var(--btn);color:var(--btnfg);font-size:15px;font-weight:600;cursor:pointer;">{{ i.cta }}</button>
+<button onClick="{{ i.open }}" style="min-height:44px;flex:1;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">Details</button>
+</div>
+</sc-if>
+<sc-if value="{{ i.hasDone }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:6px;padding-top:4px;font:500 12px 'DM Mono',monospace;color:var(--ok);"><span style="width:7px;height:7px;border-radius:50%;background:var(--ok);"></span>{{ i.doneText }}</span></sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ p.isApproval }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;padding:8px 14px;"><button onClick="{{ p.back }}" style="min-height:44px;padding:0 8px;border:none;background:transparent;color:var(--brand);font-size:16px;font-weight:500;cursor:pointer;">‹ Inbox</button></div>
+<div style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:22px;padding:4px 22px 20px;">
+<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
+<div style="width:112px;height:112px;"><dc-import name="WhombatAvatar" role="operator" style="width:100%;height:100%;display:block;" hint-size="112px,112px"></dc-import></div>
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:{{ p.ap.labelC }};">{{ p.ap.label }}</span>
+<span style="font-size:25px;line-height:1.15;font-weight:700;letter-spacing:-.02em;">Deploy feat/invoice-pdf to staging?</span>
+<span style="font-size:15px;color:var(--ink2);">Dusty · #billing-v2 · 11:25</span>
+</div>
+<div style="display:flex;flex-direction:column;border-radius:18px;background:var(--sf);border:1px solid var(--line);padding:4px 16px;">
+<sc-for list="{{ p.ap.conds }}" as="c" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line);"><span style="width:20px;height:20px;border-radius:50%;border:2px solid {{ c.bc }};background:{{ c.bgc }};color:#fffdf9;font-size:11px;display:flex;align-items:center;justify-content:center;">{{ c.mark }}</span><span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:15.5px;">{{ c.t }}</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ c.note }}</span></span></div></sc-for>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink2);">{{ p.ap.msg }}</p>
+</div>
+<sc-if value="{{ p.ap.pending }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:10px;padding:14px 22px 36px;border-top:1px solid var(--line);">
+<button onClick="{{ p.decline }}" style="flex:1;min-height:52px;border-radius:14px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:16px;font-weight:500;cursor:pointer;">Decline</button>
+<button onClick="{{ p.approve }}" style="flex:1.4;min-height:52px;border-radius:14px;border:none;background:var(--btn);color:var(--btnfg);font-size:16px;font-weight:600;cursor:pointer;">Approve</button>
+</div>
+</sc-if>
+<sc-if value="{{ p.ap.decided }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;padding:14px 22px 36px;border-top:1px solid var(--line);"><button onClick="{{ p.undo }}" style="flex:1;min-height:52px;border-radius:14px;border:1px solid var(--line2);background:transparent;color:var(--mut);font-size:16px;font-weight:500;cursor:pointer;">Undo</button></div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ p.isDm }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;">
+<div style="display:flex;align-items:center;gap:10px;padding:6px 14px 12px;border-bottom:1px solid var(--line);"><button onClick="{{ p.back }}" style="min-height:44px;padding:0 8px;border:none;background:transparent;color:var(--brand);font-size:22px;cursor:pointer;">‹</button><div style="width:36px;height:36px;"><dc-import name="WhombatAvatar" role="researcher" style="width:100%;height:100%;display:block;" hint-size="36px,36px"></dc-import></div><span style="display:flex;flex-direction:column;"><span style="font-size:16px;font-weight:600;">Pippa</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">Researcher · remembers this chat</span></span></div>
+<div style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:14px;padding:18px 16px;">
+<sc-for list="{{ dm }}" as="m" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;align-items:{{ m.align }};gap:8px;">
+<div style="max-width:84%;padding:11px 14px;border-radius:{{ m.radius }};background:{{ m.bg }};color:{{ m.fg }};font-size:15.5px;line-height:1.45;">{{ m.text }}</div>
+<sc-if value="{{ m.hasReceipts }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:84%;width:84%;display:flex;flex-direction:column;border-radius:16px;border:1px solid var(--line);background:var(--sf);padding:2px 14px;">
+<sc-for list="{{ m.receipts }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid var(--line);"><span style="width:20px;height:20px;border-radius:5px;background:var(--sf2);font:500 10.5px 'DM Mono',monospace;display:flex;align-items:center;justify-content:center;">{{ r.n }}</span><span style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:14px;">{{ r.t }}</span><span style="font:400 11px 'DM Mono',monospace;color:var(--mut);">{{ r.w }}</span></span></div></sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<div style="padding:10px 14px 34px;border-top:1px solid var(--line);"><div style="display:flex;align-items:center;gap:10px;min-height:46px;padding:0 8px 0 16px;border-radius:23px;border:1px solid var(--line2);background:var(--sf);"><span style="flex:1;font-size:15.5px;color:var(--mut);">Message Pippa</span><span style="width:32px;height:32px;border-radius:50%;background:var(--btn);"></span></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ p.isInbox }}" hint-placeholder-val="{{ true }}">
+<div style="flex:none;display:grid;grid-template-columns:repeat(4,1fr);padding:8px 10px 28px;border-top:1px solid var(--line);background:var(--bg);">
+<sc-for list="{{ tabs }}" as="b" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-height:44px;justify-content:center;color:{{ b.fg }};"><span style="width:22px;height:22px;border-radius:{{ b.r }};border:2px solid {{ b.fg }};background:{{ b.fill }};"></span><span style="font-size:11.5px;font-weight:500;">{{ b.t }}</span></div></sc-for>
+</div>
+</sc-if>
+<span style="position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--ink);opacity:.85;"></span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const THEMES = {
+  light:{bg:'#fbf9f5',sf:'#fffdf9',sf2:'#f1ece4',ink:'#221d18',ink2:'#3d352e',mut:'#6e655c',line:'rgba(34,29,24,.09)',line2:'rgba(34,29,24,.18)',brand:'#7d6353',btn:'#221d18',btnfg:'#f5f2ed',ok:'#3e7b58',warn:'#8d6d2d',bad:'#9f5540',bubble:'#ece5da'},
+  dark:{bg:'#1c1815',sf:'#24201c',sf2:'#2e2925',ink:'#f1ebe3',ink2:'#d8cfc4',mut:'#a0958a',line:'rgba(255,255,255,.08)',line2:'rgba(255,255,255,.16)',brand:'#d2b49a',btn:'#f1ebe3',btnfg:'#1c1815',ok:'#6fcf97',warn:'#e0b75e',bad:'#e59a85',bubble:'#3a332d'},
+};
+const AG = { dusty:{name:'Dusty',role:'operator'}, sketch:{name:'Sketch',role:'architect'}, pippa:{name:'Pippa',role:'researcher'}, banjo:{name:'Banjo',role:'developer'}, clover:{name:'Clover',role:'support'}, hazel:{name:'Hazel',role:'reviewer'} };
+const PP = { priya:{name:'Priya Raman',ini:'PR',tone:'#dcc0cc'}, joris:{name:'Joris de Vries',ini:'JV',tone:'#bfd0bf'} };
+const who = k => AG[k] ? { ...AG[k], isAgent: true, isHuman: false } : { ...PP[k], isAgent: false, isHuman: true };
+const DM = [
+  { me: true, text: 'Quick one: what did we decide about invoice numbering last year?' },
+  { me: false, text: 'Yearly sequences with a prefix, like 2026-000142. Joris and Priya settled it on 12 Nov 2025. Dutch tax rules need an unbroken sequence per year.',
+    receipts: [{ n: 1, t: '#billing · thread, 12 Nov 2025', w: '14 messages' }, { n: 2, t: 'Canvas · Invoicing rules v3', w: 'section 2' }, { n: 3, t: 'PR #311 · invoice-number service', w: 'merged' }] },
+  { me: true, text: 'Perfect. Does the PDF plan respect that?' },
+  { me: false, text: 'It does. Step 2 reads the number from the invoice-number service instead of generating one.' },
+];
+
+class Component extends DCLogic {
+  state = { light: { scr: 'inbox', ap: 'pending', f: 'All' }, dark: { scr: 'inbox', ap: 'pending', f: 'All' } };
+  up(k, o) { this.setState(s => ({ [k]: { ...s[k], ...o } })); }
+  renderVals() {
+    const phones = ['light', 'dark'].map(k => {
+      const P = this.state[k], t = THEMES[k];
+      const approved = P.ap === 'approved', declined = P.ap === 'declined';
+      const open = scr => () => this.up(k, { scr });
+      const stop = fn => e => { e.stopPropagation(); fn(); };
+      const cond = (ok, tt, note) => ({ t: tt, note, mark: ok ? '✓' : '', bc: ok ? t.ok : t.line2, bgc: ok ? t.ok : 'transparent' });
+      const needs = [
+        { a: who('dusty'), where: '#billing-v2', time: '11:25', text: 'Deploy feat/invoice-pdf to staging. Checks are green and Hazel approved.', kind: 'need', open: open('approval'),
+          hasActions: P.ap === 'pending', cta: 'Approve', approve: stop(() => this.up(k, { ap: 'approved' })), hasDone: P.ap !== 'pending', doneText: approved ? 'Approved · deploying' : 'Declined' },
+        { a: who('sketch'), where: 'Plan canvas', time: '11:02', text: 'The invoice PDF plan needs a person to sign off step 4.', kind: 'need', open: () => {} },
+      ];
+      const mentions = [
+        { a: who('priya'), where: '#incidents', time: '10:40', text: 'Customer 8812 got an invoice that is €0,01 off. Mara, can you look after lunch?', kind: 'mention', open: () => {} },
+        { a: who('pippa'), where: 'Direct', time: '14:04', text: 'It does. Step 2 reads the number from the invoice-number service instead of generating one.', kind: 'mention', open: open('dm') },
+      ];
+      const agents = [
+        { a: who('banjo'), where: 'feat/invoice-pdf', time: '11:36', text: 'Pushed 7be20f. 41 of 41 tests pass.', kind: 'agent', open: () => {} },
+        { a: who('clover'), where: '#general', time: '09:00', text: 'Weekly support digest: 212 conversations, 23 handed to a person.', kind: 'agent', open: () => {} },
+      ];
+      const f = P.f;
+      const sections = [
+        { title: 'NEEDS YOU', items: needs, show: f === 'All' || f === 'Needs you' },
+        { title: 'MENTIONS', items: mentions, show: f === 'All' || f === 'Mentions' },
+        { title: 'FROM AGENTS', items: agents, show: f === 'All' || f === 'Agents' },
+      ].filter(s => s.show);
+      return {
+        t, label: 'Mobile ' + k,
+        isInbox: P.scr === 'inbox', isApproval: P.scr === 'approval', isDm: P.scr === 'dm',
+        back: open('inbox'),
+        filters: ['All', 'Needs you', 'Mentions', 'Agents'].map(x => ({ t: x, bg: f === x ? t.btn : 'transparent', fg: f === x ? t.btnfg : t.ink, border: f === x ? t.btn : t.line2, go: () => this.up(k, { f: x }) })),
+        sections,
+        ap: {
+          conds: [cond(true, 'Checks pass on 7be20f', '41 of 41'), cond(true, 'Hazel approves the PR', 'approved 11:38'), cond(approved, 'A person says yes', approved ? 'you · just now' : declined ? 'declined' : 'you or Joris')],
+          pending: P.ap === 'pending', decided: P.ap !== 'pending',
+          label: approved ? 'APPROVED · DEPLOYING' : declined ? 'DECLINED' : 'NEEDS A PERSON', labelC: approved ? t.ok : declined ? t.bad : t.warn,
+          msg: approved ? 'Dusty is rolling billing-api to staging. You’ll get a note here when it’s live, usually in about two minutes.' : declined ? 'Dusty won’t deploy this commit. Banjo and Hazel have been told.' : 'Dusty builds 7be20f and rolls billing-api to staging, 2 of 2 pods. It rolls back on its own if errors stay above 1% for 5 minutes.',
+        },
+        approve: () => this.up(k, { ap: 'approved' }), decline: () => this.up(k, { ap: 'declined' }), undo: () => this.up(k, { ap: 'pending' }),
+      };
+    });
+    return {
+      phones,
+      tabs: [{ t: 'Inbox', r: '6px', on: true }, { t: 'Channels', r: '50%' }, { t: 'Agents', r: '50% 50% 40% 40%' }, { t: 'Search', r: '50%' }].map(b => ({ ...b, fg: b.on ? 'var(--ink)' : 'var(--mut)', fill: b.on ? 'var(--ink)' : 'transparent' })),
+      dm: DM.map(m => ({ text: m.text, align: m.me ? 'flex-end' : 'flex-start', bg: m.me ? 'var(--btn)' : 'var(--sf)', fg: m.me ? 'var(--btnfg)' : 'var(--ink)', radius: m.me ? '18px 18px 4px 18px' : '18px 18px 18px 4px', hasReceipts: !!m.receipts, receipts: m.receipts || [] })),
+    };
+  }
+}
+</script>
+</body>
+</html>

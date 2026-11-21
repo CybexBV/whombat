@@ -1,0 +1,145 @@
+/* “Make a plan”, in the channel modal's language (TakeOverDialog, labelled fields) with the plan card's rows. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  margin: 0;
+  font: var(--type-heading-23);
+  letter-spacing: var(--type-heading-23-tracking);
+}
+
+.description {
+  margin: 4px 0 0;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.fieldset legend {
+  padding: 0 0 6px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepRow {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 170px) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.stepNumber {
+  color: var(--mut);
+  font: 500 11.5px var(--font-mono);
+  text-align: center;
+}
+
+.stepInput,
+.dateInput {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14.5px;
+}
+
+.stepInput {
+  padding: 9px 12px;
+}
+
+.dateInput {
+  align-self: flex-start;
+  padding: 8px 10px;
+  font: 400 13px var(--font-mono);
+}
+
+.stepInput:focus-visible,
+.dateInput:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.remove {
+  border-color: transparent;
+  color: var(--mut);
+}
+
+.remove:hover:not(:disabled),
+.remove:focus-visible {
+  border-color: var(--line2);
+  color: var(--ink);
+}
+
+.remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.addStep {
+  align-self: flex-start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  font-size: 14.5px;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font: var(--type-small);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

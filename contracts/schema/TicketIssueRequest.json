@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/TicketIssueRequest.json",
+  "title": "TicketIssueRequest",
+  "type": "object",
+  "properties": {
+    "class": {
+      "type": "string",
+      "enum": [
+        "interactive",
+        "bulk"
+      ]
+    }
+  },
+  "required": [
+    "class"
+  ],
+  "additionalProperties": false
+}

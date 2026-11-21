@@ -1,0 +1,20 @@
+{
+  "runners": [
+    {
+      "id": 1,
+      "name": "build-01",
+      "status": "online",
+      "busy": true,
+      "disabled": false,
+      "ephemeral": false,
+      "labels": [
+        {
+          "id": 0,
+          "name": "ubuntu-latest",
+          "type": "custom"
+        }
+      ]
+    }
+  ],
+  "total_count": 1
+}

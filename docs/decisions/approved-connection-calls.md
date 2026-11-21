@@ -1,0 +1,10 @@
+# Approved connection calls end as the call did (2026-11-07)
+
+A person's yes to a connection tool call runs the deferred `call_connection_tool` command, whose call to the service
+runs after that command's commit. Its outcome is what the approval reports: never a success for a call that didn't get
+through. Decisions are `APC-nn`.
+
+| # | Decision | Reason |
+|---|---|---|
+| APC-01 | **The call is a required continuation of its command, and its result ends the approval.** The command's commit holds `connection.tool_called` (the call's saved intent, its `callId` the deferred input's) with the approval still running; the call then runs as the commit's `complete` hook, not an `after` hook, so what it throws reaches the approvals engine. A call that worked succeeds the approval; one that failed fails it with the call's own plain words; one that broke before the service was called says nothing happened (“Whombat couldn’t start it, so nothing happened. Undo and Approve to try again.”); one the service answered as an error fails it (“The service said it couldn’t do it.”); a timeout is uncertain (“… so it may or may not have happened …”). The agent is still woken with the result; a failure to wake it doesn't change the outcome. | An `after` hook's failure is only logged, so the engine signed “Allowed … to use …” for a call that never ran and left nothing to tell the person or recover. |
+| APC-02 | **After a crash, the call's own events settle it, and nothing is sent twice.** The engine's reconciler for `call_connection_tool` reads the agent's `connection.tool_called` and `connection.tool_finished` for the call: no `tool_called` means the command never committed, so the call never ran and runs once now; a `tool_finished` that is `done` completes the approval; anything else is uncertain (`UNCERTAIN_EXECUTION`) and is never sent again. | The command's commit is the point after which the call may have gone out; before it, running it is safe, after it, only a recorded result is known. |

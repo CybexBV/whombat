@@ -1,0 +1,844 @@
+{
+  "baselineRevision": "b37fe2cc3",
+  "measurementDate": "2026-10-31",
+  "automationInitialBaseline": {
+    "environment": {
+      "node": "v24.18.0",
+      "platform": "linux",
+      "arch": "x64",
+      "hostname": "thetitan",
+      "cpu": "AMD Ryzen Threadripper 9970X 32-Cores"
+    },
+    "baselineRef": "b37fe2cc3",
+    "batched": false,
+    "poolSize": 3,
+    "fixture": {
+      "automations": 4,
+      "runs": 200,
+      "stepsPerRun": 4,
+      "dispatchesPerRun": 2,
+      "codeRunsPerRun": 2,
+      "approvalsPerRun": 1
+    },
+    "warmups": 5,
+    "runs": 11,
+    "measurements": [
+      {
+        "size": 1,
+        "outputSha256": "567416a424b6d0f6d4d90e4ad4eacb1658c8970c77ffaf22cc09e9f33ffe1972",
+        "summary": {
+          "baseline": {
+            "medianMs": 1.511000999999851,
+            "minMs": 1.3837889999999788,
+            "maxMs": 1.7112309999997706,
+            "queries": 5
+          },
+          "current": {
+            "medianMs": 1.6421680000003107,
+            "minMs": 1.3664739999999256,
+            "maxMs": 2.6232820000000174,
+            "queries": 5
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 1.467044999999871,
+              "queries": 5
+            },
+            {
+              "ms": 1.5444699999998193,
+              "queries": 5
+            },
+            {
+              "ms": 1.4817769999999655,
+              "queries": 5
+            },
+            {
+              "ms": 1.5558580000001712,
+              "queries": 5
+            },
+            {
+              "ms": 1.4733030000002145,
+              "queries": 5
+            },
+            {
+              "ms": 1.4381100000000515,
+              "queries": 5
+            },
+            {
+              "ms": 1.3837889999999788,
+              "queries": 5
+            },
+            {
+              "ms": 1.511000999999851,
+              "queries": 5
+            },
+            {
+              "ms": 1.6385420000001432,
+              "queries": 5
+            },
+            {
+              "ms": 1.5941760000000613,
+              "queries": 5
+            },
+            {
+              "ms": 1.7112309999997706,
+              "queries": 5
+            }
+          ],
+          "current": [
+            {
+              "ms": 1.6999540000001616,
+              "queries": 5
+            },
+            {
+              "ms": 1.6306110000000444,
+              "queries": 5
+            },
+            {
+              "ms": 1.880134999999882,
+              "queries": 5
+            },
+            {
+              "ms": 1.7646710000003623,
+              "queries": 5
+            },
+            {
+              "ms": 1.5894079999998212,
+              "queries": 5
+            },
+            {
+              "ms": 1.3684869999997318,
+              "queries": 5
+            },
+            {
+              "ms": 1.3664739999999256,
+              "queries": 5
+            },
+            {
+              "ms": 1.5502799999999297,
+              "queries": 5
+            },
+            {
+              "ms": 2.6232820000000174,
+              "queries": 5
+            },
+            {
+              "ms": 1.8740760000000591,
+              "queries": 5
+            },
+            {
+              "ms": 1.6421680000003107,
+              "queries": 5
+            }
+          ]
+        }
+      },
+      {
+        "size": 30,
+        "outputSha256": "f0657e1bbf0cc56ad6446eaaffccffdbe2d9063d8b6f56aeed1e75fe6f10c634",
+        "summary": {
+          "baseline": {
+            "medianMs": 13.459525000000212,
+            "minMs": 10.565877,
+            "maxMs": 16.24912499999982,
+            "queries": 150
+          },
+          "current": {
+            "medianMs": 13.301017000000229,
+            "minMs": 10.840879999999743,
+            "maxMs": 16.07770900000014,
+            "queries": 150
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 11.508802000000287,
+              "queries": 150
+            },
+            {
+              "ms": 11.234841999999844,
+              "queries": 150
+            },
+            {
+              "ms": 10.565877,
+              "queries": 150
+            },
+            {
+              "ms": 11.177625999999691,
+              "queries": 150
+            },
+            {
+              "ms": 12.855537000000368,
+              "queries": 150
+            },
+            {
+              "ms": 13.894338999999945,
+              "queries": 150
+            },
+            {
+              "ms": 16.24912499999982,
+              "queries": 150
+            },
+            {
+              "ms": 13.459525000000212,
+              "queries": 150
+            },
+            {
+              "ms": 13.619604999999865,
+              "queries": 150
+            },
+            {
+              "ms": 14.14452399999982,
+              "queries": 150
+            },
+            {
+              "ms": 13.849140000000261,
+              "queries": 150
+            }
+          ],
+          "current": [
+            {
+              "ms": 14.081037999999808,
+              "queries": 150
+            },
+            {
+              "ms": 11.203183999999965,
+              "queries": 150
+            },
+            {
+              "ms": 12.982398000000103,
+              "queries": 150
+            },
+            {
+              "ms": 14.938838000000032,
+              "queries": 150
+            },
+            {
+              "ms": 13.24778600000036,
+              "queries": 150
+            },
+            {
+              "ms": 13.301017000000229,
+              "queries": 150
+            },
+            {
+              "ms": 13.6225400000003,
+              "queries": 150
+            },
+            {
+              "ms": 14.992828000000372,
+              "queries": 150
+            },
+            {
+              "ms": 12.378280000000359,
+              "queries": 150
+            },
+            {
+              "ms": 16.07770900000014,
+              "queries": 150
+            },
+            {
+              "ms": 10.840879999999743,
+              "queries": 150
+            }
+          ]
+        }
+      },
+      {
+        "size": 200,
+        "outputSha256": "fc05b480961a30099eb0496e37fe0647546f61aabc4a2809946740c2ca4bbaef",
+        "summary": {
+          "baseline": {
+            "medianMs": 84.49990099999923,
+            "minMs": 74.03151100000014,
+            "maxMs": 101.36007700000027,
+            "queries": 1000
+          },
+          "current": {
+            "medianMs": 80.98601300000064,
+            "minMs": 77.43094900000051,
+            "maxMs": 88.45897199999945,
+            "queries": 1000
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 87.6129890000002,
+              "queries": 1000
+            },
+            {
+              "ms": 84.49990099999923,
+              "queries": 1000
+            },
+            {
+              "ms": 89.3430900000003,
+              "queries": 1000
+            },
+            {
+              "ms": 82.3315819999998,
+              "queries": 1000
+            },
+            {
+              "ms": 87.50331600000027,
+              "queries": 1000
+            },
+            {
+              "ms": 74.03151100000014,
+              "queries": 1000
+            },
+            {
+              "ms": 80.23841900000025,
+              "queries": 1000
+            },
+            {
+              "ms": 80.60478999999941,
+              "queries": 1000
+            },
+            {
+              "ms": 84.22931400000016,
+              "queries": 1000
+            },
+            {
+              "ms": 101.36007700000027,
+              "queries": 1000
+            },
+            {
+              "ms": 89.61327600000004,
+              "queries": 1000
+            }
+          ],
+          "current": [
+            {
+              "ms": 79.3686719999996,
+              "queries": 1000
+            },
+            {
+              "ms": 77.98266999999942,
+              "queries": 1000
+            },
+            {
+              "ms": 87.41164600000047,
+              "queries": 1000
+            },
+            {
+              "ms": 88.45897199999945,
+              "queries": 1000
+            },
+            {
+              "ms": 80.81215900000007,
+              "queries": 1000
+            },
+            {
+              "ms": 80.70328700000027,
+              "queries": 1000
+            },
+            {
+              "ms": 84.07443299999977,
+              "queries": 1000
+            },
+            {
+              "ms": 77.43094900000051,
+              "queries": 1000
+            },
+            {
+              "ms": 80.98601300000064,
+              "queries": 1000
+            },
+            {
+              "ms": 84.40393700000004,
+              "queries": 1000
+            },
+            {
+              "ms": 86.59836499999983,
+              "queries": 1000
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "automationPaired": {
+    "environment": {
+      "node": "v24.18.0",
+      "postgres": "17.11 (Debian 17.11-1.pgdg13+2)",
+      "platform": "linux",
+      "arch": "x64",
+      "hostname": "thetitan",
+      "cpu": "AMD Ryzen Threadripper 9970X 32-Cores"
+    },
+    "baselineRef": "b37fe2cc3",
+    "currentSourceSha256": "2dccc0c792c32e227b07ff038e1129fcbb440e6caccbf66f160b282bf3a6819c",
+    "batched": true,
+    "database": "whombat_test_514329d713a4",
+    "poolSize": 3,
+    "fixture": {
+      "automations": 4,
+      "runs": 200,
+      "stepsPerRun": 4,
+      "dispatchesPerRun": 2,
+      "codeRunsPerRun": 2,
+      "approvalsPerRun": 1
+    },
+    "warmups": 5,
+    "runs": 11,
+    "measurements": [
+      {
+        "size": 1,
+        "outputSha256": "28580554fd6e0cd2195910db52e4527a11e89b32ea94f49ea311db742578dcae",
+        "summary": {
+          "baseline": {
+            "medianMs": 1.5971700000000055,
+            "minMs": 1.4674649999999474,
+            "maxMs": 6.938175999999885,
+            "queries": 5
+          },
+          "current": {
+            "medianMs": 1.0484349999999267,
+            "minMs": 0.856356999999889,
+            "maxMs": 1.5847519999999804,
+            "queries": 5
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 1.9399349999998776,
+              "queries": 5
+            },
+            {
+              "ms": 1.6760689999998704,
+              "queries": 5
+            },
+            {
+              "ms": 1.4674649999999474,
+              "queries": 5
+            },
+            {
+              "ms": 1.5020469999999477,
+              "queries": 5
+            },
+            {
+              "ms": 6.938175999999885,
+              "queries": 5
+            },
+            {
+              "ms": 1.6199940000001334,
+              "queries": 5
+            },
+            {
+              "ms": 1.9637209999998504,
+              "queries": 5
+            },
+            {
+              "ms": 1.5971700000000055,
+              "queries": 5
+            },
+            {
+              "ms": 1.575546999999915,
+              "queries": 5
+            },
+            {
+              "ms": 1.532613000000083,
+              "queries": 5
+            },
+            {
+              "ms": 1.5715420000001359,
+              "queries": 5
+            }
+          ],
+          "current": [
+            {
+              "ms": 1.2364880000000085,
+              "queries": 5
+            },
+            {
+              "ms": 1.2333130000001802,
+              "queries": 5
+            },
+            {
+              "ms": 1.0484349999999267,
+              "queries": 5
+            },
+            {
+              "ms": 0.856356999999889,
+              "queries": 5
+            },
+            {
+              "ms": 1.5847519999999804,
+              "queries": 5
+            },
+            {
+              "ms": 1.303579000000127,
+              "queries": 5
+            },
+            {
+              "ms": 0.9087660000000142,
+              "queries": 5
+            },
+            {
+              "ms": 0.8831880000000183,
+              "queries": 5
+            },
+            {
+              "ms": 1.12194599999998,
+              "queries": 5
+            },
+            {
+              "ms": 0.9135329999999158,
+              "queries": 5
+            },
+            {
+              "ms": 0.9331620000000385,
+              "queries": 5
+            }
+          ]
+        }
+      },
+      {
+        "size": 30,
+        "outputSha256": "729ed46542eb5d5e932b06fdd59658b34eecb623a9a643707de97a95128b2c7e",
+        "summary": {
+          "baseline": {
+            "medianMs": 14.174601999999823,
+            "minMs": 13.02132900000015,
+            "maxMs": 16.859375999999884,
+            "queries": 150
+          },
+          "current": {
+            "medianMs": 1.7120919999999842,
+            "minMs": 1.3815470000001824,
+            "maxMs": 2.0243420000001606,
+            "queries": 5
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 13.40308200000004,
+              "queries": 150
+            },
+            {
+              "ms": 15.816980000000058,
+              "queries": 150
+            },
+            {
+              "ms": 13.90355599999998,
+              "queries": 150
+            },
+            {
+              "ms": 15.254987000000028,
+              "queries": 150
+            },
+            {
+              "ms": 16.859375999999884,
+              "queries": 150
+            },
+            {
+              "ms": 14.713410999999951,
+              "queries": 150
+            },
+            {
+              "ms": 14.05935999999997,
+              "queries": 150
+            },
+            {
+              "ms": 13.633448999999928,
+              "queries": 150
+            },
+            {
+              "ms": 16.57160500000009,
+              "queries": 150
+            },
+            {
+              "ms": 13.02132900000015,
+              "queries": 150
+            },
+            {
+              "ms": 14.174601999999823,
+              "queries": 150
+            }
+          ],
+          "current": [
+            {
+              "ms": 1.5174910000000637,
+              "queries": 5
+            },
+            {
+              "ms": 1.3815470000001824,
+              "queries": 5
+            },
+            {
+              "ms": 2.0243420000001606,
+              "queries": 5
+            },
+            {
+              "ms": 1.7397540000001754,
+              "queries": 5
+            },
+            {
+              "ms": 1.6605960000001687,
+              "queries": 5
+            },
+            {
+              "ms": 1.5769800000000487,
+              "queries": 5
+            },
+            {
+              "ms": 1.7120919999999842,
+              "queries": 5
+            },
+            {
+              "ms": 1.7616769999999633,
+              "queries": 5
+            },
+            {
+              "ms": 1.6229189999999107,
+              "queries": 5
+            },
+            {
+              "ms": 1.7188629999998284,
+              "queries": 5
+            },
+            {
+              "ms": 1.8023290000000998,
+              "queries": 5
+            }
+          ]
+        }
+      },
+      {
+        "size": 200,
+        "outputSha256": "5f34aa759b9f891d846dbecc3ac277949f217c3cb6ef874754522ace5f769477",
+        "summary": {
+          "baseline": {
+            "medianMs": 91.54357399999981,
+            "minMs": 82.47196299999996,
+            "maxMs": 116.80977400000029,
+            "queries": 1000
+          },
+          "current": {
+            "medianMs": 6.397954000000027,
+            "minMs": 5.430220999999619,
+            "maxMs": 9.384604000000309,
+            "queries": 5
+          }
+        },
+        "samples": {
+          "baseline": [
+            {
+              "ms": 109.08507599999984,
+              "queries": 1000
+            },
+            {
+              "ms": 97.35986599999978,
+              "queries": 1000
+            },
+            {
+              "ms": 116.80977400000029,
+              "queries": 1000
+            },
+            {
+              "ms": 94.0575530000001,
+              "queries": 1000
+            },
+            {
+              "ms": 84.66899199999989,
+              "queries": 1000
+            },
+            {
+              "ms": 82.91269300000022,
+              "queries": 1000
+            },
+            {
+              "ms": 82.72383900000023,
+              "queries": 1000
+            },
+            {
+              "ms": 83.55622099999982,
+              "queries": 1000
+            },
+            {
+              "ms": 82.47196299999996,
+              "queries": 1000
+            },
+            {
+              "ms": 100.3668359999997,
+              "queries": 1000
+            },
+            {
+              "ms": 91.54357399999981,
+              "queries": 1000
+            }
+          ],
+          "current": [
+            {
+              "ms": 6.277985000000172,
+              "queries": 5
+            },
+            {
+              "ms": 8.161823999999797,
+              "queries": 5
+            },
+            {
+              "ms": 8.127875000000131,
+              "queries": 5
+            },
+            {
+              "ms": 6.120578999999907,
+              "queries": 5
+            },
+            {
+              "ms": 5.965685000000121,
+              "queries": 5
+            },
+            {
+              "ms": 5.430220999999619,
+              "queries": 5
+            },
+            {
+              "ms": 6.056463000000349,
+              "queries": 5
+            },
+            {
+              "ms": 8.154924999999821,
+              "queries": 5
+            },
+            {
+              "ms": 9.384604000000309,
+              "queries": 5
+            },
+            {
+              "ms": 9.214006999999583,
+              "queries": 5
+            },
+            {
+              "ms": 6.397954000000027,
+              "queries": 5
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "clientBefore": {
+    "node": "v24.18.0",
+    "platform": "linux",
+    "arch": "x64",
+    "workload": {
+      "iterations": 30,
+      "repetitions": 5,
+      "bytesPerTransfer": 65536,
+      "warmupTransfers": 1
+    },
+    "samples": [
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 30
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 30
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 30
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 30
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 30
+      }
+    ],
+    "cancellationBeforeMetadata": "pending after 50 ms",
+    "metric": "Listener counts and cancellation completion; no latency or heap-size claim."
+  },
+  "clientAfter": {
+    "node": "v24.18.0",
+    "platform": "linux",
+    "arch": "x64",
+    "workload": {
+      "iterations": 30,
+      "repetitions": 5,
+      "bytesPerTransfer": 65536,
+      "warmupTransfers": 1
+    },
+    "samples": [
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 0
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 0
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 0
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 0
+      },
+      {
+        "transfers": 30,
+        "receivedBytes": 1966080,
+        "retainedAbortListeners": 0
+      }
+    ],
+    "cancellationBeforeMetadata": "AbortError",
+    "metric": "Listener counts and cancellation completion; no latency or heap-size claim."
+  },
+  "checkBefore": {
+    "command": "pnpm check",
+    "elapsed_s": 82.92915855301544,
+    "exit_code": 0,
+    "max_rss_kib": 4618688
+  },
+  "checkAfter": {
+    "command": "pnpm check",
+    "elapsed_s": 82.16591776302084,
+    "exit_code": 0
+  },
+  "checkAfterInitial": {
+    "command": "pnpm check",
+    "elapsed_s": 83.79367686295882,
+    "exit_code": 0,
+    "max_rss_kib": 4536200
+  },
+  "serverAfter": {
+    "command": "pnpm test:server",
+    "elapsed_s": 109.7857621050207,
+    "exit_code": 0
+  },
+  "webBuild": {
+    "command": "pnpm build:web",
+    "elapsed_s": 6.565256474073976,
+    "exit_code": 0
+  },
+  "regressions": {
+    "replay": {
+      "baseline": "1,001 buffered live events: expected overflow, none observed",
+      "after": "1,000 and 1,001 event boundary cases pass; all 13 session-log tests pass"
+    },
+    "invalidResourceEncoding": {
+      "before": "SessionEncodeError retained one abort listener",
+      "after": "zero retained listeners; a valid download can acquire the sole slot; all 68 secure-session tests pass"
+    }
+  }
+}

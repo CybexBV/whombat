@@ -1,0 +1,11 @@
+/* An automation's mark (AP-997): the sidebar's Automations icon on a quiet disc, the size of the avatar it stands for. */
+.automation {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--sf2);
+  color: var(--ink2);
+}

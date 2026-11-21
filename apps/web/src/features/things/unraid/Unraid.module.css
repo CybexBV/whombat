@@ -1,0 +1,249 @@
+/*
+ * An Unraid server's page (stream WU, AP-1587…): what Things.module.css doesn't have — the array's bars and the parity
+ * progress, Unraid's device tables, notifications, inline links in notes and tables. Tokens only; the Proxmox pages'
+ * sizes (tables 14px, kinds 12px mono, cards' rows) are the reference.
+ */
+
+.wuHeadActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wuInline.wuInline {
+  margin-left: 0;
+}
+
+.wuInline:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.wuBar {
+  max-width: 420px;
+}
+
+.wuCardBar {
+  margin: -6px 20px 12px;
+}
+
+.wuCardBar > div {
+  margin-top: 0;
+}
+
+/* The parity check's progress: the same track as the use bars, a little taller. */
+.wuProgress {
+  max-width: 420px;
+  height: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--sf2);
+}
+
+.wuProgress i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+  transition: width 0.4s ease;
+}
+
+.wuProgress i.wuPaused {
+  background: var(--warn);
+}
+
+/* A row's buttons (Things' rowEnd is a mono caption, too small for buttons) */
+
+.wuEnd {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Unraid's device tables: the same columns in every table, as on Unraid's Main page */
+
+.wuDisks {
+  table-layout: fixed;
+}
+
+.wuColDevice {
+  width: 15%;
+}
+
+.wuColModel {
+  width: 19%;
+}
+
+.wuColTemp {
+  width: 7%;
+}
+
+.wuColErrors {
+  width: 6%;
+}
+
+.wuColFs {
+  width: 13%;
+}
+
+.wuColSize {
+  width: 8%;
+}
+
+.wuColSpin {
+  width: 16%;
+}
+
+.wuDisks td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wuDisks td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.wuRight.wuRight {
+  text-align: right;
+}
+
+.wuDevice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wuDevice b {
+  font: 500 14px var(--font-sans);
+}
+
+.wuStatus {
+  display: block;
+  margin: 2px 0 0 16px;
+  font: 400 12.5px var(--font-sans);
+}
+
+.wuEmpty td {
+  color: var(--mut);
+}
+
+.wuModel {
+  overflow: hidden;
+  max-width: 260px;
+  color: var(--ink2);
+  font: 400 12.5px var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+.wuFs {
+  color: var(--ink2);
+  font: 400 13px var(--font-sans);
+}
+
+.wuSpin {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  font: 400 13px var(--font-sans);
+}
+
+.wuBadText {
+  color: var(--bad);
+}
+
+.wuWarnText {
+  color: var(--warn);
+}
+
+/* A second line under a name (a pool's kind, a share's note, a plugin's author) */
+
+.wuSub {
+  margin-top: 2px;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  white-space: normal;
+}
+
+.wuShare {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wuLock {
+  display: inline-flex;
+  color: var(--mut);
+}
+
+.wuExternal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wuActs.wuActs {
+  width: 1%;
+  text-align: right;
+}
+
+.wuRowActs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+/* Unraid's notifications */
+
+.wuNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.wuNoteDot {
+  padding-top: 6px;
+}
+
+.wuNoteMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wuNoteMain > b {
+  font: 500 14.5px var(--font-sans);
+}
+
+.wuNoteMain > span {
+  color: var(--ink2);
+  font: 400 13.5px / 1.4 var(--font-sans);
+}
+
+.wuNoteMain > small {
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.wuMonoSmall.wuMonoSmall {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.wuDialogNote {
+  margin: 0;
+  color: var(--mut);
+  font: 400 12.5px var(--font-mono);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,53 @@
+{
+  "page": 1,
+  "pageSize": 20,
+  "sortKey": "timeleft",
+  "sortDirection": "descending",
+  "totalRecords": 1,
+  "records": [
+    {
+      "id": 505214718,
+      "movieId": 4,
+      "size": 2306867,
+      "sizeleft": 2306867,
+      "timeleft": "00:00:00",
+      "estimatedCompletionTime": "2026-10-21T19:45:10Z",
+      "title": "Inside.Out.2.2024.1080p.WEB.h264-GRP",
+      "status": "downloading",
+      "trackedDownloadStatus": "ok",
+      "trackedDownloadState": "downloading",
+      "statusMessages": [],
+      "downloadId": "8f190dbe-aa58-4540-864a-8314fb55350b",
+      "protocol": "usenet",
+      "downloadClient": "SABnzbd",
+      "quality": {
+        "quality": {
+          "name": "WEBDL-1080p",
+          "resolution": 1080
+        }
+      },
+      "movie": {
+        "id": 4,
+        "title": "Inside Out 2",
+        "sortTitle": "inside out 2",
+        "year": 2024,
+        "status": "released",
+        "tmdbId": 1022789,
+        "monitored": true,
+        "isAvailable": true,
+        "minimumAvailability": "released",
+        "inCinemas": "2024-06-11T00:00:00Z",
+        "digitalRelease": "2024-08-19T00:00:00Z",
+        "physicalRelease": "2024-09-10T00:00:00Z",
+        "releaseDate": "2024-08-19T00:00:00Z",
+        "added": "2026-10-21T19:44:32Z",
+        "images": [
+          {
+            "coverType": "poster",
+            "remoteUrl": "https://image.tmdb.org/t/p/original/vpnVM9B6NMmQpWeZvzLvDESb2QY.jpg"
+          }
+        ]
+      }
+    }
+  ]
+}

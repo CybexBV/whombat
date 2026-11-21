@@ -1,0 +1,421 @@
+{
+ "total": 104,
+ "data": [
+  {
+   "n": 1,
+   "t": "INFO: starting new backup job: vzdump --compress zstd --all 1 --mode snapshot --notes-template '{{guestname}}' --storage local"
+  },
+  {
+   "t": "INFO: skip external VMs: 300",
+   "n": 2
+  },
+  {
+   "n": 3,
+   "t": "INFO: Starting Backup of VM 100 (qemu)"
+  },
+  {
+   "t": "INFO: Backup started at 2026-10-11 14:16:08",
+   "n": 4
+  },
+  {
+   "n": 5,
+   "t": "INFO: status = running"
+  },
+  {
+   "t": "INFO: VM Name: deb-vnc",
+   "n": 6
+  },
+  {
+   "t": "INFO: include disk 'scsi0' 'local:100/vm-100-disk-0.qcow2' 8G",
+   "n": 7
+  },
+  {
+   "n": 8,
+   "t": "INFO: backup mode: snapshot"
+  },
+  {
+   "n": 9,
+   "t": "INFO: ionice priority: 7"
+  },
+  {
+   "t": "INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-qemu-100-2026_10_11-14_16_08.vma.zst'",
+   "n": 10
+  },
+  {
+   "t": "INFO: skipping guest filesystem freeze - disabled in VM options",
+   "n": 11
+  },
+  {
+   "n": 12,
+   "t": "INFO: starting backup via QMP command"
+  },
+  {
+   "n": 13,
+   "t": "INFO: started backup task '00000000-0000-4000-8000-000000000006'"
+  },
+  {
+   "t": "INFO: resuming VM again",
+   "n": 14
+  },
+  {
+   "n": 15,
+   "t": "INFO:  42% (3.4 GiB of 8.0 GiB) in 3s, read: 1.1 GiB/s, write: 439.1 MiB/s"
+  },
+  {
+   "n": 16,
+   "t": "INFO: 100% (8.0 GiB of 8.0 GiB) in 4s, read: 4.6 GiB/s, write: 40.0 KiB/s"
+  },
+  {
+   "t": "INFO: backup is sparse: 6.71 GiB (83%) total zero data",
+   "n": 17
+  },
+  {
+   "n": 18,
+   "t": "INFO: transferred 8.00 GiB in 4 seconds (2.0 GiB/s)"
+  },
+  {
+   "n": 19,
+   "t": "INFO: archive file size: 479MB"
+  },
+  {
+   "n": 20,
+   "t": "INFO: adding notes to backup"
+  },
+  {
+   "n": 21,
+   "t": "INFO: Finished Backup of VM 100 (00:00:04)"
+  },
+  {
+   "t": "INFO: Backup finished at 2026-10-11 14:16:12",
+   "n": 22
+  },
+  {
+   "t": "INFO: Starting Backup of VM 101 (qemu)",
+   "n": 23
+  },
+  {
+   "t": "INFO: Backup started at 2026-10-11 14:16:12",
+   "n": 24
+  },
+  {
+   "t": "INFO: status = running",
+   "n": 25
+  },
+  {
+   "t": "INFO: VM Name: deb-spice",
+   "n": 26
+  },
+  {
+   "n": 27,
+   "t": "INFO: include disk 'scsi0' 'local:101/vm-101-disk-0.qcow2' 8G"
+  },
+  {
+   "n": 28,
+   "t": "INFO: backup mode: snapshot"
+  },
+  {
+   "n": 29,
+   "t": "INFO: ionice priority: 7"
+  },
+  {
+   "t": "INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-qemu-101-2026_10_11-14_16_12.vma.zst'",
+   "n": 30
+  },
+  {
+   "t": "INFO: skipping guest filesystem freeze - disabled in VM options",
+   "n": 31
+  },
+  {
+   "n": 32,
+   "t": "INFO: starting backup via QMP command"
+  },
+  {
+   "t": "INFO: started backup task '00000000-0000-4000-8000-000000000007'",
+   "n": 33
+  },
+  {
+   "t": "INFO: resuming VM again",
+   "n": 34
+  },
+  {
+   "t": "INFO:  41% (3.3 GiB of 8.0 GiB) in 3s, read: 1.1 GiB/s, write: 441.3 MiB/s",
+   "n": 35
+  },
+  {
+   "n": 36,
+   "t": "INFO: 100% (8.0 GiB of 8.0 GiB) in 4s, read: 4.7 GiB/s, write: 40.0 KiB/s"
+  },
+  {
+   "t": "INFO: backup is sparse: 6.71 GiB (83%) total zero data",
+   "n": 37
+  },
+  {
+   "t": "INFO: transferred 8.00 GiB in 4 seconds (2.0 GiB/s)",
+   "n": 38
+  },
+  {
+   "n": 39,
+   "t": "INFO: archive file size: 482MB"
+  },
+  {
+   "n": 40,
+   "t": "INFO: adding notes to backup"
+  },
+  {
+   "n": 41,
+   "t": "INFO: Finished Backup of VM 101 (00:00:04)"
+  },
+  {
+   "n": 42,
+   "t": "INFO: Backup finished at 2026-10-11 14:16:16"
+  },
+  {
+   "n": 43,
+   "t": "INFO: Starting Backup of VM 102 (qemu)"
+  },
+  {
+   "t": "INFO: Backup started at 2026-10-11 14:16:16",
+   "n": 44
+  },
+  {
+   "t": "INFO: status = stopped",
+   "n": 45
+  },
+  {
+   "n": 46,
+   "t": "INFO: backup mode: stop"
+  },
+  {
+   "n": 47,
+   "t": "INFO: ionice priority: 7"
+  },
+  {
+   "n": 48,
+   "t": "INFO: VM Name: deb-stopped"
+  },
+  {
+   "n": 49,
+   "t": "INFO: include disk 'scsi0' 'local:102/vm-102-disk-0.qcow2' 8G"
+  },
+  {
+   "n": 50,
+   "t": "INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-qemu-102-2026_10_11-14_16_16.vma.zst'"
+  },
+  {
+   "t": "INFO: starting kvm to execute backup task",
+   "n": 51
+  },
+  {
+   "n": 52,
+   "t": "generating cloud-init ISO"
+  },
+  {
+   "t": "INFO: starting backup via QMP command",
+   "n": 53
+  },
+  {
+   "n": 54,
+   "t": "INFO: started backup task '00000000-0000-4000-8000-000000000008'"
+  },
+  {
+   "t": "INFO:  81% (6.5 GiB of 8.0 GiB) in 3s, read: 2.2 GiB/s, write: 335.9 MiB/s",
+   "n": 55
+  },
+  {
+   "t": "INFO: 100% (8.0 GiB of 8.0 GiB) in 4s, read: 1.5 GiB/s, write: 0 B/s",
+   "n": 56
+  },
+  {
+   "n": 57,
+   "t": "INFO: backup is sparse: 7.02 GiB (87%) total zero data"
+  },
+  {
+   "n": 58,
+   "t": "INFO: transferred 8.00 GiB in 4 seconds (2.0 GiB/s)"
+  },
+  {
+   "t": "INFO: stopping kvm after backup task",
+   "n": 59
+  },
+  {
+   "t": "INFO: archive file size: 367MB",
+   "n": 60
+  },
+  {
+   "t": "INFO: adding notes to backup",
+   "n": 61
+  },
+  {
+   "n": 62,
+   "t": "INFO: Finished Backup of VM 102 (00:00:05)"
+  },
+  {
+   "t": "INFO: Backup finished at 2026-10-11 14:16:21",
+   "n": 63
+  },
+  {
+   "t": "INFO: Starting Backup of VM 200 (lxc)",
+   "n": 64
+  },
+  {
+   "n": 65,
+   "t": "INFO: Backup started at 2026-10-11 14:16:21"
+  },
+  {
+   "t": "INFO: status = running",
+   "n": 66
+  },
+  {
+   "n": 67,
+   "t": "INFO: CT Name: ct-debian"
+  },
+  {
+   "n": 68,
+   "t": "INFO: including mount point rootfs ('/') in backup"
+  },
+  {
+   "t": "INFO: mode failure - some volumes do not support snapshots",
+   "n": 69
+  },
+  {
+   "n": 70,
+   "t": "INFO: trying 'suspend' mode instead"
+  },
+  {
+   "n": 71,
+   "t": "INFO: backup mode: suspend"
+  },
+  {
+   "n": 72,
+   "t": "INFO: ionice priority: 7"
+  },
+  {
+   "t": "INFO: CT Name: ct-debian",
+   "n": 73
+  },
+  {
+   "t": "INFO: including mount point rootfs ('/') in backup",
+   "n": 74
+  },
+  {
+   "n": 75,
+   "t": "INFO: starting first sync /proc/18024/root/ to /var/lib/vz/dump/vzdump-lxc-200-2026_10_11-14_16_21.tmp"
+  },
+  {
+   "n": 76,
+   "t": "INFO: first sync finished - transferred 546.66M bytes in 1s"
+  },
+  {
+   "t": "INFO: suspending guest",
+   "n": 77
+  },
+  {
+   "n": 78,
+   "t": "INFO: starting final sync /proc/18024/root/ to /var/lib/vz/dump/vzdump-lxc-200-2026_10_11-14_16_21.tmp"
+  },
+  {
+   "n": 79,
+   "t": "INFO: final sync finished - transferred 0 bytes in 1s"
+  },
+  {
+   "t": "INFO: resuming guest",
+   "n": 80
+  },
+  {
+   "n": 81,
+   "t": "INFO: guest is online again after 1 seconds"
+  },
+  {
+   "n": 82,
+   "t": "INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-lxc-200-2026_10_11-14_16_21.tar.zst'"
+  },
+  {
+   "t": "INFO: Total bytes written: 576829440 (551MiB, 448MiB/s)",
+   "n": 83
+  },
+  {
+   "n": 84,
+   "t": "INFO: archive file size: 161MB"
+  },
+  {
+   "t": "INFO: adding notes to backup",
+   "n": 85
+  },
+  {
+   "t": "INFO: Finished Backup of VM 200 (00:00:03)",
+   "n": 86
+  },
+  {
+   "t": "INFO: Backup finished at 2026-10-11 14:16:24",
+   "n": 87
+  },
+  {
+   "n": 88,
+   "t": "INFO: Starting Backup of VM 201 (lxc)"
+  },
+  {
+   "n": 89,
+   "t": "INFO: Backup started at 2026-10-11 14:16:24"
+  },
+  {
+   "n": 90,
+   "t": "INFO: status = stopped"
+  },
+  {
+   "n": 91,
+   "t": "INFO: backup mode: stop"
+  },
+  {
+   "t": "INFO: ionice priority: 7",
+   "n": 92
+  },
+  {
+   "n": 93,
+   "t": "INFO: CT Name: ct-stopped"
+  },
+  {
+   "t": "INFO: including mount point rootfs ('/') in backup",
+   "n": 94
+  },
+  {
+   "t": "INFO: creating vzdump archive '/var/lib/vz/dump/vzdump-lxc-201-2026_10_11-14_16_24.tar.zst'",
+   "n": 95
+  },
+  {
+   "t": "INFO: Total bytes written: 575959040 (550MiB, 433MiB/s)",
+   "n": 96
+  },
+  {
+   "n": 97,
+   "t": "INFO: archive file size: 159MB"
+  },
+  {
+   "t": "INFO: adding notes to backup",
+   "n": 98
+  },
+  {
+   "t": "INFO: Finished Backup of VM 201 (00:00:01)",
+   "n": 99
+  },
+  {
+   "t": "INFO: Backup finished at 2026-10-11 14:16:25",
+   "n": 100
+  },
+  {
+   "n": 101,
+   "t": "INFO: Backup job finished successfully"
+  },
+  {
+   "n": 102,
+   "t": "WARN: 'root@pam' does not have a configured email address in the user configuration - not sending an email to this user"
+  },
+  {
+   "t": "ERROR: could not notify via target `mail-to-root`: could not notify via endpoint(s): mail-to-root: no recipients provided for the mail, cannot send it.",
+   "n": 103
+  },
+  {
+   "t": "TASK OK",
+   "n": 104
+  }
+ ]
+}

@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+# release/upload-iso — put a release's installer ISO on the download site (Whombat ONE-15): Cloudflare R2, public
+# through the bucket's own domain. GitHub takes no file of 2 GiB or more, and the ISO is about 3.6 GiB (LNK-24).
+#
+#   release/upload-iso <release dir> [--production] [--bucket B] [--base-url URL] [--dry-run]
+#
+# <release dir> is a host release's folder with its ISO (`release/build iso <dir>`: iso.json, iso/<file>). Uploaded, in
+# this order, so nothing ever names a file that isn't there yet; the ISO is always published as whombat-installer.iso:
+#   installer/<release-id>/whombat-installer.iso         the ISO (checked against iso.json's sha256 and size first)
+#   installer/<release-id>/whombat-installer.iso.sha256  `<sha256>  whombat-installer.iso` (`sha256sum -c` reads it)
+#   only with --production, for a release on the Production channel (whombat-ops `promote`, ONE-19):
+#   installer/latest/whombat-installer.iso(.sha256)      the same two, at the fixed links the website names (copied
+#                                                        on the bucket from the release's own, else uploaded again)
+#   installer/latest.json                                {v, releaseId, file, size, sha256, url, sha256Url,
+#                                                        latestUrl, latestSha256Url, publishedAt}
+# Files are compared by digest, never by size (R1 #14): the object's ETag, which for one PUT is the MD5 of its bytes,
+# asked of the public site with a query of its own so no cache answers. A release's own file the site serves with the
+# same digest is not sent again (a stopped upload is run again); one it serves with another digest is refused before
+# anything is sent: a release id never names two installers (build a new release). The latest/ ones are always sent,
+# short-lived in caches so the links move with a promotion, and latest.json goes up only once the site serves the
+# release's two files and both latest/ files with their digests. The latest/ pair only ever moves forward (R2 B2): when
+# the latest.json the site serves names a newer release, the fixed links stay as they are and the run says so (exit
+# 3); a latest.json the site can't give or that names no release stops the run before anything changes (only a 404 is
+# no latest.json). The pair is swapped checksum first, then the ISO, each checked as served, then both as a pair, and
+# only then latest.json (R3 B2). A step that fails (each upload tried twice more, UPLOAD_RETRY_DELAY 5 s then twice
+# that) puts the previous release's pair back from its own files (installer/<previous id>/), or removes the fixed
+# files when there was none, so the two fixed links never name different ISOs; latest.json is left as it was.
+#
+# Settings: the bucket (--bucket, else WHOMBAT_INSTALLER_BUCKET) and the site's public base URL (--base-url, else
+# WHOMBAT_INSTALLER_BASE_URL, https, no trailing slash). The credentials are read from
+# ~/.config/cloudflare-r2/credentials.env (WHOMBAT_R2_CREDENTIALS) inside the upload's own subshell only: the key goes
+# to curl on its standard input (`-K -`), never on a command line, in the environment of anything else, or in a log.
+# One PUT per file (curl --aws-sigv4), so at most 5 GiB each. --dry-run says what it would send and reads no
+# credentials.
+set -euo pipefail
+
+die() {
+  echo "upload-iso: $*" >&2
+  exit 1
+}
+say() { echo "upload-iso: $*" >&2; }
+usage() {
+  sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//' >&2
+  exit 2
+}
+
+[ $# -ge 1 ] || usage
+case $1 in -h | --help) usage ;; esac
+dir=$1
+shift
+production=false dry=false
+bucket=${WHOMBAT_INSTALLER_BUCKET:-}
+base=${WHOMBAT_INSTALLER_BASE_URL:-}
+while [ $# -gt 0 ]; do
+  case $1 in
+    --production) production=true; shift ;;
+    --bucket) bucket=${2:?}; shift 2 ;;
+    --base-url) base=${2:?}; shift 2 ;;
+    --dry-run) dry=true; shift ;;
+    -h | --help) usage ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+creds=${WHOMBAT_R2_CREDENTIALS:-$HOME/.config/cloudflare-r2/credentials.env}
+# S3's limit for one PUT.
+max=$((5 * 1024 * 1024 * 1024))
+
+[ -f "$dir/iso.json" ] || die "$dir has no iso.json: build the ISO first (release/build iso $dir)"
+[[ $bucket =~ ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ ]] || die "the bucket (--bucket or WHOMBAT_INSTALLER_BUCKET) is missing or not a bucket name"
+base=${base%/}
+[[ $base =~ ^https://[A-Za-z0-9.-]+$ ]] || die "the base URL (--base-url or WHOMBAT_INSTALLER_BASE_URL) must be an https origin"
+
+id=$(jq -er .releaseId "$dir/iso.json")
+file=$(jq -er .file "$dir/iso.json")
+want_sha=$(jq -er .sha256 "$dir/iso.json")
+want_size=$(jq -er .size "$dir/iso.json")
+# One id family since ONE-04; the DEV image's and the community edition's ISOs aren't published here.
+[[ $id =~ ^whombat-[0-9]{8}\.[1-9][0-9]{0,3}$ ]] || die "$id is not a release id of the Whombat image (whombat-YYYYMMDD.N)"
+[[ $file =~ ^[A-Za-z0-9._-]+\.iso$ ]] || die "iso.json names a strange file: $file"
+[[ $want_sha =~ ^[0-9a-f]{64}$ ]] || die "iso.json's sha256 is not one"
+iso=$dir/iso/$file
+[ -f "$iso" ] || die "$iso is missing"
+size=$(stat -c %s "$iso")
+[ "$size" = "$want_size" ] || die "$iso is $size bytes, iso.json says $want_size"
+[ "$size" -le "$max" ] || die "$iso is $size bytes: more than one PUT takes (5 GiB)"
+say "checking $file ($size bytes)"
+sha=$(sha256sum "$iso" | cut -d' ' -f1)
+[ "$sha" = "$want_sha" ] || die "$iso's sha256 is $sha, iso.json says $want_sha"
+
+# The name people download, whatever the build called its file.
+name=whombat-installer.iso
+prefix=installer/$id
+latest=installer/latest
+url=$base/$prefix/$name
+work=$(mktemp -d "${TMPDIR:-/tmp}/upload-iso.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+printf '%s  %s\n' "$sha" "$name" >"$work/$name.sha256"
+if $production; then
+  jq -n --arg id "$id" --arg f "$name" --argjson n "$size" --arg s "$sha" --arg u "$url" --arg su "$url.sha256" \
+    --arg lu "$base/$latest/$name" --arg lsu "$base/$latest/$name.sha256" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{v: 1, releaseId: $id, file: $f, size: $n, sha256: $s, url: $u, sha256Url: $su, latestUrl: $lu,
+      latestSha256Url: $lsu, publishedAt: $at}' >"$work/latest.json"
+fi
+
+# One question for every check of this run, so no cache on the way answers it (Cloudflare keys its cache on the query).
+nonce=$(date +%s%N)
+# What the site serves at a key now: "missing" (404), "noetag" (served, but no ETag to compare), else its ETag (the
+# object's MD5 for one PUT or a copy of one), quotes and a weak prefix taken off.
+served_etag() {
+  local head status tag
+  head=$(curl -sI --max-time 30 "$base/$1?verify=$nonce" | tr -d '\r') || { echo unreachable; return 0; }
+  status=$(awk 'NR == 1 { print $2 }' <<<"$head")
+  case $status in
+    404) echo missing; return 0 ;;
+    200) ;;
+    *) echo "status-${status:-none}"; return 0 ;;
+  esac
+  tag=$(awk 'tolower($1) == "etag:" { print $2 }' <<<"$head" | tail -n1 | sed 's#^W/##; s#"##g')
+  echo "${tag:-noetag}"
+}
+md5_of() { md5sum "$1" | cut -d' ' -f1; }
+
+# r2 <key> <curl args…>: one signed request for <key> in the bucket, the key on curl's standard input.
+r2() {
+  local key=$1
+  shift
+  # The credentials live in this subshell only, unexported: curl gets the key on its standard input.
+  (
+    set +x
+    # shellcheck disable=SC1090
+    . "$creds"
+    [ -n "${R2_ENDPOINT:-}" ] && [ -n "${R2_ACCESS_KEY_ID:-}" ] && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] ||
+      { echo "upload-iso: $creds lacks R2_ENDPOINT, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY" >&2; exit 1; }
+    printf 'user = "%s:%s"\n' "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" |
+      env -u R2_ACCESS_KEY_ID -u R2_SECRET_ACCESS_KEY -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+        curl -sS --fail-with-body -K - --aws-sigv4 aws:amz:auto:s3 "$@" "${R2_ENDPOINT%/}/$bucket/$key" -o /dev/null
+  )
+}
+
+# put <local file> <key> <content type> [cache-control]: one signed PUT.
+put() {
+  local src=$1 key=$2 type=$3 cache=${4:-}
+  if $dry; then
+    say "would upload $key ($(stat -c %s "$src") bytes, $type${cache:+, $cache})"
+    return 0
+  fi
+  [ -f "$creds" ] || die "no credentials file $creds"
+  r2 "$key" -H "Content-Type: $type" ${cache:+-H "Cache-Control: $cache"} -T "$src" || die "the upload of $key failed"
+  say "uploaded $key"
+}
+
+# copy_or_put <local file> <key there already> <key> <content type> <cache-control>: the bucket copies the file it has
+# (S3 CopyObject: 3.6 GiB not sent twice); when it can't, the file is uploaded again.
+copy_or_put() {
+  local src=$1 from=$2 key=$3 type=$4 cache=$5
+  if $dry; then
+    say "would copy $from to $key ($type, $cache)"
+    return 0
+  fi
+  [ -f "$creds" ] || die "no credentials file $creds"
+  if r2 "$key" -X PUT -H "x-amz-copy-source: /$bucket/$from" -H "x-amz-metadata-directive: REPLACE" \
+    -H "Content-Type: $type" -H "Cache-Control: $cache" 2>/dev/null; then
+    say "copied $from to $key"
+  else
+    say "the bucket didn't copy $from: uploading $key"
+    put "$src" "$key" "$type" "$cache"
+  fi
+}
+
+# served_latest_id: the release the site's installer/latest.json names, or nothing when the site has none (404). A
+# latest.json that can't be read, or names no release id, stops the run: it isn't a missing one (R3 B2).
+served_latest_id() {
+  local state body rel
+  state=$(served_etag installer/latest.json)
+  case $state in
+    missing) return 0 ;;
+    status-* | unreachable) die "the site answers $state for installer/latest.json: the fixed links are left as they are" ;;
+  esac
+  body=$(curl -sf --max-time 30 "$base/installer/latest.json?verify=$nonce") ||
+    die "installer/latest.json can't be read: the fixed links are left as they are"
+  rel=$(jq -er '.releaseId' <<<"$body" 2>/dev/null) || die "installer/latest.json isn't a manifest: the fixed links are left as they are"
+  [[ $rel =~ ^whombat-[0-9]{8}\.[1-9][0-9]{0,3}$ ]] || die "installer/latest.json names $rel, no release id: the fixed links are left as they are"
+  echo "$rel"
+}
+
+# delete <key>: one signed DELETE (the key on curl's standard input).
+delete() {
+  $dry && { say "would remove $1"; return 0; }
+  r2 "$1" -X DELETE || die "the removal of $1 failed"
+  say "removed $1"
+}
+
+# copy_back <release id>: the fixed pair as that release's own files, copied on the bucket (checksum first).
+copy_back() {
+  local from=installer/$1 f type
+  for f in "$name.sha256" "$name"; do
+    # Never swapped (the step before it failed): it is that release's already.
+    [ "$(served_etag "$latest/$f")" != "$(served_etag "$from/$f")" ] || continue
+    type=application/octet-stream
+    [ "$f" = "$name.sha256" ] && type=text/plain
+    r2 "$latest/$f" -X PUT -H "x-amz-copy-source: /$bucket/$from/$f" -H "x-amz-metadata-directive: REPLACE" \
+      -H "Content-Type: $type" -H "Cache-Control: max-age=300" || die "copying $from/$f back failed"
+    [ "$(served_etag "$latest/$f")" = "$(served_etag "$from/$f")" ] || die "$latest/$f isn't $from/$f after copying it back"
+  done
+}
+# older a b: release id a (whombat-YYYYMMDD.N) sorts before b.
+older() {
+  local a=${1#whombat-} b=${2#whombat-}
+  [ "${a%%.*}" -lt "${b%%.*}" ] || { [ "${a%%.*}" = "${b%%.*}" ] && [ "${a#*.}" -lt "${b#*.}" ]; }
+}
+# again <what> <command…>: the command, tried twice more after a pause when it fails.
+again() {
+  local what=$1 i delay=${UPLOAD_RETRY_DELAY:-5}
+  shift
+  for i in 1 2 3; do
+    if ("$@"); then return 0; fi
+    [ "$i" = 3 ] && break
+    say "$what failed; trying again in $((delay * i)) s"
+    sleep $((delay * i))
+  done
+  die "$what failed three times: the fixed links may disagree until this runs again (latest.json is left as it was)"
+}
+
+# needed <local file> <key>: whether a release's own file must be sent: "no" when the site serves it with the same
+# digest, "yes" when it lacks it; another digest under this release id stops the run (nothing of it is overwritten).
+needed() {
+  local want have
+  want=$(md5_of "$1")
+  have=$(served_etag "$2")
+  case $have in
+    "$want") echo no ;;
+    missing) echo yes ;;
+    noetag) die "the site serves $2 but says no digest (ETag): it can't be compared, so nothing is sent over it" ;;
+    status-* | unreachable) die "the site answers $have for $2: nothing is sent until it answers 200 or 404" ;;
+    *) die "the site serves another $2 (digest $have, this one's $want): a release id never names two installers; build a new release" ;;
+  esac
+}
+
+# verify <local file> <key>: the site serves exactly this file (by digest), or the run stops.
+verify() {
+  local want have
+  $dry && { say "would check that $base/$2 serves this file (its digest)"; return 0; }
+  want=$(md5_of "$1")
+  have=$(served_etag "$2")
+  [ "$have" = "$want" ] || die "$base/$2 isn't this file (the site says ${have}, this one's digest is $want): latest.json is left as it was"
+  say "$2: served, the same digest"
+}
+
+# The release's own two files, both checked before either is sent.
+if $dry; then
+  say "would check the digests of $prefix/$name and $prefix/$name.sha256, then upload what the site lacks"
+  send_iso=yes send_sha=yes
+else
+  send_iso=$(needed "$iso" "$prefix/$name")
+  send_sha=$(needed "$work/$name.sha256" "$prefix/$name.sha256")
+fi
+if [ "$send_iso" = yes ]; then put "$iso" "$prefix/$name" application/octet-stream; else say "$prefix/$name is there already (the same digest)"; fi
+if [ "$send_sha" = yes ]; then put "$work/$name.sha256" "$prefix/$name.sha256" text/plain; else say "$prefix/$name.sha256 is there already (the same digest)"; fi
+verify "$iso" "$prefix/$name"
+verify "$work/$name.sha256" "$prefix/$name.sha256"
+if $production; then
+  # The fixed links only ever move forward (R2 B2): a newer release's installer there stays.
+  previous=""
+  if ! $dry; then
+    previous=$(served_latest_id)
+    if [ -n "$previous" ] && older "$id" "$previous"; then
+      say "installer/latest.json names $previous, newer than $id: the fixed links stay for it ($id's own files are up)"
+      jq -n --arg id "$id" --arg u "$url" --arg k "$previous" \
+        '{releaseId: $id, url: $u, sha256Url: ($u + ".sha256"), latest: false, latestKept: $k, dryRun: false}'
+      exit 3
+    fi
+  fi
+  # The swap, in a subshell so a failed step comes back here: the checksum first (copied from the release's own, else
+  # uploaded), checked; the ISO, checked; the pair (the served checksum names the ISO's sha256); latest.json last.
+  if ! (
+    again "the copy of the checksum to $latest/" copy_or_put "$work/$name.sha256" "$prefix/$name.sha256" "$latest/$name.sha256" text/plain "max-age=300"
+    verify "$work/$name.sha256" "$latest/$name.sha256"
+    again "the copy of the ISO to $latest/" copy_or_put "$iso" "$prefix/$name" "$latest/$name" application/octet-stream "max-age=300"
+    verify "$iso" "$latest/$name"
+    if ! $dry; then
+      served_sum=$(curl -sf --max-time 30 "$base/$latest/$name.sha256?verify=$nonce" | cut -d' ' -f1)
+      [ "$served_sum" = "$sha" ] || die "$base/$latest/$name.sha256 names ${served_sum:-nothing}, not the ISO's $sha"
+    fi
+    again "the upload of installer/latest.json" put "$work/latest.json" installer/latest.json application/json "max-age=300"
+    verify "$work/latest.json" installer/latest.json
+  ); then
+    # Never two ISOs at the fixed links: the previous release's pair back, or none when there was no previous.
+    if [ -n "$previous" ]; then
+      (copy_back "$previous") || die "the fixed links couldn't be put back to $previous: run this again (latest.json still names $previous)"
+      die "the fixed links are $previous's again and latest.json names it: run this again once the cause is fixed"
+    fi
+    if ! $dry; then
+      (delete "$latest/$name" && delete "$latest/$name.sha256") || die "the fixed files couldn't be removed: run this again"
+    fi
+    die "the fixed links are removed (there was no installer at them before): run this again once the cause is fixed"
+  fi
+fi
+jq -n --arg id "$id" --arg u "$url" --argjson p "$production" --argjson d "$dry" \
+  '{releaseId: $id, url: $u, sha256Url: ($u + ".sha256"), latest: $p, dryRun: $d}'

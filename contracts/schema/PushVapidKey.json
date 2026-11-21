@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/PushVapidKey.json",
+  "title": "PushVapidKey",
+  "type": "object",
+  "properties": {
+    "publicKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{87}$"
+    }
+  },
+  "required": [
+    "publicKey"
+  ]
+}

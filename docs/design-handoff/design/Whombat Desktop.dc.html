@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#fbf9f5;font-family:'Bricolage Grotesque',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#7d6353}a:hover{color:#221d18}
+input,button{font-family:inherit}
+input::placeholder{color:#9d9186}
+</style>
+</helmet>
+
+<div style="--bg:{{ t.bg }};--side:{{ t.side }};--sf:{{ t.sf }};--sf2:{{ t.sf2 }};--ink:{{ t.ink }};--ink2:{{ t.ink2 }};--mut:{{ t.mut }};--line:{{ t.line }};--line2:{{ t.line2 }};--brand:{{ t.brand }};--btn:{{ t.btn }};--btnfg:{{ t.btnfg }};--code:{{ t.code }};--ok:{{ t.ok }};--warn:{{ t.warn }};--bad:{{ t.bad }};--sel:{{ t.sel }};--ov:{{ t.ov }};--hi:{{ t.hi }};position:relative;height:100vh;display:flex;background:var(--bg);color:var(--ink);overflow:hidden;">
+
+<sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Onboarding" style="flex:1;display:grid;grid-template-columns:minmax(260px,380px) minmax(0,1fr);min-height:0;">
+<aside style="display:flex;flex-direction:column;gap:40px;padding:36px 32px;background:var(--side);border-right:1px solid var(--line);">
+<div style="display:flex;align-items:center;gap:10px;"><div style="width:22px;height:14px;border-radius:50%;background:var(--ink);"></div><span style="font-weight:700;font-size:19px;letter-spacing:-.01em;">Whombat</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;">
+<sc-for list="{{ obSteps }}" as="s" hint-placeholder-count="4">
+<button onClick="{{ s.go }}" style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:center;padding:10px 12px;border:none;border-radius:12px;background:{{ s.bg }};color:var(--ink);text-align:left;cursor:pointer;">
+<span style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ s.dotBg }};color:{{ s.dotFg }};font:500 12px 'DM Mono',monospace;">{{ s.n }}</span>
+<span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:15.5px;font-weight:600;">{{ s.t }}</span><span style="font-size:13px;color:var(--mut);">{{ s.d }}</span></span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top:auto;display:flex;align-items:flex-end;gap:4px;">
+<div style="width:64px;height:64px;"><dc-import name="WhombatAvatar" role="support" style="width:100%;height:100%;display:block;" hint-size="64px,64px"></dc-import></div>
+<div style="padding:12px 14px;border-radius:14px 14px 14px 4px;background:var(--sf);border:1px solid var(--line);font-size:14px;line-height:1.45;color:var(--ink2);max-width:220px;">{{ obTip }}</div>
+</div>
+</aside>
+<main style="display:flex;flex-direction:column;min-height:0;overflow:auto;">
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:32px;width:100%;max-width:720px;margin:0 auto;padding:56px 40px;">
+<div style="display:flex;flex-direction:column;gap:12px;">
+<span style="font:500 12px 'DM Mono',monospace;letter-spacing:.04em;color:var(--brand);">STEP {{ obNum }} OF 4</span>
+<h1 style="margin:0;font-size:44px;line-height:1.02;font-weight:700;letter-spacing:-.03em;text-wrap:balance;">{{ obTitle }}</h1>
+<p style="margin:0;font-size:17px;line-height:1.55;color:var(--ink2);max-width:34em;text-wrap:pretty;">{{ obSub }}</p>
+</div>
+
+<sc-if value="{{ ob0 }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:10px;">
+<label style="font:500 12px 'DM Mono',monospace;color:var(--mut);">BURROW NAME</label>
+<input value="{{ burrow }}" onChange="{{ onBurrow }}" style="padding:16px 18px;border-radius:14px;border:1px solid var(--line2);background:var(--sf);color:var(--ink);font-size:22px;font-weight:600;outline:none;">
+<span style="font:400 13px 'DM Mono',monospace;color:var(--mut);">{{ burrowUrl }}</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ ob1 }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;background:var(--sf);overflow:hidden;">
+<sc-for list="{{ repos }}" as="r" hint-placeholder-count="4">
+<button onClick="{{ r.toggle }}" style="display:flex;align-items:center;gap:14px;padding:16px 20px;border:none;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);text-align:left;cursor:pointer;">
+<span style="flex:1;display:flex;flex-direction:column;gap:3px;"><span style="font:500 15px 'DM Mono',monospace;">{{ r.n }}</span><span style="font-size:13.5px;color:var(--mut);">{{ r.d }}</span></span>
+<span style="width:36px;height:22px;border-radius:11px;background:{{ r.track }};position:relative;flex:none;"><span style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fffdf9;transform:translateX({{ r.x }}px);transition:transform .15s;"></span></span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ ob2 }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">
+<sc-for list="{{ obAgents }}" as="a" hint-placeholder-count="6">
+<button onClick="{{ a.toggle }}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 12px 16px;border-radius:16px;border:{{ a.border }};background:var(--sf);color:var(--ink);cursor:pointer;">
+<span style="position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;border:1.5px solid {{ a.checkBorder }};background:{{ a.checkBg }};color:#fffdf9;font-size:12px;display:flex;align-items:center;justify-content:center;">{{ a.check }}</span>
+<div style="width:96px;height:96px;"><dc-import name="WhombatAvatar" role="{{ a.role }}" style="width:100%;height:100%;display:block;" hint-size="96px,96px"></dc-import></div>
+<span style="font-size:17px;font-weight:700;">{{ a.name }}</span>
+<span style="display:flex;align-items:center;gap:6px;font:500 11.5px 'DM Mono',monospace;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ a.accent }};"></span>{{ a.roleName }}</span>
+<span style="font-size:13px;line-height:1.4;color:var(--ink2);text-align:center;">{{ a.job }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ ob3 }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div style="display:flex;gap:10px;">
+<input value="{{ invite }}" onChange="{{ onInvite }}" onKeyDown="{{ onInviteKey }}" placeholder="name@company.com" style="flex:1;padding:14px 16px;border-radius:12px;border:1px solid var(--line2);background:var(--sf);color:var(--ink);font-size:16px;outline:none;">
+<button onClick="{{ addInvite }}" style="padding:0 18px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">Add</button>
+</div>
+<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;background:var(--sf);overflow:hidden;">
+<sc-for list="{{ invites }}" as="i" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);">
+<span style="width:32px;height:32px;border-radius:50%;background:{{ i.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;">{{ i.ini }}</span>
+<span style="flex:1;font:400 14.5px 'DM Mono',monospace;">{{ i.e }}</span>
+<span style="font-size:13px;color:var(--mut);">Member</span>
+<button onClick="{{ i.remove }}" style="border:none;background:transparent;color:var(--mut);font-size:13px;cursor:pointer;">Remove</button>
+</div>
+</sc-for>
+</div>
+<span style="font-size:14px;color:var(--mut);">Your agents are already in. People get an email with a link to {{ burrowUrl }}.</span>
+</div>
+</sc-if>
+
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:8px;">
+<button onClick="{{ obBack }}" style="padding:12px 18px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">{{ obBackLabel }}</button>
+<button onClick="{{ obNext }}" style="padding:12px 22px;border-radius:12px;border:none;background:var(--btn);color:var(--btnfg);font-size:15px;font-weight:600;cursor:pointer;">{{ obNextLabel }}</button>
+</div>
+</div>
+</main>
+</div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+<aside style="width:256px;flex:none;display:flex;flex-direction:column;gap:22px;padding:18px 12px 14px;background:var(--side);border-right:1px solid var(--line);overflow-y:auto;">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 6px 0 10px;">
+<button onClick="{{ toOnboarding }}" title="Start a new burrow" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);cursor:pointer;padding:4px 0;"><div style="width:20px;height:13px;border-radius:50%;background:var(--ink);"></div><span style="font-weight:700;font-size:16.5px;letter-spacing:-.01em;">{{ burrow }}</span></button>
+<button onClick="{{ toggleTheme }}" style="padding:5px 10px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font:500 11px 'DM Mono',monospace;cursor:pointer;">{{ themeLabel }}</button>
+</div>
+<button onClick="{{ toSearch }}" style="display:flex;align-items:center;gap:10px;margin:0 4px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--sf);color:var(--mut);font-size:14.5px;cursor:pointer;text-align:left;">
+<span style="width:11px;height:11px;border-radius:50%;border:1.7px solid var(--mut);flex:none;"></span><span style="flex:1;">Search the burrow</span><span style="font:500 11px 'DM Mono',monospace;">⌘K</span></button>
+<div style="display:flex;flex-direction:column;gap:2px;">
+<sc-for list="{{ nav }}" as="c" hint-placeholder-count="3">
+<button onClick="{{ c.go }}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:none;border-radius:10px;background:{{ c.bg }};color:var(--ink);font-size:14.5px;font-weight:{{ c.fw }};text-align:left;cursor:pointer;" style-hover="background:var(--sel)"><span style="width:18px;display:flex;justify-content:center;"><span style="width:11px;height:11px;border-radius:{{ c.glyph }};border:1.7px solid var(--mut);"></span></span><span style="flex:1;">{{ c.label }}</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">{{ c.meta }}</span></button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;">
+<span style="font:500 10.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding:0 10px 6px;">CHANNELS</span>
+<sc-for list="{{ channels }}" as="c" hint-placeholder-count="3">
+<button onClick="{{ c.go }}" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:10px;background:{{ c.bg }};color:var(--ink);font-size:14.5px;font-weight:{{ c.fw }};text-align:left;cursor:pointer;" style-hover="background:var(--sel)"><span style="width:18px;font:500 14px 'DM Mono',monospace;color:var(--mut);text-align:center;">#</span><span style="flex:1;">{{ c.label }}</span><sc-if value="{{ c.unread }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px;padding:1px 6px;border-radius:999px;background:var(--btn);color:var(--btnfg);font:500 11px 'DM Mono',monospace;text-align:center;">{{ c.unread }}</span></sc-if></button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;">
+<span style="font:500 10.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding:0 10px 6px;">BRANCH ROOMS</span>
+<sc-for list="{{ rooms }}" as="c" hint-placeholder-count="1">
+<button onClick="{{ c.go }}" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:10px;background:{{ c.bg }};color:var(--ink);text-align:left;cursor:pointer;" style-hover="background:var(--sel)"><span style="width:18px;display:flex;justify-content:center;"><span style="width:8px;height:8px;border-radius:50%;background:{{ c.dot }};"></span></span><span style="flex:1;font:{{ c.fw }} 13.5px 'DM Mono',monospace;">{{ c.label }}</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">{{ c.meta }}</span></button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;">
+<span style="font:500 10.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding:0 10px 6px;">AGENTS</span>
+<sc-for list="{{ sideAgents }}" as="a" hint-placeholder-count="6">
+<button onClick="{{ a.go }}" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border:none;border-radius:10px;background:{{ a.bg }};color:var(--ink);text-align:left;cursor:pointer;" style-hover="background:var(--sel)">
+<div style="width:26px;height:26px;flex:none;"><dc-import name="WhombatAvatar" role="{{ a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="26px,26px"></dc-import></div>
+<span style="flex:1;font-size:14.5px;font-weight:{{ a.fw }};">{{ a.name }}</span>
+<span style="font:400 10.5px 'DM Mono',monospace;color:var(--mut);">{{ a.statusShort }}</span>
+<span style="width:7px;height:7px;border-radius:50%;background:{{ a.statusColor }};"></span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;">
+<span style="font:500 10.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding:0 10px 6px;">DIRECT</span>
+<sc-for list="{{ dms }}" as="a" hint-placeholder-count="2">
+<button onClick="{{ a.go }}" style="display:flex;align-items:center;gap:10px;padding:5px 10px;border:none;border-radius:10px;background:{{ a.bg }};color:var(--ink);text-align:left;cursor:pointer;" style-hover="background:var(--sel)">
+<div style="width:26px;height:26px;flex:none;"><dc-import name="WhombatAvatar" role="{{ a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="26px,26px"></dc-import></div>
+<span style="flex:1;font-size:14.5px;font-weight:{{ a.fw }};">{{ a.name }}</span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:12px 10px 0;border-top:1px solid var(--line);">
+<div style="display:flex;align-items:center;gap:10px;">
+<span style="position:relative;width:30px;height:30px;border-radius:50%;background:#d9c3a9;color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;">MO<span style="position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:#6fcf97;border:2px solid var(--side);"></span></span>
+<span style="flex:1;display:flex;flex-direction:column;"><span style="font-size:14px;font-weight:600;">Mara Okafor</span><span style="font-size:12px;color:var(--mut);">Engineering lead</span></span>
+</div>
+<a href="Whombat Mobile.dc.html" style="font:500 11.5px 'DM Mono',monospace;color:var(--brand);text-decoration:none;">Mobile app →</a>
+</div>
+</aside>
+
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;">
+
+<sc-if value="{{ isConv }}" hint-placeholder-val="{{ true }}">
+<header data-screen-label="{{ convLabel }}" style="display:flex;align-items:center;gap:16px;padding:16px 32px;border-bottom:1px solid var(--line);min-height:76px;">
+<sc-if value="{{ hdr.isDm }}" hint-placeholder-val="{{ false }}"><div style="width:44px;height:44px;flex:none;"><dc-import name="WhombatAvatar" role="{{ hdr.role }}" style="width:100%;height:100%;display:block;" hint-size="44px,44px"></dc-import></div></sc-if>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+<sc-if value="{{ hdr.isChannel }}" hint-placeholder-val="{{ true }}"><span style="font-size:21px;font-weight:700;letter-spacing:-.01em;"><span style="color:var(--mut);font-weight:500;margin-right:3px;">#</span>{{ hdr.title }}</span></sc-if>
+<sc-if value="{{ hdr.isBranch }}" hint-placeholder-val="{{ false }}"><span style="font:500 18px 'DM Mono',monospace;">{{ hdr.title }}</span><span style="display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--sf2);font:500 11.5px 'DM Mono',monospace;color:var(--ink2);"><span style="width:7px;height:7px;border-radius:50%;background:{{ branchDot }};"></span>{{ branchState }}</span></sc-if>
+<sc-if value="{{ hdr.isDm }}" hint-placeholder-val="{{ false }}"><span style="font-size:21px;font-weight:700;letter-spacing:-.01em;">{{ hdr.title }}</span><span style="display:flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:var(--sf2);font:500 11px 'DM Mono',monospace;color:var(--ink2);"><span style="width:7px;height:7px;border-radius:50%;background:{{ hdr.accent }};"></span>{{ hdr.roleName }}</span></sc-if>
+</div>
+<span style="font-size:14px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ hdr.topic }}</span>
+</div>
+<div style="display:flex;align-items:center;">
+<sc-for list="{{ hdr.members }}" as="p" hint-placeholder-count="5">
+<div style="width:30px;height:30px;margin-left:-6px;border-radius:50%;background:{{ p.ring }};border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;">
+<sc-if value="{{ p.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:28px;height:28px;"><dc-import name="WhombatAvatar" role="{{ p.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="28px,28px"></dc-import></div></sc-if>
+<sc-if value="{{ p.isHuman }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:600;color:#221d18;">{{ p.ini }}</span></sc-if>
+</div>
+</sc-for>
+<span style="margin-left:8px;font:500 12px 'DM Mono',monospace;color:var(--mut);">{{ hdr.count }}</span>
+</div>
+<sc-for list="{{ hdr.actions }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.go }}" style="padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ b.label }}</button>
+</sc-for>
+</header>
+
+<sc-if value="{{ hdr.isBranch }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:4px;padding:0 28px;border-bottom:1px solid var(--line);">
+<sc-for list="{{ branchTabs }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.go }}" style="padding:12px 6px;margin:0 6px;border:none;border-bottom:2px solid {{ b.line }};background:transparent;color:{{ b.fg }};font-size:14.5px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ b.label }} <span style="font:500 11px 'DM Mono',monospace;color:var(--mut);margin-left:4px;">{{ b.meta }}</span></button>
+</sc-for>
+</div>
+</sc-if>
+
+<div style="flex:1;min-height:0;overflow-y:auto;">
+<sc-if value="{{ showFiles }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:880px;padding:28px 32px;display:flex;flex-direction:column;gap:14px;">
+<div style="border:1px solid var(--line);border-radius:14px;background:var(--sf);overflow:hidden;">
+<sc-for list="{{ files }}" as="f" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto 100px;gap:16px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);">
+<span style="font:400 14px 'DM Mono',monospace;overflow:hidden;text-overflow:ellipsis;">{{ f.path }}</span>
+<span style="font:500 12.5px 'DM Mono',monospace;color:var(--ok);">+{{ f.add }}</span>
+<span style="font:500 12.5px 'DM Mono',monospace;color:var(--bad);">−{{ f.del }}</span>
+<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--sf2);"><span style="width:{{ f.addW }}%;background:var(--ok);"></span><span style="width:{{ f.delW }}%;background:var(--bad);"></span></div>
+</div>
+</sc-for>
+</div>
+<span style="font-size:13.5px;color:var(--mut);">Every patch here is a signed event from Banjo’s key. Open any file to comment on a line.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ showMsgs }}" hint-placeholder-val="{{ true }}">
+<div style="max-width:880px;padding:28px 32px 32px;display:flex;flex-direction:column;gap:28px;">
+
+<sc-if value="{{ dmEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:24px 0 8px;">
+<div style="width:132px;height:132px;"><dc-import name="WhombatAvatar" role="{{ hdr.role }}" style="width:100%;height:100%;display:block;" hint-size="132px,132px"></dc-import></div>
+<h2 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em;">This is the start of your DM with {{ hdr.title }}</h2>
+<p style="margin:0;font-size:16px;line-height:1.55;color:var(--ink2);max-width:34em;">{{ hdr.intro }}</p>
+<div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:4px;">
+<sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3"><button onClick="{{ s.use }}" style="padding:9px 14px;border-radius:999px;border:1px solid var(--line2);background:var(--sf);color:var(--ink);font-size:14px;cursor:pointer;">{{ s.t }}</button></sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasDayLine }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:14px;"><span style="flex:1;height:1px;background:var(--line);"></span><span style="font:500 11.5px 'DM Mono',monospace;color:var(--mut);">Today · Wednesday 23 September</span><span style="flex:1;height:1px;background:var(--line);"></span></div>
+</sc-if>
+
+<sc-for list="{{ msgs }}" as="m" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:40px minmax(0,1fr);gap:14px;">
+<sc-if value="{{ m.a.isAgent }}" hint-placeholder-val="{{ false }}"><div style="width:40px;height:40px;"><dc-import name="WhombatAvatar" role="{{ m.a.role }}" style="width:100%;height:100%;display:block;" hint-size="40px,40px"></dc-import></div></sc-if>
+<sc-if value="{{ m.a.isHuman }}" hint-placeholder-val="{{ true }}"><div style="width:40px;height:40px;border-radius:50%;background:{{ m.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">{{ m.a.ini }}</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:9px;min-width:0;">
+<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+<span style="font-size:15.5px;font-weight:600;">{{ m.a.name }}</span>
+<sc-if value="{{ m.a.isAgent }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--sf2);font:500 11px 'DM Mono',monospace;color:var(--ink2);"><span style="width:7px;height:7px;border-radius:50%;background:{{ m.a.accent }};"></span>{{ m.a.roleName }}</span></sc-if>
+<span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ m.time }}</span>
+</div>
+<p style="margin:0;font-size:16px;line-height:1.55;color:var(--ink2);text-wrap:pretty;"><sc-for list="{{ m.segs }}" as="s" hint-placeholder-count="1"><span style="color:{{ s.c }};font-weight:{{ s.w }};">{{ s.t }}</span></sc-for></p>
+
+<sc-if value="{{ m.isPlan }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;gap:4px;padding:18px 20px 14px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;gap:12px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">PLAN · 4 STEPS</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">Due 14 Oct</span></div>
+<span style="font-size:19px;font-weight:700;letter-spacing:-.01em;padding:2px 0 10px;">Invoice PDF export</span>
+<sc-for list="{{ plan }}" as="st" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);">
+<span style="width:16px;height:16px;margin:0 3px;border-radius:{{ st.r }};border:2px solid {{ st.bc }};background:{{ st.bgc }};transform:{{ st.tf }};"></span>
+<span style="font-size:15px;color:{{ st.fg }};">{{ st.t }}</span>
+<span style="display:flex;align-items:center;gap:8px;">
+<sc-if value="{{ st.a.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:22px;height:22px;"><dc-import name="WhombatAvatar" role="{{ st.a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="22px,22px"></dc-import></div></sc-if>
+<sc-if value="{{ st.a.isHuman }}" hint-placeholder-val="{{ false }}"><span style="width:22px;height:22px;border-radius:50%;background:{{ st.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:9px;">{{ st.a.ini }}</span></sc-if>
+<span style="font-size:13.5px;">{{ st.a.name }}</span>
+<span style="min-width:84px;text-align:right;font:500 11.5px 'DM Mono',monospace;color:{{ st.sc }};">{{ st.state }}</span>
+</span>
+</div>
+</sc-for>
+<div style="display:flex;gap:8px;padding-top:10px;"><button onClick="{{ toCanvas }}" style="padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Open plan canvas</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.isResearch }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;padding:18px 20px 16px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;gap:12px;padding-bottom:10px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">RESEARCH · PDF LIBRARIES</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">14 sources · 3 tested</span></div>
+<sc-for list="{{ research }}" as="r" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:110px 64px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid var(--line);">
+<span style="font-size:15.5px;font-weight:600;">{{ r.n }}</span>
+<span style="justify-self:start;padding:2px 9px;border-radius:999px;background:{{ r.vbg }};color:{{ r.vfg }};font:500 11px 'DM Mono',monospace;">{{ r.v }}</span>
+<span style="font-size:14.5px;color:var(--ink2);">{{ r.note }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.isRun }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;gap:14px;padding:18px 20px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;"><span style="display:flex;align-items:center;gap:8px;font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ run.dot }};box-shadow:0 0 0 4px {{ run.halo }};"></span>{{ run.label }}</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">feat/invoice-pdf</span></div>
+<span style="font-size:19px;font-weight:700;letter-spacing:-.01em;">Address review on PR #482</span>
+<div style="height:6px;border-radius:3px;background:var(--sf2);overflow:hidden;"><div style="height:100%;width:{{ run.pct }}%;background:#5aa37a;border-radius:3px;transition:width .6s ease;"></div></div>
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14.5px;color:var(--ink2);"><span>{{ run.now }}</span><span style="font:500 12.5px 'DM Mono',monospace;color:{{ run.testsC }};">{{ run.tests }}</span></div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+<button onClick="{{ toRun }}" style="padding:8px 14px;border-radius:10px;border:none;background:var(--btn);color:var(--btnfg);font-size:14px;font-weight:600;cursor:pointer;">Watch run</button>
+<button onClick="{{ toBranch }}" style="padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Branch room</button>
+<span style="margin-left:auto;font:500 12px 'DM Mono',monospace;"><span style="color:var(--ok);">+{{ run.add }}</span> <span style="color:var(--bad);">−{{ run.del }}</span> <span style="color:var(--mut);">· 6 files</span></span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.isReview }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;gap:12px;padding:18px 20px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;gap:12px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--bad);">REVIEW · 2 CHANGES REQUESTED</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">billing/pdf/format.ts:42</span></div>
+<div style="border-radius:12px;background:var(--code);padding:12px 0;overflow-x:auto;">
+<sc-for list="{{ diff }}" as="d" hint-placeholder-count="5"><div style="padding:2px 16px;background:{{ d.bg }};color:{{ d.fg }};font:400 13px/1.6 'DM Mono',monospace;white-space:pre;">{{ d.t }}</div></sc-for>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.55;color:var(--ink2);"><strong style="font-weight:600;color:var(--ink);">1.</strong> Amounts are formatted before VAT is rounded. Round first, then format, or Dutch invoices come out a cent off. Same bug as March.</p>
+<p style="margin:0;font-size:15px;line-height:1.55;color:var(--ink2);"><strong style="font-weight:600;color:var(--ink);">2.</strong> Minor: <span style="font-family:'DM Mono',monospace;font-size:13.5px;">formatEuro</span> takes a locale now, so call it <span style="font-family:'DM Mono',monospace;font-size:13.5px;">formatAmount</span>.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.isApproval }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;gap:14px;padding:18px 20px;border-radius:16px;border:1.5px solid {{ appr.border }};background:var(--sf);">
+<div style="display:flex;justify-content:space-between;gap:12px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:{{ appr.labelC }};">{{ appr.label }}</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">staging · billing-api</span></div>
+<span style="font-size:19px;font-weight:700;letter-spacing:-.01em;">Deploy feat/invoice-pdf to staging</span>
+<div style="display:flex;flex-direction:column;">
+<sc-for list="{{ appr.conds }}" as="c" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line);">
+<span style="width:18px;height:18px;border-radius:50%;border:2px solid {{ c.bc }};background:{{ c.bgc }};color:#fffdf9;font-size:11px;display:flex;align-items:center;justify-content:center;">{{ c.mark }}</span>
+<span style="font-size:15px;">{{ c.t }}</span>
+<span style="font:500 11.5px 'DM Mono',monospace;color:var(--mut);">{{ c.note }}</span>
+</div>
+</sc-for>
+</div>
+<p style="margin:0;font-size:14.5px;line-height:1.5;color:var(--ink2);">{{ appr.msg }}</p>
+<div style="display:flex;gap:8px;align-items:center;">
+<sc-if value="{{ appr.pending }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ approve }}" style="padding:9px 16px;border-radius:10px;border:none;background:var(--btn);color:var(--btnfg);font-size:14px;font-weight:600;cursor:pointer;">{{ appr.cta }}</button>
+<button onClick="{{ openApproval }}" style="padding:9px 16px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Details</button>
+</sc-if>
+<sc-if value="{{ appr.decided }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ undoApproval }}" style="padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--mut);font-size:13px;cursor:pointer;">Undo</button>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.hasCommits }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;padding:6px 18px;border-radius:14px;border:1px solid var(--line);background:var(--sf);">
+<sc-for list="{{ commits }}" as="c" hint-placeholder-count="3"><div style="display:flex;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);"><span style="font:500 12.5px 'DM Mono',monospace;color:var(--brand);">{{ c.sha }}</span><span style="font-size:14.5px;">{{ c.t }}</span></div></sc-for>
+<span style="padding:9px 0;font:500 12px 'DM Mono',monospace;color:var(--mut);"><span style="color:var(--ok);">+214</span> <span style="color:var(--bad);">−12</span> · 6 files · signed by Banjo</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.hasPill }}" hint-placeholder-val="{{ false }}">
+<span style="align-self:flex-start;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--sf);font:500 12.5px 'DM Mono',monospace;color:var(--ink2);"><span style="width:8px;height:8px;border-radius:50%;background:{{ m.pillC }};"></span>{{ m.pillT }}</span>
+</sc-if>
+
+<sc-if value="{{ m.hasAnswer }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:640px;display:flex;flex-direction:column;padding:6px 18px 8px;border-radius:14px;border:1px solid var(--line);background:var(--sf);">
+<span style="padding:10px 0 4px;font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">RECEIPTS</span>
+<sc-for list="{{ m.receipts }}" as="r" hint-placeholder-count="3">
+<button onClick="{{ r.go }}" style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border:none;border-top:1px solid var(--line);background:transparent;color:var(--ink);text-align:left;cursor:pointer;">
+<span style="width:22px;height:22px;border-radius:6px;background:var(--sf2);font:500 11px 'DM Mono',monospace;display:flex;align-items:center;justify-content:center;">{{ r.n }}</span>
+<span style="font-size:14.5px;">{{ r.t }}</span>
+<span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">{{ r.w }}</span>
+</button>
+</sc-for>
+<sc-if value="{{ m.hasSearch }}" hint-placeholder-val="{{ false }}"><button onClick="{{ toSearch }}" style="align-self:flex-start;margin:6px 0 8px;padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">Open in search</button></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ m.hasReacts }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:6px;"><sc-for list="{{ m.reacts }}" as="r" hint-placeholder-count="1"><span style="padding:3px 10px;border-radius:999px;background:var(--sf2);font:500 12px 'DM Mono',monospace;color:var(--ink2);">{{ r }}</span></sc-for></div>
+</sc-if>
+
+<sc-if value="{{ m.hasThread }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ openThread }}" style="align-self:flex-start;display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border-radius:12px;border:1px solid var(--line);background:var(--sf);color:var(--ink);cursor:pointer;" style-hover="border-color:var(--line2)">
+<span style="display:flex;"><sc-for list="{{ threadHeads }}" as="p" hint-placeholder-count="3"><span style="width:24px;height:24px;margin-right:-4px;border-radius:50%;background:{{ p.ring }};border:2px solid var(--sf);display:flex;align-items:center;justify-content:center;overflow:hidden;"><sc-if value="{{ p.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:22px;height:22px;"><dc-import name="WhombatAvatar" role="{{ p.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="22px,22px"></dc-import></div></sc-if><sc-if value="{{ p.isHuman }}" hint-placeholder-val="{{ false }}"><span style="font-size:9px;font-weight:600;color:#221d18;">{{ p.ini }}</span></sc-if></span></sc-for></span>
+<span style="font-size:14px;font-weight:600;color:var(--brand);margin-left:4px;">5 replies</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">last 10:06</span>
+</button>
+</sc-if>
+</div>
+</div>
+</sc-for>
+
+<sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px;padding-left:54px;font-size:14px;color:var(--mut);"><span style="display:flex;gap:3px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--mut);"></span><span style="width:5px;height:5px;border-radius:50%;background:var(--mut);opacity:.6;"></span><span style="width:5px;height:5px;border-radius:50%;background:var(--mut);opacity:.3;"></span></span>{{ typingLabel }}</div>
+</sc-if>
+</div>
+</sc-if>
+</div>
+
+<div style="padding:0 32px 22px;max-width:880px;width:100%;">
+<div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px 12px;border-radius:16px;border:1px solid var(--line2);background:var(--sf);">
+<input value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onDraftKey }}" placeholder="{{ composerPh }}" style="border:none;background:transparent;color:var(--ink);font-size:16px;outline:none;padding:2px 0;">
+<div style="display:flex;align-items:center;gap:6px;">
+<sc-for list="{{ composerTools }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.go }}" style="padding:5px 10px;border-radius:8px;border:none;background:var(--sf2);color:var(--ink2);font:500 12px 'DM Mono',monospace;cursor:pointer;">{{ c.t }}</button></sc-for>
+<span style="flex:1;font-size:12.5px;color:var(--mut);text-align:right;padding-right:6px;">Agents act when you mention them</span>
+<button onClick="{{ send }}" style="padding:7px 16px;border-radius:10px;border:none;background:var(--btn);color:var(--btnfg);font-size:14px;font-weight:600;cursor:pointer;">Send</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRun }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Agent run" style="flex:1;min-height:0;overflow-y:auto;">
+<div style="max-width:1120px;padding:28px 36px 48px;display:flex;flex-direction:column;gap:28px;">
+<button onClick="{{ toBilling }}" style="align-self:flex-start;border:none;background:transparent;color:var(--mut);font-size:14px;cursor:pointer;padding:0;">← #billing-v2</button>
+<div style="display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;padding-bottom:24px;border-bottom:1px solid var(--line);">
+<div style="width:96px;height:96px;flex:none;"><dc-import name="WhombatAvatar" role="developer" style="width:100%;height:100%;display:block;" hint-size="96px,96px"></dc-import></div>
+<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:8px;padding-bottom:4px;">
+<span style="display:flex;align-items:center;gap:8px;font:500 11.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ run.dot }};box-shadow:0 0 0 4px {{ run.halo }};"></span>{{ run.label }} · BANJO · STARTED 11:22</span>
+<h1 style="margin:0;font-size:32px;line-height:1.1;font-weight:700;letter-spacing:-.02em;">Address review on PR #482</h1>
+<span style="font-size:15px;color:var(--ink2);">Asked by <span style="color:var(--brand);font-weight:600;">Hazel</span> in #billing-v2 · working in <span style="font-family:'DM Mono',monospace;font-size:13.5px;">feat/invoice-pdf</span></span>
+</div>
+<div style="display:flex;gap:8px;padding-bottom:4px;">
+<button onClick="{{ toBranch }}" style="padding:9px 16px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Branch room</button>
+<button style="padding:9px 16px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Pause</button>
+<button style="padding:9px 16px;border-radius:10px;border:none;background:var(--btn);color:var(--btnfg);font-size:14px;font-weight:600;cursor:pointer;">Take over</button>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:28px;">
+<div style="display:flex;flex-direction:column;gap:14px;">
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">STEPS</span>
+<div style="display:flex;flex-direction:column;">
+<sc-for list="{{ runSteps }}" as="s" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:14px;align-items:start;">
+<div style="display:flex;flex-direction:column;align-items:center;align-self:stretch;"><span style="width:16px;height:16px;margin-top:3px;border-radius:50%;border:2px solid {{ s.bc }};background:{{ s.bgc }};flex:none;"></span><span style="flex:1;width:2px;min-height:18px;background:{{ s.lc }};margin:4px 0;"></span></div>
+<div style="display:flex;flex-direction:column;gap:3px;padding-bottom:18px;"><span style="font-size:16px;font-weight:{{ s.fw }};color:{{ s.fg }};">{{ s.t }}</span><span style="font-size:13.5px;color:var(--mut);">{{ s.d }}</span></div>
+<span style="font:400 12px 'DM Mono',monospace;color:var(--mut);padding-top:2px;">{{ s.at }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">
+<div style="display:flex;justify-content:space-between;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">LIVE LOG</span><span style="font:500 12px 'DM Mono',monospace;color:{{ run.testsC }};">{{ run.tests }}</span></div>
+<div style="border-radius:16px;background:var(--code);padding:18px 0;min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;">
+<sc-for list="{{ runLog }}" as="l" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:52px 1fr;padding:2px 20px;font:400 13px/1.7 'DM Mono',monospace;"><span style="color:#7e746a;">{{ l.at }}</span><span style="color:{{ l.c }};white-space:pre-wrap;">{{ l.t }}</span></div></sc-for>
+</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:20px;">
+<div style="display:flex;flex-direction:column;gap:14px;padding:22px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:17px;font-weight:700;">Banjo’s keys for this run</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">scoped to feat/invoice-pdf</span></div>
+<sc-for list="{{ runKeys }}" as="k" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:10px;font-size:14.5px;"><span style="width:18px;height:18px;border-radius:50%;background:{{ k.bg }};color:#fffdf9;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none;">{{ k.m }}</span><span style="flex:1;color:{{ k.fg }};">{{ k.t }}</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">{{ k.note }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;padding:22px;border-radius:16px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding-bottom:8px;"><span style="font-size:17px;font-weight:700;">Files touched</span><span style="font:500 12px 'DM Mono',monospace;"><span style="color:var(--ok);">+{{ run.add }}</span> <span style="color:var(--bad);">−{{ run.del }}</span></span></div>
+<sc-for list="{{ files }}" as="f" hint-placeholder-count="6"><div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;font:400 13px 'DM Mono',monospace;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.path }}</span><span><span style="color:var(--ok);">+{{ f.add }}</span> <span style="color:var(--bad);">−{{ f.del }}</span></span></div></sc-for>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRoster }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Agents" style="flex:1;min-height:0;overflow-y:auto;">
+<div style="max-width:1120px;padding:40px 36px 56px;display:flex;flex-direction:column;gap:32px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;">
+<div style="display:flex;flex-direction:column;gap:8px;"><h1 style="margin:0;font-size:36px;font-weight:700;letter-spacing:-.02em;">Agents</h1><p style="margin:0;font-size:16px;color:var(--ink2);max-width:36em;">{{ rosterSub }}</p></div>
+<button onClick="{{ openHire }}" style="padding:11px 18px;border-radius:12px;border:none;background:var(--btn);color:var(--btnfg);font-size:15px;font-weight:600;cursor:pointer;">Hire an agent</button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;">
+<sc-for list="{{ roster }}" as="a" hint-placeholder-count="6">
+<button onClick="{{ a.go }}" style="display:flex;flex-direction:column;gap:14px;padding:20px 20px 18px;border-radius:18px;border:1.5px solid {{ a.border }};background:var(--sf);color:var(--ink);text-align:left;cursor:pointer;" style-hover="border-color:var(--line2)">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+<div style="width:104px;height:104px;margin:-6px 0 -8px -8px;"><dc-import name="WhombatAvatar" role="{{ a.role }}" style="width:100%;height:100%;display:block;" hint-size="104px,104px"></dc-import></div>
+<span style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--sf2);font:500 11px 'DM Mono',monospace;color:var(--ink2);"><span style="width:7px;height:7px;border-radius:50%;background:{{ a.statusColor }};"></span>{{ a.statusLabel }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px;">
+<span style="font-size:21px;font-weight:700;letter-spacing:-.01em;">{{ a.name }}</span>
+<span style="display:flex;align-items:center;gap:6px;font:500 11.5px 'DM Mono',monospace;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ a.accent }};"></span>{{ a.roleName }}</span>
+</div>
+<span style="font-size:14.5px;line-height:1.45;color:var(--ink2);min-height:42px;">{{ a.doing }}</span>
+<span style="padding-top:12px;border-top:1px solid var(--line);font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ a.keysSummary }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Audit log" style="flex:1;min-height:0;overflow-y:auto;">
+<div style="max-width:1040px;padding:40px 36px 56px;display:flex;flex-direction:column;gap:26px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;">
+<div style="display:flex;flex-direction:column;gap:8px;"><h1 style="margin:0;font-size:36px;font-weight:700;letter-spacing:-.02em;">Audit log</h1><p style="margin:0;font-size:16px;line-height:1.5;color:var(--ink2);max-width:38em;text-wrap:pretty;">{{ logSub }}</p></div>
+<button onClick="{{ exportLog }}" style="padding:11px 18px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">Export CSV</button>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+<div style="display:flex;gap:2px;padding:3px;border-radius:11px;border:1px solid var(--line2);">
+<sc-for list="{{ logActors }}" as="f" hint-placeholder-count="3"><button onClick="{{ f.go }}" style="padding:6px 13px;border-radius:8px;border:none;background:{{ f.bg }};color:{{ f.fg }};font-size:13.5px;font-weight:500;cursor:pointer;">{{ f.t }}</button></sc-for>
+</div>
+<sc-if value="{{ logWhoOn }}" hint-placeholder-val="{{ false }}"><button onClick="{{ clearLogWho }}" style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 12px;border-radius:999px;border:1px solid var(--ink);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">Only {{ logWhoName }}<span style="font-size:15px;color:var(--mut);">×</span></button></sc-if>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;">
+<sc-for list="{{ logKinds }}" as="f" hint-placeholder-count="6"><button onClick="{{ f.go }}" style="padding:6px 13px;border-radius:999px;border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ f.t }} <span style="font:500 11px 'DM Mono',monospace;opacity:.7;">{{ f.n }}</span></button></sc-for>
+</div>
+</div>
+<sc-for list="{{ logDays }}" as="d" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;">
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding:0 4px 10px;">{{ d.label }}</span>
+<sc-for list="{{ d.rows }}" as="r" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;border-top:1px solid var(--line);">
+<button onClick="{{ r.toggle }}" style="display:grid;grid-template-columns:48px 28px minmax(0,1fr) auto;gap:14px;align-items:start;padding:16px 4px;border:none;background:transparent;color:var(--ink);text-align:left;cursor:pointer;">
+<span style="font:400 12.5px 'DM Mono',monospace;color:var(--mut);padding-top:5px;">{{ r.time }}</span>
+<sc-if value="{{ r.a.isAgent }}" hint-placeholder-val="{{ false }}"><div style="width:28px;height:28px;"><dc-import name="WhombatAvatar" role="{{ r.a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="28px,28px"></dc-import></div></sc-if>
+<sc-if value="{{ r.a.isHuman }}" hint-placeholder-val="{{ true }}"><span style="width:28px;height:28px;border-radius:50%;background:{{ r.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:10.5px;">{{ r.a.ini }}</span></sc-if>
+<span style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:15px;font-weight:600;">{{ r.a.name }}</span><span style="padding:2px 7px;border-radius:5px;background:var(--sf2);font:500 10.5px 'DM Mono',monospace;letter-spacing:.04em;color:var(--ink2);">{{ r.tag }}</span></span>
+<span style="font-size:15px;line-height:1.45;color:var(--ink2);text-wrap:pretty;">{{ r.text }}</span>
+<span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ r.meta }}</span>
+</span>
+<sc-if value="{{ r.hasPill }}" hint-placeholder-val="{{ false }}"><span style="padding:4px 9px;border-radius:999px;border:1px solid {{ r.pill.c }};color:{{ r.pill.c }};font:500 10.5px 'DM Mono',monospace;letter-spacing:.04em;white-space:nowrap;margin-top:2px;">{{ r.pill.t }}</span></sc-if>
+</button>
+<sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px;margin:0 4px 18px 94px;padding:18px 20px;border-radius:14px;border:1px solid var(--line);background:var(--sf);">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:16px 24px;">
+<sc-for list="{{ r.fields }}" as="f" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:5px;min-width:0;"><span style="font:500 10.5px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">{{ f.k }}</span><span style="font-size:14.5px;line-height:1.45;color:{{ f.c }};">{{ f.v }}</span></div></sc-for>
+</div>
+<sc-if value="{{ r.hasLink }}" hint-placeholder-val="{{ false }}"><button onClick="{{ r.linkGo }}" style="align-self:flex-start;padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">{{ r.linkT }}</button></sc-if>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+<sc-if value="{{ logEmpty }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:24px 4px;border-top:1px solid var(--line);font-size:15px;color:var(--mut);">Nothing in the log matches these filters.</p></sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSearch }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Search" style="flex:1;min-height:0;overflow-y:auto;">
+<div style="max-width:880px;padding:40px 36px 56px;display:flex;flex-direction:column;gap:28px;">
+<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;border-radius:16px;border:1.5px solid var(--line2);background:var(--sf);">
+<span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--mut);flex:none;"></span>
+<input value="{{ query }}" onChange="{{ onQuery }}" style="flex:1;border:none;background:transparent;color:var(--ink);font-size:19px;font-weight:500;outline:none;">
+<span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">esc</span>
+</div>
+<div style="display:grid;grid-template-columns:48px minmax(0,1fr);gap:16px;padding:22px 24px;border-radius:18px;background:var(--sf);border:1px solid var(--line);">
+<div style="width:48px;height:48px;"><dc-import name="WhombatAvatar" role="researcher" style="width:100%;height:100%;display:block;" hint-size="48px,48px"></dc-import></div>
+<div style="display:flex;flex-direction:column;gap:12px;min-width:0;">
+<span style="display:flex;align-items:center;gap:8px;"><span style="font-size:15.5px;font-weight:600;">Pippa</span><span style="font:500 11px 'DM Mono',monospace;color:var(--mut);">answered from 3 receipts · 1.8s</span></span>
+<p style="margin:0;font-size:17px;line-height:1.55;color:var(--ink);text-wrap:pretty;">Yes, twice. Both times amounts were formatted before VAT was rounded <span style="font:500 11px 'DM Mono',monospace;padding:1px 5px;border-radius:5px;background:var(--sf2);">1</span>. Tom fixed it for credit notes in March <span style="font:500 11px 'DM Mono',monospace;padding:1px 5px;border-radius:5px;background:var(--sf2);">2</span>, but regular invoices still format first. Dusty’s reconciliation run caught three more invoices a cent off the ledger <span style="font:500 11px 'DM Mono',monospace;padding:1px 5px;border-radius:5px;background:var(--sf2);">3</span>. Hazel flagged the same order in PR #482 today.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap;">
+<button onClick="{{ toIncidents }}" style="padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">Post to #incidents</button>
+<button onClick="{{ toBranch }}" style="padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">Open PR #482</button>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;">
+<div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;">
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="5"><button onClick="{{ f.go }}" style="padding:6px 13px;border-radius:999px;border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ f.t }} <span style="font:500 11px 'DM Mono',monospace;opacity:.7;">{{ f.n }}</span></button></sc-for>
+</div>
+<sc-for list="{{ results }}" as="r" hint-placeholder-count="5">
+<button onClick="{{ r.go }}" style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:14px;padding:16px 4px;border:none;border-top:1px solid var(--line);background:transparent;color:var(--ink);text-align:left;cursor:pointer;">
+<sc-if value="{{ r.a.isAgent }}" hint-placeholder-val="{{ false }}"><div style="width:28px;height:28px;"><dc-import name="WhombatAvatar" role="{{ r.a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="28px,28px"></dc-import></div></sc-if>
+<sc-if value="{{ r.a.isHuman }}" hint-placeholder-val="{{ true }}"><span style="width:28px;height:28px;border-radius:50%;background:{{ r.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:10.5px;">{{ r.a.ini }}</span></sc-if>
+<span style="display:flex;flex-direction:column;gap:5px;min-width:0;">
+<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="padding:2px 7px;border-radius:5px;background:var(--sf2);font:500 10.5px 'DM Mono',monospace;letter-spacing:.04em;color:var(--ink2);">{{ r.type }}</span><span style="font-size:14px;font-weight:600;">{{ r.where }}</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ r.a.name }}</span><sc-if value="{{ r.cited }}" hint-placeholder-val="{{ false }}"><span style="font:500 11px 'DM Mono',monospace;color:var(--brand);white-space:nowrap;">receipt {{ r.cited }}</span></sc-if></span>
+<span style="font-size:15px;line-height:1.5;color:var(--ink2);">{{ r.text }}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCanvas }}" hint-placeholder-val="{{ false }}">
+<header style="display:flex;align-items:center;gap:14px;padding:16px 32px;border-bottom:1px solid var(--line);min-height:76px;">
+<button onClick="{{ toBilling }}" style="border:none;background:transparent;color:var(--mut);font-size:14px;cursor:pointer;padding:0;">#billing-v2 /</button>
+<span style="flex:1;font-size:17px;font-weight:600;">Invoice PDF export · plan</span>
+<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);"><span style="display:flex;"><span style="width:28px;height:28px;border-radius:50%;background:#d9c3a9;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#221d18;">MO</span><span style="width:28px;height:28px;margin-left:-6px;border-radius:50%;border:2px solid #5491c4;background:var(--bg);overflow:hidden;"><dc-import name="WhombatAvatar" role="architect" crop="head" style="width:100%;height:100%;display:block;" hint-size="24px,24px"></dc-import></span></span>2 here</span>
+<button style="padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Share</button>
+</header>
+<div data-screen-label="Canvas" style="flex:1;min-height:0;overflow-y:auto;">
+<div style="display:grid;grid-template-columns:{{ canvasCols }};gap:48px;padding:48px 40px 72px;justify-content:center;">
+<article style="display:flex;flex-direction:column;gap:22px;min-width:0;">
+<div style="display:flex;flex-direction:column;gap:10px;">
+<h1 style="margin:0;font-size:42px;line-height:1.05;font-weight:700;letter-spacing:-.03em;">Invoice PDF export</h1>
+<span style="font:400 12.5px 'DM Mono',monospace;color:var(--mut);">Drafted by Sketch from Priya’s request · edited by Mara, Pippa · 12 min ago</span>
+</div>
+<h2 style="margin:10px 0 0;font-size:21px;font-weight:700;">Goal</h2>
+<p style="margin:0;font-size:17px;line-height:1.65;color:var(--ink2);text-wrap:pretty;">Customers can download any invoice as a PDF from the billing portal and from the invoice email. The PDF matches the current HTML invoice, in Dutch and English, and is ready before finance closes the month on 14 October.</p>
+<h2 style="margin:10px 0 0;font-size:21px;font-weight:700;">Steps</h2>
+<div style="display:flex;flex-direction:column;border-top:1px solid var(--line);">
+<sc-for list="{{ plan }}" as="st" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);">
+<span style="width:16px;height:16px;margin:0 3px;border-radius:{{ st.r }};border:2px solid {{ st.bc }};background:{{ st.bgc }};transform:{{ st.tf }};"></span>
+<span style="font-size:16px;color:{{ st.fg }};">{{ st.t }}</span>
+<span style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink2);">{{ st.a.name }}<span style="font:500 11.5px 'DM Mono',monospace;color:{{ st.sc }};">{{ st.state }}</span></span>
+</div>
+</sc-for>
+</div>
+<h2 style="margin:10px 0 0;font-size:21px;font-weight:700;">Rules to keep</h2>
+<div style="display:flex;flex-direction:column;gap:12px;">
+<div style="display:flex;gap:12px;font-size:17px;line-height:1.6;color:var(--ink2);"><span style="width:6px;height:6px;border-radius:50%;background:var(--ink2);flex:none;margin-top:11px;"></span><span><span style="background:{{ t.mark }};border-bottom:2px solid #8f7fc9;padding:0 2px;">Invoice numbers come from the invoice-number service.</span> The PDF path never generates or reuses one.</span></div>
+<div style="display:flex;gap:12px;font-size:17px;line-height:1.6;color:var(--ink2);"><span style="width:6px;height:6px;border-radius:50%;background:var(--ink2);flex:none;margin-top:11px;"></span><span><span style="background:{{ t.mark2 }};border-bottom:2px solid #c9765f;padding:0 2px;">Round VAT per line, half-up, before formatting.</span></span></div>
+<div style="position:relative;display:flex;gap:12px;font-size:17px;line-height:1.6;color:var(--ink2);padding:6px 10px;margin:0 -10px;border-radius:10px;background:var(--hi);"><span style="width:6px;height:6px;border-radius:50%;background:var(--ink2);flex:none;margin-top:11px;"></span><span>PDFs are generated on request and cached for 24 hours, keyed by invoice number and locale<span style="display:inline-block;width:2px;height:20px;background:#5491c4;vertical-align:-4px;margin-left:1px;"></span></span>
+<span style="position:absolute;right:10px;top:-11px;display:flex;align-items:center;gap:5px;padding:2px 9px 2px 3px;border-radius:999px;background:#5491c4;color:#fffdf9;font:500 11px 'DM Mono',monospace;"><span style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);overflow:hidden;"><dc-import name="WhombatAvatar" role="architect" crop="head" style="width:100%;height:100%;display:block;" hint-size="18px,18px"></dc-import></span>Sketch is writing</span></div>
+</div>
+<h2 style="margin:10px 0 0;font-size:21px;font-weight:700;">Out of scope</h2>
+<p style="margin:0;font-size:17px;line-height:1.65;color:var(--ink2);">Credit notes and bulk export. Both are planned for next quarter.</p>
+</article>
+<aside style="display:flex;flex-direction:column;gap:16px;padding-top:{{ canvasPad }};">
+<sc-for list="{{ comments }}" as="c" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:14px;border:1px solid var(--line);background:var(--sf);">
+<sc-for list="{{ c.items }}" as="m" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:6px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<sc-if value="{{ m.a.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:24px;height:24px;"><dc-import name="WhombatAvatar" role="{{ m.a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="24px,24px"></dc-import></div></sc-if>
+<sc-if value="{{ m.a.isHuman }}" hint-placeholder-val="{{ false }}"><span style="width:24px;height:24px;border-radius:50%;background:{{ m.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:9.5px;">{{ m.a.ini }}</span></sc-if>
+<span style="font-size:14px;font-weight:600;">{{ m.a.name }}</span><span style="font:400 11px 'DM Mono',monospace;color:var(--mut);">{{ m.time }}</span>
+</div>
+<span style="font-size:14px;line-height:1.5;color:var(--ink2);">{{ m.text }}</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</aside>
+</div>
+</div>
+</sc-if>
+</main>
+
+<sc-if value="{{ paneThread }}" hint-placeholder-val="{{ false }}">
+<aside data-screen-label="Thread" style="width:400px;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--bg);position:{{ paneLayout.pos }};right:0;top:0;bottom:0;z-index:5;box-shadow:{{ paneLayout.sh }};">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--line);min-height:76px;"><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:17px;font-weight:700;">Thread</span><span style="font-size:13px;color:var(--mut);">#billing-v2 · PDF libraries</span></div><button onClick="{{ closePane }}" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font-size:15px;cursor:pointer;">×</button></div>
+<div style="flex:1;min-height:0;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:22px;">
+<sc-for list="{{ thread }}" as="m" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;">
+<sc-if value="{{ m.a.isAgent }}" hint-placeholder-val="{{ false }}"><div style="width:32px;height:32px;"><dc-import name="WhombatAvatar" role="{{ m.a.role }}" style="width:100%;height:100%;display:block;" hint-size="32px,32px"></dc-import></div></sc-if>
+<sc-if value="{{ m.a.isHuman }}" hint-placeholder-val="{{ true }}"><div style="width:32px;height:32px;border-radius:50%;background:{{ m.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;">{{ m.a.ini }}</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
+<div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:15px;font-weight:600;">{{ m.a.name }}</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">{{ m.time }}</span></div>
+<p style="margin:0;font-size:15px;line-height:1.55;color:var(--ink2);"><sc-for list="{{ m.segs }}" as="s" hint-placeholder-count="1"><span style="color:{{ s.c }};font-weight:{{ s.w }};">{{ s.t }}</span></sc-for></p>
+<sc-if value="{{ m.hasAnswer }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;padding:2px 14px;border-radius:12px;border:1px solid var(--line);background:var(--sf);">
+<sc-for list="{{ m.receipts }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid var(--line);"><span style="width:20px;height:20px;border-radius:5px;background:var(--sf2);font:500 10.5px 'DM Mono',monospace;display:flex;align-items:center;justify-content:center;">{{ r.n }}</span><span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:14px;">{{ r.t }}</span><span style="font:400 11px 'DM Mono',monospace;color:var(--mut);">{{ r.w }}</span></span></div></sc-for>
+</div>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="padding:0 20px 20px;"><div style="display:flex;align-items:center;gap:10px;padding:13px 14px;border-radius:14px;border:1px solid var(--line2);background:var(--sf);"><span style="flex:1;font-size:15px;color:var(--mut);">Reply in thread</span><button style="padding:6px 13px;border-radius:9px;border:none;background:var(--btn);color:var(--btnfg);font-size:13.5px;font-weight:600;cursor:pointer;">Send</button></div></div>
+</aside>
+</sc-if>
+
+<sc-if value="{{ paneBranch }}" hint-placeholder-val="{{ false }}">
+<aside style="width:340px;flex:none;display:flex;flex-direction:column;gap:26px;padding:24px;min-height:0;overflow-y:auto;border-left:1px solid var(--line);background:var(--side);position:{{ paneLayout.pos }};right:0;top:0;bottom:0;z-index:5;box-shadow:{{ paneLayout.sh }};">
+<div style="display:flex;flex-direction:column;gap:10px;">
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">CHECKS</span>
+<sc-for list="{{ checks }}" as="c" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:10px;font-size:14.5px;"><span style="width:16px;height:16px;border-radius:50%;border:2px solid {{ c.bc }};background:{{ c.bgc }};flex:none;"></span><span style="flex:1;font-family:'DM Mono',monospace;font-size:13.5px;">{{ c.t }}</span><span style="font:400 12px 'DM Mono',monospace;color:var(--mut);">{{ c.note }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;">
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">REVIEWERS</span>
+<sc-for list="{{ reviewers }}" as="r" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:10px;font-size:14.5px;">
+<sc-if value="{{ r.a.isAgent }}" hint-placeholder-val="{{ true }}"><div style="width:26px;height:26px;"><dc-import name="WhombatAvatar" role="{{ r.a.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="26px,26px"></dc-import></div></sc-if>
+<sc-if value="{{ r.a.isHuman }}" hint-placeholder-val="{{ false }}"><span style="width:26px;height:26px;border-radius:50%;background:{{ r.a.tone }};color:#221d18;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:10px;">{{ r.a.ini }}</span></sc-if>
+<span style="flex:1;">{{ r.a.name }}</span><span style="font:500 12px 'DM Mono',monospace;color:{{ r.c }};">{{ r.s }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;">
+<span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">STAGING</span>
+<div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--sf);"><span style="font-size:14.5px;line-height:1.45;color:var(--ink2);">{{ appr.short }}</span><sc-if value="{{ appr.pending }}" hint-placeholder-val="{{ true }}"><button onClick="{{ openApproval }}" style="align-self:flex-start;padding:7px 12px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:13.5px;font-weight:500;cursor:pointer;">Review deploy</button></sc-if></div>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;">
+<button onClick="{{ merge }}" style="padding:12px;border-radius:12px;border:none;background:{{ mergeBtn.bg }};color:{{ mergeBtn.fg }};font-size:15px;font-weight:600;cursor:{{ mergeBtn.cur }};">{{ mergeBtn.label }}</button>
+<span style="font-size:13px;line-height:1.45;color:var(--mut);">Merging is for people. Agents in this burrow don’t hold a merge key.</span>
+</div>
+</aside>
+</sc-if>
+
+<sc-if value="{{ paneAgent }}" hint-placeholder-val="{{ false }}">
+<aside data-screen-label="Agent profile" style="width:380px;flex:none;display:flex;flex-direction:column;min-height:0;overflow-y:auto;border-left:1px solid var(--line);background:var(--bg);position:{{ paneLayout.pos }};right:0;top:0;bottom:0;z-index:5;box-shadow:{{ paneLayout.sh }};">
+<div style="display:flex;justify-content:flex-end;padding:16px 16px 0;"><button onClick="{{ closePane }}" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--ink2);font-size:15px;cursor:pointer;">×</button></div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 28px 22px;text-align:center;border-bottom:1px solid var(--line);">
+<div style="width:156px;height:156px;"><dc-import name="WhombatAvatar" role="{{ sel.role }}" style="width:100%;height:100%;display:block;" hint-size="156px,156px"></dc-import></div>
+<span style="font-size:26px;font-weight:700;letter-spacing:-.02em;">{{ sel.name }}</span>
+<span style="display:flex;align-items:center;gap:6px;font:500 11.5px 'DM Mono',monospace;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ sel.accent }};"></span>{{ sel.roleName }} · <span style="color:{{ sel.statusColor }};">{{ sel.statusLabel }}</span></span>
+<p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink2);">{{ sel.job }}</p>
+<div style="display:flex;gap:8px;padding-top:6px;">
+<button onClick="{{ sel.dm }}" style="padding:9px 16px;border-radius:10px;border:none;background:var(--btn);color:var(--btnfg);font-size:14px;font-weight:600;cursor:pointer;">Message</button>
+<sc-if value="{{ sel.hasRun }}" hint-placeholder-val="{{ false }}"><button onClick="{{ toRun }}" style="padding:9px 16px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Watch run</button></sc-if>
+<button style="padding:9px 16px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;">Configure</button>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;padding:22px 28px 32px;">
+<div style="display:flex;flex-direction:column;gap:8px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">RIGHT NOW</span><span style="font-size:15px;line-height:1.5;">{{ sel.doing }}</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">KEYS</span>
+<sc-for list="{{ sel.keys }}" as="k" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:10px;font-size:14.5px;"><span style="width:18px;height:18px;border-radius:50%;background:{{ k.bg }};color:#fffdf9;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none;">{{ k.m }}</span><span style="flex:1;color:{{ k.fg }};">{{ k.t }}</span><span style="font:400 11px 'DM Mono',monospace;color:var(--mut);">{{ k.note }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">CHANNELS</span><div style="display:flex;flex-wrap:wrap;gap:6px;"><sc-for list="{{ sel.chans }}" as="c" hint-placeholder-count="2"><span style="padding:4px 10px;border-radius:999px;background:var(--sf2);font:400 12px 'DM Mono',monospace;">{{ c }}</span></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:10px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">RECENT</span><button onClick="{{ sel.toLog }}" style="border:none;background:transparent;color:var(--brand);font-size:13.5px;font-weight:600;cursor:pointer;padding:0;">Full audit trail →</button></div>
+<sc-for list="{{ sel.recent }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;font-size:14.5px;"><span>{{ r.t }}</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);white-space:nowrap;">{{ r.w }}</span></div></sc-for>
+</div>
+</div>
+</aside>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ modalApproval }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeModal }}" style="position:absolute;inset:0;z-index:20;background:var(--ov);display:flex;align-items:center;justify-content:center;padding:24px;">
+<div onClick="{{ stop }}" data-screen-label="Approval" style="width:min(100%,560px);max-height:100%;overflow-y:auto;display:flex;flex-direction:column;gap:22px;padding:28px;border-radius:22px;background:var(--bg);box-shadow:0 30px 80px -20px rgba(0,0,0,.45);">
+<div style="display:flex;align-items:center;gap:14px;">
+<div style="width:64px;height:64px;flex:none;"><dc-import name="WhombatAvatar" role="operator" style="width:100%;height:100%;display:block;" hint-size="64px,64px"></dc-import></div>
+<div style="display:flex;flex-direction:column;gap:4px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--warn);">DUSTY IS ASKING</span><span style="font-size:23px;font-weight:700;letter-spacing:-.01em;line-height:1.15;">Deploy feat/invoice-pdf to staging?</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">WHAT HAPPENS</span>
+<sc-for list="{{ deploySteps }}" as="d" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:24px 1fr;gap:10px;font-size:15px;line-height:1.45;"><span style="font:500 12px 'DM Mono',monospace;color:var(--mut);padding-top:2px;">{{ d.n }}</span><span>{{ d.t }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding-bottom:4px;">CONDITIONS</span>
+<sc-for list="{{ appr.conds }}" as="c" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line);"><span style="width:18px;height:18px;border-radius:50%;border:2px solid {{ c.bc }};background:{{ c.bgc }};color:#fffdf9;font-size:11px;display:flex;align-items:center;justify-content:center;">{{ c.mark }}</span><span style="font-size:15px;">{{ c.t }}</span><span style="font:500 11.5px 'DM Mono',monospace;color:var(--mut);">{{ c.note }}</span></div></sc-for>
+</div>
+<p style="margin:0;padding:14px 16px;border-radius:12px;background:var(--sf2);font-size:14px;line-height:1.5;color:var(--ink2);">Dusty holds a staging key that only turns when a person approves. If you approve now, the deploy waits for the other two conditions and goes out on its own.</p>
+<div style="display:flex;justify-content:flex-end;gap:10px;">
+<button onClick="{{ decline }}" style="padding:11px 18px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">Decline</button>
+<button onClick="{{ approve }}" style="padding:11px 20px;border-radius:12px;border:none;background:var(--btn);color:var(--btnfg);font-size:15px;font-weight:600;cursor:pointer;">{{ appr.cta }}</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ modalHire }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeModal }}" style="position:absolute;inset:0;z-index:20;background:var(--ov);display:flex;align-items:center;justify-content:center;padding:24px;">
+<div onClick="{{ stop }}" data-screen-label="Hire an agent" style="width:min(100%,760px);max-height:100%;overflow-y:auto;display:grid;grid-template-columns:220px minmax(0,1fr);border-radius:22px;background:var(--bg);box-shadow:0 30px 80px -20px rgba(0,0,0,.45);overflow:hidden;">
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;padding:28px 16px;background:var(--side);border-right:1px solid var(--line);">
+<div style="width:180px;height:180px;"><dc-import name="WhombatAvatar" role="{{ hire.role }}" style="width:100%;height:100%;display:block;" hint-size="180px,180px"></dc-import></div>
+<span style="font-size:22px;font-weight:700;">{{ hire.nameShown }}</span>
+<span style="display:flex;align-items:center;gap:6px;font:500 11.5px 'DM Mono',monospace;color:var(--mut);"><span style="width:8px;height:8px;border-radius:50%;background:{{ hire.accent }};"></span>{{ hire.roleName }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:20px;padding:28px;">
+<div style="display:flex;flex-direction:column;gap:4px;"><span style="font-size:24px;font-weight:700;letter-spacing:-.02em;">Hire an agent</span><span style="font-size:14.5px;color:var(--ink2);">Pick a role, give it a name, hand over only the keys it needs.</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">
+<sc-for list="{{ hireRoles }}" as="r" hint-placeholder-count="6"><button onClick="{{ r.pick }}" style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 6px;border-radius:12px;border:1.5px solid {{ r.border }};background:var(--sf);color:var(--ink);cursor:pointer;"><div style="width:32px;height:32px;flex:none;"><dc-import name="WhombatAvatar" role="{{ r.role }}" crop="head" style="width:100%;height:100%;display:block;" hint-size="32px,32px"></dc-import></div><span style="font-size:14px;font-weight:500;">{{ r.roleName }}</span></button></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;"><label style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);">NAME</label><input value="{{ hire.name }}" onChange="{{ onHireName }}" style="padding:11px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--sf);color:var(--ink);font-size:16px;outline:none;"></div>
+<div style="display:flex;flex-direction:column;"><span style="font:500 11px 'DM Mono',monospace;letter-spacing:.05em;color:var(--mut);padding-bottom:4px;">KEYS</span>
+<sc-for list="{{ hireKeys }}" as="k" hint-placeholder-count="6"><button onClick="{{ k.toggle }}" style="display:flex;align-items:center;gap:12px;padding:10px 0;border:none;border-top:1px solid var(--line);background:transparent;color:var(--ink);text-align:left;cursor:{{ k.cur }};"><span style="flex:1;font-size:14.5px;color:{{ k.fg }};">{{ k.t }}</span><span style="font:400 11.5px 'DM Mono',monospace;color:var(--mut);">{{ k.note }}</span><span style="width:34px;height:20px;border-radius:10px;background:{{ k.track }};position:relative;flex:none;opacity:{{ k.op }};"><span style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fffdf9;transform:translateX({{ k.x }}px);transition:transform .15s;"></span></span></button></sc-for>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:10px;">
+<button onClick="{{ closeModal }}" style="padding:11px 18px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer;">Cancel</button>
+<button onClick="{{ doHire }}" style="padding:11px 20px;border-radius:12px;border:none;background:var(--btn);color:var(--btnfg);font-size:15px;font-weight:600;cursor:pointer;">Hire {{ hire.nameShown }}</button>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:14px;background:var(--btn);color:var(--btnfg);font-size:14.5px;box-shadow:0 12px 30px -10px rgba(0,0,0,.4);">{{ toast }}</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;start&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;channel&quot;,&quot;dm&quot;,&quot;branch&quot;,&quot;run&quot;,&quot;roster&quot;,&quot;search&quot;,&quot;canvas&quot;,&quot;log&quot;,&quot;onboarding&quot;],&quot;default&quot;:&quot;channel&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const RM = {
+  architect:{roleName:'Architect',accent:'#5491c4'}, developer:{roleName:'Developer',accent:'#5aa37a'}, researcher:{roleName:'Researcher',accent:'#8f7fc9'},
+  reviewer:{roleName:'Reviewer',accent:'#c9765f'}, operator:{roleName:'Operator',accent:'#b99346'}, support:{roleName:'Support',accent:'#3fa0a6'},
+};
+const AG0 = {
+  sketch:{name:'Sketch',role:'architect',status:'idle',doing:'Waiting on the review before updating the plan.',job:'Plans systems and breaks large work into steps other agents can pick up.',
+    can:['Read all connected repos','Write canvases','Create tasks for other agents'],ask:['Create channels'],cannot:['Write code','Deploy'],chans:['#billing-v2','#general'],
+    recent:[{t:'Drafted the invoice PDF plan',w:'09:13'},{t:'Split onboarding revamp into 9 tasks',w:'Yesterday'},{t:'Updated the service map',w:'Mon'}]},
+  banjo:{name:'Banjo',role:'developer',status:'running',doing:'Rounding VAT before formatting on feat/invoice-pdf.',job:'Writes, refactors and tests code in connected repositories.',
+    can:['Read and write feat/* branches','Run tests','Open pull requests'],ask:['Push to shared branches'],cannot:['Merge into main','Deploy'],chans:['#billing-v2','#incidents'],
+    recent:[{t:'Opened PR #482 · invoice PDF export',w:'10:48'},{t:'Fixed the flaky auth test',w:'Yesterday'},{t:'Refactored the webhooks module',w:'Tue'}]},
+  pippa:{name:'Pippa',role:'researcher',status:'idle',doing:'Answered Priya in #incidents with three receipts.',job:'Digs through messages, docs, runs and the web, and answers with receipts.',
+    can:['Search messages, canvases and runs','Read connected repos','Browse the web'],ask:['Message people outside the burrow'],cannot:['Write code'],chans:['#billing-v2','#incidents','#general'],
+    recent:[{t:'Compared 3 PDF libraries, 14 sources',w:'09:41'},{t:'Found two earlier rounding incidents',w:'10:41'},{t:'Collected churn interview notes',w:'Tue'}]},
+  hazel:{name:'Hazel',role:'reviewer',status:'waiting',doing:'Waiting for Banjo’s fix on PR #482.',job:'Checks work against the brief, the style rules and the tests.',
+    can:['Comment on pull requests','Request changes','Approve pull requests'],ask:[],cannot:['Merge','Write code'],chans:['#billing-v2'],
+    recent:[{t:'Requested 2 changes on PR #482',w:'11:20'},{t:'Approved PR #479',w:'09:02'},{t:'Flagged a missing migration',w:'Yesterday'}]},
+  dusty:{name:'Dusty',role:'operator',status:'waiting',doing:'Holding the staging deploy until a person says yes.',job:'Runs scheduled jobs, pipelines and deploys, and reports back every morning.',
+    can:['Run CI','Run scheduled jobs','Retry failed pipelines'],ask:['Deploy to staging','Deploy to production'],cannot:['Change code'],chans:['#incidents','#billing-v2'],
+    recent:[{t:'Nightly sync finished, 0 errors',w:'06:00'},{t:'Retried the staging pipeline',w:'Yesterday'},{t:'Rotated API keys',w:'Mon'}]},
+  clover:{name:'Clover',role:'support',status:'running',doing:'Answering 3 customer conversations in the help widget.',job:'Answers customer questions and hands over to a person with a summary.',
+    can:['Read customer accounts','Reply in the help widget','Tag tickets'],ask:['Issue refunds'],cannot:['Change billing data'],chans:['#general'],
+    recent:[{t:'Posted the weekly support digest',w:'09:00'},{t:'Tagged 41 invoice-copy tickets',w:'09:05'},{t:'Escalated a refund request',w:'Yesterday'}]},
+};
+const PP = {
+  mara:{name:'Mara Okafor',short:'Mara',ini:'MO',tone:'#d9c3a9'}, joris:{name:'Joris de Vries',ini:'JV',tone:'#bfd0bf'},
+  priya:{name:'Priya Raman',ini:'PR',tone:'#dcc0cc'}, tom:{name:'Tom Beck',ini:'TB',tone:'#c3cad9'},
+};
+const THEMES = {
+  light:{bg:'#fbf9f5',side:'#f3eee6',sf:'#fffdf9',sf2:'#f1ece4',ink:'#221d18',ink2:'#3d352e',mut:'#6e655c',line:'rgba(34,29,24,.09)',line2:'rgba(34,29,24,.18)',brand:'#7d6353',btn:'#221d18',btnfg:'#f5f2ed',code:'#2b221d',ok:'#3e7b58',warn:'#8d6d2d',bad:'#9f5540',sel:'rgba(34,29,24,.06)',ov:'rgba(34,29,24,.32)',hi:'rgba(84,145,196,.1)',mark:'rgba(143,127,201,.16)',mark2:'rgba(201,118,95,.14)'},
+  dark:{bg:'#1c1815',side:'#171411',sf:'#24201c',sf2:'#2e2925',ink:'#f1ebe3',ink2:'#d8cfc4',mut:'#a0958a',line:'rgba(255,255,255,.08)',line2:'rgba(255,255,255,.16)',brand:'#d2b49a',btn:'#f1ebe3',btnfg:'#1c1815',code:'#120f0d',ok:'#6fcf97',warn:'#e0b75e',bad:'#e59a85',sel:'rgba(255,255,255,.07)',ov:'rgba(0,0,0,.55)',hi:'rgba(84,145,196,.16)',mark:'rgba(143,127,201,.24)',mark2:'rgba(201,118,95,.22)'},
+};
+const CONVS = {
+  'general':{kind:'channel',title:'general',topic:'Everything that doesn’t have a better burrow.',members:['tom','priya','clover','pippa','joris','mara'],
+    msgs:[
+      {who:'tom',time:'08:31',text:'Coffee machine on the third floor is fixed. Carry on.',reacts:['finally · 4']},
+      {who:'clover',time:'09:00',text:'Weekly support digest: 212 conversations, 23 handed to a person, median first reply 40 seconds. Most asked: “can I get a copy of my invoice?” The PDF work will help.'},
+      {who:'priya',time:'09:05',text:'Nice. @Clover can you tag those tickets so we can close them when PDFs ship?'},
+      {who:'clover',time:'09:05',text:'Tagged 41 tickets with invoice-copy. I’ll post in #billing-v2 when they can be closed.',reacts:['+1 · 2']},
+    ]},
+  'billing-v2':{kind:'channel',title:'billing-v2',topic:'Moving invoicing to the new billing service. PDF export due 14 Oct.',members:['priya','joris','sketch','banjo','pippa','hazel','dusty','mara'],
+    actions:[{label:'Plan canvas',to:'canvas'},{label:'Branch room',to:'branch'}],
+    msgs:[
+      {who:'priya',time:'09:12',text:'Morning. Finance wants PDF invoices by the 14th. @Sketch can you break this down?'},
+      {who:'sketch',time:'09:13',text:'Here’s the plan. Four steps, three agents, and one person signs off before anything leaves the burrow.',card:'plan'},
+      {who:'pippa',time:'09:41',text:'Compared three PDF libraries. Short version: Typeset. Notes and sources are in the thread.',card:'research',thread:true},
+      {who:'joris',time:'10:02',text:'Typeset works for me. @Banjo go for it.',reacts:['+1 · 3']},
+      {who:'hazel',time:'11:20',text:'Two changes on PR #482, one of them matters. Details are in the branch room.'},
+      {who:'banjo',time:'11:22',text:'Fixing both now. Watch along if you like.',card:'run'},
+      {who:'dusty',time:'11:25',text:'I can put this on staging as soon as the fix is green. I need a person to say yes first.',card:'approval'},
+    ]},
+  'incidents':{kind:'channel',title:'incidents',topic:'Something off? Post it here. Dusty watches this room around the clock.',members:['dusty','priya','pippa','tom','mara'],
+    msgs:[
+      {who:'dusty',time:'06:00',text:'Nightly sync finished. 0 errors, 2 retries, 14m 08s.'},
+      {who:'priya',time:'10:40',text:'Customer 8812 got an invoice that is €0,01 off. @Pippa have we seen this before?'},
+      {who:'pippa',time:'10:41',text:'Yes, twice. Both times amounts were formatted before VAT was rounded. Tom fixed it for credit notes in March; regular invoices still format first.',
+        answer:{search:true,receipts:[{n:1,t:'#incidents · 3 Mar 2026',w:'Tom Beck'},{n:2,t:'PR #311 · round before format',w:'merged'},{n:3,t:'Run #1882 · ledger reconciliation',w:'Dusty'}]}},
+      {who:'priya',time:'10:43',text:'Good find. Linking this to the PDF work so it’s fixed in both places.'},
+    ]},
+  'pr482':{kind:'branch',title:'feat/invoice-pdf',topic:'PR #482 · Invoice PDF export · opened by Banjo',members:['banjo','hazel','dusty','joris','mara'],
+    msgs:[
+      {who:'banjo',time:'10:48',text:'Opened PR #482 · Invoice PDF export. Three commits, all behind the pdf_export flag.',commits:true},
+      {who:'dusty',time:'10:55',text:'Checks finished on e9f114.',pill:{t:'38 of 41 passed · 3 failing in invoice_format_test',c:'var(--warn)'}},
+      {who:'hazel',time:'11:20',text:'Two changes. The first one matters.',card:'review'},
+      {who:'banjo',time:'11:22',text:'Fixing both now.',card:'run'},
+      {who:'joris',time:'11:30',text:'Thanks both. I’ll merge once staging looks right.'},
+    ]},
+};
+const DMS = {
+  pippa:[
+    {who:'mara',time:'14:02',text:'Quick one: what did we decide about invoice numbering last year?'},
+    {who:'pippa',time:'14:02',text:'Yearly sequences with a prefix, like 2026-000142. Joris and Priya settled it on 12 Nov 2025. Dutch tax rules need an unbroken sequence per year, so numbers are never reused or skipped.',
+      answer:{receipts:[{n:1,t:'#billing · thread, 12 Nov 2025',w:'14 messages'},{n:2,t:'Canvas · Invoicing rules v3',w:'section 2'},{n:3,t:'PR #311 · invoice-number service',w:'merged'}]}},
+    {who:'mara',time:'14:04',text:'Perfect. Does the PDF plan respect that?'},
+    {who:'pippa',time:'14:04',text:'It does. Step 2 reads the number from the invoice-number service instead of generating one. I left a note on the plan canvas so Banjo doesn’t have to guess.'},
+  ],
+};
+const SUGG = {
+  architect:['Plan the credit-note PDFs','What’s blocking the billing migration?','Draw the current service map'],
+  developer:['What are you working on?','Fix the flaky webhook test','Explain the export endpoint'],
+  researcher:['What did we decide about VAT on refunds?','Compare two queue providers','Summarize this week in #incidents'],
+  reviewer:['Review PR #482 for rounding bugs','What did you flag this week?','Check the plan canvas against the brief'],
+  operator:['What ran overnight?','Show me failed pipelines this week','When is the next key rotation?'],
+  support:['What are customers asking about?','Show me escalations from today','Draft an answer about invoice copies'],
+};
+const THREAD = [
+  {who:'pippa',time:'09:41',text:'Compared three PDF libraries. Short version: Typeset.'},
+  {who:'pippa',time:'09:44',text:'Sources, weighted by how much I trusted them:',answer:{receipts:[{n:1,t:'Typeset docs · rendering benchmarks',w:'typeset.dev'},{n:2,t:'Issue #1203 · font subsetting',w:'github.com'},{n:3,t:'Tom’s PaperKit trial',w:'#billing · Mar 2025'}]}},
+  {who:'joris',time:'09:58',text:'Does Typeset handle Dutch number formatting? Comma decimals, dot thousands.'},
+  {who:'pippa',time:'09:59',text:'Yes, with the nl-NL locale. I rendered a test invoice and € 1.234,56 came out right. It doesn’t round for you, so rounding stays in our code.'},
+  {who:'tom',time:'10:05',text:'That was the March bug. @Hazel can you keep an eye on rounding order?'},
+  {who:'hazel',time:'10:06',text:'Noted. I’ll check it in review.'},
+];
+const BASE_LOG = [['10:03','$ git checkout -b feat/invoice-pdf'],['10:04','Read plan · Invoice PDF export'],['10:09','Scaffolded GET /invoices/:id/pdf'],['10:31','Rendered invoice template with Typeset'],['10:44','$ pnpm test billing/pdf'],['10:46','✗ 3 failing in invoice_format_test'],['10:48','Opened PR #482'],['11:22','Reading Hazel’s review on PR #482']];
+const LIVE = [['11:24','Editing billing/pdf/format.ts'],['11:26','Moved roundVat() ahead of formatAmount()'],['11:29','Renamed formatEuro → formatAmount (4 call sites)'],['11:31','$ pnpm test billing/pdf'],['11:33','✓ rounds half-up on €0,005 (nl-NL)'],['11:34','✓ matches HTML invoice snapshot'],['11:35','✓ 41 of 41 tests passed'],['11:36','Pushed 7be20f · asked Hazel to re-review']];
+const RSTEPS = [
+  {t:'Read Hazel’s review',d:'Two changes requested on billing/pdf/format.ts',at:'11:22'},
+  {t:'Round VAT before formatting',d:'Move roundVat() ahead of formatAmount()',at:'11:24'},
+  {t:'Rename formatEuro to formatAmount',d:'It takes a locale now',at:'11:29'},
+  {t:'Run the billing test suite',d:'41 tests, including a new €0,005 case',at:'11:31'},
+  {t:'Push and ask Hazel to re-review',d:'Posts back to #billing-v2 and the branch room',at:'11:36'},
+];
+const FILES = [{path:'billing/pdf/render.ts',add:128,del:0},{path:'billing/pdf/format.ts',add:34,del:9},{path:'billing/api/invoices.ts',add:22,del:1},{path:'billing/pdf/cache.ts',add:18,del:0},{path:'billing/pdf/format.test.ts',add:41,del:2},{path:'billing/flags.ts',add:3,del:0}];
+const LOG = [
+  {id:'e-9f31',day:0,time:'11:36',who:'banjo',k:'Code',text:'Pushed 7be20f to feat/invoice-pdf',where:'whombat/billing · PR #482',key:'Read and write feat/* branches',for:'Hazel’s review on PR #482',to:'branch',live:true},
+  {id:'e-9f2c',day:0,time:'11:35',who:'banjo',k:'Code',text:'Ran the billing test suite. 41 of 41 passed.',where:'Run #1907',key:'Run tests',for:'Hazel’s review on PR #482',to:'run',live:true},
+  {id:'e-9f18',day:0,time:'11:30',who:'dusty',k:'Asks',text:'Asked to deploy feat/invoice-pdf to staging',where:'#billing-v2',key:'Deploy to staging',keyNote:'asks a person first',for:'Invoice PDF export plan, step 4',to:'approval',ask:true},
+  {id:'e-9f02',day:0,time:'11:24',who:'banjo',k:'Code',text:'Started a run to address the review on PR #482',where:'Run #1907',key:'Read and write feat/* branches',for:'Hazel in #billing-v2',to:'run'},
+  {id:'e-9ee7',day:0,time:'11:20',who:'hazel',k:'Code',text:'Requested 2 changes on PR #482',where:'whombat/billing · PR #482',key:'Request changes',for:'Tom in #billing-v2',to:'branch'},
+  {id:'e-9ec1',day:0,time:'10:48',who:'banjo',k:'Code',text:'Opened PR #482 · invoice PDF export',where:'whombat/billing',key:'Open pull requests',for:'Invoice PDF export plan, step 2',to:'branch'},
+  {id:'e-9ea4',day:0,time:'10:41',who:'pippa',k:'Messages',text:'Answered Priya with 3 receipts',where:'#incidents',key:'Search messages, canvases and runs',for:'Priya in #incidents',to:'incidents'},
+  {id:'e-9ea0',day:0,time:'10:40',who:'priya',k:'Messages',text:'Reported that customer 8812’s invoice is €0,01 off',where:'#incidents',to:'incidents'},
+  {id:'e-9e51',day:0,time:'09:13',who:'sketch',k:'Messages',text:'Wrote the canvas “Invoice PDF export · plan”',where:'#billing-v2',key:'Write canvases',for:'Priya in #billing-v2',to:'canvas'},
+  {id:'e-9e3b',day:0,time:'09:05',who:'clover',k:'Messages',text:'Tagged 41 tickets with invoice-copy',where:'Help widget',key:'Tag tickets',for:'Priya in #general',to:'general'},
+  {id:'e-9e20',day:0,time:'06:00',who:'dusty',k:'Code',text:'Ran the nightly sync. 0 errors, 2 retries.',where:'Run #1901',key:'Run scheduled jobs',for:'Schedule · every day at 06:00',to:'incidents'},
+  {id:'e-9d77',day:1,time:'17:12',who:'clover',k:'Asks',text:'Asked to refund €24,00 on account 3310',where:'Help widget',key:'Issue refunds',keyNote:'asks a person first',for:'Customer conversation #5521',decided:{who:'priya',time:'17:20'}},
+  {id:'e-9d52',day:1,time:'16:40',who:'mara',k:'Keys',text:'Gave Banjo a new key: Run tests',where:'Agents · Banjo',about:'banjo'},
+  {id:'e-9d31',day:1,time:'15:08',who:'banjo',k:'Blocked',text:'Tried to merge PR #479 into main. Blocked.',where:'whombat/billing · PR #479',key:'Merge into main',keyNote:'not one of Banjo’s keys',for:'Hazel’s approval on PR #479',blocked:true},
+  {id:'e-9d0e',day:1,time:'15:02',who:'dusty',k:'Code',text:'Retried the staging pipeline',where:'Run #1896',key:'Retry failed pipelines',for:'Pipeline failure alert'},
+  {id:'e-9cf4',day:1,time:'11:47',who:'joris',k:'Keys',text:'Moved Dusty’s “Deploy to production” key to ask first',where:'Agents · Dusty',about:'dusty'},
+];
+const fp = k => { let h = 7; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h.toString(16).padStart(8, '0').slice(0, 8).replace(/(.{4})(.{4})/, '$1 $2'); };
+const RESULTS = [
+  {type:'THREAD',f:'Threads',where:'#incidents · 3 Mar 2026',who:'tom',cited:1,text:'Credit note 4471 is a cent off. We format the amount and then round the VAT on the formatted string.',to:'incidents'},
+  {type:'PATCH',f:'Patches',where:'PR #311 · merged 4 Mar',who:'tom',cited:2,text:'Round before format for credit notes. Regular invoices still use the old path.',to:'branch'},
+  {type:'RUN',f:'Runs',where:'Run #1882 · ledger reconciliation',who:'dusty',cited:3,text:'3 invoices differ from the ledger by €0,01. All three have lines with €0,005 VAT.',to:'incidents'},
+  {type:'CANVAS',f:'Canvases',where:'Invoicing rules v3',who:'joris',cited:0,text:'Always round per line, half-up, before formatting. Never round the total.',to:'canvas'},
+  {type:'MESSAGE',f:'Threads',where:'#billing-v2 · today 11:20',who:'hazel',cited:0,text:'Amounts are formatted before VAT is rounded. Round first, then format, or Dutch invoices come out a cent off.',to:'billing-v2'},
+];
+const HIRE_KEYS = [
+  {k:'read',t:'Read #billing-v2 and #general'},{k:'branch',t:'Write to feat/* branches'},{k:'tests',t:'Run tests and CI'},{k:'pr',t:'Open pull requests'},
+  {k:'merge',t:'Merge into main',locked:'people only'},{k:'deploy',t:'Deploy',locked:'always asks a person'},
+];
+const REPOS = [{n:'whombat/billing',d:'TypeScript · updated 2 hours ago'},{n:'whombat/web',d:'TypeScript · updated today'},{n:'whombat/infra',d:'HCL · updated Monday'},{n:'whombat/docs',d:'Markdown · updated last week'}];
+const OB = [
+  {t:'Name your burrow',d:'Where your team lives',title:'Name your burrow',sub:'This is the workspace your team and your agents share. It shows at the top of the sidebar and in every invite.',tip:'Hi, I’m Clover. I’ll stick around in case you get stuck.'},
+  {t:'Connect your code',d:'Repos agents can see',title:'Connect your code',sub:'Agents only see the repos you switch on here. Everything they do in them is signed with their own key and shows up in the audit log.',tip:'You can add repos later. Agents never see one you haven’t switched on.'},
+  {t:'Meet your agents',d:'Pick your first crew',title:'Meet your first agents',sub:'Start with a few. Each one arrives with a small set of keys, and you can hand over more once you trust them.',tip:'Three is a good start. You can hire more when there’s work for them.'},
+  {t:'Invite your team',d:'Bring in the people',title:'Invite your team',sub:'People and agents share the same channels, threads and search. Invite whoever should be in the room.',tip:'Nearly there. The kettle’s on.'},
+];
+const TONES = ['#bfd0bf','#dcc0cc','#c3cad9','#d9c3a9','#cfd2b8'];
+const segs = t => String(t).split(/(@[A-Z][a-z]+)/).filter(Boolean).map(p => p[0] === '@' ? { t: p, c: 'var(--brand)', w: 600 } : { t: p, c: 'inherit', w: 'inherit' });
+const STAT = { running:{l:'Working',s:'working',c:'#6fcf97'}, waiting:{l:'Waiting',s:'waiting',c:'#d9a84a'}, idle:{l:'Idle',s:'',c:'#a0958a'} };
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const p = props || {};
+    const start = p.start || 'channel';
+    const map = { channel:['conv','billing-v2'], dm:['conv','dm-pippa'], branch:['conv','pr482'], run:['run','billing-v2'], roster:['roster','billing-v2'], search:['search','billing-v2'], canvas:['canvas','billing-v2'], log:['log','billing-v2'], onboarding:['onboarding','billing-v2'] };
+    const [screen, conv] = map[start] || map.channel;
+    this.state = { theme: p.theme || 'light', screen, conv, pane: start === 'roster' ? 'agent' : null, agentSel: 'banjo', modal: null, tick: 0, approval: 'pending', merged: false,
+      branchTab: 'conv', filter: 'All', query: 'have we seen this invoice rounding error before?', hired: [], hireRole: 'developer', hireName: 'Nugget',
+      hireKeys: { read: true, branch: true, tests: true, pr: false }, ob: 0, burrow: 'Burrow HQ', repos: { 'whombat/billing': true, 'whombat/web': true },
+      obAgents: { architect: true, developer: true, reviewer: true }, invites: ['joris@burrowhq.example', 'priya@burrowhq.example'], invite: '', w: 1400, toast: null, draft: '', sent: {}, typing: null, logActor: 'Everyone', logKind: 'All', logWho: null, logOpen: 'e-9f18' };
+  }
+  componentDidMount() {
+    this._iv = setInterval(() => { if (this.state.tick < LIVE.length) this.setState(s => ({ tick: s.tick + 1 })); }, 2600);
+    this._rs = () => this.setState({ w: window.innerWidth }); this._rs(); window.addEventListener('resize', this._rs);
+  }
+  componentDidUpdate(pp) { if (pp.theme !== this.props.theme && this.props.theme) this.setState({ theme: this.props.theme }); }
+  componentWillUnmount() { clearInterval(this._iv); window.removeEventListener('resize', this._rs); clearTimeout(this._tt); clearTimeout(this._ty); }
+  agents() {
+    const all = {};
+    Object.entries(AG0).forEach(([k, a]) => { all[k] = { key: k, ...a, ...RM[a.role] }; });
+    this.state.hired.forEach(h => { all[h.key] = { ...h, ...RM[h.role] }; });
+    return all;
+  }
+  who(k, AG) { return AG[k] ? { ...AG[k], isAgent: true, isHuman: false, ring: 'var(--sf2)' } : { ...PP[k], isAgent: false, isHuman: true, ring: PP[k].tone }; }
+  go(screen, extra) { this.setState({ screen, pane: null, modal: null, ...(extra || {}) }); }
+  openConv(id) { this.go('conv', { conv: id, branchTab: 'conv' }); }
+  flash(msg) { this.setState({ toast: msg }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: null }), 2600); }
+  sendDraft() {
+    const text = this.state.draft.trim(); if (!text) return;
+    const id = this.state.conv, AG = this.agents();
+    const now = new Date(); const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const add = (m) => this.setState(s => ({ sent: { ...s.sent, [id]: [...(s.sent[id] || []), m] } }));
+    add({ who: 'mara', time, text });
+    this.setState({ draft: '' });
+    let agentKey = null;
+    const mm = text.match(/@([A-Z][a-z]+)/); if (mm) agentKey = Object.keys(AG).find(k => AG[k].name === mm[1]);
+    if (!agentKey && id.startsWith('dm-')) agentKey = id.slice(3);
+    if (agentKey && AG[agentKey]) {
+      this.setState({ typing: AG[agentKey].name });
+      clearTimeout(this._ty);
+      this._ty = setTimeout(() => { this.setState({ typing: null }); add({ who: agentKey, time, text: 'On it. I’ll post back here when I have something worth reading.' }); }, 1600);
+    }
+  }
+  renderVals() {
+    const S = this.state, t = THEMES[S.theme] || THEMES.light, AG = this.agents();
+    const done = S.tick >= LIVE.length;
+    const who = k => this.who(k, AG);
+    const set = o => () => this.setState(o);
+    const approved = S.approval === 'approved', declined = S.approval === 'declined';
+    const conv = S.conv;
+    const isDm = conv.startsWith('dm-');
+    const C = isDm ? null : CONVS[conv];
+    const dmAgent = isDm ? AG[conv.slice(3)] : null;
+    const toSearch = () => this.go('search');
+    const receipt = (r) => ({ ...r, go: () => this.go('search') });
+    let raw = isDm ? (DMS[conv.slice(3)] || []) : C.msgs;
+    if (conv === 'pr482' && done) raw = [...raw, { who: 'banjo', time: '11:36', text: 'Pushed 7be20f. Rounding happens before formatting now, and there’s a test for €0,005.' }, { who: 'hazel', time: '11:38', text: 'Approved. Rounding order is right.', pill: { t: 'Approved · PR #482', c: 'var(--ok)' } }];
+    raw = [...raw, ...(S.sent[conv] || [])];
+    const msgs = raw.map(m => ({
+      ...m, a: who(m.who), segs: segs(m.text),
+      isPlan: m.card === 'plan', isResearch: m.card === 'research', isRun: m.card === 'run', isReview: m.card === 'review', isApproval: m.card === 'approval',
+      hasCommits: !!m.commits, hasPill: !!m.pill, pillT: m.pill ? m.pill.t : '', pillC: m.pill ? m.pill.c : '',
+      hasAnswer: !!m.answer, receipts: m.answer ? m.answer.receipts.map(receipt) : [], hasSearch: !!(m.answer && m.answer.search),
+      hasReacts: !!(m.reacts && m.reacts.length), reacts: m.reacts || [], hasThread: !!m.thread,
+      openThread: () => this.setState({ pane: 'thread' }),
+    }));
+    const members = isDm ? [] : C.members.map(who);
+    const hdr = isDm ? { isDm: true, isChannel: false, isBranch: false, title: dmAgent.name, role: dmAgent.role, roleName: dmAgent.roleName, accent: dmAgent.accent,
+        topic: 'Can read: ' + (dmAgent.chans || []).join(', ') + ' · remembers this conversation', intro: `${dmAgent.name} is a ${dmAgent.roleName.toLowerCase()}. ${dmAgent.job}`, members: [], count: '', actions: [] }
+      : { isDm: false, isChannel: C.kind === 'channel', isBranch: C.kind === 'branch', title: C.title, topic: C.topic, members: members.slice(0, 6), count: members.length + ' in room',
+          actions: (C.actions || []).map(a => ({ label: a.label, go: () => a.to === 'canvas' ? this.go('canvas') : this.openConv('pr482') })) };
+    const pctRun = Math.round(55 + (45 * S.tick) / LIVE.length);
+    const run = { label: done ? 'RUN · DONE' : 'RUN · LIVE', dot: done ? t.ok : '#6fcf97', halo: done ? 'transparent' : 'rgba(111,207,151,.22)', pct: pctRun,
+      now: done ? 'Pushed 7be20f and asked Hazel to re-review.' : 'Now: ' + (LIVE[S.tick] || LIVE[0])[1], tests: S.tick >= 7 ? '41 of 41 passing' : '38 of 41 passing', testsC: S.tick >= 7 ? t.ok : t.warn,
+      add: 214 + Math.min(S.tick, 6) * 6, del: 12 + Math.min(S.tick, 4) * 2 };
+    const stepState = (s, owner) => {
+      const map = { done: { r: '50%', bc: t.ok, bgc: t.ok, tf: 'none', fg: t.mut, sc: t.ok }, active: { r: '50%', bc: '#5aa37a', bgc: 'transparent', tf: 'none', fg: t.ink, sc: t.ink2 }, queued: { r: '50%', bc: t.line2, bgc: 'transparent', tf: 'none', fg: t.ink, sc: t.mut }, gate: { r: '3px', bc: t.warn, bgc: 'transparent', tf: 'rotate(45deg) scale(.85)', fg: t.ink, sc: t.warn } };
+      return { ...map[s], a: who(owner) };
+    };
+    const plan = [
+      { t: 'Pick a PDF library', ...stepState('done', 'pippa'), state: 'Done' },
+      { t: 'Build the export endpoint', ...stepState(done ? 'done' : 'active', 'banjo'), state: done ? 'Done' : 'In progress' },
+      { t: 'Review against the brief', ...stepState(done ? 'done' : 'active', 'hazel'), state: done ? 'Approved' : 'Reviewing' },
+      { t: 'Deploy to staging', ...stepState(approved ? (done ? 'done' : 'gate') : 'gate', 'mara'), state: approved ? (done ? 'Deployed' : 'Approved') : declined ? 'Declined' : 'Needs you' },
+    ];
+    const cond = (ok, t1, note) => ({ t: t1, note, mark: ok ? '✓' : '', bc: ok ? t.ok : t.line2, bgc: ok ? t.ok : 'transparent' });
+    const appr = {
+      conds: [cond(done, 'Checks pass on the latest commit', done ? '41 of 41' : '38 of 41 · fixing'), cond(done, 'Hazel approves the PR', done ? 'approved 11:38' : 'changes requested'), cond(approved, 'A person says yes', approved ? 'Mara · just now' : declined ? 'declined' : 'you or Joris')],
+      pending: S.approval === 'pending', decided: S.approval !== 'pending',
+      cta: done ? 'Approve and deploy' : 'Approve in advance',
+      label: approved && done ? 'DEPLOYED' : approved ? 'APPROVED · WAITING FOR CHECKS' : declined ? 'DECLINED' : 'NEEDS A PERSON',
+      labelC: approved && done ? t.ok : declined ? t.bad : t.warn,
+      border: S.approval === 'pending' ? t.warn : t.line,
+      msg: approved && done ? 'Deployed to staging in 2m 14s. Try it: staging.burrowhq.example/invoices/2026-000142.pdf' : approved ? 'Approved. Dusty deploys as soon as checks are green and Hazel signs off.' : declined ? 'Declined. Dusty won’t deploy this commit. Banjo and Hazel have been told.' : 'Dusty won’t deploy without a person. Approve now and it goes out once the first two are green.',
+    };
+    appr.short = approved && done ? 'Deployed to staging 2m 14s ago. Mara approved.' : approved ? 'Mara approved. Waiting for checks and Hazel.' : declined ? 'Declined by Mara.' : 'Dusty is waiting for a person to approve the staging deploy.';
+    const diff = [
+      { t: '  const net = lineTotal(item)', k: 0 }, { t: '- const shown = formatEuro(net * vatRate)', k: -1 }, { t: '- const vat = round(shown)', k: -1 },
+      { t: '+ const vat = roundVat(net * vatRate)', k: 1 }, { t: '+ const shown = formatAmount(vat, locale)', k: 1 },
+    ].map(d => ({ t: d.t, bg: d.k > 0 ? 'rgba(90,163,122,.18)' : d.k < 0 ? 'rgba(201,118,95,.2)' : 'transparent', fg: d.k > 0 ? '#9fd7b4' : d.k < 0 ? '#f0a893' : '#ece4d9' }));
+    const logC = s => s.startsWith('✓') ? '#8fd1a8' : s.startsWith('✗') ? '#f0a893' : s.startsWith('$') ? '#b8ada1' : '#ece4d9';
+    const runLog = [...BASE_LOG, ...LIVE.slice(0, S.tick)].slice(-12).map(([at, l]) => ({ at, t: l, c: logC(l) }));
+    const activeIdx = S.tick < 1 ? 0 : S.tick < 3 ? 1 : S.tick < 4 ? 2 : S.tick < 7 ? 3 : S.tick < 8 ? 4 : 5;
+    const runSteps = RSTEPS.map((s, i) => {
+      const st = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'queued';
+      return { ...s, at: st === 'queued' ? '' : s.at, bc: st === 'done' ? t.ok : st === 'active' ? '#5aa37a' : t.line2, bgc: st === 'done' ? t.ok : 'transparent', lc: i === RSTEPS.length - 1 ? 'transparent' : (st === 'done' ? t.ok : t.line), fw: st === 'active' ? 600 : 500, fg: st === 'queued' ? t.mut : t.ink };
+    });
+    const keyRows = (a) => [...a.can.map(k => ({ t: k, m: '✓', bg: t.ok, fg: t.ink, note: '' })), ...(a.ask || []).map(k => ({ t: k, m: '?', bg: t.warn, fg: t.ink, note: 'asks a person' })), ...a.cannot.map(k => ({ t: k, m: '×', bg: t.line2, fg: t.mut, note: 'no key' }))];
+    const maxF = 140;
+    const files = FILES.map(f => ({ ...f, addW: Math.round((f.add / maxF) * 100), delW: Math.round((f.del / maxF) * 100) }));
+    const agentList = Object.values(AG);
+    const st = a => STAT[a.status] || STAT.idle;
+    const banjoStatus = k => (k === 'banjo' && done) ? 'idle' : (k === 'hazel' && done) ? 'idle' : AG[k].status;
+    agentList.forEach(a => { a.status = banjoStatus(a.key); });
+    const sel = AG[S.agentSel] || AG.banjo;
+    const narrow = S.w < 1240;
+    const rowBg = on => on ? t.sel : 'transparent';
+    const inConv = id => S.screen === 'conv' && S.conv === id;
+    const hk = HIRE_KEYS.map(k => {
+      const on = !k.locked && !!S.hireKeys[k.k];
+      return { t: k.t, note: k.locked || '', track: on ? t.ok : t.line2, x: on ? 14 : 0, op: k.locked ? .5 : 1, fg: k.locked ? t.mut : t.ink, cur: k.locked ? 'default' : 'pointer',
+        toggle: () => { if (!k.locked) this.setState(s => ({ hireKeys: { ...s.hireKeys, [k.k]: !s.hireKeys[k.k] } })); } };
+    });
+    const obN = S.ob;
+    const results = RESULTS.filter(r => S.filter === 'All' || r.f === S.filter).map(r => ({ ...r, a: who(r.who), go: () => r.to === 'canvas' ? this.go('canvas') : r.to === 'branch' ? this.openConv('pr482') : this.openConv(r.to) }));
+    let logAll = LOG.filter(r => !r.live || done);
+    if (S.approval !== 'pending') logAll = [{ id: 'e-9f40', day: 0, time: 'now', who: 'mara', k: 'Asks', text: (approved ? 'Approved' : 'Declined') + ' Dusty’s staging deploy of feat/invoice-pdf', where: '#billing-v2', about: 'dusty', to: 'approval' }, ...logAll];
+    S.hired.forEach(h => { logAll = [{ id: 'e-' + h.key.slice(-4), day: 0, time: 'now', who: 'mara', k: 'Keys', text: `Hired ${h.name}, a ${RM[h.role].roleName.toLowerCase()}, with ${h.can.length} keys`, where: 'Agents · ' + h.name, about: h.key }, ...logAll]; });
+    const logBase = logAll.filter(r => (S.logActor === 'Everyone' || (S.logActor === 'Agents') === !!AG[r.who]) && (!S.logWho || r.who === S.logWho || r.about === S.logWho));
+    const logShown = logBase.filter(r => S.logKind === 'All' || r.k === S.logKind);
+    const askPill = approved ? { t: 'APPROVED BY MARA', c: t.ok } : declined ? { t: 'DECLINED BY MARA', c: t.bad } : { t: 'WAITING ON A PERSON', c: t.warn };
+    const logLinks = { branch: ['Open PR #482', () => this.openConv('pr482')], run: ['Open run', () => this.go('run')], approval: [S.approval === 'pending' ? 'Review the request' : 'Open the request', () => this.setState({ modal: 'approval' })],
+      incidents: ['Open #incidents', () => this.openConv('incidents')], general: ['Open #general', () => this.openConv('general')], canvas: ['Open canvas', () => this.go('canvas')] };
+    const logRow = r => {
+      const a = who(r.who), open = S.logOpen === r.id, L = logLinks[r.to];
+      const pill = r.blocked ? { t: 'BLOCKED', c: t.bad } : r.ask ? askPill : r.decided ? { t: 'APPROVED BY ' + PP[r.decided.who].name.split(' ')[0].toUpperCase(), c: t.ok } : null;
+      const fields = [{ k: 'SIGNED BY', v: a.isAgent ? `${a.name}’s agent key · ${fp(r.who)}` : `${a.name} · personal key · ${fp(r.who)}`, c: t.ink }];
+      if (r.key) fields.push({ k: r.blocked ? 'KEY IT NEEDED' : 'KEY USED', v: r.key + (r.keyNote ? ' · ' + r.keyNote : ''), c: r.blocked ? t.bad : t.ink });
+      if (r.for) fields.push({ k: 'ON BEHALF OF', v: r.for, c: t.ink });
+      if (r.decided) fields.push({ k: 'DECIDED', v: `${PP[r.decided.who].name} approved at ${r.decided.time}`, c: t.ink });
+      if (r.ask) fields.push({ k: 'DECIDED', v: S.approval === 'pending' ? 'Nobody yet. Dusty is holding the deploy.' : `Mara Okafor ${S.approval} just now`, c: S.approval === 'pending' ? t.warn : t.ink });
+      fields.push({ k: 'EVENT', v: `${r.id} · signature verified`, c: t.ok });
+      return { ...r, a, tag: a.isAgent ? a.roleName.toUpperCase() : 'PERSON', pill: pill || { t: '', c: 'transparent' }, hasPill: !!pill, open, fields, meta: r.where + ' · ' + r.id,
+        hasLink: !!L, linkT: L ? L[0] : '', linkGo: L ? L[1] : () => {}, toggle: () => this.setState({ logOpen: open ? null : r.id }) };
+    };
+    const logDays = [['TODAY · 23 SEP', 0], ['YESTERDAY · 22 SEP', 1]].map(([label, d]) => ({ label, rows: logShown.filter(r => r.day === d).map(logRow) })).filter(d => d.rows.length);
+    const burrowSlug = (S.burrow || 'burrow').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'burrow';
+    return {
+      t, isOnboarding: S.screen === 'onboarding', isApp: S.screen !== 'onboarding',
+      isConv: S.screen === 'conv', isRun: S.screen === 'run', isRoster: S.screen === 'roster', isSearch: S.screen === 'search', isCanvas: S.screen === 'canvas', isLog: S.screen === 'log',
+      logSub: `Every action in ${S.burrow}, signed by whoever took it. People and agents write to the same log, and entries can’t be edited afterwards.`,
+      logActors: ['Everyone', 'People', 'Agents'].map(f => ({ t: f, bg: S.logActor === f ? t.btn : 'transparent', fg: S.logActor === f ? t.btnfg : t.ink, go: set({ logActor: f }) })),
+      logKinds: ['All', 'Code', 'Asks', 'Keys', 'Messages', 'Blocked'].map(f => ({ t: f, n: f === 'All' ? logBase.length : logBase.filter(r => r.k === f).length, bg: S.logKind === f ? t.btn : 'transparent', fg: S.logKind === f ? t.btnfg : t.ink, border: S.logKind === f ? t.btn : t.line2, go: set({ logKind: f }) })),
+      logWhoOn: !!S.logWho, logWhoName: S.logWho && AG[S.logWho] ? AG[S.logWho].name : '', clearLogWho: set({ logWho: null }),
+      logDays, logEmpty: !logDays.length, exportLog: () => this.flash(`Exported ${logShown.length} signed events as CSV.`),
+      themeLabel: S.theme === 'dark' ? 'Light' : 'Dark', toggleTheme: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+      burrow: S.burrow, burrowUrl: burrowSlug + '.whombat.app',
+      toOnboarding: () => this.go('onboarding', { ob: 0 }), toSearch, toCanvas: () => this.go('canvas'), toRun: () => this.go('run'), toBranch: () => this.openConv('pr482'),
+      toBilling: () => this.openConv('billing-v2'), toIncidents: () => this.openConv('incidents'),
+      nav: [
+        { glyph: '50%', label: 'Agents', meta: agentList.length, go: () => this.go('roster', { pane: null }), bg: rowBg(S.screen === 'roster'), fw: S.screen === 'roster' ? 600 : 500 },
+        { glyph: '3px', label: 'Canvases', meta: '4', go: () => this.go('canvas'), bg: rowBg(S.screen === 'canvas'), fw: S.screen === 'canvas' ? 600 : 500 },
+        { glyph: '0', label: 'Audit log', meta: '', go: () => this.go('log', { logWho: null }), bg: rowBg(S.screen === 'log'), fw: S.screen === 'log' ? 600 : 500 },
+      ],
+      channels: ['general', 'billing-v2', 'incidents'].map(id => ({ label: id, go: () => this.openConv(id), bg: rowBg(inConv(id)), fw: inConv(id) || id === 'incidents' ? 600 : 400, unread: id === 'incidents' && !inConv(id) ? 2 : 0 })),
+      rooms: [{ label: 'feat/invoice-pdf', meta: '#482', dot: done ? t.ok : t.warn, go: () => this.openConv('pr482'), bg: rowBg(inConv('pr482')), fw: inConv('pr482') ? 500 : 400 }],
+      sideAgents: agentList.map(a => ({ name: a.name, role: a.role, statusColor: st(a).c, statusShort: st(a).s, bg: rowBg(S.screen === 'roster' && S.pane === 'agent' && S.agentSel === a.key), fw: 500, go: () => this.go('roster', { pane: 'agent', agentSel: a.key }) })),
+      dms: ['pippa', 'hazel'].map(k => ({ name: AG[k].name, role: AG[k].role, bg: rowBg(inConv('dm-' + k)), fw: inConv('dm-' + k) ? 600 : 400, go: () => this.openConv('dm-' + k) })),
+      convLabel: isDm ? 'DM ' + dmAgent.name : C.kind === 'branch' ? 'Branch room' : '#' + C.title,
+      hdr, msgs, dmEmpty: isDm && !raw.length, hasDayLine: !!raw.length, suggestions: (isDm ? SUGG[dmAgent.role] : []).map(s => ({ t: s, use: () => this.setState({ draft: s }) })),
+      branchDot: done ? t.ok : t.warn, branchState: this.state.merged ? 'Merged' : done ? 'Open · ready' : 'Open · changes requested',
+      branchTabs: [{ k: 'conv', label: 'Conversation', meta: '' }, { k: 'files', label: 'Files changed', meta: '6' }].map(b => ({ ...b, line: S.branchTab === b.k ? t.ink : 'transparent', fg: S.branchTab === b.k ? t.ink : t.mut, go: set({ branchTab: b.k }) })),
+      showFiles: conv === 'pr482' && S.branchTab === 'files', showMsgs: !(conv === 'pr482' && S.branchTab === 'files'),
+      files, plan, run, diff, appr,
+      research: [
+        { n: 'Typeset', v: 'Pick', note: 'Fast, embeds fonts cleanly, MIT license', vbg: 'rgba(90,163,122,.18)', vfg: t.ok },
+        { n: 'PaperKit', v: 'No', note: 'Per-seat license and a 40 MB install', vbg: t.sf2, vfg: t.mut },
+        { n: 'Scribe', v: 'No', note: 'Unmaintained since 2024', vbg: t.sf2, vfg: t.mut },
+      ],
+      commits: [{ sha: 'a41c9e', t: 'Add PDF export endpoint' }, { sha: 'c02b7d', t: 'Render invoice with Typeset' }, { sha: 'e9f114', t: 'Cache PDFs for 24 hours' }],
+      threadHeads: ['pippa', 'joris', 'tom'].map(who),
+      typing: !!S.typing, typingLabel: (S.typing || '') + ' is thinking',
+      draft: S.draft, onDraft: e => this.setState({ draft: e.target.value }), onDraftKey: e => { if (e.key === 'Enter') this.sendDraft(); }, send: () => this.sendDraft(),
+      composerPh: isDm ? 'Message ' + dmAgent.name : conv === 'pr482' ? 'Comment on PR #482' : 'Message #' + C.title,
+      composerTools: [{ t: '@ agent', go: () => this.setState(s => ({ draft: s.draft + '@' })) }, { t: '/ command', go: () => this.setState(s => ({ draft: s.draft + '/' })) }, { t: '+ file', go: () => {} }],
+      approve: () => { this.setState({ approval: 'approved', modal: null }); this.flash(done ? 'Approved. Dusty is deploying to staging.' : 'Approved in advance. Dusty will deploy when checks are green.'); },
+      decline: () => { this.setState({ approval: 'declined', modal: null }); this.flash('Declined. Dusty won’t deploy this commit.'); },
+      undoApproval: set({ approval: 'pending' }), openApproval: set({ modal: 'approval' }), closeModal: set({ modal: null }), stop: e => e.stopPropagation(),
+      runSteps, runLog, runKeys: keyRows(AG0.banjo),
+      checks: [{ t: 'lint', ok: true, note: '12s' }, { t: 'typecheck', ok: true, note: '41s' }, { t: 'unit · billing', ok: S.tick >= 7, note: S.tick >= 7 ? '41/41' : '38/41' }, { t: 'pdf-snapshot', ok: done, note: done ? 'passed' : 'queued' }]
+        .map(c => ({ ...c, bc: c.ok ? t.ok : t.warn, bgc: c.ok ? t.ok : 'transparent' })),
+      reviewers: [{ a: who('hazel'), s: done ? 'Approved' : 'Changes requested', c: done ? t.ok : t.bad }, { a: who('joris'), s: 'Pending', c: t.mut }],
+      mergeBtn: S.merged ? { label: 'Merged into main', bg: t.sf2, fg: t.ok, cur: 'default' } : done ? { label: 'Merge into main', bg: t.btn, fg: t.btnfg, cur: 'pointer' } : { label: 'Merge into main', bg: t.sf2, fg: t.mut, cur: 'not-allowed' },
+      merge: () => { if (done && !S.merged) { this.setState({ merged: true }); this.flash('Merged PR #482. Nice digging, everyone.'); } },
+      paneThread: S.screen === 'conv' && S.pane === 'thread', paneBranch: S.screen === 'conv' && conv === 'pr482', paneAgent: S.screen === 'roster' && S.pane === 'agent',
+      paneLayout: narrow ? { pos: 'absolute', sh: '-20px 0 50px -20px rgba(0,0,0,.3)' } : { pos: 'relative', sh: 'none' },
+      closePane: set({ pane: null }),
+      thread: THREAD.map(m => ({ ...m, a: who(m.who), segs: segs(m.text), hasAnswer: !!m.answer, receipts: m.answer ? m.answer.receipts : [] })),
+      rosterSub: `${agentList.length} agents in ${S.burrow}. Each one has its own keys, its own channels and its own audit trail.`,
+      roster: agentList.map(a => ({ ...a, statusColor: st(a).c, statusLabel: st(a).l, border: S.pane === 'agent' && S.agentSel === a.key ? t.ink : t.line,
+        keysSummary: `${a.can.length} keys · ${(a.ask || []).length} ask first · ${a.chans.length} channels`, go: () => this.setState({ pane: 'agent', agentSel: a.key }) })),
+      sel: { ...sel, statusColor: st(sel).c, statusLabel: st(sel).l, keys: keyRows(sel), hasRun: sel.key === 'banjo', dm: () => this.openConv('dm-' + sel.key), toLog: () => this.go('log', { logWho: sel.key, logActor: 'Everyone', logKind: 'All', logOpen: null }) },
+      openHire: set({ modal: 'hire' }),
+      hire: { role: S.hireRole, roleName: RM[S.hireRole].roleName, accent: RM[S.hireRole].accent, name: S.hireName, nameShown: S.hireName.trim() || 'your agent' },
+      hireRoles: Object.keys(RM).map(r => ({ role: r, roleName: RM[r].roleName, border: S.hireRole === r ? t.ink : t.line, pick: set({ hireRole: r }) })),
+      onHireName: e => this.setState({ hireName: e.target.value }), hireKeys: hk,
+      doHire: () => {
+        const name = S.hireName.trim() || 'Nugget', key = 'h' + Date.now();
+        const can = HIRE_KEYS.filter(k => !k.locked && S.hireKeys[k.k]).map(k => k.t);
+        const h = { key, name, role: S.hireRole, status: 'idle', doing: 'Just hired. Reading the burrow to get up to speed.', job: AG0[Object.keys(AG0).find(k => AG0[k].role === S.hireRole)].job,
+          can, ask: ['Deploy'], cannot: ['Merge into main'], chans: ['#billing-v2', '#general'], recent: [{ t: 'Joined ' + S.burrow, w: 'just now' }] };
+        this.setState(s => ({ hired: [...s.hired, h], modal: null, screen: 'roster', pane: 'agent', agentSel: key, hireName: 'Nugget' }));
+        this.flash(name + ' joined the burrow. Say hi in a DM.');
+      },
+      query: S.query, onQuery: e => this.setState({ query: e.target.value }),
+      filters: ['All', 'Threads', 'Patches', 'Runs', 'Canvases'].map(f => ({ t: f, n: f === 'All' ? RESULTS.length : RESULTS.filter(r => r.f === f).length, bg: S.filter === f ? t.btn : 'transparent', fg: S.filter === f ? t.btnfg : t.ink, border: S.filter === f ? t.btn : t.line2, go: set({ filter: f }) })),
+      results: results.map(r => ({ ...r, cited: r.cited || 0 })),
+      comments: [
+        { items: [{ a: who('pippa'), time: '14:05', text: 'Step 2 should read the number from the invoice-number service. See PR #311 and Invoicing rules v3.' }, { a: who('mara'), time: '14:07', text: 'Agreed. Made it a rule.' }] },
+        { items: [{ a: who('hazel'), time: '11:21', text: 'This is the one that bit us in March. I’m holding the review on it.' }] },
+      ],
+      obSteps: OB.map((o, i) => ({ n: i < obN ? '✓' : i + 1, t: o.t, d: o.d, bg: i === obN ? t.sf : 'transparent', dotBg: i < obN ? t.ok : i === obN ? t.btn : t.sf2, dotFg: i <= obN ? t.btnfg : t.mut, go: set({ ob: i }) })),
+      obNum: obN + 1, obTitle: OB[obN].title, obSub: OB[obN].sub, obTip: OB[obN].tip, ob0: obN === 0, ob1: obN === 1, ob2: obN === 2, ob3: obN === 3,
+      obBackLabel: obN === 0 ? 'Skip for now' : 'Back', obNextLabel: obN === 3 ? 'Open ' + (S.burrow || 'the burrow') : 'Continue',
+      obBack: () => obN === 0 ? this.openConv('billing-v2') : this.setState({ ob: obN - 1 }),
+      obNext: () => obN === 3 ? (this.openConv('billing-v2'), this.flash('Welcome to ' + S.burrow + '. Your agents are already here.')) : this.setState({ ob: obN + 1 }),
+      onBurrow: e => this.setState({ burrow: e.target.value }),
+      repos: REPOS.map(r => { const on = !!S.repos[r.n]; return { ...r, track: on ? t.ok : t.line2, x: on ? 14 : 0, toggle: () => this.setState(s => ({ repos: { ...s.repos, [r.n]: !s.repos[r.n] } })) }; }),
+      obAgents: Object.values(AG0).map(a => { const on = !!S.obAgents[a.role]; return { ...a, ...RM[a.role], border: on ? '1.5px solid ' + t.ink : '1.5px solid ' + t.line, check: on ? '✓' : '', checkBg: on ? t.ok : 'transparent', checkBorder: on ? t.ok : t.line2, toggle: () => this.setState(s => ({ obAgents: { ...s.obAgents, [a.role]: !s.obAgents[a.role] } })) }; }),
+      invite: S.invite, onInvite: e => this.setState({ invite: e.target.value }),
+      addInvite: () => { const v = S.invite.trim(); if (v) this.setState(s => ({ invites: [...s.invites, v], invite: '' })); },
+      onInviteKey: e => { if (e.key === 'Enter') { const v = S.invite.trim(); if (v) this.setState(s => ({ invites: [...s.invites, v], invite: '' })); } },
+      invites: S.invites.map((e, i) => ({ e, ini: e.slice(0, 2).toUpperCase(), tone: TONES[i % TONES.length], remove: () => this.setState(s => ({ invites: s.invites.filter((_, j) => j !== i) })) })),
+      deploySteps: [{ n: '01', t: 'Build 7be20f, the latest commit on feat/invoice-pdf' }, { n: '02', t: 'Run migrations. There are none in this change.' }, { n: '03', t: 'Roll billing-api to staging, 2 of 2 pods' }, { n: '04', t: 'Roll back on its own if errors stay above 1% for 5 minutes' }],
+      toast: S.toast, modalApproval: S.modal === 'approval', modalHire: S.modal === 'hire',
+      canvasCols: S.w >= 1200 ? 'minmax(0,680px) minmax(240px,300px)' : 'minmax(0,680px)', canvasPad: S.w >= 1200 ? '320px' : '0',
+    };
+  }
+}
+</script>
+</body>
+</html>

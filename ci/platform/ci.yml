@@ -1,0 +1,155 @@
+# Run by the maintainers' own CI (ci-platform on their build server, never for a fork's pull request), not by GitHub:
+# public repositories keep self-hosted jobs out of .github/workflows. Public CI is .github/workflows/public-ci.yml.
+name: CI
+# Shared Buildbot uses ci-platform/config/projects.json for triggers and timeouts; this YAML supplies job commands.
+
+# On request only (John, 2026-09-30; appliance IN-132): pull requests and `gh workflow run ci.yml`, not every push.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TMPDIR: /var/tmp/whombat-ci
+  VITEST_MAX_WORKERS: 4
+  # The contracts' Go module (check) and the apps' browsers (app), from the CI server's caches.
+  GOMAXPROCS: '4'
+  GOFLAGS: -p=4
+  GOCACHE: /srv/whombat-ci/cache/go-build
+  GOMODCACHE: /srv/whombat-ci/cache/go-mod
+  PLAYWRIGHT_BROWSERS_PATH: /srv/whombat-ci/cache/playwright
+
+jobs:
+  check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 40
+    # The `hermes` phase installs the pinned Hermes fresh (uv from PyPI, Python 3.14 from uv's downloads).
+    env:
+      UV_CACHE_DIR: /srv/whombat-ci/cache/uv
+      UV_PYTHON_INSTALL_DIR: /srv/whombat-ci/cache/uv-python
+      PIP_CACHE_DIR: /srv/whombat-ci/cache/pip
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: whombat
+          POSTGRES_PASSWORD: whombat
+          POSTGRES_DB: whombat
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U whombat -d whombat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Configure isolated test database
+        run: |
+          mkdir -p ci-reports "$GOCACHE" "$GOMODCACHE"
+          echo "DATABASE_URL=postgres://whombat:whombat@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/whombat" >> "$GITHUB_ENV"
+          node --version
+          pnpm --version
+      - name: Complete runtime check with phase and test timing evidence
+        run: python3 scripts/ci/check.py run
+      - name: Retain test reports locally
+        if: always() && !cancelled()
+        run: |
+          if [ -d ci-reports ]; then
+            /opt/whombat-ci/bin/artifact save test-reports ci-reports
+          fi
+
+  # The apps' builds and browser journeys, as whombat-app's own check ran them before it moved here.
+  app:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 40
+    env:
+      CI: 'true'
+    # The real chat smoke test's runtime keeps its throwaway database here.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: whombat
+          POSTGRES_PASSWORD: whombat
+          POSTGRES_DB: whombat
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U whombat -d whombat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare local caches and the test database
+        run: |
+          mkdir -p "$TMPDIR" /srv/whombat-ci/cache/pnpm "$PLAYWRIGHT_BROWSERS_PATH"
+          echo "DATABASE_URL=postgres://whombat:whombat@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/whombat" >> "$GITHUB_ENV"
+      - name: Build the apps and run their browser journeys
+        run: bash scripts/ci/app.sh 2>&1 | tee "$RUNNER_TEMP/app.log"
+      - name: Keep build outputs on the CI server
+        run: /opt/whombat-ci/bin/artifact save web-builds apps/web/dist apps/web/dist-hosted apps/widget/dist apps/widget/dist-embed
+      - name: Keep diagnostic logs on the CI server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/app.log" ]; then
+            /opt/whombat-ci/bin/artifact save app-log "$RUNNER_TEMP/app.log"
+          fi
+      - name: Keep browser diagnostics
+        if: always()
+        run: |
+          if [ -d tmp/playwright/web ]; then
+            /opt/whombat-ci/bin/artifact save browser-diagnostics tmp/playwright/web
+          fi
+
+  package:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: pnpm install --frozen-lockfile --store-dir /srv/whombat-ci/cache/pnpm
+      - run: pnpm bundle:runtime --arch x64 --verify-reproducible
+      - name: Retain package locally
+        run: |
+          cd dist
+          # The archive holds the bundle; its unpacked copy stays out of the artifact.
+          rm -rf -- whombat-runtime-*/
+          /opt/whombat-ci/bin/artifact save whombat-linux-x64 .
+
+  # Our Hermes plugin's tests against Hermes's newest release (docs/decisions/hermes-native.md HN-10): ci-platform runs
+  # it daily on main; it only reports, the pin moves by hand (HE-10). The script needs only python3, git and the
+  # network (uv from PyPI, Python 3.14 from uv's downloads); uv's cache lives in the job's own CI cache.
+  hermes-latest:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 30
+    env:
+      UV_CACHE_DIR: /srv/whombat-ci/cache/uv
+      UV_PYTHON_INSTALL_DIR: /srv/whombat-ci/cache/uv-python
+      PIP_CACHE_DIR: /srv/whombat-ci/cache/pip
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: The plugin's tests on Hermes's newest release
+        run: python3 packages/hermes-whombat/scripts/test.py --hermes latest

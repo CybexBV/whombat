@@ -1,0 +1,165 @@
+/**
+ * Voice typing as Settings sees it: which model a recording goes to, what the
+ * settings want downloaded, and the view from the settings, the desk's Talk, the speech service and the downloads.
+ */
+import type { VoiceModelState } from '@whombat/control-contracts/local';
+import { VoiceTyping } from '@whombat/core/domain';
+import { describe, expect, it } from 'vitest';
+import type { VoiceAbility } from './speech';
+import { DEFAULT_VOICE_TYPING, modelFor, type VoiceFacts, voiceTypingView, wantedModels } from './view';
+
+const ready = (...ids: ('parakeet' | 'whisper')[]) => new Set(ids);
+
+const HEALTH: VoiceAbility = { stt: true, tts: true, microphone: true, speaker: true, models: [] };
+
+function model(id: 'parakeet' | 'whisper', state: VoiceModelState['state'], extra = {}): VoiceModelState {
+  return { id, state, size: 1000, received: state === 'ready' ? 1000 : 0, ...extra };
+}
+
+function facts(f: Partial<VoiceFacts> = {}): VoiceFacts {
+  return {
+    settings: DEFAULT_VOICE_TYPING,
+    deskTalk: false,
+    health: HEALTH,
+    fetched: [model('parakeet', 'absent'), model('whisper', 'absent')],
+    hasFetcher: true,
+    ...f,
+  };
+}
+
+describe('the model a recording goes to', () => {
+  it('is Whisper on a graphics chip in Automatic, else Parakeet, else Whisper on the processor', () => {
+    expect(modelFor('auto', ready('parakeet', 'whisper'), true)).toBe('whisper');
+    expect(modelFor('auto', ready('parakeet', 'whisper'), false)).toBe('parakeet');
+    expect(modelFor('auto', ready('parakeet'), true)).toBe('parakeet');
+    expect(modelFor('auto', ready('whisper'), false)).toBe('whisper');
+    expect(modelFor('auto', ready(), true)).toBeNull();
+  });
+
+  it('is the chosen one only when it is there', () => {
+    expect(modelFor('whisper', ready('parakeet'), true)).toBeNull();
+    expect(modelFor('whisper', ready('whisper'), false)).toBe('whisper');
+    expect(modelFor('parakeet', ready('parakeet', 'whisper'), true)).toBe('parakeet');
+  });
+});
+
+describe('what the settings want downloaded', () => {
+  const settings = (s: Partial<typeof DEFAULT_VOICE_TYPING>) => ({ ...DEFAULT_VOICE_TYPING, ...s });
+
+  it('is Parakeet while voice typing or the desk’s Talk is on', () => {
+    expect([...wantedModels(settings({}), false, false)]).toEqual(['parakeet']);
+    expect([...wantedModels(settings({ on: false }), true, false)]).toEqual(['parakeet']);
+    expect([...wantedModels(settings({ model: 'parakeet' }), false, true)]).toEqual(['parakeet']);
+  });
+
+  it('is Whisper too when chosen, or in Automatic with a graphics chip', () => {
+    expect([...wantedModels(settings({ model: 'whisper' }), false, false)]).toEqual(['parakeet', 'whisper']);
+    expect([...wantedModels(settings({}), false, true)]).toEqual(['parakeet', 'whisper']);
+  });
+
+  it('is nothing while neither hears anything', () => {
+    expect([...wantedModels(settings({ on: false, model: 'whisper' }), false, true)]).toEqual([]);
+  });
+});
+
+describe('the view', () => {
+  it('starts on, Automatic, with nothing downloaded and the mic not ready', () => {
+    const view = voiceTypingView(facts());
+    expect(VoiceTyping.parse(view)).toEqual(view);
+    expect(view).toMatchObject({
+      available: true,
+      on: true,
+      ready: false,
+      uses: null,
+      gpu: null,
+      maxSeconds: 300,
+    });
+    expect(view.models.map((m) => [m.id, m.state, m.inUse])).toEqual([
+      ['parakeet', 'absent', true],
+      ['whisper', 'absent', false],
+    ]);
+  });
+
+  it('uses what the speech service runs, and shows its graphics chip', () => {
+    const view = voiceTypingView(
+      facts({
+        health: { ...HEALTH, models: ['parakeet', 'whisper'], gpu: { name: 'AMD Radeon 8060S' } },
+        fetched: [model('whisper', 'ready'), model('parakeet', 'ready')],
+      }),
+    );
+    expect(view).toMatchObject({ ready: true, uses: 'whisper', gpu: { name: 'AMD Radeon 8060S' } });
+    // In the order Settings shows them, both needed: Parakeet while voice typing is on, Whisper in use.
+    expect(view.models.map((m) => [m.id, m.inUse])).toEqual([
+      ['parakeet', true],
+      ['whisper', true],
+    ]);
+  });
+
+  it('keeps the model recordings go to from being removed, even when the settings wouldn’t download it', () => {
+    const view = voiceTypingView(
+      facts({
+        health: { ...HEALTH, models: ['whisper'] },
+        fetched: [model('parakeet', 'failed', { problem: 'no_room' }), model('whisper', 'ready')],
+      }),
+    );
+    expect(view.uses).toBe('whisper');
+    expect(view.models.find((m) => m.id === 'whisper')?.inUse).toBe(true);
+    expect(view.models.find((m) => m.id === 'parakeet')).toMatchObject({
+      state: 'failed',
+      problem: 'no_room',
+    });
+  });
+
+  it('lets everything go while voice typing and the desk’s Talk are off', () => {
+    const off = { ...DEFAULT_VOICE_TYPING, on: false };
+    const view = voiceTypingView(facts({ settings: off, health: { ...HEALTH, models: ['parakeet'] } }));
+    expect(view).toMatchObject({ on: false, ready: false, uses: 'parakeet' });
+    expect(view.models.every((m) => !m.inUse)).toBe(true);
+    // The desk's Talk hears with the same models: it keeps them.
+    const desk = voiceTypingView(
+      facts({ settings: off, deskTalk: true, health: { ...HEALTH, models: ['whisper'] } }),
+    );
+    expect(desk.models.map((m) => [m.id, m.inUse])).toEqual([
+      ['parakeet', true],
+      ['whisper', true],
+    ]);
+  });
+
+  it('is not available without a speech service that can turn recordings into text', () => {
+    const older = { stt: true, tts: true, microphone: true, speaker: true };
+    for (const f of [{ health: null }, { health: older, hasFetcher: false, fetched: null }]) {
+      const view = voiceTypingView(facts({ fetched: [model('parakeet', 'ready')], ...f }));
+      expect(view).toMatchObject({ available: false, ready: false, uses: null, gpu: null });
+    }
+  });
+
+  it('is available on a new box before its first model is there, to show the download', () => {
+    const none = { stt: false, tts: true, microphone: true, speaker: true };
+    const view = voiceTypingView(
+      facts({ health: none, fetched: [model('parakeet', 'downloading', { received: 400 })] }),
+    );
+    expect(view).toMatchObject({ available: true, ready: false, uses: null });
+    expect(view.models.map((m) => [m.id, m.state, m.inUse])).toEqual([['parakeet', 'downloading', true]]);
+  });
+
+  it('shows the models the service runs when there is no fetcher to ask', () => {
+    const view = voiceTypingView(facts({ health: { ...HEALTH, models: ['parakeet'] }, fetched: null }));
+    expect(view.models).toEqual([{ id: 'parakeet', state: 'ready', size: 0, received: 0, inUse: true }]);
+    expect(view.ready).toBe(true);
+  });
+
+  it('shows a download’s progress and why one waits', () => {
+    const view = voiceTypingView(
+      facts({
+        fetched: [
+          model('parakeet', 'downloading', { received: 400 }),
+          model('whisper', 'waiting', { problem: 'no_network' }),
+        ],
+      }),
+    );
+    expect(view.models).toMatchObject([
+      { id: 'parakeet', state: 'downloading', received: 400, size: 1000 },
+      { id: 'whisper', state: 'waiting', problem: 'no_network' },
+    ]);
+  });
+});

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/SupportStopRequest.json",
+  "title": "SupportStopRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "owner",
+        "desk"
+      ]
+    },
+    "by": {
+      "type": "object",
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "pattern": "^acc_[A-Za-z0-9_-]{1,64}$",
+          "description": "acc_ id"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+        }
+      },
+      "required": [
+        "accountId",
+        "name"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,50 @@
+/* Bottom-center, 28px from the bottom, above modals. Two at most, the newest nearest the edge (WX-09). */
+.region {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: var(--radius-panel);
+  background: var(--btn);
+  box-shadow: var(--shadow-toast);
+  color: var(--btnfg);
+  font-size: 14.5px;
+  pointer-events: auto;
+}
+
+/* “Undo” (WX-09): the toast's own colours, bold and underlined like an inline action, a 44px-tall target on touch. */
+.action {
+  margin: -8px -8px -8px 4px;
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.action:hover {
+  text-decoration-thickness: 2px;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--btnfg);
+  outline-offset: -2px;
+}

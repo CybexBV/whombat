@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Android 16 Live Updates: ongoing notifications promoted to the status bar chip and the top of the shade. -->
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+
+  <application>
+    <!--
+      Receives Whombat's FCM data messages (live activities and inbox notifications) whether or not the app
+      is running. Priority 1 wins over expo-notifications' own service (-1), which only fetches the token.
+    -->
+    <service
+      android:name="com.whombat.live.WhombatMessagingService"
+      android:exported="false">
+      <intent-filter android:priority="1">
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 601,
+      "subject": "Send the proposal",
+      "type": "task",
+      "owner_id": 11,
+      "deal_id": 301,
+      "person_id": 41,
+      "org_id": 51,
+      "due_date": "2026-10-03",
+      "due_time": null,
+      "duration": null,
+      "busy": false,
+      "done": false,
+      "is_deleted": false,
+      "add_time": "2026-09-30T10:00:00Z",
+      "update_time": "2026-09-30T10:00:00Z"
+    },
+    {
+      "id": 602,
+      "subject": "Call back",
+      "type": "call",
+      "owner_id": 11,
+      "deal_id": 290,
+      "due_date": "2026-10-21",
+      "due_time": "09:30",
+      "done": false,
+      "is_deleted": false
+    },
+    {
+      "id": 603,
+      "subject": "Demo",
+      "type": "meeting",
+      "owner_id": 11,
+      "deal_id": 302,
+      "due_date": "2026-10-23",
+      "due_time": "10:00",
+      "done": false,
+      "is_deleted": false
+    },
+    {
+      "id": 604,
+      "subject": "Lunch",
+      "type": "lunch",
+      "owner_id": 11,
+      "deal_id": null,
+      "due_date": "2026-10-21",
+      "due_time": null,
+      "done": false,
+      "is_deleted": false
+    }
+  ],
+  "additional_data": { "next_cursor": null }
+}

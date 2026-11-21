@@ -1,0 +1,426 @@
+[
+  {
+    "platform": "desktop",
+    "theme": "light",
+    "task": "Find Vault",
+    "route": "Chat → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": []
+  },
+  {
+    "platform": "desktop",
+    "theme": "light",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "desktop",
+    "theme": "light",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "desktop",
+    "theme": "light",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "desktop",
+    "theme": "light",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 0,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 0
+  },
+  {
+    "platform": "desktop",
+    "theme": "dark",
+    "task": "Find Vault",
+    "route": "Chat → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": []
+  },
+  {
+    "platform": "desktop",
+    "theme": "dark",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "desktop",
+    "theme": "dark",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "desktop",
+    "theme": "dark",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "desktop",
+    "theme": "dark",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 0,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 0
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "light",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": []
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "light",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "light",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "light",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "light",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 0
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "dark",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": []
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "dark",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "dark",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "dark",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "phoneweb",
+    "theme": "dark",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 0
+  },
+  {
+    "platform": "ios",
+    "theme": "light",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": [
+      "Back to Chat"
+    ]
+  },
+  {
+    "platform": "ios",
+    "theme": "light",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "ios",
+    "theme": "light",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "ios",
+    "theme": "light",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "ios",
+    "theme": "light",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 1
+  },
+  {
+    "platform": "ios",
+    "theme": "dark",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": [
+      "Back to Chat"
+    ]
+  },
+  {
+    "platform": "ios",
+    "theme": "dark",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 388,
+      "scrollHeight": 388
+    }
+  },
+  {
+    "platform": "ios",
+    "theme": "dark",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "ios",
+    "theme": "dark",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "ios",
+    "theme": "dark",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 1
+  },
+  {
+    "platform": "android",
+    "theme": "light",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": [
+      "Back to Chat"
+    ]
+  },
+  {
+    "platform": "android",
+    "theme": "light",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 400,
+      "scrollHeight": 400
+    }
+  },
+  {
+    "platform": "android",
+    "theme": "light",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "android",
+    "theme": "light",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "android",
+    "theme": "light",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 1
+  },
+  {
+    "platform": "android",
+    "theme": "dark",
+    "task": "Find Vault",
+    "route": "Chat → Places → Vault",
+    "heading": "Vault",
+    "entry": "Grafana",
+    "secretFields": 0,
+    "back": [
+      "Back to Chat"
+    ]
+  },
+  {
+    "platform": "android",
+    "theme": "dark",
+    "task": "Find evening brief via Settings",
+    "route": "Chat → Settings → Evening brief → Change time",
+    "time": "18:00",
+    "saveName": "Save time",
+    "focus": "brief-time",
+    "dialogFits": {
+      "height": 400,
+      "scrollHeight": 400
+    }
+  },
+  {
+    "platform": "android",
+    "theme": "dark",
+    "task": "Close time editor",
+    "focus": "Change time"
+  },
+  {
+    "platform": "android",
+    "theme": "dark",
+    "task": "Find evening brief via Search",
+    "route": "Chat → Search → Evening brief → Evening brief schedule",
+    "schedule": "18:00",
+    "changeTime": true
+  },
+  {
+    "platform": "android",
+    "theme": "dark",
+    "task": "Settings local recovery",
+    "heading": "Loading settings…",
+    "places": 1,
+    "groups": [
+      "You",
+      "Neo",
+      "This Whombat",
+      "Screens",
+      "Advanced"
+    ],
+    "nativeTabs": 1
+  }
+]

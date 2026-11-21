@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskDecideAnswer.json",
+  "title": "DeskDecideAnswer",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "decided",
+        "wrong",
+        "backoff"
+      ]
+    },
+    "triesLeft": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "retryAt": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "talk": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{8,64}$"
+    }
+  },
+  "required": [
+    "v",
+    "result"
+  ]
+}

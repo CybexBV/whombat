@@ -1,0 +1,25 @@
+{
+  "name": "@whombat/conformance",
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-language registry, JSON Schema export, conformance vectors and their TypeScript tests (not published).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@whombat/control-contracts": "workspace:*",
+    "@whombat/core": "workspace:*",
+    "@whombat/fixtures": "workspace:*",
+    "@whombat/protocol": "workspace:*",
+    "@whombat/release": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2"
+  }
+}

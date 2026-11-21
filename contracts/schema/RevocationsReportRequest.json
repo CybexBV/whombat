@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RevocationsReportRequest.json",
+  "title": "RevocationsReportRequest",
+  "type": "object",
+  "properties": {
+    "revocations": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "endpoint",
+              "account"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "applied"
+            ]
+          },
+          "requestedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4102444800
+          },
+          "appliedAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4102444800
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ref",
+          "kind",
+          "state",
+          "requestedAt",
+          "appliedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "revocations"
+  ],
+  "additionalProperties": false
+}

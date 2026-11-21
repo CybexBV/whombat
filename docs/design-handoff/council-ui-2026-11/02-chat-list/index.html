@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat rows that say where things stand · Whombat</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="fixture-data.js"></script>
+  <script src="gallery.js" defer></script>
+</head>
+<body class="gallery">
+<main>
+  <div class="topline"><a href="../index.html">← November design review</a><button type="button" data-theme-toggle>Use dark theme</button></div>
+  <p class="eyebrow">02 / Chat list · mockups only</p>
+  <h1>The question first.<br>Where it stands, right under it.</h1>
+  <p class="intro">A topic, one stage, anything new, and the time. Your own name and face leave your rows. Chat keeps its time order; the Inbox is where decisions come first.</p>
+  <div class="links"><a href="NOTES.md">Sources, accessibility and gaps</a><a href="states.html">All row examples</a><a href="variant.html">Decision for John · summary variant</a></div>
+
+  <div class="controls">
+    <label>Platform<select id="platform"><option value="desktop">Desktop web · 1440×900</option><option value="phone-web">Phone-width web · 390×844</option><option value="ios">Native iOS study · 390×844</option><option value="android">Native Android study · 390×844</option></select></label>
+    <label>Picture theme<select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <a id="live" href="mockup.html">Open the HTML mockup</a>
+  </div>
+  <div class="comparison">
+    <figure>
+      <figcaption><strong>Before · keeps shipped decisions</strong><span>Unchanged fixture evidence from 01-groundwork.</span></figcaption>
+      <a id="before-link" href="../01-groundwork/png/desktop-chat-list-light.png"><img class="picture" id="before" src="../01-groundwork/png/desktop-chat-list-light.png" alt="Chat list before · desktop web · light" width="1440" height="900"></a>
+      <div class="gap" id="native-gap" hidden><strong>GAP · native before capture</strong><p>No fixture-only native build was available for Groundwork. A phone-width website is not a native before picture.</p></div>
+    </figure>
+    <figure>
+      <figcaption><strong>After · buildable with existing fields</strong><span class="decision">Decision for John — reopens UIR-64, UIR-66, AP-7417, AP-2454, TU-05, AP-2408</span></figcaption>
+      <a id="after-link" href="png/desktop-light.png"><img class="picture" id="after" src="png/desktop-light.png" alt="Chat list proposal · desktop web · light" width="1440" height="900"></a>
+    </figure>
+  </div>
+  <p class="muted" id="evidence">Both pictures use the same frozen fixture world. The unchanged web shell comes from the before picture; only the row region is replaced.</p>
+
+  <h2>One stage, always from the flags.</h2>
+  <div class="legend">
+    <span class="stage waiting"><span class="mark" aria-hidden="true"></span>Waiting for you</span>
+    <span class="stage working"><span class="mark" aria-hidden="true"></span><span data-working></span></span>
+    <span class="stage"><span aria-hidden="true">↳</span> Handed over</span>
+    <span class="stage"><span aria-hidden="true">✓</span> Settled</span>
+  </div>
+  <p class="intro">That is also the overlap order: waiting wins, then working, then handed over, then settled. No flag means no stage word. “New reply” comes separately from unread; it never becomes a stage.</p>
+  <div class="callout">No “failed” stage. An errored reply does not prove whether a thread is finished, waiting, or being worked on. Its row uses only the four flags, unread and the stored time.</div>
+
+  <h2>Extra cases, kept out of the baseline picture.</h2>
+  <p class="intro">The example sheet includes handed-over work, a new reply, an unanswered question, a 200-character question, a reply error, and the existing Settled shelf. It identifies the shipped fixture states separately from local sample inputs.</p>
+  <div class="links"><a href="states.html">Inspect every case and the overlap rule</a><a href="mockup.html?platform=ios&text=large">Native rows · 200% text study</a><a href="mockup.html?text=large">Web rows · 200% text study</a></div>
+
+  <h2>Assistant-written summary · a separate choice.</h2>
+  <p class="decision">needs new data / Decision for John</p>
+  <p class="intro">A sentence in the assistant’s words and a button naming the decision could explain more. That needs an explicit summary and a reliable link to the waiting ask. The buildable version above makes neither up.</p>
+  <a href="variant.html">Compare the summary and matching Inbox item →</a>
+
+  <details><summary>What stays shipped, and what needs a decision</summary>
+    <p>The before version keeps UIR-64’s waiting chip and Answer, UIR-66’s faces/reply-count/time link, AP-7417’s joined reply/waiting line, AP-2454’s sender-led phone list and TU-05’s unread dot. The proposed version changes their presentation: question-led rows, a single stage and an explicit “New reply”. It does not change the underlying flags, read markers or settle rules.</p>
+    <p>Settled stays a separate shelf. Settle, its restrictions and Undo stay. The proposed list uses chats.threads’ newest-first order. The web room screenshot is a message timeline with oldest first; turning that surface into this thread list is included in the layout decision, not described as already shipped.</p>
+    <p>The native row is a static HTML study with shared fixture inputs. iOS’s real system tab bar and Android’s real navigation are not verified by these pictures. Both remain explicit capture gaps.</p>
+  </details>
+</main>
+</body>
+</html>

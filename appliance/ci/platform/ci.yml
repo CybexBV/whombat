@@ -1,0 +1,79 @@
+# Run by the maintainers' own CI (ci-platform on their build server, never for a fork's pull request), not by GitHub:
+# public repositories keep self-hosted jobs out of .github/workflows. Public CI is .github/workflows/public-ci.yml.
+name: ci
+# On request only (John, 2026-09-30; appliance IN-132): pull requests and `gh workflow run ci.yml`, not every push.
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CI: 'true'
+  TMPDIR: /var/tmp/whombat-ci
+  GOMAXPROCS: '4'
+  GOFLAGS: -p=4
+  GOCACHE: /srv/whombat-ci/cache/go-build
+  GOMODCACHE: /srv/whombat-ci/cache/go-mod
+  PLAYWRIGHT_BROWSERS_PATH: /srv/whombat-ci/cache/playwright
+jobs:
+  check:
+    # Foreign PRs must not execute on workers that retain local caches.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, whombat, whombat-appliance]
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: whombat
+          POSTGRES_PASSWORD: whombat
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1::5432
+        options: >-
+          --health-cmd "pg_isready -U whombat -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare local caches
+        run: mkdir -p "$TMPDIR" "$GOCACHE" "$GOMODCACHE" /srv/whombat-ci/cache/pnpm "$PLAYWRIGHT_BROWSERS_PATH"
+      - name: Run checks and build
+        env:
+          WB_TEST_PG: postgres://whombat:whombat@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres?sslmode=disable
+          WB_PG_BIN: /usr/lib/postgresql/17/bin
+        run: bash scripts/ci/check.sh 2>&1 | tee "$RUNNER_TEMP/ci-check.log"
+      - name: Keep build outputs on the CI server
+        run: /opt/whombat-ci/bin/artifact save appliance-builds "$RUNNER_TEMP/appliance-bin" console/ui/dist
+      - name: Keep diagnostic logs on the CI server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/ci-check.log" ]; then
+            /opt/whombat-ci/bin/artifact save ci-log "$RUNNER_TEMP/ci-check.log"
+          fi
+  nix:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, whombat, whombat-appliance]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check Nix configuration and runtime pins
+        run: bash scripts/ci/nix-checks.sh 2>&1 | tee "$RUNNER_TEMP/nix-checks.log"
+      - name: Keep Nix check evidence locally
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/nix-checks.log" ]; then
+            /opt/whombat-ci/bin/artifact save nix-log "$RUNNER_TEMP/nix-checks.log"
+          fi
+          if [ -s "$RUNNER_TEMP/nix-checks.json" ]; then
+            /opt/whombat-ci/bin/artifact save nix-builds "$RUNNER_TEMP/nix-checks.json"
+          fi

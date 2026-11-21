@@ -1,0 +1,320 @@
+/*
+ * Settings → This Whombat → “How it’s doing” (Whombat box-status.md BS-10, BS-11; app docs/decisions/box-status.md):
+ * sizes, weights and spacing from the approved mock (`box-status-mock/mock.html`), colours from the tokens. A container
+ * query, not the viewport, makes it two tiles a row and one card a row under 640px: the settings page beside the sidebar
+ * is narrower than the window.
+ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  scroll-margin-top: 24px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+/* Without the box (Tokens only) the label sits over its card like Settings' other sections. */
+.headAlone {
+  margin-bottom: 10px;
+}
+
+.sub {
+  margin: 0 0 14px;
+  color: var(--mut);
+  font: 400 13.5px var(--font-sans);
+}
+
+/* The live dot (the presence green with its halo; README fixed colours). */
+.live {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--presence);
+  box-shadow: 0 0 0 3px var(--live-halo);
+  vertical-align: 1px;
+}
+
+/* The live line with the box's power on the right (desk-display-web.md AP-3020). */
+.subRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin: 0 0 14px;
+}
+
+.subRow > .sub {
+  margin: 0;
+}
+
+.power {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--mut);
+  font: 400 13.5px var(--font-sans);
+}
+
+/* On battery: the words in ink beside the dot (amber or red text would fail 4.5:1). */
+.power[data-tone="warn"],
+.power[data-tone="bad"] {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.measuring {
+  margin: -8px 0 14px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.quietCard {
+  margin: 0 0 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--mut);
+  font: 400 13.5px var(--font-sans);
+}
+
+/* The box parts dim while another range loads: the frame stays, nothing flashes. */
+.frame {
+  transition: opacity var(--duration-toggle);
+}
+
+.dim {
+  opacity: 0.55;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 13px 14px 12px;
+}
+
+.tileKey {
+  color: var(--mut);
+  font: 500 13px var(--font-sans);
+}
+
+.tileValue {
+  color: var(--ink);
+  font: 600 22px var(--font-sans);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.tileUnit {
+  color: var(--mut);
+  font: 500 13px var(--font-sans);
+  letter-spacing: 0;
+}
+
+.tileLine {
+  overflow: hidden;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.full {
+  margin-bottom: 10px;
+}
+
+@container (max-width: 640px) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.chart {
+  position: relative;
+  min-width: 0;
+  padding: 14px 16px 10px;
+}
+
+.disk {
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.chartHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chartTitle {
+  margin: 0;
+  color: var(--ink);
+  font: 600 15px var(--font-sans);
+}
+
+/* The hint line, with “Show as a table” at its end (AP-1141). */
+.hintRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
+
+.hint {
+  margin: 0;
+  min-width: 0;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+}
+
+.diskHint {
+  margin: 2px 0 0;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+}
+
+.toggle {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--ink2);
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--ink2);
+  font: 400 12.5px var(--font-sans);
+  list-style: none;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend i {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.legend i.box {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.legendRows {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  color: var(--ink);
+  font: 400 13.5px var(--font-sans);
+}
+
+.legendRows dt,
+.legendRows dd {
+  margin: 0;
+}
+
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.freeSwatch {
+  box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+.freeName {
+  color: var(--mut);
+}
+
+.size {
+  color: var(--mut);
+  font: 400 12.5px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--mut);
+  font: 400 12px var(--font-sans);
+}
+
+.note + .note {
+  margin-top: 2px;
+}
+
+/* Show charts / Hide charts under the tiles or the charts (this-whombat-sections.md AP-1227), at the right. */
+.chartsToggle {
+  align-self: flex-end;
+}
+
+/* The range's choices are 44px targets on a phone or a touch screen. */
+@media (max-width: 720px), (pointer: coarse) {
+  .range > label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

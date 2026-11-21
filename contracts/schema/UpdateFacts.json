@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/UpdateFacts.json",
+  "title": "UpdateFacts",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "Assigned",
+        "Downloading",
+        "Verified",
+        "Staged",
+        "WaitingForSafeBoundary",
+        "Activating",
+        "Verifying",
+        "Healthy",
+        "Failed",
+        "RolledBack",
+        "Quarantined",
+        "ForwardRepairRequired"
+      ]
+    },
+    "current": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "candidate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastCheckedAt": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "deferredReason": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "clientFloor": {
+      "type": "object",
+      "properties": {
+        "web": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "android": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "ios": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "desktop": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "cli": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "web",
+        "android",
+        "ios",
+        "desktop",
+        "cli"
+      ],
+      "additionalProperties": false
+    },
+    "failureDetail": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": [
+            "Assigned",
+            "Downloading",
+            "Verified",
+            "Staged",
+            "WaitingForSafeBoundary",
+            "Activating",
+            "Verifying",
+            "Healthy",
+            "Failed",
+            "RolledBack",
+            "Quarantined",
+            "ForwardRepairRequired"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "reasons": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "release": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "schema": {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "candidateWrites": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "candidateReads": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "database",
+            "target",
+            "candidateWrites",
+            "candidateReads"
+          ]
+        },
+        "rollbackAccess": {
+          "type": "string",
+          "enum": [
+            "read-write",
+            "read-only",
+            "none"
+          ]
+        },
+        "failedChecks": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "database",
+              "session_endpoint",
+              "runner",
+              "relay_control",
+              "boot",
+              "manager"
+            ]
+          }
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        }
+      },
+      "required": [
+        "stage",
+        "code",
+        "reasons",
+        "release",
+        "failedChecks",
+        "at"
+      ]
+    },
+    "waiting": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "boundary",
+            "checkpoint",
+            "window",
+            "hold",
+            "lock",
+            "metadata",
+            "owner"
+          ]
+        },
+        "since": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "blockers": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_.:-]+$"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "kind",
+              "count"
+            ]
+          }
+        }
+      },
+      "required": [
+        "reason",
+        "since",
+        "blockers"
+      ]
+    },
+    "lastUpdate": {
+      "type": "object",
+      "properties": {
+        "release": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 80,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "at": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      },
+      "required": [
+        "release",
+        "from",
+        "at"
+      ]
+    },
+    "askFirst": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "state",
+    "current",
+    "candidate",
+    "lastCheckedAt",
+    "deferredReason",
+    "failure"
+  ]
+}

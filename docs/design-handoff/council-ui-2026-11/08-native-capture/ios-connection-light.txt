@@ -1,0 +1,36 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 31 visible nodes
+@e1 [application] "Whombat"
+@e2 [button] "Back to Overview"
+@e3 [button] "More for Home Assistant"
+@e4 [scroll-area] [scrollable]
+  [content below scroll-area hidden]
+@e5 [other] "Home Assistant, Needs a look"
+@e6 [link] "Runs on homeassistant (pve-02)"
+@e7 [button] "Copy the address 10.100.0.131:8123"
+@e8 [button] "More detail"
+@e9 [button] "Ask Neo"
+@e10 [button] "Open Home Assistant"
+@e11 [cell] "Home Assistant: what to show"
+@e12 [scroll-area] [scrollable]
+  [content below scroll-area hidden]
+@e13 [other] "Summary" [selected]
+@e14 [other] "Integrations, 102"
+@e15 [other] "Log"
+@e16 [button] "Connection"
+@e17 [text] "Controls"
+@e18 [text] "Your favourites"
+@e19 [text] "LIVING ROOM"
+@e20 [switch] "Ceiling light" [checked]
+@e21 [switch] "Floor lamp" [unchecked]
+@e22 [text] "Movie night"
+@e23 [text] "Thermostat"
+@e24 [button] "Activate Movie night"
+@e25 [text] "20.8 °C now · heating"
+@e26 [other] "Thermostat, 21.5 °C"
+@e27 [button] "Lower Thermostat"
+@e28 [button] "Raise Thermostat"
+@e29 [text] "HALL AND GARDEN"
+@e30 [switch] "Hall light" [checked]
+@e31 [toolbar] "Toolbar"

@@ -1,0 +1,14 @@
+<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approval contact sheet · HTML designs</title><link rel="stylesheet" href="mockup.css"></head><body><main class="plate"><header><strong id="title"></strong><span>12 · Fixture-only HTML drawings · 390px · not native screenshots</span></header><div class="plate-grid" id="frames"></div></main><script>
+const q=new URLSearchParams(location.search),theme=q.get('theme')||'light';document.documentElement.dataset.theme=theme;
+const plates={
+'publish':[['Web card','platform=web&kind=everyday&surface=card'],['iOS question','platform=ios&kind=everyday'],['Android question','platform=android&kind=everyday']],
+'browser-command':[['Phone browser · command card','platform=web&surface=card&kind=command'],['Phone browser · command details','platform=web&surface=details&kind=command'],['Command end · answers stay put','platform=web&surface=details&kind=command&scroll=end']],
+'browser-mail':[['Length stress · mail card · body folded','platform=web&surface=card&kind=mail&length=long'],['Length stress · full email details','platform=web&surface=details&kind=mail&length=long'],['Length stress · email end · answers stay put','platform=web&surface=details&kind=mail&length=long&scroll=end']],
+'native':[['iOS · ordinary · 24/700 question','platform=ios&kind=everyday'],['iOS AX5 · effective 1.6× cap','platform=ios&kind=everyday&text=largest'],['Android 200% system · effective 1.6×','platform=android&kind=everyday&text=largest']],
+'facts':[['iOS AX5 · permission and exact time','platform=ios&kind=everyday&text=largest&scroll=end'],['Android largest · full email','platform=android&kind=mail&length=long&text=largest&scroll=end'],['iOS AX5 · unmet deploy conditions','platform=ios&kind=deploy&text=largest&scroll=end']],
+'kinds':[['Android · deploy waits for checks','platform=android&kind=deploy'],['iOS · grant a key at its catalogue cap','platform=ios&kind=key'],['Android · command scopes','platform=android&kind=command']],
+'states':[['Phone browser · loading','platform=web&state=loading&kind=command'],['Phone browser · read failed','platform=web&state=load-error&kind=command'],['Answer may have gone through','platform=web&state=answer-unknown&kind=command']]
+};
+const name=q.get('plate')||'native';document.getElementById('title').textContent=`${name} · ${theme}`;
+for(const [label,params]of plates[name]||plates.native){const f=document.createElement('figure'),c=document.createElement('figcaption'),i=document.createElement('iframe');c.textContent=label;i.src=`mockup.html?${params}&theme=${theme}`;i.title=label;f.append(c,i);document.getElementById('frames').append(f);}
+</script></body></html>

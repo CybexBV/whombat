@@ -1,0 +1,714 @@
+/*
+ * The connections catalog's connect and connection pages (connections-catalog.md CX-71, CX-72; AP-756, AP-757; not in
+ * the mocks, B-05): the Google page's form language (mono field labels, 13px hints, `Connectors.module.css`) in a card
+ * block, choice rows like the services picker, and the Vault's tool rows.
+ */
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.fieldset > legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inputRow > :first-child {
+  flex: 1;
+}
+
+.textarea {
+  min-width: 0;
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.textarea:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+/* Who it's for, a pick from the service: rows with a radio, a title and a muted line. */
+.scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+  cursor: pointer;
+}
+
+.scope:has(:checked) {
+  border-color: var(--ink2);
+  background: var(--sf2);
+}
+
+.scope:has(:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.scope[data-disabled] {
+  cursor: default;
+}
+
+.scopeTitle {
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.scope[data-disabled] .scopeTitle {
+  color: var(--mut);
+}
+
+.radio {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--btn);
+  cursor: inherit;
+}
+
+.scopeText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.warn {
+  margin: 0;
+  max-width: 560px;
+  color: var(--warn);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.probe {
+  margin: 0;
+  max-width: 560px;
+  color: var(--ink2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.probe[data-tone="bad"] {
+  color: var(--bad);
+}
+
+.problem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+}
+
+.spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line2);
+  border-top-color: var(--ink2);
+  border-radius: var(--radius-pill);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* The connection page (CX-72): facts as a two-column list, the checks, and the tools with their tiers. */
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 18px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--mut);
+  font: 500 12px / 20px var(--font-mono);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font: 400 13.5px var(--font-mono);
+}
+
+.tools {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool:last-child {
+  border-bottom: 0;
+}
+
+.toolMain {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.toolTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.toolName {
+  color: var(--ink);
+  font: 500 13.5px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* A long description (Home Assistant's GetLiveContext) shows two lines; the whole text is its title (AP-833). */
+.toolText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* An account's service over its keys (WHAT {ASSISTANT} MAY DO on Google's page). */
+.keyGroup {
+  margin: 0;
+  color: var(--ink);
+  font: 600 14px / 1.3 var(--font-sans);
+}
+
+.toolFilter {
+  max-width: 420px;
+}
+
+.rename {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/*
+ * The connect form as steps (connections-setup.md CS-50, AP-843): the Google page's numbered step rows in the CONNECT
+ * card, then a foot with More options, the problem and the button. Inside a step: what Whombat found at the address,
+ * the certificate to compare, the sign-ins as radio cards, the guided token's numbered list and its paste box.
+ */
+.setup {
+  display: flex;
+  flex-direction: column;
+}
+
+.setupFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.found {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+}
+
+.found > :first-child {
+  margin-top: 6px;
+}
+
+.foundText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.foundTitle {
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.cert {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 560px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf2);
+}
+
+.fingerprint {
+  color: var(--ink);
+  font: 400 13px / 1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.trusted {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  max-width: 560px;
+  color: var(--ink2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.titleLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.method {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+}
+
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guideStep {
+  display: flex;
+  gap: 10px;
+}
+
+.guideNumber {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  color: var(--ink2);
+  font: 500 11px var(--font-mono);
+}
+
+.guideMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.guideText {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.guideLink {
+  align-self: flex-start;
+}
+
+.paste {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+}
+
+.paste[data-over] {
+  border-color: var(--brand);
+  background: var(--sf2);
+}
+
+.paste:focus-within {
+  border-color: var(--brand);
+}
+
+.pasteArea {
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 13.5px / 1.5 var(--font-mono);
+  resize: none;
+  outline: none;
+}
+
+.pasteArea::placeholder {
+  color: var(--mut);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.pasteFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pasteNote {
+  margin: 0;
+  color: var(--ok);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pasteNote[data-tone="bad"] {
+  color: var(--bad);
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.moreHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.moreToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 600 14px var(--font-sans);
+  cursor: pointer;
+}
+
+.moreToggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-small);
+}
+
+.moreToggle svg {
+  color: var(--mut);
+  transition: transform 0.15s ease;
+}
+
+.moreToggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moreToggle svg {
+    transition: none;
+  }
+}
+
+.moreBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mut);
+  font-size: 13px;
+}
+
+/* Found on your network (CS-51, AP-846; CS-52, CS-53, AP-871…): the overview's rows without the link, the scan's progress
+ * and the other network. */
+.foundProgress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.foundProgress:last-child {
+  border-bottom: 0;
+}
+
+.foundRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+.foundUrl {
+  color: var(--ink2);
+  font: 400 13px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* What it is, then where (DF-08, AP-3802): “Storage, Docker and VMs · https://192.168.1.50:5001”. */
+.foundWhere {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.foundTagline {
+  color: var(--ink2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.foundDot {
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.foundFoot {
+  border-top: 1px solid var(--line);
+}
+
+/* Below the progress the footer's line would be a second one. */
+.foundProgress + .foundFoot {
+  border-top: 0;
+}
+
+/* A line of the card's (nothing new, a hiccup) above the rows keeps their divider. */
+.foundNote + .foundList {
+  border-top: 1px solid var(--line);
+}
+
+/* Hide beside Connect (CS-53, AP-873). */
+.foundActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* On a phone-wide window the buttons go under the name, so “Add as a server” leaves the words room (connect-in-chat.md). */
+@media (max-width: 560px) {
+  .foundRow {
+    flex-wrap: wrap;
+  }
+
+  .foundRow > :nth-child(2) {
+    flex: 1 1 calc(100% - 64px);
+  }
+
+  .foundActions {
+    margin-left: auto;
+  }
+}
+
+/*
+ * The footer's “Show 2 hidden” (AP-874) on the right, also without the Looked in line; its text lines up with the
+ * rows' buttons and the footer keeps its height when it appears.
+ */
+.foundFoot .foundToggle {
+  margin: -7px -12px -7px auto;
+}
+
+/* A hidden one, shown (CS-53, AP-874): its name, line and address in the meta color. */
+.foundRow[data-hidden] .foundName,
+.foundRow[data-hidden] .foundTagline,
+.foundRow[data-hidden] .foundUrl {
+  color: var(--mut);
+}
+
+.lookIn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+}
+
+/* One sign-in only: its panel without the rail that ties it to a picked card. */
+.method[data-plain] {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.narrow {
+  max-width: 560px;
+}
+
+/* The overview's found strip (connections-redesign.md AP-1161): a dashed line of chips under CONNECTED. */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 18px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-card);
+}
+
+.stripTitle {
+  flex: none;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stripChips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stripChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px 0 5px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.stripChip:hover {
+  background: var(--sf2);
+  color: var(--ink);
+}
+
+.stripChip:focus-visible,
+.stripAll:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.stripMore {
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.stripAll {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: var(--radius-button);
+  color: var(--ink2);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.stripAll:hover {
+  color: var(--ink);
+}

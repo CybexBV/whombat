@@ -1,0 +1,72 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 10,
+    "results": 2,
+    "page": 1
+  },
+  "results": [
+    {
+      "id": 1,
+      "issueType": 3,
+      "status": 1,
+      "problemSeason": 0,
+      "problemEpisode": 0,
+      "createdAt": "2026-10-21T19:44:45.000Z",
+      "updatedAt": "2026-10-21T19:44:45.000Z",
+      "createdBy": {
+        "id": 1,
+        "displayName": "admin",
+        "username": null,
+        "userType": 3,
+        "requestCount": 0
+      },
+      "media": {
+        "id": 2,
+        "mediaType": "movie",
+        "tmdbId": 969681,
+        "tvdbId": null,
+        "status": 2,
+        "ratingKey": null
+      },
+      "comments": [
+        {
+          "id": 1,
+          "message": "Subtitles are out of sync after the first hour.",
+          "createdAt": "2026-10-21T19:44:45.000Z"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "issueType": 1,
+      "status": 1,
+      "problemSeason": 24,
+      "problemEpisode": 1,
+      "createdAt": "2026-10-21T19:44:45.000Z",
+      "updatedAt": "2026-10-21T19:44:45.000Z",
+      "createdBy": {
+        "id": 1,
+        "displayName": "admin",
+        "username": null,
+        "userType": 3,
+        "requestCount": 0
+      },
+      "media": {
+        "id": 3,
+        "mediaType": "tv",
+        "tmdbId": 4614,
+        "tvdbId": 72108,
+        "status": 3,
+        "ratingKey": null
+      },
+      "comments": [
+        {
+          "id": 2,
+          "message": "Picture freezes at 41 minutes.",
+          "createdAt": "2026-10-21T19:44:45.000Z"
+        }
+      ]
+    }
+  ]
+}

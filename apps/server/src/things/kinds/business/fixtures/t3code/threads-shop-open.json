@@ -1,0 +1,32 @@
+{
+  "projectId": "mcp:0d3b9a51-5c2e-4f7a-8b16-7e4c2a9d1f60",
+  "currentThreadId": null,
+  "threads": [
+    {
+      "threadId": "mcp:5e1d7b93-2a6c-4d8f-b347-9e0c3a5f7d12",
+      "title": "Fix the checkout page",
+      "link": "[Fix the checkout page](t3-thread://v1/mcp:5e1d7b93-2a6c-4d8f-b347-9e0c3a5f7d12)",
+      "createdBy": "user",
+      "creationSource": "web",
+      "status": "running",
+      "latestRunId": "run:thread:mcp%3A5e1d7b93-2a6c-4d8f-b347-9e0c3a5f7d12:ordinal:1",
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-opus-5-5",
+      "runtimeMode": "full-access",
+      "interactionMode": "default",
+      "linkedPullRequest": null,
+      "pullRequests": [],
+      "settled": false,
+      "settledAt": null,
+      "snoozed": false,
+      "snoozedUntil": null,
+      "parentThreadId": null,
+      "relationshipToParent": null,
+      "itemCount": 14,
+      "createdAt": "2026-10-21T19:37:50.000Z",
+      "updatedAt": "2026-10-21T19:48:10.900Z"
+    }
+  ],
+  "nextCursor": null,
+  "total": 5
+}

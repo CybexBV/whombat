@@ -1,0 +1,1997 @@
+{
+  "description": "Client channel (CT-74): verifyClientChannel (`expect` ok or the error code), clientBundleTarget, and selectClientBundle over `bundles` (`expect` is the selected version or null). Development keys only.",
+  "keys": {
+    "chn-1": "5205a5ddaeb2a7ac2f012f84159680f9cf738e4c7066b60d916eb98244c23bb4"
+  },
+  "channels": [
+    {
+      "name": "valid",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "ok"
+    },
+    {
+      "name": "the same channel again",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 12,
+      "expect": "ok"
+    },
+    {
+      "name": "an older channel (rollback)",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 13,
+      "expect": "rolled_back"
+    },
+    {
+      "name": "other env",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "prod",
+      "lastSequence": 11,
+      "expect": "wrong_env"
+    },
+    {
+      "name": "expired",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790605100,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "expired"
+    },
+    {
+      "name": "issued in the future",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1789999699,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "not_yet_valid"
+    },
+    {
+      "name": "unknown key",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-9",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "unknown_key"
+    },
+    {
+      "name": "tampered executable digest",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+                "size": 1
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_signature"
+    },
+    {
+      "name": "lifetime above 14 days",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1791209601,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "ca930965324fc2cbd94dc39bb78417de8ac0024e3d639ad5567418ac0988baad81685182336b9cb4ce96ce4dd64ea3f04dda766027115d9c10de82430125f00c"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_lifetime"
+    },
+    {
+      "name": "artifact target of another version",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.1/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "97cbf0f7c4db9b5d9f417141a8e1e815b04a358196178ad9f880328aa9594c6385c8bfe5d5174f741d2ad1974c1b93e3f0472ed5a32d8a9e004a1259b3c24b0d"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_bundle"
+    },
+    {
+      "name": "inverted adapter range",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 3,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "fad858ac47858006197b66bbbb68b4104be2f1fa9783335ba1e6e04d2ac7f947e5e64f6263900c3780a1a0798ff8942ab2f191014ee177b524b5a1da9200f400"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_bundle"
+    },
+    {
+      "name": "tested before it was published",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789827200,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "fa0df58fa31f9ef83a3a1bcc2cd699781570d50c9c6859017a55e850a65ab9fa751ed7af849d9c29e4f5a3bf3597aca024e77c1038463f5c3abd334cb220d70a"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_bundle"
+    },
+    {
+      "name": "a binary source with a path inside",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": "claude"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "c80aa18529fdc1981889a8e32a1778e1c1b09461d5c730350b5b12ed8e5c5883668bdf9510d4be98a8c5bedc2e777e1ee83ba83084743b80471142eadcd8a600"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_bundle"
+    },
+    {
+      "name": "the same bundle twice",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "423b1857da8177ab7864ea577cf9af5db24446e4eeb9462e1f651cf098fef83785d5ec6381e0203e3a58f9254a49ae1362ee4189af129da6d1ae2c8e51fb700f"
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "duplicate_bundle"
+    },
+    {
+      "name": "schema violation",
+      "doc": {
+        "payload": {
+          "purpose": "whombat-client-channel/v1",
+          "env": "dev",
+          "sequence": 12,
+          "issuedAt": 1790000000,
+          "expiresAt": 1790604800,
+          "bundles": [
+            {
+              "provider": "claude",
+              "version": "2.1.290",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 2,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "claude",
+              "version": "2.1.278",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 2
+              },
+              "artifact": {
+                "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "claude"
+              },
+              "source": {
+                "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "size": 200000000,
+                "format": "binary",
+                "path": null
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "x86_64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-x86_64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            },
+            {
+              "provider": "codex",
+              "version": "0.158.0",
+              "os": "linux",
+              "arch": "aarch64",
+              "publishedAt": 1789913600,
+              "testedAt": 1789996400,
+              "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "adapter": {
+                "min": 1,
+                "max": 1
+              },
+              "artifact": {
+                "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "size": 80000000,
+                "path": "codex"
+              },
+              "source": {
+                "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "size": 30000000,
+                "format": "tar.gz",
+                "path": "codex-aarch64-unknown-linux-musl"
+              },
+              "executable": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "size": 190000000
+              }
+            }
+          ]
+        },
+        "keyId": "chn-1",
+        "sig": "0d029fa0625e3c526374b366b9f4a8fa3b4ea5e9a60ce4f785b23d05840d55ea180661e159528b5be0bc2ad80a33269677d7929d519a94e68bb246c9f589690a",
+        "extra": true
+      },
+      "now": 1790000000,
+      "env": "dev",
+      "lastSequence": 11,
+      "expect": "bad_schema"
+    }
+  ],
+  "bundles": [
+    {
+      "provider": "claude",
+      "version": "2.1.290",
+      "os": "linux",
+      "arch": "x86_64",
+      "publishedAt": 1789913600,
+      "testedAt": 1789996400,
+      "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "adapter": {
+        "min": 2,
+        "max": 2
+      },
+      "artifact": {
+        "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 80000000,
+        "path": "claude"
+      },
+      "source": {
+        "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 200000000,
+        "format": "binary",
+        "path": null
+      },
+      "executable": {
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "size": 190000000
+      }
+    },
+    {
+      "provider": "claude",
+      "version": "2.1.278",
+      "os": "linux",
+      "arch": "x86_64",
+      "publishedAt": 1789913600,
+      "testedAt": 1789996400,
+      "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "adapter": {
+        "min": 1,
+        "max": 2
+      },
+      "artifact": {
+        "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 80000000,
+        "path": "claude"
+      },
+      "source": {
+        "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size": 200000000,
+        "format": "binary",
+        "path": null
+      },
+      "executable": {
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "size": 190000000
+      }
+    },
+    {
+      "provider": "codex",
+      "version": "0.158.0",
+      "os": "linux",
+      "arch": "x86_64",
+      "publishedAt": 1789913600,
+      "testedAt": 1789996400,
+      "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "adapter": {
+        "min": 1,
+        "max": 1
+      },
+      "artifact": {
+        "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 80000000,
+        "path": "codex"
+      },
+      "source": {
+        "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "size": 30000000,
+        "format": "tar.gz",
+        "path": "codex-x86_64-unknown-linux-musl"
+      },
+      "executable": {
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "size": 190000000
+      }
+    },
+    {
+      "provider": "codex",
+      "version": "0.158.0",
+      "os": "linux",
+      "arch": "aarch64",
+      "publishedAt": 1789913600,
+      "testedAt": 1789996400,
+      "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "adapter": {
+        "min": 1,
+        "max": 1
+      },
+      "artifact": {
+        "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size": 80000000,
+        "path": "codex"
+      },
+      "source": {
+        "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "size": 30000000,
+        "format": "tar.gz",
+        "path": "codex-aarch64-unknown-linux-musl"
+      },
+      "executable": {
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "size": 190000000
+      }
+    }
+  ],
+  "targets": [
+    {
+      "bundle": {
+        "provider": "claude",
+        "version": "2.1.290",
+        "os": "linux",
+        "arch": "x86_64",
+        "publishedAt": 1789913600,
+        "testedAt": 1789996400,
+        "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "adapter": {
+          "min": 2,
+          "max": 2
+        },
+        "artifact": {
+          "target": "clients/claude/2.1.290/linux-x86_64.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 80000000,
+          "path": "claude"
+        },
+        "source": {
+          "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.290/linux-x64/claude",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size": 200000000,
+          "format": "binary",
+          "path": null
+        },
+        "executable": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size": 190000000
+        }
+      },
+      "target": "clients/claude/2.1.290/linux-x86_64.tar.gz"
+    },
+    {
+      "bundle": {
+        "provider": "claude",
+        "version": "2.1.278",
+        "os": "linux",
+        "arch": "x86_64",
+        "publishedAt": 1789913600,
+        "testedAt": 1789996400,
+        "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "adapter": {
+          "min": 1,
+          "max": 2
+        },
+        "artifact": {
+          "target": "clients/claude/2.1.278/linux-x86_64.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 80000000,
+          "path": "claude"
+        },
+        "source": {
+          "url": "https://storage.googleapis.com/claude-code-dist/claude-code-releases/2.1.278/linux-x64/claude",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size": 200000000,
+          "format": "binary",
+          "path": null
+        },
+        "executable": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size": 190000000
+        }
+      },
+      "target": "clients/claude/2.1.278/linux-x86_64.tar.gz"
+    },
+    {
+      "bundle": {
+        "provider": "codex",
+        "version": "0.158.0",
+        "os": "linux",
+        "arch": "x86_64",
+        "publishedAt": 1789913600,
+        "testedAt": 1789996400,
+        "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "adapter": {
+          "min": 1,
+          "max": 1
+        },
+        "artifact": {
+          "target": "clients/codex/0.158.0/linux-x86_64.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 80000000,
+          "path": "codex"
+        },
+        "source": {
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size": 30000000,
+          "format": "tar.gz",
+          "path": "codex-x86_64-unknown-linux-musl"
+        },
+        "executable": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size": 190000000
+        }
+      },
+      "target": "clients/codex/0.158.0/linux-x86_64.tar.gz"
+    },
+    {
+      "bundle": {
+        "provider": "codex",
+        "version": "0.158.0",
+        "os": "linux",
+        "arch": "aarch64",
+        "publishedAt": 1789913600,
+        "testedAt": 1789996400,
+        "fixturesDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "adapter": {
+          "min": 1,
+          "max": 1
+        },
+        "artifact": {
+          "target": "clients/codex/0.158.0/linux-aarch64.tar.gz",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 80000000,
+          "path": "codex"
+        },
+        "source": {
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.158.0/codex-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size": 30000000,
+          "format": "tar.gz",
+          "path": "codex-aarch64-unknown-linux-musl"
+        },
+        "executable": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size": 190000000
+        }
+      },
+      "target": "clients/codex/0.158.0/linux-aarch64.tar.gz"
+    }
+  ],
+  "selection": [
+    {
+      "name": "newest claude for adapter 2",
+      "want": {
+        "os": "linux",
+        "arch": "x86_64",
+        "provider": "claude",
+        "adapter": 2
+      },
+      "expect": "2.1.290"
+    },
+    {
+      "name": "older claude for adapter 1",
+      "want": {
+        "os": "linux",
+        "arch": "x86_64",
+        "provider": "claude",
+        "adapter": 1
+      },
+      "expect": "2.1.278"
+    },
+    {
+      "name": "no claude for adapter 3",
+      "want": {
+        "os": "linux",
+        "arch": "x86_64",
+        "provider": "claude",
+        "adapter": 3
+      },
+      "expect": null
+    },
+    {
+      "name": "codex on arm64",
+      "want": {
+        "os": "linux",
+        "arch": "aarch64",
+        "provider": "codex",
+        "adapter": 1
+      },
+      "expect": "0.158.0"
+    },
+    {
+      "name": "no claude on arm64",
+      "want": {
+        "os": "linux",
+        "arch": "aarch64",
+        "provider": "claude",
+        "adapter": 2
+      },
+      "expect": null
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+/*
+ * A failed turn (essentials item 4, AP-480): not in the mocks, so the old skill card's frame (18px 20px, 12px gaps)
+ * with the shared 1px line border — a failure is told by its label, not by an alarming frame.
+ * `[data-card]` lifts these above the shared frame (Card.module.css loads after this file).
+ */
+.card[data-card] {
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.reason {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* Try again and the fix link wrap on a narrow card. */
+.actions {
+  flex-wrap: wrap;
+}
+
+.retried {
+  font: var(--type-mono-meta);
+  color: var(--mut);
+}
+
+.problem {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--bad);
+}

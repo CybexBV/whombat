@@ -1,0 +1,488 @@
+/*
+ * Managed journeys (not in the mocks, AP-22): the sign-in frame (AuthLayout, onboarding's language) with
+ * settings' bordered-row cards and the audit log's mono labels. Tokens only.
+ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.label {
+  color: var(--mut);
+  font: 500 12px var(--font-mono);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.hint {
+  color: var(--mut);
+  font: var(--type-mono-meta);
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font: var(--type-small);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--mut);
+}
+
+/* Lost access and Rename under a Whombat's line (AP-41, AP-3086). */
+.rowLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* A Whombat's name being typed (AP-3086): the field across the row, Save and Cancel at its end. */
+.nameForm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* A retired Whombat (AP-695): muted, never opened, only forgotten. */
+.rowRetired .rowTitle {
+  color: var(--mut);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.fingerprint {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font: 500 17px var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.code {
+  margin: 0;
+  font: 600 40px var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink2);
+  font-size: 14px;
+}
+
+/* The connection strip over the app: quiet, one line, the shell's hairline. */
+.banner {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  margin-top: 10px;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+  box-shadow: var(--shadow-toast);
+  color: var(--ink2);
+  font-size: 13.5px;
+}
+
+.gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.gateCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+}
+
+.gateTitle {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.gateText {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* The claim code field (AP-47): the code as the console shows it. */
+.codeInput {
+  max-width: 320px;
+  letter-spacing: 0.12em;
+}
+
+/* The appliance terms at claim (LC-18): a native checkbox in the button's color, its label with the link. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--ink2);
+  font: var(--type-secondary);
+  line-height: 1.45;
+}
+
+.checkBox {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--btn);
+  cursor: pointer;
+}
+
+.checkLabel {
+  cursor: pointer;
+}
+
+.checkLabel a {
+  color: var(--ink);
+}
+
+/* The strips over the app (connection, recovery kit, subscription): stacked, centred at the top. */
+.strips {
+  position: fixed;
+  z-index: 50;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.strips > .banner {
+  position: static;
+  transform: none;
+  margin-top: 0;
+  pointer-events: auto;
+}
+
+.bannerBad {
+  border-color: var(--bad);
+  color: var(--ink);
+}
+
+.bannerWarn {
+  border-color: var(--warn);
+  color: var(--ink);
+}
+
+/* The waitlist's note (AP-127): the inputs' language (`Input size="lg"`). */
+.textarea {
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  color: var(--ink);
+  font: 16px / 1.45 var(--font-sans);
+  resize: vertical;
+  outline: none;
+}
+
+.textarea:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+/* The Billing page (AP-129): the plans as onboarding's choice cards (1.5px border, selected = ink border). */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px 18px 50px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.plan[data-selected="true"] {
+  border-color: var(--ink);
+}
+
+.plan:has(:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.planRadio {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--btn);
+  cursor: pointer;
+}
+
+.planRadio:focus-visible {
+  outline: none;
+}
+
+.planName {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.planPrice {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.planMeta {
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* − and + : a square button with a glyph you can hit (44px, the touch target, on narrow screens). */
+.stepper .stepButton {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .stepper .stepButton {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepperValue {
+  min-width: 44px;
+  font: 600 20px var(--font-mono);
+  text-align: center;
+}
+
+.total {
+  margin-left: 8px;
+  color: var(--ink2);
+  font-size: 14px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A claim refusal with its way out (AP-132): the words, then the action. */
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.notice p {
+  margin: 0;
+}
+
+/* Where you live, before the payment page: the label beside its choice, like Quiet hours' times. */
+.countryLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--mut);
+}
+
+.countryLabel label {
+  white-space: nowrap;
+}
+
+.select {
+  height: 34px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font: 500 14px var(--font-sans);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.select:disabled {
+  opacity: 0.6;
+}
+
+/* Link isn't sold where the person lives: said in plain words, in the row, before anything is paid. */
+.countryOutside {
+  flex-basis: 100%;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+/* A group of controls under a mono label (the Whombats stepper). */
+.bareSet {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.bareSet > legend {
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+/* Your Whombats with one Whombat: one big Open, the page's first thing to do. */
+.openOnly {
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .openOnly {
+    flex: 1;
+  }
+}
+
+/*
+ * The plan's rows and a Whombat's row on Your Whombats: at a phone's width the buttons go under the words instead of
+ * squeezing them.
+ */
+@media (max-width: 720px) {
+  .rowWrap {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .rowWrap > .rowMain {
+    min-width: min(240px, 100%);
+  }
+}

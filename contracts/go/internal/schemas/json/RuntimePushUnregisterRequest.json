@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RuntimePushUnregisterRequest.json",
+  "title": "RuntimePushUnregisterRequest",
+  "type": "object",
+  "properties": {
+    "handle": {
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    }
+  },
+  "required": [
+    "handle"
+  ],
+  "additionalProperties": false
+}

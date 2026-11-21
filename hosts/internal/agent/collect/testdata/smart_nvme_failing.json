@@ -1,0 +1,149 @@
+{
+ "json_format_version": [
+  1,
+  0
+ ],
+ "smartctl": {
+  "version": [
+   7,
+   4
+  ],
+  "pre_release": false,
+  "svn_revision": "5530",
+  "platform_info": "x86_64-linux-6.12.107+deb13-amd64",
+  "build_info": "(local build)",
+  "argv": [
+   "smartctl",
+   "--json",
+   "-a",
+   "-l",
+   "devstat",
+   "-n",
+   "standby",
+   "/dev/nvme0n1"
+  ],
+  "exit_status": 72
+ },
+ "device": {
+  "name": "/dev/nvme0n1",
+  "info_name": "/dev/nvme0n1",
+  "type": "nvme",
+  "protocol": "NVMe"
+ },
+ "model_name": "Samsung SSD 9100 PRO 4TB",
+ "serial_number": "NVMESER0002",
+ "firmware_version": "0B2QNXH7",
+ "nvme_pci_vendor": {
+  "id": 5197,
+  "subsystem_id": 5197
+ },
+ "nvme_total_capacity": 4000787030016,
+ "nvme_unallocated_capacity": 0,
+ "nvme_controller_id": 1,
+ "nvme_version": {
+  "string": "2.0",
+  "value": 131072
+ },
+ "nvme_number_of_namespaces": 1,
+ "nvme_namespaces": [
+  {
+   "id": 1,
+   "size": {
+    "blocks": 7814037168,
+    "bytes": 4000787030016
+   },
+   "capacity": {
+    "blocks": 7814037168,
+    "bytes": 4000787030016
+   },
+   "utilization": {
+    "blocks": 4752351440,
+    "bytes": 2433203937280
+   },
+   "formatted_lba_size": 512
+  }
+ ],
+ "user_capacity": {
+  "blocks": 7814037168,
+  "bytes": 4000787030016
+ },
+ "logical_block_size": 512,
+ "smart_support": {
+  "available": true,
+  "enabled": true
+ },
+ "smart_status": {
+  "passed": false,
+  "nvme": {
+   "value": 4,
+   "reliability_degraded": true
+  }
+ },
+ "nvme_smart_health_information_log": {
+  "critical_warning": 4,
+  "temperature": 30,
+  "available_spare": 8,
+  "available_spare_threshold": 10,
+  "percentage_used": 2,
+  "data_units_read": 41427560,
+  "data_units_written": 98900147,
+  "host_reads": 651933800,
+  "host_writes": 835567050,
+  "controller_busy_time": 3185,
+  "power_cycles": 2,
+  "power_on_hours": 496,
+  "unsafe_shutdowns": 42,
+  "media_errors": 17,
+  "num_err_log_entries": 1234,
+  "warning_temp_time": 0,
+  "critical_comp_time": 0,
+  "temperature_sensors": [
+   45,
+   30
+  ]
+ },
+ "temperature": {
+  "current": 30
+ },
+ "power_cycle_count": 2,
+ "power_on_time": {
+  "hours": 496
+ },
+ "nvme_error_information_log": {
+  "size": 64,
+  "read": 16,
+  "unread": 0
+ },
+ "nvme_self_test_log": {
+  "current_self_test_operation": {
+   "value": 0,
+   "string": "No self-test in progress"
+  },
+  "table": [
+   {
+    "self_test_code": {
+     "value": 2,
+     "string": "Extended"
+    },
+    "self_test_result": {
+     "value": 7,
+     "string": "Completed: failed segments"
+    },
+    "power_on_hours": 490,
+    "segment": 2,
+    "lba": 123456
+   },
+   {
+    "self_test_code": {
+     "value": 1,
+     "string": "Short"
+    },
+    "self_test_result": {
+     "value": 0,
+     "string": "Completed without error"
+    },
+    "power_on_hours": 400
+   }
+  ]
+ }
+}

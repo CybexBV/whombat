@@ -1,0 +1,47 @@
+# Final connection · Home Assistant
+
+[Before/after and states](index.html) · [static page](mockup.html) · [binding story](../STORY.md). [Overview’s common handoff](../overview/NOTES.md) supplies shared shell/source rules, Dusty labels, renderer, contrast method, target/focus requirements and gaps. **All four platforms**, light and dark; mockups only, NO CI or tests.
+
+This is step 15’s **con_ha** Home Assistant, inside the binding shell: readable **Needs a look** pill, its actual four current problems, **five folded heads-ups**, and the selected controls. Desktop uses the same selected native data as phone web/iOS/Android. Step 10’s different web host, six heads-ups and checked time do not enter this story. Current problems are ahead of controls in the reading/DOM order on every platform, so changing width does not hide them or change the story. All remain reachable by scrolling.
+
+## Round four changes
+
+The page head restores the **real Home Assistant SVG**, the same local artwork as its Overview card. Overview’s Connections tab also restores the actual UniFi, Hetzner and Gmail marks. The existing selected Home Assistant page, all four current problems, five folded heads-ups and controls keep their shared-story values in both themes on all four platforms. Its back link returns to Overview’s **Connections** tab. iOS uses the previous-title chevron; Android keeps the arrow.
+
+Source for the new visible mark: `packages/brand/assets/marks/homeassistant.svg`, unchanged and loaded locally. The brand artwork retains its own colours. No generic service glyph or new checked time is substituted. All other pictured lines keep the sources below. Current measurements and delivery attempts are the round-four [Overview evidence](../overview/NOTES.md#render-evidence-and-picture-delivery).
+
+## Every pictured line
+
+| Lines | Source |
+| --- | --- |
+| Home Assistant, Needs a look, con_ha; no checked/sample timestamp | `FINAL_STORY.connection` and STORY.md’s selected native scenario. `checkedAt=null`; a successful Vault credential check is unrelated to the connection’s current integrations. No 14:05 or fetch completion is substituted. |
+| Runs on homeassistant (pve-02); 10.100.0.131:8123; More detail / Home Assistant · 102 integrations; Summary / Integrations 102 / Log / Connection; Ask / Open | `apps/mobile/src/fixtures/thingPages.ts` HOME_ASSISTANT (`connection:con_ha`) and step 15’s read-only excerpt, native PageHead/tab anatomy. Host link goes to the same pve-02 report; address is not the conflicting web 10.100.0.5 address. App implementation keeps copying and Open behavior; the drawing shows the address without accessing the clipboard/service. |
+| Disk full in about 2 months / 8.7 GB is old backups | Native `thingPages.ts` notice `disk` title/detail and its Ask question. Part of the binding selected page, not an invented new Inbox item. |
+| Modbus fills the log / 92% of 12,286 errors, still coming in / Show them | Notice `modbus`; existing logs tab link. The count remains saved page state, never a new read stamped at 14:05. |
+| 2 integrations not loading / Shelly pool pump, garage door / Ask {assistant} | Notice `integrations` title/detail and existing Ask destination. |
+| 3 HomeWizard meters need a new sign-in / Zwembad Techniek, Schuilstal, WTW Zolder / Repair | Notice `homewizard`; existing Home Assistant repairs destination. It asks for sign-in, never pretends the assistant can silently repair credentials. |
+| Show 5 heads-ups and all five expanded titles/details | Native `thingPages.ts` notices `update`, `recorder`, `battery`, `backup-age`, `clock`; same as step 15. Update/two Modbus fixes; database 110 MB/day / sensor.evcs_* every second; two low batteries / Hallway motion, Back door; own backups seven months / Proxmox backs up the whole machine; automation 212 runs / Garden lights at dusk. These five entries, not six, supply the count. Existing Ask destinations for update/database/automation remain inside the fold. |
+| Controls, Your favourites, Living room, Hall and garden; Ceiling light On · 80%; Floor lamp Off; Movie night / Activate; Thermostat 20.8 °C now · heating / target 21.5 °C; Hall light On; Front door Locked / Unlock | `packages/fixtures/src/servicePages.ts` **homeAssistantControls()**, referenced by native thingPages and the binding story. These are the story’s selected first six controls; other existing controls are not proposed for deletion. Saved control state is not a sensor sample with a new known timestamp. |
+| Unlock the front door? Anyone at the door can come in. Cancel / Unlock | Existing supplied front-door confirmation in the same control fixture / native thing-button flow (AP-7466). No extra confirmation is invented and no command runs from this HTML. |
+| Couldn’t read/refresh Home Assistant’s page; no saved copy / showing saved page whose controls may have changed; no readings or controls yet; placeholders; recovery | Authored local query-state presentation. Empty is a successful no-page-content result, not proof the current problems cleared. Loading and failed-first-read hide cached-looking facts/controls/status. Failed refresh retains the actual saved page, including Needs a look and its problems. |
+| Ask {assistant}, chrome/badges; source/preview/gallery labels | `story.assistant` from the name helper and shared shell; presentation text/destinations. No assistant name is typed into new copy. |
+
+## Accessibility and behavior
+
+Order: shared chrome → Back to Overview → Home Assistant → named Needs a look pill → host/address → More detail → Ask/Open → Summary tabs → local read error when applicable → Worth a look (four source-order problems and their actions) → heads-up disclosure → Controls/room → each named control/state/action. iOS/Android are pushed connection pages: main’s shared shell puts Back first and Places at right in one row, with Search inside Places and no detail-page tab bar. No differently ordered secondary Places list is added.
+
+Names include **Back to Overview**, **Copy the address 10.100.0.131:8123**, **Open Home Assistant**, **Ask {assistant} about [notice title]**, **Show them: Modbus fills the log**, **Repair: 3 HomeWizard meters need a new sign-in**, **Ceiling light** (switch, checked), **Floor lamp** (switch, unchecked), **Lower/Raise Thermostat**, **Unlock Front door**. State words and switch semantics accompany all colour. The Home Assistant mark names the service; switch drawings and OS glyphs are decorative. Lit state text is opaque ink2 on the real token wash in both themes.
+
+More detail opens the existing extra facts in place. Heads-ups start folded; opening adds exactly five entries after the four current ones, with the supplied actions, retains focus and never sorts/moves the controls. It does not hand those routine notices to the assistant automatically. Ask prepares an unsent question; logs/repairs/Open are destination previews. The control drawing does not pretend a command succeeded. Unlock keeps its supplied question; the preview confirmation executes nothing. In implementation, a lost action answer **may have happened**: offer to check, never retry the command blindly or claim nothing was lost. Read-only Try again is distinct from that action path.
+
+Focus returns to the exact button, address or disclosure opener with its scroll position; Back returns to Overview’s connection origin. Shared Places traps/returns focus per SHELL.md. All interaction targets, including Log, back, address, heads-up actions and steppers, are **44×44 web/iOS / 48×48 Android** minimum. Largest text keeps 200% web / 1.6× native, one-column controls and wrapping problem facts. No reorder under a finger. Actual native hit slop, safe areas, confirmation/receipt plumbing and VoiceOver/TalkBack remain implementation GAPs.
+
+`png/expanded-{theme}.png` shows controls and the lower page with expanded heads-ups on all platforms; `png/states-{theme}.png` carries all four read alternatives plus a lower-page view. Standard normal PNGs feed the final gallery. The before images are genuine step 01 web / step 08 native fixtures, whose different selected scenarios are labelled; they are not recoloured drawings. No native/new-state runtime after is claimed.
+
+Future baseline ownership: `dashboards/index.html` / connection Summary references, shared **Whombat Desktop.dc.html**, **Whombat Mobile.dc.html** and native fixture captures. No baseline changes here. UIR-17’s connection-card Used today semantics are kept; this page does not invent a Checked timestamp.
+
+## Recorded design measurements and delivery
+
+Minimum sampled visible text across this screen’s platform/state/large-text drawings: **4.942:1 light / 5.515:1 dark**. Inbox badge **4.888 / 7.803**; lit Home Assistant state **10.231 / 8.816** where present. Both themes clear 4.5:1. No undersized drawn targets, page overflow or page errors were recorded. The [common render evidence](../overview/renders.json) and [measurement/delivery notes](../overview/NOTES.md#render-evidence-and-picture-delivery) give the full method, limits, RGB pairs and all 416 observations. This is not a passing app-test or native accessibility claim.
+
+The current picture-delivery addresses were tried: the hostname failed DNS; both IP endpoints returned HTTP 500 (“Whombat couldn’t take that picture”). No numbered areas were returned to annotate. No CI, lint, typecheck, notices, tests or PR-check wait were run.

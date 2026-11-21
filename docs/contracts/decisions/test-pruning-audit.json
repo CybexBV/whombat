@@ -1,0 +1,894 @@
+{
+  "date": "2026-09-26",
+  "repo": "whombat-contracts",
+  "toolchain": {
+    "node": "24.18.0",
+    "pnpm": "12.3.4",
+    "go": "1.26.8",
+    "vitest": "5.0.1"
+  },
+  "baselineCommit": "b8ef569968179fe156896479d9f14718fca9c715",
+  "before": 798,
+  "removed": 163,
+  "after": 635,
+  "skippedUnchanged": 0,
+  "baselineCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 8813,
+        "covered": 8042,
+        "skipped": 0,
+        "pct": 91.25
+      },
+      "branches": {
+        "total": 5554,
+        "covered": 4477,
+        "skipped": 0,
+        "pct": 80.6
+      },
+      "functions": {
+        "total": 1507,
+        "covered": 1386,
+        "skipped": 0,
+        "pct": 91.97
+      },
+      "lines": {
+        "total": 7635,
+        "covered": 7164,
+        "skipped": 0,
+        "pct": 93.83
+      }
+    },
+    "go": {
+      "statementsPercent": 72.7
+    }
+  },
+  "afterCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 8813,
+        "covered": 7937,
+        "skipped": 0,
+        "pct": 90.06
+      },
+      "branches": {
+        "total": 5554,
+        "covered": 4409,
+        "skipped": 0,
+        "pct": 79.38
+      },
+      "functions": {
+        "total": 1507,
+        "covered": 1358,
+        "skipped": 0,
+        "pct": 90.11
+      },
+      "lines": {
+        "total": 7635,
+        "covered": 7076,
+        "skipped": 0,
+        "pct": 92.67
+      }
+    },
+    "go": {
+      "statementsPercent": 72.7
+    }
+  },
+  "removedTests": [
+    {
+      "runner": "vitest",
+      "file": "packages/canvas-schema/src/build.test.ts",
+      "name": "buildCanvasYDoc builds reproducibly with the seed client id, anchoring and marking comments"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/canvas-schema/src/canvas.test.ts",
+      "name": "Y.Doc writes minimal diffs: untouched paragraphs keep their Yjs items"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/canvas-schema/src/canvas.test.ts",
+      "name": "agent edits appends and inserts after a heading"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/control-contracts/src/control.test.ts",
+      "name": "control api renews licences and serves the key set (LC-03, LC-05)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/control-contracts/src/control.test.ts",
+      "name": "control api routes claims.nearby and self-registration (CC-04, CC-10)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/attachments.test.ts",
+      "name": "attachment contracts agents can attach files to their messages and read and publish them"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/collab.test.ts",
+      "name": "collaboration contract describes awareness states with defaults for writing and cursor"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/collab.test.ts",
+      "name": "collaboration contract names canvas documents and parses them back"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "MCP tools are consistent and convert to JSON Schema"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "MCP tools push payloads carry the deep link and, for live activities, the full content state"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "MCP tools validates tool inputs"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "contract round trips agents: profile and hire"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "contract round trips audit page with signed events"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "contract round trips branch room, run, approval"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "contract round trips messages: send and detail"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "contract round trips search, canvas, inbox, auth"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "endpoint registry coerces path params and query strings"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "endpoint registry has the server-core additions: leave a channel, 501 for later phases, new event types"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "endpoint registry is well-formed"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "realtime acknowledges sub/unsub frames that carry an id (C-09)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "realtime parses every sample event and maps each type to topics"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "runner protocol parses a dispatch context"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/contracts.test.ts",
+      "name": "screen coverage backs every screen with registered endpoints"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/live-activity.test.ts",
+      "name": "approval live activity needs a person: question, conditions met, Approve and Details"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/live-activity.test.ts",
+      "name": "live activity push names one iOS attributes type for runs and approvals"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/contracts/live-activity.test.ts",
+      "name": "run live activity shows agent, title, progress, current step and tests while live"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/acp.test.ts",
+      "name": "ACP runtimes (bp-acp.md) a runner names the ACP runtimes it can run in its claim"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "DispatchContext.personal (PA-10) is optional on the wire and null by default"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "connector tools are in MCP_TOOLS with a connector, and Whombat’s own tools have none"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "hire name suggestions are single capitalised words, none a crew or personal agent name"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "personal agent names and handles (PA-04) describes it as its owner’s assistant"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "personal agent names and handles (PA-04) names are unique single capitalised words that mention, and none is a crew name"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "personal keys are a group of their own with the table’s labels and caps"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "the assistant role (PA-01) Agent.ownerId defaults to null for agents stored before it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/connectors.test.ts",
+      "name": "the assistant role (PA-01) is a role with its own copy but not hireable"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "burrow and conversations parse the mock burrow and #billing-v2"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "canvas, search, notifications, dispatch, onboarding parse notifications, dispatches and onboarding state"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "messages and cards parse every card kind"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "plans, runs, approvals parse the storyline objects"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "principals carry the role vocabulary"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "principals keep avatar motion optional in preferences, within 0–2"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/domain.test.ts",
+      "name": "principals parse people and agents"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "assistant preferences (AG-12) are optional and default on"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "connections.finishGoogle (AG-14) answers a path on this Whombat"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "connections.finishGoogle (AG-14) is a POST under /me"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "guide cards (AG-02) parse with defaults, as a message card and as a stored card"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "guides.act (AG-03) is a POST on the message"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "the briefing and the assistant’s tools (AG-10, AG-18) set the briefing"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/guides.test.ts",
+      "name": "the briefing and the assistant’s tools (AG-10, AG-18) wakes with its own trigger"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/memory.test.ts",
+      "name": "planContext estimates tokens at four characters each"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "canAskForMore offers nothing once someone asked, or when the reply was complete"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "canAskForMore offers “More detail” to people under an agent’s short reply"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "canAskForMore parses messages without it as having none"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "replySuggestions offers the newest message’s quick replies when an agent wrote it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "replySuggestions retires them once anything is said after"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "replySuggestions retires them once someone replied in the message’s thread"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/message.test.ts",
+      "name": "suggestionMessage sends the words as they are in the agent’s DM"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/personal.test.ts",
+      "name": "its RIGHT NOW line (IN-17) is fixed words about the owner, by status"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/personal.test.ts",
+      "name": "mention targets (PA-04, PA-05) lets a person with the assistant’s name keep @Name"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/providers.test.ts",
+      "name": "AI providers the agent’s quiet reply names the cause"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/workdir.test.ts",
+      "name": "AgentRuntime fills the host fields for agents stored before they existed"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/workdir.test.ts",
+      "name": "AgentRuntime keeps an old stored agent and a dispatch context parsing"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/workdir.test.ts",
+      "name": "SetAgentRuntimeBody normalizes the typed directory; empty clears it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/workdir.test.ts",
+      "name": "host path helpers expands ~ against the home directory"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/domain/workdir.test.ts",
+      "name": "runtime changes has copy for every option"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "identifiers and snippets makes references and site ids in the contract formats"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "identifiers and snippets renders the basic and custom snippets from the public address"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl drops the query string and fragment"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps ordinary words"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug 2fa"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug api"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug getting-started-with-billing"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug invoices-2026"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug ipv6-settings"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug page-3"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug settings"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl keeps the word or slug v1"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "sanitizePageUrl treats undecodable segments as ids"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/feedback/feedback.test.ts",
+      "name": "schemas includes the report card in the card unions"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/index.test.ts",
+      "name": "core exposes the API prefix and the health contract"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/markdown.test.ts",
+      "name": "parseInline keeps plain text, with curly quotes"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/markdown.test.ts",
+      "name": "parseMessage gives nothing for empty text"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/markdown.test.ts",
+      "name": "parseMessage keeps a one-line message a paragraph"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/markdown.test.ts",
+      "name": "parseMessage starts a list right under a line of text and ends it at an unindented line"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "ids generates prefixed ids"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "mentions gives @Name to a person over a personal agent with that name, and to hired agents over people"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "numbers and stats formats counts"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "numbers and stats formats euros like the mock"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "numbers and stats scales the files table bars like the mock"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "numbers and stats uses the real minus sign in diff stats"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "segments splits inline code in review comments"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "slugs builds and parses agent commit emails"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "slugs builds the burrow host on whombat.com"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "slugs folds accents and fits a DNS label"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/core/src/text/text.test.ts",
+      "name": "slugs matches the mock URL preview for plain names"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/feedback.test.ts",
+      "name": "createFixtureFetch() feedback endpoints turns intake off and pauses assessment, with matching health warnings"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/feedback.test.ts",
+      "name": "feedback fixtures parse against their schemas"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/feedback.test.ts",
+      "name": "feedback fixtures snippets carry the site id and the public address"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "FixtureFetchOptions (TODO 16.4: forcing quiet loading/error states) latencyMs delays every response by at least that long"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema agents.list and agents.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema approvals.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema audit.list and audit.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema bootstrap"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema conversations.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema conversations.getChannel"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema conversations.list"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema messages.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema messages.list"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema messages.thread"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema onboarding.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema prs.list and prs.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "read endpoints validate against their contract response schema runs.get"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "writes a freshly-hired agent’s own profile shows the grants it was hired with"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "writes an @mention in a channel resolves the mention and the agent replies in place"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fetch.test.ts",
+      "name": "writes sends a message and echoes the canned agent reply in a DM"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Banjo"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Clover"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Dusty"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Hazel"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Pippa"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly matches for Sketch"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "KEYS summaries match the mock AG0 exactly signed-in viewer is Mara, the burrow owner"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "bootstrap parses the bootstrap payload"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "burrow and repos has the mock’s four repos, in order, with their descriptions"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "burrow and repos parses every repo"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "burrow and repos parses the burrow"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "conversations and messages parses every conversation"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "conversations and messages parses every message"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "notifications parses every notification"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "onboarding has four steps; step 2 is “Set up your AI” (CT-68)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "onboarding parses the onboarding state"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "onboarding still parses a state from before 0.9.0 and one without the deprecated members"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "principals parses every agent"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "principals parses every person"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "principals parses every principal through the discriminated union"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "search parses every search result"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "search parses the search answer"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the invoice-PDF storyline parses every run log line"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the invoice-PDF storyline parses the PR and its approved terminal state"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the invoice-PDF storyline parses the plan"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the invoice-PDF storyline parses the run and its finished terminal state"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the invoice-PDF storyline parses the staging deploy approval"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the plan canvas groups comments into threads that parse"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the plan canvas parses the canvas and its comments"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the signed audit chain enriches into AuditEvent shape that parses"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/fixtures.test.ts",
+      "name": "the signed audit chain parses every signed event"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/fixtures/src/index.test.ts",
+      "name": "fixtures pins the seed clock to 11:22 Amsterdam time"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/admission.test.ts",
+      "name": "admission tickets verifies a well-formed ticket"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/claim/claim.test.ts",
+      "name": "CPace (draft-irtf-cfrg-cpace-21 B.3) computes the generator, both messages, K and ISK_IR"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/claim/claim.test.ts",
+      "name": "CPace (draft-irtf-cfrg-cpace-21 B.3) encodes lengths and transcripts like Appendix A"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/claim/claim.test.ts",
+      "name": "claim PAKE agrees on both tags with the same inputs"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/frame.test.ts",
+      "name": "frame codec encodes the documented layout"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/frame.test.ts",
+      "name": "frame codec round-trips every frame type"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/relay.test.ts",
+      "name": "relay protocol v1 keeps the close codes of MA-05"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/relay.test.ts",
+      "name": "relay protocol v1 parses hello and the relay messages"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/relay.test.ts",
+      "name": "relay protocol v1 strips unknown members (forward compatibility, CT-14)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "AI clients (CT-72) are api ops over the session: list is a query, install and remove mutate"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "operation allowlist derives one operation per api contract"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "operation allowlist flags exportable, export and ephemeral ops"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "operation allowlist validates api inputs with the endpoint schemas"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "provider sign-ins over REST and the session (CT-70, CT-71) gives every session-native provider op an api op with the same output"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "provider sign-ins over REST and the session (CT-70, CT-71) reads a providers.list answer from a runtime before 0.9.0 (no consoles)"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/protocol/src/session/session.test.ts",
+      "name": "recovery statements signs and verifies over canonical JSON"
+    }
+  ]
+}

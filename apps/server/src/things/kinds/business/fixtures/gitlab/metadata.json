@@ -1,0 +1,10 @@
+{
+  "version": "18.5.1-ee",
+  "revision": "c4bd3f7a1d2",
+  "kas": {
+    "enabled": true,
+    "externalUrl": "wss://gitlab.example.com/-/kubernetes-agent/",
+    "version": "18.5.1"
+  },
+  "enterprise": true
+}

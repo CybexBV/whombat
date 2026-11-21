@@ -1,0 +1,321 @@
+/*
+ * Settings → Agent (one-agent.md AP-4923; was the agent settings page, ui-improvements U5, AP-380…; not in the mocks):
+ * the parts under the Settings tabs as This Whombat's control, then the part's rows (SectionLabel groups of ToggleRows).
+ */
+
+/* The parts' control, as This Whombat's (`ThisWhombat.module.css` .parts). */
+.parts {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: -6px;
+  /* A phone's width doesn't hold every part: the control scrolls sideways, as the tabs above it do. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.parts > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+/*
+ * A phone's width: every part shows (the row wraps rather than hiding the last ones off the edge), and each part is a
+ * 44px target.
+ */
+@media (max-width: 720px) {
+  .parts {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .parts > label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* A part's sections, spaced like the Settings panel and as wide as every other Settings page's. */
+.partBody {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-bottom: 32px;
+  container-type: inline-size;
+}
+
+/* A group of rows under a SectionLabel (the modal's KEYS, CHANNELS, …). */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/*
+ * Access → KEYS → All keys (AP-679): a row like the key rows (10px 0, the top line, 14.5px) that opens the rest of the
+ * keys under it; the chevron turns as AssessmentCard's does, the count on the right in mono.
+ */
+.disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.disclosureChevron {
+  flex: none;
+  color: var(--mut);
+  transform: rotate(-90deg);
+  transition: transform 120ms ease;
+}
+
+.disclosureOpen {
+  transform: none;
+}
+
+.disclosureLabel {
+  flex: 1;
+}
+
+.disclosureMeta {
+  color: var(--mut);
+  font: var(--type-mono-meta-small);
+}
+
+.allKeys {
+  display: flex;
+  flex-direction: column;
+  padding-left: 22px;
+}
+
+/* A labelled field (the agent's NAME). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.textarea {
+  min-height: 96px;
+  padding: 11px 14px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.textarea:focus-visible {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mut);
+}
+
+/* All keys' line, above its first row (AP-679). */
+.allKeysHint {
+  padding-bottom: 8px;
+}
+
+.error {
+  color: var(--bad);
+  font: var(--type-small);
+}
+
+/* A row like the KEYS toggle rows: 10px 0 padding, the top line, 14.5px text, the control on the right. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.rowText {
+  flex: 1;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+/*
+ * Model & provider's MODEL (model-effort.md AP-1128): a radio row per model like Configure's rows (10px 0, the top line,
+ * 14.5px), the radio first as in the connections' choices (16px, `btn`), the tool's own line about it under its name.
+ */
+.choices {
+  display: flex;
+  flex-direction: column;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choiceRadio {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--btn);
+  cursor: inherit;
+}
+
+.choiceRadio:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choiceLabel {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.choice:has(:checked) .choiceLabel {
+  font-weight: 600;
+}
+
+.choiceDescription {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mut);
+}
+
+/* The quiet note when the agent's last turn ran on the default model (AP-1130): the hint's words, under the last row. */
+.fallback {
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mut);
+}
+
+/* EFFORT (AP-1128): the levels as the provider's segmented control on a row of its own, its hint underneath. */
+.effortRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.effortControl {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.effortHint {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mut);
+}
+
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-small);
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* “Unsaved changes · Discard · Save”: sticky at the bottom of the scroll while the tab has changes. */
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 14px 0 20px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.saveText {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink2);
+}
+
+.confirmTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.confirmText {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@container (max-width: 640px) {
+  .saveBar {
+    padding: 12px 0 16px;
+  }
+}
+
+/* Fast replies under EFFORT (chat-runtime.md CR-10, AP-2700): the switch row without the list's top line. */
+.fastRow {
+  border-top: 0;
+  padding-top: 0;
+}

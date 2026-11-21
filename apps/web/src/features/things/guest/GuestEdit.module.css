@@ -1,0 +1,153 @@
+/*
+ * The guest editing tabs' own pieces (stream WA, proxmox-wa.md): what a row becomes after the next restart, the lock
+ * on keys only the platform changes, raw values, the Add menu button, tag chips and the ticks grid. Classes are
+ * prefixed `wa` so they never meet Things.module.css's.
+ */
+
+.waValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.waNext {
+  color: var(--warn);
+  font: 500 13px var(--font-sans);
+  white-space: nowrap;
+}
+
+.waNew {
+  color: var(--mut);
+  font-weight: 400;
+}
+
+.waLock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+  white-space: nowrap;
+}
+
+.waRaw {
+  overflow-wrap: anywhere;
+  font: 400 13px / 1.45 var(--font-mono);
+}
+
+.waActs {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+}
+
+.waActs .waSerious {
+  color: var(--bad);
+}
+
+.waMore {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+}
+
+.waMore:hover,
+.waMore[aria-expanded="true"] {
+  border-color: var(--line2);
+}
+
+.waAdd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.waChecks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 16px;
+}
+
+.waChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--sf2);
+  color: var(--ink);
+  font: 400 13px var(--font-mono);
+}
+
+.waChip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--mut);
+  cursor: pointer;
+}
+
+.waChip button:hover {
+  background: var(--hi);
+  color: var(--ink);
+}
+
+.waChip button:focus-visible,
+.waMore:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.waBoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.waBoot > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.waBootWhat {
+  overflow: hidden;
+  color: var(--mut);
+  font: 400 12.5px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waKv {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 4px 20px 16px;
+  font: 400 14px var(--font-sans);
+}
+
+.waKv dt {
+  color: var(--mut);
+}
+
+.waKv dd {
+  margin: 0;
+}

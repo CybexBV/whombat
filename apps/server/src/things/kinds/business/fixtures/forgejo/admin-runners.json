@@ -1,0 +1,26 @@
+[
+  {
+    "id": 2,
+    "uuid": "986efd6b-6368-44db-b20b-81d1de4d38e3",
+    "owner_id": 0,
+    "repo_id": 0,
+    "name": "build-01",
+    "status": "active",
+    "version": "v12.13.2",
+    "labels": ["ubuntu-latest"],
+    "description": "",
+    "ephemeral": false
+  },
+  {
+    "id": 1,
+    "uuid": "23e24ea6-4b2c-4c1c-b4aa-12c6369bd73b",
+    "owner_id": 0,
+    "repo_id": 0,
+    "name": "build-02",
+    "status": "offline",
+    "version": "",
+    "labels": null,
+    "description": "spare",
+    "ephemeral": false
+  }
+]

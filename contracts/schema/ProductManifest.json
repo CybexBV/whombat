@@ -1,0 +1,504 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/ProductManifest.json",
+  "title": "ProductManifest",
+  "type": "object",
+  "properties": {
+    "manifestVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "productVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+    },
+    "createdAt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4102444800
+    },
+    "repositories": {
+      "minItems": 1,
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "whombat-contracts",
+              "Whombat",
+              "whombat-app",
+              "whombat-api",
+              "whombat-relay",
+              "whombat-appliance",
+              "whombat-hosts"
+            ]
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._/-]+$"
+          }
+        },
+        "required": [
+          "name",
+          "commit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "packages": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^(@[a-z0-9-]+\\/)?[a-z0-9._-]+$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "maxItems": 128,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._/@:-]+$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "nix-store-path",
+              "oci-image",
+              "tarball",
+              "web-bundle",
+              "apk",
+              "ipa",
+              "go-module"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "^[\\x21-\\x7e]+$"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "tuple": {
+      "type": "object",
+      "properties": {
+        "releaseId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+            },
+            "storePath": {
+              "type": "string",
+              "maxLength": 211,
+              "pattern": "^\\/nix\\/store\\/[0-9a-df-np-sv-z]{32}-[A-Za-z0-9+._?=-]+$"
+            },
+            "narHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "schemaReads": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false
+            },
+            "schemaWrites": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "protocol": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false
+            },
+            "hostAbi": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "version",
+            "storePath",
+            "narHash",
+            "schemaReads",
+            "schemaWrites",
+            "protocol",
+            "hostAbi"
+          ],
+          "additionalProperties": false
+        },
+        "providers": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+              },
+              "storePath": {
+                "type": "string",
+                "maxLength": 211,
+                "pattern": "^\\/nix\\/store\\/[0-9a-df-np-sv-z]{32}-[A-Za-z0-9+._?=-]+$"
+              },
+              "narHash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "^[a-z][a-z0-9-]*$"
+              }
+            },
+            "required": [
+              "version",
+              "storePath",
+              "narHash",
+              "provider"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+            },
+            "storePath": {
+              "type": "string",
+              "maxLength": 211,
+              "pattern": "^\\/nix\\/store\\/[0-9a-df-np-sv-z]{32}-[A-Za-z0-9+._?=-]+$"
+            },
+            "narHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "abi": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "version",
+            "storePath",
+            "narHash",
+            "abi"
+          ],
+          "additionalProperties": false
+        },
+        "manager": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+            },
+            "storePath": {
+              "type": "string",
+              "maxLength": 211,
+              "pattern": "^\\/nix\\/store\\/[0-9a-df-np-sv-z]{32}-[A-Za-z0-9+._?=-]+$"
+            },
+            "narHash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "version",
+            "storePath",
+            "narHash"
+          ],
+          "additionalProperties": false
+        },
+        "clientFloor": {
+          "type": "object",
+          "properties": {
+            "web": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "android": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "ios": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "desktop": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "cli": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "required": [
+            "web",
+            "android",
+            "ios",
+            "desktop",
+            "cli"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "releaseId",
+        "runtime",
+        "providers",
+        "host",
+        "manager"
+      ],
+      "additionalProperties": false
+    },
+    "supported": {
+      "type": "object",
+      "properties": {
+        "clientProtocol": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "relayProtocol": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "number",
+            "const": 1
+          }
+        },
+        "upgradeFromSchema": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "clientProtocol",
+        "relayProtocol",
+        "upgradeFromSchema"
+      ],
+      "additionalProperties": false
+    },
+    "upgradePaths": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "via": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 80,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            }
+          },
+          "requiresCheckpoint": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "via",
+          "requiresCheckpoint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$"
+      }
+    }
+  },
+  "required": [
+    "manifestVersion",
+    "productVersion",
+    "createdAt",
+    "repositories",
+    "packages",
+    "artifacts",
+    "tuple",
+    "supported",
+    "upgradePaths",
+    "evidence"
+  ],
+  "additionalProperties": false
+}

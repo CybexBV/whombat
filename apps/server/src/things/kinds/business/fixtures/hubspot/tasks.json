@@ -1,0 +1,32 @@
+{
+  "total": 3,
+  "results": [
+    {
+      "id": "7001",
+      "properties": {
+        "hs_task_subject": "Send the contract again",
+        "hs_timestamp": "2026-10-02T09:00:00Z",
+        "hs_task_status": "NOT_STARTED",
+        "hs_object_id": "7001"
+      }
+    },
+    {
+      "id": "7002",
+      "properties": {
+        "hs_task_subject": "Call about the quote",
+        "hs_timestamp": "2026-10-20T13:00:00Z",
+        "hs_task_status": "IN_PROGRESS",
+        "hs_object_id": "7002"
+      }
+    },
+    {
+      "id": "7003",
+      "properties": {
+        "hs_task_subject": null,
+        "hs_timestamp": "1760950800000",
+        "hs_task_status": "WAITING",
+        "hs_object_id": "7003"
+      }
+    }
+  ]
+}

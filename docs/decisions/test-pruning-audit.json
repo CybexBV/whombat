@@ -1,0 +1,1618 @@
+{
+  "date": "2026-09-26",
+  "repo": "Whombat",
+  "toolchain": {
+    "node": "24.18.0",
+    "pnpm": "12.3.4",
+    "go": "1.26.8",
+    "vitest": "5.0.1"
+  },
+  "baselineCommit": "0219f81e7d6bb25824ad2ef2dd0f490d49327034",
+  "before": 2032,
+  "removed": 309,
+  "after": 1723,
+  "skippedUnchanged": 25,
+  "baselineCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 36519,
+        "covered": 29930,
+        "skipped": 0,
+        "pct": 81.95
+      },
+      "branches": {
+        "total": 26716,
+        "covered": 19521,
+        "skipped": 0,
+        "pct": 73.06
+      },
+      "functions": {
+        "total": 7256,
+        "covered": 6091,
+        "skipped": 0,
+        "pct": 83.94
+      },
+      "lines": {
+        "total": 31374,
+        "covered": 26779,
+        "skipped": 0,
+        "pct": 85.35
+      }
+    }
+  },
+  "afterCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 36519,
+        "covered": 29440,
+        "skipped": 0,
+        "pct": 80.61
+      },
+      "branches": {
+        "total": 26716,
+        "covered": 19015,
+        "skipped": 0,
+        "pct": 71.17
+      },
+      "functions": {
+        "total": 7256,
+        "covered": 6002,
+        "skipped": 0,
+        "pct": 82.71
+      },
+      "lines": {
+        "total": 31374,
+        "covered": 26387,
+        "skipped": 0,
+        "pct": 84.1
+      }
+    }
+  },
+  "removedTests": [
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/admin.test.ts",
+      "name": "whombat admin says what happened"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/config-file.test.ts",
+      "name": "buildConfig replaces settings given explicitly, keeps the rest, follows PORT for the runner’s server URL"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/config-file.test.ts",
+      "name": "buildConfig uses your own database when DATABASE_URL is set: no embedded Postgres settings"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/config-file.test.ts",
+      "name": "config.env renders sections that read back as the same values"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/config-file.test.ts",
+      "name": "config.env updates an existing file in place: comments, order and unknown lines stay"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "backup helpers a home “has data” once it has more than config.env and logs"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "backup helpers lists backups newest first, by label"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "layout recognizes a child of any release (one left by the release before an upgrade)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "layout runs a checkout through tsx and a release’s bundles directly"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "layout services run <prefix>/current/bin/whombat for an installed release"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "support bundle redaction reads the last lines of a log"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "the unit for a release ExecStart is the current launcher, not tsx or a checkout; WHOMBAT_NODE names node"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "the unit for a release a checkout unit is unchanged"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/distribution.test.ts",
+      "name": "upgrade helpers links ~/.local/bin/whombat, updates a checkout shim link, leaves anything else alone"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/doctor.test.ts",
+      "name": "ACP runtime check (bp-acp.md) ok when every runtime is ready"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/doctor.test.ts",
+      "name": "doctor checks what the service will see uses the PATH of the unit installed for this home"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/doctor.test.ts",
+      "name": "sandbox checks is in the doctor’s extra checks"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/misc.test.ts",
+      "name": "WHOMBAT_HOME is --home, else WHOMBAT_HOME, else ~/.whombat, with ~ expanded"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/misc.test.ts",
+      "name": "findExecutable searches PATH, then ~/.local/bin"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/pg.test.ts",
+      "name": "pickLocale prefers C.UTF-8, then en_US.UTF-8, else C"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/pg.test.ts",
+      "name": "postgres settings builds the same URL as the server for the whombat database, password encoded"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/pg.test.ts",
+      "name": "postmaster.pid a postmaster holds its port once postmaster.pid names it and has its status line"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/process.test.ts",
+      "name": "lineSplitter emits whole lines across chunks, and the rest at the end"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/process.test.ts",
+      "name": "spawnChild logs output lines and reports the exit"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "renderUnit keeps PATH free of duplicates, the CLIs’ directories first"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "renderUnit names the major-version alias of a version manager’s node, so patch upgrades don’t break it"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "renderUnit reads the environment back from a unit it wrote (quotes and % undone)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "renderUnit runs whombat start from the checkout with an explicit PATH holding the CLIs’ directories"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status a re-install restarts the running service, so its new PATH applies"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status no linger hint when linger is on"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status says so when the service doesn’t stay up, with its last log lines"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status status passes systemctl through with its exit code"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status uninstalls: disable --now, remove the file, reload; nothing to do when not installed"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/service.test.ts",
+      "name": "service install / uninstall / status writes the unit, reloads, enables and (re)starts it, and hints at linger"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/start.test.ts",
+      "name": "startSteps no Postgres of its own when DATABASE_URL is set"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/start.test.ts",
+      "name": "startSteps web → postgres → migrations → server → runner with the embedded Postgres"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/start.test.ts",
+      "name": "whombat.pid RunState.take stops a leftover server of this checkout and home"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/start.test.ts",
+      "name": "whombat.pid round-trips the supervisor and its children with their start times and the boot"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/supervisor.test.ts",
+      "name": "Supervisor a stop during the restart pause ends the wait at once"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/cli/src/supervisor.test.ts",
+      "name": "Supervisor stops in reverse order: runner, server, Postgres"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/acp.test.ts",
+      "name": "ACP runtimes in the registry scripted mode claims ACP agents too (and plays them as the demo)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/acp.test.ts",
+      "name": "ACP turns a Whombat posting tool the runtime called counts as the reply (not posted twice)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/acp.test.ts",
+      "name": "ACP turns a trusted agent’s turn runs on the runtime and its reply is posted"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/attachments.test.ts",
+      "name": "the runner’s prompt names each message’s files with ids and the file tools"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/attachments.test.ts",
+      "name": "turn files fetches what the provider can use, verifies it, excerpts text and cleans up"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/clients.test.ts",
+      "name": "RunnerClients points the provider at the installed client and back to the default when there is none"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/clients.test.ts",
+      "name": "resolveClient an operator’s pin wins over everything"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/clients.test.ts",
+      "name": "resolveClient managed: the bundle the manager installed, or client.not_installed"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/clients.test.ts",
+      "name": "resolveClient self-hosted: tools/<provider>/current/<provider>, else the default lookup"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/clients.test.ts",
+      "name": "which client executables may run at all (review CLI-1, CLI-4) managed runners look in /persist/whombat/clients unless WHOMBAT_CLIENTS_ROOT says otherwise"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/config.test.ts",
+      "name": "runner config defaults to the local server and scripted agents"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/config.test.ts",
+      "name": "runner config keeps the Codex home under WHOMBAT_HOME unless WHOMBAT_CODEX_HOME says otherwise"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/guides.test.ts",
+      "name": "guided setup in the runner’s prompt asks for the morning briefing on a briefing dispatch"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/guides.test.ts",
+      "name": "guided setup in the runner’s prompt helps with the step when the owner asked from a stuck card"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/guides.test.ts",
+      "name": "guided setup in the runner’s prompt shows a guide card in history as what it asked and what was chosen"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/packs.test.ts",
+      "name": "pack instructions in the runner’s prompt come after Whombat’s rules, before memory, as data with name@version"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "Runner cleans up workspaces at start (then daily) and says what it removed"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "TurnInput from keys renders the persona, keys and the coalesced mentions"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "concise replies (docs/decisions/concise-replies.md) asks for short replies and says how to offer more"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "concise replies (docs/decisions/concise-replies.md) asks for the detail on “More detail”, where the short reply is"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "concise replies (docs/decisions/concise-replies.md) splits the MORE: line off the final text"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "provider registry live mode adds the providers that are exported and available"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "provider registry re-checks providers that are not ready, so logging in on the host needs no restart"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "provider registry scripted mode claims every provider and runs them all with the scripted provider"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "provider registry the runner sends the host status with its beats and re-checks when the server asks"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "runDispatch carries on quietly when a restart cut the turn off after it posted"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "runDispatch does not post twice when the agent already posted through MCP"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "runDispatch names its lease on every call, and lets go quietly once it lost it"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "runDispatch posts the final text through MCP when the agent did not post, then completes done"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "runDispatch replies in the thread when the trigger was a thread reply"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/runner/src/turn.test.ts",
+      "name": "working directory and access (S-11, S-13) runs a live chat turn in the working directory, guarded, and reports the access with the first beat"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/app.int.test.ts",
+      "name": "server GET /api/v1/health reports the database as up"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/app.int.test.ts",
+      "name": "server has an explicit definition (handler or 501 with its phase) for every endpoint"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/local-installer.test.ts",
+      "name": "LocalClientInstaller ignores and reports a channel that goes back to a lower sequence"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/local-installer.test.ts",
+      "name": "LocalClientInstaller installs a binary and a tar.gz client into the tools layout"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/local-installer.test.ts",
+      "name": "LocalClientInstaller reports a CLI on the host PATH until Whombat installs its own"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/local-installer.test.ts",
+      "name": "extractTarEntry reads ustar, pax paths and ./ prefixes"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/service.test.ts",
+      "name": "channelKeys (review CLI-2) works the key map out again for every moment it is asked about (repro keys.mts)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/clients/service.test.ts",
+      "name": "managedClientState (SUB-52) follows the manager’s status once it has one, and says nothing before"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/collab/collab.test.ts",
+      "name": "awareness names collaborators and tints them by role (agents) or avatar tone (people)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/collab/collab.test.ts",
+      "name": "awareness publishes, renews and removes a server-driven participant"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/collab/collab.test.ts",
+      "name": "awareness stamps the connection’s identity over whatever a client claims"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/agent-runtime.int.test.ts",
+      "name": "agents.setRuntime accepts a symlink that stays inside the roots"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/agent-runtime.int.test.ts",
+      "name": "agents.setRuntime lets an owner set the working directory, checkout and access, one signed Keys event each"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/agent-runtime.int.test.ts",
+      "name": "agents.setRuntime writes nothing when nothing changes, and clears the directory with null or an empty string"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/agent-runtime.int.test.ts",
+      "name": "host.info tells members the home directory and the workdir roots"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/burrow-workdir.int.test.ts",
+      "name": "burrows.setWorkdir lets an owner who is an admin set it: a signed Keys event, the burrow updated live"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/burrow-workdir.int.test.ts",
+      "name": "burrows.setWorkdir writes nothing when nothing changes"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/channels.int.test.ts",
+      "name": "update_conversation an agent renaming a channel needs the channels.create key"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/channels.int.test.ts",
+      "name": "update_conversation renames a channel and changes its topic, one audit line each"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/membership.int.test.ts",
+      "name": "agents and other people’s membership an agent may still leave, and people may still take people out"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/membership.int.test.ts",
+      "name": "create_channel with members an agent asking to create a channel with people shows who gets added"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/membership.int.test.ts",
+      "name": "create_channel with members people still create channels with agents in them"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/profile.int.test.ts",
+      "name": "PATCH /me/profile names a new account, and its first burrow’s person takes the name, initials and title"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/profile.int.test.ts",
+      "name": "PATCH /me/profile renames a member everywhere with a signed event, keeping the handle"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/commands/runs.int.test.ts",
+      "name": "resume the agent may resume a run it paused itself"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "loadConfig applies defaults"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "loadConfig coerces values and treats empty strings as unset"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation accepts a complete production configuration"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation keeps mail optional: Mailpit outside production, nothing by default in production, off on request"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation lists every production problem at once, with clear messages"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation parses TRUST_PROXY"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation reads <NAME>_FILE, trimming the trailing newline"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/config.test.ts",
+      "name": "secrets from files and production validation uses the embedded Postgres when DATABASE_URL is unset and whombat init set its password"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/mime.test.ts",
+      "name": "RFC 2822 messages round-trips base64url"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/mime.test.ts",
+      "name": "RFC 2822 messages threads replies"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/oauth.test.ts",
+      "name": "RealGoogleOAuth reads userinfo with the bearer token"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/oauth.test.ts",
+      "name": "withParam adds the outcome and drops an earlier one"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "calendar switches an event between timed and all-day by clearing the other kind (IN-24)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "calendar updates the guest list keeping the owner and the answers of guests who stay"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "contacts searches, warming People’s cache up once when the first answer is empty"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "drive, docs and sheets creates a doc from Markdown with a multipart upload"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "drive, docs and sheets edits a doc: append at the end, replace all; counts edits that changed something"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "drive, docs and sheets reads and writes sheet ranges (range encoded in the path)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "drive, docs and sheets shares with a notification and trashes by flag"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "mail reads a draft with every recipient, blind copies included"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "mail reads a thread as text with attachments"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/connectors/workspace-real.test.ts",
+      "name": "mail sends a draft"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/compat.test.ts",
+      "name": "evaluateSchema: what a binary may do on a database a pending contract needs a checkpoint (but not on an empty database)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/compat.test.ts",
+      "name": "evaluateSchema: what a binary may do on a database current: the database is exactly this binary’s schema"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/compat.test.ts",
+      "name": "evaluateSchema: what a binary may do on a database new binary, old schema before migrating: migration required, nothing it may do yet"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/compat.test.ts",
+      "name": "resolveCompat: the rules authors follow (MD-03) resolves tags to positions"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/compat.test.ts",
+      "name": "resolveCompat: the rules authors follow (MD-03) this build’s own compat.json is valid and covers every migration"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/db/schema/onboarding-step.test.ts",
+      "name": "onboarding steps (CT-68: four steps, older progress mapped) maps five-step progress saved before 0.9.0: 0→0, 1→1, 2→1, 3→2, 4→3"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/demo/demo.int.test.ts",
+      "name": "the demo storyline plays from 11:22 to the deployed end state"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/demo/sketch.int.test.ts",
+      "name": "Sketch writing the plan canvas in the demo types the rule, stays writing at its end, then finishes it"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/dispatch-handoff.int.test.ts",
+      "name": "agent handoffs allows a short exchange, then stops autonomous replies until a person speaks"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/live-activity.test.ts",
+      "name": "LiveActivityBroadcaster approval: pending → approved → executed ends the activity (demo: approval → approved → deployed)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/live-activity.test.ts",
+      "name": "LiveActivityBroadcaster sends each activity to its audience and ends a taken-over run"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/live-activity.test.ts",
+      "name": "LiveActivityBroadcaster sends nothing when nobody has a registered device for the activity"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/live-activity.test.ts",
+      "name": "approverIdsOf is empty when there is no person_approves condition"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/live-activity.test.ts",
+      "name": "approverIdsOf reads the person_approves condition"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/search-index.int.test.ts",
+      "name": "search indexing through the commit pipeline a new canvas is searchable the instant create_canvas resolves"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/search-index.int.test.ts",
+      "name": "search indexing through the commit pipeline a new message is searchable the instant send_message resolves"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/search-index.int.test.ts",
+      "name": "search indexing through the commit pipeline a pull request and its pushed commits are searchable immediately"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/search-index.int.test.ts",
+      "name": "search indexing through the commit pipeline a run is searchable as soon as it starts, and again once it finishes with a summary"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/domain/search-index.int.test.ts",
+      "name": "search indexing through the commit pipeline a thread reply is searchable immediately and flips the root to THREAD"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/embed.int.test.ts",
+      "name": "the built widget serves the loader to any site, cached five minutes"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "normalizeSubmission the payload hash is stable and covers screenshots by hash"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "normalizeSubmission wellFormed removes NUL and lone surrogates everywhere"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "submission structure bounds (R1-1) counts every node, and inherited names are not known fields"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "submission structure bounds (R1-1) passes what the widget sends"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "the image worker (R1-3) re-encodes off the main thread, one job at a time, with one long-lived worker"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/feedback.test.ts",
+      "name": "the image worker (R1-3) resolves the worker module from source, and from a release bundle next to app/server.mjs"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/intake.int.test.ts",
+      "name": "script-free intake a feature with a JPEG: EXIF is gone from what is stored; the Feedback principal is not created twice"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/intake.int.test.ts",
+      "name": "the visitor’s words are data (FB-15) mentions and commands in a report mention nobody and dispatch nothing"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/feedback/render.test.ts",
+      "name": "inertReply matches the summary’s neutralization on one line"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "FakeGitHub answers conditional reads with ETags, like GitHub"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "GhCliGitHub over a fake transport sends the last ETag and answers a 304 as unchanged"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "GhCliGitHub over a fake transport tells a fork’s PR from one of the repo’s branches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "check runs → checks keeps the last lines of a review comment’s hunk as diff lines"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "check runs → checks maps states, tests and durations the way the side pane shows them"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "deploy workflows picks the most specific entry"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "deploy workflows uses one file for everything"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "mode is the fake in development and tests, gh in production; the removed App reads as gh"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "poll plans finds opened, pushed, edited, reopened and vanished PRs"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "poll plans is empty once applied (polling again changes nothing)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "poll plans reads the commits of a PR the burrow has none of (one Whombat opened), once"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "poll plans takes a push’s commits after the old head, and every deploy run since the first dispatch"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "the gh token finds gh in ~/.local/bin when it is not on PATH"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/github/github.test.ts",
+      "name": "the gh token keeps the session bus, so a token gh keeps in the desktop keyring can be read"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "coming back from Google (AG-08) reads the DM and the card back from the return path"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "coming back from Google (AG-08) shows each service’s check, with Turn it on for a turned-off API"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "connect topics (AG-05) (a) with the app set: a connect card, every service preticked, the topic’s first, back to the DM"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "connect topics (AG-05) (b) no app, an admin: the app setup; (c) not an admin: ask an admin"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "connect topics (AG-05) Google turned off: says so"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "connect topics (AG-05) already connected: the result card and the briefing offer"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "repair (AG-13) says what stopped and offers to reconnect; admins get the publish link for Testing"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "suggestions (AG-11) offers Set it up, Not now and Don’t ask again"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "suggestions (AG-11) picks the first topic not set up and not in dontAsk"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the admin’s Google app setup (AG-06) I’m stuck: the troubleshooting, then the step again or ask the agent"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the admin’s Google app setup (AG-06) asks an admin from their own assistant, who can start the setup"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the admin’s Google app setup (AG-06) says Google is ready with a connect card"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the admin’s Google app setup (AG-06) shows the consent screen values and the redirect URI to copy"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the admin’s Google app setup (AG-06) with the app in config or set already, there is nothing to set up"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the morning briefing (AG-09, AG-10) asks the time, then the days, then sets it with Change and Turn it off"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the morning briefing (AG-09, AG-10) needs mail or calendar first"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the morning briefing (AG-09, AG-10) stores the time and days as a cron in the person’s zone"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the welcome (AG-04) greets by name and offers the four topics and Maybe later"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/guides/flows.test.ts",
+      "name": "the welcome (AG-04) starts the chosen topic, and Maybe later posts nothing"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/lib/host-paths.test.ts",
+      "name": "host paths expands ~ in WHOMBAT_HOME and WHOMBAT_WORKDIR_ROOTS"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/lib/licence-gate.test.ts",
+      "name": "LicenceGate says one agent, not one agents (LC-14)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mail/mailer.test.ts",
+      "name": "createMailer logs the whole message in development (the sign-in code is read from the server log)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/audience.int.test.ts",
+      "name": "an agent reads only what its audience may read canvas_read of a room’s canvas follows the same rule; its own room reads it"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/audience.int.test.ts",
+      "name": "an agent reads only what its audience may read still reads its own room, and a room that holds everyone of its own"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/body-limit.int.test.ts",
+      "name": "SEC-MCP-BODY: /mcp authenticates before it reads the body still takes a large body from a live agent token"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "MCP server advertises every tool in the core contract with its JSON Schema"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent a reviewer approving a PR advances their plan step"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent allow: a researcher holding the key searches the burrow"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent drops quick replies on a person’s message"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent keeps an agent’s offer of more detail on posts and thread replies (concise-replies.md)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent keeps an agent’s quick replies, on posts, thread replies and cards (RM-05)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent post_answer delivers the search-screen answer with receipts the asker may open"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent post_message and reply_in_thread sign the message as the agent"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent reads conversations and canvases it may see; edits canvases with the key"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent request_approval posts an approval card with the agent’s own copy"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent runs: start, log, steps, tests, files and finish stream into the run"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent set_status updates the roster; open_pull_request opens a branch room"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/mcp/mcp.int.test.ts",
+      "name": "tool calls run commands as the agent stamps the dispatch the first time it posts, so a retried turn knows it already did"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/read/pr-staging.int.test.ts",
+      "name": "PR detail staging approval is shown to conversation members and approvers"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/read/work-views.int.test.ts",
+      "name": "inbox section ordering orders MENTIONS oldest first, independent of insertion or row order"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/read/work-views.int.test.ts",
+      "name": "inbox section ordering orders NEEDS YOU and FROM AGENTS newest first (unchanged)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "connecting authenticates mobile with ?token="
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "connecting says hello with the principal, and answers pings"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "ephemeral events publishes presence, and offline when the last connection closes"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "subscriptions and delivery acks unsub frames that carry an id, and stays silent when they do not (C-09)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "subscriptions and delivery delivers message.created in order with a per-connection seq, and eventIds of the signed events"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/realtime/realtime.int.test.ts",
+      "name": "subscriptions and delivery personalizes reactions per viewer"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/endpoints.int.test.ts",
+      "name": "every endpoint covered everything except the endpoints owned by later phases"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/endpoints.int.test.ts",
+      "name": "every endpoint feedback (the public widget surface is tested in feedback/*.int.test.ts)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/health.int.test.ts",
+      "name": "SEC2-F10: health tells strangers only that it is up a local caller (loopback, loopback Host, no proxy) gets the version"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/more.int.test.ts",
+      "name": "more detail puts the detail in the thread when the short reply is in one"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/more.int.test.ts",
+      "name": "more detail wakes the agent once, in its own turn, where the short reply is"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "audit log exports the current filter as CSV"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "audit log filters by actor type, agent and kind, with counts over the actor/who base"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "audit log pages with a cursor"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "bootstrap loads the shell with sidebar sections and per-viewer unread / mention counts"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "conversations and messages messages in an agent DM dispatch to the agent"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "conversations and messages replies in a thread, toggles reactions and marks read"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "conversations and messages sends a message that mentions an agent: dispatch queued, thinking shown, badge for others"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "conversations and messages shows a thread with its context line"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "runs, approvals, agents serves the approval modal data and the branch room pane"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "runs, approvals, agents serves the roster and the profile pane"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "search finds rounding history, ranked, with type counts"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/routes/rest.int.test.ts",
+      "name": "search queues a researcher dispatch when asked for an answer"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/runtime/agent-setup.int.test.ts",
+      "name": "AI provider status knows nothing until a runner reports, then says which providers are ready"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/runtime/agent-setup.int.test.ts",
+      "name": "AI provider status “Check again” reaches the runner with its next beat and is pending until it reports"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/runtime/agent-setup.int.test.ts",
+      "name": "dispatches no runner can run the agent says why instead of thinking until it times out"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() bootstrap matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() canvas meta matches for the fixtures-servable canvas"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() each agent profile matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() each conversation matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() inbox MENTIONS orders Priya before Pippa, oldest first, as in the mock"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() loaded the full fixture world, not the built-in test world"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() the agents list matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() the approval matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() the run matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() the search answer matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/seed/fixtures.int.test.ts",
+      "name": "seeded server vs createFixtureFetch() the thread matches"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/server.test.ts",
+      "name": "SeedWorld accepts the built-in test world and applies defaults"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/server.test.ts",
+      "name": "SeedWorld pins seeded fingerprints to the deterministic seed keys"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/server.test.ts",
+      "name": "SeedWorld shifts instants exactly and calendar dates by whole days (--relative)"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/server.test.ts",
+      "name": "typing indicators keeps fan-out going when a listener throws"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/web/static.test.ts",
+      "name": "registerWebApp caches hashed assets forever and revalidates other files"
+    },
+    {
+      "runner": "vitest",
+      "file": "apps/server/src/web/static.test.ts",
+      "name": "registerWebApp falls back to index.html for app routes, with their query strings"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP negotiation records what the runtime advertised and derives the capability matrix"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP reply text a new message id starts a new message; an empty last message falls back to all the text"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP reply text the reply is the message after the last tool call, not the preamble before it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP runtime configuration reads $WHOMBAT_HOME/acp-runtimes.json with defaults, and says nothing when there is none"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP session updates maps chunks, tools and usage to turn events"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "ACP stdio stream passes JSON-RPC lines and stops at the first line that isn’t one"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "AcpProvider with the fake runtime a trusted turn: Whombat MCP over HTTP with the bearer token, tool events, the reply"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/acp/acp.test.ts",
+      "name": "AcpProvider with the fake runtime reports usage when the runtime supplies it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/attachments.test.ts",
+      "name": "planning attachments by capability images and PDFs go in as input where the provider takes them; text as an excerpt; the rest a note"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/attachments.test.ts",
+      "name": "the prompt names each message’s files with ids"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/attachments.test.ts",
+      "name": "the prompt says what each file is for this turn and fences text as data"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/binary.test.ts",
+      "name": "Claude Code 2.1.283 (the pinned binary, offline) a managed API-key turn: the owner’s key through apiKeyHelper, nothing from the runner"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/binary.test.ts",
+      "name": "Claude Code 2.1.283 (the pinned binary, offline) a pack skill: the model sees exactly that skill"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/claude.test.ts",
+      "name": "Claude Code command line builds the flags and the initialize request from the turn options"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/claude.test.ts",
+      "name": "Claude Code command line reads `claude auth status --json`"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/claude.test.ts",
+      "name": "Claude tool policy knows local hosts"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/claude.test.ts",
+      "name": "ClaudeEventMapper ignores subagent traffic except as thinking"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/claude.test.ts",
+      "name": "ClaudeProvider with a fake Claude Code CLI maps a real transcript to TurnEvents"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/claude/git-search.test.ts",
+      "name": "guarded searches and .git keeps .git excluded even when the agent’s glob names it"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/codex/codex.test.ts",
+      "name": "Codex event mapping an interrupted turn ends silently"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/codex/codex.test.ts",
+      "name": "Codex event mapping ignores notifications from other turns once the turn id is known"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/codex/codex.test.ts",
+      "name": "Codex event mapping names non-Whombat MCP tools with their server"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/codex/codex.test.ts",
+      "name": "CodexProvider with a fake app-server runs a trusted agent with danger-full-access and the owner’s environment"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/codex/codex.test.ts",
+      "name": "CodexProvider with a fake app-server runs a turn and maps the transcript to TurnEvents"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/host.test.ts",
+      "name": "resolveWorkdir (one check for server and runner) resolves ~ and symlinks that stay inside the roots"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/host.test.ts",
+      "name": "the runner’s private scratch space (BP-C38) is per user, under the temporary directory"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/index.test.ts",
+      "name": "agent-runtime uses the scripted provider unless agents are live"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/memory.test.ts",
+      "name": "memory in the prompts shows the checkpoint, the summary and a resumed session"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts adds the coding rules for run work"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts renders a channel mention with the window"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts renders a paused run to resume"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts renders a search question with the results to cite"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts renders a thread reply"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/persona/persona.test.ts",
+      "name": "persona prompts says so when a personal agent’s owner connected nothing"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "drift check accepts exactly the pinned binary"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "drift check measures the npm launcher’s native binary"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "drift check reads an installed executable: realpath, sha256, --version"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "managed availability (pinned runtime only, never a login) accepts the installed pinned Claude Code binary"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "pinned bundles and their fixtures every stream-JSON field Whombat reads is one the pinned binary sends"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "pinned bundles and their fixtures the experimental fields Whombat may send are exactly the listed ones, and experimental in the fixture"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/bundles.test.ts",
+      "name": "pinned bundles and their fixtures the installed Claude Code binary is the pinned one"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/login.test.ts",
+      "name": "Codex sign-in (fake codex-cli 0.157.0) relays the device code, then signs in once the person approves"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/login.test.ts",
+      "name": "sign-in commands build their environment from nothing but PATH and the locale"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/providers/policy.test.ts",
+      "name": "eligibility policy (the full matrix) explains the Claude subscription exclusion and names the owner for organization work"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/assistant.test.ts",
+      "name": "the scripted assistant finds tomorrow in the burrow’s time zone and lists its events"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/assistant.test.ts",
+      "name": "the scripted assistant sends through mail_send reads recipients, subject and body from the owner’s message"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/assistant.test.ts",
+      "name": "the scripted assistant summarizes mail"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "ScriptedProvider a reviewer woken by a push approves the PR and posts the pill"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "ScriptedProvider answers a search with the mock answer and its three receipts"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "ScriptedProvider plays Banjo’s run through MCP: log lines, steps, tests 41/41, diff, branch room, finish"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "ScriptedProvider resumes a paused run from its last line"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "chooseScript picks the behaviour from the dispatch"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "storyline helpers cites the thread, patch and run for the rounding question"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "storyline helpers follows the mock’s active step and diff growth"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/scripted/scripted.test.ts",
+      "name": "storyline helpers knows where a paused run stands from its latest line"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/sd-notify.test.ts",
+      "name": "systemd notifications (NX-20, MR-37) does nothing outside systemd"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/sd-notify.test.ts",
+      "name": "systemd notifications (NX-20, MR-37) says READY and STOPPING, and pings the watchdog every half period while alive"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/support/support.test.ts",
+      "name": "AsyncQueue delivers pushed items in order and ends on close"
+    },
+    {
+      "runner": "vitest",
+      "file": "packages/agent-runtime/src/support/support.test.ts",
+      "name": "killProcessTree is safe after the leader already exited"
+    },
+    {
+      "runner": "vitest",
+      "file": "scripts/package/src/package.test.ts",
+      "name": "launcher is POSIX sh that follows links to its release and runs app/cli.mjs"
+    },
+    {
+      "runner": "vitest",
+      "file": "scripts/package/src/package.test.ts",
+      "name": "notices finds the package of a bundled file"
+    },
+    {
+      "runner": "vitest",
+      "file": "scripts/package/src/package.test.ts",
+      "name": "notices lists each package once with its license text"
+    },
+    {
+      "runner": "vitest",
+      "file": "scripts/package/src/package.test.ts",
+      "name": "platform packages for another arch checks bytes against it"
+    },
+    {
+      "runner": "vitest",
+      "file": "scripts/package/src/package.test.ts",
+      "name": "the release’s feedback image worker (R1-3) is its own bundle next to the server’s, and the bundled server code finds and runs it"
+    }
+  ]
+}

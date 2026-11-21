@@ -1,0 +1,7 @@
+#crop { position: relative; width: 100%; overflow: hidden; background: var(--bg); }
+#crop.atlas img { position: absolute; max-width: none; margin: 0; border: none; border-radius: 0; }
+.compare figure { min-width: 0; }
+.compare > figure { align-self: start; }
+.controls select { max-width: 100%; min-height: 44px; }
+[hidden] { display: none !important; }
+#crop.atlas img { height: auto; max-height: none; object-fit: fill; }

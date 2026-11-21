@@ -1,0 +1,22 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name		"unassigned.devices">
+<!ENTITY author		"Limetech">
+<!ENTITY version	"2026.10.12">
+<!ENTITY launch		"Main/UnassignedDevices">
+<!ENTITY gitURL		"https://raw.githubusercontent.com/unraid/&name;/master">
+<!ENTITY pluginURL	"&gitURL;/&name;.plg">
+<!ENTITY supportURL	"https://forums.unraid.net/topic/92462-unassigned-devices-managing-disk-drives-and-remote-shares-outside-of-the-unraid-array/">
+<!ENTITY MD5		"c5bc1dbc12298062f519cf67e654b63e">
+]>
+
+<PLUGIN name="&name;"
+		author="&author;"
+		launch="&launch;"
+		version="&version;"
+		pluginURL="&pluginURL;"
+		support="&supportURL;"
+		icon="unlink"
+		min="6.11.0">
+<!-- The rest of the file (CHANGES, FILE elements) is left out: the agent reads the head only. -->
+</PLUGIN>

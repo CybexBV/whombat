@@ -1,0 +1,135 @@
+/*
+ * Settings → Devices' “Add a computer”: the Mobile app page's numbered steps (mobile.module.css `.step`), smaller to sit
+ * in a Settings row. Tokens only.
+ */
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 2px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.stepDot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--btn);
+  color: var(--btnfg);
+  font: 500 11.5px var(--font-mono);
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* Copy the link, and the link itself folded under it. */
+.stepLink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.linkFold {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.linkFold > summary {
+  align-self: flex-start;
+  color: var(--mut);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.linkFold > summary:hover {
+  color: var(--ink);
+}
+
+/* “Have a code already?”: a quiet link under the row's line, a 44px target on a phone or a touch screen. */
+.codeLink {
+  font-size: 13.5px;
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  .codeLink {
+    min-height: 44px;
+  }
+
+  /* Show the link: a 44px row, keeping its disclosure triangle. */
+  .linkFold > summary {
+    padding: 12px 0;
+  }
+}
+
+/* The code field and Continue on one baseline (the label sits over the field). */
+.codeForm {
+  align-items: flex-end;
+}
+
+/*
+ * PASSKEYS' “Passkey details”: a whole row that opens the list under it, its words where the passkey's are (after the
+ * 18px mark), its chevron down, and up while open.
+ */
+.detailsRow {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detailsRow:hover {
+  background: var(--sf2);
+}
+
+.detailsRow:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.detailsSpacer {
+  flex: none;
+  width: 18px;
+}
+
+.detailsChevron {
+  display: flex;
+  flex: none;
+  color: var(--mut);
+  transition: transform var(--duration-toggle, 120ms);
+}
+
+[aria-expanded="true"] > .detailsChevron {
+  transform: rotate(180deg);
+}
+
+/* What Passkey details opens: its rows stay the card's own rows. */
+.details {
+  display: flex;
+  flex-direction: column;
+}

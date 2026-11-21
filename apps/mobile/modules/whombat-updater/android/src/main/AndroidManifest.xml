@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The app installs its own updates (android-self-update.md AP-813): Android still asks the person each time. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+  <application>
+    <provider
+      android:name="com.whombat.updater.WhombatUpdateFileProvider"
+      android:authorities="${applicationId}.whombat-updates"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/whombat_update_paths" />
+    </provider>
+  </application>
+</manifest>

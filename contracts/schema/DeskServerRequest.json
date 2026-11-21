@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskServerRequest.json",
+  "title": "DeskServerRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "range": {
+      "type": "string",
+      "enum": [
+        "1h",
+        "24h",
+        "7d"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "range"
+  ],
+  "additionalProperties": false
+}

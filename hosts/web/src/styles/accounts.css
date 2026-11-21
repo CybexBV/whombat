@@ -1,0 +1,27 @@
+/* Accounts: kiosk mode (a read-only wall display of the overview). */
+
+.is-kiosk .topbar > .brand {
+  margin-right: 0;
+}
+.kiosk-clock {
+  min-width: 48px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+/* Nothing on a wall display is a control: links do not navigate. */
+.is-kiosk .main a {
+  pointer-events: none;
+}
+/* No bottom bar on phones. */
+.app.is-kiosk .main {
+  padding-bottom: 32px !important;
+}
+/* Large screens (a TV across the room): everything a size up. */
+@media (min-width: 1900px) {
+  .is-kiosk .main {
+    zoom: 1.15;
+  }
+}

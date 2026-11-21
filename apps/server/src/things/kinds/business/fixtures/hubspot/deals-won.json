@@ -1,0 +1,24 @@
+{
+  "total": 2,
+  "results": [
+    {
+      "id": "8001",
+      "properties": {
+        "amount": "5000",
+        "amount_in_home_currency": "5000",
+        "dealname": "Initech – rebuild",
+        "dealstage": "closedwon",
+        "closedate": "2026-10-07T12:00:00Z"
+      }
+    },
+    {
+      "id": "8002",
+      "properties": {
+        "amount": "1500",
+        "dealname": "Globex – audit",
+        "dealstage": "closedwon",
+        "closedate": "2026-10-15T12:00:00Z"
+      }
+    }
+  ]
+}

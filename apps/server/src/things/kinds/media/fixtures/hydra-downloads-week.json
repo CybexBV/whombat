@@ -1,0 +1,42 @@
+{
+  "page": 1,
+  "limit": 500,
+  "totalElements": 2,
+  "totalPages": 1,
+  "entries": [
+    {
+      "id": 51,
+      "time": "2026-11-04T19:24:26.518839Z",
+      "title": "NCIS.S22E01.1080p.WEB.h264-GRP",
+      "indexer": "NZBgeek",
+      "category": null,
+      "sizeBytes": null,
+      "ageDays": 0,
+      "accessType": "PROXY",
+      "accessSource": "API",
+      "status": "NZB_DOWNLOAD_SUCCESSFUL",
+      "error": null,
+      "externalId": null,
+      "username": null,
+      "ip": "172.19.0.1",
+      "userAgent": "Radarr"
+    },
+    {
+      "id": 50,
+      "time": "2026-11-04T19:24:26.470556Z",
+      "title": "Dune.Part.Two.2024.1080p.WEB.h264-GRP",
+      "indexer": "NZBgeek",
+      "category": null,
+      "sizeBytes": null,
+      "ageDays": 0,
+      "accessType": "PROXY",
+      "accessSource": "API",
+      "status": "NZB_DOWNLOAD_SUCCESSFUL",
+      "error": null,
+      "externalId": null,
+      "username": null,
+      "ip": "172.19.0.1",
+      "userAgent": "Sonarr"
+    }
+  ]
+}

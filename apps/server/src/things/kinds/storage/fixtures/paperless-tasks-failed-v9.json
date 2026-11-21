@@ -1,0 +1,17 @@
+[
+  {
+    "id": 3,
+    "task_id": "cd3df5e1-4ae7-4b60-bdc0-af5cd4ca5810",
+    "task_name": "consume_file",
+    "task_file_name": "scan-broken.pdf",
+    "type": "manual_task",
+    "status": "FAILURE",
+    "date_created": "2026-10-21T19:43:59.385120Z",
+    "date_done": "2026-10-21T19:44:00.546309Z",
+    "result": "scan-broken.pdf: Error occurred while consuming document scan-broken.pdf: InputFileError: ",
+    "acknowledged": false,
+    "related_document": null,
+    "duplicate_documents": [],
+    "owner": 2
+  }
+]

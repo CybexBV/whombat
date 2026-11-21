@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phone comfort · contact sheet</title>
+  <link rel="stylesheet" href="../../../../packages/tokens/tokens.css">
+  <link rel="stylesheet" href="../../../../apps/web/src/app/fonts/fonts.css">
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="board"><div class="board-head"><strong id="heading"></strong><span id="spec"></span></div><div id="phones" class="board-phones"></div></main>
+  <script>
+    const p = new URLSearchParams(location.search), theme = p.get('theme') || 'light', plate = p.get('plate') || 'ios-main';
+    document.documentElement.dataset.theme = theme;
+    const native = (platform,screen,label,raised=false) => [label,`mockup.html?platform=${platform}&screen=${screen}&theme=${theme}${raised?'&variant=raised':''}`];
+    const layouts = {
+      'ios-main': [native('ios','chat','iOS · Chat · 1.6×'),native('ios','approval','iOS · Approval · 1.6×'),native('ios','council','iOS · Council · 1.6×')],
+      'android-main': [native('android','chat','Android · Chat · 1.6×'),native('android','approval','Android · Approval · 1.6×'),native('android','council','Android · Council · 1.6×')],
+      'rows': [native('ios','delegation','iOS · Delegation · 1.6×'),native('android','delegation','Android · Delegation · 1.6×'),native('ios','thread','iOS · Approval door · 1.6×')],
+      'raised-cap': [native('ios','chat','iOS · proposed 2.4× cap',true),native('android','chat','Android · 2.0× system maximum',true),native('ios','side','Duo side tabs · 184pt rail · 2.4×',true)],
+      'web-actions': [['Today · fixture capture',`../01-groundwork/png/phone-web-chat-list-${theme}.png`],['Proposal · persistent 44px actions',`web.html?theme=${theme}`],['Proposal · actions open · focus on first action',`web.html?theme=${theme}&menu=open`]],
+    };
+    document.getElementById('heading').textContent = plate==='raised-cap' ? 'Decision for John — reopens AP-6550, AP-7460 · proposed cap 2.4×' : 'Phone comfort · buildable proposal · keeps current decisions';
+    document.getElementById('spec').textContent = `390 × 844 per phone · ${theme} · static HTML, not a native capture`;
+    document.getElementById('phones').innerHTML = layouts[plate].map(([label,url])=>`<div class="board-phone"><figure><figcaption>${label}</figcaption>${url.endsWith('.png')?`<img src="${url}" alt="${label}" width="390" height="844">`:`<iframe src="${url}" title="${label}"></iframe>`}</figure></div>`).join('');
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "whombat-integration-harness",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24"
+  },
+  "description": "Whombat managed appliance integration harness: manifest tooling, local integrated environment, validation suite, cross-repo scenarios and the acceptance demo.",
+  "scripts": {
+    "check": "biome check . && tsc --noEmit && vitest run --config vitest.unit.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "scenarios": "vitest run --config vitest.scenarios.config.ts",
+    "contracts:verify": "cd vendor/whombat-contracts/4.11.0 && sha256sum -c SHA256SUMS",
+    "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage"
+  },
+  "dependencies": {
+    "@whombat/control-contracts": "file:vendor/whombat-contracts/4.11.0/whombat-control-contracts-4.11.0.tgz",
+    "@whombat/core": "file:vendor/whombat-contracts/4.11.0/whombat-core-4.11.0.tgz",
+    "@whombat/protocol": "file:vendor/whombat-contracts/4.11.0/whombat-protocol-4.11.0.tgz",
+    "@whombat/release": "file:vendor/whombat-contracts/4.11.0/whombat-release-4.11.0.tgz",
+    "@whombat/secure-channel": "file:vendor/whombat-contracts/4.11.0/whombat-secure-channel-4.11.0.tgz",
+    "ws": "8.21.3",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^26.6.2",
+    "@types/ws": "8.18.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "playwright": "1.63.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}

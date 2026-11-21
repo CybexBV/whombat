@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceModelRequest.json",
+  "title": "VoiceModelRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "model": {
+      "type": "string",
+      "enum": [
+        "parakeet",
+        "whisper"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "model"
+  ],
+  "additionalProperties": false
+}

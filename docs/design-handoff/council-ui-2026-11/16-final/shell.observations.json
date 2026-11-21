@@ -1,0 +1,378 @@
+{
+  "purpose": "Round-four mockup PNG production, contrast and geometry observations; not app tests",
+  "baseRevision": "c2d995103",
+  "renderCommands": [
+    "render.mjs",
+    "overview/render.mjs",
+    "settings/render.mjs",
+    "approval/render.mjs",
+    "thread/render.mjs",
+    "search/render.mjs"
+  ],
+  "families": [
+    {
+      "sourceRendererEvidence": "renders.json",
+      "observations": 54,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "overview/renders.json",
+      "observations": 352,
+      "contrastMinimum": {
+        "light": 4.641,
+        "dark": 4.904
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "approval/renders.json",
+      "observations": 104,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "inbox/renders.json",
+      "observations": 48,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "settings/render.json",
+      "observations": 212,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "thread/observations.json",
+      "observations": 140,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    },
+    {
+      "sourceRendererEvidence": "search/renders.json",
+      "observations": 112,
+      "contrastMinimum": {
+        "light": 4.942,
+        "dark": 5.515
+      },
+      "contrastFailures": [],
+      "pageErrors": [],
+      "documentOverflows": [],
+      "undersizedTargets": []
+    }
+  ],
+  "matchingAfterCaptures": {
+    "count": 120,
+    "errors": [],
+    "nativePushSamples": [
+      {
+        "screen": "thread",
+        "platform": "ios",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "approval",
+        "platform": "ios",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "vault",
+        "platform": "ios",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "files",
+        "platform": "ios",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "usage",
+        "platform": "ios",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "thread",
+        "platform": "android",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "approval",
+        "platform": "android",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "vault",
+        "platform": "android",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "files",
+        "platform": "android",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "usage",
+        "platform": "android",
+        "nativeBack": "Back to Chat",
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      }
+    ],
+    "finishSamples": [
+      {
+        "screen": "chat-list",
+        "platform": "desktop",
+        "extra": {},
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": "8px",
+        "healthDot": "rgb(141, 109, 45)",
+        "waitingDot": "rgb(58, 120, 189)",
+        "documentOverflow": 0
+      },
+      {
+        "screen": "inbox",
+        "platform": "desktop",
+        "extra": {},
+        "nativeTopLevelBars": 0,
+        "settled": "\u2303",
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "settings",
+        "platform": "desktop",
+        "extra": {
+          "view": "brief",
+          "dialog": "time"
+        },
+        "nativeTopLevelBars": 0,
+        "timeInput": {
+          "type": "text",
+          "value": "18:00"
+        },
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "chat-list",
+        "platform": "phoneweb",
+        "extra": {},
+        "nativeTopLevelBars": 0,
+        "timeInput": null,
+        "chatActionGap": "8px",
+        "healthDot": "rgb(141, 109, 45)",
+        "waitingDot": "rgb(58, 120, 189)",
+        "documentOverflow": 0
+      },
+      {
+        "screen": "inbox",
+        "platform": "phoneweb",
+        "extra": {},
+        "nativeTopLevelBars": 0,
+        "settled": "\u2303",
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "settings",
+        "platform": "phoneweb",
+        "extra": {
+          "view": "brief",
+          "dialog": "time"
+        },
+        "nativeTopLevelBars": 0,
+        "timeInput": {
+          "type": "text",
+          "value": "18:00"
+        },
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "chat-list",
+        "platform": "ios",
+        "extra": {},
+        "nativeTopLevelBars": 1,
+        "timeInput": null,
+        "chatActionGap": "8px",
+        "healthDot": "rgb(141, 109, 45)",
+        "waitingDot": "rgb(58, 120, 189)",
+        "documentOverflow": 0
+      },
+      {
+        "screen": "inbox",
+        "platform": "ios",
+        "extra": {},
+        "nativeTopLevelBars": 1,
+        "settled": "\u2303",
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "settings",
+        "platform": "ios",
+        "extra": {
+          "view": "brief",
+          "dialog": "time"
+        },
+        "nativeBack": "Back to Settings",
+        "nativeTopLevelBars": 0,
+        "timeInput": {
+          "type": "text",
+          "value": "18:00"
+        },
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "chat-list",
+        "platform": "android",
+        "extra": {},
+        "nativeTopLevelBars": 1,
+        "timeInput": null,
+        "chatActionGap": "8px",
+        "healthDot": "rgb(141, 109, 45)",
+        "waitingDot": "rgb(58, 120, 189)",
+        "documentOverflow": 0
+      },
+      {
+        "screen": "inbox",
+        "platform": "android",
+        "extra": {},
+        "nativeTopLevelBars": 1,
+        "settled": "\u2303",
+        "timeInput": null,
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      },
+      {
+        "screen": "settings",
+        "platform": "android",
+        "extra": {
+          "view": "brief",
+          "dialog": "time"
+        },
+        "nativeBack": "Back to Settings",
+        "nativeTopLevelBars": 0,
+        "timeInput": {
+          "type": "text",
+          "value": "18:00"
+        },
+        "chatActionGap": null,
+        "healthDot": null,
+        "waitingDot": null,
+        "documentOverflow": 0
+      }
+    ]
+  }
+}

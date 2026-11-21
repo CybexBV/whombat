@@ -1,0 +1,1321 @@
+{
+ "json_format_version": [
+  1,
+  0
+ ],
+ "smartctl": {
+  "version": [
+   7,
+   4
+  ],
+  "pre_release": false,
+  "svn_revision": "5530",
+  "platform_info": "x86_64-linux-6.12.107+deb13-amd64",
+  "build_info": "(local build)",
+  "argv": [
+   "smartctl",
+   "--json",
+   "-a",
+   "-l",
+   "devstat",
+   "-n",
+   "standby",
+   "/dev/sda"
+  ],
+  "drive_database_version": {
+   "string": "7.3/5528"
+  },
+  "exit_status": 0
+ },
+ "device": {
+  "name": "/dev/sda",
+  "info_name": "/dev/sda [SAT]",
+  "type": "sat",
+  "protocol": "ATA"
+ },
+ "model_name": "WDC WD181KFGX-68CKWN0",
+ "serial_number": "HDDSER0001",
+ "firmware_version": "83.00A83",
+ "user_capacity": {
+  "blocks": 35156656128,
+  "bytes": 18000207937536
+ },
+ "logical_block_size": 512,
+ "physical_block_size": 4096,
+ "rotation_rate": 7200,
+ "form_factor": {
+  "ata_value": 2,
+  "name": "3.5 inches"
+ },
+ "trim": {
+  "supported": false
+ },
+ "in_smartctl_database": false,
+ "ata_version": {
+  "string": "ACS-4 published, ANSI INCITS 529-2018",
+  "major_value": 4092,
+  "minor_value": 156
+ },
+ "sata_version": {
+  "string": "SATA 3.5",
+  "value": 2047
+ },
+ "interface_speed": {
+  "max": {
+   "sata_value": 14,
+   "string": "6.0 Gb/s",
+   "units_per_second": 60,
+   "bits_per_unit": 100000000
+  },
+  "current": {
+   "sata_value": 3,
+   "string": "6.0 Gb/s",
+   "units_per_second": 60,
+   "bits_per_unit": 100000000
+  }
+ },
+ "smart_support": {
+  "available": true,
+  "enabled": true
+ },
+ "smart_status": {
+  "passed": true
+ },
+ "ata_smart_data": {
+  "offline_data_collection": {
+   "status": {
+    "value": 130,
+    "string": "was completed without error",
+    "passed": true
+   },
+   "completion_seconds": 101
+  },
+  "self_test": {
+   "status": {
+    "value": 0,
+    "string": "completed without error",
+    "passed": true
+   },
+   "polling_minutes": {
+    "short": 2,
+    "extended": 2026
+   }
+  },
+  "capabilities": {
+   "values": [
+    91,
+    3
+   ],
+   "exec_offline_immediate_supported": true,
+   "offline_is_aborted_upon_new_cmd": false,
+   "offline_surface_scan_supported": true,
+   "self_tests_supported": true,
+   "conveyance_self_test_supported": false,
+   "selective_self_test_supported": true,
+   "attribute_autosave_enabled": true,
+   "error_logging_supported": true,
+   "gp_logging_supported": true
+  }
+ },
+ "ata_sct_capabilities": {
+  "value": 61,
+  "error_recovery_control_supported": true,
+  "feature_control_supported": true,
+  "data_table_supported": true
+ },
+ "ata_smart_attributes": {
+  "revision": 16,
+  "table": [
+   {
+    "id": 1,
+    "name": "Raw_Read_Error_Rate",
+    "value": 100,
+    "worst": 100,
+    "thresh": 1,
+    "when_failed": "",
+    "flags": {
+     "value": 11,
+     "string": "PO-R-- ",
+     "prefailure": true,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": true,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 2,
+    "name": "Throughput_Performance",
+    "value": 147,
+    "worst": 147,
+    "thresh": 54,
+    "when_failed": "",
+    "flags": {
+     "value": 4,
+     "string": "--S--- ",
+     "prefailure": false,
+     "updated_online": false,
+     "performance": true,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 51,
+     "string": "51"
+    }
+   },
+   {
+    "id": 3,
+    "name": "Spin_Up_Time",
+    "value": 83,
+    "worst": 83,
+    "thresh": 1,
+    "when_failed": "",
+    "flags": {
+     "value": 7,
+     "string": "POS--- ",
+     "prefailure": true,
+     "updated_online": true,
+     "performance": true,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 30087840096,
+     "string": "352 (Average 352)"
+    }
+   },
+   {
+    "id": 4,
+    "name": "Start_Stop_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 18,
+     "string": "-O--C- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 1,
+     "string": "1"
+    }
+   },
+   {
+    "id": 5,
+    "name": "Reallocated_Sector_Ct",
+    "value": 100,
+    "worst": 100,
+    "thresh": 1,
+    "when_failed": "",
+    "flags": {
+     "value": 51,
+     "string": "PO--CK ",
+     "prefailure": true,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 7,
+    "name": "Seek_Error_Rate",
+    "value": 100,
+    "worst": 100,
+    "thresh": 1,
+    "when_failed": "",
+    "flags": {
+     "value": 10,
+     "string": "-O-R-- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": true,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 8,
+    "name": "Seek_Time_Performance",
+    "value": 140,
+    "worst": 140,
+    "thresh": 20,
+    "when_failed": "",
+    "flags": {
+     "value": 4,
+     "string": "--S--- ",
+     "prefailure": false,
+     "updated_online": false,
+     "performance": true,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 15,
+     "string": "15"
+    }
+   },
+   {
+    "id": 9,
+    "name": "Power_On_Hours",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 18,
+     "string": "-O--C- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 816,
+     "string": "816"
+    }
+   },
+   {
+    "id": 10,
+    "name": "Spin_Retry_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 1,
+    "when_failed": "",
+    "flags": {
+     "value": 18,
+     "string": "-O--C- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 12,
+    "name": "Power_Cycle_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 1,
+     "string": "1"
+    }
+   },
+   {
+    "id": 22,
+    "name": "Unknown_Attribute",
+    "value": 100,
+    "worst": 100,
+    "thresh": 25,
+    "when_failed": "",
+    "flags": {
+     "value": 35,
+     "string": "PO---K ",
+     "prefailure": true,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 6553700,
+     "string": "6553700"
+    }
+   },
+   {
+    "id": 192,
+    "name": "Power-Off_Retract_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 4207,
+     "string": "4207"
+    }
+   },
+   {
+    "id": 193,
+    "name": "Load_Cycle_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 18,
+     "string": "-O--C- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 4207,
+     "string": "4207"
+    }
+   },
+   {
+    "id": 194,
+    "name": "Temperature_Celsius",
+    "value": 71,
+    "worst": 71,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 2,
+     "string": "-O---- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 120260526105,
+     "string": "25 (Min/Max 22/28)"
+    }
+   },
+   {
+    "id": 196,
+    "name": "Reallocated_Event_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 50,
+     "string": "-O--CK ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": true,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 197,
+    "name": "Current_Pending_Sector",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 34,
+     "string": "-O---K ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": false,
+     "event_count": false,
+     "auto_keep": true
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 198,
+    "name": "Offline_Uncorrectable",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 8,
+     "string": "---R-- ",
+     "prefailure": false,
+     "updated_online": false,
+     "performance": false,
+     "error_rate": true,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   },
+   {
+    "id": 199,
+    "name": "UDMA_CRC_Error_Count",
+    "value": 100,
+    "worst": 100,
+    "thresh": 0,
+    "when_failed": "",
+    "flags": {
+     "value": 10,
+     "string": "-O-R-- ",
+     "prefailure": false,
+     "updated_online": true,
+     "performance": false,
+     "error_rate": true,
+     "event_count": false,
+     "auto_keep": false
+    },
+    "raw": {
+     "value": 0,
+     "string": "0"
+    }
+   }
+  ]
+ },
+ "power_on_time": {
+  "hours": 816
+ },
+ "power_cycle_count": 1,
+ "temperature": {
+  "current": 25,
+  "lifetime_max": 28,
+  "lifetime_min": 22,
+  "lifetime_over_limit_minutes": 0,
+  "op_limit_max": 60,
+  "lifetime_under_limit_minutes": 0,
+  "op_limit_min": 0
+ },
+ "ata_smart_error_log": {
+  "summary": {
+   "revision": 1,
+   "count": 0
+  }
+ },
+ "ata_smart_self_test_log": {
+  "standard": {
+   "revision": 1,
+   "table": [
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 804
+    },
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 636
+    },
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 469
+    },
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 300
+    },
+    {
+     "type": {
+      "value": 2,
+      "string": "Extended offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 201
+    },
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 132
+    },
+    {
+     "type": {
+      "value": 1,
+      "string": "Short offline"
+     },
+     "status": {
+      "value": 0,
+      "string": "Completed without error",
+      "passed": true
+     },
+     "lifetime_hours": 1
+    }
+   ],
+   "count": 7,
+   "error_count_total": 0,
+   "error_count_outdated": 0
+  }
+ },
+ "ata_smart_selective_self_test_log": {
+  "revision": 1,
+  "table": [
+   {
+    "lba_min": 0,
+    "lba_max": 0,
+    "status": {
+     "value": 0,
+     "string": "Not_testing"
+    }
+   },
+   {
+    "lba_min": 0,
+    "lba_max": 0,
+    "status": {
+     "value": 0,
+     "string": "Not_testing"
+    }
+   },
+   {
+    "lba_min": 0,
+    "lba_max": 0,
+    "status": {
+     "value": 0,
+     "string": "Not_testing"
+    }
+   },
+   {
+    "lba_min": 0,
+    "lba_max": 0,
+    "status": {
+     "value": 0,
+     "string": "Not_testing"
+    }
+   },
+   {
+    "lba_min": 0,
+    "lba_max": 0,
+    "status": {
+     "value": 0,
+     "string": "Not_testing"
+    }
+   }
+  ],
+  "flags": {
+   "value": 0,
+   "remainder_scan_enabled": false
+  },
+  "power_up_scan_resume_minutes": 0
+ },
+ "ata_device_statistics": {
+  "pages": [
+   {
+    "number": 1,
+    "name": "General Statistics",
+    "revision": 3,
+    "table": [
+     {
+      "offset": 8,
+      "name": "Lifetime Power-On Resets",
+      "size": 4,
+      "value": 1,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 16,
+      "name": "Power-on Hours",
+      "size": 4,
+      "value": 816,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 24,
+      "name": "Logical Sectors Written",
+      "size": 6,
+      "value": 1265648275,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 32,
+      "name": "Number of Write Commands",
+      "size": 6,
+      "value": 1631733,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 40,
+      "name": "Logical Sectors Read",
+      "size": 6,
+      "value": 1294876809,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 48,
+      "name": "Number of Read Commands",
+      "size": 6,
+      "value": 982654,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 56,
+      "name": "Date and Time TimeStamp",
+      "size": 6,
+      "value": 2938161600,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 64,
+      "name": "Pending Error Count",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   },
+   {
+    "number": 3,
+    "name": "Rotating Media Statistics",
+    "revision": 1,
+    "table": [
+     {
+      "offset": 8,
+      "name": "Spindle Motor Power-on Hours",
+      "size": 4,
+      "value": 600,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 16,
+      "name": "Head Flying Hours",
+      "size": 4,
+      "value": 600,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 24,
+      "name": "Head Load Events",
+      "size": 4,
+      "value": 4207,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 32,
+      "name": "Number of Reallocated Logical Sectors",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 40,
+      "name": "Read Recovery Attempts",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 48,
+      "name": "Number of Mechanical Start Failures",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 56,
+      "name": "Number of Realloc. Candidate Logical Sectors",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   },
+   {
+    "number": 4,
+    "name": "General Errors Statistics",
+    "revision": 1,
+    "table": [
+     {
+      "offset": 8,
+      "name": "Number of Reported Uncorrectable Errors",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 16,
+      "name": "Resets Between Cmd Acceptance and Completion",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   },
+   {
+    "number": 5,
+    "name": "Temperature Statistics",
+    "revision": 1,
+    "table": [
+     {
+      "offset": 8,
+      "name": "Current Temperature",
+      "size": 1,
+      "value": 25,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 16,
+      "name": "Average Short Term Temperature",
+      "size": 1,
+      "value": 25,
+      "flags": {
+       "value": 224,
+       "string": "VN-- ",
+       "valid": true,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 24,
+      "name": "Average Long Term Temperature",
+      "size": 1,
+      "flags": {
+       "value": 160,
+       "string": "-N-- ",
+       "valid": false,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 32,
+      "name": "Highest Temperature",
+      "size": 1,
+      "value": 28,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 40,
+      "name": "Lowest Temperature",
+      "size": 1,
+      "value": 22,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 48,
+      "name": "Highest Average Short Term Temperature",
+      "size": 1,
+      "value": 26,
+      "flags": {
+       "value": 224,
+       "string": "VN-- ",
+       "valid": true,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 56,
+      "name": "Lowest Average Short Term Temperature",
+      "size": 1,
+      "value": 24,
+      "flags": {
+       "value": 224,
+       "string": "VN-- ",
+       "valid": true,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 64,
+      "name": "Highest Average Long Term Temperature",
+      "size": 1,
+      "flags": {
+       "value": 160,
+       "string": "-N-- ",
+       "valid": false,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 72,
+      "name": "Lowest Average Long Term Temperature",
+      "size": 1,
+      "flags": {
+       "value": 160,
+       "string": "-N-- ",
+       "valid": false,
+       "normalized": true,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 80,
+      "name": "Time in Over-Temperature",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 88,
+      "name": "Specified Maximum Operating Temperature",
+      "size": 1,
+      "value": 60,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 96,
+      "name": "Time in Under-Temperature",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 104,
+      "name": "Specified Minimum Operating Temperature",
+      "size": 1,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   },
+   {
+    "number": 6,
+    "name": "Transport Statistics",
+    "revision": 1,
+    "table": [
+     {
+      "offset": 8,
+      "name": "Number of Hardware Resets",
+      "size": 4,
+      "value": 28,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 16,
+      "name": "Number of ASR Events",
+      "size": 4,
+      "value": 6,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 24,
+      "name": "Number of Interface CRC Errors",
+      "size": 4,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   },
+   {
+    "number": 255,
+    "name": "Vendor Specific Statistics",
+    "revision": 1,
+    "table": [
+     {
+      "offset": 64,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 72,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 80,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 88,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 96,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 104,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 112,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 120,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 0,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     },
+     {
+      "offset": 128,
+      "name": "Vendor Specific",
+      "size": 7,
+      "value": 4,
+      "flags": {
+       "value": 192,
+       "string": "V--- ",
+       "valid": true,
+       "normalized": false,
+       "supports_dsn": false,
+       "monitored_condition_met": false
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,66 @@
+# Run by the maintainers' own CI (ci-platform on their build server, never for a fork's pull request), not by GitHub:
+# public repositories keep self-hosted jobs out of .github/workflows. Public CI is .github/workflows/public-ci.yml.
+name: extended
+# The apps' daily qualification (ci-platform schedules it): the visual comparison and the Android build.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: extended-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CI: 'true'
+  TMPDIR: /var/tmp/whombat-ci
+  PLAYWRIGHT_BROWSERS_PATH: /srv/whombat-ci/cache/playwright
+  GRADLE_USER_HOME: /srv/whombat-ci/cache/gradle
+jobs:
+  visual:
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install from the local cache
+        run: pnpm install --frozen-lockfile --store-dir /srv/whombat-ci/cache/pnpm
+      - name: Compare the application with the design references
+        run: |
+          pnpm --filter @whombat/web exec playwright install chromium
+          pnpm --filter @whombat/web exec playwright test --project=visual --workers=4 2>&1 | tee "$RUNNER_TEMP/visual.log"
+      - name: Keep visual evidence locally
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/visual.log" ]; then
+            /opt/whombat-ci/bin/artifact save visual-log "$RUNNER_TEMP/visual.log"
+          fi
+          if [ -d tmp/playwright/web ]; then
+            /opt/whombat-ci/bin/artifact save visual-diagnostics tmp/playwright/web
+          fi
+  android:
+    runs-on: [self-hosted, linux, x64, whombat, whombat-runtime]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install from the local cache
+        run: pnpm install --frozen-lockfile --store-dir /srv/whombat-ci/cache/pnpm
+      - name: Build Android locally
+        run: |
+          test -d "$ANDROID_HOME"
+          java -version
+          pnpm --filter @whombat/mobile android:apk --clean 2>&1 | tee "$RUNNER_TEMP/android.log"
+      - name: Keep the debug APK locally
+        run: /opt/whombat-ci/bin/artifact save android-debug apps/mobile/build/whombat-debug.apk
+      - name: Keep build diagnostics locally
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/android.log" ]; then
+            /opt/whombat-ci/bin/artifact save android-log "$RUNNER_TEMP/android.log"
+          fi

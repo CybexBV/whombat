@@ -1,0 +1,19 @@
+{
+  "count": 1,
+  "_embedded": {
+    "refunds": [
+      {
+        "resource": "refund",
+        "id": "re_4qqhO89gsT",
+        "amount": { "value": "60.00", "currency": "EUR" },
+        "status": "refunded",
+        "createdAt": "2026-10-15T09:00:00+00:00",
+        "description": "Returned order",
+        "paymentId": "tr_Refund01",
+        "settlementAmount": { "value": "-60.00", "currency": "EUR" },
+        "_links": {}
+      }
+    ]
+  },
+  "_links": { "next": null }
+}

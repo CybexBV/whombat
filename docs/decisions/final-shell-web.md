@@ -1,0 +1,38 @@
+# The final web shell: one order of places, the phone bar, Search (FSW)
+
+John accepted the round-four design (`docs/design-handoff/council-ui-2026-11/16-final/SHELL.md` and `search/`), 2026-11-06.
+This file is the web's part: the sidebar, the phone-width top bar and Places drawer, and the Search screen. The phone
+app's shell is its own task.
+
+| # | Decision | Why |
+|---|---|---|
+| FSW-01 | **One order of places everywhere on the web**: Search · Chat · Inbox · Overview · Automations · Files · Vault · Usage · Settings (`@whombat/client` `APP_PLACES`, `appPlaceWords`), 44px rows, 20px icons, 15px labels, no groups and no gap. Servers and Connections follow as today (two tabs, real logos, status marks). Each name has one home. | Each name was in a different place or twice (Files in Chat's head, Spend under Advanced, Settings behind the person). One list, one home each. Superseded by FSW-13. |
+| FSW-02 | **Search is a visible link** first in the sidebar and in the phone bar, never a box there; ⌘K / Ctrl K still opens it and Esc still goes back (B-03, WE-12). | Search was invisible unless you knew the shortcut. Superseded by FSW-13. |
+| FSW-03 | **Feedback has no sidebar row**: Chat's head has a Feedback link once the room exists, with its unread count; the sidebar's Chat badge counts Chat's and Feedback's unread (only the room you aren't reading), its name says so. Feedback's right-click entries (open, Settled, clear, settle finished) follow Chat's below a line. `/feedback` stays. | One Chat home; nothing Feedback had is lost. |
+| FSW-04 | **Files is always a place** (`/files`); Chat's head has no Files button. A file in a message still opens that file. | One Files home; an empty Files page says what it holds. |
+| FSW-05 | **Usage is the spend page under its new name** at its old address (`/settings?tab=advanced&part=spend`, `USAGE_HREF`): a page of its own titled Usage without Settings' tabs or “‹ Advanced”, selected as Usage in the sidebar; Advanced's list no longer has Spend. Old links (`?tab=spend`, `?tab=ai#spend`) land there. Its content is another task's. | Usage is findable outside Advanced, under a name people use. Superseded by FSW-13 in part (no sidebar row; the page stays). |
+| FSW-06 | **Settings is the ninth place; the person at the bottom is not a link**: their face and name, with ⋯ for the account menu (the app on a phone, notifications, the theme, signing out, the version). | Settings behind a name was a second, hidden way in. Superseded by FSW-14. |
+| FSW-07 | **Below 1024 px one 56px bar**: Places (☰ and the word, `aria-haspopup="dialog"`, `aria-expanded`, `aria-controls`), Search (link), and at the end “3 need you ›” to the Inbox (named “3 things need you, open Inbox”, red only when one isn't working, hidden on the Inbox and at none). The bar no longer shows the page's title when it scrolls away. | The design's three controls fill the bar at 390 px; the page keeps its own title. Superseded by FSW-13 in part (no Search in the bar). |
+| FSW-08 | **The Places drawer**: `min(85vw, 320px)`, full height, `side` surface, rounded on its open side; a Places heading with a 44px Close Places first (it takes the focus), then the nine places and Servers / Connections, the burrow's switcher (with other Whombats) and the person at the bottom. A modal dialog named Places: Tab stays inside, Esc, the scrim, Close, a link or a new page close it and give focus back to Places. | WE-15's drawer with the final names and order. Superseded by FSW-13 in part (seven places). |
+| FSW-09 | **Badges come from the counts there are and never show 0**: Inbox is `summary.needsYou` in its worst item's colour, Chat the rooms' unread. The number is drawn, and said once in the link's name. | One source, one meaning per badge. |
+| FSW-10 | **Search groups what it finds in plain words**: Chats (the Whombat's full-text search, with its type chips, filters, Load more and the cited answer when the person asks the assistant), Things (servers, connections, devices with their real logos, “Server · Running warm”), Settings (every page of the five groups but Spend) and Places (the eight besides Search, each with one line). Things, settings and places are matched in the page as the person types (every word, any case; `searchCatalog.ts`). | People look for a server or a setting by its name as often as for a message. |
+| FSW-11 | **Search's states**: an empty query says “What are you looking for?” with three suggestions from what is there (a thing's name, Notifications, Files); while nothing is known yet “Looking for “…”…”; no results says so with Clear search; a failed search with nothing else to show “Couldn’t search” with Try again; when only the chats failed, the others show and Chats says so. A count (“3 results”) is a live status. An empty query asks the Whombat nothing. | Each state looked the same before (an empty list). |
+| FSW-12 | **Back to Search brings the query, the scroll and the focus**: the query is in the address (written before a result opens); the scroll and the opened result are kept for the tab (`sessionStorage`, read once) and the focus returns to that row, else to the field. | Opening a result and coming back lost your place. |
+| FSW-13 | **Seven places: Chat · Inbox · Overview · Automations · Files · Vault · Settings.** Search has no row and no link in the narrow bar; ⌘K / Ctrl K still opens it and Esc still goes back. Usage has no row either: it is the Usage row in Settings → Advanced, at its address (`USAGE_HREF`), and Settings is the row selected there. | John, 2026-11-12: remove Usage and Search from the sidebar. Superseded in part by FSW-16 (no Usage row in Advanced). |
+| FSW-14 | **The person's row is the account menu's button** (no ⋯), named “Account, {name}”: their own settings first — Profile, Notifications and, on a box, Devices and Shared links (Settings → You's parts) — then Phone app, notifications in this browser, the theme, Sign out and the version. | John, 2026-11-12: the person's own settings belong behind their name; the ⋯ was a second button for the same menu. |
+| FSW-15 | **Files opens on the Chat's files**: `/files` (and `/files/dm/chat`) is the Chat's space titled “Files” alone, folders as crumbs under it, without the assistant's or the Chat's name; the other conversations with files (Feedback, branch rooms, task chats) sit at its top as folder rows that open their own Files. A Whombat without the Chat room keeps the list of conversations. | John, 2026-11-12: Files showed the assistant's name to click through instead of the files. |
+| FSW-16 | **Usage isn't offered on the web**: no sidebar row, no row in Settings → Advanced, no place in Search. Its page still opens at its address (`USAGE_HREF`, old Spend links) for whoever has a link. | John, 2026-11-12: remove Usage from Settings too. |
+
+## Replaces
+
+- `docs/app/decisions/home-simplify.md` AP-2274 in part (by FSW-02: a visible Search link; still no box).
+- `docs/app/decisions/sidebar.md` AP-2607 and `sidebar.md` SB-08 (by FSW-01: one order, no groups).
+- `docs/app/decisions/chat-channel.md` AP-2401 and AP-2410 in part (by FSW-03: Feedback from Chat's head).
+- `files-space.md` FS-07 (by FSW-04).
+- `settings-groups.md` STG-03 and STG-10 in part (by FSW-05: Usage is its own place).
+- `ui-refresh-status.md` UIR-08 (by FSW-06), UIR-10 and UIR-11 (by FSW-07).
+- `docs/app/decisions/web-efficiency.md` WE-15 in part (by FSW-07, FSW-08: the bar's controls and names).
+- `final-settings-vault-files-usage.md` FSV-09 on the web (by FSW-15: the Files home is the Chat's files, not a list).
+
+Not done here, as the design asks: no brief result or setting (brief-removed.md), no recommended answers, consequences or
+undo on approvals.

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RelayHello.json",
+  "title": "RelayHello",
+  "type": "object",
+  "properties": {
+    "t": {
+      "type": "string",
+      "const": "hello"
+    },
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "ticket": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 4096,
+      "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+    },
+    "class": {
+      "type": "string",
+      "enum": [
+        "interactive",
+        "bulk",
+        "web",
+        "acme"
+      ]
+    },
+    "session": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "accepts": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "web",
+          "acme"
+        ]
+      }
+    }
+  },
+  "required": [
+    "t",
+    "v",
+    "ticket",
+    "class"
+  ]
+}

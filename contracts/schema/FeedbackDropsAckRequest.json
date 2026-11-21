@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/FeedbackDropsAckRequest.json",
+  "title": "FeedbackDropsAckRequest",
+  "type": "object",
+  "properties": {
+    "dropIds": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^fdr_[A-Za-z0-9_-]{22}$"
+      }
+    }
+  },
+  "required": [
+    "dropIds"
+  ],
+  "additionalProperties": false
+}

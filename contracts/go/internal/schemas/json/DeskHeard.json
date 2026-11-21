@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskHeard.json",
+  "title": "DeskHeard",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "text": {
+      "type": "string",
+      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,1000}$"
+    }
+  },
+  "required": [
+    "v",
+    "text"
+  ]
+}

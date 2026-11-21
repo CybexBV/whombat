@@ -1,0 +1,69 @@
+{
+  "MediaContainer": {
+    "size": 4,
+    "Metadata": [
+      {
+        "ratingKey": "5",
+        "key": "/library/metadata/5/children",
+        "parentRatingKey": "4",
+        "guid": "plex://season/6a63867cd57bbda5e601ead4",
+        "type": "season",
+        "title": "Season 24",
+        "parentTitle": "NCIS",
+        "index": 24,
+        "parentIndex": 1,
+        "parentYear": 2003,
+        "librarySectionID": 2,
+        "librarySectionTitle": "TV Shows",
+        "thumb": "/library/metadata/5/thumb/1792611700",
+        "parentThumb": "/library/metadata/4/thumb/1792611700",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611700,
+        "leafCount": 2
+      },
+      {
+        "ratingKey": "3",
+        "key": "/library/metadata/3",
+        "guid": "plex://movie/631bfefb0667a4eded0d5b66",
+        "type": "movie",
+        "title": "Inside Out 2",
+        "year": 2024,
+        "librarySectionID": 1,
+        "librarySectionTitle": "Movies",
+        "thumb": "/library/metadata/3/thumb/1792611699",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611699,
+        "duration": 3023,
+        "originallyAvailableAt": "2024-06-12"
+      },
+      {
+        "ratingKey": "2",
+        "key": "/library/metadata/2",
+        "guid": "plex://movie/5eb8f22237ccbe0041723253",
+        "type": "movie",
+        "title": "Dune: Part Two",
+        "year": 2024,
+        "librarySectionID": 1,
+        "librarySectionTitle": "Movies",
+        "thumb": "/library/metadata/2/thumb/1792611699",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611699,
+        "duration": 3023,
+        "originallyAvailableAt": "2024-02-27"
+      },
+      {
+        "ratingKey": "1",
+        "key": "/library/metadata/1",
+        "guid": "local://1",
+        "type": "movie",
+        "title": "Zzqx Unknown Thing",
+        "librarySectionID": 1,
+        "librarySectionTitle": "Movies",
+        "thumb": "/library/metadata/1/thumb/1792611698",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611698,
+        "duration": 3023
+      }
+    ]
+  }
+}

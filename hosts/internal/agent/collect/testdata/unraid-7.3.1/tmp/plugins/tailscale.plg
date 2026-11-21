@@ -1,0 +1,16 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN>
+
+<PLUGIN 
+  name="tailscale"
+  author="Derek Kaser"
+  version="2026.10.08.2310"
+  launch="Settings/Tailscale"
+  pluginURL="https://raw.githubusercontent.com/unraid/unraid-tailscale/main/plugin/tailscale.plg"
+  support="https://forums.unraid.net/topic/136889-plugin-tailscale/"
+  min="7.0.0"
+  
+  
+>
+<!-- The rest of the file (CHANGES, FILE elements) is left out: the agent reads the head only. -->
+</PLUGIN>

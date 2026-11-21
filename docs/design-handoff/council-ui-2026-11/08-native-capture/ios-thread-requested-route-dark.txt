@@ -1,0 +1,8 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 5 nodes
+@e1 [application] "Whombat"
+@e2 [button] "Back"
+@e3 [other] "Thread"
+@e4 [text] "You’re not in this conversation."
+@e5 [toolbar] "Toolbar"

@@ -1,0 +1,5 @@
+{"data":{"fsid":"00000000-0000-4000-8000-000000000000","health":{"status":"HEALTH_WARN","checks":{
+ "OSD_DOWN":{"severity":"HEALTH_WARN","summary":{"message":"1 osds down","count":1},"muted":false},
+ "PG_DEGRADED":{"severity":"HEALTH_WARN","summary":{"message":"Degraded data redundancy: 120/3600 objects degraded (3.333%), 12 pgs degraded","count":12},"muted":false},
+ "MON_DISK_CRIT":{"severity":"HEALTH_ERR","summary":{"message":"mon pve1 is very low on available space","count":1},"muted":false}
+}},"pgmap":{"num_pgs":128}}}

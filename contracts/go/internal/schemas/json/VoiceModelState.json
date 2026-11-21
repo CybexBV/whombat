@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceModelState.json",
+  "title": "VoiceModelState",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "enum": [
+        "parakeet",
+        "whisper"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "absent",
+        "downloading",
+        "waiting",
+        "ready",
+        "failed"
+      ]
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967296
+    },
+    "received": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967296
+    },
+    "problem": {
+      "type": "string",
+      "enum": [
+        "no_network",
+        "no_room",
+        "bad_download",
+        "failed"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "state",
+    "size",
+    "received"
+  ]
+}

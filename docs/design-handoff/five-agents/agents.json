@@ -1,0 +1,104 @@
+{
+  "sizeRule": {
+    "bust": ">= 40px",
+    "head": "25-39px",
+    "headSmall": "<= 24px"
+  },
+  "agents": [
+    {
+      "key": "associate",
+      "defaultName": "Pippa",
+      "roleLabel": "Associate",
+      "renamable": false,
+      "accent": "#8f7fc9",
+      "accentDeep": "#6a5aa3",
+      "svg": {
+        "bust": "svg/associate-bust.svg",
+        "head": "svg/associate-head.svg",
+        "headSmall": "svg/associate-head-small.svg"
+      },
+      "png": [
+        "png/associate-bust-512.png",
+        "png/associate-bust-256.png",
+        "png/associate-head-256.png",
+        "png/associate-head-small-64.png"
+      ]
+    },
+    {
+      "key": "developer",
+      "defaultName": "Banjo",
+      "roleLabel": "Software Developer",
+      "renamable": false,
+      "accent": "#5aa37a",
+      "accentDeep": "#3e7b58",
+      "svg": {
+        "bust": "svg/developer-bust.svg",
+        "head": "svg/developer-head.svg",
+        "headSmall": "svg/developer-head-small.svg"
+      },
+      "png": [
+        "png/developer-bust-512.png",
+        "png/developer-bust-256.png",
+        "png/developer-head-256.png",
+        "png/developer-head-small-64.png"
+      ]
+    },
+    {
+      "key": "operator",
+      "defaultName": "Dusty",
+      "roleLabel": "Operator",
+      "renamable": false,
+      "accent": "#b99346",
+      "accentDeep": "#8d6d2d",
+      "svg": {
+        "bust": "svg/operator-bust.svg",
+        "head": "svg/operator-head.svg",
+        "headSmall": "svg/operator-head-small.svg"
+      },
+      "png": [
+        "png/operator-bust-512.png",
+        "png/operator-bust-256.png",
+        "png/operator-head-256.png",
+        "png/operator-head-small-64.png"
+      ]
+    },
+    {
+      "key": "lead",
+      "defaultName": "Ace",
+      "roleLabel": "Lead",
+      "renamable": false,
+      "accent": "#c65d6e",
+      "accentDeep": "#a33346",
+      "svg": {
+        "bust": "svg/lead-bust.svg",
+        "head": "svg/lead-head.svg",
+        "headSmall": "svg/lead-head-small.svg"
+      },
+      "png": [
+        "png/lead-bust-512.png",
+        "png/lead-bust-256.png",
+        "png/lead-head-256.png",
+        "png/lead-head-small-64.png"
+      ]
+    },
+    {
+      "key": "assistant",
+      "defaultName": "Hazel",
+      "roleLabel": "Assistant",
+      "renamable": true,
+      "accent": "#a6ad43",
+      "accentDeep": "#74792a",
+      "svg": {
+        "bust": "svg/assistant-bust.svg",
+        "head": "svg/assistant-head.svg",
+        "headSmall": "svg/assistant-head-small.svg"
+      },
+      "png": [
+        "png/assistant-bust-512.png",
+        "png/assistant-bust-256.png",
+        "png/assistant-head-256.png",
+        "png/assistant-head-small-64.png"
+      ]
+    }
+  ]
+}

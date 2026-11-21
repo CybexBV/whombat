@@ -1,0 +1,7 @@
+apparmor.service                             enabled         enabled
+apt-daily.service                            static          -
+apt-daily.timer                              enabled         enabled
+backup-export.service                        static          -
+cron.service                                 enabled         enabled
+getty@.service                               enabled         enabled
+nix-gc.service                               disabled        enabled

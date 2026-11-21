@@ -1,0 +1,268 @@
+{
+  "about": "What `fast-test` (a tool outside this repository) runs for a change. Quick steps run on the development machine; a change to a shared package's source runs its dependents' types and tests on the build server; any other wide change runs the full check there (scripts/ci/full.sh: only the parts that changed). appliance/ and hosts/ have steps of their own, which run inside their folder (scripts/ci/in-folder.sh). The NixOS builds and VM tests run in the maintainers' CI (ci/platform/).",
+  "steps": [
+    {
+      "name": "biome",
+      "inFull": true,
+      "about": "Lint and format of the changed files, and no private value from the maintainers' guard list (scripts/check-forbidden.sh; it skips without the list).",
+      "run": "pnpm exec biome check --error-on-warnings --no-errors-on-unmatched --files-ignore-unknown=true {files} && bash scripts/check-forbidden.sh",
+      "retry": false
+    },
+    {
+      "name": "typecheck",
+      "inFull": true,
+      "about": "TypeScript of each touched app or package. The JavaScript projects in appliance/ and hosts/ have their own steps.",
+      "when": [
+        "apps/**/*.{ts,tsx,mts,cts}",
+        "packages/**/*.{ts,tsx,mts,cts}",
+        "tools/**/*.{ts,tsx}",
+        "**/tsconfig*.json"
+      ],
+      "run": "set --; for p in {npm-packages}; do set -- \"$@\" --filter \"$p\"; done; pnpm \"$@\" --parallel typecheck",
+      "retry": false,
+      "unless": ["appliance/**", "hosts/**"]
+    },
+    {
+      "name": "unit",
+      "inFull": true,
+      "about": "The unit tests that import the changed files, in the touched apps and packages only. A failing test runs once more by itself (scripts/vitest-project.ts), so the step doesn't.",
+      "when": [
+        "apps/**/*.{ts,tsx,mts,cts,js,jsx,css}",
+        "packages/**/*.{ts,tsx,mts,cts,js,css}",
+        "tools/**/*.{ts,tsx}"
+      ],
+      "unless": ["**/*.int.test.ts"],
+      "run": "set --; for p in {npm-packages}; do set -- \"$@\" --project \"$p\"; done; pnpm exec vitest related --run --passWithNoTests \"$@\" {files}",
+      "retry": false
+    },
+    {
+      "name": "dependents",
+      "where": "beast",
+      "retry": false,
+      "about": "A shared package's source changed: the types of the package and everything that uses it, and every unit test in any app or package that imports the changed files. Anything else in packages/ still runs the full check.",
+      "when": ["packages/*/src/**"],
+      "run": "set --; for p in {npm-packages}; do set -- \"$@\" --filter \"...$p\"; done; pnpm \"$@\" --parallel typecheck & t=$!; pnpm exec vitest related --run --passWithNoTests {files}; v=$?; wait $t && exit $v"
+    },
+    {
+      "name": "server-int",
+      "about": "The Postgres integration tests next to the changed server files (a throwaway database per file): against the shared dev Postgres when it answers, else a throwaway Postgres of this run's own.",
+      "when": ["apps/server/src/**/*.ts"],
+      "unless": ["apps/server/src/{db,commit,test,seed}/**"],
+      "run": "cd apps/server && set --; for d in {dirs}; do d=${d#./apps/server/}; for t in \"$d\"/*.int.test.ts; do [ -f \"$t\" ] && set -- \"$@\" \"$t\"; done; done; if [ $# -eq 0 ]; then echo 'No integration tests next to these files.'; exit 0; fi; fast-test with-postgres --user whombat --password whombat --db whombat --unless-up 127.0.0.1:55432 -- pnpm exec vitest run --config vitest.int.config.ts \"$@\"",
+      "retry": false
+    },
+    {
+      "name": "server-int-all",
+      "about": "Every server integration test, when the database, commit pipeline or test harness changed: in a throwaway Postgres of this run's own, so it neither waits for nor fails on the connections other suites hold in the shared one (which allows 100).",
+      "when": [
+        "apps/server/src/{db,commit,test,seed}/**",
+        "apps/server/vitest.int.config.ts",
+        "apps/server/drizzle/**"
+      ],
+      "timeout": 20,
+      "run": "fast-test with-postgres --user whombat --password whombat --db whombat -- pnpm test:server",
+      "retry": false
+    },
+    {
+      "name": "cli-int",
+      "about": "The CLI's integration tests.",
+      "when": ["apps/cli/src/**"],
+      "run": "fast-test with-postgres --user whombat --password whombat --db whombat --unless-up 127.0.0.1:55432 -- pnpm test:cli",
+      "retry": false
+    },
+    {
+      "name": "contracts",
+      "about": "The contracts' generated schema, vectors and Go code, and the Go tests.",
+      "when": [
+        "contracts/**",
+        "packages/{core,protocol,fixtures,canvas-schema,secure-channel,control-contracts,release}/src/**"
+      ],
+      "run": "pnpm contracts:gen:check && pnpm contracts:test:go"
+    },
+    {
+      "name": "scanner-allowlists",
+      "about": "The secret scanners' allowlists at the root carry the two folders' own (scripts/ci/scanner_allowlists.py), and the appliance's still name its vendored contracts release (a second).",
+      "when": [
+        ".gitleaks.toml",
+        ".trufflehog-exclude.txt",
+        "scripts/ci/*scanner_allowlists.py",
+        "{appliance,hosts}/.gitleaks.toml",
+        "{appliance,hosts}/.trufflehog-exclude.txt",
+        "appliance/harness/vendor/whombat-contracts/**",
+        "appliance/scripts/ci/test_scanner_allowlists.py"
+      ],
+      "run": "python3 -I scripts/ci/scanner_allowlists.py --check && python3 -I -m unittest discover -s scripts/ci -p 'test_scanner_allowlists.py' && cd appliance && python3 -I -m unittest discover -s scripts/ci -p 'test_scanner_allowlists.py'",
+      "retry": false
+    },
+    {
+      "name": "appliance-gofmt",
+      "inFull": true,
+      "when": ["appliance/**/*.go"],
+      "unless": ["appliance/nix/packages/standins/**"],
+      "run": "out=$(gofmt -l {files}); [ -z \"$out\" ] || { echo \"gofmt needed:\"; echo \"$out\"; exit 1; }"
+    },
+    {
+      "name": "appliance-go-test",
+      "inFull": true,
+      "about": "go vet and the tests of the touched Go packages of the appliance.",
+      "when": ["appliance/**/*.go", "appliance/**/testdata/**"],
+      "unless": [
+        "appliance/nix/packages/standins/**",
+        "appliance/nix/packages/hosts/manifest-check/**",
+        "appliance/harness/**",
+        "appliance/console/ui/**"
+      ],
+      "run": "scripts/ci/in-folder.sh appliance sh -c 'go vet \"$@\" && go test -count=1 \"$@\"' sh -- {dirs}"
+    },
+    {
+      "name": "appliance-go-modules",
+      "inFull": true,
+      "about": "The appliance's separate Go modules (the stand-ins, the hosts manifest check).",
+      "when": ["appliance/nix/packages/standins/**", "appliance/nix/packages/hosts/manifest-check/**"],
+      "run": "cd appliance && for m in nix/packages/standins nix/packages/hosts/manifest-check; do (cd \"$m\" && go vet ./... && go test -count=1 ./...) || exit 1; done"
+    },
+    {
+      "name": "fixed-hashes",
+      "inFull": true,
+      "about": "The hashes of what the Nix build downloads were taken for today's lockfiles and Go modules (appliance/nix/fixed-hashes.json; no Nix needed). A stale one: appliance/scripts/ci/fixed-hashes.sh --refresh.",
+      "when": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "patches/**",
+        "appliance/console/ui/{package.json,pnpm-lock.yaml,pnpm-workspace.yaml}",
+        "{appliance,hosts}/go.{mod,sum}",
+        "appliance/flake.lock",
+        "appliance/nix/fixed-hashes.json",
+        "appliance/scripts/ci/*fixed[-_]hashes*"
+      ],
+      "run": "appliance/scripts/ci/fixed-hashes.sh --check && python3 -I -m unittest discover -s appliance/scripts/ci -p 'test_fixed_hashes.py'",
+      "retry": false
+    },
+    {
+      "name": "appliance-harness",
+      "inFull": true,
+      "about": "The appliance's integration harness: lint, types and unit tests (a few seconds). They read the component list too.",
+      "when": ["appliance/harness/**", "appliance/manifest/components.json"],
+      "unless": ["appliance/harness/reports/**", "appliance/harness/coverage/**"],
+      "run": "cd appliance/harness && pnpm contracts:verify && pnpm check"
+    },
+    {
+      "name": "appliance-console-ui",
+      "inFull": true,
+      "about": "The console page: lint, types and unit tests.",
+      "when": ["appliance/console/ui/**"],
+      "run": "cd appliance/console/ui && pnpm check"
+    },
+    {
+      "name": "appliance-nix-eval",
+      "about": "Evaluates the appliance's Nix checks without building them (about 2 minutes): for a change to the Nix files, and to the few files of the other folders that Nix reads while it evaluates (the runtime's version, the Hermes pin, the schema's numbers, Whombat Helper).",
+      "when": [
+        "appliance/nix/**",
+        "appliance/flake.nix",
+        "appliance/flake.lock",
+        "appliance/scripts/ci/nix-*.sh",
+        "package.json",
+        "packages/agent-runtime/src/hermes/pin.ts",
+        "apps/server/src/db/migrations/compat.json",
+        "apps/server/src/db/migrations/meta/_journal.json",
+        "hosts/macos/helper/dist/**"
+      ],
+      "unless": [
+        "appliance/nix/packages/standins/**/*.go",
+        "appliance/nix/packages/hosts/manifest-check/**/*.go"
+      ],
+      "timeout": 15,
+      "run": "cd appliance && scripts/ci/nix-eval.sh"
+    },
+    {
+      "name": "appliance-source-matrix",
+      "about": "A filter of what a build reads changed (appliance/nix/lib/sources.nix): a test commit that changes only a document, a test, the phone app or a release record must still evaluate to the very same builds (appliance/scripts/ci/source-matrix.sh --nothing, about 5 minutes; every row runs in the maintainers' CI).",
+      "when": [
+        "appliance/nix/lib/sources.nix",
+        "appliance/nix/packages/{go.nix,runtime/default.nix,hosts/default.nix,console-ui/default.nix,hermes/default.nix}",
+        "appliance/scripts/ci/source-matrix.sh"
+      ],
+      "timeout": 20,
+      "run": "appliance/scripts/ci/source-matrix.sh --nothing",
+      "retry": false
+    },
+    {
+      "name": "hosts-gofmt",
+      "inFull": true,
+      "when": ["hosts/**/*.go"],
+      "run": "out=$(gofmt -l {files}); [ -z \"$out\" ] || { echo \"gofmt needed:\"; echo \"$out\"; exit 1; }"
+    },
+    {
+      "name": "hosts-vet",
+      "inFull": true,
+      "when": ["hosts/**/*.go"],
+      "run": "scripts/ci/in-folder.sh hosts go vet -- {dirs}"
+    },
+    {
+      "name": "hosts-go-test",
+      "inFull": true,
+      "about": "The touched Go packages' tests of the hosts service; a changed test file outside a package (testdata) tests the package above it. The hub package itself runs on the build server: about a minute.",
+      "when": ["hosts/cmd/**", "hosts/internal/**", "hosts/packaging/**"],
+      "unless": ["hosts/internal/hub/*"],
+      "run": "scripts/ci/in-folder.sh hosts sh -c 'n=$#; for d; do while [ \"$d\" != . ] && ! ls \"$d\"/*.go >/dev/null 2>&1; do d=$(dirname \"$d\"); done; [ \"$d\" = . ] || set -- \"$@\" \"$d\"; done; shift \"$n\"; [ $# -eq 0 ] || go test -count=1 \"$@\"' sh -- {dirs}"
+    },
+    {
+      "name": "hosts-hub",
+      "about": "The hub package's tests.",
+      "when": ["hosts/internal/hub/*"],
+      "where": "beast",
+      "run": "scripts/ci/fast-test-prepare.sh go && cd hosts && go test -count=1 ./internal/hub"
+    },
+    {
+      "name": "hosts-web",
+      "inFull": true,
+      "about": "The hosts service's own web UI: types and all unit tests (about 2 s).",
+      "when": ["hosts/web/src/**", "hosts/web/tsconfig*.json", "hosts/web/vite.config.ts"],
+      "run": "cd hosts/web && pnpm typecheck && pnpm test"
+    }
+  ],
+  "wide": [
+    "packages/**",
+    "contracts/**",
+    "scripts/**",
+    "patches/**",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig*.json",
+    "biome.json*",
+    "vitest*.ts",
+    "apps/*/package.json",
+    "apps/*/vitest*.ts",
+    "apps/*/tsconfig*.json",
+    "apps/server/src/{db,commit,auth,approvals,vault,managed,runtime,test,seed}/**",
+    "apps/server/src/{app,index,host-api,services,config}.ts",
+    "apps/web/src/test/**",
+    "apps/mobile/src/test/**",
+    "appliance/go.mod",
+    "appliance/go.sum",
+    "appliance/internal/**",
+    "appliance/harness/package.json",
+    "appliance/harness/pnpm-lock.yaml",
+    "appliance/console/ui/package.json",
+    "appliance/console/ui/pnpm-lock.yaml",
+    "appliance/scripts/ci/fast-test-*.sh",
+    "hosts/go.mod",
+    "hosts/go.sum",
+    "hosts/Makefile",
+    "hosts/internal/{proto,wire}/**",
+    "hosts/web/package.json",
+    "hosts/web/pnpm-lock.yaml"
+  ],
+  "wideUnless": ["packages/*/src/**"],
+  "wideIfDeleted": ["apps/**/*.{ts,tsx}", "packages/**", "tools/**", "appliance/**/*.go", "hosts/**/*.go"],
+  "full": "if [ -x scripts/ci/full.sh ]; then scripts/ci/full.sh; else pnpm check; fi",
+  "fullRetry": false,
+  "beast": {
+    "image": "docker.io/library/node:24-trixie",
+    "prepare": "if [ -x scripts/ci/fast-test-prepare.sh ]; then scripts/ci/fast-test-prepare.sh; else corepack enable && pnpm install --frozen-lockfile --store-dir /cache/pnpm; fi",
+    "network": "internet",
+    "caches": ["build"]
+  }
+}

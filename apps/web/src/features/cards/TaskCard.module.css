@@ -1,0 +1,105 @@
+/*
+ * A server task Whombat follows (docs/decisions/task-feedback.md AP-4300): the live run card's frame and text
+ * (RunLiveCard.module.css), the run line's dot (RunLine.module.css). Here: the track while it runs, the full words once
+ * it ended, and the server it runs on.
+ */
+
+/*
+ * While it runs: a task says nothing about how far it is, so the run line's 3px track carries only its sheen, sweeping
+ * across. With reduced motion there is no track (the dot keeps its still halo and the clock says it is running).
+ */
+.track {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--sf2);
+}
+
+.track::after {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--status-working), transparent);
+  content: "";
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track {
+    display: none;
+  }
+}
+
+/* The runtime's full words once it ended (at most 600 characters, lines kept). */
+.result {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* The server: its mark and name, a link to its page, as the run line's links. */
+.server {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink2);
+  text-decoration: none;
+}
+
+.server:hover {
+  color: var(--ink);
+}
+
+.server:hover .name {
+  text-decoration: underline;
+}
+
+.glyph {
+  flex: none;
+  color: var(--mut);
+}
+
+.name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* How it went, on the right, in the state's colour (the dot's tone on the card). */
+.state {
+  flex: none;
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mut);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.bad {
+  color: var(--bad);
+}

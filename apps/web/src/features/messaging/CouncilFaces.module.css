@@ -1,0 +1,35 @@
+/* The council's three heads, overlapping a little, each ringed in the page's colour so they read as three. */
+.faces {
+  display: inline-flex;
+  flex: none;
+}
+
+.face {
+  width: 22px;
+  height: 22px;
+  margin-right: -5px;
+  border-radius: 50%;
+  background: var(--sf2);
+  box-shadow: 0 0 0 2px var(--bg);
+  object-fit: cover;
+  object-position: 50% 12%;
+}
+
+.face:last-child {
+  margin-right: 0;
+}
+
+.small .face {
+  width: 20px;
+  height: 20px;
+  margin-right: -9px;
+}
+
+.small .face:last-child {
+  margin-right: 0;
+}
+
+.large .face {
+  width: 26px;
+  height: 26px;
+}

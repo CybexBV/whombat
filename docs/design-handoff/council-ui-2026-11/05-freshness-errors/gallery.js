@@ -1,0 +1,34 @@
+const selectors = ['screen','platform','theme','state'].map(id => document.getElementById(id));
+const [screenSelect, platformSelect, themeSelect, stateSelect] = selectors;
+const initial = new URLSearchParams(location.search);
+for (const select of selectors) if ([...select.options].some(o => o.value === initial.get(select.id))) select.value = initial.get(select.id);
+function update() {
+  const screen = screenSelect.value, platform = platformSelect.value, theme = themeSelect.value, state = stateSelect.value;
+  document.documentElement.dataset.theme = theme;
+  history.replaceState(null, '', '?' + new URLSearchParams({ screen, platform, theme, state }));
+  const matchingState = ['action','completed','refused','machines-empty'].includes(state) && screen !== 'server' ? 'read' : ['pinned','overview'].includes(screen) && state === 'normal' ? 'read' : screen === 'pinned' && state === 'no-copy' ? 'read' : state;
+  const title = { pinned:'Overview · pinned chart', overview:'Overview', server:'pve-02', automations:'Automations' }[screen];
+  const before = { pinned:`png/before-pinned-${theme}.png`, overview:`png/before-overview-error-${theme}.png`, server:`png/before-server-error-${theme}.png`, automations:`png/before-automation-failed-${theme}.png` }[screen];
+  const isNative = platform !== 'web';
+  document.getElementById('native-gap').hidden = !isNative;
+  document.getElementById('before-link').hidden = isNative;
+  const image = document.getElementById('before-image');
+  image.src = before; image.alt = `${title}, desktop web fixture before, ${theme}`;
+  document.getElementById('before-link').href = before;
+  document.getElementById('before-title').textContent = `Before · ${isNative ? 'GAP' : 'fixture web app'}`;
+  document.getElementById('before-note').textContent = isNative ? 'Source review only; no native screenshot is substituted.' : { pinned:'Same aged fixture values: the last point is 11:10; the app still labels it Now.', overview:'The Overview query has an error and older data. The error is hidden.', server:'A read fails with no saved page data. Raw route text reaches the error line.', automations:'Suspected bug is enabled and its latest run failed. The green On remains.' }[screen];
+  document.getElementById('after-note').textContent = `${isNative ? 'Native layout proposal, drawn in HTML. ' : '1440 × 900 drawing. '}${screen === 'automations' && matchingState === 'normal' ? 'Decision for John — reopens AP-6330, AP-6380, AP-1093.' : 'Existing decisions kept.'}`;
+  document.getElementById('scenario').textContent = `${title} · ${platform} · ${theme} · ${matchingState}. ${matchingState !== state ? 'This state belongs to a different screen; showing its read-error state.' : ''}${!['read','no-copy','normal'].includes(matchingState) ? ' The left image is the captured problem baseline; this additional state has no same-state before capture.' : ''}`;
+  const url = 'mockup.html?' + new URLSearchParams({ screen, platform, theme, state:matchingState });
+  const frame = document.getElementById('after-frame');
+  frame.src = url; frame.width = isNative ? 390 : 1440; frame.height = isNative ? 844 : 900;
+  frame.style.transform = isNative ? '' : 'scale(.45)'; frame.style.transformOrigin = 'top left';
+  frame.parentElement.style.height = isNative ? '844px' : '405px';
+  frame.parentElement.style.width = '100%';
+  document.getElementById('after-open').href = url;
+  const pngPlatform = platform === 'ios' && screen === 'server' ? 'ios' : isNative ? 'android' : 'web';
+  document.getElementById('after-png').href = `png/after-${pngPlatform}-${screen}-${theme}.png`;
+  for (const [id, page, extra] of [['keep-automation','automations','state=normal&variant=keep'],['variant-automation','automations','state=normal'],['expanded','server','state=action&detail=open'],['large','server','state=read&text=large']]) document.getElementById(id).href = `mockup.html?screen=${page}&platform=${id === 'large' && !isNative ? 'android' : platform}&theme=${theme}&${extra}`;
+}
+for (const select of selectors) select.addEventListener('change', () => { if (select === screenSelect) stateSelect.value = screenSelect.value === 'automations' ? 'normal' : screenSelect.value === 'server' ? 'no-copy' : 'read'; update(); });
+update();

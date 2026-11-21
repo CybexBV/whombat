@@ -1,0 +1,32 @@
+/**
+ * The names an automation's words need (core `PlanNames`, automation-page.md AP-6331): the agent's, Chat's and the
+ * other rooms' titles, and tracker connections' labels, from what the phone already reads. Unknown ones read as
+ * core's stand-ins (“a room”, “a tracker connection”).
+ */
+import { CHAT_WORDS, chatRoomsOf, roomOfConversation } from '@whombat/client';
+import { useCatalogConnections, useChats } from '@whombat/client/react';
+import type { PlanNames } from '@whombat/core';
+import { useMemo } from 'react';
+import { useBurrow } from './BurrowProvider';
+import { useAgentWords } from './useAgent';
+
+export function useAutomationNames(): PlanNames {
+  const { slug } = useBurrow();
+  const agent = useAgentWords();
+  const chats = useChats({ params: { burrow: slug } }, { retry: false });
+  const connections = useCatalogConnections({ params: { burrow: slug } }, { retry: false });
+  return useMemo(() => {
+    const list = chats.data?.chats ?? [];
+    const rooms = chatRoomsOf(list);
+    return {
+      agent: agent.Name,
+      conversationTitle: (id: string) => {
+        const room = roomOfConversation(rooms, id);
+        if (room) return CHAT_WORDS[room];
+        return list.find((c) => c.id === id)?.title;
+      },
+      connectionLabel: (id: string) =>
+        connections.data?.connections.find((c) => c.id === id)?.label || undefined,
+    };
+  }, [agent.Name, chats.data, connections.data]);
+}

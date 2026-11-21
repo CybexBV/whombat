@@ -1,0 +1,38 @@
+{
+  "name": "@whombat/agent-runtime",
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host": "./src/host.ts",
+    "./cache": "./src/cache.ts",
+    "./local-repos": "./src/workspace/local-origin.ts",
+    "./feedback": "./src/persona/feedback.ts",
+    "./failures": "./src/failures.ts",
+    "./testing/hermes": "./src/hermes/testing/index.ts",
+    "./testing/contexts": "./src/testing/contexts.ts",
+    "./providers": "./src/providers/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.5.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@whombat/control-contracts": "workspace:*",
+    "@whombat/core": "workspace:*",
+    "@whombat/fixtures": "workspace:*",
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.15"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/claude-code-linux-arm64": "2.1.302",
+    "@anthropic-ai/claude-code-linux-x64": "2.1.302"
+  }
+}

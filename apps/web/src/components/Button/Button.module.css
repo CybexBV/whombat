@@ -1,0 +1,135 @@
+/* Buttons — README "Buttons". Primary has no border, secondary a 1px line2 border (as in the mock). */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  border-radius: var(--radius-button);
+  font-family: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms;
+}
+
+.primary {
+  border: none;
+  background: var(--btn);
+  color: var(--btnfg);
+  font-weight: 600;
+}
+
+.secondary {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--ink);
+}
+
+/* A link styled as a button (`ButtonLink`) keeps its button colors over the global link hover. */
+a.primary:hover {
+  color: var(--btnfg);
+}
+
+a.secondary:hover {
+  color: var(--ink);
+}
+
+.ghost {
+  border: none;
+  background: transparent;
+  color: var(--mut);
+}
+
+.ghost:hover:not(:disabled, [aria-disabled="true"]) {
+  color: var(--ink);
+}
+
+/*
+ * The mock writes link arrows as text ("Full audit trail →"). Lucide's arrow carries its own ~3px side
+ * bearing at 14px, the width of the space before the glyph, so the icon follows the label directly.
+ */
+.link {
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.link:hover:not(:disabled, [aria-disabled="true"]) {
+  color: var(--ink);
+}
+
+.xs {
+  padding: 6px 13px;
+  border-radius: var(--radius-button-small);
+  font-size: 13.5px;
+}
+
+.sm {
+  padding: 7px 12px;
+  font-size: 13.5px;
+}
+
+.md {
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.lg {
+  padding: 9px 16px;
+  font-size: 14px;
+}
+
+.xl {
+  padding: 11px 18px;
+  border-radius: var(--radius-button-large);
+  font-size: 15px;
+}
+
+.block {
+  display: flex;
+  width: 100%;
+}
+
+/* Disabled: the mock's "Merge into main" before checks pass (sf2 fill, mut text, not-allowed). */
+.button:disabled,
+.button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.primary:disabled,
+.primary[aria-disabled="true"] {
+  background: var(--sf2);
+  color: var(--mut);
+}
+
+.secondary:disabled,
+.secondary[aria-disabled="true"],
+.ghost:disabled,
+.link:disabled {
+  color: var(--mut);
+}
+
+.iconButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink2);
+  font-size: 15px;
+  cursor: pointer;
+}

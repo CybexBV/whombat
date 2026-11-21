@@ -1,0 +1,20 @@
+{
+  "data": [
+    {
+      "id": "p-tank",
+      "store": "tank",
+      "schedule": "daily",
+      "keep-daily": 7,
+      "keep-weekly": 4,
+      "last-run-state": "OK",
+      "last-run-endtime": 1792551600,
+      "next-run": 1792638000
+    },
+    {
+      "id": "p-old",
+      "store": "tank",
+      "schedule": "weekly",
+      "disable": true
+    }
+  ]
+}

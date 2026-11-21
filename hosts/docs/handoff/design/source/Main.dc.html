@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fleet overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0c0e;--panel:#111215;--raised:#181a1e;--line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.14);--ink:#eceef1;--ink2:#aab0ba;--ink3:#868c97;--blue:#3987e5;--violet:#9085e9;--good:#0ca30c;--warn:#fab219;--serious:#ec835a;--crit:#d03b3b;--mute:#4a4f58}
+body{margin:0;background:#0b0c0e}
+a{color:inherit;text-decoration:none}
+button,input{font:inherit;color:inherit}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #6da7ec;outline-offset:2px}
+.mono{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.lbl{font-size:12px;color:var(--ink3);letter-spacing:.01em}
+.big{font-size:34px;font-weight:600;letter-spacing:-.025em;line-height:1}
+.h2{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.ln{fill:none;stroke-width:1.5px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.ic{fill:none;stroke:currentColor;stroke-width:1.6px;stroke-linecap:round;stroke-linejoin:round}
+.chip{font-size:12px;color:var(--ink2);border:1px solid var(--line2);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.seg{display:flex;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:11px}
+.seg button{border:0;background:transparent;color:var(--ink2);padding:0 14px;min-height:36px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
+.seg button:hover{background:var(--raised);color:var(--ink)}
+.nv{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:10px;color:var(--ink2);font-size:14px}
+.nv:hover{background:var(--raised);color:var(--ink)}
+.nv.on{background:var(--raised);color:var(--ink)}
+.srv{transition:border-color .15s,background .15s}
+.srv:hover{border-color:var(--line2);background:var(--raised)}
+.stat{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:15px;font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.track{height:6px;border-radius:3px;background:#1b2330;overflow:hidden}
+.hrow{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.5fr) 110px 90px 100px minmax(0,1.3fr) minmax(0,1.3fr);align-items:center;gap:20px;padding:20px 24px;border-top:1px solid var(--line)}
+a.hl:hover{background:var(--raised)}
+</style>
+</helmet>
+<div style="display:flex;flex-wrap:wrap;background:#0b0c0e;color:#eceef1;font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.45">
+
+  <nav aria-label="Primary" style="flex:0 1 240px;box-sizing:border-box;padding:28px 16px 28px;display:flex;flex-direction:column;gap:32px;border-right:1px solid var(--line)">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 12px">
+      <svg class="ic" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style="color:#eceef1"><rect x="3" y="4" width="18" height="4.5" rx="1.5"/><rect x="3" y="10" width="18" height="4.5" rx="1.5"/><rect x="3" y="16" width="11" height="4.5" rx="1.5"/></svg>
+      <span style="font-size:17px;font-weight:600;letter-spacing:-.02em">Fleet</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <a class="nv on" href="Main.dc.html">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+        Overview
+      </a>
+      <a class="nv" href="Server.dc.html">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3" width="19" height="7.5" rx="2"/><rect x="2.5" y="13.5" width="19" height="7.5" rx="2"/><path d="M6.5 7h.01M6.5 17.5h.01"/></svg>
+        Servers
+        <span style="margin-left:auto;font-size:12px;color:var(--ink3)">8</span>
+      </a>
+      <a class="nv" href="#">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
+        Workloads
+      </a>
+      <a class="nv" href="#">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M6 16h.01M10 16h.01"/></svg>
+        Storage
+      </a>
+      <a class="nv" href="#">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        Alerts
+        <span style="margin-left:auto;font-size:12px;font-weight:600;background:#d03b3b;color:#fff;border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px;box-sizing:border-box">{{alertCount}}</span>
+      </a>
+      <a class="nv" href="#">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
+        Agents
+      </a>
+    </div>
+    <div style="margin-top:auto">
+      <a class="nv" href="#">
+        <svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6h9m4 0h5M3 12h3m4 0h11M3 18h13m4 0h1"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        Settings
+      </a>
+    </div>
+  </nav>
+
+  <main style="flex:999 1 560px;min-width:0;box-sizing:border-box;padding:36px 48px 80px;display:flex;flex-direction:column;gap:40px">
+
+    <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:24px">
+      <div>
+        <h1 style="margin:0;font-size:28px;font-weight:600;letter-spacing:-.025em">Overview</h1>
+        <p style="margin:8px 0 0;color:var(--ink2)">{{summary}} <span style="color:var(--ink3)"> · Updated 8 s ago</span></p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+        <div class="seg" role="group" aria-label="Server group">
+          <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+            <button type="button" aria-pressed="{{g.on}}" onClick="{{g.pick}}" style="background:{{g.bg}};color:{{g.fg}}">{{g.label}} <span style="color:var(--ink3);margin-left:2px">{{g.count}}</span></button>
+          </sc-for>
+        </div>
+        <div class="seg" role="group" aria-label="Time range">
+          <sc-for list="{{ranges}}" as="r" hint-placeholder-count="5">
+            <button type="button" aria-pressed="{{r.on}}" onClick="{{r.pick}}" style="background:{{r.bg}};color:{{r.fg}}">{{r.label}}</button>
+          </sc-for>
+        </div>
+        <button type="button" style="display:flex;align-items:center;gap:8px;border:0;background:#eceef1;color:#0b0c0e;border-radius:11px;padding:0 18px;min-height:44px;font-weight:500;cursor:pointer">
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Add server
+        </button>
+      </div>
+    </header>
+
+    <section aria-label="Fleet totals" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:20px">
+      <div class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="lbl">Servers online</div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span class="big">{{kpi.online}}</span><span style="font-size:18px;color:var(--ink3)">/ {{kpi.total}}</span></div>
+        <div style="font-size:13px;color:var(--ink2)">{{kpi.onlineSub}}</div>
+      </div>
+      <div class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="lbl">CPU, fleet average</div>
+        <div class="big">{{kpi.cpu}}</div>
+        <svg viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:36px;overflow:visible"><path d="{{kpi.cpuArea}}" style="fill:#3987e5;fill-opacity:.12;stroke:none"/><path class="ln" d="{{kpi.cpuLine}}" style="stroke:#3987e5"/></svg>
+      </div>
+      <div class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="lbl">Memory, fleet</div>
+        <div><div class="big">{{kpi.mem}}</div><div style="margin-top:8px;font-size:13px;color:var(--ink2)">{{kpi.memSub}}</div></div>
+        <svg viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:36px;overflow:visible"><path d="{{kpi.memArea}}" style="fill:#9085e9;fill-opacity:.12;stroke:none"/><path class="ln" d="{{kpi.memLine}}" style="stroke:#9085e9"/></svg>
+      </div>
+      <div class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="lbl">Storage used</div>
+        <div><div class="big" style="white-space:nowrap">{{kpi.stor}}</div><div style="margin-top:8px;font-size:13px;color:var(--ink2)">{{kpi.storOf}}</div></div>
+        <div class="track" style="margin-top:6px"><div style="height:6px;border-radius:3px;background:#3987e5;width:{{kpi.storPct}}%"></div></div>
+        <div style="font-size:13px;color:var(--ink2)">{{kpi.storSub}}</div>
+      </div>
+      <div class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="lbl">Open alerts</div>
+        <div class="big">{{kpi.alerts}}</div>
+        <div style="font-size:13px;color:var(--ink2)">{{kpi.alertsSub}}</div>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-wrap:wrap;gap:24px;align-items:stretch">
+      <div class="card" style="flex:2 1 560px;min-width:0;box-sizing:border-box;padding:28px;display:flex;flex-direction:column;gap:24px">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:16px">
+          <div>
+            <h2 class="h2">CPU load by server</h2>
+            <div class="lbl" style="margin-top:4px">{{heat.sub}}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px" aria-label="Scale: low to high load">
+            <span class="lbl">0%</span>
+            <div style="display:flex;gap:2px">
+              <sc-for list="{{heat.legend}}" as="l" hint-placeholder-count="7">
+                <span style="width:18px;height:10px;border-radius:2px;background:{{l.c}}"></span>
+              </sc-for>
+            </div>
+            <span class="lbl">100%</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{heat.rows}}" as="row" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span class="mono" style="width:72px;flex:none;font-size:12px;color:var(--ink2)">{{row.name}}</span>
+              <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(48,minmax(0,1fr));gap:2px">
+                <sc-for list="{{row.cells}}" as="c" hint-placeholder-count="48">
+                  <div title="{{c.title}}" style="height:24px;border-radius:3px;background:{{c.bg}};box-shadow:{{c.ring}}"></div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-left:84px;font-size:12px;color:var(--ink3)">
+          <sc-for list="{{heat.ticks}}" as="t" hint-placeholder-count="5"><span>{{t}}</span></sc-for>
+        </div>
+      </div>
+
+      <div class="card" style="flex:1 1 340px;min-width:0;box-sizing:border-box;padding:28px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <h2 class="h2">Needs attention</h2>
+          <a href="#" style="font-size:13px;color:var(--ink2)">All alerts</a>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{alerts}}" as="a" hint-placeholder-count="3">
+            <div style="display:flex;gap:14px;padding:18px 0;border-top:1px solid var(--line)">
+              <div style="color:{{a.color}};flex:none;padding-top:1px">
+                <sc-if value="{{a.isCrit}}" hint-placeholder-val="{{ true }}">
+                  <svg class="ic" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Critical"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+                </sc-if>
+                <sc-if value="{{a.isWarn}}" hint-placeholder-val="{{ false }}">
+                  <svg class="ic" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Warning"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg>
+                </sc-if>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
+                  <span style="font-weight:500">{{a.title}}</span>
+                  <span class="lbl" style="white-space:nowrap">{{a.ago}}</span>
+                </div>
+                <div style="margin-top:4px;font-size:13px;color:var(--ink2)"><span class="mono" style="color:var(--ink)">{{a.host}}</span> · {{a.detail}}</div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{noAlerts}}" hint-placeholder-val="{{ false }}">
+            <div style="padding:28px 0;border-top:1px solid var(--line);color:var(--ink2)">No open alerts for this selection.</div>
+          </sc-if>
+        </div>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:12px">
+        <h2 class="h2">Servers</h2>
+        <span class="lbl">{{shownText}} · sparklines show the selected range</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:24px">
+        <sc-for list="{{servers}}" as="s" hint-placeholder-count="3">
+          <a href="{{s.href}}" class="card srv" style="display:flex;flex-direction:column;gap:24px;padding:28px;box-sizing:border-box;min-width:0;opacity:{{s.opacity}}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2)">
+                  <span class="dot" style="background:{{s.statusColor}}"></span>
+                  <span>{{s.statusLabel}}</span><span style="color:var(--ink3)">{{s.statusNote}}</span>
+                </div>
+                <div class="mono" style="font-size:20px;font-weight:500;margin-top:10px;letter-spacing:-.01em">{{s.id}}</div>
+                <div style="margin-top:2px;font-size:13px;color:var(--ink2)">{{s.os}}</div>
+                <div style="font-size:13px;color:var(--ink3)">{{s.hw}}</div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
+                <sc-if value="{{s.kvm}}" hint-placeholder-val="{{ false }}"><span class="chip">KVM</span></sc-if>
+                <span class="chip">{{s.grp}}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:36px 52px minmax(0,1fr);align-items:center;gap:12px">
+                <span class="lbl">CPU</span>
+                <span style="font-size:18px;font-weight:600;letter-spacing:-.02em">{{s.cpuText}}</span>
+                <svg viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:36px;overflow:visible"><path d="{{s.cpuArea}}" style="fill:#3987e5;fill-opacity:.12;stroke:none"/><path class="ln" d="{{s.cpuLine}}" style="stroke:#3987e5"/></svg>
+              </div>
+              <div style="display:grid;grid-template-columns:36px 52px minmax(0,1fr);align-items:center;gap:12px">
+                <span class="lbl">MEM</span>
+                <span style="font-size:18px;font-weight:600;letter-spacing:-.02em">{{s.memText}}</span>
+                <svg viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true" style="display:block;width:100%;height:36px;overflow:visible"><path d="{{s.memArea}}" style="fill:#9085e9;fill-opacity:.12;stroke:none"/><path class="ln" d="{{s.memLine}}" style="stroke:#9085e9"/></svg>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding-top:20px;border-top:1px solid var(--line)">
+              <div><div class="lbl">Temp</div><div class="stat"><span class="dot" style="background:{{s.tempDot}}"></span>{{s.tempText}}</div></div>
+              <div><div class="lbl">Disk</div><div class="stat"><span class="dot" style="background:{{s.diskDot}}"></span>{{s.diskText}}</div></div>
+              <div><div class="lbl">Disk wear</div><div class="stat"><span class="dot" style="background:{{s.wearDot}}"></span>{{s.wearText}}</div></div>
+            </div>
+            <sc-if value="{{s.online}}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:20px;font-size:13px;color:var(--ink2)">
+                <span style="display:flex;align-items:center;gap:7px"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg><span style="color:var(--ink);font-weight:500">{{s.dk}}</span> Docker</span>
+                <span style="display:flex;align-items:center;gap:7px"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg><span style="color:var(--ink);font-weight:500">{{s.ic}}</span> Incus</span>
+                <span style="display:flex;align-items:center;gap:7px"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span style="color:var(--ink);font-weight:500">{{s.qm}}</span> QEMU</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{s.offline}}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13px;color:var(--ink2)">Agent unreachable. Last seen 02:14 (11 h 47 m ago).</div>
+            </sc-if>
+          </a>
+        </sc-for>
+        <a href="#" class="card srv" style="display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:12px;padding:28px;box-sizing:border-box;min-height:200px">
+          <span style="width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);display:inline-flex;align-items:center;justify-content:center;color:var(--ink2)"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+          <span style="font-size:16px;font-weight:500">Enroll a server</span>
+          <span style="font-size:13px;color:var(--ink3);max-width:30ch">Install the agent on a new host, then approve it here.</span>
+        </a>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:12px">
+        <h2 class="h2">Workloads</h2>
+        <span class="lbl">Across {{kpi.online}} online servers</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:24px">
+        <sc-for list="{{platforms}}" as="p" hint-placeholder-count="3">
+          <div class="card" style="padding:28px;display:flex;flex-direction:column;gap:24px;box-sizing:border-box;min-width:0">
+            <div style="display:flex;align-items:center;gap:14px">
+              <span style="width:40px;height:40px;border-radius:10px;background:var(--raised);display:inline-flex;align-items:center;justify-content:center;color:var(--ink)">
+                <sc-if value="{{p.isDocker}}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></sc-if>
+                <sc-if value="{{p.isIncus}}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg></sc-if>
+                <sc-if value="{{p.isQemu}}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></sc-if>
+              </span>
+              <div>
+                <div style="font-size:16px;font-weight:600">{{p.name}}</div>
+                <div class="lbl">{{p.sub}}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:10px"><span class="big" style="font-size:44px">{{p.running}}</span><span style="color:var(--ink2)">running</span><span class="lbl" style="margin-left:auto">of {{p.total}}</span></div>
+            <div>
+              <div style="display:flex;gap:2px">
+                <sc-for list="{{p.segs}}" as="g" hint-placeholder-count="3">
+                  <div style="flex:{{g.n}} 1 0;height:6px;border-radius:3px;background:{{g.color}}"></div>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px;font-size:13px;color:var(--ink2)">
+                <sc-for list="{{p.segs}}" as="g" hint-placeholder-count="3">
+                  <span style="display:flex;align-items:center;gap:7px"><span class="dot" style="background:{{g.color}}"></span>{{g.label}} <span style="color:var(--ink);font-weight:500">{{g.n}}</span></span>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px;font-size:13px;color:var(--ink2)">
+                <sc-for list="{{p.stacks}}" as="k" hint-placeholder-count="2">
+                  <span>{{k.label}} <span style="color:var(--ink);font-weight:500">{{k.n}}</span></span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0">
+              <div class="lbl" style="padding-bottom:12px">Top by CPU</div>
+              <sc-for list="{{p.top}}" as="t" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) 84px 40px;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--line)">
+                  <div style="min-width:0"><div class="mono" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{t.n}}</div><div class="lbl">{{t.host}}</div></div>
+                  <div class="track"><div style="height:6px;border-radius:3px;background:#3987e5;width:{{t.w}}%"></div></div>
+                  <span style="text-align:right;font-size:13px;font-weight:500">{{t.v}}%</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:12px">
+        <h2 class="h2">Hypervisors</h2>
+        <span class="lbl">KVM hosts running Incus, libvirt / QEMU or Proxmox VE · allocation against physical capacity</span>
+      </div>
+      <div class="card" style="overflow:hidden">
+        <div style="overflow-x:auto">
+          <div style="min-width:980px">
+            <div class="hrow" style="padding-top:14px;padding-bottom:14px">
+              <span class="lbl">Host</span><span class="lbl">Stack</span><span class="lbl">KVM</span><span class="lbl">Guest VMs</span><span class="lbl">Containers</span><span class="lbl">vCPU allocated</span><span class="lbl">Memory assigned</span>
+            </div>
+            <sc-for list="{{hv.rows}}" as="h" hint-placeholder-count="5">
+              <a href="{{h.href}}" class="hrow hl">
+                <span class="mono" style="font-size:14px;font-weight:500">{{h.id}}</span>
+                <span style="display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{h.stacks}}" as="k" hint-placeholder-count="2"><span class="chip" style="padding:2px 10px">{{k}}</span></sc-for>
+                </span>
+                <span style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot" style="background:#0ca30c"></span>Enabled</span>
+                <span style="font-weight:600">{{h.vm}}</span>
+                <span style="font-weight:600">{{h.ct}}</span>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot" style="background:{{h.vcpuDot}}"></span><span style="font-weight:600">{{h.vcpuText}}</span><span style="color:var(--ink3)">{{h.ratio}}</span></div>
+                  <div class="track" style="margin-top:8px;position:relative"><div style="height:6px;border-radius:3px;background:#3987e5;width:{{h.vcpuW}}%"></div><span style="position:absolute;left:50%;top:0;width:1px;height:6px;background:rgba(255,255,255,.4)"></span></div>
+                </div>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="dot" style="background:{{h.memDot}}"></span><span style="font-weight:600">{{h.memText}}</span><span style="color:var(--ink3)">{{h.memPct}}</span></div>
+                  <div class="track" style="margin-top:8px"><div style="height:6px;border-radius:3px;background:#9085e9;width:{{h.memW}}%"></div></div>
+                </div>
+              </a>
+            </sc-for>
+          </div>
+        </div>
+        <div class="lbl" style="padding:14px 24px;border-top:1px solid var(--line)">The vCPU bar spans 0 to 2 : 1 overcommit; the tick marks 1 : 1. Proxmox VE hosts also run LXC containers.</div>
+      </div>
+    </section>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3365}}'>
+class Component extends DCLogic {
+  hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  rnd(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+  gen(key, n, step, o) {
+    const r = this.rnd(this.hash(key)); const out = []; let ar = 0; const sp = [];
+    const per = Math.max(8, Math.round(n / 3));
+    for (let k = 0; k < (o.spikes || 0); k++) sp.push({ i: Math.floor(r() * n), h: (0.5 + r() * 0.5) * (o.spikeH || 0), w: 1 + Math.floor(r() * 3) });
+    for (let i = 0; i < n; i++) {
+      const ago = (n - 1 - i) * step; const tod = (((840 - ago) % 1440) + 1440) % 1440;
+      ar = ar * 0.7 + (r() - 0.5) * 0.6;
+      let v = o.base + (o.amp || 0) * Math.sin(tod / 1440 * 6.2832 - 2.2) + (o.noise || 0) * ar * 3;
+      if (o.saw) v += o.saw * ((i % per) / per - 0.5);
+      for (const s of sp) { const d = Math.abs(i - s.i); if (d <= s.w) v += s.h * (1 - d / (s.w + 1)); }
+      out.push(v);
+    }
+    const delta = o.now - out[n - 1];
+    for (let i = 0; i < n; i++) { let w = (i / (n - 1) - 0.86) / 0.14; w = Math.max(0, Math.min(1, w)); w = w * w * (3 - 2 * w); out[i] = Math.max(o.min, Math.min(o.max, out[i] + delta * w)); }
+    out[n - 1] = o.now;
+    return out;
+  }
+  spark(vals, W, H) {
+    const pts = []; vals.forEach((v, i) => { if (v != null) pts.push([i / (vals.length - 1) * W, v]); });
+    if (pts.length < 2) return { line: '', area: '' };
+    let lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1]));
+    if (hi - lo < 20) { const c = (hi + lo) / 2; lo = c - 10; hi = c + 10; }
+    const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    const P = pts.map(p => [p[0], H - ((p[1] - lo) / (hi - lo)) * H]);
+    const line = P.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+    const area = line + 'L' + P[P.length - 1][0].toFixed(1) + ' ' + H + 'L' + P[0][0].toFixed(1) + ' ' + H + 'Z';
+    return { line, area };
+  }
+  timeLabel(range, k) {
+    const mins = { '1h': 60, '6h': 360, '24h': 1440, '7d': 10080, '30d': 43200 }[range];
+    const t = new Date(Date.UTC(2026, 9, 11, 14, 0) - mins * 60000 * (1 - k / 4));
+    const p = (x) => String(x).padStart(2, '0');
+    const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const D = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (k === 4) return 'Now';
+    if (range === '7d' || range === '30d') return M[t.getUTCMonth()] + ' ' + t.getUTCDate();
+    if (range === '24h') return D[t.getUTCDay()] + ' ' + p(t.getUTCHours()) + ':' + p(t.getUTCMinutes());
+    return p(t.getUTCHours()) + ':' + p(t.getUTCMinutes());
+  }
+  renderVals() {
+    const st = this.state || {};
+    const range = st.range || '24h';
+    const group = st.group || 'All';
+    const RM = { '1h': 60, '6h': 360, '24h': 1440, '7d': 10080, '30d': 43200 };
+    const mins = RM[range];
+    const OFF = 707;
+    const ALL = [
+      { id: 'basalt', os: 'NixOS 26.05', hw: 'EPYC 7443P · 24C/48T', ram: 256, grp: 'Production', st: 'warning', note: 'disk wear', cpu: 34, mem: 61, temp: 64, disk: 64, wear: 78, cap: 35, dk: [14, 2, 0], ic: [4, 2, 1], qm: [3, 1] },
+      { id: 'granite', os: 'Debian 13', hw: 'Xeon E-2388G · 8C/16T', ram: 64, grp: 'Production', st: 'online', note: '', cpu: 22, mem: 48, temp: 52, disk: 58, wear: 11, cap: 8, dk: [22, 3, 0], ic: [0, 0, 0], qm: [0, 0] },
+      { id: 'obsidian', os: 'NixOS 26.05', hw: 'Ryzen 9 7950X · 16C/32T', ram: 128, grp: 'Production', st: 'online', note: '', cpu: 47, mem: 72, temp: 66, disk: 64, wear: 19, cap: 12, dk: [9, 1, 1], ic: [8, 3, 2], qm: [0, 0] },
+      { id: 'quartz', os: 'Ubuntu 24.04 LTS', hw: 'Core i7-12700 · 12C/20T', ram: 64, grp: 'Lab', st: 'online', note: '', cpu: 12, mem: 39, temp: 47, disk: 33, wear: 6, cap: 4, dk: [5, 0, 0], ic: [1, 1, 0], qm: [1, 1] },
+      { id: 'shale', os: 'Proxmox VE 9', hw: 'EPYC 9124 · 16C/32T', ram: 192, grp: 'Production', st: 'warning', note: 'CPU temperature', cpu: 71, mem: 83, temp: 83, disk: 52, wear: 9, cap: 24, dk: [0, 0, 0], ic: [0, 0, 0], qm: [18, 4] },
+      { id: 'flint', os: 'NixOS 26.05', hw: 'Intel N100 · 4C/4T', ram: 16, grp: 'Edge', st: 'online', note: '', cpu: 18, mem: 44, temp: 55, disk: 37, wear: 8, cap: 1, dk: [6, 1, 0], ic: [0, 0, 0], qm: [0, 0] },
+      { id: 'onyx', os: 'Debian 13', hw: 'Ryzen 7 5700G · 8C/16T', ram: 64, grp: 'Lab', st: 'online', note: '', cpu: 29, mem: 55, temp: 58, disk: 83, wear: 41, cap: 16, dk: [11, 2, 1], ic: [2, 1, 1], qm: [2, 0] },
+      { id: 'marble', os: 'Ubuntu 24.04 LTS', hw: 'Celeron J4125 · 4C/4T', ram: 8, grp: 'Edge', st: 'offline', note: 'no heartbeat', cpu: 9, mem: 41, temp: 0, disk: 46, wear: 14, cap: 2, dk: [0, 0, 0], ic: [0, 0, 0], qm: [0, 0] }
+    ];
+    const VIRT = {
+      basalt: { stacks: ['Incus', 'libvirt'], th: 48, vcpu: 22, memA: 52, vm: 5, ct: 4 },
+      obsidian: { stacks: ['Incus'], th: 32, vcpu: 14, memA: 36, vm: 3, ct: 8 },
+      quartz: { stacks: ['Incus', 'libvirt'], th: 20, vcpu: 8, memA: 12, vm: 2, ct: 1 },
+      shale: { stacks: ['Proxmox VE'], th: 32, vcpu: 52, memA: 158, vm: 18, ct: 4 },
+      onyx: { stacks: ['Incus', 'libvirt'], th: 16, vcpu: 11, memA: 29, vm: 3, ct: 2 }
+    };
+    const ALERTS = [
+      { host: 'marble', sev: 'critical', title: 'Agent unreachable', detail: 'No heartbeat for 11 h 47 m', ago: 'since 02:14' },
+      { host: 'basalt', sev: 'warning', title: 'nvme1n1 wear at 78%', detail: '936 of 1,200 TBW written', ago: '2 d ago' },
+      { host: 'shale', sev: 'warning', title: 'CPU package at 83 °C', detail: 'Above 80 °C for 14 min', ago: '14 min ago' }
+    ];
+    const TOP = {
+      docker: [{ n: 'postgres-main', host: 'granite', v: 31 }, { n: 'immich-ml', host: 'obsidian', v: 24 }, { n: 'jellyfin', host: 'onyx', v: 17 }, { n: 'prometheus', host: 'basalt', v: 12 }, { n: 'traefik', host: 'flint', v: 4 }],
+      incus: [{ n: 'ci-runner-03', host: 'obsidian', v: 38 }, { n: 'build-cache', host: 'obsidian', v: 21 }, { n: 'nixbuild', host: 'basalt', v: 22 }, { n: 'dev-shell', host: 'basalt', v: 6 }, { n: 'test-vm', host: 'quartz', v: 5 }],
+      qemu: [{ n: 'k3s-node-2', host: 'shale', v: 44 }, { n: 'win-build', host: 'shale', v: 38 }, { n: 'opnsense', host: 'basalt', v: 17 }, { n: 'haos', host: 'onyx', v: 7 }, { n: 'vault-vm', host: 'quartz', v: 4 }]
+    };
+    const L = ALL.filter(s => group === 'All' || s.grp === group);
+    const on = L.filter(s => s.st !== 'offline');
+    const N = 60, H = 48;
+    const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+
+    // series per server
+    const ser = {};
+    L.forEach(s => {
+      const k = s.id + range;
+      let c = this.gen(k + 'c', N, mins / (N - 1), { base: s.cpu, amp: Math.max(3, s.cpu * 0.2), noise: s.cpu * 0.12, spikes: 2, spikeH: s.cpu * 0.6, now: s.cpu, min: 1, max: 99 });
+      let m = this.gen(k + 'm', N, mins / (N - 1), { base: s.mem, amp: 1.2, noise: 0.5, saw: 3, now: s.mem, min: 5, max: 99 });
+      let h = this.gen(k + 'h', H, mins / (H - 1), { base: s.cpu, amp: Math.max(3, s.cpu * 0.2), noise: s.cpu * 0.2, spikes: 3, spikeH: s.cpu * 0.7, now: s.cpu, min: 1, max: 99 });
+      if (s.st === 'offline') {
+        c = c.map((v, i) => ((N - 1 - i) * mins / (N - 1) < OFF ? null : v));
+        m = m.map((v, i) => ((N - 1 - i) * mins / (N - 1) < OFF ? null : v));
+        h = h.map((v, i) => ((H - 1 - i) * mins / (H - 1) < OFF ? null : v));
+      }
+      ser[s.id] = { c, m, h };
+    });
+
+    // controls
+    const ranges = ['1h', '6h', '24h', '7d', '30d'].map(r => ({ label: r, on: r === range, bg: r === range ? '#23262c' : 'transparent', fg: r === range ? '#eceef1' : '#aab0ba', pick: () => this.setState({ range: r }) }));
+    const gnames = ['All', 'Production', 'Lab', 'Edge'];
+    const groups = gnames.map(g => ({ label: g, count: ALL.filter(s => g === 'All' || s.grp === g).length, on: g === group, bg: g === group ? '#23262c' : 'transparent', fg: g === group ? '#eceef1' : '#aab0ba', pick: () => this.setState({ group: g }) }));
+
+    // KPIs
+    const off = L.length - on.length, warn = on.filter(s => s.st === 'warning').length;
+    const onlineSub = (off ? off + ' offline' : 'All reachable') + (warn ? ' · ' + warn + ' with warnings' : '');
+    const cpuAvg = Math.round(mean(on.map(s => s.cpu)));
+    const avgSeries = (key) => Array.from({ length: N }, (_, i) => mean(on.map(s => ser[s.id][key][i])));
+    const cs = this.spark(avgSeries('c'), 200, 36), ms = this.spark(avgSeries('m'), 200, 36);
+    const ramTot = on.reduce((a, s) => a + s.ram, 0);
+    const ramUsed = on.reduce((a, s) => a + s.ram * s.mem / 100, 0);
+    const capTot = on.reduce((a, s) => a + s.cap, 0);
+    const capUsed = on.reduce((a, s) => a + s.cap * s.disk / 100, 0);
+    const worn = on.filter(s => s.wear >= 75).length;
+    const aL = ALERTS.filter(a => L.some(s => s.id === a.host));
+    const crit = aL.filter(a => a.sev === 'critical').length, wn = aL.length - crit;
+    const kpi = {
+      online: on.length, total: L.length, onlineSub,
+      cpu: cpuAvg + '%', cpuLine: cs.line, cpuArea: cs.area,
+      mem: (ramTot ? Math.round(ramUsed / ramTot * 100) : 0) + '%', memSub: Math.round(ramUsed) + ' of ' + ramTot + ' GB', memLine: ms.line, memArea: ms.area,
+      stor: capUsed.toFixed(1).replace(/\.0$/, '') + ' TB', storOf: 'of ' + capTot.toFixed(1).replace(/\.0$/, '') + ' TB', storPct: capTot ? Math.round(capUsed / capTot * 100) : 0, storSub: worn ? worn + ' disk over 75% wear' : 'No disks near end of life',
+      alerts: aL.length, alertsSub: aL.length ? (crit ? crit + ' critical' : '') + (crit && wn ? ' · ' : '') + (wn ? wn + ' warning' : '') : 'All clear'
+    };
+
+    // heatmap
+    const bins = [[8, '#161d29'], [20, '#0d366b'], [35, '#184f95'], [50, '#256abf'], [65, '#3987e5'], [80, '#6da7ec'], [101, '#b7d3f6']];
+    const binColor = (v) => bins.find(b => v < b[0])[1];
+    const p2 = (x) => String(x).padStart(2, '0');
+    const heatRows = L.map(s => ({
+      name: s.id,
+      cells: ser[s.id].h.map((v, i) => {
+        const ago = (H - 1 - i) * mins / (H - 1);
+        const t = new Date(Date.UTC(2026, 9, 11, 14, 0) - ago * 60000);
+        const when = (range === '7d' || range === '30d' ? (t.getUTCMonth() + 1) + '/' + t.getUTCDate() + ' ' : '') + p2(t.getUTCHours()) + ':' + p2(t.getUTCMinutes());
+        return v == null
+          ? { title: s.id + ' · ' + when + ' · no data', bg: 'transparent', ring: 'inset 0 0 0 1px rgba(255,255,255,.08)' }
+          : { title: s.id + ' · ' + when + ' · ' + Math.round(v) + '%', bg: binColor(v), ring: 'none' };
+      })
+    }));
+    const rl = { '1h': 'Last hour', '6h': 'Last 6 hours', '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days' }[range];
+    const heat = { rows: heatRows, sub: rl + ' · one cell per ' + (mins / H < 60 ? Math.round(mins / H) + ' min' : mins / H < 1440 ? Math.round(mins / H / 60) + ' h' : '1 day') + ' · blank means no data', legend: bins.map(b => ({ c: b[1] })), ticks: [0, 1, 2, 3, 4].map(k => this.timeLabel(range, k)) };
+
+    // alerts
+    const alerts = aL.map(a => ({ ...a, isCrit: a.sev === 'critical', isWarn: a.sev !== 'critical', color: a.sev === 'critical' ? '#ef6b6b' : '#fab219' }));
+
+    // server cards
+    const dotFor = (v, w, s2) => (v >= s2 ? '#ec835a' : v >= w ? '#fab219' : '#0ca30c');
+    const servers = L.map(s => {
+      const o = s.st === 'offline';
+      const c = this.spark(ser[s.id].c, 200, 36), m = this.spark(ser[s.id].m, 200, 36);
+      return {
+        id: s.id, os: s.os, hw: s.hw, grp: s.grp, online: !o, offline: o, opacity: o ? 0.7 : 1,
+        statusLabel: o ? 'Offline' : s.st === 'warning' ? 'Warning' : 'Online',
+        statusNote: s.note ? ' · ' + s.note : '',
+        statusColor: o ? '#d03b3b' : s.st === 'warning' ? '#fab219' : '#0ca30c',
+        cpuText: o ? '—' : s.cpu + '%', memText: o ? '—' : s.mem + '%',
+        cpuLine: c.line, cpuArea: c.area, memLine: m.line, memArea: m.area,
+        tempText: o ? '—' : s.temp + ' °C', tempDot: o ? '#4a4f58' : dotFor(s.temp, 80, 90),
+        diskText: o ? '—' : s.disk + '%', diskDot: o ? '#4a4f58' : dotFor(s.disk, 80, 90),
+        wearText: o ? '—' : s.wear + '%', wearDot: o ? '#4a4f58' : dotFor(s.wear, 75, 90),
+        dk: s.dk[0], ic: s.ic[0] + s.ic[1], qm: s.qm[0],
+        kvm: !!VIRT[s.id], href: s.id === 'shale' ? 'Proxmox.dc.html' : 'Server.dc.html'
+      };
+    });
+
+    // platforms
+    const sum = (f) => on.reduce((a, s) => a + f(s), 0);
+    const hostSet = (f) => on.filter(s => f(s) > 0).length;
+    const topFor = (key) => TOP[key].filter(t => on.some(s => s.id === t.host)).slice(0, 3).map(t => ({ n: t.n, host: t.host, v: t.v, w: t.v }));
+    const segs = (arr) => arr.filter(x => x.n > 0);
+    const dkR = sum(s => s.dk[0]), dkS = sum(s => s.dk[1]), dkB = sum(s => s.dk[2]);
+    const icC = sum(s => s.ic[0]), icV = sum(s => s.ic[1]), icS = sum(s => s.ic[2]);
+    const qmR = sum(s => s.qm[0]), qmS = sum(s => s.qm[1]);
+    const pveVm = sum(s => (s.os.indexOf('Proxmox') === 0 ? s.qm[0] : 0));
+    const libVm = qmR - pveVm;
+    const pveHosts = on.filter(s => s.os.indexOf('Proxmox') === 0).length;
+    const libHosts = on.filter(s => s.os.indexOf('Proxmox') !== 0 && s.qm[0] + s.qm[1] > 0).length;
+    const platforms = [
+      { isDocker: true, isIncus: false, isQemu: false, name: 'Docker', sub: 'Engine on ' + hostSet(s => s.dk[0] + s.dk[1]) + ' servers', running: dkR, total: dkR + dkS + dkB, segs: segs([{ n: dkR, label: 'Running', color: '#0ca30c' }, { n: dkS, label: 'Stopped', color: '#4a4f58' }, { n: dkB, label: 'Unhealthy', color: '#ec835a' }]), stacks: [], top: topFor('docker') },
+      { isDocker: false, isIncus: true, isQemu: false, name: 'Incus', sub: 'Containers and VMs on ' + hostSet(s => s.ic[0] + s.ic[1] + s.ic[2]) + ' servers', running: icC + icV, total: icC + icV + icS, segs: segs([{ n: icC + icV, label: 'Running', color: '#0ca30c' }, { n: icS, label: 'Stopped', color: '#4a4f58' }]), stacks: segs([{ n: icC, label: 'Containers' }, { n: icV, label: 'KVM VMs' }]), top: topFor('incus') },
+      { isDocker: false, isIncus: false, isQemu: true, name: 'QEMU / KVM', sub: 'libvirt on ' + libHosts + ' · Proxmox VE on ' + pveHosts + ' servers', running: qmR, total: qmR + qmS, segs: segs([{ n: qmR, label: 'Running', color: '#0ca30c' }, { n: qmS, label: 'Stopped', color: '#4a4f58' }]), stacks: segs([{ n: pveVm, label: 'Proxmox VE' }, { n: libVm, label: 'libvirt' }]), top: topFor('qemu') }
+    ];
+
+    // hypervisors
+    const memColor = (p) => (p >= 90 ? '#ec835a' : p >= 80 ? '#fab219' : '#0ca30c');
+    const hvRows = on.filter(s => VIRT[s.id]).map(s => {
+      const v = VIRT[s.id]; const ratio = v.vcpu / v.th; const mp = v.memA / s.ram * 100;
+      return {
+        id: s.id, href: s.id === 'shale' ? 'Proxmox.dc.html' : 'Server.dc.html', stacks: v.stacks, vm: v.vm, ct: v.ct,
+        vcpuText: v.vcpu + ' / ' + v.th, ratio: ratio.toFixed(2) + ' : 1', vcpuW: Math.min(100, ratio / 2 * 100), vcpuDot: ratio > 1.5 ? '#fab219' : '#0ca30c',
+        memText: v.memA + ' / ' + s.ram + ' GB', memPct: Math.round(mp) + '%', memW: Math.min(100, mp), memDot: memColor(mp)
+      };
+    });
+    const hv = { rows: hvRows };
+
+    return {
+      alertCount: ALERTS.length,
+      summary: L.length + ' servers · ' + on.length + ' agents connected',
+      ranges, groups, kpi, heat, alerts, noAlerts: alerts.length === 0, servers, platforms, hv,
+      shownText: L.length + ' of ' + ALL.length + ' shown'
+    };
+  }
+}
+</script>
+</body>
+</html>

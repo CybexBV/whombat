@@ -1,0 +1,44 @@
+{
+  "name": "@whombat/control-contracts",
+  "license": "AGPL-3.0-only",
+  "version": "4.11.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Control API schemas: cloud auth, orgs, device directory, claims, tickets, device-signed requests, push, rollout, billing.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./device": "./src/device/index.ts",
+    "./local": "./src/local/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./device": {
+        "types": "./dist/device/index.d.ts",
+        "default": "./dist/device/index.js"
+      },
+      "./local": {
+        "types": "./dist/local/index.d.ts",
+        "default": "./dist/local/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@whombat/core": "workspace:*",
+    "@whombat/protocol": "workspace:*",
+    "@whombat/release": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

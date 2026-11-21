@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>11 · One Chat · design review</title>
+  <link rel="stylesheet" href="../../../../packages/tokens/tokens.css">
+  <link rel="stylesheet" href="../../../../apps/web/src/app/fonts/fonts.css">
+  <link rel="stylesheet" href="gallery.css">
+</head>
+<body>
+  <header><p class="kicker">11 / CHAT</p><h1>One conversation, one clear way into each thread.</h1><p>The shipped timeline stays. Work and waiting come from flags; reply counts fill the quiet cases. Message actions have one home.</p><nav><a href="NOTES.md">Sources & accessibility notes</a><a href="../SCORING.md">Scoring rules</a><a href="../02-chat-list/index.html">02 · earlier row study</a><a href="../07-phone-comfort/index.html">07 · message actions</a></nav></header>
+  <main>
+    <div class="controls">
+      <label>Platform<select id="platform"><option value="desktop">Desktop web · 1440 × 900</option><option value="phone-web">Phone-width web · 390 × 844</option><option value="ios">Native iOS design · 390 × 844</option><option value="android">Native Android design · 390 × 844</option></select></label>
+      <label>Screen<select id="screen"><option value="chat">Chat timeline</option><option value="thread">A thread with its approval card</option></select></label>
+      <label>Read state<select id="state"><option value="normal">Messages loaded</option><option value="empty">Successful empty read</option><option value="loading">First loading</option><option value="error">Failed read · no saved copy</option><option value="saved-error">Failed refresh · saved messages</option></select></label>
+      <label>Theme<select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label>Text<select id="text"><option value="normal">Standard</option><option value="largest">Largest kept size</option></select></label>
+    </div>
+    <p id="context" class="context"></p>
+    <a id="full" class="full" target="_blank" href="mockup.html">Open drawing at full size ↗</a>
+    <div class="comparison" tabindex="0" role="region" aria-label="Before and after comparison, scroll horizontally for desktop">
+      <section><h2>Before · shipped fixture app</h2><p id="before-note"></p><div id="before"></div></section>
+      <section><h2>After · static HTML design</h2><p id="after-note"></p><iframe id="after" title="One Chat proposed design"></iframe></section>
+    </div>
+    <section class="evidence"><h2>Component and state sheets</h2><p>These specimens explain the same design. There is no alternate main Chat list.</p><div class="sheet-links"><a href="mockup.html?screen=stages&theme=light">All stage cases · light</a><a href="mockup.html?screen=stages&theme=dark">All stage cases · dark</a><a href="mockup.html?screen=states&theme=light">Empty / loading / failed read · light</a><a href="mockup.html?screen=states&theme=dark">Empty / loading / failed read · dark</a><a href="mockup.html?platform=phone-web&menu=open">Phone web · message actions open</a></div><div class="thumbnails" id="pictures"></div></section>
+    <p class="limit">Design evidence only. The native proposals use HTML, beside step 08’s actual native before captures. They do not establish native text metrics, VoiceOver/TalkBack, gestures or keyboard avoidance. No application, token, test, decision or earlier step changes.</p>
+  </main><script src="gallery.js"></script>
+</body>
+</html>

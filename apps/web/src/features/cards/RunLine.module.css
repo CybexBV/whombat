@@ -1,0 +1,275 @@
+/*
+ * The run line (docs/decisions/run-line.md AP-668): a run that hasn't changed anything, one line under its message
+ * instead of the run card. The card's dot and progress colours, the message's text size, at most the card's width.
+ */
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: var(--max-card);
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mut);
+}
+
+.live .dot {
+  background: var(--status-working);
+  animation: pulse 1.6s ease-out infinite;
+}
+
+.warn .dot {
+  background: var(--status-waiting);
+}
+
+.ok .dot {
+  background: var(--ok);
+}
+
+.bad .dot {
+  background: var(--bad);
+}
+
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lead {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.warn .lead {
+  color: var(--warn);
+}
+
+.detail {
+  color: var(--ink2);
+}
+
+/* Watch run while live, Open run once the run has stopped (AP-699). */
+.link {
+  flex: none;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--mut);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/*
+ * Try again on a failed line (AP-699): the app's inline action (Button `link`: 13.5px, no padding, brand, ink on
+ * hover, mut while the retry is in flight) at the link's size and line height, with the link's focus ring radius.
+ * Two classes, so it wins over the Button's radius whichever stylesheet loads first.
+ */
+.row .retry {
+  flex: none;
+  border-radius: 6px;
+  line-height: inherit;
+}
+
+/*
+ * A settled card's line (docs/decisions/card-settle.md AP-731): the run line's anatomy for any card that is done. Its
+ * chips (`PR #3`, `+12 −8`) in the run card's diff font, the control that opens the card in place, and what a run did
+ * (AP-732) as smaller lines under it, indented to the text.
+ */
+.chips {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font: 500 12px var(--font-mono);
+  color: var(--ink2);
+}
+
+.chip {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+a.chip {
+  color: var(--ink2);
+  text-decoration: none;
+}
+
+a.chip:hover {
+  border-color: var(--line2);
+  color: var(--ink);
+}
+
+.expand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: -2px -4px -2px -2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mut);
+  cursor: pointer;
+}
+
+.expand:hover {
+  background: var(--sf2);
+  color: var(--ink);
+}
+
+.expand svg {
+  transition: transform var(--duration-progress) ease;
+}
+
+.expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+/* The card the line opens, in place under it. */
+.opened {
+  display: flex;
+  flex-direction: column;
+  margin-top: 3px;
+}
+
+/* What a run did (a skill it learned, a turn it scheduled): smaller lines under the run, indented to its text. */
+.inside {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: var(--max-card);
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+
+.small .row {
+  gap: 8px;
+  font-size: 13px;
+}
+
+.small .dot {
+  width: 6px;
+  height: 6px;
+}
+
+.small .link,
+.small .row .retry {
+  font-size: 13px;
+}
+
+.problem {
+  margin: 0 0 0 18px;
+  font-size: 13px;
+  color: var(--bad);
+}
+
+/* A card and what its run did under it. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A message inside its run that a link or the pins pane jumped to (AP-732): highlighted as its row would be. */
+.line[data-flash] {
+  border-radius: var(--radius-small);
+  background: var(--hi);
+  box-shadow: 0 0 0 6px var(--hi);
+  transition:
+    background 0.4s,
+    box-shadow 0.4s;
+}
+
+/*
+ * The card's track, thinner; the filled part carries a sheen that sweeps, so a quiet step still looks alive (not
+ * while the run needs a person: nothing is moving then).
+ */
+.track {
+  height: 3px;
+  margin-left: 18px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--sf2);
+}
+
+.bar {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--progress);
+  transition: width var(--duration-progress) ease;
+}
+
+.bar::after {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--status-working), transparent);
+  content: "";
+  animation: sheen 1.4s ease-in-out infinite;
+}
+
+.warn .bar::after {
+  display: none;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--live-halo);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live .dot {
+    animation: none;
+    box-shadow: var(--shadow-live-halo);
+  }
+
+  .bar::after {
+    animation: none;
+    display: none;
+  }
+}

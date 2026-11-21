@@ -1,0 +1,265 @@
+/* Guests page (UI v2): fleet-wide guest list with filters and the console side panel. */
+
+.gp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.gp-filters .input-search input {
+  width: 260px;
+}
+.gp-filters .spacer {
+  flex: 1 1 auto;
+}
+.gp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.gp-chip:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.gp-chip[aria-pressed='true'] {
+  background: var(--raised);
+  border-color: var(--line-selected);
+  color: var(--ink);
+}
+.gp-chip .c {
+  color: var(--ink-3);
+}
+.gp-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.gp-select select {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  padding-right: 4px;
+}
+.gp-select select:focus-visible {
+  outline: none;
+}
+.gp-select:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+table.gt {
+  width: 100%;
+  border-collapse: collapse;
+}
+.gt th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.gt td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+.gt tr:last-child td {
+  border-bottom: 0;
+}
+.gt tr.is-selected td {
+  background: var(--raised);
+}
+.gt th.first,
+.gt td.first {
+  padding-left: 14px;
+  padding-right: 0;
+  width: 22px;
+}
+.gt th.last,
+.gt td.last {
+  padding-right: 12px;
+  text-align: right;
+}
+.gt .n {
+  font-family: var(--font-mono);
+  color: var(--ink);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gt .n small {
+  display: block;
+  font-family: var(--font-sans);
+  color: var(--ink-3);
+  font-size: 11px;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gt .host {
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+}
+.gt .host.is-offline {
+  color: var(--ink-3);
+}
+.gt .mem {
+  font-variant-numeric: tabular-nums;
+}
+.gt .mem .d {
+  color: var(--ink-3);
+}
+.gt tr.is-stopped .n,
+.gt tr.is-stopped .mem,
+.gt tr.is-stopped .host {
+  color: var(--ink-3);
+}
+.gt-scroll {
+  position: relative; /* contain .sr-only children inside the scroller */
+  overflow-x: auto;
+}
+.gt-scroll table {
+  min-width: 720px;
+}
+
+/* Row tools: console button and the ⋯ menu; sortable column headers. */
+.row-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.tcell.row-tools {
+  display: flex;
+}
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.th-sort:hover,
+.gt th[aria-sort] .th-sort {
+  color: var(--ink);
+}
+
+/* Phones: guest, host, CPU and the console button; memory and uptime are on the host page. */
+@media (max-width: 759px) {
+  .gt-scroll table {
+    min-width: 0;
+  }
+  .gt th:nth-child(5),
+  .gt td:nth-child(5),
+  .gt th:nth-child(6),
+  .gt td:nth-child(6) {
+    display: none;
+  }
+  .gt .n {
+    max-width: 160px;
+  }
+  .gt .hide-phone,
+  .gt .row-tools .btn-label {
+    display: none;
+  }
+  .checks-table .n {
+    max-width: 120px;
+  }
+  .sys-table th:nth-child(5),
+  .sys-table td:nth-child(5) {
+    display: table-cell;
+  }
+  .gp-filters .input-search input {
+    width: 100%;
+  }
+  .gp-filters .input-search {
+    width: 100%;
+  }
+}
+
+/* Guest history dialog (GuestHistory.tsx). */
+.gh-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.gh-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+@media (max-width: 640px) {
+  .gh-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.gh-chart .lbl {
+  margin-bottom: 6px;
+}
+.platform-warnings {
+  margin: -4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Sortable column headers (Guests page). */
+.th-sort {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.th-sort:hover {
+  color: var(--ink);
+}
+/* Phones: the guest, host, CPU value and the buttons fit; memory, uptime and the CPU bar go. */
+@media (max-width: 560px) {
+  .gt th:nth-child(5),
+  .gt td:nth-child(5),
+  .gt th:nth-child(6),
+  .gt td:nth-child(6),
+  .gt .cpu-cell .track {
+    display: none;
+  }
+  .gt td,
+  .gt th {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .gt .n {
+    max-width: 118px;
+  }
+}

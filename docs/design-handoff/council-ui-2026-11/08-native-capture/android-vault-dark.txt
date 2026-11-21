@@ -1,0 +1,23 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 18 visible nodes (41 total)
+Collapsed 23 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back"
+@e3 [scroll-area] "SETTINGS, Vault, What Neo can sign in to when it works for you. Only you can see these, and only your own chats use them., When you send Neo a password in your chat, it keeps it here and hides it in your message. The AI service it runs on has still seen that one message., YOUR ENTRIES, Weather API key, Shop admin, Website login · shop.example.com, Printer admin, Password · 192.168.1.20, Home lab, Used 10:05, Server key · 1 server, Home Assistant, Used 10:48, Connection · 192.168.1.10:8123, Grafana, Used 09:12, Sign-in key · grafana.example.com, Deploy key, Server key · 2 servers, Add to Vault" [scrollable]
+  [content below scroll-area hidden]
+@e8 [button] "Add to Vault"
+@e11 [button] "Deploy key, Reached. Server key · 2 servers. Used 10:05"
+@e14 [group] "Reached"
+@e16 [button] "Grafana, Reached. Sign-in key · grafana.example.com. Used 09:12"
+@e19 [group] "Reached"
+@e21 [button] "Home Assistant, Reached. Connection · 192.168.1.10:8123. Used 10:48"
+@e24 [group] "Reached"
+@e26 [button] "Home lab, Reached. Server key · 1 server. Used 10:05"
+@e29 [group] "Reached"
+@e31 [button] "Printer admin, Failing. Password · 192.168.1.20"
+@e33 [group] "Failing"
+@e35 [button] "Shop admin, Not checked yet. Website login · shop.example.com"
+@e37 [group] "Not checked yet"
+@e39 [button] "Weather API key, Not checked yet. Secret · nothing uses it"
+@e41 [group] "Not checked yet"

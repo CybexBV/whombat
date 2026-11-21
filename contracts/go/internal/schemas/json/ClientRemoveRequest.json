@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/ClientRemoveRequest.json",
+  "title": "ClientRemoveRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "provider"
+  ],
+  "additionalProperties": false
+}

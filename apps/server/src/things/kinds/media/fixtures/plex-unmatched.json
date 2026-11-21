@@ -1,0 +1,19 @@
+{
+  "MediaContainer": {
+    "size": 1,
+    "librarySectionID": 1,
+    "Metadata": [
+      {
+        "ratingKey": "1",
+        "key": "/library/metadata/1",
+        "guid": "local://1",
+        "type": "movie",
+        "title": "Zzqx Unknown Thing",
+        "thumb": "/library/metadata/1/thumb/1792611698",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611698,
+        "duration": 3023
+      }
+    ]
+  }
+}

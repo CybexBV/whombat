@@ -1,0 +1,49 @@
+/*
+ * QEMU/KVM's pages (stream WQ, AP-1647…): what Things.module.css and the Proxmox pages' modules don't have — a picked
+ * network's row, a table row's tools, the log's box, a card head's controls. Tokens only; the Proxmox pages' sizes are
+ * the reference.
+ */
+
+.wqTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wqHeadActs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wqPicked td {
+  background: var(--sf2);
+}
+
+.wqLogWrap {
+  padding: 0 20px 16px;
+}
+
+.wqLog {
+  max-height: 460px;
+  margin: 0;
+  overflow-y: auto;
+  font-size: 12.5px;
+}
+
+.wqLog:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.wqPendingValue {
+  overflow-wrap: anywhere;
+}
+
+/* A row's action that can't be taken now (a volume in use, a disc in a drive): there, but quiet. */
+.wqOff:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

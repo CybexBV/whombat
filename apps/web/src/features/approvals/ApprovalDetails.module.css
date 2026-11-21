@@ -1,0 +1,192 @@
+/* Approval modal — Whombat Desktop.dc.html, `modalApproval`. The Modal supplies 28px padding. */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.question {
+  margin: 0;
+  font: var(--type-heading-23);
+  letter-spacing: var(--type-heading-23-tracking);
+}
+
+/* Only when the stored wording disagrees with the action (never on the mock's request). */
+.actionNote {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--bad);
+  border-radius: 12px;
+  background: var(--sf2);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* What the agent needs a command for, in its words. */
+.why {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.steps,
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps {
+  gap: 8px;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.stepN {
+  padding-top: 2px;
+  color: var(--mut);
+  font: 500 12px var(--font-mono);
+}
+
+/* An email's whole body (not in the mock; IN-16): the explainer's surface, scrolling past 220px. */
+.content {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--sf2);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.content:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.conditions {
+  display: flex;
+  flex-direction: column;
+}
+
+.conditionsLabel {
+  padding-bottom: 4px;
+}
+
+.condition {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line2);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--on-solid);
+  font-size: 11px;
+}
+
+.condition[data-met="true"] .check {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.conditionLabel {
+  font-size: 15px;
+}
+
+.note {
+  color: var(--mut);
+  font: 500 11.5px var(--font-mono);
+}
+
+.explainer {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.waiting {
+  align-self: center;
+  color: var(--mut);
+  font-size: 14px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A run_command's command (AP-623): the code surface, wrapped so the approver reads all of it; a long one scrolls. */
+.command pre {
+  max-height: 260px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A command: Allow for this task · Always allow for Banjo on a row above the usual Don’t allow · Allow once. */
+.choices {
+  flex-wrap: wrap;
+}
+
+/* An everyday ask's lasting yes: on a line of its own under its answers. */
+.actions:has(.lasting) {
+  flex-wrap: wrap;
+}
+
+.lasting {
+  flex-basis: 100%;
+}

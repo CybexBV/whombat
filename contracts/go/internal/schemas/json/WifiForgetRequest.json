@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/WifiForgetRequest.json",
+  "title": "WifiForgetRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "ssid": {
+      "type": "string",
+      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,32}$"
+    }
+  },
+  "required": [
+    "v",
+    "ssid"
+  ],
+  "additionalProperties": false
+}

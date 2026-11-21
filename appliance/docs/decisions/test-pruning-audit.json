@@ -1,0 +1,139 @@
+{
+  "date": "2026-09-26",
+  "repo": "whombat-appliance",
+  "toolchain": {
+    "node": "24.18.0",
+    "pnpm": "12.3.4",
+    "go": "1.26.8",
+    "vitest": "5.0.1"
+  },
+  "baselineCommit": "e6ee51e37bdf8c6bdd3949b1d3f18f07828146b6",
+  "before": 253,
+  "removed": 12,
+  "after": 241,
+  "skippedUnchanged": 3,
+  "baselineCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 3753,
+        "covered": 257,
+        "skipped": 0,
+        "pct": 6.84
+      },
+      "branches": {
+        "total": 2462,
+        "covered": 129,
+        "skipped": 0,
+        "pct": 5.23
+      },
+      "functions": {
+        "total": 686,
+        "covered": 55,
+        "skipped": 0,
+        "pct": 8.01
+      },
+      "lines": {
+        "total": 3292,
+        "covered": 224,
+        "skipped": 0,
+        "pct": 6.8
+      }
+    },
+    "go": {
+      "statementsPercent": 65.9
+    }
+  },
+  "afterCoverage": {
+    "typescript": {
+      "statements": {
+        "total": 3753,
+        "covered": 257,
+        "skipped": 0,
+        "pct": 6.84
+      },
+      "branches": {
+        "total": 2462,
+        "covered": 129,
+        "skipped": 0,
+        "pct": 5.23
+      },
+      "functions": {
+        "total": 686,
+        "covered": 55,
+        "skipped": 0,
+        "pct": 8.01
+      },
+      "lines": {
+        "total": 3292,
+        "covered": 224,
+        "skipped": 0,
+        "pct": 6.8
+      }
+    },
+    "go": {
+      "statementsPercent": 65.8
+    }
+  },
+  "removedTests": [
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/backup/pkg/coverage",
+      "name": "TestContractScopeIDs"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/backup/pkg/coverage",
+      "name": "TestRunbookTableMatchesCode"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/console/internal/screen",
+      "name": "TestMinutesLeft"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/helper/pkg/netconfig",
+      "name": "TestParseValid"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/helper/pkg/trust",
+      "name": "TestTupleDigestVector"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/manager/internal/journal",
+      "name": "TestSaveLoadAlternates"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/manager/internal/update",
+      "name": "TestRuntimeUpdateHappyPath"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/provisioning/internal/card",
+      "name": "TestClaimCardWords"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/provisioning/internal/claim",
+      "name": "TestBOMHandledByContractHelper"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/provisioning/internal/ident",
+      "name": "TestGenerateDistinct"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/release-tools/devtuf",
+      "name": "TestCommittedFixtures"
+    },
+    {
+      "runner": "go",
+      "package": "github.com/CybexBV/whombat/appliance/release-tools/devtuf",
+      "name": "TestFakeReleaseCarriesClientFloor"
+    }
+  ]
+}

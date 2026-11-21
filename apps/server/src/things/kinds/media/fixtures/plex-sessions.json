@@ -1,0 +1,66 @@
+{
+  "MediaContainer": {
+    "size": 1,
+    "Metadata": [
+      {
+        "ratingKey": "2",
+        "key": "/library/metadata/2",
+        "guid": "plex://movie/5eb8f22237ccbe0041723253",
+        "type": "movie",
+        "title": "Dune: Part Two",
+        "year": 2024,
+        "librarySectionID": "1",
+        "librarySectionTitle": "Movies",
+        "thumb": "/library/metadata/2/thumb/1792611699",
+        "addedAt": 1792611694,
+        "updatedAt": 1792611699,
+        "duration": 3023,
+        "viewOffset": 1000,
+        "originallyAvailableAt": "2024-02-27",
+        "sessionKey": "1",
+        "Media": [
+          {
+            "id": "2",
+            "videoResolution": "SD",
+            "container": "mpegts",
+            "bitrate": 168,
+            "Part": [
+              {
+                "id": "2",
+                "decision": "transcode"
+              }
+            ]
+          }
+        ],
+        "User": {},
+        "Player": {
+          "machineIdentifier": "sdmediatest1",
+          "profile": "Web",
+          "state": "playing",
+          "local": true,
+          "relayed": false,
+          "secure": false
+        },
+        "Session": {
+          "id": "sdmediatest1",
+          "bandwidth": 177,
+          "location": "lan"
+        },
+        "TranscodeSession": {
+          "key": "/transcode/sessions/sdtest1",
+          "throttled": false,
+          "complete": false,
+          "progress": 0.0,
+          "speed": 0.0,
+          "error": false,
+          "context": "streaming",
+          "videoDecision": "transcode",
+          "audioDecision": "transcode",
+          "protocol": "hls",
+          "container": "mpegts",
+          "transcodeHwRequested": false
+        }
+      }
+    ]
+  }
+}

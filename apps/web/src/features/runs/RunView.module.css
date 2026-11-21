@@ -1,0 +1,464 @@
+/* Agent run page — Whombat Desktop.dc.html, `isRun` screen. Sizes are the mock's inline values. */
+.screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: var(--max-run);
+  padding: 28px 36px 48px;
+}
+
+.back {
+  align-self: flex-start;
+  color: var(--mut);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+/* Header ---------------------------------------------------------------------------------------- */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 20px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+  padding-bottom: 4px;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mut);
+  font: 500 11.5px var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot[data-tone="live"] {
+  background: var(--status-working);
+}
+
+.dot[data-tone="ok"] {
+  background: var(--ok);
+}
+
+.dot[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.dot[data-tone="bad"] {
+  background: var(--bad);
+}
+
+.dot[data-tone="mut"] {
+  background: var(--mut);
+}
+
+.halo {
+  box-shadow: var(--shadow-live-halo);
+}
+
+.title {
+  margin: 0;
+  font: var(--type-run-title);
+  letter-spacing: var(--type-run-title-tracking);
+}
+
+.sub {
+  color: var(--ink2);
+  font-size: 15px;
+}
+
+.asker {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.branch {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+/* Paused / taken over / failed: the approval modal's sf2 explainer, quietly toned. */
+.notice {
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--line2);
+  border-radius: 12px;
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.notice[data-tone="warn"] {
+  border-left-color: var(--warn);
+}
+
+.notice[data-tone="bad"] {
+  border-left-color: var(--bad);
+}
+
+/* “Needs attention · …” (CT-197, AP-597): the paused note's warn rule, its label in ink. */
+.attentionLabel {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.command {
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+  background: var(--sf);
+  color: var(--ink);
+  font: 400 12.5px var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Steps and live log ----------------------------------------------------------------------------- */
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 28px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.logColumn {
+  min-width: 0;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+
+.marker {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 2px solid var(--line2);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.step[data-marker="done"] .marker {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.step[data-marker="active"] .marker {
+  border-color: var(--progress);
+}
+
+.step[data-marker="paused"] .marker {
+  border-color: var(--warn);
+}
+
+.step[data-marker="stopped"] .marker {
+  border-color: var(--mut);
+}
+
+.step[data-marker="failed"] .marker {
+  border-color: var(--bad);
+  background: var(--bad);
+}
+
+.connector {
+  flex: 1;
+  width: 2px;
+  min-height: 18px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+.connector[data-connector="ok"] {
+  background: var(--ok);
+}
+
+.connector[data-connector="none"] {
+  background: transparent;
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 18px;
+}
+
+.stepTitle {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.step:is([data-marker="active"], [data-marker="paused"], [data-marker="stopped"], [data-marker="failed"])
+  .stepTitle {
+  font-weight: 600;
+}
+
+.step[data-marker="queued"] .stepTitle {
+  color: var(--mut);
+}
+
+.stepDetail {
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.stepAt {
+  padding-top: 2px;
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.logHead {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tests {
+  font: 500 12px var(--font-mono);
+}
+
+.tests[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.tests[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.log {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 340px;
+  padding: 18px 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--code);
+}
+
+.logLine {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  padding: 2px 20px;
+  font: 400 13px / 1.7 var(--font-mono);
+}
+
+.logAt {
+  color: var(--code-timestamp);
+}
+
+.logText {
+  color: var(--code-text);
+  white-space: pre-wrap;
+}
+
+.logText[data-tone="ok"] {
+  color: var(--code-pass);
+}
+
+.logText[data-tone="bad"] {
+  color: var(--code-fail);
+}
+
+.logText[data-tone="command"] {
+  color: var(--code-command);
+}
+
+/* Keys and files -------------------------------------------------------------------------------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 20px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--sf);
+}
+
+.filesCard {
+  gap: 6px;
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.filesHead {
+  padding-bottom: 8px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.scope {
+  color: var(--mut);
+  font: 400 11.5px var(--font-mono);
+}
+
+.stat {
+  font: 500 12px var(--font-mono);
+}
+
+.keys,
+.files {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keys {
+  gap: 14px;
+}
+
+.files {
+  gap: 6px;
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+}
+
+.keyMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--on-solid);
+  font-size: 11px;
+}
+
+.keyMark[data-tier="can"] {
+  background: var(--ok);
+}
+
+.keyMark[data-tier="ask"] {
+  background: var(--warn);
+}
+
+.keyMark[data-tier="cannot"] {
+  background: var(--line2);
+}
+
+.keyLabel {
+  flex: 1;
+  color: var(--ink);
+}
+
+.keyLabelOff {
+  color: var(--mut);
+}
+
+.keyNote {
+  color: var(--mut);
+  font: 400 11.5px var(--font-mono);
+}
+
+.file {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font: 400 13px var(--font-mono);
+}
+
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add {
+  color: var(--ok);
+}
+
+.del {
+  color: var(--bad);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

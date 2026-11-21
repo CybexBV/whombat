@@ -1,0 +1,73 @@
+/**
+ * How a session reached the box (direct-connection.md DC-10), and what its page can do. A session through the relay
+ * comes from the hosted app or a native app; a direct one from a native app (no `Origin`) or from a page this box served
+ * — over plain HTTP on the local network (not a secure context), over HTTPS on the Tailscale name, or on loopback in
+ * development. The server answers what a page can't do there honestly instead of starting a ceremony that can only fail.
+ */
+import type { DirectNetwork } from './network';
+
+export type SessionTransport =
+  | { via: 'relay' }
+  | {
+      via: 'direct';
+      network: DirectNetwork;
+      tls: boolean;
+      /** The browser page that opened the session; null for a native app. */
+      page: { origin: string; secureContext: boolean } | null;
+    };
+
+/**
+ * What a browser page needs a secure context for (https, or localhost), so a page the box serves over plain HTTP on the
+ * local network goes without (DC-11). The app says so where each would be; everything else — the session, its end-to-end
+ * encryption, uploads, downloads — works the same.
+ *
+ * - `passkeys`: WebAuthn. Also off on the Tailscale page: a passkey belongs to the hosted app's name, which a page on the
+ *   box's own name can't use.
+ * - `notifications`: service worker, Push API and the Notifications API.
+ * - `offline`: the service worker's cache and installing the app.
+ * - `clipboard`: the async Clipboard API (copy falls back to the old way; reading is gone).
+ * - `camera`, `microphone`: `getUserMedia` (photos, voice).
+ * - `share`: the system share sheet (Web Share).
+ * - `keyProtection`: Web Crypto (`crypto.subtle`); the device key can't be stored non-extractable, so a script that ever
+ *   runs on that page could copy it.
+ */
+export const SECURE_CONTEXT_FEATURES = [
+  'passkeys',
+  'notifications',
+  'offline',
+  'clipboard',
+  'camera',
+  'microphone',
+  'share',
+  'keyProtection',
+] as const;
+export type SecureContextFeature = (typeof SECURE_CONTEXT_FEATURES)[number];
+
+/** What a page of the box at `origin` can't do: everything above without a secure context, else only passkeys. */
+export function unavailableOnPage(
+  page: { origin: string; secureContext: boolean },
+  passkeyOrigins: readonly string[],
+): SecureContextFeature[] {
+  if (!page.secureContext) return [...SECURE_CONTEXT_FEATURES];
+  return passkeyOrigins.includes(page.origin) ? [] : ['passkeys'];
+}
+
+/** Whether passkeys can't work on the session's page (a direct browser page whose origin isn't the passkeys' own). */
+export function passkeysUnavailable(
+  transport: SessionTransport | undefined,
+  passkeyOrigins: readonly string[],
+): boolean {
+  if (transport?.via !== 'direct' || !transport.page) return false;
+  return unavailableOnPage(transport.page, passkeyOrigins).includes('passkeys');
+}
+
+/** Session ops that need a WebAuthn ceremony in the page (DC-11). */
+export const PAGE_PASSKEY_OPS: ReadonlySet<string> = new Set([
+  'passkey.register.begin',
+  'passkey.link',
+  'passkey.register',
+  'remoteHelp.confirmBegin',
+]);
+
+/** `details.code` of the refusal of a passkey op from a page that can't run one (`forbidden`). */
+export const PASSKEYS_UNAVAILABLE_HERE = 'passkeys_unavailable_here';

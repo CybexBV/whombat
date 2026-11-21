@@ -1,0 +1,57 @@
+/**
+ * A thing's page (`/things/:thing`, one Whombat ONE-04/ONE-05): `servers?view=guests` every guest of every server (the
+ * servers list is part of Connections, CN-09: without the view the router takes it there, and so does this), `server:<id>` a server's
+ * page (mock 2), and a connection or a device its own page (Whombat connection-pages.md CP-01; connection-pages-web.md
+ * AP-1900…). A runtime without `things.pages` opens a connection's page in Settings → Connections as before (CP-18;
+ * AP-1300). Props as the route passes them: the open burrow and the thingId, URL-encoded or not.
+ */
+
+import { useRouterState } from '@tanstack/react-router';
+import { CONNECTIONS_HREF, parseThingId } from '@whombat/core';
+import { useEffect } from 'react';
+import { useNavigateHref } from '../../app/routing/navigation';
+import { ThingPageScreen } from './page/ThingPageScreen';
+import { ServerPage } from './ServerPage';
+import { ServersPage } from './ServersPage';
+import styles from './Things.module.css';
+
+export interface ThingScreenProps {
+  burrow: string;
+  /** The thingId (`server:pve-02`, `connection:con_…`, `device:con_…`) or `servers`. */
+  thing: string;
+}
+
+export function ThingScreen({ burrow, thing }: ThingScreenProps) {
+  const decoded = safeDecode(thing);
+  if (decoded === 'servers') return <ServersAddress burrow={burrow} />;
+  const parsed = parseThingId(decoded);
+  if (parsed?.kind === 'server') return <ServerPage key={parsed.id} burrow={burrow} serverId={parsed.id} />;
+  if (parsed) return <ThingPageScreen key={decoded} burrow={burrow} thing={decoded} />;
+  return (
+    <div className={styles.page}>
+      <h1 className={styles.titleSans}>Not found</h1>
+      <p className={styles.dialogBody}>There’s nothing here by that name.</p>
+    </div>
+  );
+}
+
+/** `/things/servers`: every guest with `?view=guests`, else Connections with the query (AP-2523; the router does it first). */
+function ServersAddress({ burrow }: { burrow: string }) {
+  const guests = useRouterState({
+    select: (s) => (s.location.search as Record<string, unknown>).view === 'guests',
+  });
+  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+  const navigate = useNavigateHref();
+  useEffect(() => {
+    if (!guests) navigate(`${CONNECTIONS_HREF}${searchStr}`, { replace: true });
+  }, [guests, navigate, searchStr]);
+  return guests ? <ServersPage burrow={burrow} /> : null;
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}

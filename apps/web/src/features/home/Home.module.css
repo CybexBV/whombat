@@ -1,0 +1,411 @@
+/*
+ * Home (mock 1), from `.main`, `.card`, `.need`, `.step`, `.tile`, `.did` and the widget in
+ * docs/design-handoff/one-whombat/index.html: sizes, weights and spacing 1:1, colours from the tokens.
+ */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 30px 40px 40px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 20px;
+  /* The pairs follow the room Home has, not the window's (app less-is-more.md AP-1760; home-redesign.md AP-2216). */
+  container: home-grid / inline-size;
+}
+
+/* Two pinned panels side by side (AP-2273). */
+.half {
+  grid-column: span 6;
+  min-width: 0;
+}
+
+/* Needs you, Servers, Your things, and a panel without a partner: the whole width. */
+.full {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* The panels stack when Home is narrower than 860px (a 1024px window with the sidebar open): a chart needs ~400px. */
+@container home-grid (max-width: 859px) {
+  .half {
+    grid-column: span 12;
+  }
+}
+
+/* A phone: the page's own margins shrink so the cards keep their words on longer lines (app less-is-more.md AP-1869). */
+@media (max-width: 600px) {
+  .main {
+    gap: 16px;
+    padding: 20px 16px 32px;
+  }
+}
+
+.card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 20px 12px;
+}
+
+.head h2 {
+  margin: 0;
+  font: 700 17px var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.meta {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.lnk,
+.lnk:hover {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: 400 13.5px var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.lnk:hover {
+  color: var(--ink);
+}
+
+.lbl {
+  color: var(--mut);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.quiet {
+  margin: 0;
+  padding: 2px 20px 18px;
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+}
+
+/* Buttons in cards: the mock's `.btn.sm` (5×10, 13px, 600, 9px radius); the primary keeps a 1px border in its fill. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-small);
+  background: transparent;
+  color: var(--ink);
+  font: 600 13px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--sel);
+}
+
+.btn:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.btn:focus-visible,
+.lnk:focus-visible,
+.undo:focus-visible,
+.menuButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Widget ---------------------------------------------------------------------------------------------- */
+
+.widgetHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin: 0;
+  padding: 0 20px 8px;
+}
+
+.wv dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wv dt i {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.wv dd {
+  margin: 0;
+  font: 600 22px var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.wvUnit {
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+  letter-spacing: 0;
+}
+
+.chart {
+  position: relative;
+  padding: 4px 12px 10px 8px;
+}
+
+.problem {
+  margin: 0 20px 10px;
+  color: var(--warn);
+  font: 400 13px var(--font-sans);
+}
+
+.pinned {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.pinned svg {
+  flex: none;
+}
+
+.pinned a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+}
+
+/* The widget's card lets its menu out (nothing else in it reaches its corners). */
+.overflowVisible {
+  overflow: visible;
+}
+
+/* The widget's menu at the footer's end: shown on hover or keyboard focus, so the card reads as drawn. */
+.menuWrap {
+  position: relative;
+  margin: -4px -6px -4px auto;
+}
+
+.menuUp {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.menuButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-tag);
+  background: transparent;
+  color: var(--mut);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.card:hover .menuButton,
+.card:focus-within .menuButton,
+.menuButton[aria-expanded="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .menuButton {
+    opacity: 1;
+  }
+}
+
+.menuButton:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-pane);
+  width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+  box-shadow: var(--shadow-toast);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink);
+  font: 400 14px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--sel);
+}
+
+.menuItem:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.menuItemDanger {
+  color: var(--bad);
+}
+
+/* Changes: Everything I did, a thing's Changes here ----------------------------------------------------- */
+
+.did {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.ck {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.didText {
+  flex: 1;
+  min-width: 0;
+}
+
+.did b {
+  display: block;
+  font: 500 14.5px var(--font-sans);
+}
+
+.did small {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.didUndone b {
+  color: var(--mut);
+  text-decoration: line-through;
+  text-decoration-color: var(--line2);
+}
+
+/*
+ * The time and the action in one column of a fixed width (AP-2214): the times end at the same place and Undo, Review
+ * and Undone start at the same place, whichever a row has.
+ */
+.r {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: center;
+  column-gap: 10px;
+  width: 150px;
+  margin-left: auto;
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+  white-space: nowrap;
+}
+
+.rWhen {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.undo,
+.undo:hover {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: 500 13px var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.undo:hover {
+  color: var(--ink);
+}
+
+.undo:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+/* “Asked Neo to undo this” under the title: a link to the chat where the agent answers (AP-2217). */
+.requested,
+.requested:hover {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.requested:hover {
+  color: var(--ink);
+}
+
+.requested:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.undoneWord {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

@@ -1,0 +1,13 @@
+@import url("../01-groundwork/style.css");
+.capture-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.capture-grid figure {max-width:390px;margin:auto;width:100%}
+.capture-grid img {display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius-small)}
+.capture-grid a {display:block}
+.capture-grid figcaption {line-height:1.5;min-height:44px}
+.before-after {display:grid;grid-template-columns:minmax(180px,1fr) 3fr;gap:20px;margin:24px 0}
+.capture-grid .gap {min-height:300px}
+select {max-width:100%;min-width:180px}
+:focus-visible {outline:3px solid var(--brand);outline-offset:4px}
+code {overflow-wrap:anywhere}
+#evidence {margin-top:24px}
+@media(max-width:700px){.before-after{grid-template-columns:1fr}.capture-grid{grid-template-columns:1fr}main{padding:24px 18px 60px}}

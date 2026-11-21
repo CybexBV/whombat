@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# The latest-tested Hermes job (Whombat HU-03, HU-06; NX-485; docs/runbooks/hermes-latest-tested.md): a new stable
+# Hermes Agent release, tested with Whombat's plugin, runtime and appliance, pinned on Whombat's main (the runtime's
+# pin.ts and the appliance's flake in one commit) and sent to Beta with whombat-ops candidate; never production. One run
+# at a time ($WB_HERMES_STATE/job.lock). Implementation: harness/src/dev/hermes-latest.ts.
+#
+#   latest-tested [--dry-run] [--retry-failed] [--version x.y.z [--whombat-ref <rev>]] [--no-candidate]
+#
+#   --dry-run       test what's new and show the pin commit and its push (git push --dry-run); push and ship nothing
+#   --whombat-ref   test against this commit, not origin/main (a review's branch; with --dry-run: a change to the job)
+#   --retry-failed  test a version that failed before again
+#   --version       test (and pin, and ship) this stable release instead of the newest; the pinned one: test only
+#   --no-candidate  pin on main, but don't run candidate
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+appliance="$(cd "$here/../.." && pwd)"
+for arg in "$@"; do
+  case "$arg" in -h|--help) sed -n '2,13s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+done
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"
+mkdir -p "$TMPDIR"
+export WB_HERMES_STATE="${WB_HERMES_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/whombat-hermes}"
+mkdir -p "$WB_HERMES_STATE"
+exec 9>"$WB_HERMES_STATE/job.lock"
+flock -n 9 || { echo "latest-tested: another run holds $WB_HERMES_STATE/job.lock"; exit 0; }
+[ -d "$appliance/harness/node_modules" ] || (cd "$appliance/harness" && pnpm install --frozen-lockfile >&2)
+exec node "$appliance/harness/src/dev/hermes-latest.ts" "$@"

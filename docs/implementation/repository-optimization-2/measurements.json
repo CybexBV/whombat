@@ -1,0 +1,846 @@
+{
+  "schema": "whombat-optimization-measurements-2",
+  "baseline": "64647809d",
+  "environment": {
+    "host": "The Titan, Linux x64, AMD Ryzen Threadripper 9970X (64 threads)",
+    "node": "24.18.0",
+    "postgres": "17, shared server on :55432, throwaway databases dropped after each run"
+  },
+  "serverStatements": {
+    "note": "final/run-final.sh: base tree 64647809d against the final integration tree, alternating, two rounds. Statement counts are deterministic; timings were taken at 1-minute load 34 to 43 and are indicative only.",
+    "runs": [
+      {
+        "side": "base",
+        "round": 1,
+        "load1": 42.16,
+        "ops": {
+          "fn mcpToolList": {
+            "ms": 21.83,
+            "statements": 29
+          },
+          "tools/list": {
+            "ms": 35.63,
+            "statements": 33
+          },
+          "tools/call plan_read (no plan)": {
+            "ms": 51.27,
+            "statements": 46
+          },
+          "tools/call read_conversation": {
+            "ms": 76.31,
+            "statements": 56
+          },
+          "tools/call set_status": {
+            "ms": 100.87,
+            "statements": 59
+          },
+          "poller ticks": {
+            "simulatedMinutes": 6,
+            "ticks": 36,
+            "repoPolls": 42,
+            "statements": 597,
+            "perMinute": 99.5,
+            "perTick": 16.58,
+            "cursorWritesPerMinute": 7,
+            "msPerTick": 13.19
+          },
+          "poller pollNow": {
+            "reposPerCycle": 4,
+            "statementsPerCycle": 40,
+            "cursorWritesPerCycle": 4,
+            "medianMs": 32.44
+          },
+          "api home.overview": {
+            "ms": 24.99,
+            "statements": 53
+          },
+          "fn homeOverview": {
+            "ms": 16.03,
+            "statements": 50
+          },
+          "fn needsYou": {
+            "ms": 6.3,
+            "statements": 17
+          },
+          "fn things": {
+            "ms": 4.57,
+            "statements": 10
+          },
+          "fn listWidgets": {
+            "ms": 6.09,
+            "statements": 13
+          },
+          "api chats.list": {
+            "ms": 2.71,
+            "statements": 7
+          },
+          "api chats.threads": {
+            "ms": 4.35,
+            "statements": 10
+          },
+          "api notifications.inbox": {
+            "ms": 3.73,
+            "statements": 4
+          },
+          "api connections.list": {
+            "ms": 2.78,
+            "statements": 4
+          },
+          "api search.query": {
+            "ms": 5.65,
+            "statements": 8
+          },
+          "commit agent message (Chat, top level) + background": {
+            "ms": 19.25,
+            "statements": 29
+          },
+          "commit agent reply (Chat thread) + background": {
+            "ms": 20.94,
+            "statements": 35
+          },
+          "commit person message (Chat thread, queues a turn) + background": {
+            "ms": 23.59,
+            "statements": 34
+          },
+          "job pollConnectionHealth (all due)": {
+            "ms": 103.2,
+            "statements": 241
+          },
+          "job LookWatcher.pass": {
+            "ms": 13.48,
+            "statements": 21
+          },
+          "fn buildFullGlance": {
+            "ms": 20.08,
+            "statements": 52
+          },
+          "fn desk.placeOf": {
+            "ms": 3.74,
+            "statements": 6
+          },
+          "desk console minute (60 states, 1 s apart)": {
+            "ms": 1378.34,
+            "statements": 424.5
+          }
+        }
+      },
+      {
+        "side": "final",
+        "round": 1,
+        "load1": 33.79,
+        "ops": {
+          "fn mcpToolList": {
+            "ms": 6.3,
+            "statements": 15
+          },
+          "tools/list": {
+            "ms": 13.41,
+            "statements": 19
+          },
+          "tools/call plan_read (no plan)": {
+            "ms": 19.08,
+            "statements": 21
+          },
+          "tools/call read_conversation": {
+            "ms": 20.37,
+            "statements": 30
+          },
+          "tools/call set_status": {
+            "ms": 30.8,
+            "statements": 33
+          },
+          "poller ticks": {
+            "simulatedMinutes": 6,
+            "ticks": 36,
+            "repoPolls": 42,
+            "statements": 444,
+            "perMinute": 74,
+            "perTick": 12.33,
+            "cursorWritesPerMinute": 2.83,
+            "msPerTick": 8.87
+          },
+          "poller pollNow": {
+            "reposPerCycle": 4,
+            "statementsPerCycle": 26.2,
+            "cursorWritesPerCycle": 0.4,
+            "medianMs": 15.22
+          },
+          "api home.overview": {
+            "ms": 36.28,
+            "statements": 25
+          },
+          "fn homeOverview": {
+            "ms": 23.8,
+            "statements": 22
+          },
+          "fn needsYou": {
+            "ms": 11.8,
+            "statements": 13
+          },
+          "fn things": {
+            "ms": 6.83,
+            "statements": 7
+          },
+          "fn listWidgets": {
+            "ms": 9.85,
+            "statements": 2
+          },
+          "api chats.list": {
+            "ms": 7.47,
+            "statements": 7
+          },
+          "api chats.threads": {
+            "ms": 11.91,
+            "statements": 10
+          },
+          "api notifications.inbox": {
+            "ms": 9.13,
+            "statements": 4
+          },
+          "api connections.list": {
+            "ms": 9.8,
+            "statements": 4
+          },
+          "api search.query": {
+            "ms": 19.72,
+            "statements": 8
+          },
+          "commit agent message (Chat, top level) + background": {
+            "ms": 32.17,
+            "statements": 29
+          },
+          "commit agent reply (Chat thread) + background": {
+            "ms": 53.37,
+            "statements": 34
+          },
+          "commit person message (Chat thread, queues a turn) + background": {
+            "ms": 45.64,
+            "statements": 32
+          },
+          "job pollConnectionHealth (all due)": {
+            "ms": 137.83,
+            "statements": 125
+          },
+          "job LookWatcher.pass": {
+            "ms": 26.23,
+            "statements": 18
+          },
+          "fn buildFullGlance": {
+            "ms": 20.64,
+            "statements": 19
+          },
+          "fn desk.placeOf": {
+            "ms": 4.41,
+            "statements": 6
+          },
+          "desk console minute (60 states, 1 s apart)": {
+            "ms": 1463.2,
+            "statements": 243
+          }
+        }
+      },
+      {
+        "side": "base",
+        "round": 2,
+        "load1": 40.63,
+        "ops": {
+          "fn mcpToolList": {
+            "ms": 42.02,
+            "statements": 29
+          },
+          "tools/list": {
+            "ms": 45.14,
+            "statements": 33
+          },
+          "tools/call plan_read (no plan)": {
+            "ms": 56.74,
+            "statements": 46
+          },
+          "tools/call read_conversation": {
+            "ms": 65.66,
+            "statements": 56
+          },
+          "tools/call set_status": {
+            "ms": 77.31,
+            "statements": 59
+          },
+          "poller ticks": {
+            "simulatedMinutes": 6,
+            "ticks": 36,
+            "repoPolls": 42,
+            "statements": 597,
+            "perMinute": 99.5,
+            "perTick": 16.58,
+            "cursorWritesPerMinute": 7,
+            "msPerTick": 15.7
+          },
+          "poller pollNow": {
+            "reposPerCycle": 4,
+            "statementsPerCycle": 40,
+            "cursorWritesPerCycle": 4,
+            "medianMs": 39.15
+          },
+          "api home.overview": {
+            "ms": 24.57,
+            "statements": 53
+          },
+          "fn homeOverview": {
+            "ms": 16.16,
+            "statements": 50
+          },
+          "fn needsYou": {
+            "ms": 5.51,
+            "statements": 17
+          },
+          "fn things": {
+            "ms": 3.64,
+            "statements": 10
+          },
+          "fn listWidgets": {
+            "ms": 6.07,
+            "statements": 13
+          },
+          "api chats.list": {
+            "ms": 3.26,
+            "statements": 7
+          },
+          "api chats.threads": {
+            "ms": 4.11,
+            "statements": 10
+          },
+          "api notifications.inbox": {
+            "ms": 2.34,
+            "statements": 4
+          },
+          "api connections.list": {
+            "ms": 2.46,
+            "statements": 4
+          },
+          "api search.query": {
+            "ms": 6.9,
+            "statements": 8
+          },
+          "commit agent message (Chat, top level) + background": {
+            "ms": 18.67,
+            "statements": 29
+          },
+          "commit agent reply (Chat thread) + background": {
+            "ms": 23.27,
+            "statements": 35
+          },
+          "commit person message (Chat thread, queues a turn) + background": {
+            "ms": 23.61,
+            "statements": 34
+          },
+          "job pollConnectionHealth (all due)": {
+            "ms": 107.54,
+            "statements": 241
+          },
+          "job LookWatcher.pass": {
+            "ms": 14.92,
+            "statements": 21
+          },
+          "fn buildFullGlance": {
+            "ms": 19.69,
+            "statements": 52
+          },
+          "fn desk.placeOf": {
+            "ms": 2.09,
+            "statements": 6
+          },
+          "desk console minute (60 states, 1 s apart)": {
+            "ms": 1537.86,
+            "statements": 393
+          }
+        }
+      },
+      {
+        "side": "final",
+        "round": 2,
+        "load1": 43.22,
+        "ops": {
+          "fn mcpToolList": {
+            "ms": 6.14,
+            "statements": 15
+          },
+          "tools/list": {
+            "ms": 15.08,
+            "statements": 19
+          },
+          "tools/call plan_read (no plan)": {
+            "ms": 22.03,
+            "statements": 21
+          },
+          "tools/call read_conversation": {
+            "ms": 25.63,
+            "statements": 30
+          },
+          "tools/call set_status": {
+            "ms": 27.7,
+            "statements": 33
+          },
+          "poller ticks": {
+            "simulatedMinutes": 6,
+            "ticks": 36,
+            "repoPolls": 42,
+            "statements": 444,
+            "perMinute": 74,
+            "perTick": 12.33,
+            "cursorWritesPerMinute": 2.83,
+            "msPerTick": 7.2
+          },
+          "poller pollNow": {
+            "reposPerCycle": 4,
+            "statementsPerCycle": 26.2,
+            "cursorWritesPerCycle": 0.4,
+            "medianMs": 14.96
+          },
+          "api home.overview": {
+            "ms": 21.23,
+            "statements": 25
+          },
+          "fn homeOverview": {
+            "ms": 13.92,
+            "statements": 22
+          },
+          "fn needsYou": {
+            "ms": 5.92,
+            "statements": 13
+          },
+          "fn things": {
+            "ms": 4.61,
+            "statements": 7
+          },
+          "fn listWidgets": {
+            "ms": 5.92,
+            "statements": 2
+          },
+          "api chats.list": {
+            "ms": 3.28,
+            "statements": 7
+          },
+          "api chats.threads": {
+            "ms": 5.82,
+            "statements": 10
+          },
+          "api notifications.inbox": {
+            "ms": 3.2,
+            "statements": 4
+          },
+          "api connections.list": {
+            "ms": 2.92,
+            "statements": 4
+          },
+          "api search.query": {
+            "ms": 8.21,
+            "statements": 8
+          },
+          "commit agent message (Chat, top level) + background": {
+            "ms": 20.95,
+            "statements": 29
+          },
+          "commit agent reply (Chat thread) + background": {
+            "ms": 17.1,
+            "statements": 34
+          },
+          "commit person message (Chat thread, queues a turn) + background": {
+            "ms": 15.38,
+            "statements": 32
+          },
+          "job pollConnectionHealth (all due)": {
+            "ms": 92.15,
+            "statements": 125
+          },
+          "job LookWatcher.pass": {
+            "ms": 14.6,
+            "statements": 18
+          },
+          "fn buildFullGlance": {
+            "ms": 9.26,
+            "statements": 19
+          },
+          "fn desk.placeOf": {
+            "ms": 2.61,
+            "statements": 6
+          },
+          "desk console minute (60 states, 1 s apart)": {
+            "ms": 1337.75,
+            "statements": 243
+          }
+        }
+      }
+    ]
+  },
+  "webInitialBytes": {
+    "note": "final/initial-size.mjs on each tree's pnpm build:web (box target); gzip level 9, brotli quality 11.",
+    "base": {
+      "initialJs": {
+        "files": 7,
+        "rawKB": 2157.9,
+        "gzKB": 711.7,
+        "brKB": 597.4
+      },
+      "initialCss": {
+        "files": 1,
+        "rawKB": 36.2,
+        "gzKB": 7.6,
+        "brKB": 6.8
+      },
+      "preloadJs": {
+        "files": 0,
+        "rawKB": 0,
+        "gzKB": 0,
+        "brKB": 0
+      },
+      "preloadCss": {
+        "files": 0,
+        "rawKB": 0,
+        "gzKB": 0,
+        "brKB": 0
+      }
+    },
+    "final": {
+      "initialJs": {
+        "files": 7,
+        "rawKB": 2020.9,
+        "gzKB": 665.1,
+        "brKB": 559.2
+      },
+      "initialCss": {
+        "files": 1,
+        "rawKB": 36.2,
+        "gzKB": 7.6,
+        "brKB": 6.8
+      },
+      "preloadJs": {
+        "files": 28,
+        "rawKB": 644.3,
+        "gzKB": 216.7,
+        "brKB": 193.8
+      },
+      "preloadCss": {
+        "files": 19,
+        "rawKB": 204.9,
+        "gzKB": 48.7,
+        "brKB": 41.9
+      }
+    }
+  },
+  "browserTimeToDirectMs": {
+    "note": "perfb-web/browser/measure.mjs, headless Chromium 153, cold loads alternating base and final. remote: 50 ms per request, 20 Mbps, 4x CPU slowdown; lan: 2 ms, 200 Mbps, 4x CPU slowdown. 1-minute load 48 to 54.",
+    "remote": {
+      "base": [2050, 1504, 1513, 1514, 1523, 1672, 1524],
+      "final": [877, 872, 910, 977, 955, 1047, 930]
+    },
+    "lan": {
+      "base": [693, 684, 715, 792, 699, 712, 704, 737, 770],
+      "final": [657, 715, 694, 663, 741, 607, 819, 753, 704]
+    }
+  },
+  "commandLatency": {
+    "note": "runtime-impl/launcher-env-bench.mts, real bubblewrap pod path, 30 paired runs after 5 warm-ups.",
+    "run1": {
+      "host": {
+        "loadavgStart": [46.19, 35.39, 33.29],
+        "node": "v24.18.0",
+        "N": 30,
+        "WARM": 5,
+        "loadavgEnd": [46.06, 35.7, 33.42]
+      },
+      "podHasEnvProxy": "1",
+      "A_e2e_before_envproxy": {
+        "n": 30,
+        "median": 57.53,
+        "p90": 115.52,
+        "min": 51.78,
+        "max": 124.62
+      },
+      "A_e2e_after_no_envproxy": {
+        "n": 30,
+        "median": 40.8,
+        "p90": 47.97,
+        "min": 35.76,
+        "max": 114.91
+      },
+      "A_e2e_difference": {
+        "n": 30,
+        "median": 16.62,
+        "p90": 69.93,
+        "min": -54.5,
+        "max": 84.48
+      },
+      "A_launcher_start_before": {
+        "n": 30,
+        "median": 35.7,
+        "p90": 41.75,
+        "min": 30.28,
+        "max": 43.26
+      },
+      "A_launcher_start_after": {
+        "n": 30,
+        "median": 20.12,
+        "p90": 24.26,
+        "min": 16.92,
+        "max": 27.46
+      },
+      "H_stderr": "1\nenv:1",
+      "H_helper_before": {
+        "n": 30,
+        "median": 44.54,
+        "p90": 50.71,
+        "min": 37.47,
+        "max": 58.06
+      },
+      "H_helper_after": {
+        "n": 30,
+        "median": 22.05,
+        "p90": 25.6,
+        "min": 18.85,
+        "max": 29.74
+      },
+      "H_helper_difference": {
+        "n": 30,
+        "median": 22.59,
+        "p90": 27.43,
+        "min": 13.86,
+        "max": 31.11
+      }
+    },
+    "run2": {
+      "host": {
+        "loadavgStart": [6.03, 11.97, 23.25],
+        "node": "v24.18.0",
+        "N": 30,
+        "WARM": 5,
+        "loadavgEnd": [5.95, 11.76, 23.06]
+      },
+      "podHasEnvProxy": "1",
+      "A_e2e_before_envproxy": {
+        "n": 30,
+        "median": 50.22,
+        "p90": 87.71,
+        "min": 42.54,
+        "max": 107.3
+      },
+      "A_e2e_after_no_envproxy": {
+        "n": 30,
+        "median": 34.9,
+        "p90": 44.25,
+        "min": 30.63,
+        "max": 87.11
+      },
+      "A_e2e_difference": {
+        "n": 30,
+        "median": 14.13,
+        "p90": 47.7,
+        "min": -2.16,
+        "max": 70.25
+      },
+      "A_launcher_start_before": {
+        "n": 30,
+        "median": 30.2,
+        "p90": 33.06,
+        "min": 27.15,
+        "max": 38.88
+      },
+      "A_launcher_start_after": {
+        "n": 30,
+        "median": 18.28,
+        "p90": 20.59,
+        "min": 15.94,
+        "max": 30.69
+      },
+      "H_stderr": "1\nenv:1",
+      "H_helper_before": {
+        "n": 30,
+        "median": 33.86,
+        "p90": 36.05,
+        "min": 29.12,
+        "max": 37.85
+      },
+      "H_helper_after": {
+        "n": 30,
+        "median": 16.64,
+        "p90": 17.41,
+        "min": 14.44,
+        "max": 19.16
+      },
+      "H_helper_difference": {
+        "n": 30,
+        "median": 17.44,
+        "p90": 20.5,
+        "min": 11.77,
+        "max": 22.31
+      }
+    }
+  },
+  "unitSuite": {
+    "note": "Full unit suite wall time, final/unit-timing.sh (base vs final, alternating) and final/cold-recheck.sh (after the screen preloads); load1_start is the 1-minute load average when each run started.",
+    "pairedRuns": [
+      {
+        "round": "1",
+        "variant": "base",
+        "wall_s": "69.672",
+        "load1_start": "27.99",
+        "exit": "0",
+        "test_files": " Test Files 1165 passed ",
+        "tests": " 2 skipped (1167)"
+      },
+      {
+        "round": "1",
+        "variant": "final-empty",
+        "wall_s": "65.263",
+        "load1_start": "31.77",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1175 passed "
+      },
+      {
+        "round": "1",
+        "variant": "final-warm",
+        "wall_s": "38.797",
+        "load1_start": "34.56",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "1",
+        "variant": "final-ci",
+        "wall_s": "68.332",
+        "load1_start": "44.60",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1175 passed "
+      },
+      {
+        "round": "2",
+        "variant": "base",
+        "wall_s": "70.319",
+        "load1_start": "41.07",
+        "exit": "0",
+        "test_files": " Test Files 1165 passed ",
+        "tests": " 2 skipped (1167)"
+      },
+      {
+        "round": "2",
+        "variant": "final-empty",
+        "wall_s": "67.806",
+        "load1_start": "30.57",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1175 passed "
+      },
+      {
+        "round": "2",
+        "variant": "final-warm",
+        "wall_s": "38.293",
+        "load1_start": "33.19",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "2",
+        "variant": "final-ci",
+        "wall_s": "73.171",
+        "load1_start": "56.08",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1175 passed "
+      },
+      {
+        "round": "3",
+        "variant": "base",
+        "wall_s": "81.678",
+        "load1_start": "53.52",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1164 passed "
+      },
+      {
+        "round": "3",
+        "variant": "final-empty",
+        "wall_s": "75.832",
+        "load1_start": "37.67",
+        "exit": "1",
+        "test_files": " Test Files 1 failed ",
+        "tests": " 1175 passed "
+      },
+      {
+        "round": "3",
+        "variant": "final-warm",
+        "wall_s": "41.875",
+        "load1_start": "40.02",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "3",
+        "variant": "final-ci",
+        "wall_s": "69.458",
+        "load1_start": "53.36",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      }
+    ],
+    "coldAfterPreloads": [
+      {
+        "round": "1",
+        "variant": "final-empty",
+        "wall_s": "66.085",
+        "load1_start": "12.59",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "1",
+        "variant": "final-ci",
+        "wall_s": "68.079",
+        "load1_start": "20.59",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "2",
+        "variant": "final-empty",
+        "wall_s": "65.694",
+        "load1_start": "27.59",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "2",
+        "variant": "final-ci",
+        "wall_s": "68.036",
+        "load1_start": "27.85",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "3",
+        "variant": "final-empty",
+        "wall_s": "65.026",
+        "load1_start": "40.19",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      },
+      {
+        "round": "3",
+        "variant": "final-ci",
+        "wall_s": "68.161",
+        "load1_start": "31.98",
+        "exit": "0",
+        "test_files": " Test Files 1176 passed ",
+        "tests": " 2 skipped (1178)"
+      }
+    ]
+  }
+}

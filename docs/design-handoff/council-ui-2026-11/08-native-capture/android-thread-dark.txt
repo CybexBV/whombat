@@ -1,0 +1,22 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 22 visible nodes (43 total)
+Collapsed 21 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back to Chat"
+@e3 [group] "Why is pve-02 using so much memory?"
+@e4 [button] "pve-02, Needs a look"
+@e6 [scroll-area] "Review and answer ›, Neo needs your OK, Limit the ZFS cache on pve-02 to 16 GB, Neo, 14:03, Sure. It takes effect after a restart, so I’d do it tonight., ChatGPT, Switched to ChatGPT, MO, Mara Okafor, 13:58, Can you cap the cache at 16 GB?, 13:53, It’s at 91%, but 38 GB of that is the ZFS cache, which gives memory back when a guest needs it. Nothing is short right now., 13:52, Why is pve-02 using so much memory?" [scrollable]
+@e7 [group] "Today · Wednesday 23 September"
+@e10 [group] "Mara Okafor, 13:52. Why is pve-02 using so much memory?"
+@e16 [group] "Neo, 13:53. It’s at 91%, but 38 GB of that is the ZFS cache, which gives memory back when a guest needs it. Nothing is short right now."
+@e21 [group] "Mara Okafor, 13:58. Can you cap the cache at 16 GB?"
+@e26 [group] "Switched to ChatGPT"
+@e29 [group] "Neo, 14:03, ChatGPT. Sure. It takes effect after a restart, so I’d do it tonight."
+@e32 [button] "ChatGPT · GPT-6.1 Sol · High effort"
+@e35 [group] "Neo needs your OK, Limit the ZFS cache on pve-02 to 16 GB"
+@e38 [button] "Review and answer: Limit the ZFS cache on pve-02 to 16 GB"
+@e40 [button] "Choose how Neo answers, ChatGPT, GPT-6.1 Sol, High, fast replies. For this thread"
+@e41 [text-field] "Reply…" [editable]
+@e42 [button] "Dictate"
+@e43 [button] "Send" [disabled]

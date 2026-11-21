@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/LinkLeaveResponse.json",
+  "title": "LinkLeaveResponse",
+  "type": "object",
+  "properties": {
+    "link": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "off",
+            "starting",
+            "on",
+            "grace",
+            "ended"
+          ]
+        },
+        "since": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        },
+        "pending": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[ABCDEFGHJKMNPQRTVWXY]{4}-[ABCDEFGHJKMNPQRTVWXY]{4}$"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 256,
+              "pattern": "^https:[/][/][\\x21-\\x7e]+$"
+            },
+            "expiresAt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4102444800
+            }
+          },
+          "required": [
+            "code",
+            "url",
+            "expiresAt"
+          ]
+        },
+        "waitingForAddress": {
+          "type": "boolean"
+        },
+        "graceEndsAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        },
+        "trialEndsAt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        },
+        "label": {
+          "type": "string",
+          "minLength": 11,
+          "maxLength": 32,
+          "pattern": "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 254,
+          "pattern": "^[\\x21-\\x3f\\x41-\\x7e]+@[\\x21-\\x3f\\x41-\\x7e]+$"
+        }
+      },
+      "required": [
+        "state",
+        "since"
+      ]
+    }
+  },
+  "required": [
+    "link"
+  ]
+}

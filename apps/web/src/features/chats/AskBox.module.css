@@ -1,0 +1,32 @@
+/* The Ask box: the one composer (messaging/Composer), and the chips that fill it under it. */
+
+.ask {
+  margin: 0;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip {
+  padding: 5px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink2);
+  font: 400 13.5px var(--font-sans);
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--sel);
+  color: var(--ink);
+}

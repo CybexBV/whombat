@@ -1,0 +1,15 @@
+{"data":[
+ {"key": "arch", "value": "amd64"},
+ {"key": "cores", "value": 1},
+ {"key": "features", "value": "nesting=1"},
+ {"key": "hostname", "value": "ct-stopped"},
+ {"key": "memory", "value": 512},
+ {"key": "mp0", "value": "/srv/share,mp=/share"},
+ {"key": "nameserver", "value": "192.0.2.16"},
+ {"key": "net0", "value": "name=eth0,bridge=vmbr0,gw=192.0.2.18,hwaddr=02:00:00:00:00:0d,ip=192.0.2.20/24,type=veth"},
+ {"key": "onboot", "value": 0},
+ {"key": "ostype", "value": "debian"},
+ {"key": "rootfs", "value": "local-zfs:subvol-201-disk-0,size=8G"},
+ {"key": "swap", "value": 512},
+ {"key": "unprivileged", "value": 1}
+]}

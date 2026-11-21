@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskDecideRequest.json",
+  "title": "DeskDecideRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000000
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "decline",
+        "deny"
+      ]
+    },
+    "pin": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "once",
+        "task",
+        "agent"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "number",
+    "decision"
+  ],
+  "additionalProperties": false
+}

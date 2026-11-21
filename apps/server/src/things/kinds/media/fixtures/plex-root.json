@@ -1,0 +1,13 @@
+{
+  "MediaContainer": {
+    "friendlyName": "4bbf32ed0ae8",
+    "version": "1.43.5.11029-6bf8af3f0",
+    "myPlex": true,
+    "myPlexMappingState": "unknown",
+    "myPlexSigninState": "none",
+    "myPlexSubscription": false,
+    "platform": "Linux",
+    "transcoderActiveVideoSessions": 0,
+    "updater": true
+  }
+}

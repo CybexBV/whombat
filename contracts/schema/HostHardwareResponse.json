@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/HostHardwareResponse.json",
+  "title": "HostHardwareResponse",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "hardware": {
+      "type": "object",
+      "properties": {
+        "collectedAt": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "kernel": {
+          "type": "string",
+          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,64}$"
+        },
+        "machine": {
+          "type": "object",
+          "properties": {
+            "vendor": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+            },
+            "family": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+            },
+            "firmware": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+            },
+            "virtual": {
+              "type": "boolean"
+            },
+            "hypervisor": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,32}$"
+            }
+          },
+          "required": [
+            "virtual"
+          ]
+        },
+        "cpu": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,120}$"
+            },
+            "cores": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "threads": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            }
+          },
+          "required": [
+            "model",
+            "cores",
+            "threads"
+          ]
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "devices": {
+          "maxItems": 256,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "wired",
+                  "wifi",
+                  "bluetooth",
+                  "sound",
+                  "graphics",
+                  "display",
+                  "storage",
+                  "camera",
+                  "battery",
+                  "input",
+                  "usb",
+                  "other"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+              },
+              "vendor": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+              },
+              "bus": {
+                "type": "string",
+                "enum": [
+                  "pci",
+                  "usb",
+                  "platform",
+                  "virtual"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{4}:[0-9a-f]{4}$"
+              },
+              "driver": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "no_driver",
+                  "no_firmware",
+                  "disabled"
+                ]
+              },
+              "interface": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,15}$"
+              },
+              "link": {
+                "type": "string",
+                "enum": [
+                  "up",
+                  "down"
+                ]
+              },
+              "speedMbps": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000000
+              },
+              "capture": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "playback": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "card": {
+                "type": "string",
+                "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,32}$"
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "sizeBytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "bus",
+              "driver",
+              "status"
+            ]
+          }
+        },
+        "log": {
+          "maxItems": 40,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,240}$"
+          }
+        }
+      },
+      "required": [
+        "collectedAt",
+        "kernel",
+        "machine",
+        "cpu",
+        "memoryBytes",
+        "devices",
+        "log"
+      ]
+    }
+  },
+  "required": [
+    "v",
+    "hardware"
+  ]
+}

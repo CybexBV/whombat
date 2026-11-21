@@ -1,0 +1,70 @@
+import { BEARER, type CatalogEntryInput, DELETES_ASK, urlField } from './shared.js';
+
+export const entry = {
+  id: 'custom_api',
+  name: 'API',
+  category: 'custom',
+  description: 'Any HTTP API with a token, for everything not in this list.',
+  signIn: [
+    {
+      kind: 'token',
+      label: 'Bearer token',
+      auth: BEARER,
+      secretLabel: 'Token',
+      secretHelp: 'The token the API’s documentation tells you to send.',
+    },
+    {
+      kind: 'token',
+      label: 'Header',
+      auth: { type: 'header', name: 'X-Api-Key', template: '{secret}' },
+      secretLabel: 'Header value',
+      secretHelp: 'The header’s name is yours to choose; the value is kept like a password.',
+    },
+    {
+      kind: 'token',
+      label: 'Username and password',
+      auth: { type: 'basic', usernameField: 'username' },
+      secretLabel: 'Password',
+      secretHelp: 'Sent with the username as basic authentication.',
+    },
+    {
+      kind: 'token',
+      label: 'Query parameter',
+      auth: { type: 'query', name: 'api_key' },
+      secretLabel: 'Key',
+      secretHelp: 'Added to every request as a query parameter.',
+    },
+  ],
+  fields: [
+    urlField('https://api.example.com/v1', 'The API’s base address; the agent’s paths are relative to it.'),
+    {
+      id: 'username',
+      label: 'Username',
+      kind: 'text',
+      required: false,
+      help: 'Only for username and password.',
+    },
+    {
+      id: 'description',
+      label: 'What should the agent know?',
+      placeholder: 'What the API is for, its main endpoints, and anything to be careful with.',
+      kind: 'text',
+      required: false,
+      guide: true,
+      help: 'Shown to the agent as this connection’s guide (at most 1 500 characters).',
+    },
+  ],
+  transport: 'rest',
+  baseUrl: '{url}',
+  mcpPath: null,
+  mcpMissingHint: null,
+  check: { kind: 'reach' },
+  tools: [],
+  request: { prefixes: ['/'] },
+  guide:
+    'An HTTP API connected by hand. Paths are relative to the connection’s base address. When the connection has no notes, ask the person what the API is for and which endpoints to use before changing anything.',
+  sensitive: [DELETES_ASK],
+  docsUrl: null,
+  tokenUrl: null,
+  handle: 'api',
+} satisfies CatalogEntryInput;

@@ -1,0 +1,45 @@
+packages:
+  - apps/*
+  - packages/*
+  - tools/*
+  - contracts/conformance
+  - scripts/package
+allowBuilds:
+  esbuild: true
+  # The sign-in console's PTY (SUB-20): node-pty builds its native addon from source (node-gyp).
+  node-pty: true
+  # ssh2 (the Vault's SSH keys, vault.md VT-D42): its optional native crypto binding is never built, and its optional
+  # cpu-features is removed below; ssh2 runs on Node's crypto and its own pure-JS fallbacks.
+  ssh2: false
+# The pinned Claude Code binary (packages/agent-runtime/src/providers/bundles.ts, SUB-09: the latest tested
+# release, usually younger than pnpm's minimum release age). Exact versions only; bump with the pin.
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/claude-code-linux-arm64@2.1.302'
+  - '@anthropic-ai/claude-code-linux-x64@2.1.302'
+# The contracts packages (core, protocol, …) are workspace packages: everything here builds against their sources.
+overrides:
+  # ssh2's optional native helpers (vault.md VT-D42): cpu-features (it only orders ciphers) and nan (build headers) are
+  # never installed, so no native source reaches the lockfile, the release bundle or the Nix build.
+  'cpu-features': '-'
+  nan: '-'
+patchedDependencies:
+  # postgres.js 3.4.9 (the latest release) crashes the process when the server ends a session that a
+  # transaction or a reserve() is using (pg_terminate_backend, a restart or failover, a network reset,
+  # idle_in_transaction_session_timeout): an uncaught TypeError from nextWrite(), or an unhandled rejection of
+  # its array-type fetch. A dead transaction's later statements can also run in autocommit on the session the
+  # pool reconnects. The patch (both the ESM and CJS builds, every hunk marked `[whombat patch]`) backports the
+  # open upstream fixes: porsager/postgres PRs #1209, #1215, #1229, #1240, #1241. Drop it once a release has
+  # them; the regression tests are apps/server/src/db/lost-session.int.test.ts. Identical in control.
+  postgres@3.4.9: patches/postgres@3.4.9.patch
+  # xterm 6.0.0 ignores `documentOverride` for its main document (`a ?? b ? c : d` precedence) and its DOM row
+  # factory (the global `document`): both fixed so the sign-in console's styles stay CSP-safe
+  # (docs/decisions/subscriptions.md).
+  '@xterm/xterm@6.0.0': patches/@xterm__xterm@6.0.0.patch
+  # Android shares (AP-715): a page's or mail's EXTRA_SUBJECT names it, and a text file comes as a file.
+  expo-share-intent@8.0.1: patches/expo-share-intent@8.0.1.patch
+  # A message's words on iPhone (docs/app/decisions/ios-native.md AP-6277): Select All in the menu of selected words,
+  # which iOS leaves out for text that can't be edited (marked `[whombat patch]`).
+  '@bsky.app/react-native-uitextview@2.7.1': patches/@bsky.app__react-native-uitextview@2.7.1.patch
+  # iPhone's tab badges in the tokens' colours with readable text in both themes (docs/decisions/phone-shell-final.md):
+  # iOS's badge text colour through the tab's appearance, which react-native-screens leaves out (`[whombat patch]`).
+  react-native-screens@4.26.2: patches/react-native-screens@4.26.2.patch

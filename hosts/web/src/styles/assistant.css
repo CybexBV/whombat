@@ -1,0 +1,612 @@
+/* The assistant (docs/ASSIST.md 7): the investigation panel on the right of
+   any page (the page makes room from 1600 px, where the rest keeps its wide
+   layout; the panel lies over the page below that, full screen below 760 px), its transcript and the Markdown of answers,
+   Settings › Assistant, and the buttons on alert rows. Tokens only. */
+
+:root {
+  --inv-w: 520px;
+}
+
+/* ------------------------------------------------------------ panel */
+
+.inv-panel {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  width: min(var(--inv-w), 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--tooltip-shadow);
+}
+.inv-panel:focus {
+  outline: none;
+}
+@media (min-width: 1600px) {
+  .app:has(> .inv-panel) > .main {
+    width: calc(100% - var(--inv-w));
+    margin: 0 var(--inv-w) 0 auto;
+  }
+  .inv-panel {
+    box-shadow: none;
+  }
+}
+@media (max-width: 759px) {
+  .inv-panel {
+    top: 0;
+    z-index: 45;
+    width: 100vw;
+    border-left: 0;
+    box-shadow: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+.inv-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.inv-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.inv-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.modal-x.inv-x {
+  margin: 0 -6px 0 0;
+}
+.inv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.inv-meta a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.inv-state {
+  color: var(--ink);
+}
+.btn-ghost.inv-stop {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------ transcript */
+
+.inv-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.inv-log:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.inv-log > p {
+  margin: 0;
+}
+
+.inv-user {
+  align-self: flex-end;
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.inv-user-text {
+  padding: 8px 12px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 4px 12px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Tool steps: one line each; consecutive steps sit close together. */
+.inv-step + .inv-step {
+  margin-top: -10px;
+}
+.inv-step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 16px);
+  min-height: 30px;
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+.inv-step-line:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.inv-step-line .spinner {
+  margin: 0 1px;
+}
+.inv-step-ic {
+  display: inline-flex;
+  flex: none;
+}
+.inv-step-ic.is-ok {
+  color: var(--good);
+}
+.inv-step-ic.is-fail {
+  color: var(--critical-text);
+}
+.inv-step-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-step-host {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+.inv-step-dur {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.inv-step-chev {
+  flex: none;
+  color: var(--ink-3);
+}
+.inv-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 6px 22px;
+}
+.inv-args {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  font: 12px/1.5 var(--font-mono);
+}
+.inv-args > div {
+  display: contents;
+}
+.inv-args dt {
+  color: var(--ink-3);
+}
+.inv-args dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.inv-out,
+.inv-cmd {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--terminal-bg);
+  color: var(--term-fg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  font: 12px/1.55 var(--font-mono);
+  overflow: auto;
+}
+.inv-out {
+  max-height: 320px;
+  white-space: pre;
+}
+.inv-cmd {
+  max-height: 200px;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inv-out:focus-visible,
+.inv-cmd:focus-visible,
+.md-pre:focus-visible,
+.md-table:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Approvals (access "ask"): the command, the assistant's reason, Run / Decline. */
+.inv-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+}
+.inv-approval.is-pending {
+  border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+}
+.inv-approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.inv-approval-head .ic {
+  color: var(--ink-3);
+  flex: none;
+}
+.inv-approval.is-pending .inv-approval-head .ic {
+  color: var(--warning);
+}
+.inv-reason {
+  margin: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.inv-approval-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inv-approval-form .input {
+  min-height: 34px;
+}
+.inv-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.inv-decision {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.inv-decision .ic {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+.inv-decision.is-approved .ic {
+  color: var(--good);
+}
+.inv-decision.is-declined .ic {
+  color: var(--serious);
+}
+.inv-step-line.inv-out-toggle {
+  margin-bottom: -6px;
+}
+
+.inv-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.inv-status::before,
+.inv-status::after {
+  content: '';
+  flex: 1 1 0;
+  border-top: 1px solid var(--line);
+}
+.inv-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inv-summary {
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: var(--radius-card);
+}
+.inv-summary.is-resolved {
+  border-color: color-mix(in srgb, var(--good) 50%, transparent);
+  background: color-mix(in srgb, var(--good) 7%, transparent);
+}
+.inv-summary.is-attention {
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  background: color-mix(in srgb, var(--warning) 7%, transparent);
+}
+.inv-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.inv-summary.is-resolved .inv-summary-head .ic {
+  color: var(--good);
+}
+.inv-summary.is-attention .inv-summary-head .ic {
+  color: var(--warning);
+}
+.inv-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--critical) 45%, transparent);
+  border-radius: var(--radius-control);
+  color: var(--critical-text);
+  overflow-wrap: anywhere;
+}
+.inv-error .ic {
+  flex: none;
+  margin-top: 1px;
+}
+
+.inv-reply {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+textarea.input.inv-reply-input {
+  flex: 1 1 auto;
+  min-height: 40px;
+  height: 64px;
+  max-height: 160px;
+  padding: 9px 12px;
+  resize: none;
+}
+.btn-primary.inv-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+textarea.input.inv-ask-input {
+  min-height: 84px;
+}
+
+/* ------------------------------------------------------------ Markdown (lib/markdown.tsx) */
+
+.md {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre {
+  margin: 0;
+}
+.md ul,
+.md ol {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.md li > ul,
+.md li > ol,
+.md li > p + p {
+  margin-top: 3px;
+}
+.md .md-h {
+  margin-top: 4px;
+}
+.md .md-h:first-child {
+  margin-top: 0;
+}
+.md a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-selected);
+  text-underline-offset: 3px;
+}
+.md a:hover {
+  text-decoration-color: var(--ink);
+}
+.md-code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--raised);
+  color: var(--ink);
+  font: 0.92em var(--font-mono);
+}
+.md-pre {
+  padding: 10px 12px;
+  background: var(--terminal-bg);
+  color: var(--term-fg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  font: 12px/1.55 var(--font-mono);
+  overflow-x: auto;
+  white-space: pre;
+}
+.md blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.md hr {
+  width: 100%;
+  margin: 2px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.md-table {
+  overflow-x: auto;
+}
+.md table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.md th,
+.md td {
+  padding: 5px 12px 5px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.md th {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------ starting investigations */
+
+.btn-ghost.inv-alert-btn.is-waiting {
+  border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+}
+.btn-ghost.watch-inv {
+  margin-top: 6px;
+}
+/* Phones: with two buttons the row's actions get a line of their own under the text. */
+@media (max-width: 560px) {
+  .alert-row:has(.inv-alert-btn) .act {
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+  }
+}
+
+/* ------------------------------------------------------------ Settings › Assistant */
+
+.inv-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.inv-radios {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inv-radios legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.inv-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.inv-radio input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+}
+.inv-blurb {
+  margin: 0;
+}
+.inv-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.inv-progress .track {
+  width: 100%;
+}
+.inv-device {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+.inv-device .link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.inv-code {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+.inv-device-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.inv-row {
+  border-top: 1px solid var(--line);
+}
+.inv-row:first-child {
+  border-top: 0;
+}
+.inv-row-link {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: 7px;
+}
+.inv-row-link:hover {
+  background: var(--raised);
+}
+.inv-row-link .dot {
+  margin-top: 5px;
+}
+.inv-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.inv-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-row-link time {
+  white-space: nowrap;
+}

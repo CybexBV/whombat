@@ -1,0 +1,444 @@
+/* The console on the installed box (CG-06…CG-09), sized for 1024×768 and zoomed up (Stage). */
+
+.page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Burn-in: two layers of the overlay colour (55 % black each in the dark theme) leave about 40 % brightness. */
+.dim {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-toast);
+  background: linear-gradient(var(--ov), var(--ov)), var(--ov);
+  pointer-events: none;
+  transition: opacity 2s ease;
+}
+
+.drift {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 28px 40px 18px;
+  transition: transform 3s ease-in-out;
+}
+
+.header {
+  flex: none;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.footer {
+  flex: none;
+  margin: 0;
+  color: var(--mut);
+  font: var(--type-meta-small);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+/* Starting / waiting */
+
+.waking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.wakingScene {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 220px;
+}
+
+.wakingSay {
+  width: 220px;
+  text-align: left;
+}
+
+.wakingTitle {
+  margin: 12px 0 0;
+  font: var(--type-display-onboarding);
+  letter-spacing: var(--type-display-onboarding-tracking);
+}
+
+.wakingHint {
+  max-width: 30em;
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-body-large);
+  font-size: 19px;
+}
+
+.dots {
+  display: inline-block;
+  width: 0;
+}
+
+/* Claim code on a sign */
+
+.claim {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: center;
+}
+
+.claimTitle {
+  margin: 0;
+  font: var(--type-display-onboarding);
+  font-size: 46px;
+  letter-spacing: var(--type-display-onboarding-tracking);
+}
+
+.claimOpen {
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-body-large);
+  font-size: 21px;
+}
+
+.claimOpen strong {
+  color: var(--ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.claimRotates {
+  margin: 0;
+  color: var(--mut);
+  font: var(--type-body-large);
+}
+
+/* The other way in, when the address above doesn't open: last on the screen and quieter than the line to follow. */
+.claimElse {
+  margin: 0;
+  color: var(--mut);
+  font: var(--type-body-large);
+}
+
+.claimElse strong {
+  color: var(--ink2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* New letters: quiet under the code; the key that does the same sits in it as a keycap. */
+.newLetters {
+  gap: 10px;
+}
+
+.newLettersKey {
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-tag-large);
+  color: var(--mut);
+  font: var(--type-label);
+  letter-spacing: var(--type-label-tracking);
+  text-align: center;
+}
+
+.signScene {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.signScene::after {
+  position: absolute;
+  right: 4%;
+  bottom: 0;
+  left: 4%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line2);
+  content: "";
+}
+
+.signLeft,
+.signRight {
+  position: relative;
+  z-index: 2;
+}
+
+.signLeft {
+  margin-right: -18px;
+}
+
+.signRight {
+  margin-left: -18px;
+}
+
+.signSay {
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 12px;
+  width: 184px;
+  text-align: left;
+}
+
+.sign {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 0;
+}
+
+.board {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 540px;
+  padding: 18px 56px 10px;
+  border: 3px solid var(--earth);
+  border-radius: var(--radius-card-xlarge);
+  background: var(--sf2);
+  box-shadow:
+    inset 0 -8px 0 var(--sel),
+    var(--shadow-toast);
+}
+
+.code {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: 0.08em;
+  margin-right: -0.08em;
+}
+
+.wait {
+  color: var(--ink2);
+}
+
+.post {
+  position: absolute;
+  bottom: 0;
+  width: 16px;
+  height: 64px;
+  border-radius: 3px 3px 0 0;
+  background: var(--earth);
+}
+
+.post:nth-of-type(1) {
+  left: 22%;
+}
+
+.post:nth-of-type(2) {
+  right: 22%;
+}
+
+.sign {
+  padding-bottom: 48px;
+}
+
+/* Claimed */
+
+.claimed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  width: 100%;
+  text-align: center;
+}
+
+.claimedText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 920px;
+}
+
+.setUp {
+  margin: 0;
+  color: var(--ok);
+  font: 600 20px var(--font-sans);
+}
+
+.burrowName {
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px 4px;
+}
+
+.more {
+  margin: 0;
+  color: var(--mut);
+  font: 500 19px var(--font-sans);
+}
+
+.openApp {
+  margin: 10px 0 0;
+  color: var(--ink2);
+  font: var(--type-body-large);
+  font-size: 21px;
+}
+
+.fact {
+  width: 100%;
+  max-width: 700px;
+  min-height: 118px;
+  margin: 0;
+  padding: 18px 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card-large);
+  background: var(--sf);
+  transition: opacity 700ms ease;
+}
+
+.factKicker {
+  color: var(--brand);
+  font: 500 12px var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.factText {
+  margin: 8px 0 0;
+  color: var(--ink);
+  font: 400 21px / 1.4 var(--font-sans);
+  text-wrap: balance;
+}
+
+.family {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+}
+
+/* Celebration */
+
+.celebration {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg);
+  animation: fadein 400ms ease-out both;
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+}
+
+.celebrationScene,
+.celebrationTitle,
+.celebrationName {
+  position: relative;
+  z-index: 1;
+}
+
+.celebrationScene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.celebrationSay {
+  margin-left: 220px;
+  font-size: 20px;
+}
+
+.celebrationTitle {
+  margin: 12px 0 0;
+  font: var(--type-display-onboarding);
+  font-size: 72px;
+  letter-spacing: var(--type-display-onboarding-tracking);
+}
+
+.celebrationName {
+  max-width: 80%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink2);
+  font: 600 28px var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The page when the server is away for a while. */
+
+.away {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+}
+
+/* Whombat Link and Tailscale: notes above every claim screen, the Link code's last lines (CG-404) */
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(880px, 100%);
+  margin: 0 0 22px;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  padding: 12px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  color: var(--ink2);
+  font: var(--type-body-large);
+  font-size: 17px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.noteUrl {
+  color: var(--ink);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* The Link code's nine letters make a lower sign than the claim's four: room above it for Hazel's bubble. */
+.linkSign {
+  margin-top: 46px;
+}
+
+.linkConfirm {
+  margin: 0;
+  color: var(--ink2);
+  font: var(--type-body-large);
+  font-size: 19px;
+}

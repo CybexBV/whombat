@@ -1,0 +1,148 @@
+/* Quiet notices (quiet-notices.md AP-4822…AP-4827; the quiet mock): a line's ⋯ button, a quiet line's Undo, and
+   What Whombat watches. Notice rows themselves are the dashboard's (`Dashboard.module.css` .watch). */
+
+/* The ⋯ button at a line's end: the size of the line's icon, a quiet border until hovered. */
+.more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  margin-top: -2px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-small);
+  background: var(--sf);
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.more:hover,
+.more[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.more:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.more:focus-visible,
+.undo:focus-visible,
+.chipUndo:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Undo on a greyed line, a text link like the line's own. */
+.undo {
+  flex: none;
+  margin: 2px 0 0 auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font: 400 13px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.undo:hover {
+  color: var(--ink);
+}
+
+.undo:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+/* A quiet line: greyed, its icon without colour. */
+.quietLine b {
+  color: var(--mut);
+}
+
+.quietIcon {
+  background: var(--sf2);
+  color: var(--mut);
+}
+
+/* What Whombat watches: a switch per check, what is excepted under it. */
+.watchRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 11px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.watchText {
+  flex: 1;
+  min-width: 0;
+}
+
+.watchName {
+  display: block;
+  color: var(--ink);
+  font: 500 14.5px / 1.35 var(--font-sans);
+}
+
+.watchOff {
+  display: block;
+  margin-top: 2px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.except {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 4px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.exceptLabel {
+  margin-right: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-small);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 500 12.5px / 20px var(--font-sans);
+}
+
+.chipWords {
+  color: var(--mut);
+  font-weight: 400;
+}
+
+.chipUndo {
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--brand);
+  font: 500 12.5px / 20px var(--font-sans);
+  cursor: pointer;
+}
+
+.chipUndo:hover {
+  color: var(--ink);
+}
+
+.empty {
+  margin: 0;
+  padding: 2px 20px 18px;
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+}

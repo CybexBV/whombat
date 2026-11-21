@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Settings → Skills (all-skills.md SK-16, SK-17)</title>
+<!-- Layout, order and words reference only. Colours here are placeholders: the app uses its own tokens. Figures are made up. -->
+<style>
+:root{--background:#0e0f11;--foreground:#ececec;--card:#16171a;--border:#2a2c31;--input:#2a2c31;--muted:#2a2c31;--muted-foreground:#9a9ca3;--primary:#3b6cf6;--primary-foreground:#fff;--accent-surface:#1f2433;--accent-surface-foreground:#dfe6ff;--success:#3ccf7e;--warning:#f0a43a;--code-background:#0b0b0c;--code-foreground:#e6e6e6;--radius:10px;--font-sans:Inter,system-ui,sans-serif;--font-mono:ui-monospace,monospace}
+body{margin:24px;background:var(--background);font-family:var(--font-sans);color:var(--foreground)}
+.wrap{display:grid;grid-template-columns:1fr 290px;gap:14px;max-width:1000px}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);margin-bottom:14px;font-size:13px;overflow:auto}
+.tabs span{padding:0 0 8px;color:var(--muted-foreground);white-space:nowrap}
+.tabs .on{color:var(--foreground);border-bottom:2px solid var(--primary);font-weight:600}
+h2{font-size:17px;margin:0 0 2px}.help{font-size:13px;color:var(--muted-foreground);margin:0 0 12px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.search{flex:1;min-width:160px;border:1px solid var(--input);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--muted-foreground)}
+.btn{font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--border);color:var(--muted-foreground)}
+.chip.on{background:var(--accent-surface);color:var(--accent-surface-foreground);border-color:transparent}
+.grp{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);margin:14px 0 4px;font-weight:600}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--border);font-size:13px}
+.n{font-weight:600;font-family:var(--font-mono);font-size:12.5px}.d{color:var(--muted-foreground);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-size:12px;white-space:nowrap}.ok{color:var(--success)}.warn{color:var(--warning)}.mut{color:var(--muted-foreground)}
+.sel{background:var(--accent-surface);margin:0 -8px;padding:8px;border-radius:8px}
+.sw{width:28px;height:16px;border-radius:999px;background:var(--primary);position:relative}
+.sw:after{content:"";position:absolute;right:2px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--primary-foreground)}
+.fold{font-size:12.5px;color:var(--muted-foreground);padding:8px 0;border-top:1px solid var(--border)}
+.side h3{font-size:15px;margin:0 0 2px;font-family:var(--font-mono)}.tag{font-size:11.5px;color:var(--muted-foreground)}
+.side p{font-size:12.5px;margin:8px 0}.meta{font-size:12px;color:var(--muted-foreground);display:grid;gap:4px;margin:10px 0}
+pre{font-family:var(--font-mono);font-size:11px;background:var(--code-background);color:var(--code-foreground);padding:8px;border-radius:8px;white-space:pre-wrap;margin:8px 0}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+</style></head><body>
+<div class="wrap">
+<div class="card">
+  <div class="tabs"><span>Profile</span><span>Notifications</span><span>Members</span><span>AI</span><span class="on">Skills</span><span>Connections</span><span>This Whombat</span></div>
+  <h2>Skills · 187</h2>
+  <p class="help">Dusty uses a skill when a task matches it.</p>
+  <div class="bar"><div class="search">Search skills</div><span class="btn">Learn a skill</span><span class="btn p">Add skills</span></div>
+  <div class="chips"><span class="chip on">All</span><span class="chip">Ready · 151</span><span class="chip">Needs setup · 9</span><span class="chip">Off · 4</span><span class="chip">Learned · 6</span></div>
+  <div class="grp">Learned by Dusty</div>
+  <div class="row"><div><div class="n">menerga-heat-pump</div><div class="d">Read and set the Menerga heat pump over Modbus</div></div><span class="st ok">Ready · Changed today</span><span class="sw"></span></div>
+  <div class="row"><div><div class="n">how-whombat-website-deploys</div><div class="d">Build, upload and switch the site on the Hetzner server</div></div><span class="st ok">Ready · Used 4 times</span><span class="sw"></span></div>
+  <div class="grp">From Hermes</div>
+  <div class="row sel"><div><div class="n">proxmox</div><div class="d">Guests, storage, backups and upgrades on Proxmox VE</div></div><span class="st ok">Dusty’s version</span><span class="sw"></span></div>
+  <div class="row"><div><div class="n">home-assistant-live-investigation</div><div class="d">Find out why something in Home Assistant happened</div></div><span class="st ok">Ready · Used 31 times</span><span class="sw"></span></div>
+  <div class="row"><div><div class="n">unifi-protect</div><div class="d">Cameras, recordings and alerts in UniFi Protect</div></div><span class="st warn">Needs UniFi Protect</span><span class="sw"></span></div>
+  <div class="grp">Homelab</div>
+  <div class="row"><div><div class="n">tailscale</div><div class="d">Tailnet devices, ACLs, exit nodes and SSH</div></div><span class="st ok">Ready</span><span class="sw"></span></div>
+  <div class="row"><div><div class="n">truenas</div><div class="d">Pools, datasets, shares and snapshots on TrueNAS</div></div><span class="st mut">Hidden · no TrueNAS server</span><span class="sw"></span></div>
+  <div class="grp">Documents</div>
+  <div class="row"><div><div class="n">xlsx</div><div class="d">Create, edit and recalculate Excel workbooks</div></div><span class="st ok">Ready · Used 2 times</span><span class="sw"></span></div>
+  <div class="fold">▸ Resting · 12 (not used for 60 days)</div>
+  <div class="fold">▸ Off · 4</div>
+  <div class="fold">▸ Added by others · 3</div>
+</div>
+<div class="card side">
+  <h3>proxmox</h3>
+  <div class="tag">Dusty’s version of From Hermes › proxmox</div>
+  <p>Guests, storage, backups and upgrades on Proxmox VE.</p>
+  <div class="meta"><span>Needs a Proxmox server · you have pve-01, pve-02</span><span>Used 18 times · last yesterday</span><span>Changed 3 times by Dusty · last on Thursday</span></div>
+  <pre>## Before changing a guest
+- Check the backup job ran in the last 24 h
+- pve-02 storage “tank” is overbooked: …</pre>
+  <div class="acts"><span class="btn">Edit</span><span class="btn">Compare with original</span><span class="btn">History</span><span class="btn">Pin</span><span class="btn">Reset to original</span></div>
+</div>
+</div>
+</body></html>

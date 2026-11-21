@@ -1,0 +1,976 @@
+/*
+ * Settings → Connections (docs/decisions/connectors.md; not in the mocks,
+ * B-05). Settings' bordered-row cards (SettingsScreen.module.css), the AI provider panel's rows (dot + name +
+ * muted meta), the run page's quiet notice (GitHubNotice) and onboarding's mono field labels.
+ */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A card row: dot, name + meta, actions on the right (AiProviderPanel `.head`). */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.email {
+  color: var(--ink2);
+  font: 400 14px var(--font-mono);
+}
+
+.meta {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--mut);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.block:last-child {
+  border-bottom: 0;
+}
+
+/* SETUP STEPS: numbered rows with a status dot, body copy in ink2, actions under it. */
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.step:last-child {
+  border-bottom: 0;
+}
+
+.stepMark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 1px;
+}
+
+.stepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  color: var(--ink2);
+  font: 500 12px var(--font-mono);
+}
+
+.stepNumber[data-done] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.stepMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stepTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.stepText {
+  max-width: 44em;
+  margin: 0;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.stepText strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.externalLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.externalLink:hover {
+  text-decoration: underline;
+}
+
+/* Values to copy: mono label, value, “Copy” (onboarding's field labels). */
+.copyList {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  max-width: 660px;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf2);
+}
+
+.copyList dt {
+  color: var(--mut);
+  font: 500 12px var(--font-mono);
+}
+
+.copyList dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 400 13.5px var(--font-mono);
+}
+
+.copyButton {
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.copyButton:hover {
+  border-color: var(--ink2);
+}
+
+/* Step 5: the Client ID and secret, or the dropped client_secret JSON. */
+.appForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.field {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--mut);
+  font: 500 12px var(--font-mono);
+}
+
+.drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-panel);
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.drop[data-over] {
+  border-color: var(--brand);
+  background: var(--sf2);
+}
+
+.fileButton {
+  margin: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font: var(--type-small);
+}
+
+.hint {
+  margin: 0;
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.toggleSteps {
+  flex: none;
+}
+
+/* TROUBLESHOOTING: Google's words in mono, then the fix. */
+.trouble {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.trouble:last-child {
+  border-bottom: 0;
+}
+
+.troubleWhat {
+  color: var(--ink);
+  font: 500 13.5px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.troubleWhat[data-plain] {
+  font: 600 14.5px var(--font-sans);
+}
+
+.troubleFix {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.code {
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+  background: var(--sf2);
+  color: var(--ink);
+  font: 400 12.5px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* YOUR ACCOUNTS: services to tick, then one line per connected service. */
+.services {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.service {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 28px;
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.services:disabled .service {
+  color: var(--mut);
+  cursor: default;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--btn);
+  cursor: inherit;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 14px;
+}
+
+.checkName {
+  min-width: 132px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.checkState {
+  color: var(--mut);
+}
+
+.checkState[data-state="api_disabled"],
+.checkState[data-state="no_scope"] {
+  color: var(--warn);
+}
+
+.checkState[data-state="error"] {
+  color: var(--bad);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 18px;
+  min-height: 36px;
+}
+
+/*
+ * The overview (AP-673): an intro line, CONNECTED as Automations' link rows, ADD A CONNECTION as tiles that wrap, and
+ * the provider's logo on a bordered square in both (40px; 48px in a provider page's header).
+ */
+.intro {
+  margin: 0;
+  max-width: 44em;
+  color: var(--ink2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--sf);
+}
+
+.logo[data-size="48"] {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-button-large);
+}
+
+/* A mark that is its own tile (Mollie's): it fills the square, its own corners instead of the border. */
+.logo[data-tile] {
+  border: 0;
+  background: none;
+}
+
+.logo[data-tile] > svg {
+  display: block;
+}
+
+.connectedList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connectedList > li {
+  border-bottom: 1px solid var(--line);
+}
+
+.connectedList > li:last-child {
+  border-bottom: 0;
+}
+
+.chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--mut);
+}
+
+/* A provider's page: the way back, then its logo, name and line above the sections. */
+.back {
+  align-self: flex-start;
+  color: var(--mut);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.providerHead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.providerTitle {
+  margin: 0;
+  /* A long address (“homeassistant.local:8123”) breaks instead of running under Rename at phone widths (AP-1754). */
+  overflow-wrap: anywhere;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/*
+ * The connections catalog (connections-catalog.md CX-70…CX-72, AP-755…AP-757): a monogram for a provider without a
+ * published mark, the scope tag on a row, the search box beside ADD A CONNECTION and the category groups of tiles.
+ */
+/* The poller's line on a connection only automations use (TA-03): a problem in the warning colour. */
+.meta[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+  font: 700 18px / 1 var(--font-sans);
+}
+
+.monogram[data-size="26"] {
+  font-size: 21px;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category + .category {
+  margin-top: 8px;
+}
+
+.categoryTitle {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/*
+ * The overview and Add a connection (connections-redesign.md AP-1157…AP-1166): the intro beside its button, NEEDS YOU
+ * in a warm card with the fix on each row, CONNECTED in one-line rows, and the catalog's search, chips and small tiles.
+ */
+.logo[data-size="32"] {
+  width: 32px;
+  height: 32px;
+}
+
+.logo[data-size="20"] {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+}
+
+.monogram[data-size="18"] {
+  font-size: 15px;
+}
+
+.monogram[data-size="12"] {
+  font-size: 10px;
+}
+
+.overviewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.overviewHead > a {
+  flex: none;
+}
+
+.needsCard {
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, var(--sf));
+}
+
+.needsCard .connectedList > li {
+  border-color: color-mix(in srgb, var(--warn) 18%, transparent);
+}
+
+.needsRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.needsRow:hover {
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
+}
+
+.needsRow:focus-visible,
+.haveRow:focus-visible,
+.pickTile:focus-visible,
+.notListedLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.needsState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.needsState[data-tone="bad"] {
+  color: var(--bad);
+}
+
+.needsMeta {
+  color: var(--ink2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* Looks like a `sm` button (secondary; primary for Connect again); the whole row is the link. */
+.needsAction {
+  flex: none;
+  padding: 7px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.needsAction[data-primary] {
+  border-color: var(--btn);
+  background: var(--btn);
+  color: var(--btnfg);
+  font-weight: 600;
+}
+
+/*
+ * One line per connection (AP-1160, AP-1177): the names in a column of their own, so the addresses after them line up;
+ * the dot and the chevron at the end.
+ */
+.haveRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 220px) minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 52px;
+  padding: 9px 18px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.haveRow:hover {
+  background: var(--sf2);
+}
+
+.haveName {
+  overflow: hidden;
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.haveWhere {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Where it is (AP-1178): a quiet mono pill, its whole text in `title` when it is cut. */
+.address {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: var(--radius-tag-large);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 400 12.5px / 1.5 var(--font-mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.address[data-plain] {
+  font: 400 13px / 1.5 var(--font-sans);
+}
+
+.needsRow .address {
+  flex: 0 1 auto;
+}
+
+.haveTag {
+  flex: none;
+}
+
+/* Two that nothing tells apart (sidebar-tabs.md): a quiet line asking to rename one. */
+.haveNote {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.addHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.addSearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.addSearchIcon {
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  color: var(--mut);
+  pointer-events: none;
+}
+
+.addSearch .addSearchInput {
+  width: 100%;
+  padding: 10px 14px 10px 40px;
+  border-radius: var(--radius-button-large);
+  font-size: 15px;
+}
+
+.addChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin: -6px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.pickTiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickTile {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.pickTile:hover {
+  border-color: var(--line2);
+  background: var(--sf2);
+}
+
+.pickText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pickName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pickTitle {
+  overflow: hidden;
+  font-size: 14.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pickTag {
+  flex: none;
+}
+
+.pickLine {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.pickNote {
+  color: var(--mut);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.notListed {
+  margin: 0;
+  color: var(--mut);
+  font-size: 14px;
+  text-align: center;
+}
+
+.notListedLink {
+  border-radius: 3px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+}
+
+.notListedLink:hover {
+  text-decoration-color: var(--ink);
+}
+
+/* EMAIL (IMAP) (connections-more-web.md AP-2764…): the servers Whombat found in one line with Change, the server fields
+ * (host, port, security per side), and a provider's hint in the run page's notice. */
+.mailFound {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.mailFoundText {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.mailFoundTitle {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mailFoundHosts {
+  color: var(--mut);
+  font-size: 13.5px;
+}
+
+.mailHosts {
+  color: var(--ink2);
+  font: 400 13.5px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.mailServers {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 660px;
+}
+
+/* USERNAME stacks under the sides: not the row's 260px basis. */
+.mailServers > .field {
+  flex: none;
+}
+
+.mailSide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mailRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.mailHost,
+.mailPort,
+.mailSecurity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mailHost {
+  flex: 1 1 240px;
+}
+
+.mailPort {
+  flex: 0 0 96px;
+}
+
+.mailSide > legend {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+/* The switch's label at the top with the others', the switch at the bottom with the inputs. */
+.mailSecurity {
+  flex: none;
+  align-self: stretch;
+  justify-content: space-between;
+}
+
+.mailSmall {
+  color: var(--mut);
+  font-size: 12.5px;
+}
+
+.mailHint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 660px;
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--line2);
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Two links under a hint (Gmail: the Google connection and its app password; AP-3915): side by side. */
+.mailHintLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+/* An entry Whombat looks after best as a server: Add as a server above its connect form (connect-in-chat.md). */
+.asServer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The way forward under a connection's “needs a secure address” sentence. */
+.addressAction {
+  display: flex;
+  padding: 0 18px 18px;
+}

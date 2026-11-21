@@ -1,0 +1,75 @@
+{
+  "total_count": 2,
+  "runners": [
+    {
+      "id": 22,
+      "name": "ci-main",
+      "os": "Linux",
+      "status": "online",
+      "busy": true,
+      "version": "2.338.1",
+      "labels": [
+        {
+          "id": 0,
+          "name": "self-hosted",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "Linux",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "X64",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "ci",
+          "type": "custom"
+        },
+        {
+          "id": 0,
+          "name": "main",
+          "type": "custom"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "ci-pr",
+      "os": "Linux",
+      "status": "offline",
+      "busy": false,
+      "version": "2.338.1",
+      "labels": [
+        {
+          "id": 0,
+          "name": "self-hosted",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "Linux",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "X64",
+          "type": "read-only"
+        },
+        {
+          "id": 0,
+          "name": "ci",
+          "type": "custom"
+        },
+        {
+          "id": 0,
+          "name": "pr",
+          "type": "custom"
+        }
+      ]
+    }
+  ]
+}

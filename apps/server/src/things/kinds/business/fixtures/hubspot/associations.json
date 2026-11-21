@@ -1,0 +1,25 @@
+{
+  "status": "COMPLETE",
+  "results": [
+    {
+      "from": { "id": "7001" },
+      "to": [
+        {
+          "toObjectId": 9001,
+          "associationTypes": [{ "category": "HUBSPOT_DEFINED", "typeId": 216, "label": null }]
+        }
+      ]
+    },
+    {
+      "from": { "id": "7002" },
+      "to": [
+        {
+          "toObjectId": 8001,
+          "associationTypes": [{ "category": "HUBSPOT_DEFINED", "typeId": 216, "label": null }]
+        }
+      ]
+    }
+  ],
+  "startedAt": "2026-10-21T15:00:00Z",
+  "completedAt": "2026-10-21T15:00:00Z"
+}

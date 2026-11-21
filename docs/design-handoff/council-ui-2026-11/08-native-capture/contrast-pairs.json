@@ -1,0 +1,602 @@
+{
+  "method": "WCAG 2 relative luminance; sRGB, target ≥4.5:1. Selected visible text pairs only. No inspector certification.",
+  "excludes": "OS status bar, non-text icons/meters, image/gradient text, antialiasing and off-screen content. Files content unavailable.",
+  "pairs": [
+    {
+      "theme": "light",
+      "foregroundToken": "mut",
+      "backgroundToken": "bg",
+      "foreground": [
+        110,
+        101,
+        92
+      ],
+      "background": [
+        251,
+        249,
+        245
+      ],
+      "ratio": 5.428,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "mut",
+      "backgroundToken": "sf",
+      "foreground": [
+        110,
+        101,
+        92
+      ],
+      "background": [
+        255,
+        253,
+        249
+      ],
+      "ratio": 5.618,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "mut",
+      "backgroundToken": "sf2",
+      "foreground": [
+        110,
+        101,
+        92
+      ],
+      "background": [
+        241,
+        236,
+        228
+      ],
+      "ratio": 4.854,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "brand",
+      "backgroundToken": "bg",
+      "foreground": [
+        125,
+        99,
+        83
+      ],
+      "background": [
+        251,
+        249,
+        245
+      ],
+      "ratio": 5.281,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "brand",
+      "backgroundToken": "sf",
+      "foreground": [
+        125,
+        99,
+        83
+      ],
+      "background": [
+        255,
+        253,
+        249
+      ],
+      "ratio": 5.466,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "warn",
+      "backgroundToken": "bg",
+      "foreground": [
+        141,
+        109,
+        45
+      ],
+      "background": [
+        251,
+        249,
+        245
+      ],
+      "ratio": 4.583,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "warn",
+      "backgroundToken": "sf",
+      "foreground": [
+        141,
+        109,
+        45
+      ],
+      "background": [
+        255,
+        253,
+        249
+      ],
+      "ratio": 4.743,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "warnText",
+      "backgroundToken": "sf2",
+      "foreground": [
+        118,
+        91,
+        39
+      ],
+      "background": [
+        241,
+        236,
+        228
+      ],
+      "ratio": 5.418,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "bad",
+      "backgroundToken": "sf2",
+      "foreground": [
+        159,
+        85,
+        64
+      ],
+      "background": [
+        241,
+        236,
+        228
+      ],
+      "ratio": 4.641,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "ink",
+      "backgroundToken": "bg",
+      "foreground": [
+        34,
+        29,
+        24
+      ],
+      "background": [
+        251,
+        249,
+        245
+      ],
+      "ratio": 15.888,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "ink2",
+      "backgroundToken": "bg",
+      "foreground": [
+        61,
+        53,
+        46
+      ],
+      "background": [
+        251,
+        249,
+        245
+      ],
+      "ratio": 11.431,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "btn",
+      "foreground": [
+        245,
+        242,
+        237
+      ],
+      "background": [
+        34,
+        29,
+        24
+      ],
+      "ratio": 14.962,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "bad",
+      "foreground": [
+        245,
+        242,
+        237
+      ],
+      "background": [
+        159,
+        85,
+        64
+      ],
+      "ratio": 4.888,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "ink",
+      "foreground": [
+        245,
+        242,
+        237
+      ],
+      "background": [
+        34,
+        29,
+        24
+      ],
+      "ratio": 14.962,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "UIKit badge numeral (white upper bound)",
+      "backgroundToken": "sampled UIKit badge red",
+      "foreground": [
+        255,
+        255,
+        255
+      ],
+      "background": [
+        255,
+        56,
+        60
+      ],
+      "ratio": 3.57,
+      "platform": "ios",
+      "screenshot": "png/ios-chat-list-light.png",
+      "sample": "x 76–92, y 768–785 at 390×844; 233 light / 232 dark solid background pixels",
+      "source": "UIKit badge, navigation/GlassTabs.tsx; white gives the maximum possible numeral contrast"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "mut",
+      "backgroundToken": "sampled lit control tile",
+      "foreground": [
+        110,
+        101,
+        92
+      ],
+      "background": [
+        251,
+        239,
+        228
+      ],
+      "ratio": 5.047,
+      "platform": "ios",
+      "screenshot": "png/ios-connection-light.png",
+      "sample": "solid lit-tile background, third most frequent screenshot colour; excludes antialiased edges",
+      "source": "screens/thing/Controls.tsx useTileStyle: chart2/chartWash over sf; platform alpha rounding differs"
+    },
+    {
+      "theme": "light",
+      "foregroundToken": "mut",
+      "backgroundToken": "sampled lit control tile",
+      "foreground": [
+        110,
+        101,
+        92
+      ],
+      "background": [
+        251,
+        239,
+        229
+      ],
+      "ratio": 5.05,
+      "platform": "android",
+      "screenshot": "png/android-connection-light.png",
+      "sample": "solid lit-tile background, third most frequent screenshot colour; excludes antialiased edges",
+      "source": "screens/thing/Controls.tsx useTileStyle: chart2/chartWash over sf; platform alpha rounding differs"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "mut",
+      "backgroundToken": "bg",
+      "foreground": [
+        160,
+        149,
+        138
+      ],
+      "background": [
+        28,
+        24,
+        21
+      ],
+      "ratio": 6.013,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "mut",
+      "backgroundToken": "sf",
+      "foreground": [
+        160,
+        149,
+        138
+      ],
+      "background": [
+        36,
+        32,
+        28
+      ],
+      "ratio": 5.515,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "mut",
+      "backgroundToken": "sf2",
+      "foreground": [
+        160,
+        149,
+        138
+      ],
+      "background": [
+        46,
+        41,
+        37
+      ],
+      "ratio": 4.904,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "brand",
+      "backgroundToken": "bg",
+      "foreground": [
+        210,
+        180,
+        154
+      ],
+      "background": [
+        28,
+        24,
+        21
+      ],
+      "ratio": 9.015,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "brand",
+      "backgroundToken": "sf",
+      "foreground": [
+        210,
+        180,
+        154
+      ],
+      "background": [
+        36,
+        32,
+        28
+      ],
+      "ratio": 8.268,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "warn",
+      "backgroundToken": "bg",
+      "foreground": [
+        224,
+        183,
+        94
+      ],
+      "background": [
+        28,
+        24,
+        21
+      ],
+      "ratio": 9.325,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "warn",
+      "backgroundToken": "sf",
+      "foreground": [
+        224,
+        183,
+        94
+      ],
+      "background": [
+        36,
+        32,
+        28
+      ],
+      "ratio": 8.553,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "warnText",
+      "backgroundToken": "sf2",
+      "foreground": [
+        224,
+        183,
+        94
+      ],
+      "background": [
+        46,
+        41,
+        37
+      ],
+      "ratio": 7.606,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "bad",
+      "backgroundToken": "sf2",
+      "foreground": [
+        229,
+        154,
+        133
+      ],
+      "background": [
+        46,
+        41,
+        37
+      ],
+      "ratio": 6.364,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "ink",
+      "backgroundToken": "bg",
+      "foreground": [
+        241,
+        235,
+        227
+      ],
+      "background": [
+        28,
+        24,
+        21
+      ],
+      "ratio": 14.891,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "ink2",
+      "backgroundToken": "bg",
+      "foreground": [
+        216,
+        207,
+        196
+      ],
+      "background": [
+        28,
+        24,
+        21
+      ],
+      "ratio": 11.456,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "btn",
+      "foreground": [
+        28,
+        24,
+        21
+      ],
+      "background": [
+        241,
+        235,
+        227
+      ],
+      "ratio": 14.891,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "bad",
+      "foreground": [
+        28,
+        24,
+        21
+      ],
+      "background": [
+        229,
+        154,
+        133
+      ],
+      "ratio": 7.803,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "btnfg",
+      "backgroundToken": "ink",
+      "foreground": [
+        28,
+        24,
+        21
+      ],
+      "background": [
+        241,
+        235,
+        227
+      ],
+      "ratio": 14.891,
+      "source": "packages/tokens/src/colors.ts"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "UIKit badge numeral (white upper bound)",
+      "backgroundToken": "sampled UIKit badge red",
+      "foreground": [
+        255,
+        255,
+        255
+      ],
+      "background": [
+        255,
+        66,
+        69
+      ],
+      "ratio": 3.433,
+      "platform": "ios",
+      "screenshot": "png/ios-chat-list-dark.png",
+      "sample": "x 76–92, y 768–785 at 390×844; 233 light / 232 dark solid background pixels",
+      "source": "UIKit badge, navigation/GlassTabs.tsx; white gives the maximum possible numeral contrast"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "mut",
+      "backgroundToken": "sampled lit control tile",
+      "foreground": [
+        160,
+        149,
+        138
+      ],
+      "background": [
+        64,
+        44,
+        30
+      ],
+      "ratio": 4.484,
+      "platform": "ios",
+      "screenshot": "png/ios-connection-dark.png",
+      "sample": "solid lit-tile background, third most frequent screenshot colour; excludes antialiased edges",
+      "source": "screens/thing/Controls.tsx useTileStyle: chart2/chartWash over sf; platform alpha rounding differs"
+    },
+    {
+      "theme": "dark",
+      "foregroundToken": "mut",
+      "backgroundToken": "sampled lit control tile",
+      "foreground": [
+        160,
+        149,
+        138
+      ],
+      "background": [
+        63,
+        44,
+        29
+      ],
+      "ratio": 4.505,
+      "platform": "android",
+      "screenshot": "png/android-connection-dark.png",
+      "sample": "solid lit-tile background, third most frequent screenshot colour; excludes antialiased edges",
+      "source": "screens/thing/Controls.tsx useTileStyle: chart2/chartWash over sf; platform alpha rounding differs"
+    }
+  ]
+}

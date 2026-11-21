@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+# release/sbom — software bill of materials, license inventory, provenance and vulnerability scan for every
+# component of a commit. See docs/release/sbom.md.
+#
+#   release/sbom [--rev COMMIT] [--name N] [--cloud COMMIT] [--pins FILE] [--scratch DIR] [--out DIR]
+#                [--no-android] [--no-nix] [--no-scan]
+#
+# What is inventoried are pins: which commit of which component. For a commit of this repository (--rev, default
+# HEAD) they are the component list, manifest/components.json, with that commit filled in (manifest/pins-at; --name
+# is the candidate's number, --cloud the whombat-cloud commit of control and the relay when the release records name
+# none). --pins FILE takes a pins file as it is: the candidate manifest of a release from before the one repository.
+#
+# 1. Clean clones at the pinned commits, built exactly like the release: `manifest/build --keep --no-manifest`
+#    (IN-05 clean `git clone --no-local`, frozen lockfiles). `--scratch DIR` reuses a kept scratch of that command
+#    whose build-report.json names the same commits.
+# 2. CycloneDX 1.6 JSON per component with maintained generators, all fetched from the appliance's pinned nixpkgs
+#    (flake.lock) except pnpm (the version the repositories pin) and the CycloneDX Gradle plugin:
+#      pnpm workspaces      `pnpm -r sbom --sbom-format cyclonedx` (dev dependencies carry scope "excluded")
+#      shipped JS subsets   `pnpm --filter <pkg> sbom --prod` (hosted web UI, mobile JS bundle)
+#      Go binaries          `cyclonedx-gomod app -licenses -std` per shipped main package; contracts Go module `mod`
+#      Android native       CycloneDX Gradle plugin (init script, no repository change) on `releaseRuntimeClasspath`
+#                           after `expo prebuild` in the scratch clone
+#      NixOS closure        `sbomnix` on `#appliance-toplevel` of the pinned appliance commit (+ SPDX, CSV)
+#      provider CLIs        `sbomnix` on `#whombat-provider-{codex,claude}` (proprietary, fetched by hash, unmodified),
+#                           for a commit whose flake still has them (the image runs Hermes since, in its closure)
+# 3. Vulnerability scans: grype (every SBOM), osv-scanner (every non-Nix SBOM), govulncheck (Go binaries, symbol
+#    level), vulnxscan (NixOS closure: vulnix + grype + OSV). Databases and their timestamps are recorded.
+# 4. release/lib/summarize.ts merges everything into licenses.{json,md}, vulnerabilities.{json,md} (triage from
+#    release/policy/triage.json) and provenance.json, and writes SHA256SUMS over the output.
+#
+# Writes <out> (default release/out/<productVersion>/) and a work directory under ~/.cache/whombat-mgd/release-sbom/.
+# Never pushes, publishes or signs anything. Network: nixpkgs binary cache, npm/Gradle/Go module caches as the
+# builds need them, and the vulnerability databases.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "$here/.." && pwd)"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"
+mkdir -p "$TMPDIR"
+export NIX_CONFIG="${NIX_CONFIG:-}"$'\n'"experimental-features = nix-command flakes"
+state="${WB_MGD_HOME:-$HOME/.cache/whombat-mgd}"
+
+scratch="" out="" android=1 nixos=1 scan=1 pins="" rev="" name="" cloud=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pins) pins="$(realpath "$2")"; shift 2 ;;
+    --rev) rev="$2"; shift 2 ;;
+    --name) name="$2"; shift 2 ;;
+    --cloud) cloud="$2"; shift 2 ;;
+    --scratch) scratch="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --no-android) android=0; shift ;;
+    --no-nix) nixos=0; shift ;;
+    --no-scan) scan=0; shift ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+work="$state/release-sbom/$run_id"
+mkdir -p "$work/raw" "$work/scan" "$work/logs"
+# The pins: a file as given, else the component list at the commit, else (a tree from before the list) the pins the
+# repository holds.
+if [ -n "$pins" ]; then
+  [ -z "$rev$name$cloud" ] || { echo "--pins names every commit itself: no --rev, --name or --cloud with it" >&2; exit 2; }
+  pins_from="$pins"
+elif [ -f "$repo/manifest/components.json" ]; then
+  rev="$(git -C "$repo" rev-parse --verify "${rev:-HEAD}^{commit}")"
+  pins="$("$repo/manifest/pins-at" "$rev" ${name:+--name "$name"} ${cloud:+--cloud "$cloud"} --out "$work/pins.json")"
+  pins_from="manifest/components.json at $rev"
+else
+  pins="$repo/manifest/pins.json"
+  pins_from="manifest/pins.json"
+fi
+# manifest/build reads the same pins, and writes its report beside them unless they are the repository's own.
+export WB_MGD_PINS="$pins"
+if [ "$pins" = "$repo/manifest/pins.json" ]; then
+  build_report="$repo/manifest/build-report.json"
+else
+  build_report="${pins%.json}.build-report.json"
+fi
+product="$(jq -r .productVersion "$pins")"
+out="${out:-$repo/release/out/$product}"
+rm -rf "$out"
+mkdir -p "$out/sbom"
+log() { printf '▸ %s\n' "$*" >&2; }
+expand() { local p="$1"; printf '%s' "${p/#\~/$HOME}"; }
+steps="$work/steps.jsonl"   # one line per step: {step, component, status, detail}
+: > "$steps"
+record() { jq -cn --arg step "$1" --arg component "$2" --arg status "$3" --arg detail "${4:-}" \
+  '{step:$step, component:$component, status:$status, detail:$detail}' >> "$steps"; }
+
+# ---------------------------------------------------------------------------------------------------------------
+# Tools from the appliance's pinned nixpkgs (the flake.lock of the pinned appliance commit).
+appliance_src="$(expand "$(jq -r '[.components[] | select(.repository=="whombat-appliance")][0].source' "$pins")")"
+appliance_commit="$(jq -r '[.components[] | select(.repository=="whombat-appliance")][0].commit' "$pins")"
+# The appliance's commit is looked for in the checkout the pins name, then this one, then the archives; its flake and
+# files are named for where the appliance is in it (release/lib/source.sh).
+root=$repo
+# shellcheck source=release/lib/source.sh
+. "$here/lib/source.sh"
+appliance_at() { WB_ARCHIVE_GIT="$appliance_src:$(source_archives | paste -sd: -)" "$@"; }
+nixpkgs_rev="$(appliance_at source_show "$appliance_commit" flake.lock | jq -r .nodes.nixpkgs.locked.rev)"
+nixpkgs="github:NixOS/nixpkgs/$nixpkgs_rev"
+tools="$state/release-sbom/tools-$nixpkgs_rev"
+mkdir -p "$tools"
+for t in grype osv-scanner cyclonedx-gomod sbomnix govulncheck; do
+  if [ ! -e "$tools/$t" ]; then
+    log "tool $t from $nixpkgs"
+    nix build --out-link "$tools/$t" "$nixpkgs#$t" >&2
+  fi
+done
+T() { printf '%s/%s/bin/%s' "$tools" "$1" "${2:-$1}"; }
+gradle_plugin="3.4.1"
+{
+  jq -n --arg nixpkgs "$nixpkgs" --arg pnpm "$(pnpm --version)" --arg node "$(node --version)" \
+    --arg go "$(go version)" --arg nix "$(nix --version)" --arg gradlePlugin "$gradle_plugin" \
+    '{nixpkgs:$nixpkgs, host:{pnpm:$pnpm, node:$node, go:$go, nix:$nix},
+      cyclonedxGradlePlugin:("org.cyclonedx:cyclonedx-gradle-plugin:" + $gradlePlugin)}'
+  for t in grype osv-scanner cyclonedx-gomod sbomnix govulncheck; do
+    jq -n --arg name "$t" --arg store "$(readlink "$tools/$t")" '{($name): $store}'
+  done
+} | jq -s 'reduce .[] as $x ({}; . * $x) | {tools: .}' > "$work/tools.json"
+
+# ---------------------------------------------------------------------------------------------------------------
+# 1. Clean clones built from the pins (manifest/build). It writes its report beside the pins; a report the
+#    repository holds is restored byte for byte, the fresh one is kept with the output.
+if [ -z "$scratch" ]; then
+  # A report that is a file of the repository is put back as it was; one beside generated pins is this run's own.
+  report_backup=""
+  if [ "$build_report" = "$repo/manifest/build-report.json" ] || git -C "$repo" ls-files --error-unmatch "$build_report" >/dev/null 2>&1; then
+    report_backup="$work/build-report.before.json"
+    cp "$build_report" "$report_backup"
+  fi
+  log "manifest/build --keep --no-manifest (clean clones at the pinned commits; $pins_from)"
+  set +e
+  "$repo/manifest/build" --keep --no-manifest > "$work/logs/manifest-build.log" 2>&1
+  code=$?
+  set -e
+  scratch="$(jq -r .scratch "$build_report")"
+  [ -z "$report_backup" ] || cp "$report_backup" "$build_report"
+  if [ "$code" -ne 0 ]; then
+    echo "manifest/build failed (exit $code); see $work/logs/manifest-build.log" >&2
+    exit 1
+  fi
+fi
+[ -f "$scratch/build-report.json" ] || { echo "no build-report.json in $scratch" >&2; exit 1; }
+cp "$scratch/build-report.json" "$work/build-report.json"
+# The scratch must be at exactly the pinned commits.
+jq -r '.components[] | "\(.id) \(.commit)"' "$pins" | while read -r id commit; do
+  head="$(git -C "$scratch/$id" rev-parse HEAD)"
+  [ "$head" = "$commit" ] || { echo "$scratch/$id is at $head, pinned $commit" >&2; exit 1; }
+  [ -z "$(git -C "$scratch/$id" status --porcelain --untracked-files=no)" ] || {
+    echo "$scratch/$id has modified tracked files" >&2; exit 1; }
+done
+
+# ---------------------------------------------------------------------------------------------------------------
+# 2. SBOMs.
+sbom_pnpm() { # <component> <dir> <file> [pnpm args…]
+  local id="$1" dir="$2" file="$3"; shift 3
+  if (cd "$dir" && pnpm "$@" sbom --sbom-format cyclonedx --sbom-spec-version 1.6 --sbom-type application \
+      > "$out/sbom/$file" 2> "$work/logs/$file.log"); then
+    record sbom "$id" ok "pnpm $* sbom → $file"
+  else
+    rm -f "$out/sbom/$file"; record sbom "$id" failed "pnpm $* sbom (see $work/logs/$file.log)"
+  fi
+}
+
+sbom_go_app() { # <component> <module dir> <binary name> <file>
+  local id="$1" mod="$2" bin="$3" file="$4" main
+  main="$(cd "$mod" && go list -f '{{if eq .Name "main"}}{{.Dir}}{{end}}' ./... 2>/dev/null \
+    | awk -v b="$bin" -F/ '$NF==b' | head -1)"
+  if [ -z "$main" ]; then record sbom "$id" failed "no main package named $bin in $mod"; return; fi
+  if (cd "$mod" && "$(T cyclonedx-gomod)" app -json -licenses -std -main "${main#"$mod"/}" \
+      -output "$out/sbom/$file" . > "$work/logs/$file.log" 2>&1); then
+    record sbom "$id" ok "cyclonedx-gomod app -licenses -std -main ${main#"$mod"/} → $file"
+  else
+    rm -f "$out/sbom/$file"; record sbom "$id" failed "cyclonedx-gomod app $bin (see $work/logs/$file.log)"
+  fi
+}
+
+# A component's own root in its clone: its folder when the clone holds it in one (control and the relay in
+# whombat-cloud, the appliance and the hosts service in this repository), else the clone.
+root_of() { # <component id>
+  local d
+  d="$(jq -r --arg id "$1" '.components[] | select(.id == $id) | .dir // ""' "$pins")"
+  if [ -n "$d" ] && [ -d "$scratch/$1/$d" ]; then printf '%s' "$scratch/$1/$d"; else printf '%s' "$scratch/$1"; fi
+}
+
+jq -c '.components[]' "$pins" | while read -r c; do
+  id="$(jq -r .id <<<"$c")"
+  dir="$(root_of "$id")"
+  log "SBOM $id"
+  if [ -f "$dir/pnpm-lock.yaml" ]; then
+    if [ -f "$dir/pnpm-workspace.yaml" ]; then sbom_pnpm "$id" "$dir" "$id.cdx.json" -r
+    else sbom_pnpm "$id" "$dir" "$id.cdx.json"; fi
+  fi
+  case "$id" in
+    whombat-contracts)
+      # The Go module is contracts/go in Whombat, which holds the contracts since whombat-contracts moved into it.
+      godir=go; [ -d "$dir/contracts/go" ] && godir=contracts/go
+      if (cd "$dir/$godir" && "$(T cyclonedx-gomod)" mod -json -licenses -output "$out/sbom/$id-go.cdx.json" . \
+          > "$work/logs/$id-go.log" 2>&1); then
+        record sbom "$id" ok "cyclonedx-gomod mod -licenses $godir/ → $id-go.cdx.json"
+      else record sbom "$id" failed "cyclonedx-gomod mod $godir/"; fi ;;
+    whombat-app)
+      sbom_pnpm "$id" "$dir" "$id-web-hosted.cdx.json" --filter @whombat/web --prod
+      sbom_pnpm "$id" "$dir" "$id-mobile-js.cdx.json" --filter @whombat/mobile --prod
+      if [ "$android" = 1 ]; then
+        mobile="$dir/apps/mobile"
+        init="$work/cyclonedx.init.gradle"
+        cat > "$init" <<EOF
+initscript {
+  repositories { gradlePluginPortal() }
+  dependencies { classpath "org.cyclonedx:cyclonedx-gradle-plugin:$gradle_plugin" }
+}
+allprojects {
+  if (path == ':app') {
+    apply plugin: org.cyclonedx.gradle.CyclonedxPlugin
+    tasks.matching { it.name == 'cyclonedxDirectBom' }.configureEach { includeConfigs = ['releaseRuntimeClasspath'] }
+  }
+}
+EOF
+        if (cd "$mobile" && export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}" EXPO_NO_TELEMETRY=1 CI=1 \
+              NODE_ENV=production \
+            && node node_modules/expo/bin/cli prebuild --platform android --no-install \
+            && cd android && ./gradlew --no-daemon -q --init-script "$init" :app:cyclonedxDirectBom) \
+            > "$work/logs/$id-android.log" 2>&1 \
+          && cp "$mobile/android/app/build/reports/cyclonedx-direct/bom.json" "$out/sbom/$id-android.cdx.json"; then
+          record sbom "$id" ok "expo prebuild + CycloneDX Gradle plugin $gradle_plugin (releaseRuntimeClasspath) → $id-android.cdx.json; $(grep -c ModelBuildingException "$work/logs/$id-android.log" || true) POM model warnings (local Expo modules without versions)"
+        else
+          record sbom "$id" failed "Android Gradle SBOM (see $work/logs/$id-android.log)"
+        fi
+      else record sbom "$id" skipped "Android Gradle SBOM (--no-android)"; fi ;;
+  esac
+  # Go binaries named by the component's `tar` artifacts from bin/.
+  jq -r '.artifacts[] | select(.from.type=="tar" and .from.cwd=="bin") | .from.paths[]' <<<"$c" | while read -r bin; do
+    mod="$dir"
+    [ -f "$dir/go.mod" ] || continue
+    sbom_go_app "$id" "$mod" "$bin" "$id-$bin.cdx.json"
+  done
+done
+
+if [ "$nixos" = 1 ]; then
+  flake=$(appliance_at source_flake "$appliance_commit")
+  # The provider CLIs were packages of their own until the image ran Hermes: only a commit that has them.
+  providers=()
+  for attr in whombat-provider-codex whombat-provider-claude; do
+    if nix eval --raw "$flake#packages.x86_64-linux.$attr.name" >/dev/null 2>&1; then providers+=("$attr"); fi
+  done
+  [ ${#providers[@]} -gt 0 ] || record sbom "nix:providers" skipped "this commit has no provider CLI packages"
+  for attr in appliance-toplevel "${providers[@]}"; do
+    log "SBOM nix $attr"
+    if nix build --no-link --print-out-paths "$flake#$attr" > "$work/$attr.outpath" 2> "$work/logs/nix-$attr.log" \
+      && (cd "$work" && "$(T sbomnix)" "$flake#$attr" --cdx "$out/sbom/nix-$attr.cdx.json" \
+            --spdx "$out/sbom/nix-$attr.spdx.json" --csv "$work/nix-$attr.csv" >> "$work/logs/nix-$attr.log" 2>&1); then
+      record sbom "nix:$attr" ok "sbomnix $flake#$attr (runtime closure) → nix-$attr.{cdx,spdx}.json; out $(cat "$work/$attr.outpath")"
+    else
+      record sbom "nix:$attr" failed "sbomnix $attr (see $work/logs/nix-$attr.log)"
+    fi
+  done
+  # Where the provider CLIs come from (fetched by hash, never patched): the fixed-output source of each package.
+  for attr in "${providers[@]}"; do
+    if nix eval --json "$flake#packages.x86_64-linux.$attr" \
+      --apply 'p: { name = p.pname; version = p.version; url = p.src.url or (builtins.head p.src.urls); outputHash = p.src.outputHash; outputHashAlgo = p.src.outputHashAlgo or null; }' \
+      > "$work/$attr.src.json.tmp" 2>> "$work/logs/nix-$attr.log"; then mv "$work/$attr.src.json.tmp" "$work/$attr.src.json"
+    else rm -f "$work/$attr.src.json.tmp"; record sbom "nix:$attr" failed "source eval"; fi
+  done
+else
+  record sbom "nix" skipped "--no-nix"
+fi
+
+# ---------------------------------------------------------------------------------------------------------------
+# 3. Vulnerability scans.
+if [ "$scan" = 1 ]; then
+  export GRYPE_DB_CACHE_DIR="$state/release-sbom/grype-db" GRYPE_DB_AUTO_UPDATE=false
+  log "grype db update"
+  "$(T grype)" db update >&2
+  "$(T grype)" db status -o json > "$work/scan/grype-db.json"
+  for f in "$out"/sbom/*.cdx.json; do
+    b="$(basename "$f" .cdx.json)"
+    case "$b" in nix-appliance-toplevel) continue ;; esac   # scanned by vulnxscan below
+    log "scan $b"
+    "$(T grype)" "sbom:$f" -o json --file "$work/scan/$b.grype.json" 2> "$work/logs/$b.grype.log" \
+      && record scan "$b" ok "grype" || record scan "$b" failed "grype"
+    case "$b" in nix-*) continue ;; esac
+    # osv-scanner recognises CycloneDX by the .cdx.json name; exit 1 means "vulnerabilities found".
+    set +e
+    "$(T osv-scanner)" scan source --format json -L "$f" > "$work/scan/$b.osv.json" 2> "$work/logs/$b.osv.log"
+    code=$?
+    set -e
+    if [ "$code" -le 1 ]; then record scan "$b" ok "osv-scanner"; else record scan "$b" failed "osv-scanner exit $code"; fi
+  done
+  jq -r '.components[] | .id as $id | .artifacts[] | select(.from.type=="tar" and .from.cwd=="bin") | .from.paths[] | "\($id) \(.)"' "$pins" \
+    | while read -r id bin; do
+      f="$(root_of "$id")/bin/$bin"
+      [ -f "$f" ] || { record scan "$id-$bin" failed "govulncheck: no binary $f"; continue; }
+      if "$(T govulncheck)" -mode binary -format json "$f" > "$work/scan/$id-$bin.govulncheck.json" \
+          2> "$work/logs/$id-$bin.govulncheck.log"; then record scan "$id-$bin" ok "govulncheck -mode binary"
+      else record scan "$id-$bin" failed "govulncheck -mode binary"; fi
+    done
+  if [ "$nixos" = 1 ] && [ -s "$work/appliance-toplevel.outpath" ]; then
+    log "vulnxscan appliance-toplevel (vulnix downloads NVD data on first use)"
+    if (cd "$work/scan" && "$(T sbomnix vulnxscan)" "$(cat "$work/appliance-toplevel.outpath")" \
+          --out nix-appliance-toplevel.vulns.csv > "$work/logs/vulnxscan.log" 2>&1); then
+      record scan nix-appliance-toplevel ok "vulnxscan (vulnix + grype + osv)"
+    else record scan nix-appliance-toplevel failed "vulnxscan (see $work/logs/vulnxscan.log)"; fi
+  fi
+else
+  record scan all skipped "--no-scan"
+fi
+
+# ---------------------------------------------------------------------------------------------------------------
+# 4. Summaries, provenance, digests.
+log "summarize"
+node "$here/lib/summarize.ts" --pins "$pins" --pins-from "$pins_from" --work "$work" --out "$out" --scratch "$scratch" \
+  --policy "$here/policy/licenses.json" --triage "$here/policy/triage.json" --run-id "$run_id"
+(cd "$out" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+log "done: $out (work: $work)"
+jq -r '"steps: \([.[] | select(.status=="ok")] | length) ok, \([.[] | select(.status=="failed")] | length) failed, \([.[] | select(.status=="skipped")] | length) skipped"' \
+  -s "$steps" >&2

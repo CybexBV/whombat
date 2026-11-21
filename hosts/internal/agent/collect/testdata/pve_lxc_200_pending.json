@@ -1,0 +1,14 @@
+{"data":[
+ {"key": "arch", "value": "amd64"},
+ {"key": "cores", "value": 1},
+ {"key": "features", "value": "nesting=1"},
+ {"key": "hostname", "value": "ct-debian"},
+ {"key": "memory", "value": 512},
+ {"key": "nameserver", "value": "192.0.2.16"},
+ {"key": "net0", "value": "name=eth0,bridge=vmbr0,gw=192.0.2.18,hwaddr=02:00:00:00:00:0d,ip=192.0.2.20/24,type=veth"},
+ {"key": "onboot", "value": 1},
+ {"key": "ostype", "value": "debian"},
+ {"key": "rootfs", "value": "local:200/vm-200-disk-0.raw,size=4G"},
+ {"key": "swap", "value": 512},
+ {"key": "unprivileged", "value": 1}
+]}

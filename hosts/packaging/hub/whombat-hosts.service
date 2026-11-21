@@ -1,0 +1,76 @@
+# Whombat hosts service with its own web UI (not headless). Inside the
+# Whombat appliance it runs headless instead, from the appliance's NixOS
+# module (serve --headless --listen unix:… --service-token-file …,
+# docs/WHOMBAT.md). Install the binary as /usr/local/bin/whombat-hosts and
+# put the settings in /etc/whombat-hosts/hub.env, for example:
+#
+#   WHOMBAT_HOSTS_PUBLIC_URL=http://10.100.0.6:8080
+#   WHOMBAT_HOSTS_AGENT_URL=wss://10.100.0.6:8443
+#   WHOMBAT_HOSTS_AGENT_DIST=/usr/local/share/whombat-hosts/agent
+#   # HTTPS for the UI (files readable by the service, see LoadCredential below):
+#   # WHOMBAT_HOSTS_TLS_CERT=${CREDENTIALS_DIRECTORY}/tls.crt
+#   # WHOMBAT_HOSTS_TLS_KEY=${CREDENTIALS_DIRECTORY}/tls.key
+#   # Single sign-on (README), the client secret as a credential:
+#   # WHOMBAT_HOSTS_OIDC_ISSUER=https://auth.example.com/application/o/hosts/
+#   # WHOMBAT_HOSTS_OIDC_CLIENT_ID=hosts
+#   # WHOMBAT_HOSTS_OIDC_CLIENT_SECRET_FILE=${CREDENTIALS_DIRECTORY}/oidc-secret
+#   # WHOMBAT_HOSTS_OIDC_NAME=Authentik
+#
+# (RACKOON_* variables still work.) The data directory
+# /var/lib/whombat-hosts holds the database and the hub's CA key: back it
+# up, keep it private. On first start the hub prints a one-time setup
+# token: journalctl -u whombat-hosts | grep -A1 'Setup token'
+[Unit]
+Description=Whombat hosts service (server monitoring, agent listener, console gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/whombat-hosts/hub.env
+ExecStart=/usr/local/bin/whombat-hosts serve --data /var/lib/whombat-hosts
+# Always: after POST /api/v1/hub/restore the hub stops on its own (exit 0)
+# and applies the staged backup when it starts again.
+Restart=always
+RestartSec=5s
+TimeoutStopSec=20s
+
+DynamicUser=yes
+StateDirectory=whombat-hosts
+StateDirectoryMode=0700
+UMask=0077
+# LoadCredential=tls.crt:/etc/whombat-hosts/tls.crt
+# LoadCredential=tls.key:/etc/whombat-hosts/tls.key
+# LoadCredential=oidc-secret:/etc/whombat-hosts/oidc-secret
+
+# Sandbox: no privileges needed (ports above 1024, no devices).
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

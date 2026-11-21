@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/VoiceTranscribeRequest.json",
+  "title": "VoiceTranscribeRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "audioWav": {
+      "type": "string",
+      "minLength": 60,
+      "maxLength": 12800060,
+      "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+    },
+    "model": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "parakeet",
+        "whisper"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "en",
+        "nl"
+      ]
+    },
+    "prompt": {
+      "type": "string",
+      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,400}$"
+    }
+  },
+  "required": [
+    "v",
+    "audioWav",
+    "model",
+    "language"
+  ],
+  "additionalProperties": false
+}

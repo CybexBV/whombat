@@ -1,0 +1,542 @@
+/*
+ * The screen (DK-126…DK-141): drawn at its logical size and scaled to the box it's given, always in the dark tokens.
+ * The top bar is fixed (the name, the pill, the pages, the host's chips); under it the page's widgets; over them the
+ * thin edge, the modal and a widget opened big. Sizes are the mockups' (`desk-widgets/src/kit.css`).
+ */
+
+.frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  transform-origin: 0 0;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.screen *,
+.screen *::before,
+.screen *::after {
+  box-sizing: border-box;
+}
+
+.focus:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+/* An outage or a question (DK-135): a thin coloured edge along the top, seen from the side. */
+.edge {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: var(--bad);
+  box-shadow: 0 0 40px 6px color-mix(in srgb, var(--bad) 45%, transparent);
+  pointer-events: none;
+  animation: fade-in 1.2s ease-out 1;
+}
+
+.edge[data-tone="warn"] {
+  background: var(--warn);
+  box-shadow: 0 0 40px 6px color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The top bar (DK-134) */
+
+.bar {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 24px;
+  color: var(--mut);
+  font-size: 15px;
+}
+
+.left {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  max-width: 50%;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 16px;
+  padding: 7px 14px 7px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bad);
+  color: var(--bg);
+  font: 650 15px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.pill i {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.pages {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  gap: 26px;
+  font-size: 16px;
+  transform: translateX(-50%);
+}
+
+.pagesAfter {
+  position: static;
+  margin-left: 34px;
+  gap: 20px;
+  transform: none;
+}
+
+/* The names and dots are touched on the box: their touch area reaches past what's drawn. */
+.page {
+  position: relative;
+  margin: -10px 0;
+  padding: 14px 0;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.page[data-on] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.page[data-on]::after {
+  position: absolute;
+  right: var(--turn, 0%);
+  bottom: 7px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand);
+  content: "";
+}
+
+.dots {
+  gap: 0;
+}
+
+/* The names drawn unseen, to measure them (the top bar places the pages where they fit). */
+.measure {
+  top: -200px;
+  left: 0;
+  font-weight: 600;
+  visibility: hidden;
+  transform: none;
+  pointer-events: none;
+}
+
+.dot {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 36px;
+  margin: -14px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.dot::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 18%, var(--sf));
+  content: "";
+}
+
+.dot[data-on]::before {
+  background: var(--ink);
+}
+
+.back {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px 8px 14px;
+  border: 1.5px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+  color: var(--ink);
+  font: 600 16px var(--font-sans);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.backAfter {
+  position: static;
+  margin-left: 24px;
+  transform: none;
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.chip svg {
+  display: block;
+  flex: none;
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.chip[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.chip[data-tone="bad"] {
+  color: var(--bad);
+}
+
+/* The page */
+
+.grid {
+  position: absolute;
+  inset: 0;
+}
+
+.cell {
+  position: absolute;
+  border: 1.5px dashed color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: var(--radius-card);
+}
+
+.empty {
+  position: absolute;
+  top: 56px;
+  right: 20px;
+  bottom: 20px;
+  left: 20px;
+  display: grid;
+  place-content: center;
+  color: color-mix(in srgb, var(--mut) 75%, var(--bg));
+  font-size: 22px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Try on the screen (DK-143) */
+.trying {
+  position: absolute;
+  z-index: 5;
+  top: 62px;
+  left: 50%;
+  padding: 6px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--brand) 16%, var(--bg));
+  color: var(--brand);
+  font: 600 14px var(--font-sans);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* Over the dashboard: the modal's and a widget's open big */
+
+.ov {
+  position: absolute;
+  z-index: 6;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--side) 75%, transparent);
+  animation: fade-in 0.2s ease-out 1;
+}
+
+.bigWidget {
+  z-index: 7;
+  border-color: var(--line2);
+}
+
+/* The modal (DK-135) */
+
+.md {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  top: calc(56px + (100% - 56px) / 2);
+  padding: 38px 44px 40px;
+  border: 1.5px solid var(--line2);
+  border-radius: 30px;
+  background: var(--sf);
+  box-shadow: var(--shadow-modal);
+  transform: translate(-50%, -50%);
+  animation: fade-in 0.2s ease-out 1;
+}
+
+.md[data-kind="look"] {
+  border-color: color-mix(in srgb, var(--bad) 65%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bad) 13%, var(--sf)), var(--sf) 70%);
+}
+
+.md[data-kind="look"][data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warn) 10%, var(--sf)), var(--sf) 70%);
+}
+
+.md[data-kind="ask"] {
+  border-color: color-mix(in srgb, var(--face-dusty) 55%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--face-dusty) 10%, var(--sf)), var(--sf) 70%);
+}
+
+.mdTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mdSince {
+  color: var(--bad);
+}
+
+.md[data-tone="warn"] .mdSince {
+  color: var(--warn);
+}
+
+.mdAsks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: color-mix(in srgb, var(--face-dusty) 50%, var(--ink));
+}
+
+.mdCount {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--mut);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1.5px solid var(--line2);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mdTitle {
+  margin: 16px 0 0;
+  font-size: 56px;
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+
+.md[data-kind="ask"] .mdTitle {
+  font-size: 46px;
+}
+
+.mdDetail {
+  margin: 14px 0 0;
+  color: var(--mut);
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.mdQuote {
+  margin: 22px 0 0;
+  padding: 18px 22px;
+  border-left: 3px solid var(--face-dusty);
+  border-radius: 4px 14px 14px 4px;
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+  color: var(--ink2);
+  font-size: 22px;
+  line-height: 1.45;
+}
+
+.mdFacts {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mut);
+  font: 17px var(--font-mono);
+  line-height: 1.6;
+}
+
+.btnLock {
+  display: inline-flex;
+  margin-right: 10px;
+  vertical-align: -1px;
+}
+
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.mdSays {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 0;
+  color: var(--ink2);
+  font-size: 22px;
+}
+
+.mdButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 34px;
+}
+
+.btn {
+  display: inline-block;
+  min-height: 44px;
+  padding: 16px 28px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink);
+  font: 600 22px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--btn);
+  color: var(--btnfg);
+}
+
+.outline {
+  border: 1.5px solid var(--line2);
+}
+
+.quiet {
+  padding-left: 10px;
+  color: var(--mut);
+}
+
+.mdNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--mut);
+  font-size: 18px;
+}
+
+/* Only the time (DK-138): the clock alone. */
+.onlyTime {
+  position: absolute;
+  top: 56px;
+  right: 0;
+  bottom: 56px;
+  left: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.onlyTimeClock {
+  font-size: 220px;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+}
+
+.onlyTimeDate {
+  margin-top: 22px;
+  color: var(--mut);
+  font-size: 32px;
+}

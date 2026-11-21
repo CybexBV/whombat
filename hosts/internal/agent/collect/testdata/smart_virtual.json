@@ -1,0 +1,1 @@
+{"json_format_version":[1,0],"smartctl":{"version":[7,4],"exit_status":4,"messages":[{"string":"SMART support is: Unavailable - device lacks SMART capability.","severity":"information"}]},"device":{"name":"/dev/sdd","type":"scsi","protocol":"SCSI"},"scsi_vendor":"QEMU","scsi_product":"QEMU HARDDISK","smart_support":{"available":false,"enabled":false}}

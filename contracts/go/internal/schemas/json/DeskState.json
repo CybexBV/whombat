@@ -1,0 +1,2321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DeskState.json",
+  "title": "DeskState",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "now": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "paired": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "person": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                },
+                "initial": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,2}$"
+                },
+                "tone": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5
+                }
+              },
+              "required": [
+                "name",
+                "initial",
+                "tone"
+              ]
+            },
+            "assistant": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                },
+                "face": {
+                  "type": "string",
+                  "enum": [
+                    "dusty",
+                    "banjo",
+                    "neo",
+                    "skipper",
+                    "hazel"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "face"
+              ]
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_+./-]+$"
+            },
+            "lockedView": {
+              "type": "string",
+              "enum": [
+                "time",
+                "summary",
+                "everything"
+              ]
+            },
+            "night": {
+              "type": "string",
+              "enum": [
+                "dim",
+                "black"
+              ]
+            },
+            "quiet": {
+              "type": "boolean"
+            },
+            "voice": {
+              "type": "boolean"
+            },
+            "hasPin": {
+              "type": "boolean"
+            },
+            "pinDigits": {
+              "type": "integer",
+              "minimum": 4,
+              "maximum": 6
+            }
+          },
+          "required": [
+            "person",
+            "assistant",
+            "timeZone",
+            "lockedView",
+            "night",
+            "quiet",
+            "voice",
+            "hasPin"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pairing": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[ABCDEFGHJKMNPQRTVWXY]{4}$"
+            },
+            "expiresAt": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            }
+          },
+          "required": [
+            "code",
+            "expiresAt"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lock": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "locked",
+            "unlocked",
+            "phone",
+            "backoff"
+          ]
+        },
+        "until": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "retryAt": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "camera": {
+          "type": "boolean"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "stays": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "state"
+      ]
+    },
+    "glance": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,200}$"
+                },
+                "more": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,200}$"
+                }
+              },
+              "required": [
+                "text"
+              ]
+            },
+            "needsYou": {
+              "type": "object",
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "items": {
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "approval",
+                          "question"
+                        ]
+                      },
+                      "title": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      },
+                      "at": {
+                        "type": "string",
+                        "maxLength": 40,
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                      },
+                      "where": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "detail": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,400}$"
+                      },
+                      "facts": {
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+                        }
+                      },
+                      "approveLabel": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "onDesk": {
+                        "type": "boolean"
+                      },
+                      "phoneReason": {
+                        "type": "string",
+                        "enum": [
+                          "money",
+                          "release",
+                          "delete",
+                          "keys",
+                          "outside"
+                        ]
+                      },
+                      "deny": {
+                        "type": "boolean"
+                      },
+                      "approveWithPin": {
+                        "type": "boolean"
+                      },
+                      "inTalk": {
+                        "type": "boolean"
+                      },
+                      "choices": {
+                        "minItems": 1,
+                        "maxItems": 2,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "agent"
+                              ]
+                            },
+                            "label": {
+                              "type": "string",
+                              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "label"
+                          ]
+                        }
+                      },
+                      "from": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      }
+                    },
+                    "required": [
+                      "number",
+                      "kind",
+                      "title",
+                      "at",
+                      "onDesk"
+                    ]
+                  }
+                },
+                "looks": {
+                  "minItems": 1,
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "server",
+                          "connection",
+                          "device"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "down",
+                          "bad",
+                          "look"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      },
+                      "server": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                      },
+                      "notice": {
+                        "type": "object",
+                        "properties": {
+                          "check": {
+                            "type": "string",
+                            "maxLength": 80,
+                            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+                          },
+                          "subject": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,160}$"
+                          }
+                        },
+                        "required": [
+                          "check"
+                        ]
+                      },
+                      "nature": {
+                        "type": "string",
+                        "enum": [
+                          "problem",
+                          "you",
+                          "fyi"
+                        ]
+                      },
+                      "ignoreWords": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,60}$"
+                      },
+                      "question": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,300}$"
+                      },
+                      "research": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "looking",
+                              "found",
+                              "fixing",
+                              "fixed",
+                              "failed"
+                            ]
+                          },
+                          "title": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+                          },
+                          "summary": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,240}$"
+                          },
+                          "fix": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,32}$"
+                          },
+                          "plan": {
+                            "minItems": 1,
+                            "maxItems": 6,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                            }
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "pattern": "^cnv_[A-Za-z0-9_-]{1,64}$",
+                            "description": "cnv_ id"
+                          },
+                          "threadRootId": {
+                            "type": "string",
+                            "pattern": "^msg_[A-Za-z0-9_-]{1,64}$",
+                            "description": "msg_ id"
+                          },
+                          "at": {
+                            "type": "string",
+                            "maxLength": 40,
+                            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "state",
+                          "at"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "kind",
+                      "name",
+                      "state"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "count",
+                "items"
+              ]
+            },
+            "working": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                    },
+                    "steps": {
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "done",
+                              "now",
+                              "next"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "state"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "steps"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "done": {
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                  },
+                  "at": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                  }
+                },
+                "required": [
+                  "text",
+                  "at"
+                ]
+              }
+            },
+            "servers": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                  },
+                  "mark": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad",
+                      "off"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+                  },
+                  "cpu": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "memory": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "temp": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  "disk": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "mark",
+                  "state",
+                  "note"
+                ]
+              }
+            },
+            "moreServers": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "tiles": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "icon": {
+                    "type": "string",
+                    "enum": [
+                      "temperature",
+                      "heat",
+                      "sun",
+                      "power",
+                      "lock",
+                      "light",
+                      "water",
+                      "network",
+                      "generic"
+                    ]
+                  },
+                  "mark": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "value": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,24}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,48}$"
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "icon",
+                  "value",
+                  "label"
+                ]
+              }
+            },
+            "box": {
+              "type": "object",
+              "properties": {
+                "up": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+                },
+                "cpu": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "cores": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4096
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "cores",
+                    "tone"
+                  ]
+                },
+                "memory": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "used": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        },
+                        "unit": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "unit"
+                      ]
+                    },
+                    "total": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "used",
+                    "total",
+                    "tone"
+                  ]
+                },
+                "history": {
+                  "type": "object",
+                  "properties": {
+                    "stepS": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3600
+                    },
+                    "cpu": {
+                      "maxItems": 60,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "memory": {
+                      "maxItems": 60,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "stepS",
+                    "cpu",
+                    "memory"
+                  ]
+                },
+                "storage": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "free": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        },
+                        "unit": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "unit"
+                      ]
+                    },
+                    "total": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    },
+                    "parts": {
+                      "maxItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "enum": [
+                              "whombat",
+                              "agent"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                          },
+                          "percent": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value",
+                          "percent"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "free",
+                    "total",
+                    "tone",
+                    "parts"
+                  ]
+                },
+                "temp": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -100,
+                      "maximum": 1000
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "tone"
+                  ]
+                },
+                "network": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "down": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                        },
+                        "up": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                        }
+                      },
+                      "required": [
+                        "down",
+                        "up"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "up",
+                "cpu",
+                "memory",
+                "history",
+                "storage",
+                "network"
+              ]
+            },
+            "self": {
+              "type": "object",
+              "properties": {
+                "up": {
+                  "type": "string",
+                  "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+                },
+                "cpu": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "cores": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4096
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "cores",
+                    "tone"
+                  ]
+                },
+                "memory": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "used": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        },
+                        "unit": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "unit"
+                      ]
+                    },
+                    "total": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "used",
+                    "total",
+                    "tone"
+                  ]
+                },
+                "history": {
+                  "type": "object",
+                  "properties": {
+                    "stepS": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3600
+                    },
+                    "cpu": {
+                      "maxItems": 60,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "memory": {
+                      "maxItems": 60,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "stepS",
+                    "cpu",
+                    "memory"
+                  ]
+                },
+                "storage": {
+                  "type": "object",
+                  "properties": {
+                    "percent": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "free": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        },
+                        "unit": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,8}$"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "unit"
+                      ]
+                    },
+                    "total": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    },
+                    "parts": {
+                      "maxItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "enum": [
+                              "whombat",
+                              "agent"
+                            ]
+                          },
+                          "value": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                          },
+                          "percent": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value",
+                          "percent"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "percent",
+                    "free",
+                    "total",
+                    "tone",
+                    "parts"
+                  ]
+                },
+                "temp": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -100,
+                      "maximum": 1000
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "tone"
+                  ]
+                },
+                "network": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "down": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                        },
+                        "up": {
+                          "type": "string",
+                          "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,16}$"
+                        }
+                      },
+                      "required": [
+                        "down",
+                        "up"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "up",
+                "cpu",
+                "memory",
+                "history",
+                "storage",
+                "network"
+              ]
+            },
+            "extraServers": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                  },
+                  "mark": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad",
+                      "off"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+                  },
+                  "cpu": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "memory": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "temp": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  "disk": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -100,
+                        "maximum": 1000
+                      },
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "tone"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "mark",
+                  "state",
+                  "note"
+                ]
+              }
+            },
+            "extraTiles": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "icon": {
+                    "type": "string",
+                    "enum": [
+                      "temperature",
+                      "heat",
+                      "sun",
+                      "power",
+                      "lock",
+                      "light",
+                      "water",
+                      "network",
+                      "generic"
+                    ]
+                  },
+                  "mark": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                  },
+                  "value": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,24}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,48}$"
+                  },
+                  "tone": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "warn",
+                      "bad"
+                    ]
+                  }
+                },
+                "required": [
+                  "icon",
+                  "value",
+                  "label"
+                ]
+              }
+            },
+            "found": {
+              "type": "object",
+              "properties": {
+                "scanning": {
+                  "type": "boolean"
+                },
+                "progress": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "done": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000
+                        }
+                      },
+                      "required": [
+                        "done",
+                        "total"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "items": {
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "catalogId": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,30}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,60}$"
+                      },
+                      "tagline": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "address": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      }
+                    },
+                    "required": [
+                      "catalogId",
+                      "name",
+                      "tagline",
+                      "address"
+                    ]
+                  }
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 40,
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "scanning",
+                "progress",
+                "items",
+                "count",
+                "finishedAt"
+              ]
+            },
+            "calm": {
+              "type": "object",
+              "properties": {
+                "headline": {
+                  "type": "object",
+                  "properties": {
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "busy",
+                        "warn",
+                        "bad"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+                    },
+                    "more": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,200}$"
+                    }
+                  },
+                  "required": [
+                    "tone",
+                    "text"
+                  ]
+                },
+                "clock": {
+                  "type": "string",
+                  "enum": [
+                    "big",
+                    "small"
+                  ]
+                },
+                "hero": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "ask",
+                        "look"
+                      ]
+                    },
+                    "tone": {
+                      "type": "string",
+                      "enum": [
+                        "bad",
+                        "warn"
+                      ]
+                    },
+                    "title": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                    },
+                    "detail": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,200}$"
+                    },
+                    "since": {
+                      "type": "string",
+                      "maxLength": 40,
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                    },
+                    "ask": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000000000
+                    },
+                    "look": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                    },
+                    "server": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    "research": {
+                      "type": "string",
+                      "enum": [
+                        "looking",
+                        "found",
+                        "fixing",
+                        "fixed",
+                        "failed"
+                      ]
+                    },
+                    "fix": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,32}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "tone",
+                    "title"
+                  ]
+                },
+                "also": {
+                  "maxItems": 2,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tone": {
+                        "type": "string",
+                        "enum": [
+                          "bad",
+                          "warn"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "text": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      },
+                      "ask": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000
+                      },
+                      "look": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                      },
+                      "server": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                      }
+                    },
+                    "required": [
+                      "tone",
+                      "name",
+                      "text"
+                    ]
+                  }
+                },
+                "moreNeeds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "moments": {
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "pattern": "^((server|connection|device|widget):[A-Za-z0-9][A-Za-z0-9._:-]{0,199}|work|coming|box)$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "work",
+                          "activity",
+                          "figure",
+                          "coming"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "mark": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "value": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "detail": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,80}$"
+                      },
+                      "progress": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "pinned": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "kind",
+                      "name",
+                      "value"
+                    ]
+                  }
+                },
+                "strip": {
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "mark": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "warn",
+                          "bad",
+                          "off"
+                        ]
+                      },
+                      "say": {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                      },
+                      "spark": {
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "work": {
+                        "type": "string",
+                        "enum": [
+                          "done",
+                          "now",
+                          "next"
+                        ]
+                      },
+                      "progress": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "mark",
+                      "state"
+                    ]
+                  }
+                },
+                "moreStrip": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "bar": {
+                  "type": "object",
+                  "properties": {
+                    "network": {
+                      "type": "string",
+                      "enum": [
+                        "always",
+                        "matters",
+                        "off"
+                      ]
+                    },
+                    "internet": {
+                      "type": "string",
+                      "enum": [
+                        "always",
+                        "matters",
+                        "off"
+                      ]
+                    },
+                    "battery": {
+                      "type": "string",
+                      "enum": [
+                        "always",
+                        "matters",
+                        "off"
+                      ]
+                    },
+                    "updates": {
+                      "type": "string",
+                      "enum": [
+                        "always",
+                        "matters",
+                        "off"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "network",
+                    "internet",
+                    "battery",
+                    "updates"
+                  ]
+                },
+                "doneCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "digest": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{8,64}$"
+                    },
+                    "awayS": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 31536000
+                    },
+                    "items": {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "icon": {
+                            "type": "string",
+                            "enum": [
+                              "ask",
+                              "done",
+                              "down",
+                              "up",
+                              "look"
+                            ]
+                          },
+                          "text": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                          },
+                          "at": {
+                            "type": "string",
+                            "maxLength": 40,
+                            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                          },
+                          "ask": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000000
+                          },
+                          "look": {
+                            "type": "string",
+                            "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,120}$"
+                          },
+                          "server": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                          }
+                        },
+                        "required": [
+                          "icon",
+                          "text"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "awayS",
+                    "items"
+                  ]
+                },
+                "update": {
+                  "type": "string",
+                  "enum": [
+                    "downloading",
+                    "installing",
+                    "restarting"
+                  ]
+                },
+                "sample": {
+                  "type": "object",
+                  "properties": {
+                    "scenario": {
+                      "type": "string",
+                      "enum": [
+                        "now",
+                        "wrong",
+                        "busy"
+                      ]
+                    },
+                    "until": {
+                      "type": "string",
+                      "maxLength": 40,
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                    }
+                  },
+                  "required": [
+                    "scenario",
+                    "until"
+                  ]
+                }
+              },
+              "required": [
+                "headline",
+                "clock",
+                "also",
+                "moreNeeds",
+                "moments",
+                "strip",
+                "moreStrip",
+                "bar"
+              ]
+            },
+            "grid": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "outputs": {
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]{1,40}$"
+                  },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,60}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "grid": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "grid"
+                ]
+              }
+            }
+          },
+          "required": [
+            "status",
+            "needsYou",
+            "working",
+            "done",
+            "servers",
+            "moreServers",
+            "tiles"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "power": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "ac",
+                "battery"
+              ]
+            },
+            "percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "charging": {
+              "type": "boolean"
+            },
+            "minutesLeft": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "chargeLimit": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "since": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "source",
+            "percent",
+            "charging",
+            "minutesLeft",
+            "chargeLimit",
+            "since"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "talk": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "transcribing",
+                "thinking",
+                "answered",
+                "failed",
+                "working"
+              ]
+            },
+            "question": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,500}$"
+            },
+            "answer": {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,600}$"
+            },
+            "thing": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+                    },
+                    "mark": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32,
+                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "warn",
+                        "bad",
+                        "off"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){0,40}$"
+                    },
+                    "cpu": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -100,
+                          "maximum": 1000
+                        },
+                        "tone": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "bad"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "tone"
+                      ]
+                    },
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -100,
+                          "maximum": 1000
+                        },
+                        "tone": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "bad"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "tone"
+                      ]
+                    },
+                    "temp": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -100,
+                          "maximum": 1000
+                        },
+                        "tone": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "bad"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "tone"
+                      ]
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    "disk": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -100,
+                          "maximum": 1000
+                        },
+                        "tone": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "warn",
+                            "bad"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "tone"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "mark",
+                    "state",
+                    "note"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "audio": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "not_heard",
+                "slow",
+                "voice_unavailable",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "state",
+            "thing",
+            "audio"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "presence": {
+      "type": "object",
+      "properties": {
+        "camera": {
+          "type": "boolean"
+        },
+        "watching": {
+          "type": "boolean"
+        },
+        "here": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "camera",
+        "watching",
+        "here"
+      ]
+    },
+    "remoteHelp": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "look",
+            "fix"
+          ]
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "connected": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "until",
+        "connected"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,40}$"
+    }
+  },
+  "required": [
+    "v",
+    "now",
+    "paired",
+    "pairing",
+    "lock",
+    "glance",
+    "power",
+    "talk"
+  ]
+}

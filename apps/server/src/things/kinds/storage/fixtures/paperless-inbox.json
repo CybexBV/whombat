@@ -1,0 +1,28 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 3,
+      "correspondent": null,
+      "title": "invoice-october",
+      "created": "2026-10-01",
+      "added": "2026-10-21T19:44:02.599873Z"
+    },
+    {
+      "id": 2,
+      "correspondent": null,
+      "title": "insurance-renewal",
+      "created": "2026-10-21",
+      "added": "2026-10-21T19:43:59.970877Z"
+    },
+    {
+      "id": 1,
+      "correspondent": 1,
+      "title": "Invoice October",
+      "created": "2026-10-01",
+      "added": "2026-10-21T19:43:59.501074Z"
+    }
+  ]
+}

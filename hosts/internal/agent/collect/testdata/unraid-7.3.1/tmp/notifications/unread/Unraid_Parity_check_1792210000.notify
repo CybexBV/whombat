@@ -1,0 +1,6 @@
+timestamp=1792210000
+event="Unraid Parity-Check"
+subject="Notice [BLACKBOX] - Parity-Check finished (12 errors)"
+description="Duration: 5 hours, 10 minutes \"see the log\""
+importance="alert"
+link="/Main"

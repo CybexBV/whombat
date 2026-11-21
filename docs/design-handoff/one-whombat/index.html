@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One Whombat — mockups</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="tokens.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0b0a;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;padding:40px;display:flex;flex-direction:column;gap:48px;align-items:flex-start}
+.caption{font:500 13px var(--font-mono);color:#a0958a;letter-spacing:.05em;text-transform:uppercase;margin-bottom:-36px}
+.frame{width:1440px;display:flex;background:var(--bg);color:var(--ink);overflow:hidden;border-radius:12px}
+.frame.fixed{height:900px}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.s{width:15px;height:15px}
+.mono{font-family:var(--font-mono)}
+.mut{color:var(--mut)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.new{border:1.5px dashed var(--brand);width:9px;height:9px}
+/* sidebar */
+.side{width:256px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 12px 12px}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px 16px}
+.brand img{width:30px;height:24px}
+.brand b{font:700 17px var(--font-sans);flex:1}
+.pill-s{font:500 11px var(--font-mono);border:1px solid var(--line2);border-radius:999px;padding:3px 9px;color:var(--ink2)}
+.search{display:flex;align-items:center;gap:9px;border:1px solid var(--line2);border-radius:10px;padding:9px 11px;color:var(--mut);font:400 14.5px var(--font-sans);margin-bottom:10px}
+.search span{flex:1}.search kbd{font:500 11px var(--font-mono);color:var(--mut)}
+.newbtn{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--btn);color:var(--btnfg);border-radius:10px;padding:9px;font:600 14.5px var(--font-sans);margin-bottom:12px}
+.nav a{display:flex;align-items:center;gap:11px;padding:7px 10px;border-radius:9px;color:var(--ink2);font:400 15px var(--font-sans);text-decoration:none}
+.nav a.on{background:var(--sel);color:var(--ink);font-weight:600}
+.nav a .n{margin-left:auto;font:500 11px var(--font-mono);color:var(--mut)}
+.nav a .n.badge{background:var(--bad);color:#1c1815;border-radius:999px;padding:1px 7px;font-weight:600}
+.slabel{display:flex;align-items:center;justify-content:space-between;font:500 11px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--mut);padding:16px 10px 6px}
+.slabel svg{width:14px;height:14px}
+.thing{display:flex;align-items:center;gap:10px;padding:5.5px 10px;border-radius:9px;color:var(--ink2);font:400 14.5px var(--font-sans)}
+.thing.on{background:var(--sel);color:var(--ink);font-weight:600}
+.thing .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thing .nm.host{font:400 13.5px var(--font-mono)}
+.thing.on .nm.host{font-weight:500}
+.thing svg{color:var(--mut)}
+.thing .tag{font:500 10.5px var(--font-mono);color:var(--brand)}
+.conv{padding:5px 10px;color:var(--ink2);font:400 14px var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:9px}
+.conv.on{background:var(--sel);color:var(--ink);font-weight:600}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 8px 2px;border-top:1px solid var(--line)}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 12px var(--font-sans);color:var(--avatar-ink);flex:none}
+.me b{font:600 14.5px var(--font-sans);display:block}.me small{font:400 13px var(--font-sans);color:var(--mut)}
+/* main */
+.main{flex:1;min-width:0;padding:30px 40px 40px;display:flex;flex-direction:column;gap:20px}
+.hello h1{font:700 34px var(--font-sans);letter-spacing:-.02em}
+.hello p{font:400 17px/1.5 var(--font-sans);color:var(--ink2);margin-top:6px}
+.hello p b{font-weight:600;color:var(--ink)}
+.ask{background:var(--sf);border:1px solid var(--line2);border-radius:18px;padding:16px 16px 12px 20px}
+.ask .row{display:flex;align-items:center;gap:12px}
+.ask .ph{flex:1;font:400 17px var(--font-sans);color:var(--placeholder)}
+.round{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--btn);color:var(--btnfg)}
+.round.ghost{background:transparent;color:var(--mut);border:1px solid var(--line2)}
+.chips{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.chip{font:400 13.5px var(--font-sans);color:var(--ink2);border:1px solid var(--line2);border-radius:999px;padding:5px 12px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}
+.card{background:var(--sf);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.card>header{display:flex;align-items:baseline;gap:12px;padding:16px 20px 12px}
+.card>header h2{font:700 17px var(--font-sans);letter-spacing:-.01em}
+.card>header .meta{font:400 13px var(--font-sans);color:var(--mut)}
+.card>header .lnk{margin-left:auto;font:400 13.5px var(--font-sans);color:var(--brand)}
+.lbl{font:500 11px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:10px;padding:7px 13px;font:600 14px var(--font-sans);border:1px solid var(--line2);color:var(--ink);background:transparent;white-space:nowrap}
+.btn.p{background:var(--btn);color:var(--btnfg);border-color:var(--btn)}
+.btn.sm{padding:5px 10px;font-size:13px;border-radius:9px}
+.badge{font:500 11px var(--font-mono);border-radius:999px;padding:2px 9px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.badge.warn{background:rgba(224,183,94,.14);color:var(--warn)}
+.badge.bad{background:rgba(229,154,133,.15);color:var(--bad)}
+.badge.ok{background:rgba(111,207,151,.13);color:var(--ok)}
+.badge.mut{background:var(--sf2);color:var(--ink2)}
+.badge.brand{background:rgba(210,180,154,.14);color:var(--brand)}
+/* needs you */
+.need{display:flex;gap:14px;padding:14px 20px;border-top:1px solid var(--line)}
+.need .ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
+.need .ic.bad{background:rgba(229,154,133,.14)}.need .ic.warn{background:rgba(224,183,94,.13)}.need .ic.info{background:var(--hi);color:#8db8de}
+.need h3{font:600 15.5px var(--font-sans)}
+.need p{font:400 14.5px/1.45 var(--font-sans);color:var(--ink2);margin-top:3px}
+.need .acts{display:flex;gap:8px;margin-top:10px}
+.need .when{margin-left:auto;font:400 12px var(--font-mono);color:var(--mut);white-space:nowrap}
+/* steps */
+.steps{padding:4px 20px 6px}
+.step{display:flex;gap:12px;padding:8px 0;align-items:flex-start}
+.step .st{width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.step .st.done{background:rgba(111,207,151,.16);color:var(--ok)}
+.step .st.now{border:2px solid var(--warn);box-shadow:0 0 0 4px rgba(224,183,94,.14)}
+.step .st.todo{border:1.5px solid var(--line2)}
+.step b{font:500 14.5px var(--font-sans);display:block}
+.step small{font:400 13px var(--font-sans);color:var(--mut)}
+.step.now b{color:var(--warn)}
+.prog{height:5px;border-radius:3px;background:var(--sf2);margin:0 20px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--progress);border-radius:3px}
+.cfoot{display:flex;align-items:center;gap:10px;padding:12px 20px 14px;font:400 13px var(--font-sans);color:var(--mut)}
+.cfoot .lnk{margin-left:auto;color:var(--brand)}
+/* hosts table */
+table{width:100%;border-collapse:collapse}
+th{font:500 10.5px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--mut);text-align:left;padding:8px 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+td{padding:10px 12px;border-bottom:1px solid var(--line);font:400 14px var(--font-sans);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.h{border-left:3px solid transparent;padding-left:17px}
+td.h.ok{border-left-color:var(--ok)}td.h.warn{border-left-color:var(--warn)}td.h.bad{border-left-color:var(--bad)}
+td.h b{font:500 14px var(--font-mono);display:block;color:var(--ink)}
+td.h small{font:400 12px var(--font-sans);color:var(--mut);white-space:nowrap;display:block;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+#hosts td{padding-left:10px;padding-right:10px}
+#hosts td.h{padding-left:17px}
+.num{font:500 13px var(--font-mono);white-space:nowrap}
+.state{white-space:nowrap}
+td{white-space:nowrap}
+.chart svg{display:block;width:100%}
+.compact .step{padding:5px 0}
+.compact .step b{display:inline}
+.compact .step small{margin-left:6px}
+.compact .step small::before{content:"· ";}
+.bar{height:4px;border-radius:2px;background:var(--sf2);margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px}
+.sparkc{display:flex;align-items:center;gap:8px}
+/* tiles */
+.tile{padding:4px 20px 16px}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fact .lbl{display:block;margin-bottom:3px}
+.fact b{font:600 16px var(--font-sans)}
+.fact span{font:400 13px var(--font-sans);color:var(--mut)}
+.newdev{margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--sf2);border-radius:12px;padding:10px 12px;font:400 14px var(--font-sans);color:var(--ink2)}
+.newdev .btn{margin-left:auto}
+/* done list */
+.did{display:flex;gap:12px;padding:11px 20px;border-top:1px solid var(--line);align-items:flex-start}
+.did .ck{color:var(--ok);margin-top:2px}
+.did b{font:500 14.5px var(--font-sans);display:block}
+.did small{font:400 13px var(--font-sans);color:var(--mut)}
+.did .r{margin-left:auto;display:flex;align-items:center;gap:10px;font:400 12px var(--font-mono);color:var(--mut);white-space:nowrap}
+.undo{display:inline-flex;align-items:center;gap:5px;font:500 13px var(--font-sans);color:var(--brand)}
+/* chart */
+.widget-head{display:flex;gap:28px;padding:0 20px 8px}
+.wv .lbl{display:flex;align-items:center;gap:6px}
+.wv .lbl i{width:10px;height:3px;border-radius:2px;display:inline-block}
+.wv b{font:600 22px var(--font-sans);letter-spacing:-.01em}
+.wv b small{font:400 14px var(--font-sans);color:var(--mut)}
+.chart{padding:4px 12px 10px 8px}
+.chart text{font:400 11px var(--font-mono);fill:var(--mut)}
+.pinned{display:flex;align-items:center;gap:8px;padding:10px 20px 14px;border-top:1px solid var(--line);font:400 13px var(--font-sans);color:var(--mut)}
+/* server page */
+.crumb{display:flex;align-items:center;gap:6px;font:400 14px var(--font-sans);color:var(--mut)}
+.shead{display:flex;align-items:center;gap:14px}
+.shead h1{font:500 30px var(--font-mono);letter-spacing:-.02em}
+.shead .r{margin-left:auto;display:flex;gap:8px}
+.sfacts{display:flex;gap:22px;font:400 14px var(--font-sans);color:var(--mut);margin-top:-8px}
+.sfacts b{color:var(--ink);font-weight:500}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 -40px;padding:0 40px}
+.tabs a{padding:10px 12px 12px;font:400 15px var(--font-sans);color:var(--ink2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a.on{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:0}
+.kpi{padding:14px 18px;border-right:1px solid var(--line)}
+.kpi:last-child{border-right:0}
+.kpi b{font:600 18px var(--font-sans);display:block;margin-top:4px}
+.kpi b small{font:400 13px var(--font-sans);color:var(--mut)}
+.kpi span{font:400 12.5px var(--font-sans);color:var(--mut)}
+.kpi.warn b{color:var(--warn)}
+.gtag{font:400 11.5px var(--font-mono);color:var(--ink2);background:var(--sf2);border-radius:5px;padding:1px 6px;margin-right:4px}
+.kind{font:400 12px var(--font-mono);color:var(--mut)}
+.state{display:inline-flex;align-items:center;gap:6px;font:400 13.5px var(--font-sans)}
+/* pane */
+.pane{width:400px;flex:none;border-left:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column}
+.pane>header{padding:20px 22px 14px;border-bottom:1px solid var(--line)}
+.pane>header h2{font:700 19px var(--font-sans)}
+.pane>header p{font:400 13.5px var(--font-sans);color:var(--mut);margin-top:2px}
+.pane .msgs{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden}
+.msg{display:flex;gap:12px}
+.msg .wa{width:34px;height:34px;border-radius:50%;background:var(--sf2);display:flex;align-items:center;justify-content:center;flex:none}
+.msg .wa img{width:24px;height:19px}
+.msg .face{width:34px;height:34px;flex:none;border-radius:50%;background:color-mix(in srgb,var(--role-operator) 14%,transparent);display:flex;align-items:flex-end;justify-content:center}
+.msg .face img{width:30px;height:30px;display:block}
+.msg .who{font:600 15px var(--font-sans)}
+.msg .who time{font:400 12px var(--font-mono);color:var(--mut);margin-left:8px;font-weight:400}
+.msg .tx{font:400 15.5px/1.55 var(--font-sans);color:var(--ink2);margin-top:2px}
+.msg .tx b{color:var(--ink);font-weight:600}
+.inner{background:var(--sf);border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden}
+.inner .ih{display:flex;align-items:center;gap:8px;padding:11px 14px 6px;font:600 14px var(--font-sans)}
+.inner .ib{padding:0 14px 12px;font:400 14px/1.5 var(--font-sans);color:var(--ink2)}
+.inner .ia{display:flex;gap:8px;padding:0 14px 14px}
+.wh{list-style:none;padding:0 14px 12px}
+.wh li{display:flex;gap:8px;font:400 13.5px/1.45 var(--font-sans);color:var(--ink2);padding:2px 0}
+.wh li::before{content:"·";color:var(--mut)}
+.composer{margin:0 18px 18px;border:1px solid var(--line2);border-radius:14px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:10px;background:var(--sf)}
+.composer>span:first-child{flex:1;font:400 15px var(--font-sans);color:var(--placeholder)}
+.composer .round{width:32px;height:32px}
+/* conversation */
+.chead{display:flex;align-items:center;gap:14px;padding:18px 40px 14px;border-bottom:1px solid var(--line)}
+.chead h1{font:700 21px var(--font-sans);letter-spacing:-.01em}
+.chead p{font:400 13.5px var(--font-sans);color:var(--mut);margin-top:2px}
+.chead .r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.cbody{flex:1;overflow:hidden;padding:18px 40px 0;display:flex;flex-direction:column;justify-content:flex-end}
+.cbody .col{max-width:880px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.reads{display:flex;flex-wrap:wrap;gap:8px;padding:2px 16px 14px}
+.read{background:var(--sf2);border-radius:10px;padding:7px 11px;font:400 13px var(--font-sans);color:var(--mut)}
+.read b{display:block;font:600 15px var(--font-sans);color:var(--ink)}
+.allow{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--line)}
+.allow b{font:500 14.5px var(--font-sans);display:block}
+.allow small{font:400 13px var(--font-sans);color:var(--mut)}
+.seg{margin-left:auto;display:flex;background:var(--sf2);border-radius:11px;padding:3px;gap:2px}
+.seg span{font:500 13px var(--font-sans);padding:5px 11px;border-radius:9px;color:var(--mut)}
+.seg span.on{background:var(--sf);color:var(--ink);box-shadow:var(--shadow-segment-lift)}
+.skillcard{background:var(--sf);border:1px solid var(--line2);border-radius:16px;margin-top:12px;overflow:hidden;max-width:700px}
+.skillcard .top{display:flex;gap:14px;align-items:center;padding:14px 16px 10px}
+.skillcard .top .sk{width:42px;height:42px;border-radius:12px;background:rgba(210,180,154,.14);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.skillcard .top h3{font:700 17px var(--font-sans)}
+.skillcard .top p{font:400 13.5px var(--font-sans);color:var(--mut);margin-top:2px}
+.sublbl{padding:12px 16px 8px}
+.foot{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid var(--line);background:rgba(255,255,255,.015)}
+.foot p{flex:1;font:400 13px/1.4 var(--font-sans);color:var(--mut)}
+.inv{max-width:700px;margin-top:10px}
+.inv .step{padding:7px 0}
+/* phone */
+.phones{width:1440px;display:flex;gap:56px;justify-content:center;padding:48px 0;background:#15120f;border-radius:12px}
+.phone{width:390px;height:844px;border-radius:46px;background:var(--bg);color:var(--ink);overflow:hidden;position:relative;outline:10px solid #2a2520;display:flex;flex-direction:column}
+.sbar{display:flex;justify-content:space-between;padding:16px 30px 6px;font:600 15px var(--font-sans)}
+.pbody{flex:1;padding:8px 18px 0;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.pbody h1{font:700 30px var(--font-sans);letter-spacing:-.02em}
+.pbody .sub{font:400 15px/1.45 var(--font-sans);color:var(--ink2);margin-top:-8px}
+.pcard{background:var(--sf);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.pcard .pc-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 4px}
+.prow{display:flex;gap:12px;padding:11px 14px;border-top:1px solid var(--line);align-items:center;min-height:52px}
+.prow b{font:600 15px var(--font-sans);display:block}
+.prow small{font:400 13px var(--font-sans);color:var(--mut)}
+.prow .chev{margin-left:auto;color:var(--mut)}
+.pask{margin:0 14px 10px;border:1px solid var(--line2);border-radius:16px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:10px;background:var(--sf)}
+.pask>span:first-child{flex:1;font:400 15.5px var(--font-sans);color:var(--placeholder)}
+.tabbar{display:flex;justify-content:space-around;padding:8px 6px 26px;border-top:1px solid var(--line);background:var(--side)}
+.tabbar a{display:flex;flex-direction:column;align-items:center;gap:4px;font:500 11px var(--font-sans);color:var(--mut);width:64px}
+.tabbar a.on{color:var(--ink)}
+.tabbar svg.i{width:22px;height:22px}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sf);border-radius:26px 26px 0 0;padding:10px 20px 34px;box-shadow:0 -20px 50px rgba(0,0,0,.5)}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line2);margin:0 auto 16px}
+.sheet h2{font:700 22px/1.2 var(--font-sans);letter-spacing:-.01em}
+.sheet p{font:400 15.5px/1.5 var(--font-sans);color:var(--ink2);margin-top:8px}
+.sheet .big{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.sheet .big .btn{justify-content:center;height:52px;font-size:16px;border-radius:12px}
+.notif{margin:6px 12px 0;background:rgba(46,41,37,.92);border-radius:22px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start}
+.notif .appi{width:38px;height:38px;border-radius:10px;background:#2b221d;display:flex;align-items:center;justify-content:center;flex:none}
+.notif .appi img{width:26px;height:21px}
+.notif b{font:600 14.5px var(--font-sans)}
+.notif p{font:400 14px/1.4 var(--font-sans);color:var(--ink2)}
+.notif time{margin-left:auto;font:400 12px var(--font-sans);color:var(--mut)}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+/* settings → profile → your assistant */
+.set{flex:1;min-width:0;padding:36px 36px 48px;display:flex;flex-direction:column;gap:26px}
+.set>*{width:968px}
+.set h1{font:700 36px var(--font-sans);letter-spacing:-.02em}
+.set .subt{font:400 16px/1.5 var(--font-sans);color:var(--ink2);margin-top:8px}
+.stabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-top:-6px}
+.stabs a{padding:12px 0;margin-bottom:-1px;font:500 15px var(--font-sans);color:var(--mut);border-bottom:2px solid transparent}
+.stabs a.on{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.ssec{display:flex;flex-direction:column;gap:10px}
+.scard{border:1px solid var(--line);border-radius:var(--radius-card);background:var(--sf);overflow:hidden}
+.srow{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow .rm{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.srow .rt{font:600 15px var(--font-sans)}
+.srow .rx{font:400 13.5px var(--font-sans);color:var(--mut)}
+.flabel{font:500 12px var(--font-mono);color:var(--mut)}
+.inp{display:flex;align-items:center;height:48px;border:1px solid var(--line2);border-radius:10px;padding:0 16px;font:400 16px var(--font-sans);background:var(--bg);color:var(--ink)}
+.btn.lg{padding:9px 16px;font-size:14.5px;border-radius:10px}
+.fpr{font:500 14px var(--font-mono);color:var(--ink2);letter-spacing:.02em}
+.tog{width:40px;height:24px;border-radius:999px;background:var(--ok);position:relative;flex:none}
+.tog::after{content:"";position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:var(--knob)}
+.arow{align-items:flex-start;gap:20px;padding:18px 18px 16px}
+.arow .bust{width:96px;height:96px;flex:none;display:block;border-radius:18px;background:color-mix(in srgb,var(--role-operator) 14%,transparent)}
+.namef{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.nameline{display:flex;gap:10px;align-items:center}
+.hint{font:400 13.5px/1.45 var(--font-sans);color:var(--mut);margin-top:2px}
+.facerow{flex-direction:column;align-items:stretch;gap:12px;padding:16px 18px 18px}
+.faces{display:flex;gap:12px}
+.fc{width:76px;height:76px;border-radius:16px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;position:relative}
+.fc img{width:64px;height:64px;display:block}
+.fc.on{border:2px solid var(--ink);background:color-mix(in srgb,var(--role-operator) 14%,transparent)}
+.fc.on::after{content:"";position:absolute;right:-7px;top:-7px;width:20px;height:20px;border-radius:50%;background:var(--ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c1815' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center/12px no-repeat}
+</style>
+</head>
+<body>
+
+<div class="caption">1 · Home</div>
+<div class="frame" id="home" data-theme="dark">
+  <aside class="side" data-active="home"></aside>
+  <main class="main">
+    <div class="hello">
+      <h1>Good afternoon, John</h1>
+      <p>Everything is running. <b>3 things need you</b>, and I’m adding your heat pump.</p>
+    </div>
+
+    <div class="ask">
+      <div class="row">
+        <span class="ph">Ask Dusty to check, change or set up anything…</span>
+        <span class="round ghost"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+        <span class="round"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>
+      </div>
+      <div class="chips">
+        <span class="chip">Why is pve-02 running hot?</span>
+        <span class="chip">Show today’s mail from customers</span>
+        <span class="chip">Turn the heating down at night</span>
+        <span class="chip">Add a server</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card" style="grid-column:span 7">
+        <header><h2>Needs you</h2><span class="meta">3</span></header>
+        <div class="need">
+          <div class="ic bad"><svg class="i bad" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg></div>
+          <div style="flex:1">
+            <h3>The disk array on blackbox has failed</h3>
+            <p>Both parity drives dropped out 3 days ago. Your files are still there, but nothing protects them now.</p>
+            <div class="acts"><span class="btn p sm">Look into it</span><span class="btn sm">Remind me tomorrow</span></div>
+          </div>
+          <span class="when">3 d ago</span>
+        </div>
+        <div class="need">
+          <div class="ic warn"><svg class="i warn" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></div>
+          <div style="flex:1">
+            <h3>Restart arnica-prod-nest-01 on pve-02?</h3>
+            <p>It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds.</p>
+            <div class="acts"><span class="btn p sm">Restart now</span><span class="btn sm">Tonight at 03:00</span><span class="btn sm">Not now</span></div>
+          </div>
+          <span class="when">10:12</span>
+        </div>
+        <div class="need">
+          <div class="ic info"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/></svg></div>
+          <div style="flex:1">
+            <h3>What may I change on the heat pump?</h3>
+            <p>I can read it now. Pick what I’m allowed to change before I switch that on.</p>
+            <div class="acts"><span class="btn p sm">Choose</span></div>
+          </div>
+          <span class="when">13:41</span>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column:span 5;display:flex;flex-direction:column">
+        <header><h2>Working on</h2><span class="meta">1 task</span></header>
+        <div style="padding:0 20px 10px;font:600 15.5px var(--font-sans)">Adding your Daikin heat pump</div>
+        <div class="prog"><i style="width:60%"></i></div>
+        <div class="steps">
+          <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Found it on your network</b><small>A Modbus gateway at 10.100.0.42</small></div></div>
+          <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Checked what already exists</b><small>Home Assistant has nothing for this model</small></div></div>
+          <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Wrote a skill that only reads</b><small>9 readings, all match the unit’s display</small></div></div>
+          <div class="step now"><span class="st now"></span><div><b>Waiting for you</b><small>What I may change, and within which limits</small></div></div>
+          <div class="step"><span class="st todo"></span><div><b style="color:var(--mut);font-weight:400">Add it to the night-time heating</b></div></div>
+        </div>
+        <div class="cfoot">Started 13:20<span class="lnk">Open conversation</span></div>
+        <div style="margin-top:auto;border-top:1px solid var(--line);padding:12px 20px 14px">
+          <div class="lbl" style="margin-bottom:8px">Automations today</div>
+          <div style="display:flex;gap:10px;align-items:center;font:400 14px var(--font-sans);color:var(--ink2);padding:3px 0"><span class="dot ok"></span>Customer mail summary<span class="mono mut" style="margin-left:auto;font-size:12px">ran 08:00</span></div>
+          <div style="display:flex;gap:10px;align-items:center;font:400 14px var(--font-sans);color:var(--ink2);padding:3px 0"><span class="dot" style="border:1.5px solid var(--line2)"></span>Night-time heating<span class="mono mut" style="margin-left:auto;font-size:12px">runs 22:00</span></div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column:span 7">
+        <header><h2>Servers</h2><span class="meta">5 online · 66 of 133 guests running</span><span class="lnk">All servers</span></header>
+        <table>
+          <thead><tr><th style="padding-left:20px">Server</th><th>CPU · 24 h</th><th>Memory</th><th>Hottest</th><th>Guests</th></tr></thead>
+          <tbody id="hosts"></tbody>
+        </table>
+      </section>
+
+      <div style="grid-column:span 5;display:flex;flex-direction:column;gap:20px">
+        <section class="card">
+          <header><h2>Home</h2><span class="meta">Home Assistant · 127 devices</span><span class="lnk">Open</span></header>
+          <div class="tile">
+            <div class="facts">
+              <div class="fact"><span class="lbl">Living room</span><b>21.0 °C</b> <span>heating</span></div>
+              <div class="fact"><span class="lbl">Alarm</span><b>Armed</b> <span>at home</span></div>
+              <div class="fact"><span class="lbl">Front door</span><b>Locked</b></div>
+              <div class="fact"><span class="lbl">Lights</span><b>4 on</b> <span>kitchen, hall</span></div>
+            </div>
+          </div>
+        </section>
+        <section class="card">
+          <header><h2>Network</h2><span class="meta">UniFi · 38 devices</span><span class="lnk">Open</span></header>
+          <div class="tile">
+            <div class="facts">
+              <div class="fact"><span class="lbl">Internet</span><b>940 / 38</b> <span>Mbit/s</span></div>
+              <div class="fact"><span class="lbl">Access points</span><b>4 of 4</b> <span>online</span></div>
+            </div>
+            <div class="newdev"><span class="dot new"></span>A new device joined: <span class="mono" style="font-size:13px">esp32-a4c1</span><span class="btn sm">Name it</span></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" style="grid-column:span 7">
+        <header><h2>Heat pump · today</h2><span class="meta">Daikin Altherma</span><span class="lnk">Open</span></header>
+        <div class="widget-head">
+          <div class="wv"><span class="lbl"><i style="background:var(--chart1)"></i>Room</span><b>21.0 <small>°C</small></b></div>
+          <div class="wv"><span class="lbl"><i style="background:var(--chart2)"></i>Water to radiators</span><b>34 <small>°C</small></b></div>
+          <div class="wv"><span class="lbl"><i style="background:var(--chart3)"></i>Outside</span><b>9 <small>°C</small></b></div>
+          <div class="wv"><span class="lbl">Using</span><b>1.2 <small>kW</small></b></div>
+        </div>
+        <div class="chart" id="hpchart"></div>
+        <div class="pinned"><svg class="i s" viewBox="0 0 24 24"><path d="M12 17v5M5 17h14l-2-4V5h1V3H6v2h1v8z"/></svg>You pinned this from a conversation. It updates every minute without asking the AI.</div>
+      </section>
+
+      <section class="card" style="grid-column:span 5">
+        <header><h2>Done recently</h2><span class="lnk">Everything I did</span></header>
+        <div class="did"><span class="ck"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Gave nextcloud more memory</b><small>2 → 4 GB, on pve-02</small></div><span class="r">10:12 <span class="undo"><svg class="i s" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo</span></span></div>
+        <div class="did"><span class="ck"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Installed security updates on pve-01</b><small>No restart needed</small></div><span class="r">03:00</span></div>
+        <div class="did"><span class="ck"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Wrote replies to 3 customer emails</b><small>Saved as drafts in your mailbox</small></div><span class="r">Fri <span class="undo">Review</span></span></div>
+        <div class="did"><span class="ck"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Moved pve-02’s backups to 02:00</b><small>They overlapped with the nightly sync</small></div><span class="r">Fri <span class="undo"><svg class="i s" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo</span></span></div>
+        <div class="did"><span class="ck"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Stopped old-wp-staging on pve-01</b><small>Nobody had opened it in 60 days</small></div><span class="r">Thu <span class="undo"><svg class="i s" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo</span></span></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="caption">2 · A server, with Dusty beside it</div>
+<div class="frame fixed" id="server" data-theme="dark">
+  <aside class="side" data-active="pve-02"></aside>
+  <main class="main" style="gap:18px">
+    <div class="crumb"><svg class="i s" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>Servers</div>
+    <div class="shead">
+      <h1>pve-02</h1>
+      <span class="badge warn"><span class="dot warn"></span>Running hot</span>
+      <div class="r">
+        <span class="btn"><svg class="i s" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5M12 19h8"/></svg>Shell</span>
+        <span class="btn"><svg class="i s" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>Power</span>
+      </div>
+    </div>
+    <div class="sfacts"><span>Proxmox VE <b>9.2.11</b></span><span>Ryzen AI MAX+ PRO · <b>32 threads</b></span><span>Up <b>23 days</b></span></div>
+    <div class="tabs"><a class="on">Summary</a><a>Guests</a><a>Storage</a><a>Sensors</a><a>Backups</a><a>System</a></div>
+    <section class="card">
+      <div class="kpis">
+        <div class="kpi"><span class="lbl">CPU</span><b>10 %</b><span>32 threads</span></div>
+        <div class="kpi"><span class="lbl">Memory</span><b>76 <small>/ 118 GB</small></b><span>64 % used</span></div>
+        <div class="kpi warn"><span class="lbl">Hottest</span><b>75 °C</b><span>warm for 17 h</span></div>
+        <div class="kpi"><span class="lbl">Storage</span><b>871 GB <small>/ 2 TB</small></b><span>overbooked</span></div>
+        <div class="kpi"><span class="lbl">Guests</span><b>19 <small>running</small></b><span>6 VMs · 13 CTs</span></div>
+      </div>
+    </section>
+    <section class="card">
+      <header><h2>CPU temperature</h2><span class="meta">last 24 h · dashed line: warm from 72 °C</span></header>
+      <div class="chart" id="tempchart" style="padding-bottom:6px"></div>
+    </section>
+    <section class="card">
+      <header><h2>Busiest guests</h2><span class="lnk">All 23 guests</span></header>
+      <table>
+        <thead><tr><th style="padding-left:20px">Guest</th><th>State</th><th>CPU</th><th>Memory</th><th></th></tr></thead>
+        <tbody>
+          <tr><td style="padding-left:20px"><span class="mono" style="font-size:14px">cli-proxy-api</span> <span class="kind">CT 140</span></td><td><span class="state"><span class="dot ok"></span>Running</span></td><td class="num">13.6 %</td><td class="num">3.1 / 4 GB</td><td><span class="gtag">api</span></td></tr>
+          <tr><td style="padding-left:20px"><span class="mono" style="font-size:14px">arnica-prod-nest-01</span> <span class="kind">VM 118</span></td><td><span class="state"><span class="dot ok"></span>Running</span></td><td class="num">9.2 %</td><td class="num">3.8 / 4 GB</td><td><span class="badge warn">restart to apply 1 change</span></td></tr>
+          <tr><td style="padding-left:20px"><span class="mono" style="font-size:14px">AgentDVR</span> <span class="kind">CT 141</span></td><td><span class="state"><span class="dot ok"></span>Running</span></td><td class="num">8.7 %</td><td class="num">1.2 / 2 GB</td><td><span class="gtag">cameras</span></td></tr>
+          <tr><td style="padding-left:20px"><span class="mono" style="font-size:14px">homeassistant</span> <span class="kind">CT 131</span></td><td><span class="state"><span class="dot ok"></span>Running</span></td><td class="num">2.4 %</td><td class="num">1.9 / 4 GB</td><td><span class="gtag">home</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+  <aside class="pane">
+    <header><h2>Ask about pve-02</h2><p>Dusty sees this server’s sensors, guests and history</p></header>
+    <div class="msgs">
+      <div class="msg"><span class="av" style="background:var(--tone-4)">JP</span><div><div class="who">John<time>14:02</time></div><div class="tx">Why is pve-02 so warm?</div></div></div>
+      <div class="msg"><span class="face"><img src="avatars/operator-head.svg" alt="Dusty"></span><div style="flex:1;min-width:0"><div class="who">Dusty<time>14:02</time></div>
+        <div class="tx">The CPU has been above 72 °C since last night. Most of the load comes from <b>cli-proxy-api</b> and <b>arnica-prod-nest-01</b>. pve-01 has almost nothing running, so I can move one over.</div>
+        <div class="inner">
+          <div class="ih"><svg class="i s" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Move cli-proxy-api to pve-01</div>
+          <ul class="wh"><li>Live move, no downtime, about a minute</li><li>pve-01 then uses 4 of its 20 threads</li><li>Its backups move with it</li></ul>
+          <div class="ia"><span class="btn p sm">Move it</span><span class="btn sm">Not now</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="composer"><span>Ask about pve-02…</span><span class="round"><svg class="i s" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span></div>
+  </aside>
+</div>
+
+<div class="caption">3 · Something unsupported: Dusty builds the skill</div>
+<div class="frame fixed" id="convo" data-theme="dark">
+  <aside class="side" data-active="conv-heat"></aside>
+  <main style="flex:1;display:flex;flex-direction:column;min-width:0">
+    <div class="chead">
+      <div><h1>Add our heat pump</h1><p>Started 13:20 · uses your network and Home Assistant</p></div>
+      <div class="r"><span class="badge brand"><span class="dot new"></span>Learning a new device</span></div>
+    </div>
+    <div class="cbody"><div class="col">
+      <div class="msg"><span class="av" style="background:var(--tone-4)">JP</span><div><div class="who">John<time>13:20</time></div><div class="tx">We have a Daikin Altherma heat pump in the utility room. Can you add it, so I can see it and control it?</div></div></div>
+      <div class="msg"><span class="face"><img src="avatars/operator-head.svg" alt="Dusty"></span><div style="flex:1;min-width:0"><div class="who">Dusty<time>13:41</time></div>
+        <div class="tx">It works. I checked what already exists first, then wrote a skill that only reads. Before I change anything, choose what I’m allowed to do.</div>
+        <div class="inner inv">
+          <div class="steps compact" style="padding:8px 16px 6px">
+            <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Found its Modbus gateway on your network</b><small>10.100.0.42, in the utility room’s network segment</small></div></div>
+            <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Home Assistant has no integration for this model</b><small>No ready-made tool either, so I’ll write one</small></div></div>
+            <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Found the list of readings in the installer manual</b><small>Page 41 of the PDF on Daikin’s site</small></div></div>
+            <div class="step"><span class="st done"><svg class="i s" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span><div><b>Read 9 values from your unit</b><small>They match what its display shows</small></div></div>
+          </div>
+        </div>
+        <div class="skillcard">
+          <div class="top"><span class="sk"><svg class="i" viewBox="0 0 24 24"><path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0z"/></svg></span><div><h3>Daikin Altherma heat pump</h3><p>New skill · reads only, until you allow more</p></div><span class="badge ok" style="margin-left:auto">Tested on your unit</span></div>
+          <div class="reads">
+            <div class="read">Room<b>21.0 °C</b></div><div class="read">Water to radiators<b>34 °C</b></div><div class="read">Hot water<b>48 °C</b></div><div class="read">Outside<b>9 °C</b></div><div class="read">Using<b>1.2 kW</b></div><div class="read">Mode<b>Heating</b></div><div class="read" style="display:flex;align-items:center">+ 3 more</div>
+          </div>
+          <div class="sublbl lbl">What I may change</div>
+          <div class="allow"><div><b>Room temperature</b><small>Only between 16 and 24 °C</small></div><div class="seg"><span>Off</span><span>Ask me</span><span class="on">Allowed</span></div></div>
+          <div class="allow"><div><b>Hot water boost</b><small>On or off</small></div><div class="seg"><span>Off</span><span class="on">Ask me</span><span>Allowed</span></div></div>
+          <div class="allow"><div><b>Heating curve</b><small>The installer’s setting, change with care</small></div><div class="seg"><span class="on">Off</span><span>Ask me</span><span>Allowed</span></div></div>
+          <div class="foot"><p>Everything else stays off. I tested this from my own computer and wrote nothing to the unit.</p><span class="btn sm">Show the skill</span><span class="btn p sm">Switch on</span></div>
+        </div>
+      </div></div>
+    </div></div>
+    <div class="composer" style="max-width:880px;width:calc(100% - 80px);margin:10px auto 16px"><span>Reply to Dusty…</span><span class="round"><svg class="i s" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span></div>
+  </main>
+</div>
+
+<div class="caption">4 · On the phone</div>
+<div class="phones" id="phones">
+  <div class="phone" data-theme="dark">
+    <div class="sbar"><span>14:05</span><span>●●● 5G</span></div>
+    <div class="pbody">
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px"><img src="whombat-symbol-paper.svg" alt="" style="width:30px;height:24px"><span style="font:700 16px var(--font-sans)">Cybex</span><span class="av" style="background:var(--tone-4);width:30px;height:30px;margin-left:auto;font-size:11px">JP</span></div>
+      <h1>Good afternoon</h1>
+      <p class="sub">Everything is running. 3 things need you.</p>
+      <div class="pcard">
+        <div class="pc-h"><span class="lbl">Needs you</span><span class="badge bad">3</span></div>
+        <div class="prow"><span class="dot bad"></span><div><b>blackbox’s disk array failed</b><small>Your files have no protection now</small></div><svg class="i chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="prow"><span class="dot warn"></span><div><b>Restart arnica-prod-nest-01?</b><small>For its extra memory · 40 s down</small></div><svg class="i chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="prow"><span class="dot new"></span><div><b>Heat pump: what may I change?</b><small>It reads fine already</small></div><svg class="i chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+      <div class="pcard">
+        <div class="pc-h"><span class="lbl">Your things</span></div>
+        <div class="prow"><svg class="i" viewBox="0 0 24 24" style="color:var(--mut)"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg><div><b>Servers</b><small>5 online · 66 guests running</small></div><span class="dot warn chev" style="margin-left:auto"></span></div>
+        <div class="prow"><svg class="i" viewBox="0 0 24 24" style="color:var(--mut)"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><circle cx="12" cy="14" r="2"/></svg><div><b>Home</b><small>21.0 °C · alarm armed · door locked</small></div><span class="dot ok" style="margin-left:auto"></span></div>
+        <div class="prow"><svg class="i" viewBox="0 0 24 24" style="color:var(--mut)"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><path d="M12 19h.01"/></svg><div><b>Network</b><small>38 devices · 1 new</small></div><span class="dot ok" style="margin-left:auto"></span></div>
+      </div>
+    </div>
+    <div class="pask"><span>Ask Dusty…</span><span class="round ghost" style="width:34px;height:34px"><svg class="i s" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span></div>
+    <nav class="tabbar">
+      <a class="on"><svg class="i" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+      <a><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/></svg>Things</a>
+      <a><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg>Chats</a>
+      <a><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Watch</a>
+    </nav>
+  </div>
+
+  <div class="phone" data-theme="dark">
+    <div class="sbar"><span>14:05</span><span>●●● 5G</span></div>
+    <div class="pbody" style="opacity:.55">
+      <p class="sub" style="margin-top:150px">Everything is running. 3 things need you.</p>
+      <div class="pcard"><div class="pc-h"><span class="lbl">Needs you</span></div><div class="prow"><div><b>blackbox’s disk array failed</b><small>Your files have no protection now</small></div></div><div class="prow"><div><b>Restart arnica-prod-nest-01?</b></div></div></div>
+    </div>
+    <div class="dim"></div>
+    <div class="notif" style="position:absolute;top:48px;left:0;right:0">
+      <span class="appi"><img src="whombat-symbol-paper.svg" alt=""></span>
+      <div style="flex:1"><div style="display:flex"><b>Whombat</b><time>now</time></div><p>pve-02 is cool again: 61 °C since the move.</p></div>
+    </div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <span class="badge warn">Needs you · pve-02</span>
+      <h2 style="margin-top:12px">Restart arnica-prod-nest-01?</h2>
+      <p>It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds.</p>
+      <div class="big"><span class="btn p">Restart now</span><span class="btn">Tonight at 03:00</span><span class="btn" style="border:0;color:var(--mut)">Not now</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="caption">5 · Settings → Profile → Your assistant</div>
+<div class="frame" id="assistant" data-theme="dark">
+  <aside class="side" data-active="settings"></aside>
+  <main class="set">
+    <div><h1>Settings</h1><p class="subt">Your profile, Dusty’s AI and skills, who’s in Cybex and this Whombat.</p></div>
+    <nav class="stabs"><a class="on">Profile</a><a>Notifications</a><a>Members</a><a>AI</a><a>Skills</a><a>Connections</a><a>This Whombat</a></nav>
+    <section class="ssec">
+      <span class="lbl">Profile</span>
+      <div class="scard">
+        <div class="srow" style="align-items:flex-end">
+          <span class="av" style="background:var(--tone-4);margin-bottom:8px">JP</span>
+          <div style="flex:1;display:flex;gap:12px">
+            <div class="namef"><span class="flabel">NAME</span><span class="inp">John Pals</span></div>
+            <div class="namef"><span class="flabel">TITLE</span><span class="inp">Founder</span></div>
+          </div>
+          <span class="btn lg" style="color:var(--mut)">Save</span>
+        </div>
+        <div class="srow"><div class="rm"><span class="rt">Photo</span><span class="rx">Shown with your name in every burrow. Any picture works: it’s cropped to a square.</span></div><span class="btn lg">Change photo</span></div>
+        <div class="srow"><div class="rm"><span class="rt">Signing key</span><span class="rx">Everything you do in Cybex is signed with this key.</span></div><span class="fpr">3e47 96d7</span></div>
+      </div>
+    </section>
+    <section class="ssec">
+      <span class="lbl">Your assistant</span>
+      <div class="scard">
+        <div class="srow arow">
+          <img class="bust" src="avatars/operator-bust.svg" alt="Dusty’s face">
+          <div class="namef">
+            <span class="flabel">NAME</span>
+            <div class="nameline"><span class="inp" style="flex:1">Dusty</span><span class="btn lg">Suggest a name</span><span class="btn lg" style="color:var(--mut)">Save</span></div>
+            <p class="hint">One word with a capital first letter. Dusty answers you in every chat and looks after your servers and connections.</p>
+          </div>
+        </div>
+        <div class="srow facerow">
+          <div class="rm"><span class="rt">Face</span><span class="rx">What Dusty looks like in chats, lists and on your phone. A new name keeps it.</span></div>
+          <div class="faces">
+            <span class="fc" title="Pippa’s face"><img src="avatars/associate-bust.svg" alt="Pippa’s face"></span>
+            <span class="fc" title="Banjo’s face"><img src="avatars/developer-bust.svg" alt="Banjo’s face"></span>
+            <span class="fc on" title="Dusty’s face"><img src="avatars/operator-bust.svg" alt="Dusty’s face"></span>
+            <span class="fc" title="Ace’s face"><img src="avatars/lead-bust.svg" alt="Ace’s face"></span>
+            <span class="fc" title="Hazel’s face"><img src="avatars/assistant-bust.svg" alt="Hazel’s face"></span>
+          </div>
+        </div>
+        <div class="srow"><div class="rm"><span class="rt">Suggestions from Dusty</span><span class="rx">Now and then Dusty offers to set something up for you.</span></div><span class="tog"></span></div>
+        <div class="srow"><div class="rm"><span class="rt">AI and keys</span><span class="rx">Which AI model Dusty uses, and what Dusty may do without asking.</span></div><span class="btn lg">More settings</span></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const I = {
+  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  watch:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  bolt:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  skill:'<path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.8-.7z"/>',
+  vault:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  server:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  ha:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><circle cx="12" cy="14" r="2"/>',
+  thermo:'<path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+  wifi:'<path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><path d="M12 19h.01"/>',
+  cloud:'<path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+};
+const ic = (n, cls='i') => `<svg class="${cls}" viewBox="0 0 24 24">${I[n]}</svg>`;
+function sidebar(active){
+  const nav = [['home','Home','home',''],['watch','Watch','watch','<span class="n badge">3</span>'],['automations','Automations','bolt','<span class="n">6</span>'],['skills','Skills','skill','<span class="n">14</span>'],['vault','Vault','vault','']];
+  const things = [
+    ['server','thetitan','ok',true],['server','pve-01','ok',true],['server','pve-02','warn',true],['server','blackbox','bad',true],['server','the-falcon','ok',true],
+    ['ha','Home Assistant','ok'],['thermo','Heat pump','new'],['wifi','UniFi','ok'],['cloud','Hetzner','ok'],['mail','Mail','ok']];
+  const convs = [['conv-heat','Add our heat pump'],['conv-pve','Why is pve-02 so warm?'],['conv-mail','Customer mail every morning']];
+  return `
+  <div class="brand"><img src="whombat-symbol-paper.svg" alt=""><b>Cybex</b><span class="pill-s">Light</span></div>
+  <div class="search">${ic('search','i s')}<span>Search or jump to…</span><kbd>⌘K</kbd></div>
+  <div class="newbtn">${ic('plus','i s')}Ask Dusty</div>
+  <nav class="nav">${nav.map(([id,l,i,x])=>`<a class="${id===active?'on':''}">${ic(i)}${l}${x}</a>`).join('')}</nav>
+  <div class="slabel">Your things ${ic('plus','i')}</div>
+  ${things.map(([i,n,s,host])=>`<div class="thing ${n===active?'on':''}">${ic(i,'i s')}<span class="nm ${host?'host':''}">${n}</span>${s==='new'?'<span class="tag">learning</span>':''}<span class="dot ${s}"></span></div>`).join('')}
+  <div class="slabel">Conversations</div>
+  ${convs.map(([id,t])=>`<div class="conv ${id===active?'on':''}">${t}</div>`).join('')}
+  <div class="me"><span class="av" style="background:var(--tone-4)">JP</span><div style="flex:1"><b>John Pals</b><small>Owner</small></div>${ic('gear','i')}</div>`;
+}
+document.querySelectorAll('.side').forEach(s => s.innerHTML = sidebar(s.dataset.active));
+
+// deterministic noise
+function rng(seed){ return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+function series(n, base, amp, seed, shape){
+  const r = rng(seed); const out = [];
+  for (let k = 0; k < n; k++){ const t = k/(n-1); out.push(shape(t) * amp + base + (r()-.5) * amp * .35); }
+  return out;
+}
+function spark(vals, w, h, color){
+  const max = Math.max(...vals) * 1.15, min = 0;
+  const pts = vals.map((v,k)=>`${(k/(vals.length-1)*w).toFixed(1)},${(h - (v-min)/(max-min)*h).toFixed(1)}`);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polygon points="0,${h} ${pts.join(' ')} ${w},${h}" fill="${color}" opacity=".16"/><polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+}
+const css = (el, v) => getComputedStyle(el).getPropertyValue(v).trim();
+const home = document.getElementById('home');
+const C1 = css(home,'--chart1'), C2 = css(home,'--chart2'), C3 = css(home,'--chart3');
+const OK = css(home,'--ok'), WARN = css(home,'--warn'), BAD = css(home,'--bad');
+const MEM = '#8f7fc9';
+
+const hosts = [
+  ['blackbox','Unraid 7.3 · Xeon W-1250','bad', 11, 22, '14 / 63 GB', 61, 90, '13 / 21', 3],
+  ['pve-02','Proxmox VE 9.2 · Ryzen AI MAX+','warn', 10, 64, '76 / 118 GB', 75, 85, '19 / 23', 5],
+  ['pve-01','Proxmox VE 9.2 · Core i9-13900H','ok', 1, 3, '3 / 94 GB', 51, 82, '1 / 35', 7],
+  ['the-falcon','Debian 13 · Ryzen 9 9950X3D','ok', 1, 15, '14 / 92 GB', 65, 100, 'none', 11],
+  ['thetitan','Debian 13 · Threadripper 9970X','ok', 4, 42, '78 / 188 GB', 49, 85, '33 / 54', 13],
+];
+document.getElementById('hosts').innerHTML = hosts.map(([n,sub,st,cpu,mem,memt,temp,lim,g,seed]) => {
+  const v = series(48, cpu*.6, cpu*.9+1, seed, t => .5 + .5*Math.sin(t*9 + seed));
+  const tc = temp/lim > .85 ? 'warn' : 'ok';
+  return `<tr><td class="h ${st}"><b>${n}</b><small>${sub}</small></td>
+  <td><div class="sparkc">${spark(v, 64, 22, C1)}<span class="num">${cpu} %</span></div></td>
+  <td style="min-width:96px"><span class="num">${memt}</span><div class="bar"><i style="width:${mem}%;background:${MEM}"></i></div></td>
+  <td><span class="state"><span class="dot ${tc}"></span><span class="num">${temp} °C</span></span></td>
+  <td class="num">${g}</td></tr>`;
+}).join('');
+
+function lineChart(el, {h, ser, yMin, yMax, yTicks, xLabels, unit, limit}){
+  const w = el.clientWidth - 20;
+  const L = 40, R = 10, T = 8, B = 22, W = w - L - R, H = h - T - B;
+  const y = v => T + H - (v - yMin) / (yMax - yMin) * H;
+  let s = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  yTicks.forEach(t => { s += `<line x1="${L}" x2="${w-R}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--line2)"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end">${t}${unit}</text>`; });
+  xLabels.forEach((l,k) => { const x = L + k/(xLabels.length-1)*W; s += `<text x="${x}" y="${h-4}" text-anchor="${k===0?'start':k===xLabels.length-1?'end':'middle'}">${l}</text>`; });
+  if (limit) s += `<line x1="${L}" x2="${w-R}" y1="${y(limit.v)}" y2="${y(limit.v)}" stroke="${limit.c}" stroke-dasharray="4 4" opacity=".8"/><text x="${w-R-4}" y="${y(limit.v)-6}" text-anchor="end" style="fill:${limit.c}">${limit.t}</text>`;
+  ser.forEach(({vals, color, fill}) => {
+    const pts = vals.map((v,k) => `${(L + k/(vals.length-1)*W).toFixed(1)},${y(v).toFixed(1)}`);
+    if (fill) s += `<polygon points="${L},${T+H} ${pts.join(' ')} ${L+W},${T+H}" fill="${color}" opacity=".12"/>`;
+    s += `<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round"/>`;
+    const last = pts[pts.length-1].split(',');
+    s += `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${color}"/>`;
+  });
+  el.innerHTML = s + '</svg>';
+}
+const N = 96;
+lineChart(document.getElementById('hpchart'), {
+  h: 190, yMin: 0, yMax: 50, yTicks: [0,10,20,30,40,50], unit: '°', xLabels: ['00:00','04:00','08:00','12:00','Now'],
+  ser: [
+    {vals: series(N, 18.6, 2.6, 3, t => t < .25 ? .1 : t < .35 ? (t-.25)*10*.9 : .9 + .05*Math.sin(t*20)), color: C1},
+    {vals: series(N, 26, 12, 5, t => .55 + .45*Math.sin(t*14) * (t>.3?1:.4)), color: C2},
+    {vals: series(N, 4, 6, 9, t => Math.sin((t-.25)*Math.PI)), color: C3},
+  ]});
+lineChart(document.getElementById('tempchart'), {
+  h: 130, yMin: 40, yMax: 90, yTicks: [40,60,80], unit: '°', xLabels: ['Fri 14:00','Fri 20:00','Sat 02:00','Sat 08:00','Now'],
+  limit: {v: 72, c: WARN, t: ''},
+  ser: [{vals: series(N, 58, 18, 21, t => t < .12 ? .1 : t < .2 ? (t-.12)*12.5*.95 : t > .97 ? .4 : .95 + .03*Math.sin(t*30)), color: C2, fill: true}]
+});
+</script>
+</body>
+</html>

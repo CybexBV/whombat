@@ -1,0 +1,8 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 4 visible nodes (8 total)
+Collapsed 4 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back"
+@e3 [scroll-area] "Files, Files shared in your conversations. You see the ones in conversations you’re in., Couldn’t load your files. Try again in a moment., Try again" [scrollable]
+@e7 [button] "Try again"

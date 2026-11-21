@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "backup-type": "vm",
+      "backup-id": "900",
+      "last-backup": 1792576800,
+      "backup-count": 2,
+      "owner": "root@pam!pve",
+      "files": []
+    }
+  ]
+}

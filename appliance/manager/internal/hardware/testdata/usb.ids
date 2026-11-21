@@ -1,0 +1,30 @@
+#
+#	List of USB ID's (a part of hwdata's usb.ids, for the tests)
+#
+0489  Foxconn / Hon Hai
+04f3  Elan Microelectronics Corp.
+	0103  ActiveJet K-2024 Multimedia Keyboard
+0627  Adomax Technology Co., Ltd
+	0001  QEMU Tablet
+0b05  ASUSTek Computer, Inc.
+	1a30  N-KEY Device
+0bda  Realtek Semiconductor Corp.
+	8156  USB 10/100/1G/2.5G LAN
+	b812  RTL88x2bu [AC1200 Techkey]
+13d3  IMC Networks
+	3608  Wireless_Device
+1d6b  Linux Foundation
+	0003  3.0 root hub
+8087  Intel Corp.
+	0036  BE200 Bluetooth
+
+# List of known device classes, subclasses and protocols
+C 00  (Defined at Interface level)
+C 01  Audio
+	01  Control Device
+C e0  Wireless
+	01  Radio Frequency
+		01  Bluetooth
+AT 0409  English (US)
+HID 21  HID
+R 00  Not Specified

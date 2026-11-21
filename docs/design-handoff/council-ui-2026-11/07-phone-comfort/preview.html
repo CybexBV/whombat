@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Phone comfort · picture viewer</title>
+<style>
+  * { box-sizing: border-box; }
+  html,body { margin: 0; padding: 0; background: transparent; color: var(--foreground,CanvasText); font-family: var(--font-sans,system-ui); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  select { min-height: 44px; padding: 8px; color: var(--foreground,CanvasText); background: var(--card,Canvas); border: 1px solid var(--border,ButtonBorder); border-radius: var(--radius,8px); font: inherit; }
+  select:focus-visible { outline: 2px solid var(--ring,Highlight); outline-offset: 2px; }
+  .window { width: 390px; max-width: 100%; height: 844px; position: relative; overflow: hidden; border-radius: var(--radius,14px); }
+  .window img { position: absolute; width: 1440px; height: 900px; max-width: none; left: -1018px; top: -54px; }
+  .window img[hidden] { display: none; }
+  p { margin: 12px 0 0; font-size: 13px; color: var(--muted-foreground,GrayText); }
+</style></head>
+<body>
+<div class="controls">
+  <select id="app" aria-label="App"><option value="ios-main">iOS · main 1.6×</option><option value="android-main">Android · main 1.6×</option><option value="web-actions">Phone-width web</option><option value="raised-cap">Decision for John · cap 2.4×</option></select>
+  <select id="scene" aria-label="Picture"><option value="0">Chat</option><option value="1">Approval</option><option value="2" selected>Council</option></select>
+  <select id="theme" aria-label="Picture theme"><option value="light">Light</option><option value="dark">Dark</option></select>
+</div>
+<div class="window" aria-label="390px phone proposal">
+  <img data-picture="ios-main-light" src="png/ios-main-light.png" alt="iOS main proposal, light">
+  <img hidden data-picture="ios-main-dark" src="png/ios-main-dark.png" alt="iOS main proposal, dark">
+  <img hidden data-picture="android-main-light" src="png/android-main-light.png" alt="Android main proposal, light">
+  <img hidden data-picture="android-main-dark" src="png/android-main-dark.png" alt="Android main proposal, dark">
+  <img hidden data-picture="web-actions-light" src="png/web-actions-light.png" alt="Phone web actions, light">
+  <img hidden data-picture="web-actions-dark" src="png/web-actions-dark.png" alt="Phone web actions, dark">
+  <img hidden data-picture="raised-cap-light" src="png/raised-cap-light.png" alt="Decision for John, raised cap, light">
+  <img hidden data-picture="raised-cap-dark" src="png/raised-cap-dark.png" alt="Decision for John, raised cap, dark">
+</div>
+<p id="caption">Static native proposal · native runtime captures remain a GAP.</p>
+<script>
+  const app=document.getElementById('app'),scene=document.getElementById('scene'),theme=document.getElementById('theme');
+  function update(){
+    const names=app.value==='web-actions'?['Before','44px actions','Actions open']:app.value==='raised-cap'?['iOS 2.4×','Android 2.0×','Duo side tabs']:['Chat','Approval','Council'];
+    [...scene.options].forEach((o,i)=>o.textContent=names[i]);
+    for(const image of document.querySelectorAll('img')){image.hidden=image.dataset.picture!==app.value+'-'+theme.value;image.style.left=-(32+493*Number(scene.value))+'px';}
+    document.getElementById('caption').textContent=app.value==='web-actions'?'Static snapshot of fixture Chat · same data and clock.':app.value==='raised-cap'?'Decision for John — reopens AP-6550, AP-7460.':'Static native proposal · native runtime captures remain a GAP.';
+  }
+  for(const select of [app,scene,theme])select.addEventListener('change',update);
+  update();
+</script>
+</body></html>

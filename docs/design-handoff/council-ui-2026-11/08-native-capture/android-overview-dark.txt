@@ -1,0 +1,21 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 16 visible nodes (66 total)
+Collapsed 50 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "Overview, 2 other things need you., Overview: what to show, pve-01, Running, Proxmox VE 9.0 · up 19 d, CPU, 21 %, Memory, 69 %, Storage, 55 %, Temp, 58 °C, pve-02, Running warm, 34 %, 80 %, 61 °C, 23 of 40 machines running, blackbox, Disk array failed, Unraid 7.3 · up 19 d, 4 %, 31 %, 70 %, 47 °C, 6 of 9 machines running, Pinned, Connections, Servers, blackbox’s disk array failed. ›" [scrollable]
+  [content below scroll-area hidden]
+@e4 [group] "blackbox’s disk array failed."
+@e8 [group] "Servers, 5, something isn’t working" [selected]
+@e11 [group] "Connections, 5"
+@e14 [group] "Pinned, 1"
+@e17 [button] "blackbox, disk array failed. Unraid 7.3. CPU 4 %, 24 hour average 5 %. Memory 31 %, 9.8 of 32 GB. Storage 70 %, 11 of 16 TB. Temp 47 °C, the hottest sensor, limit 85 °C. 6 of 9 machines running"
+@e30 [button] "pve-02, running warm. Proxmox VE 9.0. CPU 34 %, 24 hour average 38 %. Memory 80 %, 51 of 64 GB. Storage 55 %, 1.1 of 2 TB. Temp 61 °C, the hottest sensor, limit 85 °C. 23 of 40 machines running"
+@e43 [button] "pve-01, running. Proxmox VE 9.0. CPU 21 %, 24 hour average 22 %. Memory 69 %, 44 of 64 GB. Storage 55 %, 2.2 of 4 TB. Temp 58 °C, the hottest sensor, limit 85 °C. 18 of 31 machines running"
+@e55 [group] "Chat, 1 new"
+@e56 [text] "1"
+@e58 [group] "Inbox, 3 new"
+@e59 [text] "3"
+@e61 [group] "Overview" [selected]
+@e63 [group] "Automations"
+@e65 [group] "Settings"

@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/UpdateProgressRequest.json",
+  "title": "UpdateProgressRequest",
+  "type": "object",
+  "properties": {
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "Assigned",
+        "Downloading",
+        "Verified",
+        "Staged",
+        "WaitingForSafeBoundary",
+        "Activating",
+        "Verifying",
+        "Healthy",
+        "Failed",
+        "RolledBack",
+        "Quarantined",
+        "ForwardRepairRequired"
+      ]
+    },
+    "current": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "candidate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failedChecks": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "runtime",
+          "database",
+          "session_endpoint",
+          "runner",
+          "relay_control",
+          "boot",
+          "manager"
+        ]
+      }
+    },
+    "failureDetail": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": [
+            "Assigned",
+            "Downloading",
+            "Verified",
+            "Staged",
+            "WaitingForSafeBoundary",
+            "Activating",
+            "Verifying",
+            "Healthy",
+            "Failed",
+            "RolledBack",
+            "Quarantined",
+            "ForwardRepairRequired"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "reasons": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "release": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "schema": {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "candidateWrites": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "candidateReads": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "database",
+            "target",
+            "candidateWrites",
+            "candidateReads"
+          ]
+        },
+        "rollbackAccess": {
+          "type": "string",
+          "enum": [
+            "read-write",
+            "read-only",
+            "none"
+          ]
+        },
+        "failedChecks": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "database",
+              "session_endpoint",
+              "runner",
+              "relay_control",
+              "boot",
+              "manager"
+            ]
+          }
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        }
+      },
+      "required": [
+        "stage",
+        "code",
+        "reasons",
+        "release",
+        "failedChecks",
+        "at"
+      ],
+      "additionalProperties": false
+    },
+    "waiting": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "boundary",
+            "checkpoint",
+            "window",
+            "hold",
+            "lock",
+            "metadata",
+            "owner"
+          ]
+        },
+        "since": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4102444800
+        }
+      },
+      "required": [
+        "reason",
+        "since"
+      ],
+      "additionalProperties": false
+    },
+    "at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4102444800
+    }
+  },
+  "required": [
+    "sequence",
+    "state",
+    "current",
+    "candidate",
+    "attempt",
+    "failure",
+    "failedChecks",
+    "at"
+  ],
+  "additionalProperties": false
+}

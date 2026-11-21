@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>03 · Approvals that say what you agree to</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="viewer.js" defer></script>
+  </head>
+  <body>
+    <main class="gallery">
+      <nav aria-label="Review navigation"><a href="../index.html">‹ November UI review</a><a href="NOTES.md">Sources, accessibility and gaps ↗</a></nav>
+      <p class="eyebrow">03 · Web and native phone / mockups only</p>
+      <h1>Say yes to something clear.</h1>
+      <p>See what will happen, when it will happen, which permission it uses and what still waits. The main version uses today’s data and keeps the shipped answers.</p>
+      <div class="controls">
+        <label>Approval kind<select id="kind"><option value="everyday">Everyday ask · pve-02</option><option value="command">Server command · web-1</option><option value="deploy">Code change / deploy</option><option value="mail">Mail send</option><option value="key">Key request</option></select></label>
+        <label>App and surface<select id="surface"><option value="details">Web · ApprovalDetails</option><option value="card">Web · chat card</option><option value="phone">Native phone · approval screen</option></select></label>
+        <label>Theme<select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <label>Phone platform<select id="platform"><option value="ios">iOS</option><option value="android">Android</option></select></label>
+      </div>
+      <div class="comparison">
+        <figure><figcaption id="before-label">Before · shipped fixture screen</figcaption><a id="before-link"><img id="before" alt="" /></a><div class="gap" id="gap" hidden><strong>GAP · native before pictures</strong><p>No attested fixture-only iOS or Android binary was available. Phone-width web pictures are not native evidence. The proposal alongside is static HTML.</p></div></figure>
+        <figure><figcaption id="after-label">After · buildable main version</figcaption><iframe id="after" title="Proposed approval with existing data"></iframe><a id="full" target="_blank" rel="noreferrer">Open the mockup at full size ↗</a></figure>
+      </div>
+      <div class="links"><a id="variants" href="approvals.html?surface=variants">Marked alternatives ↗</a><a id="states" href="approvals.html?surface=states">Shipped answered states ↗</a><a id="phones" href="approvals.html?surface=phones">Everyday, deploy and key on a phone ↗</a><a id="large" href="approvals.html?surface=phone&large=1">Phone at large text ↗</a></div>
+      <p class="secondary">The open-message alternative is labelled “Decision for John — reopens handle-it.md”. The suggested-answer, consequence, undoability and downtime alternative is labelled “needs new data — reopens UIR-39, UIR-40”. Neither is part of the main version.</p>
+    </main>
+  </body>
+</html>

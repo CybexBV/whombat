@@ -1,0 +1,63 @@
+/* The hosted app's legal pages (LC-17): not in the mocks; a reading column in the design system's type. Tokens only. */
+
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink2);
+}
+
+.header {
+  display: flex;
+  padding: 24px 32px;
+}
+
+.column {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 32px 96px;
+  font: var(--type-body);
+}
+
+.column p {
+  margin: 0 0 16px;
+}
+
+.column code {
+  font: 400 0.92em var(--font-mono);
+}
+
+.column a {
+  color: var(--ink);
+}
+
+.title {
+  margin: 28px 0 20px;
+  color: var(--ink);
+  font: var(--type-page-title);
+  letter-spacing: var(--type-page-title-tracking);
+}
+
+.heading {
+  margin: 32px 0 12px;
+  color: var(--ink);
+  font: var(--type-card-title);
+  letter-spacing: var(--type-card-title-tracking);
+}
+
+.version {
+  padding: 14px 18px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  color: var(--ink);
+  font: var(--type-secondary);
+}
+
+.list {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+
+.list li {
+  margin-bottom: 8px;
+}

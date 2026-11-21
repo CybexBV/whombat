@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-app-version="2.3.1" data-app-environment="staging">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  The two CSP additions Whombat Feedback needs (add them to the policy your server already sends):
+    script-src https://whombat.example.com
+    frame-src  https://whombat.example.com
+  No connect-src and no 'unsafe-inline': the form runs in Whombat's frame and sends reports itself.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://whombat.example.com; frame-src https://whombat.example.com; style-src 'self'; img-src 'self'; connect-src 'self'">
+<title>Computers · Lumio</title>
+<link rel="stylesheet" href="/style.css">
+<!-- No floating button: the app's own “Feedback” button opens the widget. -->
+<script
+  src="https://whombat.example.com/embed/v1/widget.js"
+  data-site="fbs_REPLACEwithYourSiteId000"
+  data-theme="auto"
+  data-launcher="custom"
+  defer
+></script>
+<script src="/feedback.js" defer></script>
+</head>
+<body>
+<header>
+  <strong>Lumio</strong>
+  <nav aria-label="Main">
+    <a href="/computers">Computers</a>
+    <a href="/policies">Policies</a>
+  </nav>
+  <div class="actions">
+    <button type="button" id="refresh">Refresh</button>
+    <!-- The app's existing button: any element with data-whombat-feedback opens the widget. -->
+    <button type="button" id="feedback-button" data-whombat-feedback>Feedback</button>
+    <button type="button" id="suggest">Suggest an improvement</button>
+  </div>
+</header>
+<main id="view" tabindex="-1"></main>
+</body>
+</html>

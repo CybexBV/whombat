@@ -1,0 +1,17 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-11T12:06:00Z" },
+  "title": "Server Monitoring Dashboard",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 3365, "title": "Fleet overview", "expand": "fill", "is_interactive": true },
+    "Server.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 3702, "title": "Server detail: basalt (Incus + libvirt)", "expand": "fill", "is_interactive": true },
+    "Proxmox.dc.html": { "x": 3040, "y": 0, "w": 1440, "h": 4479, "title": "Proxmox host: shale", "expand": "fill", "is_interactive": true }
+  },
+  "order": ["Main.dc.html", "Server.dc.html", "Proxmox.dc.html"],
+  "notes": {
+    "t1": { "x": 0, "y": -260, "text": "Server monitoring dashboard (sample data)", "kind": "title1", "maxW": 4480 }
+  },
+  "designSystems": []
+}

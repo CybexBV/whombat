@@ -1,0 +1,185 @@
+/*
+ * The work line under a thread's row: marks or a dot, “Council · 2 of 3 answered”, the mono
+ * clock at the end, and a 3px hairline under it in the run line's green. Amber words when it waits for the person;
+ * quiet words when it waits for something else. With reduced motion nothing moves; the bar says the same still.
+ */
+
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.words {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.who {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sep {
+  color: var(--mut);
+}
+
+.line[data-tone="warn"] .top,
+.line[data-tone="warn"] .who {
+  color: var(--warn-text);
+}
+
+.line[data-tone="calm"] .top,
+.line[data-tone="calm"] .who {
+  color: var(--mut);
+}
+
+.clock {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--mut);
+  font: var(--type-mono-meta);
+}
+
+/* T3 Code or a checklist: one 7px dot by its tone (the words say it too). */
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mut);
+}
+
+.dot[data-tone="live"] {
+  background: var(--progress);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.dot[data-tone="warn"] {
+  background: var(--warn);
+}
+
+/* A council's members, overlapping a little, each ringed in the page's colour. */
+.marks {
+  display: inline-flex;
+  flex: none;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  border-radius: 50%;
+  background: var(--sf2);
+  box-shadow: 0 0 0 1.5px var(--bg);
+  color: var(--ink2);
+  font: 600 9px / 1 var(--font-sans);
+}
+
+.mark:last-child {
+  margin-right: 2px;
+}
+
+/* The hairline: segments where there is a count, a soft sweep where there is none. */
+.segments {
+  display: flex;
+  gap: 3px;
+  height: 3px;
+}
+
+.segment {
+  flex: 1;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.segment[data-state="done"] {
+  background: var(--progress);
+}
+
+.segment[data-state="working"] {
+  background: var(--progress);
+  opacity: 0.35;
+  animation: breatheSoft 2.4s ease-in-out infinite;
+}
+
+.track {
+  position: relative;
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.fill,
+.fillWorking {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--progress);
+}
+
+.fillWorking {
+  opacity: 0.35;
+}
+
+.sweeper {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--progress), transparent);
+  animation: sweep 2.2s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  to {
+    left: 100%;
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes breatheSoft {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-tone="live"],
+  .segment[data-state="working"] {
+    animation: none;
+  }
+
+  /* Still: the sweep stands as a soft band in the middle of the track. */
+  .sweeper {
+    left: 30%;
+    animation: none;
+  }
+}

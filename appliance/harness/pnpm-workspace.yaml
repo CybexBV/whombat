@@ -1,0 +1,12 @@
+packages:
+  - .
+overrides:
+  '@whombat/core': 'file:vendor/whombat-contracts/4.11.0/whombat-core-4.11.0.tgz'
+  '@whombat/canvas-schema': 'file:vendor/whombat-contracts/4.11.0/whombat-canvas-schema-4.11.0.tgz'
+  '@whombat/control-contracts': 'file:vendor/whombat-contracts/4.11.0/whombat-control-contracts-4.11.0.tgz'
+  '@whombat/fixtures': 'file:vendor/whombat-contracts/4.11.0/whombat-fixtures-4.11.0.tgz'
+  '@whombat/protocol': 'file:vendor/whombat-contracts/4.11.0/whombat-protocol-4.11.0.tgz'
+  '@whombat/release': 'file:vendor/whombat-contracts/4.11.0/whombat-release-4.11.0.tgz'
+  '@whombat/secure-channel': 'file:vendor/whombat-contracts/4.11.0/whombat-secure-channel-4.11.0.tgz'
+allowBuilds:
+  esbuild: true

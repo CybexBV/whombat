@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "id": "v-weekly",
+      "store": "tank",
+      "schedule": "sat 02:00",
+      "ignore-verified": true,
+      "outdated-after": 30,
+      "last-run-state": "OK",
+      "last-run-endtime": 1792440000,
+      "last-run-upid": "UPID:pbs:v1",
+      "next-run": 1792958400
+    },
+    {
+      "id": "v-offsite",
+      "store": "offsite",
+      "schedule": "sun 03:00",
+      "last-run-state": "verification failed - please check the log for details",
+      "last-run-endtime": 1792180800,
+      "next-run": 1793044800
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 13 visible nodes (31 total)
+Collapsed 18 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [scroll-area] "Inbox, NEEDS YOU · 3, Heat pump: what may I change?, It reads fine already, 13:41, Restart arnica-prod-nest-01?, It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds., pve-02 · 13:58, blackbox’s disk array failed, Your files have no protection now, 13:52" [scrollable]
+@e5 [button] "Problem: blackbox’s disk array failed. Your files have no protection now."
+@e9 [button] "Needs a look: Restart arnica-prod-nest-01? It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds."
+@e13 [button] "Heat pump: what may I change? It reads fine already."
+@e17 [button] "Settled · 0"
+@e20 [group] "Chat, 1 new"
+@e21 [text] "1"
+@e23 [group] "Inbox, 3 new" [selected]
+@e24 [text] "3"
+@e26 [group] "Overview"
+@e28 [group] "Automations"
+@e30 [group] "Settings"

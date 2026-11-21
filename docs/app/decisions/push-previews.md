@@ -1,0 +1,29 @@
+# Notifications with a preview (AP-807…AP-811)
+
+John, 2026-10-06: a managed Whombat's phone and browser notifications carry a short preview (who wrote, where, the
+start of the message) instead of being content-free. Android showed generic lines like “Whombat · A run has news”,
+and worse: control's FCM message had a `notification` block, so with the app in the background Android showed
+“Whombat needs you” itself for every push and the app's code never ran. Contracts 0.51.0 (CT-286, CT-287) add the
+preview to `PushRequest`, `clear`, `Preferences.notifications.previews` (default on) and feature
+`notifications.previews`; control (control CL-120) now sends data-only FCM messages with string data `kind`, `ref`
+and when present `title`, `body`, `tag`, `clear: "1"`; Web Push gets `{title, body, kind, ref, tag?, clear?}`.
+
+| ID | Decision | Why |
+|---|---|---|
+| AP-807 | **Android renders a managed push from its data, preview first.** `ManagedPush.from(data)` (`WhombatPush.kt`) reads `kind`, `ref`, `title`, `body` (blank = absent), `tag` (absent = the ref) and `clear` (“1” or “true”). A clear cancels the notification tagged `whombat.push:<tag>` and shows nothing; otherwise `LiveNotifications.showGeneric` posts under that tag: the title (else “Whombat”), the body with `BigTextStyle` (else the kind's line), `setOnlyAlertOnce(true)` so a newer message in the same thread replaces the one still showing without sounding again, `VISIBILITY_PRIVATE` with a public version “Whombat” + the kind's line (Android's “hide sensitive content” on the lock screen). Approval and security go to the “Needs you” channel, the rest to “Mentions and agent updates”. A tap still opens `whombat://push?kind=…&ref=…`, resolved through the session. Every managed push, a clear too, still tells the app (`onGenericPush`: the inbox refreshes). The kind's lines live once in `LiveNotifications.GENERIC_TEXT` and equal `PUSH_TEXT` in `@whombat/client/managed` (`content.test.ts`): message “New message”, mention “You were mentioned”, approval “Something is waiting for your approval”, run “An agent has news about a run”, update “Your Whombat has an update”, backup “Your Whombat’s backups need a look”, security “A security change on your Whombat”, generic “Whombat needs you”. The module has no Kotlin test setup, so the logic stays small; the debug receiver takes `--es data64 <base64 JSON of the data>` and `scripts/push.mjs fcm` forwards control's whole `data`. | The phone shows what the person needs to decide whether to look, one notification per thread or approval instead of a pile, and the lock screen can still hide it. |
+| AP-808 | **The web's service worker does the same.** A managed push (`kind` + `ref`, no `path`) shows its `title`/`body` under `tag` (else the ref) with `renotify: false`; control's fixed text when there is no preview (“Whombat” / “Whombat needs you”, its `GENERIC_ALERT`) is shown as “Whombat” and the kind's line instead, as before. `clear` closes the notifications with that tag and shows nothing (a browser may show its own “updated in the background” line if it allows no more silent pushes; clears are rare: an approval decided elsewhere). `sw.test.ts` runs `public/sw.js` in a fake worker scope and checks its words equal `PUSH_TEXT`. | One behaviour on every client; the words test the doc comment promised now exists. |
+| AP-809 | **Settings → Notifications: “Show message text in notifications”.** Web: a PREVIEWS section after THREADS with the Threads row's exact row and `Toggle` (label for the switch, the meta line “Notifications show who wrote and the start of the message. Off: they only say what kind of notification it is.” as its description). Android: a PREVIEWS block after QUIET HOURS, the Quiet hours row's title + `Switch` (`switchColors`, 44dp) and the hint below like `QUIET_HOURS_HINT`. Both save `Preferences.notifications.previews` the way the other notification preferences save (the whole `notifications`, built from what the server has now) and show only where the runtime advertises `notifications.previews` (the legacy server, fixtures and the fake world have every feature). `FEATURE_NAMES` calls it “message text in notifications”. | The person decides; on an older Whombat the switch would do nothing, so it isn't there. |
+| AP-810 | **Privacy policy `2026-10-06-draft`.** The opening names the one exception to “our servers can't read it”: the preview, which you can turn off. The Notifications paragraph says what a preview holds (who wrote, where, the start; at most 80 + 160 characters), that it passes through our servers to the push service without being stored or logged, and how to turn it off; the push services bullet says they receive the preview while delivering it. Section 9 (transfers) names no provider's content, so it stays. `docs/privacy-and-security.md` (summary, what control learns, the push service rows) says the same. The website's privacy page (Whombat_Website `design/Privacy-policy.dc.html`) carries the same text. | The policy said push never carried content; that is no longer true, and the reader learns it where they'd look. |
+
+### AP-811 Release 0.43.0
+
+AP-807…AP-810 with contracts 0.51.0 (CT-286, CT-287; `SESSION_API_LEVEL` stays 33). Control's data-only FCM and the
+runtime's previews are control CL-120 and the Whombat side. Checks: `pnpm check` once, Settings → Notifications in
+the fake world at 1440×900 in both themes against the Threads switch (DEV fast: no CI, no emulator run). APK 0.43.0
+with Firebase published to DEV; production untouched.
+
+### AP-812 The short versions say it too (0.43.1)
+
+The Privacy Policy's summary bullet (“We can't read it”) and the Terms of Service's content bullet now name the
+notification preview as the one thing we see while passing it on, so no summary contradicts AP-810. Terms version
+`2026-10-06-draft`. The website's pages changed the same way (not published). Release 0.43.1, web only (no APK).

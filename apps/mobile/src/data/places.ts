@@ -1,0 +1,188 @@
+/**
+ * Places (docs/decisions/phone-shell-final.md): the one list of where the app goes, in the web sidebar's order —
+ * Search, Chat, Inbox, Overview, Automations, Files, Vault, Usage, Settings — and below it a shortcut to each server and
+ * connection with its real logo. Chat, the Inbox, Overview, Automations and Settings are the bar's tabs; Files, Vault
+ * and Usage are pages pushed over them, Search its own page. Pure: the sheet is `ui/places.tsx`, the row above a tab's
+ * screen `ui/topRow.tsx`.
+ */
+import type { MarkLike } from '@whombat/brand';
+import { type ThingRow, thingRows } from '@whombat/client';
+import type { ThingSummary } from '@whombat/core';
+import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from './shell';
+
+export type PlaceId =
+  | 'search'
+  | 'chat'
+  | 'inbox'
+  | 'overview'
+  | 'automations'
+  | 'files'
+  | 'vault'
+  | 'usage'
+  | 'settings';
+
+/** Every place, in the order the web's sidebar and Places show them. */
+export const PLACES: readonly PlaceId[] = [
+  'search',
+  'chat',
+  'inbox',
+  'overview',
+  'automations',
+  'files',
+  'vault',
+  'usage',
+  'settings',
+];
+
+/** What each place is called: the tabs' own words, Overview's title, and Usage for what was Spend. */
+export const PLACE_WORDS: Record<PlaceId, string> = {
+  search: 'Search',
+  chat: TAB_WORDS.ChatRoom,
+  inbox: TAB_WORDS.NeedsYou,
+  overview: OVERVIEW_TITLE,
+  automations: TAB_WORDS.Automations,
+  files: 'Files',
+  vault: 'Vault',
+  usage: 'Usage',
+  settings: TAB_WORDS.Settings,
+};
+
+export const PLACES_COPY = {
+  title: 'Places',
+  /** What opens the sheet, for VoiceOver and TalkBack too. */
+  open: 'Places',
+  close: 'Close Places',
+  servers: 'Servers',
+  connections: 'Connections',
+} as const;
+
+/** One line on what is in each place, under its name in Search's results. */
+export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string): string {
+  switch (place) {
+    case 'chat':
+      return `You and ${assistant}`;
+    case 'inbox':
+      return 'What needs you';
+    case 'overview':
+      return 'Servers and connections';
+    case 'automations':
+      return 'Plans and schedules';
+    case 'files':
+      return 'Files shared in your conversations';
+    case 'vault':
+      return 'Sign-ins and secrets';
+    case 'usage':
+      return `What it cost and how much ${assistant} worked`;
+    case 'settings':
+      return `You, ${assistant} and this Whombat`;
+  }
+}
+
+/** The tab a place is, for the places that are tabs. */
+export const PLACE_TABS: Partial<Record<PlaceId, Tab>> = {
+  chat: 'ChatRoom',
+  inbox: 'NeedsYou',
+  overview: 'Dashboard',
+  automations: 'Automations',
+  settings: 'Settings',
+};
+
+/**
+ * Where a place goes: a tab (the pages above the tabs close), or a page pushed on top whose “‹ …” names the page it was
+ * opened from (`back`). Usage is the Spend screen under its new name.
+ */
+export type PlaceRoute =
+  | { kind: 'tab'; tab: Tab }
+  | { kind: 'page'; name: 'Search' | 'Files' | 'Vault' | 'Spend'; params: { back: string } };
+
+const PLACE_PAGES = {
+  search: 'Search',
+  files: 'Files',
+  vault: 'Vault',
+  usage: 'Spend',
+} as const satisfies Partial<Record<PlaceId, string>>;
+
+export function placeRoute(place: PlaceId, back: string): PlaceRoute {
+  const tab = PLACE_TABS[place];
+  if (tab) return { kind: 'tab', tab };
+  const name = PLACE_PAGES[place as keyof typeof PLACE_PAGES] ?? 'Search';
+  return { kind: 'page', name, params: { back } };
+}
+
+/** Which place a screen is, to mark it in the sheet: a tab, or one of the pages Places opens. */
+export function placeOfScreen(name: string | undefined): PlaceId | null {
+  switch (name) {
+    case 'ChatRoom':
+      return 'chat';
+    case 'NeedsYou':
+      return 'inbox';
+    case 'Dashboard':
+      return 'overview';
+    case 'Automations':
+      return 'automations';
+    case 'Settings':
+      return 'settings';
+    case 'Search':
+      return 'search';
+    case 'Files':
+      return 'files';
+    case 'Vault':
+      return 'vault';
+    case 'Spend':
+      return 'usage';
+    default:
+      return null;
+  }
+}
+
+/** The shortcuts under the places: the servers, then the connections and devices, in the server's order. */
+export interface PlacesThings {
+  servers: ThingRow[];
+  connections: ThingRow[];
+}
+
+/** What the hosts service says of a server that the thing list doesn't: its system's logo and name, how it is. */
+export interface ServerFacts {
+  thingId: string;
+  mark: MarkLike | null;
+  /** “Proxmox VE 9.0 · up 19 d”. */
+  osLine: string;
+  /** “Running”, “Running warm”, “Disk array failed”. */
+  status: string;
+}
+
+/**
+ * The servers' and connections' rows; a server wears the logo of what it runs where the hosts service knows it (as on
+ * Overview), never a plain server where there is a real logo.
+ */
+export function placesThings(
+  things: readonly ThingSummary[] | undefined,
+  servers: readonly ServerFacts[] = [],
+): PlacesThings {
+  const list = things ?? [];
+  const serverIds = new Set(list.filter((t) => t.kind === 'server').map((t) => t.id));
+  const facts = new Map(servers.map((s) => [s.thingId, s]));
+  const rows = thingRows(list).map((r) => {
+    const mark = facts.get(r.id)?.mark;
+    return mark ? { ...r, mark } : r;
+  });
+  return {
+    servers: rows.filter((r) => serverIds.has(r.id)),
+    connections: rows.filter((r) => !serverIds.has(r.id)),
+  };
+}
+
+/**
+ * What a place's row says to VoiceOver and TalkBack, its count included once (the number on screen is decorative):
+ * “Chat, 1 unread reply”, “Inbox, 3 things need you, something isn’t working”.
+ */
+export function placeLabel(place: PlaceId, count: number, broken = false): string {
+  const name = PLACE_WORDS[place];
+  if (count <= 0) return name;
+  if (place === 'chat') return `${name}, ${count} unread ${count === 1 ? 'reply' : 'replies'}`;
+  if (place === 'inbox') {
+    const need = `${count} ${count === 1 ? 'thing needs' : 'things need'} you`;
+    return broken ? `${name}, ${need}, something isn’t working` : `${name}, ${need}`;
+  }
+  return name;
+}

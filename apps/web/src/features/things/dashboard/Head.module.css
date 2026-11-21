@@ -1,0 +1,290 @@
+/*
+ * The head of a server's or a connection's page and its tab row with the range picker (Whombat dashboards.md DS-01,
+ * DS-03; dashboards-web.md AP-2050…; docs/design-handoff/dashboards/index.html `.head`, `.tabs`, `.range`). Tokens only.
+ */
+
+.head {
+  flex-wrap: nowrap;
+  gap: 10px 14px;
+}
+
+/* The kind's icon or its maker's mark: the size of the head's two lines. */
+.icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-button-large);
+}
+
+.iconPlain {
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+.iconBlue {
+  background: var(--hi);
+  color: color-mix(in srgb, var(--chart1) 62%, var(--ink));
+}
+
+/* Hetzner's and other clouds' mark sits on a warm tint (hetzner.png). */
+.iconWarm {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+}
+
+/* The name's line over the fact line, taking what the buttons leave. */
+.nameBox {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Name, badge, chips and the verdict; a verdict without room goes under the name. */
+.nameLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font: 700 30px / 1.1 var(--font-sans);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.nameMono {
+  margin: 0;
+  font: 500 28px / 1.1 var(--font-mono);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.verdict {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink2);
+  font: 400 15px / 1.4 var(--font-sans);
+}
+
+.actions.actions {
+  flex-wrap: nowrap;
+  align-self: flex-start;
+}
+
+@container page (max-width: 560px) {
+  .head {
+    flex-wrap: wrap;
+  }
+
+  .icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .name,
+  .nameMono {
+    font-size: 25px;
+  }
+
+  .actions.actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* A middling page: the buttons go under the name's two lines rather than squeeze them. */
+@container page (max-width: 760px) {
+  .head {
+    flex-wrap: wrap;
+  }
+
+  .nameBox {
+    flex-basis: calc(100% - 66px);
+  }
+
+  .actions.actions {
+    margin-left: 66px;
+  }
+}
+
+@container page (max-width: 560px) {
+  .actions.actions {
+    margin-left: 0;
+  }
+}
+
+.badge.badge {
+  padding: 3px 10px;
+  font-size: 11.5px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  padding: 3px 10px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  color: var(--ink2);
+  font: 400 12.5px var(--font-sans);
+  white-space: nowrap;
+}
+
+/* The facts under the name, one line set apart by middle dots. */
+.facts.facts {
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 0;
+  font-size: 13px;
+}
+
+.facts > * + *::before {
+  content: "·" / "";
+  margin-right: 6px;
+  color: var(--mut);
+}
+
+/* A service's head: the status pill first, “More detail” last, neither set apart by a dot. */
+.facts > .lead + *::before,
+.facts > .moreSlot::before {
+  content: none;
+}
+
+.lead {
+  display: inline-flex;
+  margin-right: 4px;
+}
+
+.moreSlot {
+  margin-left: 6px;
+}
+
+.more {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink2);
+  font: 500 13px var(--font-sans);
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.more:hover {
+  color: var(--ink);
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.more::after {
+  display: inline-block;
+  margin-left: 4px;
+  content: "▸" / "";
+  transition: transform 0.15s;
+}
+
+.more[aria-expanded="true"]::after {
+  transform: rotate(90deg);
+}
+
+.detail[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+  .more {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .more::after {
+    transition: none;
+  }
+}
+
+/* The tab row: the tabs, the range picker at its right end, one rule under both across the column. */
+.tabRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 12px;
+  margin: 0 -40px;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabsIn.tabsIn.tabsIn {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  padding-bottom: 8px;
+}
+
+.live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+  white-space: nowrap;
+}
+
+.seg label {
+  padding: 4px 10px;
+  font: 500 12.5px var(--font-mono);
+}
+
+/* A narrower page keeps the tabs and the picker on one row: the live words go first. */
+@container page (max-width: 999px) {
+  .live {
+    display: none;
+  }
+}
+
+/* The page's narrow padding (`Things.module.css`); the tabs scroll rather than wrap. */
+@media (max-width: 720px) {
+  .tabRow {
+    margin: 0 -18px;
+    padding: 0 18px;
+  }
+
+  .tabsIn.tabsIn.tabsIn {
+    overflow-x: auto;
+  }
+}
+
+/* The title being renamed: a box in its place, the title's face, as wide as a long name needs. */
+.renaming {
+  display: flex;
+  flex: 1 1 320px;
+  max-width: 560px;
+  min-width: 0;
+}

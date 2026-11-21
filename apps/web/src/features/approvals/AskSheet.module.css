@@ -1,0 +1,112 @@
+/* The approval's dialog for an everyday ask — 16-final/approval: a head, then the card filling the rest. */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  height: min(790px, calc(100dvh - 48px));
+  min-height: 0;
+  background: var(--sf);
+}
+
+.head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 4px 16px 4px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 24px;
+}
+
+/* The card shrinks to its content, or fills what's left and scrolls its facts. */
+.body > section {
+  flex: 0 1 auto;
+}
+
+.answered {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.state,
+.problem {
+  flex: none;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+}
+
+.stateTitle,
+.problemTitle {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.problemTitle {
+  color: var(--warn-text);
+}
+
+.stateBody,
+.problemBody {
+  margin: 10px 0 0;
+  color: var(--ink2);
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+
+.recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.recovery > * {
+  min-height: 44px;
+}
+
+.skeletons {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+/* A phone's width: less room around the card. */
+@media (max-width: 600px) {
+  .body {
+    padding: 16px;
+  }
+}
+
+/* Short screens and the largest text: everything scrolls as one, the answers after the facts. */
+@media (max-height: 650px) {
+  .sheet {
+    height: auto;
+  }
+}

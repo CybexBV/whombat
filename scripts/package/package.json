@@ -1,0 +1,23 @@
+{
+  "name": "@whombat/package",
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle:runtime": "tsx src/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "sign": "tsx src/sign.ts"
+  },
+  "dependencies": {
+    "@whombat/cli": "workspace:*",
+    "@whombat/core": "workspace:*",
+    "@whombat/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "esbuild": "0.28.2",
+    "tsx": "^4.23.15"
+  }
+}

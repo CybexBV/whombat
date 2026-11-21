@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 290,
+      "title": "Initech – rebuild",
+      "pipeline_id": 1,
+      "stage_id": 2,
+      "value": 5000,
+      "currency": "EUR",
+      "add_time": "2026-08-01T10:00:00Z",
+      "update_time": "2026-10-07T12:00:00Z",
+      "status": "won",
+      "won_time": "2026-10-07T12:00:00Z",
+      "is_deleted": false
+    },
+    {
+      "id": 291,
+      "title": "Globex – audit",
+      "pipeline_id": 1,
+      "stage_id": 2,
+      "value": 1500,
+      "currency": "EUR",
+      "add_time": "2026-09-01T10:00:00Z",
+      "update_time": "2026-10-02T12:00:00Z",
+      "status": "won",
+      "won_time": "2026-09-29T12:00:00Z",
+      "is_deleted": false
+    },
+    {
+      "id": 302,
+      "title": "Acme – support",
+      "pipeline_id": 1,
+      "stage_id": 1,
+      "value": 3000,
+      "currency": "USD",
+      "add_time": "2026-10-18T10:00:00Z",
+      "update_time": "2026-10-19T10:00:00Z",
+      "status": "open",
+      "is_deleted": false
+    },
+    {
+      "id": 303,
+      "title": "Jansen – partner",
+      "pipeline_id": 2,
+      "stage_id": 5,
+      "value": 800,
+      "currency": "EUR",
+      "add_time": "2026-10-19T10:00:00Z",
+      "update_time": "2026-10-19T10:00:00Z",
+      "status": "open",
+      "is_deleted": false
+    },
+    {
+      "id": 304,
+      "title": "Lost one",
+      "pipeline_id": 1,
+      "stage_id": 1,
+      "value": 100,
+      "currency": "EUR",
+      "add_time": "2026-10-16T10:00:00Z",
+      "update_time": "2026-10-17T10:00:00Z",
+      "status": "lost",
+      "is_deleted": false
+    }
+  ],
+  "additional_data": { "next_cursor": null }
+}

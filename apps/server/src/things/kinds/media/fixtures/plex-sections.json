@@ -1,0 +1,33 @@
+{
+  "MediaContainer": {
+    "size": 2,
+    "Directory": [
+      {
+        "key": "1",
+        "type": "movie",
+        "title": "Movies",
+        "agent": "tv.plex.agents.movie",
+        "scanner": "Plex Movie",
+        "refreshing": false,
+        "updatedAt": 1792611697,
+        "scannedAt": 1792611698,
+        "createdAt": 1792611697,
+        "contentChangedAt": 11,
+        "hidden": 0
+      },
+      {
+        "key": "2",
+        "type": "show",
+        "title": "TV Shows",
+        "agent": "tv.plex.agents.series",
+        "scanner": "Plex TV Series",
+        "refreshing": false,
+        "updatedAt": 1792611697,
+        "scannedAt": 1792611699,
+        "createdAt": 1792611697,
+        "contentChangedAt": 23,
+        "hidden": 0
+      }
+    ]
+  }
+}

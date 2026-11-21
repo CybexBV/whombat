@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/RelayRenewRefused.json",
+  "title": "RelayRenewRefused",
+  "type": "object",
+  "properties": {
+    "t": {
+      "type": "string",
+      "const": "renew_refused"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "malformed",
+        "bad_header",
+        "unknown_kid",
+        "bad_signature",
+        "bad_claims",
+        "wrong_audience",
+        "wrong_issuer",
+        "wrong_role",
+        "wrong_worker",
+        "bad_lifetime",
+        "not_yet_valid",
+        "expired",
+        "replayed",
+        "replay_cache_full",
+        "appliance_mismatch",
+        "stale",
+        "rate"
+      ]
+    },
+    "lease": {
+      "type": "object",
+      "properties": {
+        "renewWithinS": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600
+        }
+      },
+      "required": [
+        "renewWithinS"
+      ]
+    }
+  },
+  "required": [
+    "t",
+    "reason",
+    "lease"
+  ]
+}

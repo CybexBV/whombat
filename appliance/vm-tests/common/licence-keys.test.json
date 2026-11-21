@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "env": "test",
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "kid": "lic-test-1",
+      "x": "ipfQm0RiMPWBT1qSHiUlgEcQrLO1XkLEopbdyChT_mQ",
+      "alg": "EdDSA",
+      "use": "sig"
+    }
+  ]
+}

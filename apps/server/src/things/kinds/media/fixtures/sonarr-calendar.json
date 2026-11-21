@@ -1,0 +1,66 @@
+[
+  {
+    "id": 511,
+    "seriesId": 1,
+    "episodeFileId": 0,
+    "seasonNumber": 24,
+    "episodeNumber": 3,
+    "title": "Sleeping Dogs",
+    "airDate": "2026-10-20",
+    "airDateUtc": "2026-10-21T00:00:00Z",
+    "hasFile": false,
+    "monitored": true,
+    "series": {
+      "id": 1,
+      "title": "NCIS",
+      "sortTitle": "ncis",
+      "status": "continuing",
+      "ended": false,
+      "network": "CBS",
+      "airTime": "20:00",
+      "year": 2003,
+      "tvdbId": 72108,
+      "tmdbId": 4614,
+      "monitored": true,
+      "added": "2026-10-21T19:39:52Z",
+      "images": [
+        {
+          "coverType": "poster",
+          "remoteUrl": "https://artworks.thetvdb.com/banners/posters/72108-5.jpg"
+        }
+      ]
+    }
+  },
+  {
+    "id": 512,
+    "seriesId": 1,
+    "episodeFileId": 0,
+    "seasonNumber": 24,
+    "episodeNumber": 4,
+    "title": "Like Subscribe",
+    "airDate": "2026-10-27",
+    "airDateUtc": "2026-10-28T00:00:00Z",
+    "hasFile": false,
+    "monitored": true,
+    "series": {
+      "id": 1,
+      "title": "NCIS",
+      "sortTitle": "ncis",
+      "status": "continuing",
+      "ended": false,
+      "network": "CBS",
+      "airTime": "20:00",
+      "year": 2003,
+      "tvdbId": 72108,
+      "tmdbId": 4614,
+      "monitored": true,
+      "added": "2026-10-21T19:39:52Z",
+      "images": [
+        {
+          "coverType": "poster",
+          "remoteUrl": "https://artworks.thetvdb.com/banners/posters/72108-5.jpg"
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,921 @@
+/*
+ * The layout editor (the mockups' `editor.html`, desk-display-web.md AP-5950…): a header with the screen's name,
+ * Undo, Try on the screen and Save; the pages, Size and Pages turn; the screen in its bezel beside *Add a widget* (under
+ * it in a narrow window). The screen itself is drawn in its dark (`drawing.tsx`); lengths inside `.scaled` are its
+ * logical pixels.
+ */
+
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 28px 40px;
+}
+
+.gone {
+  color: var(--mut);
+}
+
+.editor {
+  container-type: inline-size;
+  container-name: editor;
+  max-width: 1500px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--bg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.editor input,
+.editor select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sf);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dirty {
+  margin-right: 4px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 20px 10px;
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.pageTab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pageButton {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pageButton:hover {
+  color: var(--ink);
+}
+
+.pageOn {
+  background: var(--sf2);
+  color: var(--ink);
+  font-weight: 600;
+  padding-right: 34px;
+}
+
+.addPage {
+  color: var(--ink2);
+}
+
+.pageButton:focus-visible,
+.pageMenuButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.pageMenuWrap {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.pageMenuButton {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--mut);
+  cursor: pointer;
+}
+
+.pageMenuButton:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  box-shadow: var(--shadow-pane);
+}
+
+.menu button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu button:hover:not(:disabled),
+.menu button:focus-visible {
+  background: var(--sel);
+  outline: none;
+}
+
+.menu button:disabled {
+  color: var(--mut);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.menu .menuDanger {
+  color: var(--bad);
+}
+
+.options {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.optionLabel {
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  padding: 4px 20px 20px;
+}
+
+@container editor (min-width: 1000px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr) 350px;
+  }
+}
+
+.left {
+  min-width: 0;
+}
+
+.note {
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--warn) 9%, var(--sf));
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.bezel {
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--code);
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  touch-action: none;
+  outline: none;
+}
+
+.hit {
+  position: absolute;
+  inset: 0;
+}
+
+/* The editor's layer over a drawn widget: the button that chooses and drags it, and the chosen one's outline. */
+.widget {
+  position: absolute;
+  z-index: 2;
+  border-radius: var(--radius-panel);
+  cursor: grab;
+}
+
+.away {
+  outline: none;
+}
+
+.grab {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: grab;
+}
+
+.grab:focus-visible {
+  outline: 4px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.chosen {
+  outline: 4px solid var(--brand);
+  outline-offset: 4px;
+  z-index: 2;
+}
+
+/* The widget being moved, drawn where the pointer has it. */
+.moving {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* What's being dragged in from Add a widget, faint inside its ghost. */
+.ghostWidget {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.noFit {
+  outline-color: var(--bad);
+}
+
+.remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+.remove:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.handle {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--brand);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 12px;
+  height: 12px;
+  border-right: 3px solid var(--bg);
+  border-bottom: 3px solid var(--bg);
+  border-radius: 0 0 3px;
+}
+
+.ghost {
+  position: absolute;
+  z-index: 4;
+  border: 4px solid var(--brand);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  pointer-events: none;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.ghostNo {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 16%, transparent);
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--mut);
+}
+
+.floating {
+  position: fixed;
+  z-index: var(--z-toast);
+  pointer-events: none;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-toast);
+}
+
+/* The panel. */
+.panel {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.search {
+  width: 100%;
+  height: 38px;
+  margin-top: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.search:focus-visible {
+  border-color: var(--ink2);
+  box-shadow: 0 0 0 2px var(--brand);
+}
+
+.group {
+  margin-top: 16px;
+}
+
+.tray {
+  padding: 10px 4px 4px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--warn) 10%, var(--sf));
+}
+
+.groupLabel {
+  margin: 0 0 4px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+
+/* A section's heading folds it (DK-155): the label as the groups' were, a chevron that turns, how many. */
+.section {
+  margin-top: 10px;
+}
+
+.section:has(.fold[aria-expanded="true"]) + .section {
+  margin-top: 14px;
+}
+
+.foldHead {
+  margin: 0;
+}
+
+.fold,
+.serverFold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fold {
+  min-height: 30px;
+  padding: 4px 6px;
+  color: var(--mut);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.fold:hover,
+.serverFold:hover {
+  background: var(--sel);
+}
+
+.fold:hover {
+  color: var(--ink2);
+}
+
+.fold:focus-visible,
+.serverFold:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.foldChevron {
+  display: flex;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.fold[aria-expanded="true"] .foldChevron,
+.serverFold[aria-expanded="true"] .foldChevron {
+  transform: rotate(90deg);
+}
+
+.foldLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foldCount {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--mut);
+}
+
+/* A server under *Servers*: its mark and name, its widgets under it. */
+.server + .server {
+  margin-top: 2px;
+}
+
+.serverFold {
+  min-height: 40px;
+  padding: 6px;
+  color: var(--ink);
+  gap: 8px;
+}
+
+.serverName {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverItems {
+  margin: 2px 0 6px 12px;
+  padding-left: 4px;
+  border-left: 1px solid var(--line);
+}
+
+/* A widget's preview beside its row (DK-156): the screen's own dark, drawn live at the size it starts at. */
+.peek {
+  position: fixed;
+  z-index: 60;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+  box-shadow: var(--shadow-pane);
+  pointer-events: none;
+}
+
+.peekHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  height: 20px;
+  margin-bottom: 6px;
+}
+
+.peekName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peekBox {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--code);
+}
+
+.peekWait {
+  font-size: 12.5px;
+  color: var(--mut);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 6px;
+  border-radius: var(--radius-button);
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.item:hover {
+  background: var(--sel);
+}
+
+.grip {
+  flex: none;
+  display: flex;
+  color: var(--mut);
+  opacity: 0.6;
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+.tileBig {
+  width: 36px;
+  height: 36px;
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.itemName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.itemNameText {
+  flex: none;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--sf2);
+  color: var(--mut);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.itemLine {
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.size {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--mut);
+}
+
+.add {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 50%;
+  background: var(--sf);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.add:hover {
+  background: var(--ink);
+  color: var(--btnfg);
+}
+
+.add:focus-visible,
+.more:focus-visible,
+.backLink:focus-visible,
+.removeLink:focus-visible,
+.stepper button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .add {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.more {
+  margin: 4px 0 0 44px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.noMatch {
+  margin: 0;
+  padding: 18px 6px;
+  font-size: 13.5px;
+  color: var(--mut);
+}
+
+.ask {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 0;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.chosenHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.chosenText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chosenName {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.chosenSub {
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.preview {
+  display: grid;
+  place-items: center;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  background: var(--code);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fieldHint {
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.45;
+}
+
+.select {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.steppers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stepLabel {
+  font-size: 14px;
+  color: var(--mut);
+}
+
+.stepLabelGap {
+  margin-left: 6px;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  background: var(--sf);
+}
+
+.stepper button {
+  width: 34px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.stepper b {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 600;
+}
+
+@media (pointer: coarse) {
+  .stepper {
+    height: 44px;
+  }
+
+  .stepper button {
+    width: 44px;
+    height: 42px;
+  }
+}
+
+.showField {
+  align-items: stretch;
+}
+
+.showRows {
+  margin: 4px -16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.showRows > * {
+  flex-wrap: wrap;
+}
+
+.removeLink {
+  margin-top: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bad);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -1,0 +1,142 @@
+/* Branch room side pane (340px, side bg), ported from docs/design-handoff/design/Whombat Desktop.dc.html. */
+
+.pane {
+  gap: 26px;
+  padding: 24px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sectionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+}
+
+.mark {
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--warn);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.passed {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.checkName {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+
+.checkNote {
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.reviewerName {
+  flex: 1;
+}
+
+.reviewState {
+  font: 500 12px var(--font-mono);
+}
+
+.staging {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button-large);
+  background: var(--sf);
+}
+
+.stagingText {
+  color: var(--ink2);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.review {
+  align-self: flex-start;
+  border-radius: var(--radius-button-small);
+}
+
+.mergeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.merge {
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-button-large);
+  background: var(--sf2);
+  color: var(--mut);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.mergeReady {
+  background: var(--btn);
+  color: var(--btnfg);
+  cursor: pointer;
+}
+
+.mergeMerged {
+  color: var(--ok);
+  cursor: default;
+}
+
+.mergeBusy {
+  cursor: progress;
+}
+
+.note {
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

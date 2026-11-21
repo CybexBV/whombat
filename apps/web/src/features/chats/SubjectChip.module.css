@@ -1,0 +1,63 @@
+/* What a thread is about (chat-channel.md AP-2405, the mock's `.chip`): mono 11px in a pill, a status dot first. */
+
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 2px 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-pill);
+  color: var(--ink2);
+  font: var(--type-mono-badge);
+  line-height: 1.45;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.chip:hover {
+  border-color: var(--mut);
+  color: var(--ink);
+}
+
+a.chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mut);
+}
+
+.dot_ok {
+  background: var(--ok);
+}
+
+.dot_warn {
+  background: var(--warn);
+}
+
+.dot_bad {
+  background: var(--bad);
+}
+
+.dot_offline,
+.dot_unknown {
+  border: 1.5px solid var(--mut);
+  background: transparent;
+}
+
+.dot_learning {
+  border: 1.5px dashed var(--brand);
+  background: transparent;
+}

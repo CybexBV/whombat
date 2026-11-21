@@ -1,0 +1,28 @@
+/*
+ * Settings → This Whombat → VOICE TYPING (docs/decisions/dictation.md DT-06; not in the mocks): Settings' rows
+ * (SettingsScreen.module.css) and SCREEN's wrapping rows; a model's download as the backup file's 6px bar.
+ */
+
+/* The models' rows sit in the card as any other rows; the group names them for screen readers. */
+.models {
+  display: flex;
+  flex-direction: column;
+}
+
+.progress {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  max-width: 320px;
+  border-radius: var(--radius-pill);
+  background: var(--sf2);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--progress);
+  transition: width var(--duration-progress);
+}

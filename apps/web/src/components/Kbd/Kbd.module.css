@@ -1,0 +1,4 @@
+.kbd {
+  color: var(--mut);
+  font: var(--type-mono-badge);
+}

@@ -1,0 +1,354 @@
+/* Managing guests, lifecycle half (docs/MANAGE.md 4): the guest page's
+   Backups, Tasks, Firewall and Replication tabs, the task dialog, create /
+   clone / delete dialogs, storage contents, tags, bulk selection. Built from
+   the table, card, chip and form rules; nothing new in the palette. */
+
+/* ------------------------------------------------------------ tables in tabs */
+
+table.lc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lc-table th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.lc-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+.lc-table tr:last-child td {
+  border-bottom: 0;
+}
+.lc-table th:first-child,
+.lc-table td:first-child {
+  padding-left: 16px;
+}
+.lc-table th:last-child,
+.lc-table td:last-child {
+  padding-right: 12px;
+}
+.lc-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lc-table td.last {
+  text-align: right;
+  white-space: nowrap;
+}
+.lc-table tr.is-stopped td {
+  color: var(--ink-3);
+}
+.lc-table tr.is-clickable {
+  cursor: pointer;
+}
+.lc-table tr.is-clickable:hover td {
+  background: var(--raised);
+}
+.lc-open {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.lc-open:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lc-user {
+  max-width: 220px;
+}
+.lc-notes {
+  max-width: 280px;
+}
+.lc-notes,
+.lc-match {
+  white-space: nowrap;
+}
+.lc-notes .ellipsis,
+.lc-match .ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.lc-match {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-lock {
+  display: inline-flex;
+  margin-left: 6px;
+  color: var(--ink-2);
+  vertical-align: -2px;
+}
+.chip.lc-chip {
+  margin-left: 8px;
+  gap: 5px;
+}
+input.lc-check {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--ink);
+  vertical-align: middle;
+}
+@media (max-width: 759px) {
+  .lc-table .hide-phone {
+    display: none;
+  }
+}
+
+/* Card header with a caption and a button on the right. */
+.lc-head-tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 12px;
+}
+.lc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grid-gap);
+  min-width: 0;
+}
+.lc-kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 12px 24px;
+}
+.lc-kv dt {
+  margin-bottom: 2px;
+}
+.lc-kv dd {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ task dialog */
+
+.task-meta {
+  font-size: 13px;
+}
+.task-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.task-msg {
+  overflow-wrap: anywhere;
+}
+.task-log {
+  margin: 0;
+  max-height: min(380px, 50vh);
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--terminal-bg);
+  color: var(--term-fg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-log:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ forms */
+
+/* The create dialog: wider (three fields a row), its buttons stay in view while the form scrolls. */
+.modal.lc-create {
+  width: min(760px, calc(100vw - 32px));
+}
+.modal.lc-create .modal-actions {
+  position: sticky;
+  bottom: 0;
+  margin-bottom: -28px;
+  padding: 14px 0 28px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+fieldset.lc-section {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lc-section > legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+details.lc-advanced {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+details.lc-advanced > summary,
+details.lc-templates > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  width: max-content;
+  max-width: 100%;
+}
+details.lc-advanced[open] > summary {
+  margin-bottom: 12px;
+}
+textarea.input.lc-keys {
+  min-height: 64px;
+  font-size: 12px;
+}
+.lc-note {
+  margin: 0;
+}
+.btn-text.lc-link {
+  font-size: 12px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lc-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.lc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.lc-appliances {
+  max-height: min(420px, 50vh);
+  overflow: auto;
+}
+.lc-names {
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* ------------------------------------------------------------ templates under the guest table */
+
+details.lc-templates {
+  border-top: 1px solid var(--line);
+  padding: 10px 16px;
+}
+details.lc-templates[open] > summary {
+  margin-bottom: 6px;
+}
+.lc-tpl-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.lc-tpl-row:first-child {
+  border-top: 0;
+}
+
+/* ------------------------------------------------------------ names, tags */
+
+a.guest-link {
+  color: inherit;
+}
+a.guest-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tag-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+.chip.tag-chip {
+  min-height: 18px;
+  padding: 0 7px;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+/* Phones: the name needs the room; tags stay on the guest page. */
+@media (max-width: 759px) {
+  .gt .tag-chips,
+  .trow .tag-chips {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ bulk selection */
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+  font-size: 12.5px;
+}
+.bulk-bar > .strong {
+  margin-right: 4px;
+}
+.bulk-bar .btn-text {
+  margin-left: auto;
+}
+.gt th.sel,
+.gt td.sel {
+  width: 18px;
+  padding-left: 14px;
+  padding-right: 4px;
+}
+.gt.has-select th.first,
+.gt.has-select td.first {
+  padding-left: 6px;
+}
+/* The selection column shifts the columns the phone layout hides (guests.css). */
+@media (max-width: 759px) {
+  .gt.has-select th:nth-child(5),
+  .gt.has-select td:nth-child(5) {
+    display: table-cell;
+  }
+  .gt.has-select th:nth-child(6),
+  .gt.has-select td:nth-child(6),
+  .gt.has-select th:nth-child(7),
+  .gt.has-select td:nth-child(7) {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ storage tab */
+
+.btn-ghost.store-contents {
+  margin-left: 10px;
+}

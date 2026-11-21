@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# release/ship — the release pipeline of one environment (the maintainers' shipping runbook; UP-C1, UP-X45, IN-94…IN-117).
+#
+#   release/ship build <id> [--reuse-host <id> | --host] [--known-issue "…"]… [--previous <id>] [--no-newer-check]
+#                      [--out-root DIR]
+#                      The release of the one Whombat image (ONE-02), checked newer than the Beta channel
+#                      (releases.whombat.com, WB_RELEASES_URL). Without --reuse-host it is runtime-only by itself when
+#                      this commit's host is Beta's newest release's (UP-X16); --host forces a host release. No ISO (UP-X15).
+#   release/ship validate <id> [--skip-gates] [--scenarios <pattern>] [--jobs N] [--no-demo]
+#                      [--skip-upgrade-gates] [--rerun-gates] [--rerun-upgrade-gates] [--serial] [--previous <id>,<id>]
+#   release/ship status [--dev]
+#   release/ship iso <id>   the installer ISO of the build (its host's for a runtime-only release; UP-X15)
+#
+# Publishing is the maintainers' `candidate` (Beta, `tufrepo gh-publish`) and `promote` (Production, `tufrepo
+# gh-promote`); publish-dev, promote-prod and all went with DEV and the Hetzner update repository (ONE-01) and say so.
+# Each stage writes its record next to the release (~/.cache/whombat-releases/<id>/): build.json → gates.json →
+# upgrade-gates.json (validate), each naming the sha256 of the one it follows; a stage refuses to run without them.
+# Heavy work runs under flock ~/.cache/wb-tmp/robust-updates-heavy.lock (WB_HEAVY_LOCK); validate holds it once for its
+# parts side by side (IN-116). Implementation: harness/src/ship/.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"; mkdir -p "$TMPDIR"
+export NIX_CONFIG="${NIX_CONFIG:-}"$'\n'"experimental-features = nix-command flakes"
+[ -d "$here/../harness/node_modules" ] || (cd "$here/../harness" && pnpm install --frozen-lockfile >&2)
+exec node "$here/../harness/src/ship/main.ts" "$@"

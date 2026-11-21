@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>07 · Phone comfort and large text · Whombat</title>
+  <link rel="stylesheet" href="../../../../packages/tokens/tokens.css">
+  <link rel="stylesheet" href="../../../../apps/web/src/app/fonts/fonts.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 32px; color: var(--ink); background: var(--side); font: 16px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; }
+    a { color: var(--brand); }
+    h1 { font-size: 28px; letter-spacing: -.02em; margin: 6px 0; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0 0 14px; max-width: 900px; color: var(--ink2); }
+    .overline { font: 500 11px var(--font-mono); letter-spacing: .05em; color: var(--mut); text-transform: uppercase; }
+    header { display: flex; justify-content: space-between; align-items: start; gap: 24px; }
+    header a { min-height: 44px; display: inline-flex; align-items: center; }
+    .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 16px 0 24px; }
+    label { display: flex; flex-direction: column; gap: 4px; color: var(--ink2); font-size: 13px; }
+    select, button { color: var(--ink); background: var(--sf); border: 1px solid var(--line2); border-radius: var(--radius-button); padding: 10px 12px; min-height: 44px; font: 15px var(--font-sans); cursor: pointer; }
+    select:focus-visible, button:focus-visible, a:focus-visible, iframe:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+    .comparisons { display: grid; grid-template-columns: repeat(3, 390px); justify-content: space-between; gap: 24px; align-items: start; }
+    figure { margin: 0; width: 390px; }
+    figcaption { min-height: 92px; }
+    figcaption p { font-size: 13px; color: var(--mut); }
+    iframe, .before, .gap { display: block; width: 390px; height: 844px; border: 1px solid var(--line2); border-radius: var(--radius-panel); background: var(--bg); }
+    .gap { padding: 32px; display: flex; flex-direction: column; justify-content: center; }
+    .gap strong { font-size: 24px; margin-bottom: 12px; }
+    .gap p { color: var(--mut); }
+    .tag { font: 500 11px var(--font-mono); display: inline-block; padding: 4px 6px; border-radius: var(--radius-tag); background: var(--sf2); color: var(--ink2); }
+    .variant-tag { color: var(--warn-text); }
+    .open { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+    .explanation { border-top: 1px solid var(--line2); padding-top: 24px; margin-top: 28px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 32px; }
+    .explanation p { font-size: 15px; }
+    .downloads { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+    .downloads a { min-height: 44px; display: flex; align-items: center; font-size: 14px; }
+    @media(max-width: 1250px) { .comparisons { justify-content: start; overflow-x: auto; padding: 4px 4px 16px; } }
+    @media(max-width: 650px) { body { padding: 20px 16px; } header { display: block; } .explanation { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header><div><span class="overline">Whombat · November UI review · 07</span><h1>Room to read. Room to tap.</h1><p>Names keep their width. The next line carries the status. A visible button opens the web’s message actions.</p></div><a href="NOTES.md">Sources, interactions &amp; gaps ↗</a></header>
+  <div class="controls">
+    <label>App<select id="platform"><option value="ios">Native iOS</option><option value="android">Native Android</option><option value="web">Web at phone width</option></select></label>
+    <label>Screen<select id="screen"><option value="chat">Chat</option><option value="thread">Thread · approval door</option><option value="approval">Approval · review and answer</option><option value="council">Council · members</option><option value="delegation">Delegation · tasks</option><option value="side">Side tabs · Duo excerpt</option><option value="desk">Desk preview · fixed-size drawing</option></select></label>
+    <label>Appearance<select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <button id="open-actions" hidden>Open message actions</button>
+  </div>
+  <div class="comparisons" aria-label="Before, buildable proposal and decision variant">
+    <figure><figcaption><span class="tag">BEFORE · fixture evidence</span><h2>Today</h2><p id="before-caption"></p></figcaption><div id="before"></div></figure>
+    <figure><figcaption><span class="tag">BUILDABLE · keeps decisions</span><h2 id="main-title">Current 1.6× cap</h2><p id="main-caption"></p></figcaption><iframe id="main" title="Buildable proposal, current text cap"></iframe><a class="open" id="main-open" target="_blank">Open 390px drawing ↗</a></figure>
+    <figure><figcaption><span class="tag variant-tag" id="decision">Decision for John — reopens AP-6550, AP-7460</span><h2 id="variant-title">Proposed cap: 2.4×</h2><p id="variant-caption"></p></figcaption><iframe id="variant" title="Decision for John, raised text cap"></iframe><a class="open" id="variant-open" target="_blank">Open variant ↗</a></figure>
+  </div>
+  <section class="explanation" aria-label="Design review notes">
+    <div><h2>Current cap, calmer rows</h2><p>The largest iOS and Android settings are drawn at the effective 1.6× cap. Council and delegation names wrap; provider, status and time follow underneath. Approval answers already stack above 1.3× and keep their order.</p></div>
+    <div><h2>One reachable action button</h2><p>On the phone-width web, each message has one persistent 44×44 button. Enter or Space opens its sheet. Focus starts on the first action; Escape or Close returns it to the button.</p></div>
+    <div><h2>A bigger cap has a cost</h2><p>The variant draws iOS at 2.4× and Android at its 2.0× system maximum. At 2.4×, Feedback joins Settled in the header menu; Android at 2.0× still keeps Feedback visible. A wider side rail preserves full labels; it leaves far less room for the page. Desk-preview tiles keep their drawing size.</p></div>
+  </section>
+  <nav class="downloads" aria-label="PNG contact sheets">
+    <a href="png/ios-main-light.png">iOS · light</a><a href="png/ios-main-dark.png">iOS · dark</a><a href="png/android-main-light.png">Android · light</a><a href="png/android-main-dark.png">Android · dark</a><a href="png/rows-light.png">Delegation · light</a><a href="png/rows-dark.png">Delegation · dark</a><a href="png/web-actions-light.png">Web actions · light</a><a href="png/web-actions-dark.png">Web actions · dark</a><a href="png/raised-cap-light.png">Raised cap · light</a><a href="png/raised-cap-dark.png">Raised cap · dark</a>
+  </nav>
+  <script>
+    const $ = id => document.getElementById(id);
+    const parameters = new URLSearchParams(location.search);
+    for (const id of ['platform','screen','theme']) if (parameters.has(id)) $(id).value = parameters.get(id);
+    function update() {
+      const platform = $('platform').value, theme = $('theme').value;
+      if(platform==='web') $('screen').value='chat';
+      for(const option of $('screen').options) option.disabled=platform==='web'&&option.value!=='chat';
+      const screen=$('screen').value;
+      document.documentElement.dataset.theme = theme;
+      const url = platform==='web'?`web.html?theme=${theme}`:`mockup.html?platform=${platform}&screen=${screen}&theme=${theme}`;
+      $('main').src = url; $('main-open').href = url;
+      $('variant').src = url + (platform==='web'?'&menu=open':'&variant=raised'); $('variant-open').href = $('variant').src;
+      const native = platform !== 'web';
+      $('main-title').textContent = native ? 'Current 1.6× cap' : 'Visible 44px actions';
+      $('main-caption').textContent = native ? '390 × 844 · static proposal · largest system text, capped at 1.6×.' : '390 × 844 · same fixture snapshot · no hover needed.';
+      $('variant-title').textContent = native ? 'Proposed cap: 2.4×' : 'Message actions, open';
+      $('decision').textContent = native ? 'Decision for John — reopens AP-6550, AP-7460' : 'BUILDABLE · expanded state';
+      $('variant-caption').textContent = native ? (platform==='ios'?'iOS: effective 2.4×.':'Android: effective 2.0×, system maximum.') + ' Same order; more scrolling.' : 'Same message, full action list. Focus starts on Reply in thread.';
+      const captured = !native && ['chat','thread','approval'].includes(screen);
+      $('before-caption').textContent = captured ? 'Existing groundwork capture · 390 × 844 · frozen fixture clock.' : 'GAP · no attested fixture-only native capture; no before invented.';
+      $('before').innerHTML = captured ? `<img class="before" src="../01-groundwork/png/phone-web-${screen==='chat'?'chat-list':screen}-${theme}.png" alt="Today’s ${screen}, phone-width web, ${theme}">` : '<div class="gap"><strong>Before: GAP</strong><p>Native iOS and Android evidence is missing. This is a design proposal, not a verified native render.</p><p>The source layouts and decision boundaries are recorded in NOTES.md.</p></div>';
+      $('open-actions').hidden = !(platform==='web'&&screen==='chat');
+      history.replaceState(null,'',`?platform=${platform}&screen=${screen}&theme=${theme}`);
+    }
+    for(const id of ['platform','screen','theme']) $(id).addEventListener('change',update);
+    $('open-actions').addEventListener('click',()=>{ for(const id of ['main','variant']) { const url = new URL($(id).src); url.searchParams.set('menu','open'); $(id).src=url.href; } });
+    update();
+  </script>
+</body>
+</html>

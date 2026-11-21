@@ -1,0 +1,46 @@
+{
+  "total_count": 1,
+  "workflow_runs": [
+    {
+      "id": 2,
+      "title": "Add CI",
+      "workflow_id": "ci.yml",
+      "index_in_repo": 1,
+      "ScheduleID": 0,
+      "prettyref": "main",
+      "is_ref_deleted": false,
+      "commit_sha": "baca98e035dd4ca335cad2d8848e161bac40b5f5",
+      "is_fork_pull_request": false,
+      "need_approval": false,
+      "approved_by": 0,
+      "event": "push",
+      "trigger_event": "push",
+      "status": "success",
+      "started": "2026-10-21T19:41:41Z",
+      "stopped": "2026-10-21T19:41:41Z",
+      "created": "2026-10-21T19:41:38Z",
+      "updated": "2026-10-21T19:41:41Z",
+      "html_url": "https://git.example.com/whombat/api/actions/runs/1",
+      "repository": {
+        "id": 2,
+        "name": "api",
+        "full_name": "whombat/api",
+        "default_branch": "main",
+        "updated_at": "2026-10-21T19:41:38Z",
+        "html_url": "https://git.example.com/whombat/api",
+        "has_actions": true,
+        "archived": false,
+        "empty": false,
+        "owner": {
+          "login": "whombat"
+        }
+      },
+      "trigger_user": {
+        "id": 1,
+        "login": "whombat",
+        "full_name": "",
+        "is_admin": true
+      }
+    }
+  ]
+}

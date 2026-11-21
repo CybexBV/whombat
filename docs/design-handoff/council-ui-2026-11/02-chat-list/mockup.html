@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat list · current-data proposal</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="fixture-data.js"></script>
+  <script src="rows.js"></script>
+  <script src="mockup.js" defer></script>
+</head>
+<body class="mockup">
+  <div class="web-chrome" aria-hidden="true"></div>
+  <div class="native-chrome" hidden>
+    <header><h1>Chat</h1><div><button type="button" data-shelf>Settled</button><button type="button" aria-label="More Chat options" data-options>···</button></div></header>
+  </div>
+  <a class="skip" href="#thread-list">Skip to Chat threads</a>
+  <button class="shelf-hotspot" type="button" data-shelf aria-label="Open Settled threads"><span class="sr-only">Settled</span></button>
+  <main class="mock-surface" aria-label="Chat threads">
+    <div class="list-heading"><span id="list-date">Wednesday 23 September</span><span class="desktop-only">Latest activity</span></div>
+    <ol class="thread-list" id="thread-list" tabindex="-1"></ol>
+  </main>
+  <div class="native-bottom" hidden>
+    <div class="composer"><span data-placeholder></span><span aria-hidden="true">＋　↑</span></div>
+    <nav aria-label="App tabs"><span class="active">Chat</span><span>Inbox</span><span>Overview</span><span>Automations</span><span>Settings</span></nav>
+  </div>
+  <dialog id="thread-detail" aria-labelledby="detail-title">
+    <button class="back" type="button" data-close>‹ Chat</button>
+    <p class="eyebrow">Thread preview</p>
+    <h2 id="detail-title"></h2>
+    <div id="detail-stage"></div>
+    <p class="review-note">Layout study: opening this row goes to the existing thread. Its cards and answers keep their shipped behaviour.</p>
+    <button type="button" data-settle>Settle</button>
+  </dialog>
+  <dialog id="settled-detail" aria-labelledby="settled-title">
+    <button class="back" type="button" data-close>‹ Chat</button>
+    <h2 id="settled-title">Settled</h2>
+    <ol class="thread-list" id="settled-list"></ol>
+  </dialog>
+  <dialog id="options-detail" aria-labelledby="options-title">
+    <button class="back" type="button" data-close>‹ Chat</button>
+    <h2 id="options-title">Chat</h2>
+    <p data-did></p><p>Files</p>
+    <p class="review-note">Unchanged destinations. This study covers Chat rows.</p>
+  </dialog>
+</body>
+</html>

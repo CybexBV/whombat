@@ -1,0 +1,9 @@
+repository: github.com/CybexBV/whombat
+app: 3.135.1
+9252e425bedbcbc27426d26c59c2c87a1636f3c7 packages/avatars
+8e82e43a54ea4b046f32ecbe8972838865b880f4 packages/brand
+b8915af3a84fb6116124f01bce6c45c5fff18279 packages/screen
+394ec9d2140cb373caf367f712b05e509b4070fe packages/tokens/tokens.css
+1c2f454ca777a02c1863ea800db8282e7a0b4fb4 apps/web/src/app/fonts
+dc6fbadf1d96287b1b3d34e4da976fff0a3ff894 LICENSE
+1b82085336ef56b86dd059e9382a2a5bda22d56f THIRD_PARTY_NOTICES.md

@@ -1,0 +1,34 @@
+[project]
+name = "hermes-whombat"
+version = "0.1.0"
+description = "Whombat's Hermes Agent plugin: Claude subscription DirectSDK, the commands' terminal backend, tool policy and prompt sections."
+requires-python = ">=3.14"
+license = "AGPL-3.0-only"
+# Hermes Agent itself is the host (pinned by Whombat); it is not a dependency here so the
+# image's Hermes package and this plugin can be built side by side.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+# Hermes discovers both the general plugin and the bundled Nous model provider.
+[project.entry-points."hermes_agent.plugins"]
+whombat = "whombat_hermes.plugin"
+claude-subscription-directsdk-experimental = "whombat_hermes.directsdk"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["whombat_hermes", "whombat_claude_directsdk"]
+package-dir = { whombat_claude_directsdk = "vendor/claude-subscription-directsdk" }
+
+[tool.setuptools.package-data]
+whombat_claude_directsdk = ["LICENSE", "UPSTREAM.json", "plugin.yaml"]
+# The plugin's own skills (whombat:settings), written from the settings map (pnpm assistant-settings:gen).
+whombat_hermes = ["skills/*/*.md", "skills/*/references/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

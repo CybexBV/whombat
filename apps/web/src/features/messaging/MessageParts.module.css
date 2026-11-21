@@ -1,0 +1,302 @@
+/* Message row additions (docs/decisions/essentials-messages.md): hover toolbar, reactions, (edited), the pin marker,
+   the tombstone, link previews and the inline editor. Built in the row's own language (mono meta, sf2 pills, line
+   borders); the mock has none of these. */
+
+/* Toolbar: the old “More actions” button's place (28px buttons at the row's top right), grown to three, and Ask before
+   them (AP-953). */
+.toolbar {
+  position: absolute;
+  top: -6px;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-message-row]:hover > .toolbar,
+[data-message-row]:focus-within > .toolbar,
+.toolbarOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.tool:hover,
+.tool[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.tool:focus-visible {
+  outline-offset: -1px;
+}
+
+/* Settle thread (chat-settle.md AP-6150): the check turns the ok colour under the pointer, as the mock's `.tool.on`. */
+.settleTool:hover {
+  color: var(--ok);
+}
+
+/* Reactions: the mock's sf2 mono pills. */
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The mock's pill exactly (no border: the viewer's own reaction is told by aria-pressed and the tooltip). */
+.reaction {
+  margin: 0;
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 500 12px var(--font-mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reaction:hover {
+  color: var(--ink);
+}
+
+/* An emoji reaction's character in the platform's colour emoji font (text reactions stay in DM Mono). */
+.emoji {
+  font-family: var(--font-emoji);
+}
+
+.edited {
+  color: var(--mut);
+  font: var(--type-mono-meta);
+}
+
+.pinned {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 4px;
+  color: var(--mut);
+  font: var(--type-mono-meta);
+}
+
+/* Tombstone (CT-173): a quiet line, no author. */
+.deleted {
+  margin: 0;
+  color: var(--mut);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.55;
+}
+
+.deletedAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--sf2);
+  color: var(--mut);
+}
+
+/* Link previews: compact cards, no images. */
+.previews {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* What the Vault took (vault-self-serve.md AP-4007): a quiet line per item, the lock beside it, as a reply's notes. */
+.vaultSaved {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vaultSavedLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.vaultSavedLine svg {
+  flex: none;
+}
+
+.vaultSavedLink {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.vaultSavedLink:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vaultSavedLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 520px;
+  padding: 10px 14px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+}
+
+.preview:hover {
+  border-color: var(--line2);
+}
+
+.previewSite {
+  overflow: hidden;
+  color: var(--mut);
+  font: var(--type-mono-meta-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.previewTitle,
+.previewTitle:hover {
+  color: var(--brand);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+/* The whole card opens the link. */
+.previewTitle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.previewTitle:focus-visible {
+  outline: none;
+}
+
+.preview:has(.previewTitle:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.previewDescription {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Inline editor: the composer's card, in the row. */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.editorInput {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  margin: 0;
+  padding: 2px 0;
+  overflow-y: auto;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.55;
+  resize: none;
+}
+
+.editorCompact .editorInput {
+  font-size: 15px;
+}
+
+.editorBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editorHint {
+  flex: 1;
+  min-width: 0;
+  color: var(--mut);
+  font-size: 12.5px;
+}
+
+.editorError {
+  color: var(--bad);
+}
+
+/*
+ * At phone width and on a touch screen (docs/decisions/chat-threads-cards.md): the message's actions are one 44px ⋯
+ * on its author line, always there; Settle and Reply in thread are in its menu. The line grows to the button's height so
+ * nothing sits under it.
+ */
+@media (max-width: 640px), (pointer: coarse) {
+  .toolbar {
+    top: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .tool {
+    width: 44px;
+    height: 44px;
+  }
+
+  .inMenu {
+    display: none;
+  }
+
+  [data-message-row]:has(> .toolbar) [data-message-meta] {
+    min-height: 44px;
+    padding-right: 48px;
+    align-items: center;
+  }
+}

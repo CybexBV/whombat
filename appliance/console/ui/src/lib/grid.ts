@@ -1,0 +1,507 @@
+/**
+ * The screen of widgets as the page reads it (contracts 3.6; Whombat desk-display.md “Screens of widgets”): the desk
+ * socket's `DeskGlance.grid` (core's `DeskGrid`) and each monitor's in `DeskGlance.outputs`, checked member by member
+ * like the rest of the state: what the page doesn't understand goes (a widget of an unknown type, a view of an unknown
+ * kind, a field of the wrong type), a part without what it can't do without goes, and what is left is always drawable.
+ * A grid with no page left is none, and the page draws the calm glance instead.
+ *
+ * The shapes are `@whombat/screen`'s (the drawing's), which mirror core's member for member.
+ */
+import type {
+  DeskAttention,
+  DeskAttentionItem,
+  DeskGrid,
+  DeskImage,
+  DeskLayout,
+  DeskPage,
+  DeskViewBase,
+  DeskViewPoster,
+  DeskViewRow,
+  DeskWidget,
+  DeskWidgetView,
+} from '@whombat/screen';
+import { SCREEN_SIZES, VIEW_KINDS, type ViewKind, WIDGET_TYPES } from '@whombat/screen';
+
+export type {
+  DeskAttention,
+  DeskAttentionItem,
+  DeskGrid,
+  DeskImage,
+  DeskLayout,
+  DeskPage,
+  DeskViewBase,
+  DeskWidget,
+  DeskWidgetView,
+};
+
+/** A monitor on the box with its screen (`DeskOutputGrid`): its output, the monitor's name, the grid. */
+export interface DeskOutputGrid {
+  key: string;
+  name: string | null;
+  grid: DeskGrid;
+}
+
+/* The contract's bounds (core desk-screens.ts, checked against the vendored file by grid.test.ts) ---------------- */
+
+export const DESK_PAGES_MAX = 6;
+export const DESK_PAGE_WIDGETS_MAX = 24;
+export const DESK_PAGE_SHAPES_MAX = 8;
+export const DESK_SCREEN_VIEWS_MAX = 64;
+export const DESK_ATTENTION_MAX = 12;
+export const DESK_VIEW_ROWS_MAX = 12;
+export const DESK_VIEW_POINTS_MAX = 120;
+export const DESK_WIDGET_OPTS_MAX = 8;
+export const DESK_GRID_MAX = 39;
+export const DESK_OUTPUTS_MAX = 4;
+export const DESK_SCREEN_ID_RE = /^(box|out_[a-z0-9-]{1,40}|scr_[A-Za-z0-9_-]{8,40})$/;
+export const DESK_WIDGET_REF_RE =
+  /^(server|connection|device|widget|account):[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
+export const DESK_SHAPE_RE = /^([1-9]|[1-3][0-9])x([1-9]|[1-3][0-9])$/;
+export const DESK_OUTPUT_KEY_RE = /^[a-z0-9-]{1,40}$/;
+const PAGE_ID_RE = /^p_[A-Za-z0-9_-]{1,32}$/;
+const WIDGET_ID_RE = /^w_[A-Za-z0-9_-]{1,32}$/;
+const OPT_KEY_RE = /^[a-z][a-zA-Z0-9]{0,23}$/;
+const IMAGE_REF_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const MARK_RE = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+const SERVER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const TIME_RE =
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$/;
+
+/* Small readers ---------------------------------------------------------------------------------------------------- */
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const oneOf = <T extends string>(v: unknown, values: readonly T[]): T | undefined =>
+  values.includes(v as T) ? (v as T) : undefined;
+const list = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
+const int = (v: unknown, min: number, max: number): number | undefined =>
+  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : undefined;
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+const pct = (v: unknown) => int(v, 0, 100);
+const matching = (v: unknown, re: RegExp): string | undefined =>
+  typeof v === 'string' && re.test(v) ? v : undefined;
+const time = (v: unknown) =>
+  typeof v === 'string' && TIME_RE.test(v) && Number.isFinite(Date.parse(v)) ? v : undefined;
+/** A display string on one line, cut to `max` code points; undefined when it isn't one or is empty. */
+function text(v: unknown, max: number): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const one = v.replace(/\s+/g, ' ').trim();
+  if (!one) return undefined;
+  const points = Array.from(one);
+  return points.length <= max ? one : points.slice(0, max).join('');
+}
+/** Drops the members that are undefined, so the drawing's `in` and spreads see only what was sent. */
+function defined<T extends Obj>(o: T): T {
+  for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+  return o;
+}
+const TONES = ['ok', 'warn', 'bad', 'off'] as const;
+const tone = (v: unknown) => oneOf(v, TONES);
+const SHAPES = ['poster', 'wide', 'square'] as const;
+const points = (v: unknown, nullable: boolean): (number | null)[] =>
+  list(v, DESK_VIEW_POINTS_MAX).flatMap((p) => {
+    const n = num(p);
+    return n !== undefined ? [n] : nullable && p === null ? [null] : [];
+  });
+
+export function parseImage(v: unknown): DeskImage | undefined {
+  if (!isObj(v)) return undefined;
+  const thing = matching(v.thing, DESK_WIDGET_REF_RE);
+  const ref =
+    typeof v.ref === 'string' && v.ref.length >= 16 && v.ref.length <= 600
+      ? matching(v.ref, IMAGE_REF_RE)
+      : undefined;
+  const shape = oneOf(v.shape, SHAPES);
+  if (!thing || !ref || !shape) return undefined;
+  return defined({ thing, ref, shape, alt: text(v.alt, 120) });
+}
+
+/* The layout ------------------------------------------------------------------------------------------------------ */
+
+const overlaps = (a: DeskWidget, b: DeskWidget) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+function parseOpts(v: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!isObj(v)) return out;
+  for (const [k, x] of Object.entries(v).slice(0, DESK_WIDGET_OPTS_MAX)) {
+    const s = text(x, 120);
+    if (OPT_KEY_RE.test(k) && s) out[k] = s;
+  }
+  return out;
+}
+
+/** A shape's widgets: the ones the page can draw, inside the shape, each id once, none on another. */
+function parseWidgets(v: unknown, cols: number, rows: number): DeskWidget[] {
+  const out: DeskWidget[] = [];
+  for (const w of list(v, DESK_PAGE_WIDGETS_MAX)) {
+    if (!isObj(w)) continue;
+    const id = matching(w.id, WIDGET_ID_RE);
+    const type = oneOf(w.type, WIDGET_TYPES);
+    const x = int(w.x, 0, DESK_GRID_MAX - 1);
+    const y = int(w.y, 0, DESK_GRID_MAX - 1);
+    const width = int(w.w, 1, DESK_GRID_MAX);
+    const height = int(w.h, 1, DESK_GRID_MAX);
+    if (!id || !type || x === undefined || y === undefined || width === undefined || height === undefined)
+      continue;
+    if (x + width > cols || y + height > rows) continue;
+    const ref = w.ref === undefined ? undefined : matching(w.ref, DESK_WIDGET_REF_RE);
+    if (w.ref !== undefined && !ref) continue;
+    const widget: DeskWidget = defined({ id, type, ref, opts: parseOpts(w.opts), x, y, w: width, h: height });
+    if (out.some((o) => o.id === id || overlaps(o, widget))) continue;
+    out.push(widget);
+  }
+  return out;
+}
+
+function parsePage(v: unknown): DeskPage | null {
+  if (!isObj(v) || !isObj(v.layouts)) return null;
+  const id = matching(v.id, PAGE_ID_RE);
+  const name = text(v.name, 24);
+  if (!id || !name) return null;
+  const layouts: Record<string, DeskWidget[]> = {};
+  for (const [shape, widgets] of Object.entries(v.layouts).slice(0, DESK_PAGE_SHAPES_MAX)) {
+    const m = DESK_SHAPE_RE.exec(shape);
+    if (m) layouts[shape] = parseWidgets(widgets, Number(m[1]), Number(m[2]));
+  }
+  const shapes = Object.keys(layouts);
+  if (shapes.length === 0) return null;
+  const last = typeof v.last === 'string' && v.last in layouts ? v.last : (shapes[0] as string);
+  return { id, name, layouts, last };
+}
+
+export function parseLayout(v: unknown): DeskLayout | null {
+  if (!isObj(v)) return null;
+  const pages: DeskPage[] = [];
+  for (const p of list(v.pages, DESK_PAGES_MAX)) {
+    const page = parsePage(p);
+    if (page && !pages.some((o) => o.id === page.id)) pages.push(page);
+  }
+  if (pages.length === 0) return null;
+  return {
+    pages,
+    turn: oneOf(v.turn, ['touch', '30s', '60s'] as const) ?? 'touch',
+    size: oneOf(v.size, SCREEN_SIZES) ?? 'normal',
+  };
+}
+
+/* The views ------------------------------------------------------------------------------------------------------- */
+
+function parseRow(v: unknown): DeskViewRow | null {
+  if (!isObj(v)) return null;
+  const title = text(v.title, 120);
+  if (!title) return null;
+  return defined({
+    title,
+    detail: text(v.detail, 120),
+    meta: text(v.meta, 40),
+    time: text(v.time, 16),
+    tone: tone(v.tone),
+    progress: pct(v.progress),
+    state: oneOf(v.state, ['on', 'off'] as const),
+    image: parseImage(v.image),
+  });
+}
+
+function parsePoster(v: unknown): DeskViewPoster | null {
+  if (!isObj(v)) return null;
+  const title = text(v.title, 120);
+  if (!title) return null;
+  return defined({
+    title,
+    detail: text(v.detail, 120),
+    who: text(v.who, 80),
+    progress: pct(v.progress),
+    time: text(v.time, 40),
+    image: parseImage(v.image),
+  });
+}
+
+const some = <T>(v: unknown, max: number, parse: (x: unknown) => T | null): T[] =>
+  list(v, max).flatMap((x) => {
+    const p = parse(x);
+    return p === null ? [] : [p];
+  });
+const words = (v: unknown, max: number, each: number): string[] | undefined => {
+  const out = some(v, max, (x) => text(x, each) ?? null);
+  return out.length > 0 ? out : undefined;
+};
+
+/** A view the page can draw, its members checked; null for an unknown kind or one without what it needs. */
+export function parseView(v: unknown): DeskWidgetView | null {
+  if (!isObj(v)) return null;
+  const kind = oneOf(v.kind, VIEW_KINDS) as ViewKind | undefined;
+  const id = matching(v.id, WIDGET_ID_RE);
+  const title = text(v.title, 60);
+  if (!kind || !id || !title) return null;
+  const problemText = isObj(v.problem) ? text(v.problem.text, 120) : undefined;
+  const base: DeskViewBase = defined({
+    id,
+    title,
+    name: text(v.name, 40),
+    mark: matching(v.mark, MARK_RE),
+    tone: tone(v.tone),
+    problem:
+      problemText && isObj(v.problem)
+        ? defined({ text: problemText, detail: text(v.problem.detail, 200) })
+        : undefined,
+    locked: v.locked === true ? true : undefined,
+    at: time(v.at),
+  });
+  switch (kind) {
+    case 'figures': {
+      const items = some(v.items, 4, (x) => {
+        if (!isObj(x)) return null;
+        const value = text(x.value, 24);
+        const label = text(x.label, 40);
+        return value && label ? defined({ value, unit: text(x.unit, 12), label, tone: tone(x.tone) }) : null;
+      });
+      // Locked or with a problem, a widget says so instead of its figures.
+      if (items.length === 0 && !base.locked && !base.problem) return null;
+      const spark = points(v.spark, false) as number[];
+      return defined({
+        ...base,
+        kind,
+        items,
+        line: text(v.line, 120),
+        spark: spark.length > 0 ? spark : undefined,
+        progress: pct(v.progress),
+      });
+    }
+    case 'list':
+      return defined({
+        ...base,
+        kind,
+        head: text(v.head, 80),
+        progress: pct(v.progress),
+        rows: some(v.rows, DESK_VIEW_ROWS_MAX, parseRow),
+        count: int(v.count, 0, 1_000_000),
+        empty: text(v.empty, 120),
+      });
+    case 'posters':
+      return defined({
+        ...base,
+        kind,
+        head: text(v.head, 80),
+        items: some(v.items, DESK_VIEW_ROWS_MAX, parsePoster),
+        shape: oneOf(v.shape, SHAPES) ?? 'poster',
+        empty: text(v.empty, 120),
+      });
+    case 'chart': {
+      const series = some(v.series, 3, (x) =>
+        isObj(x)
+          ? defined({ label: text(x.label, 40), points: points(x.points, true), tone: tone(x.tone) })
+          : null,
+      );
+      if (series.length === 0 && !base.locked && !base.problem) return null;
+      const figureValue = isObj(v.figure) ? text(v.figure.value, 40) : undefined;
+      const foot = some(v.foot, 4, (x) => {
+        if (!isObj(x)) return null;
+        const label = text(x.label, 30);
+        const value = text(x.value, 40);
+        return label && value ? { label, value } : null;
+      });
+      return defined({
+        ...base,
+        kind,
+        figure:
+          figureValue && isObj(v.figure)
+            ? defined({ value: figureValue, rest: text(v.figure.rest, 60), tone: tone(v.figure.tone) })
+            : undefined,
+        stats: words(v.stats, 2, 80),
+        series,
+        unit: text(v.unit, 12),
+        limit: num(v.limit),
+        foot: foot.length > 0 ? foot : undefined,
+      });
+    }
+    case 'camera':
+      return defined({ ...base, kind, image: parseImage(v.image), event: text(v.event, 80) });
+    case 'server': {
+      const server = matching(v.server, SERVER_ID_RE);
+      const state = tone(v.state);
+      if (!server || !state) return null;
+      const spark = points(v.spark, false).filter(
+        (p): p is number => p !== null && Number.isInteger(p) && p >= 0 && p <= 100,
+      );
+      return defined({
+        ...base,
+        kind,
+        line: text(v.line, 80),
+        state,
+        say: text(v.say, 40),
+        cpu: pct(v.cpu),
+        memory: pct(v.memory),
+        disk: pct(v.disk),
+        spark: spark.length > 0 ? spark : undefined,
+        range: oneOf(v.range, ['1h', '24h', '7d'] as const),
+        stats: words(v.stats, 2, 80),
+        uptime: text(v.uptime, 40),
+        server,
+      });
+    }
+    case 'text': {
+      const body = text(v.body, 600);
+      return body ? { ...base, kind, body } : null;
+    }
+    case 'photo': {
+      // One picture at a time (contracts 3.7, Whombat DK-160): a picture without its image is left out.
+      const items = some(v.items, 12, (x) => {
+        if (!isObj(x)) return null;
+        const image = parseImage(x.image);
+        return image ? defined({ image, caption: text(x.caption, 80), time: text(x.time, 40) }) : null;
+      });
+      const every = int(v.every, 30, 3600);
+      return defined({ ...base, kind, items, every, empty: text(v.empty, 120) });
+    }
+    case 'board': {
+      // Named tiles, each in its colour (contracts 3.7, Whombat DK-162): a tile without a name or tone is left out.
+      const items = some(v.items, 48, (x) => {
+        if (!isObj(x)) return null;
+        const label = text(x.label, 40);
+        const t = tone(x.tone);
+        return label && t ? defined({ label, tone: t, value: text(x.value, 16) }) : null;
+      });
+      return defined({
+        ...base,
+        kind,
+        head: text(v.head, 80),
+        items,
+        count: int(v.count, 0, 1_000_000),
+        empty: text(v.empty, 120),
+      });
+    }
+  }
+}
+
+/* What needs the person ------------------------------------------------------------------------------------------- */
+
+function parseAttentionItem(v: unknown): DeskAttentionItem | null {
+  if (!isObj(v)) return null;
+  const key = text(v.key, 120);
+  const kind = oneOf(v.kind, ['ask', 'look'] as const);
+  const t = oneOf(v.tone, ['bad', 'warn'] as const);
+  const title = text(v.title, 120);
+  if (!key || !kind || !t || typeof v.pops !== 'boolean' || !title) return null;
+  const ask = int(v.ask, 1, 1_000_000_000);
+  const look = text(v.look, 120);
+  // An ask names its number and a look its key: the modal's buttons need them.
+  if ((kind === 'ask' && ask === undefined) || (kind === 'look' && !look)) return null;
+  const research = oneOf(v.research, ['looking', 'found', 'fixing', 'fixed', 'failed'] as const);
+  return defined({
+    key,
+    kind,
+    tone: t,
+    pops: v.pops,
+    title,
+    detail: text(v.detail, 200),
+    since: time(v.since),
+    name: text(v.name, 40),
+    ask: kind === 'ask' ? ask : undefined,
+    look: kind === 'look' ? look : undefined,
+    server: matching(v.server, SERVER_ID_RE),
+    research,
+    // The step only while the assistant found it.
+    fix: research === 'found' ? text(v.fix, 32) : undefined,
+  });
+}
+
+export function parseAttention(v: unknown): DeskAttention {
+  if (!isObj(v)) return { items: [], more: 0 };
+  const items: DeskAttentionItem[] = [];
+  for (const x of list(v.items, DESK_ATTENTION_MAX)) {
+    const item = parseAttentionItem(x);
+    if (item && !items.some((o) => o.key === item.key)) items.push(item);
+  }
+  return defined({
+    items,
+    more: int(v.more, 0, 1_000_000) ?? 0,
+    tone: items.length > 0 ? oneOf(v.tone, ['bad', 'warn'] as const) : undefined,
+  });
+}
+
+/* The grid -------------------------------------------------------------------------------------------------------- */
+
+/** A screen's grid, checked; null when it has no page the page can draw (then the calm glance shows). */
+export function parseGrid(v: unknown): DeskGrid | null {
+  if (!isObj(v)) return null;
+  const screen = matching(v.screen, DESK_SCREEN_ID_RE);
+  const layout = parseLayout(v.layout);
+  if (!screen || !layout) return null;
+  const views: DeskWidgetView[] = [];
+  for (const x of list(v.views, DESK_SCREEN_VIEWS_MAX)) {
+    const view = parseView(x);
+    if (view && !views.some((o) => o.id === view.id)) views.push(view);
+  }
+  const until = isObj(v.trying) ? time(v.trying.until) : undefined;
+  return defined({
+    screen,
+    layout,
+    views,
+    attention: parseAttention(v.attention),
+    popups: oneOf(v.popups, ['all', 'problems', 'none'] as const) ?? 'all',
+    trying: until ? { until } : undefined,
+  });
+}
+
+/** The monitors' screens: each with a key and a grid the page can draw, each key once. */
+export function parseOutputGrids(v: unknown): DeskOutputGrid[] {
+  const out: DeskOutputGrid[] = [];
+  for (const x of list(v, DESK_OUTPUTS_MAX)) {
+    if (!isObj(x)) continue;
+    const key = matching(x.key, DESK_OUTPUT_KEY_RE);
+    const grid = parseGrid(x.grid);
+    if (key && grid && !out.some((o) => o.key === key))
+      out.push({ key, name: text(x.name, 60) ?? null, grid });
+  }
+  return out;
+}
+
+/* Locked by the page ----------------------------------------------------------------------------------------------- */
+
+/**
+ * A grid as a locked screen may show it, for a desk the page can't vouch for (Whombat away, an unlock that ran out):
+ * what the runtime would have sent for the lock view, as far as the page can tell. *Only the time* has no grid. Every
+ * view shows everything; *A summary* shows the servers and Whombat's own widgets, and every other widget says “Unlock
+ * to see it” (the page can't tell which are private). No ask's words in either: `askTitle` (“Dusty has a question”).
+ */
+export function lockedGrid(
+  g: DeskGrid,
+  view: 'time' | 'summary' | 'everything',
+  askTitle: string,
+): DeskGrid | null {
+  if (view === 'time') return null;
+  const attention = {
+    ...g.attention,
+    items: g.attention.items.map((i) =>
+      i.kind === 'ask' ? defined({ ...i, title: askTitle, detail: undefined }) : i,
+    ),
+  };
+  if (view === 'everything') return { ...g, attention };
+  const views = g.views.map((v): DeskWidgetView => {
+    const base: DeskViewBase = defined({
+      id: v.id,
+      title: v.title,
+      name: v.name,
+      mark: v.mark,
+      locked: true,
+    });
+    switch (v.kind) {
+      case 'server':
+        return v;
+      case 'figures':
+        return { ...base, kind: v.kind, items: [] };
+      case 'list':
+        return { ...base, kind: v.kind, rows: [] };
+      case 'posters':
+        return { ...base, kind: v.kind, items: [], shape: v.shape };
+      case 'chart':
+        return { ...base, kind: v.kind, series: [] };
+      case 'camera':
+        return { ...base, kind: v.kind };
+      default:
+        return { ...base, kind: 'text', body: v.title };
+    }
+  });
+  return { ...g, views, attention };
+}

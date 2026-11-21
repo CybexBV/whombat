@@ -1,0 +1,1312 @@
+/*
+ * Servers' pages (one Whombat mock 2, docs/design-handoff/one-whombat/index.html “server page”): the column, the crumb,
+ * the header with its badge and buttons, the fact line, the tabs, cards, the five figures, tables, tags and badges.
+ * Tokens only; sizes and weights are the mock's.
+ */
+
+.screen {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.page {
+  container: page / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 30px 40px 40px;
+}
+
+.crumb {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  color: var(--ink);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.title {
+  margin: 0;
+  font: 500 30px var(--font-mono);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.titleSans {
+  margin: 0;
+  font: 700 34px var(--font-sans);
+  letter-spacing: -0.02em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* A narrow page: the name and its badge on top, the buttons under them from the left (AP-1754). */
+@container page (max-width: 560px) {
+  .head {
+    gap: 10px 12px;
+  }
+
+  .actions {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .title {
+    font-size: 26px;
+  }
+}
+
+.btn.btn {
+  padding: 7px 13px;
+  border-radius: var(--radius-button);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.btn svg {
+  margin-right: -1px;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin-top: -8px;
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+}
+
+.facts b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* A link in the fact line (“Also connected: Proxmox VE API”, connection-pages.md CP-10). */
+.factLink {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.factLink:hover {
+  color: var(--ink);
+}
+
+.factLink:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Tabs: the mock's row under the header, ruled across the whole column. */
+.tabs.tabs {
+  gap: 4px;
+  margin: 0 -40px;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs.tabs > button {
+  margin: 0 0 -1px;
+  padding: 10px 12px 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink2);
+  font: 400 15px var(--font-sans);
+}
+
+.tabs.tabs > button[aria-selected="true"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tabs.tabs > button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  border-radius: 6px 6px 0 0;
+}
+
+/* Cards */
+
+/* A card is a size container (`card`): its tables drop low-value columns as it narrows (less-is-more.md AP-1754). */
+.card {
+  container: card / inline-size;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 16px 20px 12px;
+}
+
+.cardHead h2 {
+  margin: 0;
+  font: 700 17px var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+.meta {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.cardLink {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font: 400 13.5px var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cardLink:hover {
+  color: var(--ink);
+}
+
+.cardBody {
+  padding: 0 20px 16px;
+}
+
+.cardNote {
+  margin: 0;
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.lbl {
+  color: var(--mut);
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* The five figures */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.kpi {
+  min-width: 0;
+  padding: 14px 18px;
+  border-right: 1px solid var(--line);
+  font: 400 16px var(--font-sans);
+  white-space: nowrap;
+}
+
+.kpi:last-child {
+  border-right: 0;
+}
+
+/* The mock's figure: the label and the line under the number are inline in the 16px line (its heights). */
+.kpi > span {
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+}
+
+.kpi > span:first-child {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kpi b {
+  display: block;
+  margin-top: 4px;
+  font: 600 18px var(--font-sans);
+}
+
+.kpi b small {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.chart {
+  padding: 4px 12px 6px 8px;
+}
+
+/* Tables */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--mut);
+  font: 500 10.5px var(--font-mono);
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font: 400 14px var(--font-sans);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 20px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 20px;
+}
+
+/*
+ * Tables that fit their card (AP-1754): the main cell takes the room that is left and ellipsises (`.cellMain` with a
+ * `.cellLine` inside), the low-value columns drop as the card narrows — `.dropXl` under 900 px, `.dropL` under 760,
+ * `.dropM` under 640, `.dropS` under 520, `.dropXs` under 420, `.dropXxs` under 340 (doubled, so they beat a
+ * button's own display) — and under 520 px a cell may wrap rather than push.
+ */
+.table .cellMain {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cellLine > * {
+  flex: none;
+}
+
+.ellipsis,
+.cellLine > .ellipsis {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellSub {
+  display: block;
+  overflow: hidden;
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A “used” cell with its bar. */
+.table .usedCell {
+  width: 28%;
+  min-width: 160px;
+}
+
+/* A second line under a name that has an icon before it starts under the name. */
+.underIcon.underIcon {
+  padding-left: 22px;
+}
+
+/* A segmented choice that wraps rather than run out of a narrow card. */
+.segWrap.segWrap {
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* A chart series' colour beside its row (the Sensors table is the chart's legend). */
+.swatch {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.onlyNarrow.onlyNarrow,
+.onlyS.onlyS {
+  display: none;
+}
+
+@container card (max-width: 899px) {
+  .dropXl.dropXl {
+    display: none;
+  }
+}
+
+@container card (max-width: 759px) {
+  .dropL.dropL {
+    display: none;
+  }
+
+  .onlyNarrow.onlyNarrow {
+    display: inline-flex;
+  }
+}
+
+@container card (max-width: 639px) {
+  .dropM.dropM {
+    display: none;
+  }
+}
+
+@container card (max-width: 519px) {
+  .dropS.dropS {
+    display: none;
+  }
+
+  .onlyS.onlyS {
+    display: inline;
+  }
+
+  .cellSub.onlyS.onlyS {
+    display: block;
+  }
+
+  /* Words a narrow row keeps for screen readers only (a state beside its dot, a column's head). */
+  .narrowSr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table th,
+  .table td {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .table th:first-child,
+  .table td:first-child {
+    padding-left: 14px;
+  }
+
+  .table th:last-child,
+  .table td:last-child {
+    padding-right: 14px;
+  }
+
+  .table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .table .usedCell {
+    width: auto;
+    min-width: 96px;
+  }
+}
+
+@container card (max-width: 419px) {
+  .dropXs.dropXs {
+    display: none;
+  }
+
+  /* The column after a dropped first one starts at the card's edge. */
+  .table .dropXs:first-child + th,
+  .table .dropXs:first-child + td {
+    padding-left: 14px;
+  }
+}
+
+@container card (max-width: 339px) {
+  .dropXxs.dropXxs {
+    display: none;
+  }
+}
+
+.name {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: 400 14px var(--font-mono);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--line2);
+  text-underline-offset: 3px;
+}
+
+.kind {
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+/* A guest's kind as an icon (AP-1755): Docker's mark, the Linux Containers mark or a screen, the words in its tooltip. */
+.kindIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--mut);
+  vertical-align: -3px;
+}
+
+/* A guest's name line: icon, name (ellipsised), Proxmox's id, the project, “This Whombat”, a waiting change. */
+.gName.gName {
+  font: 400 14px var(--font-mono);
+}
+
+.gId {
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.gProject {
+  max-width: 140px;
+}
+
+/* The project shrinks with the name, never below a few letters; the name keeps a few more. */
+.cellLine > .gProject {
+  min-width: 4em;
+}
+
+.cellLine > .gName {
+  min-width: 7ch;
+}
+
+.gSelf.gSelf {
+  gap: 4px;
+  padding: 1px 7px;
+}
+
+.gNote {
+  align-items: center;
+  color: var(--warn);
+}
+
+@container card (max-width: 639px) {
+  .gProject {
+    display: none;
+  }
+}
+
+@container card (max-width: 519px) {
+  .gSelf.gSelf {
+    padding: 2px;
+  }
+
+  .gSelfWords {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.num,
+.table .num {
+  font: 500 13px var(--font-mono);
+  white-space: nowrap;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 13.5px var(--font-sans);
+  white-space: nowrap;
+}
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ok {
+  background: var(--ok);
+}
+
+.warn {
+  background: var(--warn);
+}
+
+.bad {
+  background: var(--bad);
+}
+
+.mut {
+  background: var(--line2);
+}
+
+.gtag {
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+  background: var(--sf2);
+  color: var(--ink2);
+  font: 400 11.5px var(--font-mono);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font: 500 11px var(--font-mono);
+  white-space: nowrap;
+}
+
+/* The badges' tints are the README's status colours at a low alpha (the mock's rgba values). */
+.badgeWarn {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+.badgeBad {
+  background: color-mix(in srgb, var(--bad) 15%, transparent);
+  color: var(--bad);
+}
+
+.badgeOk {
+  background: color-mix(in srgb, var(--ok) 13%, transparent);
+  color: var(--ok);
+}
+
+.badgeMut {
+  background: var(--sf2);
+  color: var(--ink2);
+}
+
+/* Rows of facts (key → value) */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+  font: 400 14px var(--font-sans);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowMain b {
+  display: block;
+  font: 500 14.5px var(--font-sans);
+}
+
+.rowMain small {
+  display: block;
+  overflow: hidden;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+  text-overflow: ellipsis;
+}
+
+/* Rows folded behind one summary row (the agent's switches, AP-1753, AP-1767). */
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+  font: 400 14px var(--font-sans);
+  list-style: none;
+  cursor: pointer;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.foldMore {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--brand);
+  font: 400 13.5px var(--font-sans);
+}
+
+.foldMore svg {
+  transition: transform var(--duration-toggle) ease;
+}
+
+.fold[open] > summary .foldMore svg {
+  transform: rotate(90deg);
+}
+
+.fold > summary:hover .foldMore {
+  color: var(--ink);
+}
+
+/* A row's state line wraps rather than hide its end (Health's Load in a narrow card). */
+.rowMain small > .state {
+  display: inline;
+  white-space: normal;
+}
+
+.rowMain small > .state > .dot {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+/* A narrow card: a row's parts wrap under each other rather than squeeze its words (AP-1754). */
+@container card (max-width: 519px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .row > .rowMain {
+    min-width: 140px;
+  }
+}
+
+.rowEnd {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  color: var(--mut);
+  font: 400 12px var(--font-mono);
+}
+
+.facts2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 18px;
+  padding: 4px 20px 16px;
+}
+
+/* Facts two a row in a narrow card rather than one under the other (AP-1760). */
+@container card (max-width: 519px) {
+  .facts2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 4px 14px 14px;
+  }
+}
+
+.fact b {
+  display: block;
+  margin-top: 3px;
+  font: 600 16px var(--font-sans);
+}
+
+.fact span:last-child:not(.lbl) {
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
+.bar {
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--sf2);
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--face-dusty);
+}
+
+.barWarn i {
+  background: var(--warn);
+}
+
+.barBad i {
+  background: var(--bad);
+}
+
+/* Lines that say something (an alert, a hint, a refusal) */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+  font: 400 14px / 1.45 var(--font-sans);
+}
+
+.notice b {
+  display: block;
+  font: 600 15px var(--font-sans);
+}
+
+.notice p {
+  margin: 2px 0 0;
+  color: var(--ink2);
+}
+
+.noticeBad {
+  border-color: color-mix(in srgb, var(--bad) 35%, transparent);
+}
+
+.noticeWarn {
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+}
+
+.empty {
+  padding: 22px 20px;
+  color: var(--mut);
+  font: 400 14px var(--font-sans);
+}
+
+.error {
+  margin: 0;
+  color: var(--bad);
+  font: 400 13.5px var(--font-sans);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 12px;
+}
+
+.search {
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+  padding: 7px 11px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--ink);
+  font: 400 14px var(--font-sans);
+}
+
+@container card (max-width: 519px) {
+  .search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+.search::placeholder {
+  color: var(--placeholder);
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--mut);
+}
+
+.skeleton {
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button-small);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  color: var(--ink);
+}
+
+.iconBtn:focus-visible,
+.name:focus-visible,
+.cardLink:focus-visible,
+.crumb:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* A guest's four figures: four a row, then two (below). */
+.kpis.kpis4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* The figures follow their card's width, not the window's (AP-1754): three a row, then two. */
+@container card (max-width: 900px) {
+  .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .kpi:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .kpi:nth-child(n + 4) {
+    border-top: 1px solid var(--line);
+  }
+
+  .kpis4 > .kpi:nth-child(3n) {
+    border-right: 1px solid var(--line);
+  }
+
+  .kpis4 > .kpi:nth-child(n + 4) {
+    border-top: 0;
+  }
+
+  .kpis4 > .kpi:last-child {
+    border-right: 0;
+  }
+}
+
+@container card (max-width: 640px) {
+  .kpis.kpis4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpis4 > .kpi:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+
+  .kpis4 > .kpi:nth-child(even) {
+    border-right: 0;
+  }
+
+  .kpis4 > .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+@container card (max-width: 520px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi {
+    padding: 12px 14px;
+    white-space: normal;
+  }
+
+  .kpi:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+
+  .kpi:nth-child(even),
+  .kpi:last-child {
+    border-right: 0;
+  }
+
+  .kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 22px 18px 32px;
+  }
+
+  .tabs.tabs {
+    margin: 0 -18px;
+    padding: 0 18px;
+    overflow-x: auto;
+  }
+}
+
+/* Dialogs */
+
+.dialogTitle {
+  margin: 0;
+  font: var(--type-header-title);
+  letter-spacing: var(--type-header-title-tracking);
+}
+
+.dialogBody {
+  margin: 0;
+  color: var(--ink2);
+  font: 400 15px / 1.5 var(--font-sans);
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialogActions .spacer {
+  margin-right: auto;
+}
+
+.seriousBtn.seriousBtn {
+  background: var(--bad);
+  color: var(--btnfg);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span:first-child {
+  color: var(--ink2);
+  font: 500 13.5px var(--font-sans);
+}
+
+.field small {
+  color: var(--mut);
+  font: 400 12.5px var(--font-sans);
+}
+
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-button);
+  background: var(--sf);
+  color: var(--ink);
+  font: 400 14.5px var(--font-sans);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+textarea.input {
+  min-height: 90px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.fieldError {
+  color: var(--bad);
+  font: 400 12.5px var(--font-sans);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  color: var(--ink);
+  font: 400 14.5px var(--font-sans);
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font: 400 13.5px var(--font-mono);
+}
+
+.review li:last-child {
+  border-bottom: 0;
+}
+
+/* Long values (libvirt's device strings) wrap instead of running out of the dialog. */
+.review li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.review b {
+  min-width: 90px;
+  font-weight: 500;
+}
+
+.old {
+  color: var(--mut);
+  text-decoration: line-through;
+  text-decoration-color: var(--line2);
+}
+
+.code {
+  display: block;
+  overflow-x: auto;
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+  background: var(--code);
+  color: var(--code-text);
+  font: 400 13px / 1.55 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* A small menu under a button (Power, a guest's power) */
+
+.menuWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-panel);
+  background: var(--sf);
+  box-shadow: var(--shadow-toast);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--ink);
+  font: 400 14px var(--font-sans);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu button:hover,
+.menu button:focus-visible {
+  background: var(--sel);
+  outline: none;
+}
+
+.menu .menuSerious {
+  color: var(--bad);
+}
+
+/* What the server's switches don't allow stays in the menu, greyed, its reason in the tooltip. */
+.menu button:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
+.menu button:disabled:hover {
+  background: none;
+}
+
+/* ⋯ in a page's head: as tall as the buttons beside it (Ask). */
+.headMore.headMore {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-button);
+}
+
+/* A machine's page when its machine can't be read: what may have happened, then the ways on. */
+.missing {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.missing p {
+  margin: 0;
+  color: var(--ink);
+  font: 400 15px / 1.5 var(--font-sans);
+}
+
+.missingActs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* “6 temporary machines hidden · Show” under a list of machines. */
+.tempRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+  font: 400 13.5px var(--font-sans);
+}
+
+.tempRow .cardLink {
+  margin-left: 0;
+}
+
+/* “Also connected: Proxmox VE API” in a server's Technical details (connection-pages.md CP-10). */
+.alsoConnected {
+  margin: 0;
+  color: var(--ink2);
+  font: 400 14px var(--font-sans);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.noticeIcon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-button);
+}
+
+.noticeIconBad {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+}
+
+.noticeIconWarn {
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
+  color: var(--warn);
+}
+
+.noticeIconMut {
+  background: var(--hi);
+  color: var(--ink2);
+}
+
+.noticeActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* A server's id under the name a person gave it: quiet, in the mono face. */
+.idLine {
+  color: var(--mut);
+  font: 400 13px var(--font-mono);
+}
+
+/* A failed refresh's note above the tabs (overview-server-connection-final.md): the page under it keeps its readings. */
+.readNote {
+  margin: 4px 0 18px;
+}

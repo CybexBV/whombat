@@ -1,0 +1,4 @@
+{
+  "assistant": "Neo",
+  "source": "agentWords(assistantAgent().name).name"
+}

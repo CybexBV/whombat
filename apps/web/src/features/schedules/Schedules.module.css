@@ -1,0 +1,26 @@
+/* An agent's schedule in the room (RA-30; AP-684; not in the mocks): the skill card's frame, 18px 20px with 12px gaps. */
+.card[data-card] {
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.cardWhen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink2);
+  font-size: 14.5px;
+}
+
+.cardHidden {
+  margin: 0;
+  color: var(--mut);
+  font-size: 14.5px;
+}
+
+.cardProblem {
+  margin: 0;
+  color: var(--bad);
+  font: var(--type-small);
+}

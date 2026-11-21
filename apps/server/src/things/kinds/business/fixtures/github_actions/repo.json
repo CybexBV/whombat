@@ -1,0 +1,12 @@
+{
+  "id": 1,
+  "full_name": "acme/web",
+  "name": "web",
+  "default_branch": "main",
+  "archived": false,
+  "html_url": "https://github.com/acme/web",
+  "owner": {
+    "login": "acme",
+    "type": "Organization"
+  }
+}

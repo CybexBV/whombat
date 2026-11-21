@@ -1,0 +1,22 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 17 visible nodes (47 total)
+Collapsed 30 Android helper nodes from the agent-facing text snapshot; use --raw or --json for the full hierarchy.
+@e1 [scroll-area] [scrollable]
+@e2 [button] "Back to Overview"
+@e3 [button] "More for pve-02"
+@e4 [scroll-area] "pve-02 has a problem: CPU running warm., pve-02: what to show, WORTH A LOOK, UPDATES, BACKUPS, See backups, 4 updates waiting, 1 for security, checked 3 h ago, Show 1 heads-up, CPU running warm, It sat above 75 °C for 40 minutes during the backup., Ask Neo, TEMPERATURE, Normal, CPU package 71 °C, SPACE, Plenty free, Full in about 5 months, MEMORY, 23 GB free, PROCESSOR, Quiet, 18 % in use, Machines, Summary, pve-02, 1 to look at" [scrollable]
+  [content below scroll-area hidden]
+@e5 [group] "pve-02, 1 to look at"
+@e10 [group] "Summary" [selected]
+@e12 [group] "Machines"
+@e14 [group] "Backups"
+@e16 [button] "Processor: Quiet, 18 % in use. Last 24 hours: steady, with a peak"
+@e20 [button] "Memory: Plenty free, 23 GB free. Last 24 hours: steady"
+@e24 [group] "Space: Plenty free, Full in about 5 months"
+@e28 [button] "Temperature: Normal, CPU package 71 °C. Last 24 hours: steady"
+@e34 [button] "Needs a look. CPU running warm. It sat above 75 °C for 40 minutes during the backup."
+@e38 [button] "More for CPU running warm"
+@e39 [button] "Show 1 heads-up"
+@e42 [button] "Updates: 4 updates waiting, 1 for security, checked 3 h ago"
+@e46 [button] "See backups"

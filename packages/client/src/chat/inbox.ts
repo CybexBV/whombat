@@ -1,0 +1,299 @@
+/**
+ * Chat and Feedback as an inbox (Whombat chat-inbox.md CIB-01…CIB-11; app chat-inbox.md): a thread's two-line row,
+ * the filters, which thread opens after one is settled, and the choices for settling by itself. Pure; web and phone
+ * share it.
+ */
+import {
+  CHAT_THREAD_TEXT_MAX,
+  type ChatSubject,
+  type ChatThread,
+  type ChatThreadLast,
+  chatThreadHref,
+  type Message,
+  threadPreview,
+} from '@whombat/core';
+import { doneWhen } from '../home/time';
+import { canSettle } from './settle';
+import { threadTitle } from './threads';
+
+/** The inbox's words, verbatim. `{agent}` is the assistant's name. */
+export const INBOX_WORDS = {
+  all: 'All',
+  unread: 'Unread',
+  waiting: 'Waiting',
+  /** A row's and an open thread's status while something in it waits for the person. */
+  waitingForYou: 'Waiting for you',
+  /** A row's status while the assistant works on it. */
+  working: 'Working',
+  you: 'You',
+  noReply: 'No reply yet',
+  markUnread: 'Mark as unread',
+  markRead: 'Mark as read',
+  markedUnread: 'Marked as unread.',
+  /** Above the first new message of an open thread. */
+  newLine: 'New',
+  /** The filters' group, for screen readers. */
+  show: 'Show',
+  nothingNew: 'Nothing new',
+  nothingNewHint: 'You’ve read every reply.',
+  nothingWaits: 'Nothing waits for you',
+  allSettled: 'All settled',
+  allSettledHint: 'New questions and replies land here.',
+  /** Settings: when threads settle by themselves (CIB-09). */
+  quietChoice: 'Settle threads by themselves',
+  quietChoiceHint: 'Only threads you’ve read, where nothing waits for you.',
+} as const;
+
+/** “From Dusty”: the second line of a thread someone else started, before any reply. */
+export function fromLine(name: string): string {
+  return `From ${name}`;
+}
+
+/** “New replies, 2”: a row's count of new messages for screen readers. */
+export function newCountLabel(n: number): string {
+  return n === 1 ? '1 new message' : `${n} new messages`;
+}
+
+/* Settling by itself (CIB-09) -------------------------------------------------------------------------------------- */
+
+/** The quiet days people choose from (`Preferences.chat.settleQuietDays`): never, a day, three days, a week. */
+export const SETTLE_QUIET_CHOICES = [
+  { days: null, label: 'Never' },
+  { days: 1, label: 'After 1 day' },
+  { days: 3, label: 'After 3 days' },
+  { days: 7, label: 'After a week' },
+] as const satisfies readonly { days: number | null; label: string }[];
+
+/** The choice to show for stored quiet days: the nearest offered one (a value set elsewhere, 1–90, reads as it). */
+export function quietChoiceOf(days: number | null): (typeof SETTLE_QUIET_CHOICES)[number] {
+  if (days === null) return SETTLE_QUIET_CHOICES[0];
+  let best: (typeof SETTLE_QUIET_CHOICES)[number] = SETTLE_QUIET_CHOICES[1];
+  for (const c of SETTLE_QUIET_CHOICES)
+    if (c.days !== null && Math.abs(c.days - days) < Math.abs((best.days as number) - days)) best = c;
+  return best;
+}
+
+/** “after 3 quiet days”, “after a quiet day”, “after a quiet week”: how a thread settled by itself (`settledMeta`). */
+export function quietDaysWords(days: number): string {
+  if (days === 1) return 'after a quiet day';
+  if (days === 7) return 'after a quiet week';
+  return `after ${days} quiet days`;
+}
+
+/* Rows (CIB-01…CIB-04) --------------------------------------------------------------------------------------------- */
+
+/** A link as plain words in a row: no `https://`, no `www.` (CIB-01). */
+export function plainLinks(text: string): string {
+  return text.replace(/\bhttps?:\/\/(www\.)?/gi, '');
+}
+
+/** One row of the inbox. */
+export interface InboxRow {
+  rootId: string;
+  /** `/chat?thread=<root>`, `/feedback?thread=<root>`. */
+  href: string;
+  /** The first line of the thread's first message (CIB-02). */
+  title: string;
+  /** Who wrote the second line (“You”, “Dusty”), or null when the line is a note (“No reply yet”). */
+  who: string | null;
+  /** The second line's words: the newest reply, plain, links as words. */
+  line: string;
+  /** “10:48”, “Thu”, “3 Oct”: the thread's last activity. */
+  when: string;
+  /** New messages in it for the person; 0 for the thread open on screen (it is being read). */
+  unread: number;
+  waiting: boolean;
+  working: boolean;
+  /** It may be settled now (`canSettle`). */
+  settleable: boolean;
+  /** Something in it came from someone else, so Mark as unread can do something. */
+  markable: boolean;
+  /**
+   * The name shown before the line on the phone's row: `who`, except the assistant's own replies, which go without
+   * (the row's icon says whose chat it is). Null when nothing goes before the line.
+   */
+  shownWho: string | null;
+  /** The title without its quiet tail: all of `title` when it has none. */
+  titleHead: string;
+  /** “ · shop”: the end of a repository thread's title that names its repository, drawn quieter; null when none. */
+  titleTail: string | null;
+  /** What the row's icon shows: the repository's icon, the thing it is about, or the assistant's face. */
+  icon: InboxIcon;
+  /** The repository its work is in (`ChatThread.repo`): its name, and its icon's attachment URL when it has one. */
+  repoName: string | null;
+  repoIconUrl: string | null;
+  /** The repository's letter, for its tile until or unless its icon shows. */
+  repoLetter: string | null;
+  /** What the thread is about (`ChatThread.subject`): a server, a connection or a device. */
+  subjectKind: ChatSubject['kind'] | null;
+  subjectId: string | null;
+  subjectName: string | null;
+}
+
+/** A row's icon: a repository's (its own picture, else its letter), a thing's mark, or the assistant's face. */
+export type InboxIcon = 'repo' | 'subject' | 'agent';
+
+/** Which icon a thread's row shows: its repository wins over what it is about; everything else is a chat. */
+export function inboxIcon(t: Pick<ChatThread, 'repo' | 'subject'>): InboxIcon {
+  if (t.repo) return 'repo';
+  if (t.subject) return 'subject';
+  return 'agent';
+}
+
+/** The letter on a repository's tile: its name's first letter or digit, upper case (“shop” → “S”); “?” for none. */
+export function repoLetter(name: string): string {
+  const first = [...name].find((c) => /[\p{L}\p{N}]/u.test(c));
+  return first ? first.toLocaleUpperCase() : '?';
+}
+
+/** What a thread's icon is drawn from, wherever its row is (the inbox, Settled). */
+export type ThreadIconFields = Pick<
+  InboxRow,
+  'icon' | 'repoName' | 'repoIconUrl' | 'repoLetter' | 'subjectKind' | 'subjectId' | 'subjectName'
+>;
+
+export function threadIconFields(t: Pick<ChatThread, 'repo' | 'subject'>): ThreadIconFields {
+  const repo = t.repo ?? null;
+  return {
+    icon: inboxIcon(t),
+    repoName: repo?.name ?? null,
+    repoIconUrl: repo?.iconUrl ?? null,
+    repoLetter: repo ? repoLetter(repo.name) : null,
+    subjectKind: t.subject?.kind ?? null,
+    subjectId: t.subject?.id ?? null,
+    subjectName: t.subject?.name ?? null,
+  };
+}
+
+/**
+ * A title split in two where it ends with “ · ” and the repository's name (any case): the head as the title and the tail
+ * quieter. Without that ending the whole title is the head.
+ */
+export function splitRepoTitle(
+  title: string,
+  repoName: string | null | undefined,
+): { head: string; tail: string | null } {
+  if (!repoName) return { head: title, tail: null };
+  const tail = ` · ${repoName}`;
+  const at = title.length - tail.length;
+  if (at > 0 && title.slice(at).toLocaleLowerCase() === tail.toLocaleLowerCase())
+    return { head: title.slice(0, at), tail: title.slice(at) };
+  return { head: title, tail: null };
+}
+
+export interface InboxRowOptions {
+  /** The person's own principal id: their messages read “You”. */
+  me: string | null | undefined;
+  /** The assistant's principal id and name. */
+  agentId: string | null | undefined;
+  agentName: string;
+  /** Anyone else's short name (a reporter in Feedback); “Someone” when unknown. */
+  nameOf?: (principalId: string) => string | null | undefined;
+  now: Date | number;
+  timeZone: string;
+  /** The thread open on screen: never shown as new. */
+  openRootId?: string | null;
+}
+
+function whoOf(id: string, o: InboxRowOptions): string {
+  if (id === o.me) return INBOX_WORDS.you;
+  if (id === o.agentId) return o.agentName;
+  return o.nameOf?.(id) || 'Someone';
+}
+
+/** The inbox's rows, in the threads' order (newest activity first, as `chats.threads` sends them). */
+export function inboxRows(
+  threads: readonly ChatThread[],
+  unread: ReadonlyMap<string, number>,
+  o: InboxRowOptions,
+): InboxRow[] {
+  return threads.map((t) => {
+    const last = t.last;
+    let who: string | null;
+    let line: string;
+    if (last) {
+      who = whoOf(last.authorId, o);
+      line = plainLinks(last.text);
+    } else if (t.authorId === o.me) {
+      who = null;
+      line = t.working ? '' : INBOX_WORDS.noReply;
+    } else {
+      who = null;
+      line = fromLine(whoOf(t.authorId, o));
+    }
+    const title = plainLinks(threadTitle(t.text)) || INBOX_WORDS.noReply;
+    const split = splitRepoTitle(title, t.repo?.name);
+    return {
+      rootId: t.rootId,
+      href: chatThreadHref(t.room, t.rootId),
+      title,
+      who,
+      line,
+      when: doneWhen(t.lastAt, o.now, o.timeZone),
+      unread: t.rootId === o.openRootId ? 0 : (unread.get(t.rootId) ?? 0),
+      waiting: !!t.waiting,
+      working: t.working,
+      settleable: canSettle(t),
+      markable: t.authorId !== o.me || (!!last && last.authorId !== o.me) || t.replyCount > 0,
+      shownWho: last && last.authorId === o.agentId ? null : who,
+      titleHead: split.head,
+      titleTail: split.tail,
+      ...threadIconFields(t),
+    };
+  });
+}
+
+export type InboxFilter = 'all' | 'unread' | 'waiting';
+
+/** The rows a filter shows (CIB-05). */
+export function inboxFiltered(rows: readonly InboxRow[], filter: InboxFilter): readonly InboxRow[] {
+  if (filter === 'unread') return rows.filter((r) => r.unread > 0);
+  if (filter === 'waiting') return rows.filter((r) => r.waiting);
+  return rows;
+}
+
+/** How many rows each filter would show, for the filters' numbers. */
+export function inboxCounts(rows: readonly InboxRow[]): { unread: number; waiting: number } {
+  let unread = 0;
+  let waiting = 0;
+  for (const r of rows) {
+    if (r.unread > 0) unread++;
+    if (r.waiting) waiting++;
+  }
+  return { unread, waiting };
+}
+
+/**
+ * The thread to open after `rootId` leaves the list (settled on a computer): the one below it, else the one above;
+ * null when it was the only one or isn't listed.
+ */
+export function nextRootAfter(rows: readonly Pick<InboxRow, 'rootId'>[], rootId: string): string | null {
+  const at = rows.findIndex((r) => r.rootId === rootId);
+  if (at < 0) return null;
+  return rows[at + 1]?.rootId ?? rows[at - 1]?.rootId ?? null;
+}
+
+/** The row `step` away from `rootId` (J/K): the first row when nothing is open; null past either end. */
+export function rowStep(
+  rows: readonly Pick<InboxRow, 'rootId'>[],
+  rootId: string | null | undefined,
+  step: 1 | -1,
+): string | null {
+  if (!rows.length) return null;
+  const at = rootId ? rows.findIndex((r) => r.rootId === rootId) : -1;
+  if (at < 0) return rows[0]?.rootId ?? null;
+  return rows[at + step]?.rootId ?? null;
+}
+
+/**
+ * A reply as `ChatThread.last` (CIB-03): its plain preview as the server makes it (`threadPreview`: lines joined, links
+ * as their words), else “A file” / “3 files”; null for a reply that is only a card (the row keeps what it had).
+ */
+export function lastOfMessage(
+  m: Pick<Message, 'authorId' | 'text' | 'attachments' | 'createdAt'>,
+): ChatThreadLast | null {
+  const line = threadPreview(m.text, CHAT_THREAD_TEXT_MAX);
+  const files = m.attachments?.length ?? 0;
+  const text = line ? line : files ? (files === 1 ? 'A file' : `${files} files`) : '';
+  return text ? { authorId: m.authorId, text, at: m.createdAt } : null;
+}

@@ -1,0 +1,8508 @@
+[
+  {
+    "screen": "search",
+    "platform": "web",
+    "theme": "light",
+    "file": "14-after-web-search-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search coverage",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Actions aren’t included.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "⌘K",
+          "ratio": 9.277,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            230,
+            225,
+            218
+          ],
+          "fontSize": "12px",
+          "shell": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Mara Okafor · Settings",
+          "ratio": 10.408,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Amounts are formatted before VAT is rounded. Round first, then format, or Dutch invoices come out a cent off.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 12.895,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            230,
+            225,
+            218
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Burrow HQ",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "21px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "web",
+    "theme": "light",
+    "file": "14-after-web-usage-ready-light.png",
+    "measure": {
+      "minimum": 4.942,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "More about these numbers",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "All windows use Europe/Amsterdam. Costs are estimates for turns with a cost report, not your provider’s bill.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Turns with no usage report ·",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DT"
+        },
+        {
+          "text": "Mara Okafor · Settings",
+          "ratio": 10.408,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "2",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "Usage",
+          "ratio": 12.895,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            230,
+            225,
+            218
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "These numbers don’t include a provider breakdown.",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "tokens",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "light",
+    "state": "ready",
+    "file": "14-after-phone-files-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Chat",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "light",
+    "state": "loading",
+    "file": "14-after-phone-files-loading-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Loading your files…",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "light",
+    "state": "empty",
+    "file": "14-after-phone-files-empty-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Go to Chat",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "light",
+    "state": "failed",
+    "file": "14-after-phone-files-failed-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "More detail",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Try again",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "light",
+    "state": "ready",
+    "file": "14-after-ios-files-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Chat",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "light",
+    "state": "loading",
+    "file": "14-after-ios-files-loading-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Loading your files…",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "light",
+    "state": "empty",
+    "file": "14-after-ios-files-empty-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Go to Chat",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "light",
+    "state": "failed",
+    "file": "14-after-ios-files-failed-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "More detail",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Try again",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "light",
+    "state": "ready",
+    "file": "14-after-android-files-ready-light.png",
+    "measure": {
+      "minimum": 5.618,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Chat",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "light",
+    "state": "loading",
+    "file": "14-after-android-files-loading-light.png",
+    "measure": {
+      "minimum": 5.618,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Loading your files…",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "light",
+    "state": "empty",
+    "file": "14-after-android-files-empty-light.png",
+    "measure": {
+      "minimum": 5.466,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Go to Chat",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "light",
+    "state": "failed",
+    "file": "14-after-android-files-failed-light.png",
+    "measure": {
+      "minimum": 5.466,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "More detail",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 6.271,
+          "foreground": [
+            118,
+            91,
+            39
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Try again",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-search-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "RUN",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-usage-ready-light.png",
+    "measure": {
+      "minimum": 4.942,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Usage",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "tokens",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "inbox",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-inbox-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "0",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11.5px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "10:12",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "What only you can decide, and what Neo is on.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds.",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Settled",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "No backup of pve-01’s guests for 2 days",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "A"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "vault",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-vault-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "See home network ranges",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "The password stopped working.",
+          "ratio": 5.372,
+          "foreground": [
+            159,
+            85,
+            64
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Which parts of your home network Neo may reach is set in Settings.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Secret · nothing uses it",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "What Neo can sign in to when it works for you.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Vault",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "36px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Weather API key",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "STRONG"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "settings",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-settings-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Settings groups",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "You → Notifications",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "You, Neo and this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "You",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-search-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "RUN",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "android",
+    "theme": "light",
+    "file": "14-after-android-search-ready-light.png",
+    "measure": {
+      "minimum": 5.428,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "RUN",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-usage-ready-light.png",
+    "measure": {
+      "minimum": 4.942,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Usage",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "1,195,945",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "STRONG"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "android",
+    "theme": "light",
+    "file": "14-after-android-usage-ready-light.png",
+    "measure": {
+      "minimum": 4.942,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Usage",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "tokens",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "light",
+    "q": "vault",
+    "state": "ready",
+    "file": "14-after-ios-search-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search coverage",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Things use the downloaded Overview list. Settings use the app’s setting names.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Sign-ins and secrets",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "Vault",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "light",
+    "q": "home",
+    "state": "ready",
+    "file": "14-after-ios-search-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search coverage",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Things use the downloaded Overview list. Settings use the app’s setting names.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Connection",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "Home Assistant",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "light",
+    "q": "home",
+    "state": "unloaded",
+    "file": "14-after-ios-search-unloaded-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search coverage",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Messages, threads, patches, runs, canvases, plans, decisions and automations.",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Open Overview",
+          "ratio": 5.466,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Open Overview to load the list, then come back to Search.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "phone",
+    "theme": "light",
+    "file": "14-after-phone-chat-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settled",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Ask Neo anything",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Chat",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "⋯",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-chat-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settled",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Settings",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 10.522,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            242,
+            240,
+            235
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "⋯",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "android",
+    "theme": "light",
+    "file": "14-after-android-chat-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settled",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Settings",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 10.522,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            242,
+            240,
+            235
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "⋯",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "automations",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-automations-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Chat",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Settings",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Automations",
+          "ratio": 10.522,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            242,
+            240,
+            235
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Things Neo does for you.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Automations",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "automation",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-automation-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Automations",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Finished · 24 Sept 2026, 11:46",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "On",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Latest run",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Run #7",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "run",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-run-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "24 Sept 2026, 11:46 · Europe/Amsterdam",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Run #7",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "brief-request",
+    "platform": "ios",
+    "theme": "light",
+    "file": "14-after-ios-brief-request-ready-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Ask Neo to find its time.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Evening brief",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Ask Neo",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "phone",
+    "theme": "light",
+    "text": "largest",
+    "file": "14-after-phone-search-largest-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Conversations and work",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "38.4px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "All",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Search",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Settings",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "light",
+    "text": "largest",
+    "file": "14-after-phone-files-largest-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Chat",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "B"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "phone",
+    "theme": "light",
+    "text": "largest",
+    "file": "14-after-phone-usage-largest-light.png",
+    "measure": {
+      "minimum": 4.942,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 4.942,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 14.466,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            243,
+            238,
+            230
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Usage",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "inbox",
+    "platform": "phone",
+    "theme": "light",
+    "text": "largest",
+    "file": "14-after-phone-inbox-largest-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "0",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "23px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "3 days ago",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "What only you can decide, and what Neo is on.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Both parity drives dropped out 3 days ago. Your files are still there, but nothing protects them now.",
+          "ratio": 11.831,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Ask Neo to handle it",
+          "ratio": 14.962,
+          "foreground": [
+            245,
+            242,
+            237
+          ],
+          "background": [
+            34,
+            29,
+            24
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Settled",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Settle",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "vault",
+    "platform": "phone",
+    "theme": "light",
+    "text": "largest",
+    "file": "14-after-phone-vault-largest-light.png",
+    "measure": {
+      "minimum": 5.281,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 5.281,
+          "foreground": [
+            125,
+            99,
+            83
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Your entries",
+          "ratio": 5.428,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "grafana.example.com",
+          "ratio": 5.618,
+          "foreground": [
+            110,
+            101,
+            92
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "26px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "What Neo can sign in to when it works for you.",
+          "ratio": 11.431,
+          "foreground": [
+            61,
+            53,
+            46
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Vault",
+          "ratio": 15.888,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            251,
+            249,
+            245
+          ],
+          "fontSize": "72px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "Grafana",
+          "ratio": 16.445,
+          "foreground": [
+            34,
+            29,
+            24
+          ],
+          "background": [
+            255,
+            253,
+            249
+          ],
+          "fontSize": "30px",
+          "shell": false,
+          "tag": "STRONG"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "web",
+    "theme": "dark",
+    "file": "14-after-web-search-ready-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Actions aren’t included.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Search coverage",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "⌘K",
+          "ratio": 9.974,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            39,
+            36,
+            34
+          ],
+          "fontSize": "12px",
+          "shell": true,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Amounts are formatted before VAT is rounded. Round first, then format, or Dutch invoices come out a cent off.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Mara Okafor · Settings",
+          "ratio": 11.919,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Search",
+          "ratio": 12.965,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            39,
+            36,
+            34
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Burrow HQ",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "21px",
+          "shell": true,
+          "tag": "A"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "web",
+    "theme": "dark",
+    "file": "14-after-web-usage-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Turns with no usage report ·",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DT"
+        },
+        {
+          "text": "All windows use Europe/Amsterdam. Costs are estimates for turns with a cost report, not your provider’s bill.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "More about these numbers",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "2",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Mara Okafor · Settings",
+          "ratio": 11.919,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Usage",
+          "ratio": 12.965,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            39,
+            36,
+            34
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "tokens",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "These numbers don’t include a provider breakdown.",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "dark",
+    "state": "ready",
+    "file": "14-after-phone-files-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Chat",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "dark",
+    "state": "loading",
+    "file": "14-after-phone-files-loading-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Loading your files…",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "dark",
+    "state": "empty",
+    "file": "14-after-phone-files-empty-dark.png",
+    "measure": {
+      "minimum": 8.268,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Go to Chat",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "dark",
+    "state": "failed",
+    "file": "14-after-phone-files-failed-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "More detail",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Try again",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "dark",
+    "state": "ready",
+    "file": "14-after-ios-files-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Chat",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "dark",
+    "state": "loading",
+    "file": "14-after-ios-files-loading-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Loading your files…",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "dark",
+    "state": "empty",
+    "file": "14-after-ios-files-empty-dark.png",
+    "measure": {
+      "minimum": 8.268,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Go to Chat",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "ios",
+    "theme": "dark",
+    "state": "failed",
+    "file": "14-after-ios-files-failed-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "More detail",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Try again",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "dark",
+    "state": "ready",
+    "file": "14-after-android-files-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Chat",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "dark",
+    "state": "loading",
+    "file": "14-after-android-files-loading-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Loading your files…",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "dark",
+    "state": "empty",
+    "file": "14-after-android-files-empty-dark.png",
+    "measure": {
+      "minimum": 8.268,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Go to Chat",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files you and your agent share in a conversation show up here.",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "android",
+    "theme": "dark",
+    "state": "failed",
+    "file": "14-after-android-files-failed-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "The list couldn’t be read. Your files haven’t been changed.",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "More detail",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Couldn’t load your files",
+          "ratio": 8.553,
+          "foreground": [
+            224,
+            183,
+            94
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Try again",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-search-ready-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "RUN",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-usage-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "0",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "tokens",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Usage",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "inbox",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-inbox-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "10:12",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "12px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11.5px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "It needs a restart to get its extra memory (4 → 8 GB). It’s down for about 40 seconds.",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "What only you can decide, and what Neo is on.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "No backup of pve-01’s guests for 2 days",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15.5px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Settled",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Yes, now",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "vault",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-vault-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Secret · nothing uses it",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "13.5px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Which parts of your home network Neo may reach is set in Settings.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "The password stopped working.",
+          "ratio": 7.157,
+          "foreground": [
+            229,
+            154,
+            133
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "See home network ranges",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "13px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "What Neo can sign in to when it works for you.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Weather API key",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "15px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Vault",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "36px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "settings",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-settings-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "You → Notifications",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Settings groups",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "You, Neo and this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "You",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Settings",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-search-ready-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "RUN",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "android",
+    "theme": "dark",
+    "file": "14-after-android-search-ready-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "RUN",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "11.2px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Round before format for credit notes. Regular invoices still use the old path.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Run #1882 · ledger reconciliation",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-usage-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settings",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "0",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "1,195,945",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Usage",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "android",
+    "theme": "dark",
+    "file": "14-after-android-usage-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "16 Sep, 11:22–23 Sep, 11:22",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "DD"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "tokens",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Usage",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "dark",
+    "q": "vault",
+    "state": "ready",
+    "file": "14-after-ios-search-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Sign-ins and secrets",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Things use the downloaded Overview list. Settings use the app’s setting names.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Search coverage",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Vault",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "dark",
+    "q": "home",
+    "state": "ready",
+    "file": "14-after-ios-search-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Connection",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Things use the downloaded Overview list. Settings use the app’s setting names.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Search coverage",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Home Assistant",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "ios",
+    "theme": "dark",
+    "q": "home",
+    "state": "unloaded",
+    "file": "14-after-ios-search-unloaded-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Messages, threads, patches, runs, canvases, plans, decisions and automations.",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": true,
+          "tag": "P"
+        },
+        {
+          "text": "Open Overview",
+          "ratio": 8.268,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Search coverage",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": true,
+          "tag": "SUMMARY"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Where Search looks",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "19px",
+          "shell": true,
+          "tag": "H2"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Open Overview to load the list, then come back to Search.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "phone",
+    "theme": "dark",
+    "file": "14-after-phone-chat-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Ask Neo anything",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "DIV"
+        },
+        {
+          "text": "Settled",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "⋯",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Chat",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-chat-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settings",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 8.552,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            51,
+            48,
+            44
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Settled",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "⋯",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Chat",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "chat",
+    "platform": "android",
+    "theme": "dark",
+    "file": "14-after-android-chat-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settings",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 8.552,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            51,
+            48,
+            44
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Settled",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "⋯",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Chat",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "automations",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-automations-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Settings",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Automations",
+          "ratio": 8.552,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            51,
+            48,
+            44
+          ],
+          "fontSize": "10px",
+          "shell": true,
+          "tag": "A"
+        },
+        {
+          "text": "Chat",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Things Neo does for you.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Automations",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "automation",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-automation-ready-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Finished · 24 Sept 2026, 11:46",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "14px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Automations",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "On",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Run #7",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Latest run",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "19px",
+          "shell": false,
+          "tag": "H2"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "run",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-run-ready-dark.png",
+    "measure": {
+      "minimum": 9.015,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Assess and fix tracker reports",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Run #7",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "24 Sept 2026, 11:46 · Europe/Amsterdam",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "brief-request",
+    "platform": "ios",
+    "theme": "dark",
+    "file": "14-after-ios-brief-request-ready-dark.png",
+    "measure": {
+      "minimum": 9.015,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Ask Neo to find its time.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Ask Neo",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "16px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Evening brief",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "34px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "search",
+    "platform": "phone",
+    "theme": "dark",
+    "text": "largest",
+    "file": "14-after-phone-search-largest-dark.png",
+    "measure": {
+      "minimum": 6.013,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Conversations and work",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "38.4px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Settings",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Search",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "All",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "files",
+    "platform": "phone",
+    "theme": "dark",
+    "text": "largest",
+    "file": "14-after-phone-files-largest-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 files · 488 bytes · 23 Sep",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "SMALL"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Files shared in your conversations. You see the ones in conversations you’re in.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Chat",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "B"
+        },
+        {
+          "text": "Files",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "usage",
+    "platform": "phone",
+    "theme": "dark",
+    "text": "largest",
+    "file": "14-after-phone-usage-largest-dark.png",
+    "measure": {
+      "minimum": 6.256,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "Prepared 23 Sep 2026, 11:22 · Europe/Amsterdam",
+          "ratio": 6.256,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "How much AI Neo used on this Whombat.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Usage",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "64px",
+          "shell": false,
+          "tag": "H1"
+        },
+        {
+          "text": "All providers that reported usage here, combined. These numbers don’t name individual providers.",
+          "ratio": 15.493,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            23,
+            20,
+            17
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "inbox",
+    "platform": "phone",
+    "theme": "dark",
+    "text": "largest",
+    "file": "14-after-phone-inbox-largest-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "3 days ago",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "0",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "23px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "Both parity drives dropped out 3 days ago. Your files are still there, but nothing protects them now.",
+          "ratio": 10.507,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "What only you can decide, and what Neo is on.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Settle",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        },
+        {
+          "text": "Settled",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Ask Neo to handle it",
+          "ratio": 14.891,
+          "foreground": [
+            28,
+            24,
+            21
+          ],
+          "background": [
+            241,
+            235,
+            227
+          ],
+          "fontSize": "28px",
+          "shell": false,
+          "tag": "BUTTON"
+        }
+      ]
+    }
+  },
+  {
+    "screen": "vault",
+    "platform": "phone",
+    "theme": "dark",
+    "text": "largest",
+    "file": "14-after-phone-vault-largest-dark.png",
+    "measure": {
+      "minimum": 5.515,
+      "failures": [],
+      "pairs": [
+        {
+          "text": "grafana.example.com",
+          "ratio": 5.515,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "26px",
+          "shell": false,
+          "tag": "SPAN"
+        },
+        {
+          "text": "Your entries",
+          "ratio": 6.013,
+          "foreground": [
+            160,
+            149,
+            138
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "H2"
+        },
+        {
+          "text": "Search",
+          "ratio": 9.015,
+          "foreground": [
+            210,
+            180,
+            154
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "A"
+        },
+        {
+          "text": "What Neo can sign in to when it works for you.",
+          "ratio": 11.456,
+          "foreground": [
+            216,
+            207,
+            196
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "32px",
+          "shell": false,
+          "tag": "P"
+        },
+        {
+          "text": "Grafana",
+          "ratio": 13.657,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            36,
+            32,
+            28
+          ],
+          "fontSize": "30px",
+          "shell": false,
+          "tag": "STRONG"
+        },
+        {
+          "text": "Vault",
+          "ratio": 14.891,
+          "foreground": [
+            241,
+            235,
+            227
+          ],
+          "background": [
+            28,
+            24,
+            21
+          ],
+          "fontSize": "72px",
+          "shell": false,
+          "tag": "H1"
+        }
+      ]
+    }
+  }
+]

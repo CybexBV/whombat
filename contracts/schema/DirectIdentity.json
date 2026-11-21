@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/DirectIdentity.json",
+  "title": "DirectIdentity",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "appliance": {
+      "type": "string",
+      "pattern": "^12D3KooW[1-9A-HJ-NP-Za-km-z]{44}$"
+    },
+    "edition": {
+      "type": "string",
+      "enum": [
+        "commercial",
+        "community"
+      ]
+    },
+    "claimed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "v",
+    "appliance"
+  ]
+}

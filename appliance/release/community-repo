@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# release/community-repo — the community edition's own TUF repository on this machine (Whombat HE-58, HE-62; UP-X27,
+# NX-445). Test keys only: it starts as a copy of release-tools/fixtures/community-test (never that directory itself),
+# signs whombat-community-YYYYMMDD.N releases and is served by nothing but a throwaway test (docs/runbooks/install.md,
+# “The community edition in a VM”). No public channel exists.
+#
+#   release/community-repo init <dir>                  a working copy of the test repository (refuses an existing <dir>)
+#   release/community-repo publish <dir> <build dir>   approve a `release/build community` release (its release/
+#                                                      directory) and sign new targets, snapshot and timestamp
+#   release/community-repo status <dir>                versions, expiries and releases (tufrepo status)
+#
+# Serve `<dir>/metadata/` and `<dir>/targets/` (the image's `--updates-url` names their parent), never `<dir>/keys/`.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root=$(cd "$here/.." && pwd)
+export NIX_CONFIG="${NIX_CONFIG:-}"$'\n'"experimental-features = nix-command flakes"
+export TMPDIR="${TMPDIR:-$HOME/.cache/wb-tmp}"
+fixture=$root/release-tools/fixtures/community-test
+# Where this checkout's flake is: the appliance at a repository's top, or in Whombat's appliance/ folder.
+# shellcheck source=release/lib/source.sh
+. "$here/lib/source.sh"
+
+die() {
+  echo "community-repo: $*" >&2
+  exit 1
+}
+usage() {
+  sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//' >&2
+  exit 2
+}
+tufrepo() {
+  local t
+  t=$(nix build --no-link --print-out-paths "$(source_tree_flake)#whombat-release-tools")/bin/tufrepo
+  "$t" "$@"
+}
+
+case ${1:-} in
+  init)
+    [ $# = 2 ] || usage
+    [ ! -e "$2" ] || die "$2 exists"
+    [ "$(jq -r .edition "$fixture/state.json")" = community ] || die "$fixture is not the community test repository"
+    mkdir -p "$(dirname "$2")"
+    cp -r "$fixture" "$2"
+    rm -f "$2/README.md" "$2/.lock"
+    chmod -R go-rwx "$2/keys"
+    echo "community-repo: $2 (test keys; serve metadata/ and targets/ only)" >&2
+    ;;
+  publish)
+    [ $# = 3 ] || usage
+    [ "$(jq -r .edition "$2/state.json" 2>/dev/null)" = community ] || die "$2 is not a community repository (init first)"
+    [ -f "$3/build.json" ] && [ -d "$3/release" ] || die "$3 is not a release/build output directory"
+    [ "$(jq -r .env "$3/build.json")" = community ] || die "$3 is a $(jq -r .env "$3/build.json") release"
+    tufrepo publish-release --dir "$2" --release-dir "$3/release"
+    ;;
+  status)
+    [ $# = 2 ] || usage
+    tufrepo status --dir "$2"
+    ;;
+  *) usage ;;
+esac

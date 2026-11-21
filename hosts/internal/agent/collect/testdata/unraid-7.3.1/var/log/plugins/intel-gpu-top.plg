@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name "intel-gpu-top">
+<!ENTITY author "ich777">
+<!ENTITY version "2026.01.13">
+<!ENTITY gitURL "https://github.com/&author;/&name;/releases/download">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&author;/&name;/master/&name;.plg">
+<!ENTITY md5 "d476a4b38746e357404e9ba653f3d6bb">
+<!ENTITY plugin "/boot/config/plugins/&name;">
+<!ENTITY emhttp "/usr/local/emhttp/plugins/&name;">
+]>
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="6.10.0" support="https://forums.unraid.net/topic/92865-support-ich777-nvidiadvb-kernel-helperbuilder-docker/">
+<!-- The rest of the file (CHANGES, FILE elements) is left out: the agent reads the head only. -->
+</PLUGIN>

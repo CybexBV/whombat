@@ -1,0 +1,988 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0}
+/* The screen: Whombat's dark tokens (bg #1c1815, sf #24201c, ink #f1ebe3, mut #a0958a, ok/warn/bad, brand sand). */
+.scr{position:relative;background:#1c1815;color:#f1ebe3;font-family:'Bricolage Grotesque',system-ui,sans-serif;overflow:hidden;
+  transform-origin:0 0;-webkit-font-smoothing:antialiased}
+.scr *{box-sizing:border-box}
+.scr .mono{font-family:'DM Mono',ui-monospace,monospace}
+.edge{position:absolute;left:0;right:0;top:0;height:4px;background:#e59a85;box-shadow:0 0 40px 6px rgba(229,154,133,.45);z-index:5}
+
+/* top bar */
+.tb{position:absolute;left:0;right:0;top:0;height:56px;display:flex;align-items:center;padding:0 24px;font-size:15px;color:#a0958a;z-index:4}
+.tb .nm{color:#f1ebe3;font-weight:650;font-size:18px;letter-spacing:-.01em}
+.tb .pg{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:26px;font-size:16px}
+.tb .pg span{position:relative;padding:4px 0}
+.tb .pg span.on{color:#f1ebe3;font-weight:600}
+.tb .pg span.on:after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:2px;border-radius:2px;background:#d2b49a}
+.tb .pg span.on.turn:after{right:38%}
+.tb.narrow .pg{position:static;transform:none;margin-left:34px;gap:20px}
+.tb .pg.dots{gap:9px}
+.tb .pg.dots span{width:8px;height:8px;border-radius:50%;background:#4a433c;padding:0}
+.tb .pg.dots span.on{background:#f1ebe3}.tb .pg.dots span.on:after{display:none}
+.tb .rt{margin-left:auto;display:flex;gap:18px;align-items:center}
+.tb .ch{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tb .ch svg{display:block}
+.tb .pill{margin-left:16px;background:#e59a85;color:#1c1815;font-weight:650;padding:7px 14px 7px 12px;border-radius:999px;display:flex;align-items:center;gap:8px}
+.tb .pill i{width:8px;height:8px;border-radius:50%;background:#1c1815;display:block}
+
+/* editing: the cells */
+.cell{position:absolute;border:1.5px dashed rgba(255,255,255,.09);border-radius:16px}
+
+/* widgets */
+.w{position:absolute;box-sizing:border-box;background:#24201c;border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:15px 18px;overflow:hidden}
+.w.bare{background:transparent;border-color:transparent}
+.w.bad{border-color:rgba(229,154,133,.6);background:linear-gradient(180deg,rgba(229,154,133,.12),rgba(229,154,133,.04))}
+.w.warnc{border-color:rgba(224,183,94,.45)}
+.w.flush{padding:0}
+.hd{display:flex;align-items:center;gap:9px;font-size:15px;color:#a0958a;white-space:nowrap;height:24px}
+.hd .n{overflow:hidden;text-overflow:ellipsis}
+.hd .n b{color:#f1ebe3;font-weight:600}
+.hd .r{margin-left:auto;color:#a0958a}
+.mk{display:inline-grid;place-items:center;flex:none;border-radius:7px;font-weight:800;color:#1c1815;letter-spacing:-.02em}
+.mk.ic{background:#2e2925;color:#d2b49a}
+.big{font-size:34px;font-weight:650;letter-spacing:-.02em;line-height:1.08;margin-top:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mid{font-size:22px;font-weight:600;letter-spacing:-.01em;line-height:1.2;margin-top:10px}
+.d{font-size:15px;color:#a0958a;margin-top:6px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.okc{color:#6fcf97}.warn{color:#e0b75e}.badc{color:#e59a85}.sand{color:#d2b49a}
+.bar{height:7px;border-radius:4px;background:#3a342e;overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;border-radius:4px}
+.bar.thin{height:4px;margin-top:8px}
+.rows{margin-top:10px;display:flex;flex-direction:column}
+.rw{display:flex;align-items:center;gap:12px;min-height:38px;border-top:1px solid rgba(255,255,255,.06);font-size:16px}
+.rw:first-child{border-top:0}
+.rw .l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .s{color:#a0958a;font-size:14px;white-space:nowrap}
+.rw .t{font-family:'DM Mono',monospace;font-size:14px;color:#d2b49a;width:52px;flex:none}
+.rw .two{flex:1;min-width:0;padding:7px 0}
+.rw .two b{display:block;font-weight:600;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rw .two span{display:block;color:#a0958a;font-size:14px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meter{display:grid;grid-template-columns:70px 1fr 46px;align-items:center;gap:10px;font-size:15px;color:#a0958a;height:30px}
+.meter .bar{margin:0}
+.meter b{color:#f1ebe3;font-weight:600;text-align:right}
+.lab{font-size:14px;letter-spacing:.14em;color:#7d746a;text-transform:uppercase}
+.poster{border-radius:8px;flex:none;position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.poster span{position:absolute;left:7px;right:7px;bottom:6px;font-size:11px;font-weight:700;line-height:1.1;color:rgba(255,255,255,.88);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.dot{display:inline-block;border-radius:50%;flex:none}
+
+/* clock and status (bare) */
+.ck{height:100%;display:flex;flex-direction:column;justify-content:center;padding-left:4px}
+.ck.row{flex-direction:row;align-items:center;justify-content:flex-start;gap:26px}
+.ck-t{font-weight:700;letter-spacing:-.045em;line-height:.86;white-space:nowrap}
+.ck-t .co{margin:0 .04em;position:relative;top:-.06em}
+.ck-d{color:#a0958a;margin-top:12px;white-space:nowrap}
+.ck.row .ck-d{margin-top:0}
+.st{height:100%;display:flex;flex-direction:column;justify-content:center}
+.st-h{font-weight:650;letter-spacing:-.02em;display:flex;align-items:center;gap:16px;white-space:nowrap}
+.st-s{font-size:22px;color:#a0958a;margin-top:10px;line-height:1.35}
+
+/* what's going on (bare) */
+.nw{height:100%;display:flex;flex-direction:column}
+.nw-h{display:flex;justify-content:space-between;align-items:center;height:26px}
+.nw-h .r{font-size:16px;color:#a0958a}
+.nw-c{flex:1;display:grid;gap:12px;margin-top:10px;min-height:0}
+.nw-c .mc{background:#24201c;border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:16px 18px;min-height:0;overflow:hidden}
+.nw-e{flex:1;display:grid;place-items:center;color:#7d746a;font-size:18px;border:1.5px dashed rgba(255,255,255,.07);border-radius:18px;margin-top:10px}
+
+/* servers strip (bare) */
+.sp{height:100%;display:grid;gap:10px}
+.chip{background:#24201c;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:14px 13px 10px;overflow:hidden;min-width:0}
+.chip .h{display:flex;align-items:center;gap:7px;font-size:15px;white-space:nowrap;overflow:hidden}
+.chip svg{display:block;margin-top:12px}
+.chip .nt{font-size:16px;margin-top:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.bad{border-color:rgba(229,154,133,.6);background:rgba(229,154,133,.09)}.chip.bad .nt{color:#e59a85}
+.chip.warn{border-color:rgba(224,183,94,.5);background:rgba(224,183,94,.06)}.chip.warn .nt{color:#e0b75e}
+.chip.off{opacity:.45}.chip.off .nt{color:#a0958a}
+.chip.more{display:grid;place-items:center;font-size:20px;color:#a0958a}
+
+/* camera */
+.cam{position:absolute;inset:0}
+.cam svg{position:absolute;inset:0;width:100%;height:100%}
+.cam .top{position:absolute;left:16px;right:16px;top:14px;display:flex;align-items:center;gap:9px;font-size:15px;color:#f1ebe3;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.cam .top .r{margin-left:auto;font-family:'DM Mono',monospace;font-size:14px;color:#d8cfc4}
+.cam .ev{position:absolute;left:16px;bottom:14px;background:rgba(28,24,21,.78);border-radius:999px;padding:7px 13px;font-size:14px;display:flex;align-items:center;gap:8px}
+.cam .live{width:8px;height:8px;border-radius:50%;background:#e59a85;box-shadow:0 0 0 4px rgba(229,154,133,.25)}
+.cam .lockd{position:absolute;inset:0;background:#2a2622;display:grid;place-items:center;color:#a0958a;font-size:16px;text-align:center}
+
+/* the modal */
+.ov{position:absolute;left:0;right:0;top:56px;bottom:0;background:rgba(17,14,12,.72);z-index:6}
+.md{position:absolute;left:50%;top:calc(56px + (100% - 56px)/2);transform:translate(-50%,-50%);z-index:7;background:#24201c;border-radius:30px;
+  padding:38px 44px 40px;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.md.problem{border:1.5px solid rgba(229,154,133,.65);background:linear-gradient(180deg,#3a2622,#24201c 70%)}
+.md.ask{border:1.5px solid rgba(143,127,201,.55);background:linear-gradient(180deg,#2c2733,#24201c 70%)}
+.md-top{display:flex;align-items:center;justify-content:space-between;font-family:'DM Mono',monospace;font-size:17px;letter-spacing:.06em}
+.md-top .cnt{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:0;font-size:18px;color:#a0958a;display:flex;gap:14px;align-items:center}
+.md-top .cnt b{display:inline-grid;line-height:0;place-items:center;width:40px;height:40px;border-radius:50%;border:1.5px solid #4a443d;color:#f1ebe3;font-weight:500}
+.md-t{font-size:56px;font-weight:650;letter-spacing:-.025em;line-height:1.05;margin-top:16px}
+.md-s{font-size:24px;color:#a0958a;margin-top:14px;line-height:1.4}
+.md-q{font-size:22px;line-height:1.45;color:#d8cfc4;margin-top:22px;padding:18px 22px;border-left:3px solid #8f7fc9;background:rgba(255,255,255,.035);border-radius:4px 14px 14px 4px}
+.md-b{margin-top:34px;display:flex;gap:12px;align-items:center}
+.btn{display:inline-block;font-size:22px;font-weight:600;padding:16px 28px;border-radius:999px;white-space:nowrap}
+.btn.p{background:#f1ebe3;color:#1c1815}.btn.o{border:1.5px solid #4a443d;color:#f1ebe3}.btn.t{color:#a0958a;padding-left:10px}
+.face{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#8f7fc9;color:#1c1815;font-weight:800;font-size:15px;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:0}
+.md-lock{margin-top:18px;font-size:18px;color:#a0958a;display:flex;align-items:center;gap:8px}
+
+/* editing: selection, handles, ghost */
+.w.sel{outline:4px solid #d2b49a;outline-offset:4px;z-index:3}
+.editing .w.bare{background:rgba(255,255,255,.025);border:1.5px dashed rgba(255,255,255,.13)}
+.editing .w.bare.drag,.editing .w.bare.sel{background:#24201c}
+.w.drag{opacity:.9;z-index:4;box-shadow:0 24px 60px rgba(0,0,0,.6);cursor:grabbing}
+.w .hdl{position:absolute;right:6px;bottom:6px;width:34px;height:34px;border-radius:11px;background:#d2b49a;cursor:nwse-resize;z-index:2;
+  display:grid;place-items:center}
+.w .hdl:before{content:"";width:12px;height:12px;border-right:3px solid #1c1815;border-bottom:3px solid #1c1815;border-radius:0 0 3px 0}
+.w .rm{position:absolute;right:6px;top:6px;width:34px;height:34px;border-radius:50%;background:#f1ebe3;color:#1c1815;z-index:2;
+  display:grid;place-items:center;font-size:22px;font-weight:600;cursor:pointer;line-height:1}
+.gh{position:absolute;border-radius:20px;border:4px solid #d2b49a;background:rgba(210,180,154,.12);z-index:2;pointer-events:none}
+.gh.no{border-color:#e59a85;background:rgba(229,154,133,.16)}
+.gh .w{opacity:.55;inset:0;left:0;top:0;width:100%;height:100%;border:0}
+.empty{position:absolute;left:20px;right:20px;top:56px;bottom:20px;display:grid;place-items:center;color:#7d746a;font-size:22px;text-align:center;line-height:1.5;pointer-events:none}
+
+/* The web app, light: Whombat's light tokens. */
+.ui{--bg:#fbf9f5;--side:#f3eee6;--sf:#fffdf9;--sf2:#f1ece4;--ink:#221d18;--ink2:#3d352e;--mut:#6e655c;--line:rgba(34,29,24,.09);
+  --line2:rgba(34,29,24,.18);--btn:#221d18;--btnfg:#f5f2ed;--ok:#3e7b58;--warn:#8d6d2d;--bad:#9f5540;--sel:rgba(34,29,24,.06);--brand:#7d6353;
+  font-family:'Bricolage Grotesque',system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;font-size:14px}
+.ui *{box-sizing:border-box}
+.ui button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.ui .b{height:36px;padding:0 16px;border-radius:999px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.ui .b.p{background:var(--btn);color:var(--btnfg)}
+.ui .b.o{border:1px solid var(--line2);background:var(--sf)}
+.ui .b.g{color:var(--mut)}
+.ui .b:disabled{opacity:.4;cursor:default}
+.ui .b:focus-visible,.ui .seg button:focus-visible,.ui .ci:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.ui .seg{display:inline-flex;background:var(--sf2);border-radius:999px;padding:3px}
+.ui .seg button{padding:5px 12px;border-radius:999px;color:var(--mut);font-size:13px;white-space:nowrap}
+.ui .seg button.on{background:var(--sf);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(34,29,24,.12)}
+.ui .card{background:var(--sf);border:1px solid var(--line);border-radius:16px}
+.ui .lab{font-size:12px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase;font-weight:600}
+.ui .mut{color:var(--mut)}
+.ui .tg{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--sf2);color:var(--mut);font-size:12px;white-space:nowrap}
+.ui .sw{width:38px;height:22px;border-radius:999px;background:#3e7b58;position:relative;flex:none}
+.ui .sw:after{content:"";position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.ui .mk{display:inline-grid;place-items:center;flex:none;border-radius:7px;font-weight:800;color:#1c1815}
+.ui .mk.ic{background:#2e2925;color:#d2b49a}
+
+/* Settings page */
+.st-page{padding:36px 40px}
+.st-page h1{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:0}
+.st-tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-top:22px;font-size:15px;color:var(--mut)}
+.st-tabs span{padding:10px 0;position:relative}
+.st-tabs span.on{color:var(--ink);font-weight:600}
+.st-tabs span.on:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--ink)}
+.scr-row{display:flex;gap:22px;align-items:center;padding:18px 20px;border-top:1px solid var(--line)}
+.scr-row:first-child{border-top:0}
+.scr-row .th{flex:none;border-radius:10px;overflow:hidden;background:#0d0b09;padding:5px}
+.scr-row .tx{flex:1;min-width:0}
+.scr-row .tx b{font-size:16px;font-weight:600}
+.scr-row .tx div{margin-top:4px;color:var(--mut);font-size:14px}
+.dlg-ov{position:absolute;inset:0;background:rgba(34,29,24,.32)}
+.dlg{position:absolute;background:var(--sf);border-radius:20px;box-shadow:0 24px 70px rgba(34,29,24,.28);padding:26px 28px}
+.code{display:flex;gap:8px;margin-top:10px}
+.code span{width:44px;height:52px;border:1px solid var(--line2);border-radius:10px;display:grid;place-items:center;font-size:24px;font-weight:600;background:var(--bg)}
+.code span.cur{border:2px solid var(--ink)}
+.fld{margin-top:18px}
+.fld>label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}
+.inp{height:40px;border:1px solid var(--line2);border-radius:10px;padding:0 12px;display:flex;align-items:center;background:var(--sf);font-size:14px}
+
+.ed{container-type:inline-size;container-name:ed;border-radius:14px;overflow:hidden;position:relative;border:1px solid var(--line)}
+.ed-h{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--sf);flex-wrap:wrap}
+.ed .lnk{color:var(--mut);font-size:14px;font-weight:500}
+.ed-ti b{display:block;font-size:17px;font-weight:650;letter-spacing:-.01em}
+.ed-ti span{font-size:13px;color:var(--mut)}
+.ed-act{margin-left:auto;display:flex;gap:8px;align-items:center}
+.ed-act .dirty{font-size:13px;color:var(--warn);margin-right:4px}
+.ed-tb{display:flex;align-items:center;gap:14px;padding:12px 20px 10px;flex-wrap:wrap}
+.pgs{display:flex;gap:2px;align-items:center}
+.pgs button{padding:7px 14px;border-radius:999px;font-size:14px;color:var(--mut)}
+.pgs button.on{background:var(--sf2);color:var(--ink);font-weight:600}
+.pgs .addpg{color:var(--ink2)}
+.opts{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ol{font-size:13px;color:var(--mut)}
+.ed-main{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding:4px 20px 20px}
+@container ed (min-width: 1000px){.ed-main{grid-template-columns:minmax(0,1fr) 350px}}
+.ed{user-select:none;-webkit-user-select:none}
+.ed input{user-select:text;-webkit-user-select:text}
+.ed-main{align-items:start}
+.bez{background:#0d0b09;border-radius:18px;padding:12px}
+.vp{position:relative;overflow:hidden;border-radius:8px;touch-action:none;user-select:none;-webkit-user-select:none}
+.vp .w{cursor:grab}
+.w.nofit{outline-color:#e59a85}
+.hint{font-size:13px;color:var(--mut);margin-top:10px;line-height:1.55}
+.hint kbd{font-family:'DM Mono',monospace;font-size:11.5px;background:var(--sf2);border-radius:5px;padding:1px 5px;color:var(--ink2)}
+.note{background:#f6efe2;border:1px solid rgba(141,109,45,.22);color:var(--ink2);border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:10px;gap:8px;align-items:baseline;line-height:1.45}
+.ed-pn{background:var(--sf);border:1px solid var(--line);border-radius:16px;padding:16px;max-height:540px;overflow:auto}
+.ed-pn .pt{font-size:16px;font-weight:650}
+.srch{height:38px;width:100%;border:1px solid var(--line2);border-radius:10px;padding:0 12px;font:inherit;font-size:14px;background:var(--bg);margin-top:12px;outline:none}
+.srch:focus{border-color:var(--ink2)}
+.grp{margin-top:16px}
+.grp .gl{font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:0 0 4px 6px}
+.grp.tray{background:#f6efe2;border-radius:12px;padding:10px 4px 4px}
+.ci{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:10px;cursor:grab;touch-action:pan-y}
+.ci:hover{background:var(--sel)}
+.ci .tx{flex:1;min-width:0}
+.ci .tx b{display:flex;gap:6px;align-items:center;font-weight:600;font-size:14px;white-space:nowrap}
+.ci .tx>span{display:block;font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ci .sz{font-family:'DM Mono',monospace;font-size:11.5px;color:var(--mut)}
+.ci .add{width:28px;height:28px;border-radius:50%;border:1px solid var(--line2);display:grid;place-items:center;font-size:17px;flex:none;background:var(--sf);cursor:pointer}
+.ci .add:hover{background:var(--ink);color:var(--btnfg)}
+.ci .grip{color:#b9afa4;font-size:13px;letter-spacing:-3px;width:10px;flex:none}
+.ask{margin-top:18px;padding:12px 14px;border-radius:12px;background:var(--sf2);font-size:13px;color:var(--ink2);line-height:1.45}
+.fl{position:fixed;z-index:50;pointer-events:none;background:#221d18;color:#f5f2ed;border-radius:999px;padding:7px 14px;font:600 13px 'Bricolage Grotesque',sans-serif;box-shadow:0 10px 30px rgba(34,29,24,.3)}
+.toast{position:absolute;left:50%;bottom:18px;transform:translate(-50%,16px);opacity:0;transition:opacity .18s,transform .18s;background:#221d18;color:#f5f2ed;
+  padding:10px 16px;border-radius:12px;font-size:13.5px;max-width:80%;pointer-events:none;z-index:20;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.pe-h{display:flex;align-items:center;gap:12px;margin-top:14px}
+.pe-h b{display:block;font-size:17px;font-weight:650}
+.pe-h span{font-size:13px;color:var(--mut)}
+.pv{background:#0d0b09;border-radius:12px;padding:12px;margin-top:14px;display:grid;place-items:center}
+.ed .fld{margin-top:18px}
+.ed .fld>label{display:block;font-size:13px;font-weight:600;margin-bottom:7px}
+.stp{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:34px;background:var(--sf)}
+.stp button{width:34px;height:32px;font-size:18px;color:var(--ink2)}
+.stp b{min-width:20px;text-align:center;font-weight:600}
+.sel2{height:38px;border:1px solid var(--line2);border-radius:10px;padding:0 10px;font:inherit;font-size:14px;background:var(--sf);width:100%;color:var(--ink)}
+.rmv{color:var(--bad)!important;font-weight:600;margin-top:24px;font-size:14px}
+</style></head><body>
+<div class="ui ed" id="ed">
+  <div class="ed-h">
+    <button class="lnk">‹ Screens</button>
+    <div class="ed-ti"><b>This Whombat’s screen</b><span id="sub"></span></div>
+    <div class="ed-act"><span class="dirty" id="dirty"></span><button class="b g" id="undo">Undo</button><button class="b o" id="try">Try on the screen</button><button class="b p" id="save">Save</button></div>
+  </div>
+  <div class="ed-tb">
+    <div class="pgs" id="pgs"></div>
+    <div class="opts"><span class="ol">Size</span><div class="seg" id="zoom"></div><span class="ol">Pages turn</span><div class="seg" id="turn"><button class="on" data-t="0">When touched</button><button data-t="1">Every 30 s</button></div></div>
+  </div>
+  <div class="ed-main">
+    <div>
+      <div class="note" id="note" style="display:none"></div>
+      <div class="bez"><div class="vp" id="vp"></div></div>
+      <div class="hint">Drag a widget to move it, drag its corner to make it bigger or smaller, and drag one in from <i>Add a widget</i>. A chosen widget moves with <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd>, resizes with <kbd>Shift</kbd> and the arrows, and goes with <kbd>Delete</kbd>.</div>
+    </div>
+    <aside class="ed-pn" id="pn"></aside>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+/* The widget kit: one renderer for the box's screen, monitors, tablets and the editor's preview. */
+const K = (() => {
+  const BAR = 56, PAD = 20, GAP = 12, TARGET = 140;
+  const C = { ink: '#f1ebe3', mut: '#a0958a', ok: '#6fcf97', warn: '#e0b75e', bad: '#e59a85', sand: '#d2b49a', dusty: '#8f7fc9' };
+
+  /* The grid comes from the screen: as many cells of about 140 px as fit, stretched to fill. Size is a zoom. */
+  function grid(W, H, zoom = 1) {
+    const w = W / zoom, h = H / zoom;
+    const cols = Math.max(2, Math.round((w - 2 * PAD + GAP) / (TARGET + GAP)));
+    const rows = Math.max(2, Math.round((h - BAR - PAD + GAP) / (TARGET + GAP)));
+    return { W: w, H: h, cols, rows, zoom, cw: (w - 2 * PAD - (cols - 1) * GAP) / cols, ch: (h - BAR - PAD - (rows - 1) * GAP) / rows };
+  }
+  const rect = (g, d) => ({ x: PAD + d.x * (g.cw + GAP), y: BAR + d.y * (g.ch + GAP), w: d.w * g.cw + (d.w - 1) * GAP, h: d.h * g.ch + (d.h - 1) * GAP });
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  function fits(ws, c, g, ignore) {
+    if (c.x < 0 || c.y < 0 || c.x + c.w > g.cols || c.y + c.h > g.rows) return false;
+    return ws.every((o) => o.id === ignore || !overlaps(o, c));
+  }
+  function firstFree(ws, w, h, g) {
+    for (let y = 0; y + h <= g.rows; y++) for (let x = 0; x + w <= g.cols; x++) if (fits(ws, { x, y, w, h }, g)) return { x, y };
+    return null;
+  }
+  /* Another shape: keep what fits where it is, stretch full-width ones, the rest to the first free spot, smaller if it must. */
+  function reflow(ws, oldCols, g) {
+    const out = [], dropped = [];
+    for (const d of [...ws].sort((a, b) => a.y - b.y || a.x - b.x)) {
+      const t = T[d.t];
+      let w = d.w === oldCols ? Math.min(g.cols, t.max[0]) : Math.min(d.w, g.cols, t.max[0]);
+      let h = Math.min(d.h, g.rows);
+      const c = { ...d, w, h };
+      if (fits(out, c, g)) { out.push(c); continue; }
+      let p = firstFree(out, w, h, g);
+      if (p) { out.push({ ...c, ...p }); continue; }
+      let done = false;
+      for (let hh = h; hh >= t.min[1] && !done; hh--)
+        for (let ww = w; ww >= t.min[0] && !done; ww--) {
+          p = firstFree(out, ww, hh, g);
+          if (p) { out.push({ ...d, ...p, w: ww, h: hh }); done = true; }
+        }
+      if (!done) dropped.push(d);
+    }
+    return { ws: out, dropped };
+  }
+
+  /* drawing helpers */
+  function series(seed, n = 25, lo = 3, hi = 27, start = 10) {
+    let x = seed * 9301 + 49297, v = start; const p = [];
+    for (let i = 0; i < n; i++) { x = (x * 9301 + 49297) % 233280; v = Math.max(lo, Math.min(hi, v + (x / 233280 - 0.5) * 8)); p.push(v); }
+    return p;
+  }
+  function spark(seed, w, h, color = C.ok, fill = false, n = 25) {
+    w = Math.max(10, Math.round(w)); h = Math.max(10, Math.round(h));
+    const p = series(seed, n), pts = p.map((v, i) => [(i / (p.length - 1)) * w, h - 2 - (v / 30) * (h - 4)]);
+    const line = pts.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block">${fill ? `<polygon points="0,${h} ${line} ${w},${h}" fill="${color}" fill-opacity=".13"/>` : ''}<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" stroke-opacity=".9"/></svg>`;
+  }
+  function chart(seed, w, h, color, limit) {
+    w = Math.max(20, Math.round(w)); h = Math.max(20, Math.round(h));
+    const p = series(seed, 48), pts = p.map((v, i) => [(i / (p.length - 1)) * w, h - 4 - (v / 30) * (h - 8)]);
+    const line = pts.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+    let gl = '';
+    for (let i = 1; i < 4; i++) gl += `<line x1="0" x2="${w}" y1="${(h * i) / 4}" y2="${(h * i) / 4}" stroke="rgba(255,255,255,.05)"/>`;
+    const lim = limit ? `<line x1="0" x2="${w}" y1="${h * 0.18}" y2="${h * 0.18}" stroke="${C.bad}" stroke-opacity=".5" stroke-dasharray="5 6"/>` : '';
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block">${gl}${lim}<polygon points="0,${h} ${line} ${w},${h}" fill="${color}" fill-opacity=".14"/><polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round"/></svg>`;
+  }
+  const mk = (l, c, s = 24) => `<span class="mk" style="background:${c};width:${s}px;height:${s}px;font-size:${Math.round(s * (l.length > 1 ? 0.4 : 0.5))}px">${l}</span>`;
+  const ICONS = {
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    pulse: '<path d="M3 12h4l2.5-6 5 12L17 12h4"/>',
+    now: '<rect x="3.5" y="5" width="7" height="14" rx="2"/><rect x="13.5" y="5" width="7" height="14" rx="2"/>',
+    strip: '<rect x="3" y="8" width="5" height="8" rx="1.5"/><rect x="9.5" y="8" width="5" height="8" rx="1.5"/><rect x="16" y="8" width="5" height="8" rx="1.5"/>',
+    cal: '<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  };
+  const ico = (n, s = 24) => `<span class="mk ic" style="width:${s}px;height:${s}px"><svg width="${s * 0.72}" height="${s * 0.72}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg></span>`;
+  const hd = (mark, name, right = '') => `<div class="hd">${mark}<span class="n">${name}</span>${right ? `<span class="r">${right}</span>` : ''}</div>`;
+  const bar = (p, c = C.ok, cls = '') => `<div class="bar ${cls}"><i style="width:${p}%;background:${c}"></i></div>`;
+  const poster = (p, w, h, label = true) => `<div class="poster" style="width:${Math.round(w)}px;height:${Math.round(h)}px;background:linear-gradient(160deg,${p.g[0]},${p.g[1]})">${label && w > 56 ? `<span>${p.t}</span>` : ''}</div>`;
+  const cut = (n, max) => Math.max(0, Math.min(n, max));
+
+  /* the world the mockups show */
+  const SERVERS = [
+    { id: 'pve-01', os: 'PX', c: '#e57000', sub: 'Proxmox · 16 cores', cpu: 12, mem: 41, disk: 37, seed: 1 },
+    { id: 'pve-02', os: 'PX', c: '#e57000', sub: 'Proxmox · 8 cores', cpu: 8, mem: 63, disk: 52, seed: 2 },
+    { id: 'nas', os: 'SY', c: '#3b8fd9', sub: 'Synology DS923+', cpu: 4, mem: 22, disk: 88, seed: 3 },
+    { id: 'blackbox', os: 'UN', c: '#f15a2c', sub: 'Unraid · 12 cores', cpu: 18, mem: 47, disk: 61, seed: 4 },
+    { id: 'the-falcon', os: 'LX', c: '#f2c94c', sub: 'Debian · 32 cores', cpu: 31, mem: 58, disk: 44, seed: 5 },
+    { id: 'pi-hole', os: 'RP', c: '#c51a4a', sub: 'Raspberry Pi 5', cpu: 3, mem: 18, disk: 21, seed: 6 },
+    { id: 'media', os: 'UB', c: '#e95420', sub: 'Ubuntu 24.04', cpu: 22, mem: 39, disk: 71, seed: 7 },
+    { id: 'backup-box', os: 'DB', c: '#a80030', sub: 'Debian · usually off', off: true, seed: 8 },
+  ];
+  const STREAMS = [
+    { t: 'Dune: Part Two', s: 'Film · 2024', who: 'John · Living room TV', p: 64, time: '1:42 of 2:46', g: ['#d08a3a', '#3a2212'] },
+    { t: 'The Bear', s: 'S3 · E4 “Violet”', who: 'Sanne · iPad', p: 22, time: '0:07 of 0:31', g: ['#3b7d9c', '#10222c'] },
+  ];
+  const RECENT = [
+    { t: 'Civil War', g: ['#8c3b2f', '#1d1311'] }, { t: 'Shōgun', g: ['#a8322d', '#2b0f0d'] }, { t: 'Inside Out 2', g: ['#5f8fd6', '#2b2a6b'] },
+    { t: 'Furiosa', g: ['#d9822b', '#4a1f0e'] }, { t: 'Fallout', g: ['#c7a23a', '#2c2410'] }, { t: 'Slow Horses', g: ['#5b6b52', '#1a1f17'] },
+    { t: 'Dune: Part Two', g: ['#d08a3a', '#3a2212'] }, { t: 'The Bear', g: ['#3b7d9c', '#10222c'] },
+  ];
+  const SENSORS = { 'Living room': ['21.4', 48, 11], Bedroom: ['19.2', 52, 12], Outside: ['11.8', 81, 13] };
+  const down = (c) => c.sc === 'wrong';
+
+  /* The widgets. min/max/def in cells; render(c) gets the cells (w, h), the pixels (pw, ph), the scenario and options. */
+  const T = {};
+  T.clock = {
+    name: 'Clock', group: 'whombat', bare: true, mark: () => ico('clock'), desc: 'The time and the date, big', min: [2, 1], max: [8, 3], def: [3, 2],
+    render(c) {
+      const row = c.h === 1 && c.w >= 4;
+      const fs = c.h === 1 ? Math.min(c.ph * 0.66, c.pw / (row ? 4.9 : 3.0)) : Math.min(c.ph * 0.6, c.pw / 2.75);
+      const ds = Math.max(17, Math.min(28, fs * 0.2));
+      const date = c.h === 1 && !row ? '' : `<div class="ck-d" style="font-size:${ds}px">Tuesday 27 October</div>`;
+      return `<div class="ck ${row ? 'row' : ''}"><div class="ck-t" style="font-size:${fs}px">14<span class="co">:</span>34</div>${date}</div>`;
+    },
+  };
+  T.status = {
+    name: 'How things are', group: 'whombat', bare: true, mark: () => ico('pulse'), desc: 'One sentence: all fine, or what’s wrong', min: [2, 1], max: [8, 2], def: [3, 2],
+    render(c) {
+      const bad = down(c), fs = c.h === 1 ? 30 : 46, dot = c.h === 1 ? 16 : 20;
+      const head = bad ? '1 thing is wrong' : 'All fine';
+      const sub = bad ? 'pve-02 isn’t answering since 14:30.' : c.w >= 3 ? (c.h >= 2 ? '8 servers and 14 services are running.<br>Nothing needs you.' : '8 servers and 14 services are running. Nothing needs you.') : 'Nothing needs you.';
+      const showSub = c.h >= 2 || c.w >= 5;
+      return `<div class="st"><div class="st-h" style="font-size:${fs}px"><span class="dot" style="width:${dot}px;height:${dot}px;background:${bad ? C.bad : C.ok}"></span>${head}</div>${showSub ? `<div class="st-s" style="${c.h === 1 ? 'font-size:17px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' : ''}">${sub}</div>` : ''}</div>`;
+    },
+  };
+  T.now = {
+    name: 'What’s going on', group: 'whombat', bare: true, mark: () => ico('now'), desc: 'Up to three things happening now', min: [2, 2], max: [12, 3], def: [8, 2],
+    render(c) {
+      const items = down(c)
+        ? [
+            { m: mk('B', '#6fcf97', 22), k: 'Coming up', v: 'Backups at 02:00', d: 'pve-01 and nas' },
+            { m: mk('H', '#41bdf5', 22), k: 'Front door', v: 'Locked', d: 'since 08:12' },
+          ]
+        : [
+            { m: mk('P', '#e5a00d', 22), k: 'Plex', v: '2 watching', d: 'Dune: Part Two · The Bear', x: ['John · Living room TV', 'Sanne · iPad'] },
+            { m: mk('S', '#f2c94c', 22), k: 'Downloads', v: '3 left · 20 min', b: 62, x: ['Shōgun S01, Civil War', 'and The Bear S03E05'] },
+            { m: mk('B', '#6fcf97', 22), k: 'Coming up', v: 'Backups at 02:00', d: 'pve-01, pve-02 and nas', x: ['Then the morning summary', 'at 08:00'] },
+          ];
+      const cols = c.w < 4 ? 1 : Math.min(items.length, Math.floor(c.w / 2), 3);
+      const rowsN = c.w < 4 ? Math.max(1, Math.floor((c.ph - 36) / 128)) : 1;
+      const shown = items.slice(0, cols * rowsN);
+      const tall = (c.ph - 36) / rowsN > 245;
+      const card = (i) => `<div class="mc">${hd(i.m, i.k)}<div class="big" style="font-size:${c.w < 4 ? 24 : 30}px">${i.v}</div>${i.b ? bar(i.b) : `<div class="d">${i.d}</div>`}${tall && i.x ? `<div style="margin-top:${i.b ? 26 : 22}px;border-top:1px solid rgba(255,255,255,.06);padding-top:14px">${i.x.map((l) => `<div class="d" style="margin-top:4px">${l}</div>`).join('')}</div>` : ''}</div>`;
+      return `<div class="nw"><div class="nw-h"><span class="lab">What’s going on</span>${c.w >= 6 ? '<span class="r">Dusty did 3 things today ›</span>' : ''}</div><div class="nw-c" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rowsN},1fr)">${shown.map(card).join('')}</div></div>`;
+    },
+  };
+  T.strip = {
+    name: 'Servers', group: 'whombat', bare: true, mark: () => ico('strip'), desc: 'Every server in a row, words when one isn’t fine', min: [2, 1], max: [16, 2], def: [8, 1],
+    render(c) {
+      let list = SERVERS.map((s) => ({ ...s }));
+      if (down(c)) {
+        list.find((s) => s.id === 'pve-02').st = ['bad', 'not answering'];
+        list.find((s) => s.id === 'nas').st = ['warn', 'disk 88 %'];
+        list.sort((a, b) => (b.st ? (b.st[0] === 'bad' ? 2 : 1) : 0) - (a.st ? (a.st[0] === 'bad' ? 2 : 1) : 0));
+      }
+      list.forEach((s) => { if (s.off && !s.st) s.st = ['off', 'off']; });
+      const n = Math.min(list.length, c.w);
+      const shown = list.length > n ? list.slice(0, n - 1) : list;
+      const cw = (c.pw - (n - 1) * 10) / n;
+      const tall = c.h >= 2;
+      const chip = (s) => {
+        const body = s.st ? `<div class="nt">${s.st[1]}</div>` : tall
+          ? `<div style="margin-top:14px">${['CPU', 'MEM', 'DISK'].map((k, i) => `<div class="meter" style="grid-template-columns:44px 1fr 38px;height:26px;font-size:13px"><span>${k}</span>${bar([s.cpu, s.mem, s.disk][i], C.ok, 'thin')}<b style="font-size:13px">${[s.cpu, s.mem, s.disk][i]}%</b></div>`).join('')}</div>`
+          : spark(s.seed, cw - 28, 30);
+        return `<div class="chip ${s.st ? s.st[0] : ''}"><div class="h">${mk(s.os, s.c, 19)}${s.id}</div>${body}</div>`;
+      };
+      const more = list.length > n ? `<div class="chip more">+${list.length - n + 1}</div>` : '';
+      return `<div class="sp" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${shown.map(chip).join('')}${more}</div>`;
+    },
+  };
+  T.server = {
+    name: 'A server', group: 'servers', mark: (o) => { const s = SERVERS.find((x) => x.id === (o.id || 'pve-01')); return mk(s.os, s.c); },
+    desc: 'Processor, memory and disk, with a chart when it’s wide', min: [2, 1], max: [6, 3], def: [2, 2],
+    fields: [{ k: 'id', label: 'Server', kind: 'select', opts: SERVERS.filter((s) => !s.off).map((s) => s.id), def: 'pve-01' }, { k: 'range', label: 'Chart', kind: 'seg', opts: ['1 h', '24 h', '7 d'], def: '24 h' }],
+    bad: (c) => down(c) && (c.o.id || 'pve-01') === 'pve-02',
+    render(c) {
+      const s = SERVERS.find((x) => x.id === (c.o.id || 'pve-01'));
+      const head = hd(mk(s.os, s.c), `<b>${s.id}</b>`, c.w >= 3 ? s.sub : '');
+      if (this.bad(c)) return `${head}<div class="big badc" style="font-size:28px">Not answering</div><div class="d">Since 14:30 · 4 min</div>`;
+      const meters = ['Processor', 'Memory', 'Disk'].map((k, i) => { const v = [s.cpu, s.mem, s.disk][i]; return `<div class="meter"><span>${k}</span>${bar(v, v > 85 ? C.warn : C.ok)}<b>${v} %</b></div>`; }).join('');
+      if (c.h === 1) return `${head}<div style="display:flex;align-items:flex-end;gap:14px"><div class="big">${s.cpu} %<div class="d" style="margin-top:2px">processor</div></div><div style="flex:1;padding-bottom:6px">${spark(s.seed, c.pw * 0.45, 40)}</div></div>`;
+      if (c.w < 4) return `${head}<div class="d" style="margin-top:2px">${c.w < 3 ? s.sub : 'Up 21 days'}</div><div style="margin-top:12px">${meters}</div>`;
+      const ch = c.ph - 30 - 44 - (c.h >= 3 ? 34 : 0);
+      return `${head}<div style="display:flex;gap:22px;margin-top:14px"><div style="width:42%;flex:none">${meters}<div class="d" style="margin-top:8px">Up 21 days</div></div><div style="flex:1;min-width:0"><div class="d" style="margin:0 0 6px">Processor · ${c.o.range || '24 h'}</div>${chart(s.seed, c.pw * 0.58 - 58, ch, C.ok, true)}${c.h >= 3 ? '<div class="d">Avg <b style="color:#f1ebe3">14 %</b> · Peak <b style="color:#f1ebe3">63 %</b> Sun 03:10</div>' : ''}</div></div>`;
+    },
+  };
+  T.plexNow = {
+    name: 'Now playing', group: 'plex', mark: () => mk('P', '#e5a00d'), desc: 'Who’s watching what', min: [2, 1], max: [6, 4], def: [4, 2],
+    fields: [{ k: 'lock', label: 'On a locked screen', kind: 'seg', opts: ['Titles', 'Just how many'], def: 'Titles' }],
+    bad: (c) => down(c),
+    render(c) {
+      const head = hd(mk('P', '#e5a00d'), c.w >= 3 ? '<b>Plex</b> · Now playing' : '<b>Plex</b>', c.w >= 3 && !down(c) ? '2 watching' : '');
+      if (down(c)) return `${head}<div class="mid badc">Plex isn’t answering</div><div class="d">It runs on pve-02, which is down.</div>`;
+      if (c.h === 1) return `${head}<div class="big">2 watching</div><div class="d">Dune: Part Two · The Bear</div>`;
+      if (c.w < 3) return `${head}<div class="rows">${STREAMS.map((s) => `<div class="rw"><div class="two"><b>${s.t}</b><span>${s.who}</span>${bar(s.p, C.sand, 'thin')}</div></div>`).join('')}</div>`;
+      const rowH = Math.min(c.h >= 3 ? 170 : 104, (c.ph - 30 - 44) / 2);
+      return `${head}<div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">${STREAMS.map((s) => `<div style="display:flex;gap:16px;height:${rowH}px">${poster(s, rowH * 0.68, rowH, false)}<div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center"><div style="font-size:${c.h >= 3 ? 24 : 20}px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.t}</div><div class="d" style="margin-top:3px">${s.s}</div><div class="d" style="margin-top:2px">${s.who}</div><div style="display:flex;align-items:center;gap:12px">${'<div style="flex:1">' + bar(s.p, C.sand, 'thin') + '</div>'}<span class="mono" style="font-size:13px;color:#a0958a;margin-top:8px">${s.time}</span></div></div></div>`).join('')}</div>`;
+    },
+  };
+  T.plexRecent = {
+    name: 'Recently added', group: 'plex', mark: () => mk('P', '#e5a00d'), desc: 'New films and episodes, as posters', min: [2, 2], max: [8, 3], def: [4, 2],
+    bad: (c) => down(c),
+    render(c) {
+      const head = hd(mk('P', '#e5a00d'), '<b>Plex</b> · Recently added', c.w >= 4 ? 'this week' : '');
+      if (down(c)) return `${head}<div class="mid badc">Plex isn’t answering</div>`;
+      const inner = c.pw - 36, h0 = c.ph - 30 - 44, n = Math.max(1, Math.round((inner + 10) / (h0 * 0.67 + 10)));
+      const pw = (inner - (n - 1) * 10) / n, ph = Math.min(h0, pw * 1.5);
+      return `${head}<div style="display:flex;gap:10px;margin-top:14px">${RECENT.slice(0, n).map((p) => poster(p, pw, ph)).join('')}</div>`;
+    },
+  };
+  T.plexLib = {
+    name: 'Library', group: 'plex', mark: () => mk('P', '#e5a00d'), desc: 'How much is in it, and room left', min: [2, 1], max: [6, 1], def: [4, 1],
+    render(c) {
+      const f = [['1,284', 'films'], ['312', 'shows'], ['4.2 TB', 'free']].slice(0, c.w >= 4 ? 3 : 2);
+      return `${hd(mk('P', '#e5a00d'), '<b>Plex</b> · Library')}<div style="display:flex;gap:30px;margin-top:8px">${f.map((x) => `<div><span style="font-size:30px;font-weight:650;letter-spacing:-.02em">${x[0]}</span> <span class="d" style="display:inline">${x[1]}</span></div>`).join('')}</div>`;
+    },
+  };
+  T.sab = {
+    name: 'Download queue', group: 'sab', mark: () => mk('S', '#f2c94c'), desc: 'What’s downloading and how long it takes', min: [2, 1], max: [6, 4], def: [4, 2],
+    bad: (c) => down(c),
+    render(c) {
+      const head = hd(mk('S', '#f2c94c'), '<b>SABnzbd</b>', down(c) ? '' : '42 MB/s');
+      if (down(c)) return `${head}<div class="mid badc">Stopped</div><div class="d">It runs on pve-02, which is down.</div>`;
+      if (c.h === 1) return `${head}<div class="big" style="font-size:30px">3 left · 20 min</div>${bar(62)}`;
+      const items = [['Shōgun S01 1080p', '4.2 GB', 78], ['Civil War 2024 2160p', '12.1 GB', 31], ['The Bear S03E05', '1.1 GB', 0], ['Furiosa 2024 1080p', '8.4 GB', 0], ['Slow Horses S04E03', '1.4 GB', 0]];
+      const n = Math.max(1, Math.floor((c.ph - 30 - 60) / 50));
+      return `${head}<div class="mid" style="margin-top:8px">${Math.min(n, 5) > 3 ? '5' : '3'} left · about ${Math.min(n, 5) > 3 ? '1 h 10 min' : '20 min'}</div><div class="rows" style="margin-top:6px">${items.slice(0, n).map((i) => `<div class="rw"><div class="two"><b style="font-size:15px;font-weight:500">${i[0]}</b>${i[2] ? bar(i[2], C.ok, 'thin') : '<span>Waiting</span>'}</div><span class="s">${i[1]}</span></div>`).join('')}</div>`;
+    },
+  };
+  T.seerr = {
+    name: 'Requests', group: 'seerr', mark: () => mk('Se', '#7b5cd6'), desc: 'New requests waiting for a yes', min: [2, 1], max: [4, 3], def: [2, 2],
+    bad: (c) => down(c),
+    render(c) {
+      const head = hd(mk('Se', '#7b5cd6'), '<b>Seerr</b>', down(c) ? '' : '2 new');
+      if (down(c)) return `${head}<div class="mid badc">Isn’t answering</div>`;
+      if (c.h === 1) return `${head}<div class="big" style="font-size:28px">2 new requests</div><div class="d">Inside Out 2 · Fallout</div>`;
+      return `${head}<div class="rows">${[['Inside Out 2', 'Sanne · 1 h ago', RECENT[2]], ['Fallout · Season 2', 'Tom · 3 h ago', RECENT[4]]].map((r) => `<div class="rw">${poster(r[2], 30, 44, false)}<div class="two"><b>${r[0]}</b><span>${r[1]}</span></div></div>`).join('')}</div>`;
+    },
+  };
+  T.sonarr = {
+    name: 'Coming episodes', group: 'sonarr', mark: () => mk('So', '#35c5f4'), desc: 'The next episodes of your shows', min: [2, 1], max: [4, 4], def: [2, 2],
+    render(c) {
+      const head = hd(mk('So', '#35c5f4'), '<b>Sonarr</b> · Coming up');
+      if (c.h === 1) return `${head}<div class="big" style="font-size:28px">The Bear · 21:00</div><div class="d">S3 E5, tonight</div>`;
+      const rows = [['21:00', 'The Bear', 'S3 E5 · tonight'], ['Thu', 'Shōgun', 'S1 E9'], ['Fri', 'Slow Horses', 'S4 E3'], ['Sun', 'Fallout', 'S2 E1']];
+      const n = Math.max(1, Math.floor((c.ph - 40) / 54));
+      return `${head}<div class="rows">${rows.slice(0, n).map((r) => `<div class="rw"><span class="t">${r[0]}</span><div class="two"><b>${r[1]}</b><span>${r[2]}</span></div></div>`).join('')}</div>`;
+    },
+  };
+  T.climate = {
+    name: 'A sensor', group: 'ha', mark: () => mk('H', '#41bdf5'), desc: 'A temperature or any figure, with its day', min: [1, 1], max: [4, 3], def: [2, 2],
+    fields: [{ k: 'sensor', label: 'Sensor', kind: 'select', opts: Object.keys(SENSORS), def: 'Living room' }],
+    render(c) {
+      const name = c.o.sensor || 'Living room', [t, hum, seed] = SENSORS[name];
+      if (c.w === 1) return `<div style="height:100%;display:flex;flex-direction:column;justify-content:center"><div style="font-size:40px;font-weight:650;letter-spacing:-.03em">${t}°</div><div class="d" style="margin-top:2px">${name}</div></div>`;
+      const head = hd(mk('H', '#41bdf5'), `<b>${name}</b>`);
+      if (c.h === 1) return `${head}<div class="big">${t} °C</div><div class="d">Humidity ${hum} %</div>`;
+      return `${head}<div style="display:flex;align-items:baseline;gap:12px"><div class="big" style="font-size:44px">${t} °C</div><span class="d">${hum} %</span></div><div style="margin-top:12px">${spark(seed, c.pw - 36, Math.max(30, c.ph - 178), '#41bdf5', true)}</div><div class="d">Today 19.8 – 22.1 °C</div>`;
+    },
+  };
+  T.lights = {
+    name: 'Lights', group: 'ha', mark: () => mk('H', '#41bdf5'), desc: 'Which lights are on', min: [2, 1], max: [4, 4], def: [2, 2],
+    render(c) {
+      const head = hd(mk('H', '#41bdf5'), '<b>Lights</b>', '2 on');
+      if (c.h === 1) return `${head}<div class="big">2 on</div><div class="d">Living room, Kitchen</div>`;
+      const L = [['Living room', 'On · 80 %', 1], ['Kitchen', 'On', 1], ['Garden', 'Off', 0], ['Hall', 'Off', 0], ['Bedroom', 'Off', 0], ['Office', 'Off', 0]];
+      const n = Math.max(1, Math.floor((c.ph - 44) / 40));
+      return `${head}<div class="rows">${L.slice(0, n).map((l) => `<div class="rw"><span class="dot" style="width:12px;height:12px;background:${l[2] ? '#f2c94c' : '#4a433c'};${l[2] ? 'box-shadow:0 0 0 5px rgba(242,201,76,.16)' : ''}"></span><span class="l">${l[0]}</span><span class="s">${l[1]}</span></div>`).join('')}</div>`;
+    },
+  };
+  T.camera = {
+    name: 'Camera', group: 'ha', mark: () => mk('H', '#41bdf5'), desc: 'A still from a camera, every few seconds', min: [2, 2], max: [8, 5], def: [4, 3], flush: true,
+    fields: [{ k: 'cam', label: 'Camera', kind: 'select', opts: ['Front door', 'Driveway', 'Garden'], def: 'Front door' }, { k: 'lock', label: 'On a locked screen', kind: 'seg', opts: ['Show it', 'Hide it'], def: 'Hide it' }],
+    render(c) {
+      const name = c.o.cam || 'Front door';
+      if (c.locked && (c.o.lock || 'Hide it') === 'Hide it') return `<div class="cam"><div class="lockd">${name}<br>Unlock to see the camera</div></div>`;
+      const scene = `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4554"/><stop offset="1" stop-color="#1e252e"/></linearGradient><radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#f6d58a" stop-opacity=".55"/><stop offset="1" stop-color="#f6d58a" stop-opacity="0"/></radialGradient></defs>
+        <rect width="400" height="300" fill="url(#sky)"/><rect x="0" y="0" width="400" height="215" fill="#4b4640"/>
+        <g opacity=".22">${Array.from({ length: 12 }, (_, i) => `<line x1="0" x2="400" y1="${i * 18 + 6}" y2="${i * 18 + 6}" stroke="#2b2724" stroke-width="2"/>`).join('')}</g>
+        <rect x="150" y="62" width="100" height="153" rx="3" fill="#2b211b"/><rect x="158" y="70" width="84" height="145" fill="#4a3426"/><rect x="170" y="84" width="60" height="44" fill="#5c4130"/><rect x="170" y="140" width="60" height="62" fill="#5c4130"/>
+        <circle cx="232" cy="150" r="4" fill="#c9a86a"/><circle cx="285" cy="80" r="40" fill="url(#glow)"/><rect x="280" y="72" width="10" height="16" rx="2" fill="#f6d58a"/>
+        <polygon points="120,215 280,215 360,300 40,300" fill="#3c3d3f"/><rect x="0" y="213" width="400" height="5" fill="#2e2f31"/>
+        <ellipse cx="72" cy="222" rx="44" ry="26" fill="#2f4a33"/><ellipse cx="335" cy="226" rx="48" ry="24" fill="#2c4430"/>
+        <rect x="0" y="0" width="400" height="300" fill="#000" opacity=".08"/></svg>`;
+      return `<div class="cam">${scene}<div class="top">${mk('H', '#41bdf5', 22)}<span>${name}</span><span class="r">14:33</span></div>${c.h >= 2 ? '<div class="ev"><span class="live"></span>Someone at the door · 14:21</div>' : ''}</div>`;
+    },
+  };
+  T.internet = {
+    name: 'Internet', group: 'unifi', mark: () => mk('U', '#1fb0ff'), desc: 'Speed now and the devices on your network', min: [2, 1], max: [6, 3], def: [2, 2],
+    render(c) {
+      const head = hd(mk('U', '#1fb0ff'), '<b>Internet</b>', `<span class="okc">● Online</span>`);
+      const fig = `<div class="big" style="font-size:30px">942 <span style="color:#a0958a;font-weight:500">↓</span> 48 <span style="color:#a0958a;font-weight:500">↑</span></div><div class="d">Mbps · 174 devices</div>`;
+      if (c.h === 1) return head + fig;
+      if (c.w < 4) return `${head}${fig}<div style="margin-top:12px">${spark(21, c.pw - 36, Math.max(28, c.ph - 30 - 100 - 20), '#1fb0ff', true)}</div>`;
+      return `${head}<div style="display:flex;gap:20px"><div style="width:40%;flex:none">${fig}</div><div style="flex:1;margin-top:14px">${chart(21, c.pw * 0.6 - 56, c.ph - 30 - 40, '#1fb0ff')}</div></div>`;
+    },
+  };
+  T.pihole = {
+    name: 'Blocked today', group: 'pihole', mark: () => mk('Pi', '#96060c'), desc: 'How much Pi-hole kept out today', min: [1, 1], max: [4, 2], def: [2, 1],
+    render(c) {
+      if (c.w === 1) return `<div style="height:100%;display:flex;flex-direction:column;justify-content:center"><div style="font-size:40px;font-weight:650;letter-spacing:-.03em">12 %</div><div class="d" style="margin-top:2px">blocked</div></div>`;
+      return `${hd(mk('Pi', '#96060c'), '<b>Pi-hole</b>')}<div class="big">12 % blocked</div><div class="d">2,184 of 18,204 lookups today</div>${c.h >= 2 ? `<div style="margin-top:14px">${spark(31, c.pw - 36, c.ph - 30 - 100 - 20, '#c94a4a', true)}</div>` : ''}`;
+    },
+  };
+  T.storage = {
+    name: 'Storage', group: 'synology', mark: () => mk('SY', '#3b8fd9'), desc: 'How full it is, and when it will be full', min: [2, 1], max: [4, 2], def: [2, 2],
+    warn: true,
+    render(c) {
+      const head = hd(mk('SY', '#3b8fd9'), '<b>nas</b> · Volume 1');
+      return `${head}<div class="big warn">88 % full</div>${bar(88, C.warn)}${c.h >= 2 ? '<div class="d" style="margin-top:12px;white-space:normal">At this rate it’s full in about 12 days.</div><div class="d">3.1 TB free of 26 TB</div>' : ''}`;
+    },
+  };
+  T.backups = {
+    name: 'Backups', group: 'pbs', mark: () => mk('PB', '#e57000'), desc: 'Last night’s backups, one line', min: [2, 1], max: [4, 2], def: [2, 1],
+    render(c) {
+      return `${hd(mk('PB', '#e57000'), '<b>Backups</b>')}<div class="big" style="font-size:28px"><span class="okc">✓</span> All 14 done</div><div class="d">Last night at 02:00</div>`;
+    },
+  };
+  T.work = {
+    name: 'Dusty’s work', group: 'whombat', mark: () => mk('D', C.dusty), desc: 'What Dusty is doing and how far along', min: [2, 1], max: [8, 3], def: [4, 1],
+    render(c) {
+      const head = hd(mk('D', C.dusty), '<b>Dusty</b>', c.w >= 3 ? '2 of 4 done' : '');
+      return `${head}<div class="mid" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Updating the server agents</div>${bar(50, C.dusty)}${c.h >= 2 ? '<div class="rows" style="margin-top:12px">' + [['✓', 'pve-01'], ['✓', 'pve-02'], ['…', 'the-falcon'], ['', 'blackbox']].slice(0, Math.floor((c.ph - 110) / 38)).map((r) => `<div class="rw"><span style="width:18px;color:${r[0] === '✓' ? C.ok : C.sand}">${r[0]}</span><span class="l">${r[1]}</span><span class="s">${r[0] === '✓' ? 'updated' : r[0] ? 'now' : 'next'}</span></div>`).join('') + '</div>' : ''}`;
+    },
+  };
+  T.coming = {
+    name: 'Coming up', group: 'whombat', mark: () => ico('cal'), desc: 'Automations and backups in the next hours', min: [2, 1], max: [4, 4], def: [2, 2],
+    render(c) {
+      const head = hd(ico('cal'), '<b>Coming up</b>');
+      if (c.h === 1) return `${head}<div class="big" style="font-size:28px">Backups · 02:00</div><div class="d">pve-01, pve-02 and nas</div>`;
+      const rows = [['02:00', 'Backups', 'pve-01, pve-02 and nas'], ['08:00', 'Morning summary', 'in your Chat'], ['Thu', 'Renew the certificate', 'on pve-01']];
+      return `${head}<div class="rows">${rows.slice(0, Math.max(1, Math.floor((c.ph - 40) / 54))).map((r) => `<div class="rw"><span class="t">${r[0]}</span><div class="two"><b>${r[1]}</b><span>${r[2]}</span></div></div>`).join('')}</div>`;
+    },
+  };
+  T.calendar = {
+    name: 'Today', group: 'gcal', mark: () => mk('G', '#4285f4'), desc: 'Today’s appointments from a calendar', min: [2, 1], max: [6, 4], def: [3, 2],
+    render(c) {
+      const head = hd(mk('G', '#4285f4'), '<b>Today</b>', c.w >= 3 ? 'Family calendar' : '');
+      if (c.h === 1) return `${head}<div class="big" style="font-size:28px">15:30 Dentist</div><div class="d">Sanne · then 2 more</div>`;
+      const rows = [['15:30', 'Dentist', 'Sanne'], ['18:00', 'Football training', 'Tom'], ['19:30', 'Dinner at Marco’s', 'everyone'], ['Wed', 'Bins out', 'tomorrow morning']];
+      return `${head}<div class="rows">${rows.slice(0, Math.max(1, Math.floor((c.ph - 40) / 54))).map((r) => `<div class="rw"><span class="t">${r[0]}</span><div class="two"><b>${r[1]}</b><span>${r[2]}</span></div></div>`).join('')}</div>`;
+    },
+  };
+  T.done = {
+    name: 'Done today', group: 'whombat', mark: () => ico('check'), desc: 'What Dusty finished today', min: [2, 1], max: [6, 4], def: [3, 2],
+    render(c) {
+      const head = hd(ico('check'), '<b>Dusty did 3 things today</b>');
+      if (c.h === 1) return `${head}<div class="mid">Renewed the certificate on pve-01</div>`;
+      const rows = [['12:41', 'Renewed the certificate on pve-01'], ['13:05', 'Updated the-falcon and restarted it'], ['11:20', 'Answered Bakkerij de Vries']];
+      return `${head}<div class="rows">${rows.slice(0, Math.max(1, Math.floor((c.ph - 40) / 40))).map((r) => `<div class="rw"><span class="okc">✓</span><span class="l">${r[1]}</span><span class="s mono">${r[0]}</span></div>`).join('')}</div>`;
+    },
+  };
+
+  /* What Add a widget lists, by where it comes from. */
+  const GROUPS = [
+    { k: 'whombat', label: 'Whombat and Dusty', items: [['clock'], ['status'], ['now'], ['strip'], ['work'], ['coming'], ['done']] },
+    { k: 'servers', label: 'Servers', items: SERVERS.filter((s) => !s.off).map((s) => ['server', { id: s.id }, s.id, s.sub]) },
+    { k: 'plex', label: 'Plex', items: [['plexNow'], ['plexRecent'], ['plexLib']] },
+    { k: 'sab', label: 'SABnzbd', items: [['sab']] },
+    { k: 'seerr', label: 'Seerr', items: [['seerr']] },
+    { k: 'sonarr', label: 'Sonarr', items: [['sonarr']] },
+    { k: 'ha', label: 'Home Assistant', items: [['climate'], ['lights'], ['camera']] },
+    { k: 'unifi', label: 'UniFi', items: [['internet']] },
+    { k: 'pihole', label: 'Pi-hole', items: [['pihole']] },
+    { k: 'synology', label: 'Synology', items: [['storage']] },
+    { k: 'pbs', label: 'Proxmox Backup Server', items: [['backups']] },
+    { k: 'gcal', label: 'Google Calendar', items: [['calendar']] },
+  ];
+
+  /* one widget, absolutely placed on the screen */
+  function widget(g, d, o = {}) {
+    const t = T[d.t], r = rect(g, d);
+    const c = { w: d.w, h: d.h, pw: r.w, ph: r.h, sc: o.sc || 'calm', o: d.o || {}, locked: o.locked };
+    const bad = t.bad ? t.bad(c) : false;
+    const cls = ['w', t.bare ? 'bare' : '', t.flush ? 'flush' : '', bad ? 'bad' : '', t.warn ? 'warnc' : '', o.sel === d.id ? 'sel' : ''].join(' ');
+    const handles = o.sel === d.id ? '<span class="rm" title="Remove">×</span><span class="hdl" title="Drag to resize"></span>' : '';
+    const pos = o.at ? `left:0;top:0;width:100%;height:100%` : `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
+    return `<div class="${cls}" data-id="${d.id}" style="${pos}">${t.render(c)}${handles}</div>`;
+  }
+
+  const SVG = {
+    wifi: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></svg>',
+    batt: '<svg width="24" height="16" viewBox="0 0 26 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="2" width="21" height="12" rx="3"/><rect x="3.5" y="4.5" width="14" height="7" rx="1.5" fill="currentColor" stroke="none"/><path d="M24.5 6v4" stroke-linecap="round"/></svg>',
+    lock: '<svg width="16" height="18" viewBox="0 0 16 18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="7.5" width="13" height="9" rx="2.5"/><path d="M4.5 7.5V5a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+  };
+  function topbar(o) {
+    const chips = (o.chips || ['wifi', 'online', 'battery', 'lock']).map((k) => ({
+      wifi: `<span class="ch">${SVG.wifi}Ziggo-5G</span>`,
+      online: `<span class="ch"><span class="dot" style="width:8px;height:8px;background:${C.ok}"></span>Online</span>`,
+      battery: `<span class="ch">${SVG.batt}84 %</span>`,
+      lock: `<span class="ch">${SVG.lock}${o.locked === false ? 'Unlocked' : 'Locked'}</span>`,
+      help: `<span class="ch">Remote help on</span>`,
+    }[k])).join('');
+    const pages = (o.pages || []).length > 1
+      ? `<div class="pg ${o.dots ? 'dots' : ''}">${o.pages.map((p, i) => `<span class="${i === o.page ? 'on' : ''} ${i === o.page && o.autoTurn ? 'turn' : ''}">${o.dots ? '' : p}</span>`).join('')}</div>` : '';
+    const pill = o.pill ? `<span class="pill"><i></i>${o.pill}</span>` : '';
+    return `<div class="tb ${o.narrow ? 'narrow' : ''}"><span class="nm">${o.name || 'Home'}</span>${pill}${pages}<div class="rt">${chips}</div></div>`;
+  }
+  const CHEV = (d) => `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d > 0 ? 'M5 2l5 5-5 5' : 'M9 2L4 7l5 5'}"/></svg>`;
+  function modal(m) {
+    if (m.kind === 'problem')
+      return `<div class="ov"></div><div class="md problem" style="width:${m.width || 860}px"><div class="md-top"><span class="badc">SINCE 14:30 · 4 MIN</span><span class="cnt">1 of 2<b>${CHEV(1)}</b></span></div>
+        <div class="md-t">pve-02 isn’t answering</div><div class="md-s">Plex, SABnzbd and Seerr run on it, so they’re down too.</div>
+        <div class="md-b"><span class="btn p">Ask Dusty to fix it</span><span class="btn o">Open pve-02</span><span class="btn t">Not now</span></div></div>`;
+    return `<div class="ov"></div><div class="md ask" style="width:${m.width || 860}px"><div class="md-top"><span style="display:flex;align-items:center;gap:12px;color:#c8bde8"><span class="face">D</span>DUSTY ASKS · 14:36</span><span class="cnt"><b>${CHEV(-1)}</b>2 of 2</span></div>
+      <div class="md-t" style="font-size:46px">Send this reply to Bakkerij de Vries?</div>
+      <div class="md-q">“Hi Marieke, the order form works again. Your three orders from this morning came through fine.”</div>
+      <div class="md-b"><span class="btn p">Send it</span><span class="btn o">Change it first</span><span class="btn t">Not now</span></div>
+      ${m.locked ? '<div class="md-lock">' + SVG.lock + 'Your PIN first, then it sends.</div>' : ''}</div>`;
+  }
+  /* a whole screen at its logical size */
+  function screen(o) {
+    const g = grid(o.W, o.H, o.zoom || 1);
+    let h = `<div class="scr ${o.editing ? 'editing' : ''}" style="width:${g.W}px;height:${g.H}px">`;
+    if (o.edge) h += '<div class="edge"></div>';
+    h += topbar({ ...o, narrow: g.W < 1100 && !o.dots });
+    if (o.editing) for (let y = 0; y < g.rows; y++) for (let x = 0; x < g.cols; x++) { const r = rect(g, { x, y, w: 1, h: 1 }); h += `<div class="cell" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px"></div>`; }
+    for (const d of o.ws) h += widget(g, d, o);
+    if (o.editing && !o.ws.length) h += '<div class="empty">An empty page.<br>Drag widgets here, or press + on one.</div>';
+    if (o.modal) h += modal(o.modal);
+    return { html: h + '</div>', g };
+  }
+  /* a screen scaled into a box of the given width */
+  function fitted(o, width) {
+    const { html, g } = screen(o), s = width / g.W;
+    return `<div style="width:${width}px;height:${Math.round(g.H * s)}px;overflow:hidden;position:relative"><div style="transform:scale(${s});transform-origin:0 0;width:${g.W}px;height:${g.H}px">${html}</div></div>`;
+  }
+
+  function fittedBox(o, mw, mh) {
+    const g = grid(o.W, o.H, o.zoom || 1), s = Math.min(mw / g.W, mh / g.H);
+    return `<div style="width:${mw}px;height:${mh}px;display:grid;place-items:center"><div style="width:${Math.round(g.W * s)}px;height:${Math.round(g.H * s)}px;overflow:hidden;position:relative;border-radius:4px"><div style="transform:scale(${s});transform-origin:0 0;width:${g.W}px;height:${g.H}px">${screen(o).html}</div></div></div>`;
+  }
+
+  let n = 0;
+  const L = (rows) => rows.map(([t, x, y, w, h, o]) => ({ id: 'w' + ++n, t, x, y, w, h, o: o || {} }));
+  const LAYOUTS = {
+    defaultLaptop: () => L([['clock', 0, 0, 4, 2], ['status', 4, 0, 4, 2], ['now', 0, 2, 8, 2], ['strip', 0, 4, 8, 1]]),
+    overview: () => L([['clock', 0, 0, 3, 2], ['status', 3, 0, 3, 2], ['climate', 6, 0, 2, 2], ['now', 0, 2, 4, 2], ['server', 4, 2, 2, 2, { id: 'pve-01' }], ['internet', 6, 2, 2, 2], ['strip', 0, 4, 8, 1]]),
+    media: () => L([['plexNow', 0, 0, 4, 3], ['sab', 4, 0, 4, 2], ['seerr', 4, 2, 2, 2], ['sonarr', 6, 2, 2, 2], ['plexRecent', 0, 3, 4, 2], ['plexLib', 4, 4, 4, 1]]),
+    house: () => L([['camera', 0, 0, 4, 3], ['lights', 4, 0, 2, 3], ['climate', 6, 0, 2, 1], ['climate', 6, 1, 2, 1, { sensor: 'Outside' }], ['pihole', 6, 2, 2, 1], ['calendar', 0, 3, 4, 2], ['coming', 4, 3, 2, 2], ['backups', 6, 3, 2, 1], ['storage', 6, 4, 2, 1]]),
+    monitor: () => L([['clock', 0, 0, 3, 2], ['status', 3, 0, 3, 2], ['climate', 6, 0, 2, 2], ['internet', 8, 0, 4, 2], ['now', 0, 2, 6, 2], ['plexNow', 6, 2, 3, 3], ['sab', 9, 2, 3, 3], ['server', 0, 4, 3, 2, { id: 'pve-01' }], ['storage', 3, 4, 3, 2], ['seerr', 6, 5, 3, 1], ['backups', 9, 5, 3, 1], ['strip', 0, 6, 12, 1]]),
+    tablet: () => L([['clock', 0, 0, 5, 1], ['camera', 0, 1, 3, 2], ['climate', 3, 1, 2, 1], ['lights', 3, 2, 2, 1], ['calendar', 0, 3, 5, 2], ['plexNow', 0, 5, 3, 2], ['sonarr', 3, 5, 2, 2]]),
+  };
+
+  return { BAR, PAD, GAP, C, grid, rect, fits, firstFree, reflow, T, GROUPS, SERVERS, widget, screen, fitted, fittedBox, topbar, LAYOUTS, mk, ico };
+})();
+
+/* Settings → Screens → a screen's layout: the editor. */
+const ED = (() => {
+  const $ = (s) => document.querySelector(s);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const ZOOMS = [0.8, 1, 1.3], ZN = ['Smaller', 'Normal', 'Larger'];
+  const W = 1280, H = 800;
+  const E = { zi: 1, page: 0, sel: null, undo: [], dirty: false, q: '', turn: 0, pages: [] };
+  let G, SC, D = null, A = null, uid = 1000, tt = 0;
+  const g0 = K.grid(W, H, 1), k0 = g0.cols + 'x' + g0.rows;
+  E.pages = [['Overview', K.LAYOUTS.overview()], ['Media', K.LAYOUTS.media()], ['House', K.LAYOUTS.house()]]
+    .map(([name, ws]) => ({ name, shapes: { [k0]: ws }, last: k0, adapted: {}, tray: {} }));
+
+  /* A layout per page and per shape: another shape starts as a rearranged copy, kept once you change it. */
+  const key = () => G.cols + 'x' + G.rows;
+  function cur() {
+    const p = E.pages[E.page], k = key();
+    if (!p.shapes[k]) {
+      const r = K.reflow(p.shapes[p.last], +p.last.split('x')[0], G);
+      p.shapes[k] = r.ws; p.tray[k] = r.dropped; p.adapted[k] = p.last;
+    }
+    return p.shapes[k];
+  }
+  const sel = () => cur().find((x) => x.id === E.sel);
+  function touched() { const p = E.pages[E.page]; p.last = key(); delete p.adapted[key()]; E.dirty = true; }
+  function snap() { E.undo.push(JSON.stringify({ pages: E.pages, zi: E.zi, page: E.page })); if (E.undo.length > 80) E.undo.shift(); }
+  function undo() {
+    const s = E.undo.pop(); if (!s) return;
+    const o = JSON.parse(s); E.pages = o.pages; E.zi = o.zi; E.page = o.page; E.sel = null; render(); toast('Undone.');
+  }
+  function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('on'), 2600); }
+
+  function render() {
+    G = K.grid(W, H, ZOOMS[E.zi]);
+    cur();
+    if (E.sel && !sel()) E.sel = null;
+    $('#sub').textContent = `Built in · 13.4″ · ${G.cols} × ${G.rows} · ${E.pages.length} page${E.pages.length > 1 ? 's' : ''}`;
+    $('#undo').disabled = !E.undo.length;
+    $('#dirty').textContent = E.dirty ? 'Not saved yet' : '';
+    $('#save').disabled = !E.dirty;
+    $('#pgs').innerHTML = E.pages.map((p, i) => `<button class="${i === E.page ? 'on' : ''}" data-pg="${i}">${esc(p.name)}</button>`).join('') + '<button class="addpg" data-pg="add">+ Page</button>';
+    $('#zoom').innerHTML = ZN.map((n, i) => `<button class="${i === E.zi ? 'on' : ''}" data-z="${i}">${n}</button>`).join('');
+    const p = E.pages[E.page], from = p.adapted[key()];
+    $('#note').style.display = from ? 'block' : 'none';
+    if (from) $('#note').innerHTML = `<b>Rearranged for ${G.cols} × ${G.rows}.</b> Your ${from.replace('x', ' × ')} layout stays as it was. Change anything here and this one is kept too.`;
+    canvas(); panel();
+  }
+  function canvas() {
+    const vp = $('#vp'); SC = vp.clientWidth / G.W; vp.style.height = Math.round(G.H * SC) + 'px';
+    const { html } = K.screen({ W, H, zoom: ZOOMS[E.zi], ws: cur(), pages: E.pages.map((x) => x.name), page: E.page, editing: true, sel: E.sel, autoTurn: E.turn === 1 });
+    vp.innerHTML = `<div style="transform:scale(${SC});transform-origin:0 0;width:${G.W}px;height:${G.H}px">${html}</div>`;
+    // Beside the screen the panel is as tall as the screen's column and scrolls; under it, a fixed height.
+    const wide = $('#ed').clientWidth >= 1000;
+    $('#pn').style.maxHeight = (wide ? $('.ed-main > div').offsetHeight : 540) + 'px';
+  }
+  function ghost(c, ok, t, o) {
+    let gh = document.querySelector('#vp .gh');
+    if (!c) { if (gh) gh.remove(); return; }
+    if (!gh) { gh = document.createElement('div'); document.querySelector('#vp .scr').appendChild(gh); }
+    const r = K.rect(G, c); gh.className = 'gh' + (ok ? '' : ' no');
+    Object.assign(gh.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    const k = t ? `${t}|${c.w}x${c.h}` : '';
+    if (gh.dataset.k !== k) { gh.dataset.k = k; gh.innerHTML = t ? K.widget(G, { id: 'ghost', t, ...c, o }, { at: true }) : ''; }
+  }
+
+  /* moving and resizing on the screen */
+  function onCanvasDown(e) {
+    if (e.button !== 0) return;
+    const w = e.target.closest('.w');
+    if (e.target.closest('.rm')) { remove(w.dataset.id); return; }
+    if (!w) { if (E.sel) { E.sel = null; render(); } return; }
+    e.preventDefault();
+    const d = cur().find((x) => x.id === w.dataset.id);
+    D = { mode: e.target.closest('.hdl') ? 'resize' : 'move', id: d.id, sx: e.clientX, sy: e.clientY, o: { ...d }, moved: false, el: w };
+    addEventListener('pointermove', dMove); addEventListener('pointerup', dUp, { once: true });
+  }
+  function dMove(e) {
+    if (!D.moved && Math.hypot(e.clientX - D.sx, e.clientY - D.sy) < 5) return;
+    D.moved = true;
+    const dx = (e.clientX - D.sx) / SC, dy = (e.clientY - D.sy) / SC, stx = G.cw + K.GAP, sty = G.ch + K.GAP, t = K.T[D.o.t];
+    if (D.mode === 'move') {
+      D.c = { x: clamp(Math.round(D.o.x + dx / stx), 0, G.cols - D.o.w), y: clamp(Math.round(D.o.y + dy / sty), 0, G.rows - D.o.h), w: D.o.w, h: D.o.h };
+      D.ok = K.fits(cur(), D.c, G, D.id);
+      D.el.classList.add('drag'); D.el.style.transform = `translate(${dx}px,${dy}px)`;
+      ghost(D.c, D.ok);
+    } else {
+      D.c = { x: D.o.x, y: D.o.y, w: clamp(Math.round(D.o.w + dx / stx), t.min[0], Math.min(t.max[0], G.cols - D.o.x)), h: clamp(Math.round(D.o.h + dy / sty), t.min[1], Math.min(t.max[1], G.rows - D.o.y)) };
+      D.ok = K.fits(cur(), D.c, G, D.id);
+      // It redraws at the new size while you drag, so you see what it shows at that size.
+      const k = D.c.w + 'x' + D.c.h;
+      if (D.k !== k) { D.k = k; const tmp = document.createElement('div'); tmp.innerHTML = K.widget(G, { ...D.o, ...D.c }, { sel: D.id }); const nw = tmp.firstChild; D.el.replaceWith(nw); D.el = nw; }
+      D.el.classList.toggle('nofit', !D.ok);
+      ghost(D.ok ? null : D.c, false);
+    }
+  }
+  function dUp() {
+    removeEventListener('pointermove', dMove);
+    const d = D; D = null;
+    if (d.moved && d.ok && (d.c.x !== d.o.x || d.c.y !== d.o.y || d.c.w !== d.o.w || d.c.h !== d.o.h)) { snap(); Object.assign(sel2(d.id), d.c); touched(); }
+    else if (d.moved && !d.ok) toast(d.mode === 'move' ? 'That spot is taken. Drop it on an empty spot, or move the other one first.' : 'No room to make it that big there.');
+    E.sel = d.id; render();
+  }
+  const sel2 = (id) => cur().find((x) => x.id === id);
+
+  /* dragging in from Add a widget */
+  function onPanelDown(e) {
+    const it = e.target.closest('.ci');
+    if (!it || e.button !== 0 || e.target.closest('.add')) return;
+    e.preventDefault();
+    const t = it.dataset.t, T = K.T[t];
+    A = { t, o: JSON.parse(it.dataset.o || '{}'), w: Math.min(T.def[0], G.cols), h: Math.min(T.def[1], G.rows), sx: e.clientX, sy: e.clientY, moved: false };
+    addEventListener('pointermove', aMove); addEventListener('pointerup', aUp, { once: true });
+  }
+  function aMove(e) {
+    if (!A.moved && Math.hypot(e.clientX - A.sx, e.clientY - A.sy) < 5) return;
+    if (!A.moved) { A.moved = true; A.fl = document.createElement('div'); A.fl.className = 'fl'; A.fl.textContent = K.T[A.t].name; document.body.appendChild(A.fl); }
+    A.fl.style.left = e.clientX + 14 + 'px'; A.fl.style.top = e.clientY + 12 + 'px';
+    const r = $('#vp').getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) { A.c = null; ghost(null); A.fl.style.opacity = 1; return; }
+    A.fl.style.opacity = 0;
+    const lx = (e.clientX - r.left) / SC, ly = (e.clientY - r.top) / SC, stx = G.cw + K.GAP, sty = G.ch + K.GAP, T = K.T[A.t];
+    const x0 = Math.floor((lx - K.PAD) / stx), y0 = Math.floor((ly - K.BAR) / sty);
+    let c = { x: clamp(x0 - Math.floor((A.w - 1) / 2), 0, G.cols - A.w), y: clamp(y0 - Math.floor((A.h - 1) / 2), 0, G.rows - A.h), w: A.w, h: A.h };
+    let ok = K.fits(cur(), c, G);
+    // No room for its usual size: the biggest size that fits under the pointer.
+    for (let h = A.h; !ok && h >= T.min[1]; h--)
+      for (let w = A.w; !ok && w >= T.min[0]; w--) {
+        const t2 = { x: clamp(x0, 0, G.cols - w), y: clamp(y0, 0, G.rows - h), w, h };
+        if (K.fits(cur(), t2, G)) { c = t2; ok = true; }
+      }
+    A.c = c; A.ok = ok; ghost(c, ok, A.t, A.o);
+  }
+  function aUp() {
+    removeEventListener('pointermove', aMove);
+    const a = A; A = null; if (a.fl) a.fl.remove(); ghost(null);
+    if (!a.moved || !a.c) return;
+    if (!a.ok) { toast('No room there. Drop it on an empty spot, or make something smaller first.'); return; }
+    place(a.t, a.o, a.c);
+  }
+  function place(t, o, c) {
+    snap(); const id = 'n' + ++uid; cur().push({ id, t, x: c.x, y: c.y, w: c.w, h: c.h, o });
+    touched(); E.sel = id; render();
+    const T = K.T[t]; toast(`${t === 'server' ? o.id : T.name} added${c.w < T.def[0] || c.h < T.def[1] ? ', a bit smaller so it fits' : ''}.`);
+  }
+  function addAuto(t, o) {
+    const T = K.T[t];
+    for (let h = Math.min(T.def[1], G.rows); h >= T.min[1]; h--)
+      for (let w = Math.min(T.def[0], G.cols); w >= T.min[0]; w--) {
+        const p = K.firstFree(cur(), w, h, G);
+        if (p) return place(t, o, { ...p, w, h });
+      }
+    toast('No room on this page. Make a widget smaller, or add a page.');
+  }
+  function remove(id) {
+    const ws = cur(), i = ws.findIndex((x) => x.id === id), d = ws[i];
+    snap(); ws.splice(i, 1); touched(); E.sel = null; render();
+    toast(`${d.t === 'server' ? d.o.id : K.T[d.t].name} removed. Undo brings it back.`);
+  }
+  function resizeBy(dim, n) {
+    const d = sel(), T = K.T[d.t], c = { x: d.x, y: d.y, w: d.w, h: d.h };
+    c[dim] += n;
+    if (c.w < T.min[0] || c.h < T.min[1]) return toast(`It doesn’t get smaller than ${T.min[0]} × ${T.min[1]}.`);
+    if (c.w > T.max[0] || c.h > T.max[1]) return toast(`It doesn’t get bigger than ${T.max[0]} × ${T.max[1]}.`);
+    if (!K.fits(cur(), c, G, d.id)) return toast('No room to grow that way. Move it, or make room first.');
+    snap(); Object.assign(d, c); touched(); render();
+  }
+  function setOpt(k, v) { const d = sel(); snap(); d.o = { ...d.o, [k]: v }; touched(); render(); }
+
+  /* the side panel: Add a widget, or Edit widget */
+  function item(t, o, name, desc) {
+    const T = K.T[t], oj = JSON.stringify(o || {});
+    const here = cur().some((x) => x.t === t && JSON.stringify(x.o || {}) === oj);
+    return `<div class="ci" data-t="${t}" data-o='${oj}'><span class="grip">⋮⋮</span>${T.mark(o || {})}<div class="tx"><b>${esc(name || T.name)}${here ? '<span class="tg">On this page</span>' : ''}</b><span>${esc(desc || T.desc)}</span></div><span class="sz">${T.def[0]}×${T.def[1]}</span><button class="add" aria-label="Add ${esc(name || T.name)}">+</button></div>`;
+  }
+  function catalogue() {
+    const q = E.q.trim().toLowerCase();
+    const tray = (E.pages[E.page].tray[key()] || []).filter((d) => !cur().some((x) => x.id === d.id));
+    let h = tray.length ? `<div class="grp tray"><div class="gl">Didn’t fit after rearranging</div>${tray.map((d) => item(d.t, d.o, d.t === 'server' ? d.o.id : '')).join('')}</div>` : '';
+    for (const g of K.GROUPS) {
+      const items = g.items.map(([t, o, name, desc]) => ({ t, o: o || {}, name: name || K.T[t].name, desc: desc || K.T[t].desc }))
+        .filter((i) => !q || `${i.name} ${i.desc} ${g.label}`.toLowerCase().includes(q));
+      if (items.length) h += `<div class="grp"><div class="gl">${g.label}</div>${items.map((i) => item(i.t, i.o, i.name, i.desc)).join('')}</div>`;
+    }
+    if (!h) h = `<div class="mut" style="padding:18px 6px;font-size:13.5px">No widget called “${esc(E.q)}” yet.</div>`;
+    return h + '<div class="ask">Missing something? Ask Dusty, for example “put my solar panels on the screen”, and it makes a widget from that connection.</div>';
+  }
+  function panel() {
+    const pn = $('#pn'), d = sel();
+    if (!d) {
+      const had = document.activeElement && document.activeElement.id === 'srch';
+      pn.innerHTML = `<div class="pt">Add a widget</div><input class="srch" id="srch" placeholder="Search widgets" value="${esc(E.q)}"><div id="cat">${catalogue()}</div>`;
+      if (had) { const s = $('#srch'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+      return;
+    }
+    const T = K.T[d.t], grp = (K.GROUPS.find((g) => g.k === T.group) || {}).label || '';
+    const name = d.t === 'server' ? d.o.id || 'pve-01' : T.name;
+    const r = K.rect(G, d), s = Math.min(310 / r.w, 200 / r.h, 0.62);
+    const pv = `<div class="pv"><div style="width:${Math.round(r.w * s)}px;height:${Math.round(r.h * s)}px;position:relative;overflow:hidden;border-radius:${12 * s}px"><div class="scr" style="transform:scale(${s});transform-origin:0 0;width:${r.w}px;height:${r.h}px">${K.widget(G, d, { at: true })}</div></div></div>`;
+    const fields = (T.fields || []).map((f) => {
+      const v = d.o[f.k] || f.def;
+      if (f.kind === 'select') return `<div class="fld"><label>${f.label}</label><select class="sel2" data-f="${f.k}">${f.opts.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`;
+      return `<div class="fld"><label>${f.label}</label><div class="seg" data-f="${f.k}">${f.opts.map((o) => `<button class="${o === v ? 'on' : ''}" data-v="${o}">${o}</button>`).join('')}</div></div>`;
+    }).join('');
+    const size = `<div class="fld"><label>Size</label><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="mut">Wide</span><div class="stp"><button data-s="w,-1" aria-label="Narrower">−</button><b>${d.w}</b><button data-s="w,1" aria-label="Wider">+</button></div><span class="mut" style="margin-left:6px">High</span><div class="stp"><button data-s="h,-1" aria-label="Lower">−</button><b>${d.h}</b><button data-s="h,1" aria-label="Higher">+</button></div></div><div class="mut" style="font-size:12.5px;margin-top:8px">From ${T.min[0]} × ${T.min[1]} to ${T.max[0]} × ${T.max[1]}. It shows more as it grows.</div></div>`;
+    const tap = T.group === 'whombat' ? '' : `<div class="fld"><label>Touching it on the screen</label><div class="mut" style="font-size:13px">Opens ${d.t === 'server' ? name : grp}’s page, full screen.</div></div>`;
+    pn.innerHTML = `<button class="lnk" data-act="back">‹ Add a widget</button><div class="pe-h">${T.mark(d.o)}<div><b>${esc(name)}</b><span>${d.t === 'server' ? 'Server' : `${esc(grp)} · ${esc(T.desc)}`}</span></div></div>${pv}${fields}${size}${tap}<button class="rmv" data-act="remove">Remove from this page</button>`;
+  }
+
+  function wire() {
+    $('#vp').addEventListener('pointerdown', onCanvasDown);
+    $('#ed').addEventListener('dragstart', (e) => e.preventDefault());
+    $('#pn').addEventListener('mousedown', (e) => { if (e.target.closest('.ci') && !e.target.closest('.add')) e.preventDefault(); });
+    const pn = $('#pn');
+    pn.addEventListener('pointerdown', onPanelDown);
+    pn.addEventListener('input', (e) => { if (e.target.id === 'srch') { E.q = e.target.value; $('#cat').innerHTML = catalogue(); } });
+    pn.addEventListener('change', (e) => { const f = e.target.closest('[data-f]'); if (f && f.tagName === 'SELECT') setOpt(f.dataset.f, f.value); });
+    pn.addEventListener('click', (e) => {
+      const ad = e.target.closest('.add');
+      if (ad) { const it = ad.closest('.ci'); return addAuto(it.dataset.t, JSON.parse(it.dataset.o || '{}')); }
+      const act = e.target.closest('[data-act]');
+      if (act && act.dataset.act === 'back') { E.sel = null; return render(); }
+      if (act && act.dataset.act === 'remove') return remove(E.sel);
+      const st = e.target.closest('[data-s]');
+      if (st) { const [dim, n] = st.dataset.s.split(','); return resizeBy(dim, +n); }
+      const v = e.target.closest('[data-v]');
+      if (v) setOpt(v.closest('[data-f]').dataset.f, v.dataset.v);
+    });
+    $('#pgs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pg]'); if (!b) return;
+      if (b.dataset.pg === 'add') {
+        snap(); const k = key();
+        E.pages.push({ name: 'Page ' + (E.pages.length + 1), shapes: { [k]: [] }, last: k, adapted: {}, tray: {} });
+        E.page = E.pages.length - 1; E.sel = null; E.dirty = true; render(); return toast('A new page. Drag widgets onto it.');
+      }
+      E.page = +b.dataset.pg; E.sel = null; render();
+    });
+    $('#zoom').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-z]'); if (!b || +b.dataset.z === E.zi) return;
+      snap(); E.zi = +b.dataset.z; E.sel = null; E.dirty = true; render();
+      const p = E.pages[E.page], n = (p.tray[key()] || []).length;
+      toast(p.adapted[key()] ? `Rearranged for ${G.cols} × ${G.rows}${n ? `. ${n} didn’t fit and wait in Add a widget` : ''}.` : `Your ${G.cols} × ${G.rows} layout.`);
+    });
+    $('#turn').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      E.turn = +b.dataset.t; E.dirty = true;
+      [...$('#turn').children].forEach((x) => x.classList.toggle('on', x === b)); render();
+      toast(E.turn ? 'Pages turn by themselves every 30 seconds, and wait while someone touches the screen.' : 'Pages turn when someone swipes or touches a page’s name.');
+    });
+    $('#undo').addEventListener('click', undo);
+    $('#save').addEventListener('click', () => { E.dirty = false; render(); toast('Saved. The screen shows it within a few seconds.'); });
+    $('#try').addEventListener('click', () => toast('On the screen now for a minute, with “Preview from Settings” on it.'));
+    document.addEventListener('keydown', (e) => {
+      if (e.target.closest && e.target.closest('input,select')) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return undo(); }
+      const d = sel(); if (!d) return;
+      const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (dirs[e.key]) {
+        e.preventDefault(); const [dx, dy] = dirs[e.key];
+        if (e.shiftKey) return dx ? resizeBy('w', dx) : resizeBy('h', dy);
+        const c = { x: d.x + dx, y: d.y + dy, w: d.w, h: d.h };
+        if (K.fits(cur(), c, G, d.id)) { snap(); Object.assign(d, c); touched(); render(); }
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(d.id); }
+      if (e.key === 'Escape') { E.sel = null; render(); }
+    });
+    new ResizeObserver(() => { if (!D && !A) canvas(); }).observe($('#vp'));
+  }
+  wire(); render();
+  return { E, render, select: (i) => { E.sel = cur()[i].id; render(); }, zoom: (i) => { E.zi = i; render(); }, cur };
+})();
+
+</script>
+</body></html>

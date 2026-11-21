@@ -1,0 +1,27 @@
+Page: com.whombat.mobile
+App: com.whombat.mobile
+Snapshot: 24 nodes
+@e1 [application] "Whombat"
+@e2 [scroll-area] [scrollable]
+@e3 [text] "Settings"
+@e4 [button] "Mara Okafor, Your photo"
+@e5 [segmented-control] "Theme"
+@e6 [button] "System" [selected]
+@e7 [button] "Light"
+@e8 [button] "Dark"
+@e9 [text] "Theme"
+@e10 [button] "Neo, Claude Code"
+@e11 [button] "Connections, 5 connected"
+@e12 [button] "This Whombat, Demo world on this phone"
+@e13 [button] "Screens, 3 screens"
+@e14 [button] "Advanced, Model, keys, skills, spend and more"
+@e15 [text] "VERSION"
+@e16 [text] "This app"
+@e17 [text] "3.73.0 · build 3073000"
+@e18 [tab-bar] "Tab Bar"
+@e19 [button] "Chat"
+@e20 [button] "Inbox"
+@e21 [button] "Overview"
+@e22 [button] "Automations"
+@e23 [button] "Settings" [selected]
+@e24 [toolbar] "Toolbar"
