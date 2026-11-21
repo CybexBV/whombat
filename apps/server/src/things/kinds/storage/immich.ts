@@ -37,6 +37,7 @@ import { bytes, clip, dateOf, line, list, num, plural, rec, str, thousands, when
 import { actAs } from '../act';
 import { cachedRead, KIND_DEADLINE_MS, latestRead, problemOf, withDeadline } from '../read';
 import type { KindAction, KindModule } from '../registry';
+import { declaredSettings } from '../settings';
 import {
   addedNote,
   countLine,
@@ -52,6 +53,7 @@ import {
   weekChange,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { IMMICH_SETTINGS } from './immich-settings';
 import { fixed, fullness, itemLines, type KindNotice, lookInto, newer, UNTIL } from './lines';
 import { ifPresent, optional, readJson } from './net';
 import {
@@ -1254,6 +1256,8 @@ export const IMMICH_KIND: KindModule = {
       points: immichPoints(s),
     };
   },
+  asksFirst: 'deleting and settings ask first',
   actions: { resume: resumeQueue },
+  settings: declaredSettings(IMMICH_SETTINGS),
   checks: IMMICH_CHECKS,
 };

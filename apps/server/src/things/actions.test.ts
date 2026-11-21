@@ -9,8 +9,11 @@ import type { PrincipalRow } from '../read/principals';
 import { actionChangeKind, actionFor } from './actions';
 import { pageButton } from './kinds/buttons';
 import { HOME_ASSISTANT_KIND } from './kinds/first';
+import { ADGUARD_KIND, PIHOLE_KIND } from './kinds/home/dns';
+import { RADARR_KIND, SONARR_KIND } from './kinds/media/arr';
 import { PLEX_KIND } from './kinds/media/plex';
 import { SETTING_ACTION } from './kinds/settings';
+import { IMMICH_KIND } from './kinds/storage/immich';
 import { refreshOf } from './page';
 
 const row = {
@@ -35,7 +38,16 @@ function refused(run: () => unknown): { code: string; message: string } {
 describe('actionFor (SD-S04)', () => {
   it('gives the person the kind’s own action and its declared settings action', () => {
     expect(actionFor(row, viewer, 'restart')).toBe(HOME_ASSISTANT_KIND.actions?.restart);
-    expect(actionFor({ ...row, catalogId: 'plex' }, viewer, SETTING_ACTION)).toBe(PLEX_KIND.settings?.action);
+    for (const [catalogId, kind] of [
+      ['plex', PLEX_KIND],
+      ['adguard', ADGUARD_KIND],
+      ['pihole', PIHOLE_KIND],
+      ['sonarr', SONARR_KIND],
+      ['radarr', RADARR_KIND],
+      ['immich', IMMICH_KIND],
+    ] as const) {
+      expect(actionFor({ ...row, catalogId }, viewer, SETTING_ACTION)).toBe(kind.settings?.action);
+    }
   });
 
   it('refuses an action the kind doesn’t offer, a name an object has anyway, and a kind without buttons', () => {
