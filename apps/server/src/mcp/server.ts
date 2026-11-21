@@ -213,7 +213,12 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
       return seesActiveConnection(db, agentId, row, agentRow);
     }),
     assesses: once(() => assessesInTurn(db, agentId, dispatchId)),
-    proposes: once(() => proposesInTurn(db, agentId, dispatchId)),
+    proposes: once(async () => {
+      const row = await dispatch();
+      return row?.trigger === 'automation' && row.agentId === agentId
+        ? proposesInTurn(db, agentId, dispatchId)
+        : false;
+    }),
     looks: once(() => looksInTurn(db, agentId, dispatchId)),
     tracker,
     unavailableActions: async () =>

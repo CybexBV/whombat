@@ -43,8 +43,16 @@ import { conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
-import { clipWords } from './steps/words';
 import { type AutomationRunRow, type AutomationStepRow, publishRun } from './store';
+
+/** At most `max` characters, cut at a word boundary when possible. */
+function clipTitle(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = /\s/.test(text.charAt(max - 1)) ? cut.length : cut.search(/\s\S*$/);
+  const kept = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/, '');
+  return `${kept}…`;
+}
 
 /** What an agent hears when it calls `propose_connection_actions` outside a proposing turn. */
 export const NOT_PROPOSING_ACTIONS =
@@ -354,7 +362,7 @@ export async function planConnectionActions(
   const proposal =
     planned.length === 1 && planned[0]
       ? {
-          title: clipWords(planned[0].summary, 160),
+          title: clipTitle(planned[0].summary, 160),
           details: `${planned[0].label}: ${planned[0].summary}.`.slice(0, 2000),
         }
       : {
