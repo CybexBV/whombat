@@ -108,7 +108,11 @@ describe('Pi-hole declared settings', () => {
     expect(by('rate_limit')).toMatchObject({ value: '1,000 lookups / min', choose: { current: 1000 } });
     expect(by('query_logging')).toMatchObject({ value: 'On', on: true });
     expect(by('privacy_level')).toMatchObject({ value: 'Show everything', choose: { current: 0 } });
-    expect(by('max_db_days')).toMatchObject({ value: '90 days', choose: { current: 90 } });
+    expect(by('max_db_days')).toMatchObject({
+      value: '90 days',
+      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
+    });
+    expect(by('max_db_days')?.choose).toBeUndefined();
     expect(by('dns_and_dhcp')?.elsewhere).toEqual({
       label: 'In Pi-hole',
       url: 'http://192.0.2.16/admin/settings/dns',
@@ -135,9 +139,6 @@ describe('Pi-hole declared settings', () => {
     await act(ctx, { target: 'rate_limit', value: 2000 });
     expect(ph.store.dns.rateLimit).toEqual({ count: 2000, interval: 60 });
 
-    await act(ctx, { target: 'max_db_days', value: 30 });
-    expect(ph.store.database.maxDBdays).toBe(30);
-
     await act(ctx, { target: 'privacy_level', value: 2 });
     expect(ph.store.misc.privacylevel).toBe(2);
   });
@@ -145,6 +146,7 @@ describe('Pi-hole declared settings', () => {
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
     await expect(act(ctx, { target: 'privacy_level', value: 9 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
 
@@ -155,14 +157,14 @@ describe('Pi-hole declared settings', () => {
     await expect(act(ctx, { target: 'dnssec', value: true })).rejects.toThrow(/didn’t take/);
 
     ph.store.deaf = false;
-    const done = await act(ctx, { target: 'max_db_days', value: 180 });
-    ph.store.database.maxDBdays = 365;
+    const done = await act(ctx, { target: 'privacy_level', value: 2 });
+    ph.store.misc.privacylevel = 3;
     await expect(
-      act(ctx, { target: 'max_db_days', value: done.undo?.value, expect: done.undo?.expect }),
+      act(ctx, { target: 'privacy_level', value: done.undo?.value, expect: done.undo?.expect }),
     ).rejects.toThrow(/changed again since/);
-    ph.store.database.maxDBdays = 180;
-    await act(ctx, { target: 'max_db_days', value: done.undo?.value, expect: done.undo?.expect });
-    expect(ph.store.database.maxDBdays).toBe(90);
+    ph.store.misc.privacylevel = 2;
+    await act(ctx, { target: 'privacy_level', value: done.undo?.value, expect: done.undo?.expect });
+    expect(ph.store.misc.privacylevel).toBe(0);
   });
 
   it('describes changes in plain words for the approval card', async () => {

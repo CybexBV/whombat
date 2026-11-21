@@ -108,14 +108,6 @@ const PRIVACY_LEVELS: SettingChoice[] = [
   { value: 3, label: 'Anonymous', note: 'no lookup history' },
 ];
 
-const DB_DAYS: SettingChoice[] = [
-  { value: 7, label: '7 days' },
-  { value: 30, label: '30 days' },
-  { value: 90, label: '90 days' },
-  { value: 180, label: '180 days' },
-  { value: 365, label: '1 year' },
-];
-
 function daysWords(v: SettingValue): string {
   const d = Number(v);
   if (d === 365) return '1 year';
@@ -203,13 +195,10 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     id: 'max_db_days',
     group: 'logs',
     label: 'Keep query history for',
-    help: 'How many days of lookups Pi-hole keeps in its database.',
-    kind: 'choice',
+    help: 'How many days of lookups Pi-hole keeps in its database. Shortening it deletes older history, so it stays in Pi-hole.',
+    kind: 'elsewhere',
     read: (s) => s.maxDbDays ?? undefined,
-    choices: (s) => withCurrent(DB_DAYS, s.maxDbDays ?? undefined, daysWords),
     words: daysWords,
-    write: (v) => patchConfig({ database: { maxDBdays: Number(v) } }),
-    sentence: (v) => `Pi-hole now keeps query history for ${daysWords(v)}.`,
   },
 ];
 

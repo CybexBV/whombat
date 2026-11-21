@@ -115,25 +115,8 @@ function filterIntervalWords(v: SettingValue): string {
   return h % 24 === 0 ? `Every ${h / 24} days` : `Every ${h} hours`;
 }
 
-const QUERYLOG_INTERVALS: SettingChoice[] = [
-  { value: 6 * HOUR_MS, label: '6 hours' },
-  { value: DAY_MS, label: '24 hours' },
-  { value: 7 * DAY_MS, label: '7 days' },
-  { value: 30 * DAY_MS, label: '30 days' },
-  { value: 90 * DAY_MS, label: '90 days' },
-];
-
-const STATS_INTERVALS: SettingChoice[] = [
-  { value: DAY_MS, label: '24 hours' },
-  { value: 7 * DAY_MS, label: '7 days' },
-  { value: 30 * DAY_MS, label: '30 days' },
-  { value: 90 * DAY_MS, label: '90 days' },
-];
-
 function durationWords(v: SettingValue): string {
   const ms = Number(v);
-  const known = QUERYLOG_INTERVALS.find((c) => c.value === ms);
-  if (known) return known.label;
   if (ms >= DAY_MS && ms % DAY_MS === 0) {
     const d = ms / DAY_MS;
     return d === 1 ? '24 hours' : `${d} days`;
@@ -246,17 +229,10 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'querylog_interval',
     group: 'logs',
     label: 'Keep query log for',
-    help: 'Older lookups are removed automatically.',
-    kind: 'choice',
+    help: 'How long AdGuard Home keeps lookups before removing them. Shortening it deletes older history, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.querylog?.interval,
-    choices: (s) => withCurrent(QUERYLOG_INTERVALS, s.querylog?.interval, durationWords),
     words: durationWords,
-    write: (v, s) => ({
-      method: 'PUT',
-      path: '/control/querylog/config/update',
-      body: { ...(s.querylog?.raw ?? {}), interval: Number(v) },
-    }),
-    sentence: (v) => `AdGuard Home now keeps its query log for ${durationWords(v)}.`,
   },
   {
     id: 'anonymize_ip',
@@ -294,17 +270,10 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'stats_interval',
     group: 'logs',
     label: 'Keep statistics for',
-    help: 'How much history the charts and counts cover.',
-    kind: 'choice',
+    help: 'How long AdGuard Home keeps charts and counts. Shortening it deletes older history, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.stats?.interval,
-    choices: (s) => withCurrent(STATS_INTERVALS, s.stats?.interval, durationWords),
     words: durationWords,
-    write: (v, s) => ({
-      method: 'PUT',
-      path: '/control/stats/config/update',
-      body: { ...(s.stats?.raw ?? {}), interval: Number(v) },
-    }),
-    sentence: (v) => `AdGuard Home now keeps statistics for ${durationWords(v)}.`,
   },
   {
     id: 'dns_and_access',
