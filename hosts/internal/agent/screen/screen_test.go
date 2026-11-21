@@ -825,6 +825,9 @@ func TestUnlockByHelper(t *testing.T) {
 	locked = false
 	mu.Unlock()
 	run(t, s, proto.ScreenRequest{Op: proto.ScreenClick, X: 1, Y: 1})
+	// The click ends with the button let go (a second "ptr 0 1 1"); the
+	// fake may record it after run returns, so wait for it before clearing.
+	f.waitSeen(t, "ptr 0 1 1", 2)
 	reset(true, "alex", map[string]any{"ok": true, "message": "typed"})
 	r := run(t, s, proto.ScreenRequest{Op: proto.ScreenUnlock})
 	if !r.OK || r.Message != "" || *r.Status.Locked {

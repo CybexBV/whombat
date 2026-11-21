@@ -65,8 +65,8 @@
     },
     {
       "name": "cli-int",
-      "about": "The CLI's integration tests.",
-      "when": ["apps/cli/src/**"],
+      "about": "The CLI's integration tests, also when the server code they run changed (its migrations and what `@whombat/server/host` exports).",
+      "when": ["apps/cli/src/**", "apps/server/src/db/**", "apps/server/src/{host-api,config,version}.ts"],
       "run": "fast-test with-postgres --user whombat --password whombat --db whombat --unless-up 127.0.0.1:55432 -- pnpm test:cli",
       "retry": false
     },

@@ -10,7 +10,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { readMigrations } from '@whombat/server/host';
+import { binarySchema, readMigrations } from '@whombat/server/host';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateCommand, schemaCheckCommand, targetFromEnv } from './schema';
@@ -18,6 +18,8 @@ import { migrateCommand, schemaCheckCommand, targetFromEnv } from './schema';
 const BASE_URL = process.env.DATABASE_URL ?? 'postgres://whombat:whombat@localhost:55432/whombat';
 const BIN = join(import.meta.dirname, '..', 'bin', 'whombat.mjs');
 const ALL = readMigrations();
+// Versions count on from the migrations an older chain had before this one's baseline (compat.json's schemaBase).
+const VERSION = binarySchema().base + ALL.length;
 
 async function admin(statement: string): Promise<void> {
   const sql = postgres(BASE_URL, { max: 1, onnotice: () => {} });
@@ -80,11 +82,11 @@ describe('schema-check and migrate as the appliance runs them', () => {
       database: { version: 0 },
       pending: ALL.map((m) => m.tag),
       // MD-12: the schema migrate leaves and its floors (the newest migration's floors are older schemas).
-      target: { version: ALL.length, tag: ALL.at(-1)?.tag },
+      target: { version: VERSION, tag: ALL.at(-1)?.tag },
     });
     const floors = before.json.target as { readers: number; writers: number };
     expect(floors.readers).toBeLessThanOrEqual(floors.writers);
-    expect(floors.writers).toBeLessThanOrEqual(ALL.length);
+    expect(floors.writers).toBeLessThanOrEqual(VERSION);
 
     const migrated = await whombat(['migrate', '--json', '--env']);
     expect(migrated.code).toBe(0);
@@ -100,7 +102,7 @@ describe('schema-check and migrate as the appliance runs them', () => {
     expect(after.json).toMatchObject({
       verdict: 'current',
       access: 'read-write',
-      database: { version: ALL.length, postgresMajor: 17 },
+      database: { version: VERSION, postgresMajor: 17 },
     });
   }, 60_000);
 

@@ -107,13 +107,21 @@ esac`, vars))
 	return f
 }
 
+// write replaces a file in one step (a new file renamed over it), as the
+// fake emcmd's sed -i does: the agent reads var.ini every few milliseconds
+// while a task runs, and a file emptied and then written could be read empty
+// in between, which looks like a parity check that ended with no errors.
 func (f *unraidFixture) write(rel, content string) {
 	f.t.Helper()
 	p := filepath.Join(f.root, rel)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+	tmp := p + ".new"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.Rename(tmp, p); err != nil {
 		f.t.Fatal(err)
 	}
 }

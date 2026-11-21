@@ -9,9 +9,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "check": "concurrently --group --kill-others-on-fail --names lint,notices,types,tests \"biome check --error-on-warnings . && bash scripts/check-forbidden.sh\" \"pnpm notices --check\" \"pnpm typecheck\" \"pnpm test\"",
+    "check": "concurrently --max-processes ${CHECK_JOBS:-4} --group --kill-others-on-fail --names lint,notices,types,tests \"biome check --error-on-warnings . && bash scripts/check-forbidden.sh\" \"pnpm notices --check\" \"pnpm typecheck\" \"pnpm test\"",
     "ci:check": "python3 scripts/ci/check.py run",
-    "typecheck": "pnpm -r --parallel typecheck && tsc -p tsconfig.json",
+    "typecheck": "pnpm -r --no-sort --workspace-concurrency=${TYPECHECK_JOBS:-64} typecheck && tsc -p tsconfig.json",
     "lint": "biome check --error-on-warnings . && bash scripts/check-forbidden.sh",
     "format": "biome check --write .",
     "dev": "node --import tsx scripts/dev.ts",
