@@ -3,7 +3,7 @@
  * under `~/.cache/whombat-mgd/` (override `WB_MGD_HOME`), never in /tmp. Ports can be overridden for parallel
  * runs; the defaults are the architecture's.
  */
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,8 +27,14 @@ export function withoutLinks(p: string): string {
 }
 
 export const STATE_HOME = withoutLinks(process.env.WB_MGD_HOME ?? join(homedir(), '.cache', 'whombat-mgd'));
-/** Shared-host temp dir (the host `/tmp` runs out of inodes). */
-export const TMP_DIR = process.env.TMPDIR ?? join(homedir(), '.cache', 'wb-tmp');
+/** Shared-host temp dir (the host `/tmp` runs out of inodes). Made when missing: a fresh machine without `TMPDIR`,
+ * such as a CI runner, has no such folder yet. */
+export const TMP_DIR = process.env.TMPDIR ?? madeDir(join(homedir(), '.cache', 'wb-tmp'));
+
+function madeDir(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 export const paths = {
   home: STATE_HOME,
