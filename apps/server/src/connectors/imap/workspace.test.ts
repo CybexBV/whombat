@@ -6,9 +6,11 @@ import { ConnectionUnavailableError } from '../types';
 import { parseMessageId } from './ids';
 import { MemoryMailServer } from './memory';
 import { nodemailerSmtp, type SmtpConnectOptions } from './smtp';
+import { MAIL_IDLE_REFRESH_MS, MAIL_IDLE_SOCKET_TIMEOUT_MS, MAIL_TIMEOUTS } from './session';
 import {
   IMAP_ONLY_MAIL_TEXT,
   type ImapAccount,
+  type ImapOpenOptions,
   ImapWorkspace,
   type MailConnector,
   MESSAGE_GONE_TEXT,
@@ -469,7 +471,13 @@ describe('Email (IMAP) behind the mail tools', () => {
     expect(reset.headers).toEqual([]);
   });
 
-  it('wakes on IMAP IDLE when new mail arrives and reports unsupported when IDLE is absent', async () => {
+  it('wakes on IMAP IDLE when new mail arrives, uses a multi-minute socket timeout, and reports unsupported when IDLE is absent', async () => {
+    const openOpts: (ImapOpenOptions | undefined)[] = [];
+    const baseImap = connector.imap;
+    connector.imap = (a, opts) => {
+      openOpts.push(opts);
+      return baseImap(a, opts);
+    };
     const ac = new AbortController();
     let woke!: () => void;
     const woken = new Promise<void>((resolve) => {
@@ -496,6 +504,12 @@ describe('Email (IMAP) behind the mail tools', () => {
     );
     await woken;
     expect(await watching).toBe('idle');
+    expect(openOpts[0]?.timeouts?.socketMs).toBe(MAIL_IDLE_SOCKET_TIMEOUT_MS);
+    expect(openOpts[0]?.timeouts?.socketMs).toBeGreaterThan(MAIL_TIMEOUTS.socketMs);
+    expect(openOpts[0]?.maxIdleTimeMs).toBe(MAIL_IDLE_REFRESH_MS);
+
+    await ws.mailBaseline(TOKEN);
+    expect(openOpts[1]).toBeUndefined();
 
     server.capabilities = new Set(['IMAP4REV1']);
     expect(await ws.watchInbox(TOKEN, () => {}, new AbortController().signal)).toBe('unsupported');

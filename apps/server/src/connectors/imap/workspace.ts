@@ -75,7 +75,14 @@ import {
   threadRoot,
 } from './ids';
 import { type FolderPick, parseMailQuery } from './search';
-import type { ImapSession, MailboxInfo, MessageMeta } from './session';
+import {
+  type ImapSession,
+  MAIL_IDLE_REFRESH_MS,
+  MAIL_IDLE_SOCKET_TIMEOUT_MS,
+  type MailboxInfo,
+  type MailTimeouts,
+  type MessageMeta,
+} from './session';
 
 export const IMAP_ONLY_MAIL_TEXT = 'Email (IMAP) only does mail.';
 export const MESSAGE_GONE_TEXT = 'That message isn’t there any more: search again.';
@@ -106,9 +113,14 @@ export interface ImapAccount {
   savesSent: boolean;
 }
 
+export interface ImapOpenOptions {
+  timeouts?: Partial<MailTimeouts>;
+  maxIdleTimeMs?: number;
+}
+
 /** Opens the two sides of an account, under the destination policy (`net.ts`). */
 export interface MailConnector {
-  imap(account: ImapAccount): Promise<ImapSession>;
+  imap(account: ImapAccount, options?: ImapOpenOptions): Promise<ImapSession>;
   smtpVerify(account: ImapAccount): Promise<void>;
   /** How many recipients the server refused while taking the message for the others. */
   smtpSend(
@@ -817,7 +829,10 @@ export class ImapWorkspace implements GoogleWorkspace {
     const account = await this.deps.account(token);
     let session: ImapSession;
     try {
-      session = await this.deps.connector.imap(account);
+      session = await this.deps.connector.imap(account, {
+        timeouts: { socketMs: MAIL_IDLE_SOCKET_TIMEOUT_MS },
+        maxIdleTimeMs: MAIL_IDLE_REFRESH_MS,
+      });
     } catch (err) {
       throw await this.failure(token, err);
     }
