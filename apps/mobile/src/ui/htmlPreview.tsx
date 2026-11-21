@@ -12,8 +12,10 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { COPIED_TEXT } from '../data/messageActions';
+import { PAGES_COPY } from '../data/pageSets';
 import { keepPageHeight, keptPage, keptPageHeight } from '../data/previewPages';
 import {
+  afterPreviewGone,
   PAGE_HEIGHT_SCRIPT,
   PREVIEW_CARD_HEIGHT,
   PREVIEW_WEBVIEW_PROPS,
@@ -26,6 +28,7 @@ import { copyToClipboard } from './clipboard';
 import { FullScreenModal } from './fullScreen';
 import { Check, Code2, Copy, Globe, type LucideIcon, Maximize2, Workflow, X } from './icons';
 import { useRowInView } from './inView';
+import { Button } from './primitives';
 import { KeepsSideways } from './sideways';
 import { Touchable } from './Touchable';
 import { hitSlopFor } from './touchTarget';
@@ -119,13 +122,57 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     const t = setTimeout(() => setStarted(false), PREVIEW_RELEASE_MS);
     return () => clearTimeout(t);
   }, [inView, started, fit]);
+  // Android stops a WebView's browser to free memory (or it crashes), which leaves the page blank: a new WebView starts
+  // it again, twice by itself, then the person's “Try again”.
+  const [mount, setMount] = useState(0);
+  const [restarts, setRestarts] = useState(0);
+  const [gone, setGone] = useState(false);
+  const onGone = () => {
+    if (afterPreviewGone(restarts) === 'restart') {
+      setRestarts((n) => n + 1);
+      setMount((n) => n + 1);
+    } else setGone(true);
+  };
   if (!started && fit) return <View style={{ height, backgroundColor: 'transparent' }} />;
+  if (gone)
+    return (
+      <View
+        style={{
+          ...(fit ? { height } : { flex: 1 }),
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          padding: 24,
+        }}
+      >
+        <Text
+          size={15}
+          color={theme.colors.ink2}
+          accessibilityLiveRegion="polite"
+          style={{ textAlign: 'center' }}
+        >
+          {PREVIEW_GONE_TEXT}
+        </Text>
+        <Button
+          label={PAGES_COPY.tryAgain}
+          variant="secondary"
+          onPress={() => {
+            setRestarts(0);
+            setMount((n) => n + 1);
+            setGone(false);
+          }}
+        />
+      </View>
+    );
   // The page scrolls itself, sideways too, not the message's swipe; the chat scrolls around the card.
   return (
     <KeepsSideways>
       <WebView
+        key={mount}
         {...PREVIEW_WEBVIEW_PROPS}
         source={source}
+        onRenderProcessGone={onGone}
+        onContentProcessDidTerminate={onGone}
         // Full screen the page's own background shows once it loads; until then the app's, not a white flash in dark.
         style={
           fit ? { height, backgroundColor: 'transparent' } : { flex: 1, backgroundColor: theme.colors.bg }
@@ -146,6 +193,9 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     </KeepsSideways>
   );
 }
+
+/** Where a preview's browser stopped again and again: the page set viewer's words, for one page. */
+const PREVIEW_GONE_TEXT = 'Couldn’t open this page.';
 
 /** How long a page stays live after its row left the screen (and the two rows either side). */
 const PREVIEW_RELEASE_MS = 20_000;
