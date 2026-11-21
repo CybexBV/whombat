@@ -5,8 +5,8 @@ import { MAIL_CERT } from '../../test/self-signed';
 import { ConnectionUnavailableError } from '../types';
 import { parseMessageId } from './ids';
 import { MemoryMailServer } from './memory';
-import { nodemailerSmtp, type SmtpConnectOptions } from './smtp';
 import { MAIL_IDLE_REFRESH_MS, MAIL_IDLE_SOCKET_TIMEOUT_MS, MAIL_TIMEOUTS } from './session';
+import { nodemailerSmtp, type SmtpConnectOptions } from './smtp';
 import {
   IMAP_ONLY_MAIL_TEXT,
   type ImapAccount,

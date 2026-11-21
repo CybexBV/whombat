@@ -367,7 +367,9 @@ describe('mail', () => {
         return {
           json: {
             historyId: '705',
-            history: [{ id: '705', messagesAdded: [{ message: { id: 'm_old_moved', labelIds: ['INBOX'] } }] }],
+            history: [
+              { id: '705', messagesAdded: [{ message: { id: 'm_old_moved', labelIds: ['INBOX'] } }] },
+            ],
           },
         };
       }

@@ -22,7 +22,10 @@ function asText(v: unknown): string {
   return JSON.stringify(v);
 }
 
-function parseTemplate(template: string, scope: Record<string, unknown>): { parts: string[]; values: string[] } {
+function parseTemplate(
+  template: string,
+  scope: Record<string, unknown>,
+): { parts: string[]; values: string[] } {
   const parts: string[] = [];
   const values: string[] = [];
   let last = 0;
@@ -44,7 +47,10 @@ function truncateStatic(text: string, max: number): string {
 /** Fills placeholders with text from the scope, cut to `max` characters without ever cutting inside a fenced block. */
 export function renderTemplate(template: string, scope: Record<string, unknown>, max = 8000): string {
   const { parts, values } = parseTemplate(template, scope);
-  const full = parts.reduce((out, part, i) => out + part + (i < values.length ? (values[i] as string) : ''), '');
+  const full = parts.reduce(
+    (out, part, i) => out + part + (i < values.length ? (values[i] as string) : ''),
+    '',
+  );
   if (full.length <= max) return full;
   if (max <= 0) return '';
   if (max === 1) return '…';
