@@ -6,7 +6,8 @@
  *
  * Each ending is read at the next start, which may be a newer build after an update: the note carries the build that
  * ended (Android keeps the label the run gave itself) and the moment it ended. Only structured facts are kept: the
- * reason, the signal and its code, the thread's name and frames (a file as its name only), the memory used, the build.
+ * reason, the signal and its code, a known thread's name and the frames (a code file by its name only), the memory
+ * used, the build.
  * Android's free text (an ending's description, a native abort message, the causes it names) can carry whatever a
  * library put in it, an address, a link or a token, and the note goes to the box's log and the phone's sync log: it is
  * never kept, except an ANR's kind, matched against Android's own fixed words and said in ours.
@@ -37,6 +38,8 @@ interface AndroidExit {
   description: string | null;
   /** `3.140.0 (3140000)`, the label that run gave itself. */
   build: string | null;
+  /** That run's own id (`WhombatDiagnostics.runId`); null for a run of a build before it had one. */
+  run: string | null;
   /** An ANR's thread dump, its start. */
   trace: string | null;
   /** A native crash's tombstone (a protocol buffer), base64, its start. */
@@ -47,15 +50,66 @@ interface AndroidExit {
 const IMPORTANCE_VISIBLE = 200;
 /** An ending older than this when first read (the first start of a build that reads them) is let go. */
 export const EXIT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-/** How close a JavaScript error noted in the ended run must be to the crash to be its cause. */
-const SAME_CRASH_MS = 30_000;
 
 const FRAMES = 20;
 const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
-/** A path is its last part: the folders are the phone's (and an app's install folder has random names). */
-const withoutPaths = (line: string) => line.replace(/[^\s(]*\//g, '');
+/**
+ * A file a frame names, as its name only when it is a code file (a library, the APK, Android's compiled code): the
+ * folders are the phone's (an app's install folder has random names), and a file in the app's or the person's data,
+ * an anonymous mapping or a name with other characters could say something of the person: those are `(file)`.
+ */
+export function fileName(path: string): string {
+  if (/^\/(data\/(data|user|user_de|media)|storage|sdcard|mnt)\//.test(path)) return '(file)';
+  const name = path.split('/').pop() ?? '';
+  return /^[\w.+-]+\.(so|apk|oat|odex|vdex|art|jar|dex)(![\w.+-]+\.so)?$/.test(name) ? name : '(file)';
+}
+
+/**
+ * Thread names the note keeps as they are: React Native's, Android's own and the app's. A native thread can be named
+ * by any library, so any other name is said as “another thread”. Linux cuts names to 15 characters.
+ */
+const KNOWN_THREADS = new Set([
+  'main',
+  'mqt_js',
+  'mqt_v_js',
+  'mqt_native_modu',
+  'mqt_v_native',
+  'RenderThread',
+  'FinalizerDaemon',
+  'FinalizerWatchd',
+  'ReferenceQueueD',
+  'HeapTaskDaemon',
+  'Signal Catcher',
+  'Jit thread pool',
+  'Profile Saver',
+  'whombat-voice',
+  'GLThread',
+  'FrescoDecodeExe',
+  'FrescoBackgroun',
+  'OkHttp Dispatch',
+  'hermes-chrome-i',
+]);
+const KNOWN_THREAD_FORMS = [
+  /^hwuiTask\d+$/,
+  /^binder:\d+_[0-9A-F]+$/,
+  /^pool-\d+-thread-\d+$/,
+  /^AsyncTask #\d+$/,
+  /^DefaultDispatch$/,
+  /^RxCachedThreadS$/,
+];
+export function threadName(name: string): string {
+  return KNOWN_THREADS.has(name) || KNOWN_THREAD_FORMS.some((form) => form.test(name))
+    ? name
+    : 'another thread';
+}
+
+/** `3.141.0 (3141000) run=ab12…`: the build and the run's id. */
+function summaryOf(summary: string | null): { build: string | null; run: string | null } {
+  const m = /^(.*?)(?:\s+run=([0-9a-f]{1,32}))?$/.exec(summary ?? '');
+  return { build: m?.[1] || null, run: m?.[2] ?? null };
+}
 
 function exitOf(json: string): AndroidExit | null {
   let raw: unknown;
@@ -81,7 +135,7 @@ function exitOf(json: string): AndroidExit | null {
     pss: num(o.pss),
     rss: num(o.rss),
     description: str(o.description),
-    build: str(o.build),
+    ...summaryOf(str(o.build)),
     trace: str(o.trace),
     tombstone: str(o.tombstone),
   };
@@ -120,10 +174,16 @@ export function mainThreadOf(trace: string): {
     if (!native && !line.startsWith('at ')) continue;
     if (native && !java && ++nativeOnTop > NATIVE_ON_TOP) continue;
     if (!native) java = true;
-    frames.push(cut(withoutPaths(native ? line.slice('native: '.length) : line), 300));
+    frames.push(cut(native ? nativeFrame(line.slice('native: '.length)) : line, 300));
     if (frames.length >= FRAMES) break;
   }
   return { state, waiting, frames };
+}
+
+/** `#00 pc 0009c4a8  /apex/…/libc.so (wait+8) (BuildId: …)` with its file as `fileName` says it. */
+function nativeFrame(line: string): string {
+  const m = /^(#\d+ pc [0-9a-f]+)\s+(\S+)(.*)$/.exec(line);
+  return m ? `${m[1]}  ${fileName(m[2] ?? '')}${m[3] ?? ''}` : '(frame)';
 }
 
 // ── A native crash's tombstone (Android's tombstone.proto) ────────────────────────────────────────────────────────
@@ -280,7 +340,7 @@ function frameLine(frame: Field[], index: number): string {
   const build = textOf(frame, 8);
   const parts = [
     `#${String(index).padStart(2, '0')}`,
-    file ? withoutPaths(file) : '?',
+    file ? fileName(file) : '?',
     `+${hex(intOf(frame, 1) ?? { lo: 0, hi: 0 })}`,
     fn ? `(${fn}${offset && !isZero(offset) ? `+${asNumber(offset)}` : ''})` : null,
     build ? `(BuildId: ${build})` : null,
@@ -323,7 +383,7 @@ export function tombstoneOf(bytes: Uint8Array): { words: string[]; frames: strin
     return { words, frames: [] };
   }
   const name = textOf(crashed.fields, 2);
-  if (name) words.push(`thread ${cut(name, 60)}`);
+  if (name) words.push(`thread ${threadName(name)}`);
   const frames = crashed.fields
     .filter((f): f is Extract<Field, { bytes: Uint8Array }> => f.no === 4 && 'bytes' in f)
     .slice(0, FRAMES)
@@ -351,17 +411,36 @@ export function anrKind(description: string | null): string | null {
   return kinds.find(([form]) => form.test(description))?.[1] ?? null;
 }
 
+// ── The runs that ended with a JavaScript error noted ──────────────────────────────────────────────────────────────
+
+/** How many runs are remembered: the endings read at a start are a few runs back at most. */
+const FATAL_RUNS_KEPT = 10;
+
+/** The run ids in the small file beside the notes; anything else in it is nothing. */
+export function readFatalRuns(text: string | null): string[] {
+  try {
+    const parsed: unknown = JSON.parse(text ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((r): r is string => typeof r === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The file's text with `run` added (once), the newest kept. */
+export function withFatalRun(text: string | null, run: string): string {
+  const runs = readFatalRuns(text).filter((r) => r !== run);
+  return JSON.stringify([...runs, run].slice(-FATAL_RUNS_KEPT));
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 interface ExitInput {
   /** This build, for an ending that names none. */
   build: string;
   now: Date;
-  /** The notes waiting to be sent: a JavaScript error noted just before a crash is that crash's cause. */
-  pending: readonly AppErrorNote[];
+  /** The runs that ended with a JavaScript error noted (`fatalRuns`): that note is their crash's cause. */
+  fatalRuns: readonly string[];
 }
-
-const NOTED_LATER: ReadonlySet<string> = new Set(Object.values(ANDROID_EXIT_NAMES));
 
 const mb = (kb: number | null) => (kb === null ? null : `${Math.round(kb / 1024)} MB`);
 
@@ -376,18 +455,8 @@ export function notesOfExit(json: string, input: ExitInput): AppErrorNote[] | nu
   if (input.now.getTime() - exit.timestamp > EXIT_MAX_AGE_MS) return [];
   const onScreen = exit.importance !== null && exit.importance <= IMPORTANCE_VISIBLE;
   if (exit.reason === 'low_memory' && !onScreen) return [];
-  if (exit.reason === 'crash') {
-    const explained = input.pending.some((n) => {
-      const at = Date.parse(n.at);
-      return (
-        n.kind === 'app' &&
-        !NOTED_LATER.has(n.name ?? '') &&
-        at <= exit.timestamp + 5_000 &&
-        at >= exit.timestamp - SAME_CRASH_MS
-      );
-    });
-    if (explained) return [];
-  }
+  // A fatal JavaScript error ends the app as a Java crash: the same ending only when it was noted in that very run.
+  if (exit.reason === 'crash' && exit.run && input.fatalRuns.includes(exit.run)) return [];
 
   let what: string;
   let name: string;

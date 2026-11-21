@@ -6,14 +6,18 @@ import {
   base64Bytes,
   CRASHED_THREAD_NOT_READ,
   EXIT_MAX_AGE_MS,
+  fileName,
   mainThreadOf,
   notesOfExit,
+  readFatalRuns,
+  threadName,
   tombstoneOf,
+  withFatalRun,
 } from './androidExits';
 
 const now = new Date('2026-11-21T10:00:00.000Z');
 const at = now.getTime() - 60_000;
-const input = { build: 'android 3.141.0 (3141000)', now, pending: [] as AppErrorNote[] };
+const input = { build: 'android 3.141.0 (3141000)', now, fatalRuns: [] as string[] };
 const exit = (over: Record<string, unknown>) =>
   JSON.stringify({
     platform: 'android',
@@ -23,7 +27,7 @@ const exit = (over: Record<string, unknown>) =>
     status: 0,
     pss: 204_800,
     rss: 307_200,
-    build: '3.140.0 (3140000)',
+    build: '3.140.0 (3140000) run=0a1b2c3d4e5f',
     ...over,
   });
 
@@ -218,23 +222,73 @@ describe('Android endings as notes', () => {
     expect(notesOfExit(exit({ reason: 'low_memory', importance: null }), input)).toEqual([]);
   });
 
-  it('a crash a JavaScript error of that run explains is let go; one without is noted', () => {
-    const js: AppErrorNote = {
-      at: new Date(at - 800).toISOString(),
-      build: 'android 3.140.0 (3140000)',
-      kind: 'app',
-      name: 'TypeError',
-      message: 'x is undefined',
-      stack: [],
-      components: null,
-    };
-    expect(notesOfExit(exit({ reason: 'crash' }), { ...input, pending: [js] })).toEqual([]);
-    const older = { ...js, at: new Date(at - 120_000).toISOString() };
-    expect(notesOfExit(exit({ reason: 'crash' }), { ...input, pending: [older] })?.[0]?.name).toBe(
+  it('a crash a JavaScript error of that very run explains is let go; one of another run is noted', () => {
+    expect(notesOfExit(exit({ reason: 'crash' }), { ...input, fatalRuns: ['0a1b2c3d4e5f'] })).toEqual([]);
+    // A JavaScript crash in one run, a separate Java crash in the next a few seconds later: both are noted.
+    const next = exit({
+      reason: 'crash',
+      timestamp: at + 5_000,
+      build: '3.140.0 (3140000) run=ffff00001111',
+    });
+    expect(notesOfExit(next, { ...input, fatalRuns: ['0a1b2c3d4e5f'] })?.[0]?.name).toBe(
       ANDROID_EXIT_NAMES.crash,
     );
-    const anotherEnding = { ...js, name: ANDROID_EXIT_NAMES.lowMemory };
-    expect(notesOfExit(exit({ reason: 'crash' }), { ...input, pending: [anotherEnding] })).toHaveLength(1);
+    // A run of a build before run ids: nothing to match, so it is noted.
+    expect(
+      notesOfExit(exit({ reason: 'crash', build: '3.139.0 (3139000)' }), {
+        ...input,
+        fatalRuns: ['0a1b2c3d4e5f'],
+      }),
+    ).toHaveLength(1);
+  });
+
+  it('remembers the runs that ended with a JavaScript error, once each, the newest ten', () => {
+    let file: string | null = null;
+    for (let i = 0; i < 12; i += 1) file = withFatalRun(file, `r${i}`);
+    file = withFatalRun(file, 'r11');
+    expect(readFatalRuns(file)).toEqual(['r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10', 'r11']);
+    expect(readFatalRuns('not json')).toEqual([]);
+    expect(readFatalRuns(null)).toEqual([]);
+  });
+
+  it('a thread or file name a library chose never reaches the note', () => {
+    const own = [
+      ...int(6, 7),
+      ...bytes(16, [
+        ...int(1, 7),
+        ...bytes(
+          2,
+          thread(7, 'mara@example.com', [
+            frame(0x20, 'run', '/data/user/0/com.whombat.mobile/files/mara-secret.so'),
+          ]),
+        ),
+      ]),
+    ];
+    const [note] = notesOfExit(exit({ reason: 'crash_native', tombstone: base64(own) }), input) ?? [];
+    expect(note?.message).toContain('thread another thread');
+    expect(note?.stack[0]).toContain('(file)');
+    expect(JSON.stringify(note)).not.toMatch(/mara/i);
+    const anr = mainThreadOf(
+      [
+        '"main" prio=5 tid=1 Native',
+        '  native: #00 pc 0000000000001234  /data/data/com.whombat.mobile/mara.so (x+1)',
+        '',
+      ].join('\n'),
+    );
+    expect(anr.frames).toEqual(['#00 pc 0000000000001234  (file) (x+1)']);
+  });
+
+  it('keeps known thread names and code files only', () => {
+    expect(threadName('mqt_v_js')).toBe('mqt_v_js');
+    expect(threadName('binder:4321_3')).toBe('binder:4321_3');
+    expect(threadName('mara@example.com')).toBe('another thread');
+    expect(fileName('/apex/com.android.runtime/lib64/bionic/libc.so')).toBe('libc.so');
+    expect(fileName('/data/app/~~x==/com.whombat.mobile-y==/base.apk!libhermes.so')).toBe(
+      'base.apk!libhermes.so',
+    );
+    expect(fileName('/data/user/0/com.whombat.mobile/files/libmara.so')).toBe('(file)');
+    expect(fileName('/memfd:jit-cache (deleted)')).toBe('(file)');
+    expect(fileName('[anon:Mara secret]')).toBe('(file)');
   });
 
   it('lets go of endings older than a week, keeps text that isn’t one, and names this build when the ending has none', () => {

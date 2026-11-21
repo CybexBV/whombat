@@ -18,8 +18,9 @@
 // {version, versionCode, file, size, sha256, publishedAt}. Files are written under a temporary name and renamed, so
 // control never serves half an APK; the previous APK stays (a download that started keeps working), older ones go.
 // Beside them, <dir>/sourcemaps/<versionCode>-<rev>.map and .mapping.txt keep the build's bundle source map and R8's
-// mapping (the newest 30 builds): outside android/, and control serves only the one APK latest.json names. Only maps
-// this run's build wrote are kept: with --skip-build none (they could be another build's).
+// mapping (the newest 30 builds): outside android/, and control serves only the one APK latest.json names. Only a
+// bundle map this run's build wrote is kept (with --skip-build none: it could be another build's); R8's mapping is
+// kept whenever it is there.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -80,8 +81,9 @@ const MAPS_KEPT = 30;
  * The bundle's source map and R8's mapping, kept per build beside the published files
  * (`<dir>/sourcemaps/<versionCode>-<rev>.map`, `….mapping.txt`): an error note from the phone names lines of the
  * minified bundle (src/errors/errorNotes.ts), and a crash's Java frames are R8's short names; these turn them back into
- * the code's. Only files written since `since` (this build's start) are kept, named after `rev`, the revision the build
- * was made from. Never stops a publish.
+ * the code's. Only a bundle map written since `since` (this build's start) is kept, named after `rev`, the revision the
+ * build was made from. R8's mapping is kept whenever it is there: Gradle leaves it as it was when R8 had nothing new to
+ * do, and then it still matches. Never stops a publish; true when the bundle map was kept.
  */
 function keepMaps(since, rev) {
   try {
@@ -103,7 +105,7 @@ function keepMaps(since, rev) {
       console.warn(
         `No bundle source map from this build in ${generated}: its error notes can't be read back`,
       );
-    if (fresh(mapping)) copyFileSync(mapping, join(maps, `${name}.mapping.txt`));
+    if (existsSync(mapping)) copyFileSync(mapping, join(maps, `${name}.mapping.txt`));
     // The newest builds stay, whole: a build is the files that share its name.
     const byAge = readdirSync(maps)
       .map((entry) => ({ entry, build: entry.split('.')[0], at: statSync(join(maps, entry)).mtimeMs }))
@@ -111,8 +113,10 @@ function keepMaps(since, rev) {
     const kept = new Set();
     for (const { build } of byAge) if (kept.size < MAPS_KEPT) kept.add(build);
     for (const { entry, build } of byAge) if (!kept.has(build)) rmSync(join(maps, entry), { force: true });
+    return Boolean(sourceMap);
   } catch (error) {
     console.warn(`The build’s source map wasn’t kept: ${error instanceof Error ? error.message : error}`);
+    return false;
   }
 }
 
@@ -182,9 +186,15 @@ renameSync(`${latest}.partial`, latest);
 for (const entry of readdirSync(out))
   if (entry.endsWith('.apk') && entry !== file && entry !== previous) rmSync(join(out, entry));
 
-if (skipBuild) console.warn('--skip-build: no source map kept (the one on disk may be another build’s)');
-else keepMaps(buildStart, buildRev);
+const mapKept = !skipBuild && keepMaps(buildStart, buildRev);
 
 console.log(
   `Published ${file} (${(record.size / 1e6).toFixed(1)} MB, sha256 ${sha256}) for ${envName} in ${out}`,
 );
+
+// Said last, where it is seen: without the map this build's error notes can't be read back.
+if (!mapKept)
+  console.warn(
+    `\n!!! NO SOURCE MAP KEPT for ${file}${skipBuild ? ' (--skip-build: the map on disk may be another build’s)' : ''}: ` +
+      'error notes from this build can’t be turned back into the code’s lines. Publish without --skip-build to keep one.\n',
+  );

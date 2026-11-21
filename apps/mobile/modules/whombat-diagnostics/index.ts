@@ -17,6 +17,8 @@ export interface DiagnosticPayload {
 interface NativeWhombatDiagnostics {
   pending(): DiagnosticPayload[];
   remove(ids: string[]): void;
+  /** Android: this run's id, kept by Android with its ending. */
+  runId?(): string;
   addListener(event: 'onPayload', listener: () => void): { remove(): void };
 }
 
@@ -30,6 +32,15 @@ export function pendingDiagnostics(): DiagnosticPayload[] {
 /** These are noted (or not worth a note): they go from the phone, and the system handing them over again is ignored. */
 export function removeDiagnostics(ids: string[]): void {
   if (ids.length) native?.remove(ids);
+}
+
+/** Android: this run's own id (Android keeps it with the run's ending); null elsewhere. */
+export function diagnosticsRunId(): string | null {
+  try {
+    return native?.runId?.() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Calls `listener` when a payload arrived (iOS; Android's are read at the start); returns the unsubscribe. */
