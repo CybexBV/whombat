@@ -103,6 +103,19 @@ func (f *fakeSharing) seen(ev string) int {
 	return n
 }
 
+// waitSeen waits until ev was received n times since the last takeEvents:
+// what the agent sent may still be on its way when a step returns.
+func (f *fakeSharing) waitSeen(t *testing.T, ev string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for f.seen(ev) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("Screen Sharing got %q %d times, not %d: %q", ev, f.seen(ev), n, f.takeEvents())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func (f *fakeSharing) endedSessions() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
