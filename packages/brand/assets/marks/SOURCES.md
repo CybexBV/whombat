@@ -39,6 +39,7 @@ implies no endorsement.
 | `fedora.svg` | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | custom |
 | `forgejo.svg` | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC-BY-SA-4.0 (Caesar Schinas) |
 | `freebsd.svg` | FreeBSD | Simple Icons `freebsd` (<https://www.freebsdfoundation.org/about/project/>) | CC0-1.0 |
+| `frigate.svg` | Frigate | Simple Icons `frigate` (<https://frigate.video>) | CC0-1.0 |
 | `fusebox.svg` | Fusebox | Fusebox's `assets/icon.svg` (John's own product) | Unlicense |
 | `gentoo.svg` | Gentoo | Simple Icons `gentoo` (<https://wiki.gentoo.org/wiki/Project:Artwork/Artwork#Variations_of_the_.22g.22_logo>) | CC-BY-SA-2.5 |
 | `github.svg` | GitHub | Simple Icons `github` (<https://github.com/logos>) | CC0-1.0 |
@@ -52,6 +53,7 @@ implies no endorsement.
 | `hubspot.svg` | HubSpot | Simple Icons `hubspot` (<https://www.hubspot.com/style-guide>) | CC0-1.0 |
 | `imap.svg` | Email | Lucide `mail` | ISC |
 | `immich.svg` | Immich | Simple Icons `immich` (<https://github.com/immich-app/immich/blob/25c9b779e4d19bc34551f8b137266a459e0d70e1/design/immich-logo.svg>) | CC0-1.0 |
+| `jellyfin.svg` | Jellyfin | Simple Icons `jellyfin` (<https://jellyfin.org/docs/general/contributing/branding.html>) | CC0-1.0 |
 | `kalilinux.svg` | Kali Linux | Simple Icons `kalilinux` (<https://www.kali.org/docs/policy/trademark/>) | CC0-1.0 |
 | `kdeneon.svg` | KDE neon | Simple Icons `kdeneon` (<https://community.kde.org/Neon>) | CC0-1.0 |
 | `kubuntu.svg` | Kubuntu | Simple Icons `kubuntu` (<https://kubuntu.org>) | CC0-1.0 |
@@ -91,6 +93,7 @@ implies no endorsement.
 | `proxmox.svg` | Proxmox | Simple Icons `proxmox` (<https://www.proxmox.com/en/news/media-kit>) | CC0-1.0 |
 | `proxmox_backup.svg` | Proxmox | Simple Icons `proxmox` (<https://www.proxmox.com/en/news/media-kit>) | CC0-1.0 |
 | `pterodactyl.svg` | Pterodactyl | Simple Icons `pterodactyl` (<https://github.com/pterodactyl/panel/blob/eaf46429f2a001469fb5f18f7891ce8e5be7f049/public/favicons/favicon-96x96.png>) | CC0-1.0 |
+| `qbittorrent.svg` | qBittorrent | Simple Icons `qbittorrent` (<https://github.com/qbittorrent/qBittorrent/blob/73028f9930d9ab9d89edb60ed4aedb66d75669d9/src/icons/qbittorrent-tray-light.svg>) | CC0-1.0 |
 | `qemu.svg` | QEMU | Simple Icons `qemu` (<https://wiki.qemu.org/Logo>) | CC0-1.0 |
 | `qnap.svg` | QNAP | Simple Icons `qnap` (<https://marketing.qnap.com/resource/qnap-logo-k100>) | CC0-1.0 |
 | `qubesos.svg` | Qubes OS | Simple Icons `qubesos` (<https://github.com/QubesOS/qubes-attachment/blob/ed7e552eb8a5fca4e099361d137793d3551b3968/icons/qubes-logo-home.svg>) | CC0-1.0 |
