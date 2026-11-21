@@ -381,6 +381,8 @@ interface Conn {
   pongN: number;
   /** The next stall check, armed while something is sent. */
   watch: ReturnType<typeof setTimeout> | null;
+  /** The `probe()` waiting for its `pong`. */
+  check: ReturnType<typeof setTimeout> | null;
   /**
    * Until when the appliance owes this connection another frame: an agent's thinking line is refreshed every few
    * seconds while its turn runs, so silence before then is a dead path, checked at once like an unanswered request.
@@ -637,6 +639,7 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
           probeN: 0,
           pongN: 0,
           watch: null,
+          check: null,
           liveUntil: 0,
           draining: false,
           streams: new Map(),
@@ -839,6 +842,34 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
     connectionEnded(c, 'lost');
   }
 
+  /**
+   * `probe()`: one `ping`; no `pong` within the stall check's first wait and the connection is lost, dialed again at once.
+   * Not a stuck spell (the stall check's wait isn't doubled after it): a socket that died while the app was away says
+   * nothing about the network now.
+   */
+  function probe(c: Conn) {
+    if (c.closed || c.draining || c.check) return;
+    const n = ++pingN;
+    if (!send(c, { t: 'ping', n })) return;
+    c.check = setTimeout(
+      () => {
+        c.check = null;
+        if (c.closed || conn !== c || c.pongN >= n) return;
+        connectionEnded(c, 'lost');
+        dialNow();
+      },
+      baseStallMs > 0 ? baseStallMs : 2500,
+    );
+  }
+
+  /** Dial now instead of waiting out the backoff (a no-op while open or dialing). */
+  function dialNow() {
+    if (!wanted || conn || connecting) return;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    void attemptConnect();
+  }
+
   async function attemptConnect() {
     if (!wanted || conn || connecting) return;
     const controller = new AbortController();
@@ -904,6 +935,8 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
     if (c.heartbeat) clearInterval(c.heartbeat);
     if (c.watch) clearTimeout(c.watch);
     c.watch = null;
+    if (c.check) clearTimeout(c.check);
+    c.check = null;
     try {
       c.wire.close(reason);
     } catch {
@@ -2337,11 +2370,9 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
       attempt = 0;
       connectNow();
     },
-    reconnectNow() {
-      if (!wanted || conn || connecting) return;
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = null;
-      void attemptConnect();
+    reconnectNow: dialNow,
+    probe() {
+      if (conn && state.status === 'open') probe(conn);
     },
     close(reason = 'closed') {
       terminate(reason);
