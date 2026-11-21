@@ -54,13 +54,14 @@ export function parseRdapBootstrap(body: unknown): Map<string, string> {
     if (!Array.isArray(entry) || entry.length < 2) continue;
     const tlds = list(entry[0]);
     const urls = list(entry[1]);
-    const base = urls
-      .map(str)
-      .find((u): u is string => !!u && /^https:\/\//i.test(u.trim()));
+    const base = urls.map(str).find((u): u is string => !!u && /^https:\/\//i.test(u.trim()));
     if (!base) continue;
     const normalized = `${base.trim().replace(/\/+$/, '')}/`;
     for (const rawTld of tlds) {
-      const tld = str(rawTld)?.trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+      const tld = str(rawTld)
+        ?.trim()
+        .toLowerCase()
+        .replace(/^\.+|\.+$/g, '');
       if (tld && !out.has(tld)) out.set(tld, normalized);
     }
   }
@@ -174,7 +175,11 @@ function cacheOf(services: Services): RdapCache {
   return c;
 }
 
-async function getBootstrap(cache: RdapCache, nowMs: number, fetchJson: RdapFetch): Promise<Map<string, string> | null> {
+async function getBootstrap(
+  cache: RdapCache,
+  nowMs: number,
+  fetchJson: RdapFetch,
+): Promise<Map<string, string> | null> {
   if (cache.bootstrap && cache.bootstrap.until > nowMs) return cache.bootstrap.value;
   const res = await fetchJson(IANA_RDAP_BOOTSTRAP_URL);
   if (!res.ok || !res.json) {
@@ -236,7 +241,10 @@ export async function readDomainExpirations(
   const bootstrap = await getBootstrap(cache, nowMs, fetchJson);
   if (!bootstrap) return null;
   const results = await Promise.all(
-    unique.map(async (domain) => ({ domain, res: await readOneDomain(cache, domain, bootstrap, nowMs, fetchJson) })),
+    unique.map(async (domain) => ({
+      domain,
+      res: await readOneDomain(cache, domain, bootstrap, nowMs, fetchJson),
+    })),
   );
   if (!results.some((r) => r.res.ok)) return null;
   const expirations = new Map<string, Date | null>();

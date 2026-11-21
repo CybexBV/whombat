@@ -10,7 +10,22 @@ import { startOfLocalDay } from '../../../home/time';
 import type { Services } from '../../../services';
 import { imageRef, thingImage } from '../../images';
 import type { KindCheck, KindNotice } from '../../quiet/types';
-import { bytes, clip, clock, dateOf, line, list, num, pct, plural, rec, span, str, thousands, when } from '../../words';
+import {
+  bytes,
+  clip,
+  clock,
+  dateOf,
+  line,
+  list,
+  num,
+  pct,
+  plural,
+  rec,
+  span,
+  str,
+  thousands,
+  when,
+} from '../../words';
 import { cachedRead, getJson, KIND_DEADLINE_MS, latestRead, problemOf, withDeadline } from '../read';
 import { type KindModule, type KindSeen, seenFromView } from '../registry';
 import {
@@ -147,7 +162,8 @@ export function parseStats(body: unknown, now: Date): FrigateSnapshot {
     if (totalMb !== null && totalMb > 0 && freeMb !== null && freeMb >= 0) {
       const totalBytes = Math.round(totalMb * MIB);
       const freeBytes = Math.round(freeMb * MIB);
-      const usedBytes = usedMb !== null && usedMb >= 0 ? Math.round(usedMb * MIB) : Math.max(0, totalBytes - freeBytes);
+      const usedBytes =
+        usedMb !== null && usedMb >= 0 ? Math.round(usedMb * MIB) : Math.max(0, totalBytes - freeBytes);
       storage = { mount, totalBytes, usedBytes, freeBytes };
     }
   }
@@ -218,7 +234,11 @@ async function readStats(services: Services, row: CatalogConnectionRow, now: Dat
 function loadStats(services: Services, row: CatalogConnectionRow, now: Date) {
   return async () => {
     try {
-      return await withDeadline(readStats(services, row, now), KIND_DEADLINE_MS, 'Frigate didn’t answer in time.');
+      return await withDeadline(
+        readStats(services, row, now),
+        KIND_DEADLINE_MS,
+        'Frigate didn’t answer in time.',
+      );
     } catch (err) {
       throw problemOf(err, NAME);
     }
@@ -238,12 +258,13 @@ async function readTodayEvents(
   timeZone: string,
 ): Promise<FrigateEvent[] | null> {
   const after = String(Math.floor(startOfLocalDay(now, timeZone).getTime() / 1000));
-  return optional(
-    getJson(services, row, NAME, '/api/events', { limit: '20', after }).then(parseEvents),
-  );
+  return optional(getJson(services, row, NAME, '/api/events', { limit: '20', after }).then(parseEvents));
 }
 
-async function readSummary(services: Services, row: CatalogConnectionRow): Promise<FrigateSummaryRow[] | null> {
+async function readSummary(
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<FrigateSummaryRow[] | null> {
   return optional(
     cachedRead(
       services,
@@ -501,17 +522,17 @@ export function frigateLive(ctx: FrigateCtx): LivePanel | null {
   return liveList({
     id: 'detections',
     title: 'Today',
-    ...(counts
-      ? { meta: counts.total > 0 ? plural(counts.total, 'detection') : 'Nothing seen today' }
-      : {}),
+    ...(counts ? { meta: counts.total > 0 ? plural(counts.total, 'detection') : 'Nothing seen today' } : {}),
     ask: { questions: ['What was detected today?', 'Which camera saw the most this week?'] },
-    items: today.map((e): ThingPageItem => ({
-      id: e.id,
-      title: detectionWords(e),
-      ...(e.zones.length ? { detail: clip(e.zones.map(prettyCameraName).join(', '), 120) } : {}),
-      at: e.at.toISOString(),
-      icon: 'camera',
-    })),
+    items: today.map(
+      (e): ThingPageItem => ({
+        id: e.id,
+        title: detectionWords(e),
+        ...(e.zones.length ? { detail: clip(e.zones.map(prettyCameraName).join(', '), 120) } : {}),
+        at: e.at.toISOString(),
+        icon: 'camera',
+      }),
+    ),
     empty: 'Nothing seen today.',
   });
 }
@@ -553,7 +574,9 @@ export function frigateInventory(s: FrigateSnapshot, ctx: FrigateCtx, openUrl: s
         icon: 'device',
         value: `${Math.round(worst)} ms`,
         detail: s.detectors.map((d) => d.name).join(', '),
-        ...(worst > DETECTOR_SLOW_MS ? { note: 'Slow', noteTone: 'warn' as const } : { note: 'Healthy', noteTone: 'ok' as const }),
+        ...(worst > DETECTOR_SLOW_MS
+          ? { note: 'Slow', noteTone: 'warn' as const }
+          : { note: 'Healthy', noteTone: 'ok' as const }),
       }),
     );
   }
@@ -588,7 +611,9 @@ export function frigateShelf(
     id: 'cameras',
     title: 'Cameras',
     meta:
-      online === s.cameras.length ? `All ${s.cameras.length} online` : `${online} of ${s.cameras.length} online`,
+      online === s.cameras.length
+        ? `All ${s.cameras.length} online`
+        : `${online} of ${s.cameras.length} online`,
     shape: 'wide',
     items: s.cameras
       .slice()
@@ -702,7 +727,9 @@ export function frigateKpis(s: FrigateSnapshot, ctx: FrigateCtx): ThingPageKpi[]
       value: String(online),
       rest: `of ${s.cameras.length}`,
       ...(s.cameras.length ? { meter: online / s.cameras.length } : {}),
-      ...(off ? { sub: `${off} offline`, tone: 'warn' as const } : { sub: 'all online', color: 'green' as const }),
+      ...(off
+        ? { sub: `${off} offline`, tone: 'warn' as const }
+        : { sub: 'all online', color: 'green' as const }),
     },
   ];
   const counts = todaySummaryCount(ctx);
@@ -725,7 +752,16 @@ export function frigateView(
   },
 ): Pick<
   KindView,
-  'kpis' | 'charts' | 'notices' | 'panels' | 'slots' | 'facts' | 'machine' | 'refreshS' | 'verdict' | 'suggestions'
+  | 'kpis'
+  | 'charts'
+  | 'notices'
+  | 'panels'
+  | 'slots'
+  | 'facts'
+  | 'machine'
+  | 'refreshS'
+  | 'verdict'
+  | 'suggestions'
 > {
   const facts: ThingLine[] = [];
   if (s.version) facts.push(line(`Frigate **${s.version}**`));

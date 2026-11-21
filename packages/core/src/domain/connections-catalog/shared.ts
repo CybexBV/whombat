@@ -366,8 +366,7 @@ export const TokenAuth = z.discriminatedUnion('type', [
       twoStep: SessionTwoStep.optional(),
     })
     .refine(
-      (a) =>
-        [a.tokenJsonPath, a.tokenXmlTag, a.tokenCookie].filter((x) => x !== undefined).length === 1,
+      (a) => [a.tokenJsonPath, a.tokenXmlTag, a.tokenCookie].filter((x) => x !== undefined).length === 1,
       {
         message: 'A session reads its token from exactly one of tokenJsonPath, tokenXmlTag and tokenCookie.',
         path: ['tokenJsonPath'],

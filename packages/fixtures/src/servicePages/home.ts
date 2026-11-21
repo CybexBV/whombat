@@ -887,7 +887,6 @@ const frigate: FixtureServicePage = {
           open: FRIGATE_URL,
         }),
         verdict: 'Frigate is fine: 3 of 4 cameras are online.',
-        suggestions: ['Detections this week', 'Which cameras went offline', 'Storage used by recordings'],
         buttons: [],
         refreshS: 10,
         tabs: summary([
@@ -1036,7 +1035,12 @@ const frigate: FixtureServicePage = {
       }),
       checks: [
         { check: 'frigate.camera_offline', name: 'Cameras going offline', nature: 'problem', perItem: true },
-        { check: 'frigate.storage_full', name: 'Recordings disk filling up', nature: 'problem', perItem: false },
+        {
+          check: 'frigate.storage_full',
+          name: 'Recordings disk filling up',
+          nature: 'problem',
+          perItem: false,
+        },
         { check: 'frigate.detector_slow', name: 'Slow object detector', nature: 'fyi', perItem: true },
         { check: 'frigate.skipped_fps', name: 'Cameras dropping frames', nature: 'fyi', perItem: true },
       ],

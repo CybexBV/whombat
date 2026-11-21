@@ -285,7 +285,16 @@ export function parseSnapshots(body: unknown): Map<string, SnapshotsOf> {
     const first = Math.min(was?.first ?? time, time);
     if (time > 0) times.set(key, [...(times.get(key) ?? []), time]);
     if (!was || time > was.time)
-      out.set(key, { time, size: num(s.size), verified, damaged, everVerified, first, rhythmS: null, times: [] });
+      out.set(key, {
+        time,
+        size: num(s.size),
+        verified,
+        damaged,
+        everVerified,
+        first,
+        rhythmS: null,
+        times: [],
+      });
     else Object.assign(was, { damaged, everVerified, first });
   }
   for (const [key, t] of times) {

@@ -1149,9 +1149,7 @@ describe('cookie-based session sign-ins', () => {
     expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'User IP is banned', 403)?.reason).toBe(
       'locked',
     );
-    expect(
-      TokenAuth.safeParse({ ...cookieAuth, tokenJsonPath: 'token' }).success,
-    ).toBe(false);
+    expect(TokenAuth.safeParse({ ...cookieAuth, tokenJsonPath: 'token' }).success).toBe(false);
     expect(
       tokenAuthProblem(entry('nginx_proxy_manager'), { ...cookieAuth, tokenJsonPath: 'token' }),
     ).toContain('one of them');

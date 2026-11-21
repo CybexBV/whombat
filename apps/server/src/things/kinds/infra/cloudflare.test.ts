@@ -147,7 +147,9 @@ describe('cloudflare page', () => {
     const s = snapshot();
     expect(cloudflareSkipped(s)).toEqual([]);
     expect(cloudflareSkipped({ ...s, domainExpirations: null })).toEqual(['cloudflare.domain_expiring']);
-    expect(cloudflareSkipped({ ...s, domainExpirationsPartial: true })).toEqual(['cloudflare.domain_expiring']);
+    expect(cloudflareSkipped({ ...s, domainExpirationsPartial: true })).toEqual([
+      'cloudflare.domain_expiring',
+    ]);
     expect(cloudflareSkipped({ ...s, tunnels: null, certificatesPartial: true, zonesTotal: 40 })).toEqual([
       'cloudflare.tunnel_down',
       'cloudflare.tunnel_degraded',
@@ -169,7 +171,13 @@ describe('cloudflare page', () => {
     const far = new Date(NOW.getTime() + 90 * 86_400_000);
 
     const warnNotices = cloudflareNotices(
-      { ...s, domainExpirations: new Map([['example.com', soon], ['example.org', far]]) },
+      {
+        ...s,
+        domainExpirations: new Map([
+          ['example.com', soon],
+          ['example.org', far],
+        ]),
+      },
       NOW,
     ).filter((n) => n.check === 'cloudflare.domain_expiring');
     expect(warnNotices).toHaveLength(1);

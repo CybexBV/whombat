@@ -113,6 +113,8 @@ describe('qBittorrent page and checks', () => {
       'qbittorrent.disconnected',
     ]);
     const s = snap();
+    const first = s.torrents[0];
+    if (!first) throw new Error('missing torrent');
     const bad = snap({
       state: {
         ...s.state,
@@ -123,7 +125,7 @@ describe('qBittorrent page and checks', () => {
       torrents: [
         ...s.torrents,
         {
-          ...s.torrents[0]!,
+          ...first,
           hash: 'err1',
           name: 'Broken.Release',
           state: 'missingFiles',

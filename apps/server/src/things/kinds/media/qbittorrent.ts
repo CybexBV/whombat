@@ -7,8 +7,8 @@
  * qBittorrent down.
  */
 import type { ThingLine, ThingPageBar, ThingPageKpi } from '@whombat/core';
-import type { CatalogConnectionRow } from '../../../connections/types';
 import { signedConnectionFetch } from '../../../connections/http';
+import type { CatalogConnectionRow } from '../../../connections/types';
 import type { ConnectionActivity } from '../../../home/types';
 import { ApiError } from '../../../lib/errors';
 import type { Services } from '../../../services';
@@ -27,7 +27,7 @@ import {
   statFigure,
   statsOf,
 } from '../../series';
-import { bytes, clip, dateOf, line, num, plural, rec, span, str, thousands, when } from '../../words';
+import { bytes, clip, dateOf, line, num, plural, rec, span, str, thousands } from '../../words';
 import { actAs } from '../act';
 import { cachedRead, getJson, KIND_DEADLINE_MS, liveRead, problemOf, withDeadline } from '../read';
 import type { KindAction, KindActionCtx, KindModule, KindSeen } from '../registry';
@@ -35,7 +35,6 @@ import { seenFromView } from '../registry';
 import { countLine, dayKey, inventory, liveRows, slotPanels } from '../slots';
 import type { KindCtx, KindView } from '../types';
 import {
-  badgeOf,
   idOf,
   itemLines,
   leftWords,
@@ -47,7 +46,15 @@ import {
   uniqueById,
   worstFirst,
 } from './common';
-import { asNotices, type Button, type ButtonCtx, button, type GalleryItem, type Item, type Panel } from './ui';
+import {
+  asNotices,
+  type Button,
+  type ButtonCtx,
+  button,
+  type GalleryItem,
+  type Item,
+  type Panel,
+} from './ui';
 
 const NAME = 'qBittorrent';
 export const QBT_MBPS_KEY = 'qbt_mbps';
@@ -185,7 +192,11 @@ async function readVersion(services: Services, row: CatalogConnectionRow): Promi
   const res = await signedConnectionFetch(
     services,
     row,
-    { method: 'GET', url: `${row.baseUrl.replace(/\/+$/, '')}/api/v2/app/version`, headers: { Accept: '*/*' } },
+    {
+      method: 'GET',
+      url: `${row.baseUrl.replace(/\/+$/, '')}/api/v2/app/version`,
+      headers: { Accept: '*/*' },
+    },
     { maxBytes: 1024, deadlineMs: 5_000 },
   );
   if (res.status < 200 || res.status >= 300) return null;
@@ -197,13 +208,7 @@ async function readMaindata(services: Services, row: CatalogConnectionRow, now: 
   const [maindata, version] = await Promise.all([
     getJson(services, row, NAME, '/api/v2/sync/maindata'),
     optional(
-      cachedRead(
-        services,
-        `qbt-version:${row.id}`,
-        row,
-        () => readVersion(services, row),
-        VERSION_KEEP_MS,
-      ),
+      cachedRead(services, `qbt-version:${row.id}`, row, () => readVersion(services, row), VERSION_KEEP_MS),
     ),
   ]);
   return parseMaindata(maindata, now, version);
@@ -329,7 +334,8 @@ export function qbtNotices(input: QbtInput): KindNotice[] {
       tone: 'bad',
       icon: 'network',
       title: 'qBittorrent has no network connection',
-      detail: 'It can’t reach peers or trackers. Check its network interface or VPN in qBittorrent’s settings.',
+      detail:
+        'It can’t reach peers or trackers. Check its network interface or VPN in qBittorrent’s settings.',
       link: { kind: 'url', label: 'Open qBittorrent', url: input.url },
       nature: 'problem',
       check: 'qbittorrent.disconnected',
@@ -343,7 +349,8 @@ export function qbtNotices(input: QbtInput): KindNotice[] {
       tone: 'info',
       icon: 'network',
       title: 'qBittorrent is firewalled',
-      detail: 'Incoming connections are blocked, which can slow downloads and seeding. Check port forwarding or UPnP.',
+      detail:
+        'Incoming connections are blocked, which can slow downloads and seeding. Check port forwarding or UPnP.',
       link: { kind: 'url', label: 'Open qBittorrent', url: input.url },
       nature: 'fyi',
       check: 'qbittorrent.firewalled',
@@ -392,7 +399,8 @@ export function qbtNotices(input: QbtInput): KindNotice[] {
           tone: 'info',
           icon: 'clock',
           title: clip(`${t.name} is stalled`, 120),
-          detail: 'No peers are sending data right now. It may pick up when a seed comes online, or need another release.',
+          detail:
+            'No peers are sending data right now. It may pick up when a seed comes online, or need another release.',
           nature: 'fyi',
           check: 'qbittorrent.stalled',
           subject: { id: `torrent:${t.hash}`, name: clip(t.name, 80) },
@@ -489,7 +497,9 @@ function downloadingRows(input: QbtInput) {
   const s = input.snapshot;
   const queue = s.torrents
     .filter(isInQueue)
-    .sort((a, b) => queueRank(a) - queueRank(b) || b.dlSpeedBps - a.dlSpeedBps || a.name.localeCompare(b.name));
+    .sort(
+      (a, b) => queueRank(a) - queueRank(b) || b.dlSpeedBps - a.dlSpeedBps || a.name.localeCompare(b.name),
+    );
   const shown = queue.slice(0, QUEUE_ROWS);
   const meta = qbtQueueMeta(s);
   return liveRows({
@@ -502,7 +512,11 @@ function downloadingRows(input: QbtInput) {
     items: shown.map((t): GalleryItem => {
       const paused = isPausedDl(t);
       const err = isErrored(t);
-      const sub = [t.category, t.sizeBytes > 0 ? bytes(t.sizeBytes) : null, t.dlSpeedBps > 0 ? speedWords(t.dlSpeedBps) : null]
+      const sub = [
+        t.category,
+        t.sizeBytes > 0 ? bytes(t.sizeBytes) : null,
+        t.dlSpeedBps > 0 ? speedWords(t.dlSpeedBps) : null,
+      ]
         .filter(Boolean)
         .join(' · ');
       const have = Math.max(0, t.sizeBytes - t.leftBytes);
@@ -720,7 +734,8 @@ export function qbtVerdict(s: QbtSnapshot): string {
       200,
     );
   }
-  if (seeding > 0) return clip(`qBittorrent is fine: nothing downloading, seeding ${plural(seeding, 'torrent')}.`, 200);
+  if (seeding > 0)
+    return clip(`qBittorrent is fine: nothing downloading, seeding ${plural(seeding, 'torrent')}.`, 200);
   return 'qBittorrent is fine: nothing downloading.';
 }
 
@@ -922,7 +937,11 @@ async function postWithV4Fallback(
   try {
     await call(v5Path);
   } catch (err) {
-    if (err instanceof ApiError && err.code === 'unavailable' && err.message.includes('answered with an error')) {
+    if (
+      err instanceof ApiError &&
+      err.code === 'unavailable' &&
+      err.message.includes('answered with an error')
+    ) {
       await call(v4Path);
       return;
     }
@@ -940,7 +959,10 @@ export const QBT_ACTIONS: Record<string, KindAction> = {
     return { message: 'Torrents resumed.', title: 'Resumed all torrents in qBittorrent', everyday: true };
   },
   async toggle_alt_speed(ctx) {
-    await actAs(ctx.services, ctx.row, NAME, { method: 'POST', path: '/api/v2/transfer/toggleSpeedLimitsMode' });
+    await actAs(ctx.services, ctx.row, NAME, {
+      method: 'POST',
+      path: '/api/v2/transfer/toggleSpeedLimitsMode',
+    });
     return {
       message: 'Switched qBittorrent’s speed limit mode.',
       title: 'Switched speed limit mode in qBittorrent',

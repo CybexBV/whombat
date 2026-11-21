@@ -66,7 +66,9 @@ describe('RDAP parsing and lookup', () => {
         events: [{ eventAction: 'registrar expiration', eventDate: '2026-12-01T12:00:00Z' }],
       })?.toISOString(),
     ).toBe('2026-12-01T12:00:00.000Z');
-    expect(parseRdapExpiration({ events: [{ eventAction: 'registration', eventDate: '2020-01-01Z' }] })).toBeNull();
+    expect(
+      parseRdapExpiration({ events: [{ eventAction: 'registration', eventDate: '2020-01-01Z' }] }),
+    ).toBeNull();
     expect(parseRdapExpiration({})).toBeNull();
   });
 
@@ -80,7 +82,12 @@ describe('RDAP parsing and lookup', () => {
       return { ok: true, status: 404, json: null };
     });
 
-    const first = await readDomainExpirations(services, ['example.com', 'example.org', 'example.zz'], now, fetchJson);
+    const first = await readDomainExpirations(
+      services,
+      ['example.com', 'example.org', 'example.zz'],
+      now,
+      fetchJson,
+    );
     expect(first?.partial).toBe(true);
     expect(first?.expirations.get('example.com')?.toISOString()).toBe('2026-11-02T00:00:00.000Z');
     expect(first?.expirations.has('example.org')).toBe(false);
@@ -97,7 +104,12 @@ describe('RDAP parsing and lookup', () => {
   it('returns null when bootstrap is unavailable', async () => {
     const services = fakeServices();
     const fetchJson = vi.fn<RdapFetch>(async () => ({ ok: false, status: 0 }));
-    const res = await readDomainExpirations(services, ['example.com'], new Date('2026-10-21T12:00:00Z'), fetchJson);
+    const res = await readDomainExpirations(
+      services,
+      ['example.com'],
+      new Date('2026-10-21T12:00:00Z'),
+      fetchJson,
+    );
     expect(res).toBeNull();
   });
 });

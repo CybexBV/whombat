@@ -923,7 +923,8 @@ function stateOf(q: ArrQueueItem): { text: string; dot: 'ok' | 'warn' | 'bad' | 
 const isSab = (q: ArrQueueItem) => /sab/i.test(q.client ?? '') || (!q.client && q.protocol === 'usenet');
 
 /** Whether a queue row's download client is qBittorrent's (its name, or torrent when the viewer has qBittorrent). */
-const isQbt = (q: ArrQueueItem) => /qbit|qbt/i.test(q.client ?? '') || (!q.client && q.protocol === 'torrent');
+const isQbt = (q: ArrQueueItem) =>
+  /qbit|qbt/i.test(q.client ?? '') || (!q.client && q.protocol === 'torrent');
 
 function clientFor(input: ArrInput, item: ArrQueueItem): { href: string; name: string } | null {
   if (input.qbittorrent && isQbt(item)) return input.qbittorrent;

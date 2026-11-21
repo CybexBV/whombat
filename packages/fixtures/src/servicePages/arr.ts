@@ -785,16 +785,12 @@ function jellyfin(ctx: FixtureServiceCtx) {
       'Jellyfin',
       'ok',
       '1 stream playing',
-      [
-        [{ text: 'Jellyfin ' }, { text: '10.10.3', strong: true }],
-        [{ text: '3 libraries', strong: true }],
-      ],
+      [[{ text: 'Jellyfin ' }, { text: '10.10.3', strong: true }], [{ text: '3 libraries', strong: true }]],
       '10.100.0.20:8096',
     ),
     verdict: scanning
       ? 'Jellyfin is fine: 1 person is watching and libraries are being scanned.'
       : 'Jellyfin is fine: 1 person is watching and every library is up to date.',
-    suggestions: ['Most watched this month', 'Who watches most', 'Biggest movies'],
     refreshS: 5,
     tabs: k.summary(
       [],
@@ -831,15 +827,29 @@ function jellyfin(ctx: FixtureServiceCtx) {
           look: 'counts',
           title: 'Libraries',
           meta: '3 libraries',
-          ...(scanning ? {} : { buttons: [k.button({ action: 'scan', target: 'all', label: 'Scan all', icon: 'search' })] }),
+          ...(scanning
+            ? {}
+            : { buttons: [k.button({ action: 'scan', target: 'all', label: 'Scan all', icon: 'search' })] }),
           items: [
             count('library-movies', 'Movies', 'film', '412', {
               detail: scanning ? 'Scanning' : 'Scanned today',
-              ...(scanning ? {} : { actions: [k.button({ action: 'scan', target: 'movies', label: 'Scan Movies', icon: 'search' })] }),
+              ...(scanning
+                ? {}
+                : {
+                    actions: [
+                      k.button({ action: 'scan', target: 'movies', label: 'Scan Movies', icon: 'search' }),
+                    ],
+                  }),
             }),
             count('library-tv', 'TV Shows', 'tv', '68', {
               detail: scanning ? '2,840 episodes · Scanning' : '2,840 episodes · Scanned today',
-              ...(scanning ? {} : { actions: [k.button({ action: 'scan', target: 'tv', label: 'Scan TV Shows', icon: 'search' })] }),
+              ...(scanning
+                ? {}
+                : {
+                    actions: [
+                      k.button({ action: 'scan', target: 'tv', label: 'Scan TV Shows', icon: 'search' }),
+                    ],
+                  }),
             }),
           ],
         },
@@ -880,7 +890,10 @@ function jellyfin(ctx: FixtureServiceCtx) {
           change: '+11 %',
           color: 'blue',
         }),
-        k.machine([{ id: 'jellyfin-version', label: 'Jellyfin', value: '10.10.3', pct: null, sub: 'Linux 6.12' }], 12),
+        k.machine(
+          [{ id: 'jellyfin-version', label: 'Jellyfin', value: '10.10.3', pct: null, sub: 'Linux 6.12' }],
+          12,
+        ),
       ],
     ),
   });
@@ -902,9 +915,24 @@ function jellyfin(ctx: FixtureServiceCtx) {
       return null;
     },
     checks: [
-      { check: 'jellyfin.task_failed', name: 'Failed scheduled tasks', nature: 'problem' as const, perItem: true },
-      { check: 'jellyfin.restart', name: 'Restart needed after changes', nature: 'you' as const, perItem: false },
-      { check: 'jellyfin.converting', name: 'Many streams converting at once', nature: 'fyi' as const, perItem: false },
+      {
+        check: 'jellyfin.task_failed',
+        name: 'Failed scheduled tasks',
+        nature: 'problem' as const,
+        perItem: true,
+      },
+      {
+        check: 'jellyfin.restart',
+        name: 'Restart needed after changes',
+        nature: 'you' as const,
+        perItem: false,
+      },
+      {
+        check: 'jellyfin.converting',
+        name: 'Many streams converting at once',
+        nature: 'fyi' as const,
+        perItem: false,
+      },
       { check: 'jellyfin.scan', name: 'Long library scans', nature: 'fyi' as const, perItem: true },
     ],
   };
@@ -932,7 +960,6 @@ function qbittorrent(ctx: FixtureServiceCtx) {
     verdict: paused
       ? 'qBittorrent is fine: nothing downloading, seeding 14 torrents.'
       : 'qBittorrent is fine: downloading 1 torrent at 18 MB/s and seeding 14.',
-    suggestions: ['Slowest or stalled downloads', 'Biggest torrents on disk', 'Upload ratio this month'],
     ...(paused ? {} : { refreshS: 5 }),
     tabs: k.summary(
       [],
@@ -944,7 +971,9 @@ function qbittorrent(ctx: FixtureServiceCtx) {
           span: 2,
           look: 'rows',
           title: 'Downloading now',
-          meta: paused ? 'Paused · 1 download · 1.8 GB left' : '18 MB/s · 1 download · 1.8 GB left · about 2 min',
+          meta: paused
+            ? 'Paused · 1 download · 1.8 GB left'
+            : '18 MB/s · 1 download · 1.8 GB left · about 2 min',
           buttons: [
             paused
               ? k.button({ action: 'resume', label: 'Resume all', icon: 'play', tone: 'primary' })
@@ -979,7 +1008,9 @@ function qbittorrent(ctx: FixtureServiceCtx) {
           items: [
             count('downloading', 'Downloading', 'download', '1', { detail: paused ? 'Paused' : '18 MB/s' }),
             count('seeding', 'Seeding', 'network', '14', { detail: '2.1 MB/s up' }),
-            count('transfer', 'All-time transfer', 'disk', '4.8 TB', { detail: '8.9 TB uploaded · ratio 1.85' }),
+            count('transfer', 'All-time transfer', 'disk', '4.8 TB', {
+              detail: '8.9 TB uploaded · ratio 1.85',
+            }),
           ],
         },
         k.machine(
@@ -1025,12 +1056,37 @@ function qbittorrent(ctx: FixtureServiceCtx) {
       return null;
     },
     checks: [
-      { check: 'qbittorrent.disk_low', name: 'Download disk low on space', nature: 'problem' as const, perItem: false },
-      { check: 'qbittorrent.disconnected', name: 'No network connection', nature: 'problem' as const, perItem: false },
-      { check: 'qbittorrent.errored', name: 'Torrents with errors', nature: 'problem' as const, perItem: true },
-      { check: 'qbittorrent.firewalled', name: 'Incoming connections firewalled', nature: 'fyi' as const, perItem: false },
+      {
+        check: 'qbittorrent.disk_low',
+        name: 'Download disk low on space',
+        nature: 'problem' as const,
+        perItem: false,
+      },
+      {
+        check: 'qbittorrent.disconnected',
+        name: 'No network connection',
+        nature: 'problem' as const,
+        perItem: false,
+      },
+      {
+        check: 'qbittorrent.errored',
+        name: 'Torrents with errors',
+        nature: 'problem' as const,
+        perItem: true,
+      },
+      {
+        check: 'qbittorrent.firewalled',
+        name: 'Incoming connections firewalled',
+        nature: 'fyi' as const,
+        perItem: false,
+      },
       { check: 'qbittorrent.stalled', name: 'Stalled downloads', nature: 'fyi' as const, perItem: true },
-      { check: 'qbittorrent.alt_speed', name: 'Slow speed limits left on', nature: 'fyi' as const, perItem: false },
+      {
+        check: 'qbittorrent.alt_speed',
+        name: 'Slow speed limits left on',
+        nature: 'fyi' as const,
+        perItem: false,
+      },
     ],
   };
 }

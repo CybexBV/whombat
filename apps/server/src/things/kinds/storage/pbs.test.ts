@@ -479,10 +479,18 @@ describe('what Whombat watches on Proxmox Backup Server (QN-01…QN-04)', () => 
   it('says which checks it couldn’t see whole', async () => {
     const s = await snapshotOf();
     // The unplugged datastore's guests weren't read.
-    expect(pbsSkipped(s)).toEqual(['pbs.backup_late', 'pbs.retired', 'pbs.verify_failed', 'pbs.never_verified']);
+    expect(pbsSkipped(s)).toEqual([
+      'pbs.backup_late',
+      'pbs.retired',
+      'pbs.verify_failed',
+      'pbs.never_verified',
+    ]);
     const whole = { ...s, groupsComplete: true };
     expect(pbsSkipped(whole)).toEqual([]);
-    expect(pbsSkipped({ ...whole, snapshotsRead: false })).toEqual(['pbs.verify_failed', 'pbs.never_verified']);
+    expect(pbsSkipped({ ...whole, snapshotsRead: false })).toEqual([
+      'pbs.verify_failed',
+      'pbs.never_verified',
+    ]);
     expect(pbsSkipped({ ...whole, jobs: null, tasksCapped: true })).toEqual([
       'pbs.job_failed',
       'pbs.task_failed',
@@ -519,7 +527,9 @@ describe('what Whombat watches on Proxmox Backup Server (QN-01…QN-04)', () => 
     expect(found[0]?.detail).toContain('verify');
     // Not raised when snapshots weren't read.
     expect(
-      lines({ ...only(s, [unverified]), snapshotsRead: false }).filter((n) => n.check === 'pbs.never_verified'),
+      lines({ ...only(s, [unverified]), snapshotsRead: false }).filter(
+        (n) => n.check === 'pbs.never_verified',
+      ),
     ).toEqual([]);
   });
 });

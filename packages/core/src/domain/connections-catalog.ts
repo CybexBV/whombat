@@ -1187,7 +1187,8 @@ export function sessionLoginFailure(
     const matched =
       f.bodyPattern !== undefined
         ? new RegExp(f.bodyPattern, 'i').test(body)
-        : f.values !== undefined && sessionAnswerMatches({ json: f.json, xml: f.xml, values: f.values }, body);
+        : f.values !== undefined &&
+          sessionAnswerMatches({ json: f.json, xml: f.xml, values: f.values }, body);
     if (matched) return { reason: f.reason, text: f.text ?? sessionLoginFailureText(entry, f.reason) };
   }
   return null;

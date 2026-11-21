@@ -223,7 +223,7 @@ export function parseItem(raw: unknown): JellyfinItem | null {
     tmdbId: type === 'Movie' || type === 'Series' ? tmdbFrom(m.ProviderIds) : null,
     season,
     episode: epNum,
-    artist: audio ? (str(m.AlbumArtist) ?? artists[0] ?? null)?.slice(0, 80) ?? null : null,
+    artist: audio ? ((str(m.AlbumArtist) ?? artists[0] ?? null)?.slice(0, 80) ?? null) : null,
   };
 }
 

@@ -95,7 +95,10 @@ function rest(more: Partial<JellyfinRest> = {}): JellyfinRest {
 
 const input = (r: JellyfinRest, more: Partial<JellyfinInput> = {}): JellyfinInput => ({
   rest: r,
-  live: { sessions: parseSessions(fixture('jellyfin-sessions.json')), tasks: parseTasks(fixture('jellyfin-tasks.json')) },
+  live: {
+    sessions: parseSessions(fixture('jellyfin-sessions.json')),
+    tasks: parseTasks(fixture('jellyfin-tasks.json')),
+  },
   readAt: now,
   now,
   timeZone: TZ,
@@ -104,7 +107,8 @@ const input = (r: JellyfinRest, more: Partial<JellyfinInput> = {}): JellyfinInpu
   asked: null,
   since: new Map(),
   streams: [],
-  poster: (id, title) => (id ? { ref: `jellyfin_${id}.signature12345678`, alt: title, shape: 'poster' } : undefined),
+  poster: (id, title) =>
+    id ? { ref: `jellyfin_${id}.signature12345678`, alt: title, shape: 'poster' } : undefined,
   ...more,
 });
 
@@ -210,12 +214,17 @@ describe('Jellyfin page in slots', () => {
       ['shows', '68', '2,840 episodes'],
       ['watching', '1', '1 converting'],
     ]);
-    expect(jellyfinActivity({ sessions: parseSessions(fixture('jellyfin-sessions.json')), tasks: [] })).toEqual({
+    expect(
+      jellyfinActivity({ sessions: parseSessions(fixture('jellyfin-sessions.json')), tasks: [] }),
+    ).toEqual({
       active: true,
       value: '1 watching',
       detail: 'Dune: Part Two',
     });
-    expect(jellyfinActivity({ sessions: [], tasks: [] })).toEqual({ active: false, value: 'Nobody watching' });
+    expect(jellyfinActivity({ sessions: [], tasks: [] })).toEqual({
+      active: false,
+      value: 'Nobody watching',
+    });
     expect(jellyfinPosterPath('mov1022789')).toBe('/Items/mov1022789/Images/Primary?maxWidth=240&quality=90');
     expect(jellyfinVerdict(rest(), { sessions: [], tasks: [] })).toBe(
       'Jellyfin is fine: nobody is watching and every library is up to date.',
@@ -245,7 +254,8 @@ describe('Jellyfin page in slots', () => {
       lastEndedAt: null,
       errorMessage: null,
     };
-    const one = parseSessions(fixture('jellyfin-sessions.json'))[0]!;
+    const one = parseSessions(fixture('jellyfin-sessions.json'))[0];
+    if (!one) throw new Error('missing session');
     const notices = jellyfinNotices(
       input(rest({ pendingRestart: true, failedTasks: [failedTask] }), {
         live: {

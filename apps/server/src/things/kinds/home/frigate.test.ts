@@ -106,7 +106,14 @@ describe('Frigate page in slots', () => {
       detectors: [{ name: 'cpu1', inferenceMs: 145 }],
       storage: { mount: '/media/frigate/recordings', totalBytes: 1_000e9, usedBytes: 960e9, freeBytes: 40e9 },
       cameras: [
-        { id: 'front_door', name: 'Front door', online: true, cameraFps: 5, detectionFps: 1, skippedFps: 2.5 },
+        {
+          id: 'front_door',
+          name: 'Front door',
+          online: true,
+          cameraFps: 5,
+          detectionFps: 1,
+          skippedFps: 2.5,
+        },
         { id: 'garage', name: 'Garage', online: false, cameraFps: 0, detectionFps: 0, skippedFps: 0 },
       ],
     });

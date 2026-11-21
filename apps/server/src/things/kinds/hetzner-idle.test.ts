@@ -115,19 +115,13 @@ describe('Hetzner idle paid server check', () => {
     // Active CPU
     expect(isIdlePaidServer(s, activityOf(s.id, { cpu: 2.5 }), NOW)).toBe(false);
     // Periodic batch job: mostly idle, but 10% of hours spike to 12% CPU (p95 >= 5%)
-    expect(
-      isIdlePaidServer(
-        s,
-        activityOf(s.id, { cpu: (i) => (i % 10 === 0 ? 12 : 0.1) }),
-        NOW,
-      ),
-    ).toBe(false);
+    expect(isIdlePaidServer(s, activityOf(s.id, { cpu: (i) => (i % 10 === 0 ? 12 : 0.1) }), NOW)).toBe(false);
     // Active network
     expect(isIdlePaidServer(s, activityOf(s.id, { netIn: 400, netOut: 300 }), NOW)).toBe(false);
     // Created 5 days ago
-    expect(isIdlePaidServer(server({ createdAt: new Date(NOW.getTime() - 5 * DAY) }), activityOf(s.id), NOW)).toBe(
-      false,
-    );
+    expect(
+      isIdlePaidServer(server({ createdAt: new Date(NOW.getTime() - 5 * DAY) }), activityOf(s.id), NOW),
+    ).toBe(false);
     // Stopped server (already covered by hetzner.not_running)
     expect(isIdlePaidServer(server({ status: 'off' }), activityOf(s.id), NOW)).toBe(false);
     // Free / unknown cost
