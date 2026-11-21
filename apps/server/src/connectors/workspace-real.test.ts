@@ -399,6 +399,123 @@ describe('mail', () => {
     expect(resynced.reset).toBe(true);
     expect(resynced.headers.map((h) => h.id)).toEqual(['m_during_expiry']);
   });
+
+  it('resumes Gmail backfill across pages when more than 50 messages arrive before baseline or resync', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    // 115 messages received after activation: m_001 is the earliest (an invoice), followed by 114 newer messages.
+    const total = 115;
+    const allNewestFirst: { id: string }[] = [];
+    const messages: Record<string, object> = {};
+    for (let i = total; i >= 1; i--) {
+      const id = `m_${String(i).padStart(3, '0')}`;
+      allNewestFirst.push({ id });
+      messages[id] = {
+        id,
+        threadId: `t_${id}`,
+        labelIds: ['INBOX'],
+        snippet: i === 1 ? 'Invoice #1' : `Noise ${i}`,
+        internalDate: String(activation.getTime() + i * 1_000),
+        payload: {
+          headers: [
+            { name: 'From', value: i === 1 ? 'billing@example.com' : 'news@example.com' },
+            { name: 'Subject', value: i === 1 ? 'Invoice #1' : `Newsletter ${i}` },
+            { name: 'Message-ID', value: `<${id}@example.com>` },
+          ],
+        },
+      };
+    }
+    // One more message arrives after baseline starts (caught by history.list once backfill completes).
+    messages.m_after_backfill = {
+      id: 'm_after_backfill',
+      threadId: 't_after',
+      labelIds: ['INBOX'],
+      snippet: 'Arrived during backfill',
+      internalDate: String(activation.getTime() + 200_000),
+      payload: {
+        headers: [
+          { name: 'From', value: 'billing@example.com' },
+          { name: 'Subject', value: 'Invoice arrived during backfill' },
+          { name: 'Message-ID', value: '<after-backfill@example.com>' },
+        ],
+      },
+    };
+
+    const { workspace } = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile')) return { json: { historyId: '900' } };
+      if (c.url.pathname.endsWith('/messages')) {
+        const token = c.url.searchParams.get('pageToken');
+        const offset = token ? Number(token.replace('page_', '')) : 0;
+        const page = allNewestFirst.slice(offset, offset + 50);
+        const nextOffset = offset + 50;
+        return {
+          json: {
+            messages: page,
+            ...(nextOffset < allNewestFirst.length ? { nextPageToken: `page_${nextOffset}` } : {}),
+          },
+        };
+      }
+      if (c.url.pathname.endsWith('/history')) {
+        if (c.url.searchParams.get('startHistoryId') === '100') {
+          return { status: 404, json: { error: { message: 'Start history id too old' } } };
+        }
+        return {
+          json: {
+            historyId: '910',
+            history: [
+              { id: '910', messagesAdded: [{ message: { id: 'm_after_backfill', labelIds: ['INBOX'] } }] },
+            ],
+          },
+        };
+      }
+      const id = c.url.pathname.split('/').at(-1) ?? '';
+      return { json: messages[id] };
+    });
+
+    // Initial baseline walks pages 50 -> 50 -> 15 without dropping m_001.
+    const seenIds = new Set<string>();
+    const p1 = await workspace.mailBaseline('tok', { since: activation });
+    expect(p1.more).toBe(true);
+    expect(p1.cursor).toMatchObject({ kind: 'gmail', historyId: '900', backfill: { pageToken: 'page_50' } });
+    expect(p1.headers).toHaveLength(50);
+    for (const h of p1.headers) seenIds.add(h.id);
+    expect(seenIds.has('m_001')).toBe(false);
+
+    const p2 = await workspace.mailChanges('tok', p1.cursor, { since: activation });
+    expect(p2.more).toBe(true);
+    expect(p2.cursor).toMatchObject({ kind: 'gmail', historyId: '900', backfill: { pageToken: 'page_100' } });
+    expect(p2.headers).toHaveLength(50);
+    for (const h of p2.headers) seenIds.add(h.id);
+
+    const p3 = await workspace.mailChanges('tok', p2.cursor, { since: activation });
+    expect(p3.more).toBeUndefined();
+    expect(p3.cursor).toEqual({ kind: 'gmail', historyId: '900' });
+    expect(p3.headers).toHaveLength(15);
+    for (const h of p3.headers) seenIds.add(h.id);
+    expect(seenIds.size).toBe(total);
+    expect(seenIds.has('m_001')).toBe(true);
+
+    // Next poll seamlessly switches to history.list from historyId 900 and catches mail arrived during backfill.
+    const steady = await workspace.mailChanges('tok', p3.cursor, { since: activation });
+    expect(steady.cursor).toEqual({ kind: 'gmail', historyId: '910' });
+    expect(steady.headers.map((h) => h.id)).toEqual(['m_after_backfill']);
+
+    // Expired historyId resync with >50 messages also paginates resumably through every page.
+    const resyncSeen = new Set<string>();
+    let step = await workspace.mailChanges(
+      'tok',
+      { kind: 'gmail', historyId: '100' },
+      { since: activation, resyncSince: activation },
+    );
+    expect(step.reset).toBe(true);
+    expect(step.more).toBe(true);
+    for (const h of step.headers) resyncSeen.add(h.id);
+    while (step.more) {
+      step = await workspace.mailChanges('tok', step.cursor, { since: activation, resyncSince: activation });
+      for (const h of step.headers) resyncSeen.add(h.id);
+    }
+    expect(resyncSeen.size).toBe(total);
+    expect(resyncSeen.has('m_001')).toBe(true);
+  });
 });
 
 describe('calendar', () => {

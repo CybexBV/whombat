@@ -41,13 +41,29 @@ const StagedMailAttachment = z.object({
 });
 
 const MailProviderCursorSchema: z.ZodType<MailProviderCursor> = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('gmail'), historyId: z.string().min(1).max(128) }),
+  z.object({
+    kind: z.literal('gmail'),
+    historyId: z.string().min(1).max(128),
+    backfill: z
+      .object({
+        pageToken: z.string().min(1).max(2048),
+        afterSeconds: z.number().int().nonnegative(),
+        sinceMs: z.number().int().nonnegative(),
+      })
+      .optional(),
+  }),
   z.object({ kind: z.literal('microsoft'), deltaLink: z.string().min(1).max(4096) }),
   z.object({
     kind: z.literal('imap'),
     mailbox: z.string().min(1).max(255),
     uidValidity: z.string().min(1).max(64),
     lastUid: z.number().int().nonnegative(),
+    backfill: z
+      .object({
+        sinceMs: z.number().int().nonnegative(),
+        untilUid: z.number().int().nonnegative(),
+      })
+      .optional(),
   }),
   z.object({ kind: z.literal('fake'), seq: z.number().int().nonnegative() }),
 ]);

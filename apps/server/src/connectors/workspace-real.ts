@@ -510,19 +510,14 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     return headers;
   }
 
-  async mailBaseline(accessToken: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
-    // Capture the current historyId first so mail arriving during backfill is still caught by the next history poll.
-    const profile = await this.json<{ historyId?: string | number }>(
-      accessToken,
-      'GET',
-      `${GMAIL_API}/profile`,
-      { query: { fields: 'historyId' } },
-    );
-    const cursor: MailProviderCursor = { kind: 'gmail', historyId: String(profile.historyId ?? '0') };
-    if (!options.since) return { cursor, headers: [] };
-    // Pad Gmail's whole-second `after:` search slightly and enforce the exact 5 s skew margin on `internalDate`.
-    const afterSeconds = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) - 60);
-    const list = await this.json<{ messages?: { id: string }[] }>(
+  private async gmailBackfillPage(
+    accessToken: string,
+    historyId: string,
+    afterSeconds: number,
+    sinceMs: number,
+    pageToken?: string,
+  ): Promise<MailChangesResult> {
+    const list = await this.json<{ messages?: { id: string }[]; nextPageToken?: string }>(
       accessToken,
       'GET',
       `${GMAIL_API}/messages`,
@@ -531,12 +526,40 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
           labelIds: 'INBOX',
           q: `after:${afterSeconds}`,
           maxResults: 50,
+          ...(pageToken ? { pageToken } : {}),
         },
       },
     );
-    const ids = (list.messages ?? []).map((m) => m.id).slice(0, 50);
-    const headers = await this.fetchGmailHeaders(accessToken, ids, options.since);
-    return { cursor, headers };
+    const ids = (list.messages ?? []).map((m) => m.id);
+    const headers = await this.fetchGmailHeaders(accessToken, ids, new Date(sinceMs));
+    const nextToken = list.nextPageToken?.trim() || undefined;
+    if (nextToken) {
+      return {
+        cursor: {
+          kind: 'gmail',
+          historyId,
+          backfill: { pageToken: nextToken, afterSeconds, sinceMs },
+        },
+        headers,
+        more: true,
+      };
+    }
+    return { cursor: { kind: 'gmail', historyId }, headers };
+  }
+
+  async mailBaseline(accessToken: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    // Capture the current historyId first so mail arriving during backfill is still caught by the next history poll.
+    const profile = await this.json<{ historyId?: string | number }>(
+      accessToken,
+      'GET',
+      `${GMAIL_API}/profile`,
+      { query: { fields: 'historyId' } },
+    );
+    const historyId = String(profile.historyId ?? '0');
+    if (!options.since) return { cursor: { kind: 'gmail', historyId }, headers: [] };
+    // Pad Gmail's whole-second `after:` search slightly and enforce the exact 5 s skew margin on `internalDate`.
+    const afterSeconds = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) - 60);
+    return this.gmailBackfillPage(accessToken, historyId, afterSeconds, options.since.getTime());
   }
 
   async mailChanges(
@@ -547,6 +570,20 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     const resyncSince = options.resyncSince ?? options.since ?? null;
     if (cursor.kind !== 'gmail') {
       return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
+    }
+    if (cursor.backfill) {
+      const { pageToken, afterSeconds, sinceMs } = cursor.backfill;
+      try {
+        return await this.gmailBackfillPage(accessToken, cursor.historyId, afterSeconds, sinceMs, pageToken);
+      } catch (err) {
+        if (err instanceof GoogleApiError && err.status === 404) {
+          return {
+            ...(await this.mailBaseline(accessToken, { ...options, since: new Date(sinceMs) })),
+            reset: true,
+          };
+        }
+        throw err;
+      }
     }
     const addedIds: string[] = [];
     const seen = new Set<string>();
@@ -605,7 +642,11 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     }
     const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
     const headers = await this.fetchGmailHeaders(accessToken, addedIds, options.since);
-    return { cursor: { kind: 'gmail', historyId: finalHistoryId }, headers };
+    return {
+      cursor: { kind: 'gmail', historyId: finalHistoryId },
+      headers,
+      ...(truncated ? { more: true } : {}),
+    };
   }
 
   async mailRead(

@@ -779,32 +779,48 @@ export class ImapWorkspace implements GoogleWorkspace {
     opened: { path: string; uidValidity: string; uidNext: number | null },
     folders: readonly MailboxInfo[],
     since: Date | null | undefined,
-  ): Promise<{ cursor: MailProviderCursor; headers: MailHeader[] }> {
-    const lastUid =
+  ): Promise<MailChangesResult> {
+    const highUid =
       opened.uidNext !== null
         ? Math.max(0, opened.uidNext - 1)
         : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
-    const cursor: MailProviderCursor = {
+    const emptyCursor: MailProviderCursor = {
       kind: 'imap',
       mailbox: opened.path,
       uidValidity: opened.uidValidity,
-      lastUid,
+      lastUid: highUid,
     };
-    if (!since) return { cursor, headers: [] };
+    if (!since) return { cursor: emptyCursor, headers: [] };
     // IMAP SEARCH SINCE matches whole calendar days in the server's timezone: look back one full day, then filter
     // accurately by `internalDate` with the 5-second skew margin.
     const dayBefore = new Date(since.getTime() - 24 * 3_600_000);
-    const uids = (await s.search({ since: dayBefore })).sort((a, b) => a - b).slice(-50);
-    if (uids.length === 0) return { cursor, headers: [] };
-    const metas = await s.meta(uids, { bodyStructure: true });
-    const headers = this.imapHeadersOf(opened, folders, uids, metas, since);
-    const maxUid = uids[uids.length - 1] ?? lastUid;
+    const uids = (await s.search({ since: dayBefore })).sort((a, b) => a - b);
+    if (uids.length === 0) return { cursor: emptyCursor, headers: [] };
+    const maxFoundUid = uids[uids.length - 1] ?? highUid;
+    const untilUid = Math.max(highUid, maxFoundUid);
+    const batch = uids.slice(0, 50);
+    const metas = await s.meta(batch, { bodyStructure: true });
+    const headers = this.imapHeadersOf(opened, folders, batch, metas, since);
+    const batchLastUid = batch[batch.length - 1] ?? highUid;
+    if (uids.length > 50) {
+      return {
+        cursor: {
+          kind: 'imap',
+          mailbox: opened.path,
+          uidValidity: opened.uidValidity,
+          lastUid: batchLastUid,
+          backfill: { sinceMs: since.getTime(), untilUid },
+        },
+        headers,
+        more: true,
+      };
+    }
     return {
       cursor: {
         kind: 'imap',
         mailbox: opened.path,
         uidValidity: opened.uidValidity,
-        lastUid: Math.max(lastUid, maxUid),
+        lastUid: untilUid,
       },
       headers,
     };
@@ -842,18 +858,69 @@ export class ImapWorkspace implements GoogleWorkspace {
       if (opened.uidValidity !== cursor.uidValidity) {
         return { ...(await this.imapBackfill(s, opened, folders, resyncSince)), reset: true };
       }
-      const found = (await s.search({ uid: `${cursor.lastUid + 1}:*` }))
-        .filter((u) => u > cursor.lastUid)
+      let activeCursor = cursor;
+      if (activeCursor.backfill) {
+        const backfillSince = new Date(activeCursor.backfill.sinceMs);
+        const untilUid = activeCursor.backfill.untilUid;
+        const dayBefore = new Date(backfillSince.getTime() - 24 * 3_600_000);
+        const remaining =
+          activeCursor.lastUid < untilUid
+            ? (await s.search({ since: dayBefore, uid: `${activeCursor.lastUid + 1}:${untilUid}` }))
+                .filter((u) => u > activeCursor.lastUid && u <= untilUid)
+                .sort((a, b) => a - b)
+            : [];
+        if (remaining.length > 0) {
+          const batch = remaining.slice(0, 50);
+          const metas = await s.meta(batch, { bodyStructure: true });
+          const headers = this.imapHeadersOf(opened, folders, batch, metas, backfillSince);
+          const batchLastUid = batch[batch.length - 1] ?? activeCursor.lastUid;
+          if (remaining.length > 50) {
+            return {
+              cursor: {
+                kind: 'imap',
+                mailbox: opened.path,
+                uidValidity: opened.uidValidity,
+                lastUid: batchLastUid,
+                backfill: activeCursor.backfill,
+              },
+              headers,
+              more: true,
+            };
+          }
+          const finalUid = Math.max(untilUid, batchLastUid);
+          const moreArrived = opened.uidNext !== null && opened.uidNext - 1 > finalUid;
+          return {
+            cursor: {
+              kind: 'imap',
+              mailbox: opened.path,
+              uidValidity: opened.uidValidity,
+              lastUid: finalUid,
+            },
+            headers,
+            ...(moreArrived ? { more: true } : {}),
+          };
+        }
+        // No eligible UIDs remain in the backfill window: advance to `untilUid` and continue with steady-state UID sync.
+        activeCursor = {
+          kind: 'imap',
+          mailbox: opened.path,
+          uidValidity: opened.uidValidity,
+          lastUid: Math.max(activeCursor.lastUid, untilUid),
+        };
+      }
+      const found = (await s.search({ uid: `${activeCursor.lastUid + 1}:*` }))
+        .filter((u) => u > activeCursor.lastUid)
         .sort((a, b) => a - b);
-      if (found.length === 0) return { cursor, headers: [] };
+      if (found.length === 0) return { cursor: activeCursor, headers: [] };
       const batch = found.slice(0, 50);
       // Fetch envelope, flags and BODYSTRUCTURE only — never raw message bodies until a trigger matches.
       const metas = await s.meta(batch, { bodyStructure: true });
       const headers = this.imapHeadersOf(opened, folders, batch, metas, options.since);
-      const nextUid = batch[batch.length - 1] ?? cursor.lastUid;
+      const nextUid = batch[batch.length - 1] ?? activeCursor.lastUid;
       return {
         cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid: nextUid },
         headers,
+        ...(found.length > 50 ? { more: true } : {}),
       };
     });
   }
