@@ -144,6 +144,7 @@ import { entry as dropboxEntry } from './connections-catalog/dropbox.js';
 import { entry as esphomeEntry } from './connections-catalog/esphome.js';
 import { entry as feedbackEntry } from './connections-catalog/feedback.js';
 import { entry as forgejoEntry } from './connections-catalog/forgejo.js';
+import { entry as frigateEntry } from './connections-catalog/frigate.js';
 import { entry as fuseboxEntry } from './connections-catalog/fusebox.js';
 import { entry as githubEntry } from './connections-catalog/github.js';
 import { entry as githubActionsEntry } from './connections-catalog/github_actions.js';
@@ -224,6 +225,7 @@ const ENTRIES = [
   hetznerEntry,
   unifiNetworkEntry,
   unifiProtectEntry,
+  frigateEntry,
   unifiAccessEntry,
   adguardEntry,
   piholeEntry,
@@ -305,6 +307,7 @@ export const CATALOG_IDS = [
   'hetzner',
   'unifi_network',
   'unifi_protect',
+  'frigate',
   'unifi_access',
   'adguard',
   'pihole',

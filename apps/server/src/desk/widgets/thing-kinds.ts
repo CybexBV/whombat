@@ -413,6 +413,19 @@ const house = {
     // Whether the alarm is on.
     privateFigures: ['alarm'],
   },
+  frigate: {
+    panels: [
+      {
+        panel: 'cameras',
+        name: 'All cameras',
+        line: 'Every camera’s latest picture, side by side',
+        mosaic: true,
+        poster: (i) => (i.muted ? { time: '' } : {}),
+        private: true,
+      },
+      { panel: 'detections', private: true },
+    ],
+  },
   unifi_access: {
     panels: [
       { panel: 'doors', private: true },

@@ -1,0 +1,126 @@
+/**
+ * Frigate's page, camera shelf, detections, detectors, storage checks and slot layout from documented API fixtures.
+ */
+import { readFileSync } from 'node:fs';
+import { ThingPageNotice, ThingPagePanel } from '@whombat/core';
+import { describe, expect, it } from 'vitest';
+import { slotProblems } from '../slots';
+import {
+  FRIGATE_CHECKS,
+  FRIGATE_KIND,
+  type FrigateCtx,
+  type FrigateSnapshot,
+  frigateKpis,
+  frigateNotices,
+  frigateSkipped,
+  frigateVerdict,
+  frigateView,
+  offlineSinceOf,
+  parseEvents,
+  parseStats,
+  parseSummary,
+} from './frigate';
+
+const fixture = <T>(name: string): T =>
+  JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as T;
+
+const now = new Date('2026-10-21T19:46:00Z');
+const TZ = 'Europe/Amsterdam';
+
+const snap = (more: Partial<FrigateSnapshot> = {}): FrigateSnapshot => ({
+  ...parseStats(fixture('frigate-stats.json'), now),
+  ...more,
+});
+
+const ctxOf = (s: FrigateSnapshot, more: Partial<FrigateCtx> = {}): FrigateCtx => ({
+  now,
+  timeZone: TZ,
+  events: parseEvents(fixture('frigate-events.json')),
+  summary: parseSummary(fixture('frigate-summary.json')),
+  offlineSince: offlineSinceOf('con_frigate_test', s),
+  ...more,
+});
+
+const panel = (panels: ThingPagePanel[], id: string) => panels.find((p) => p.id === id);
+
+describe('Frigate page in slots', () => {
+  it('parses stats, events and summary and passes slot validation', () => {
+    const s = snap();
+    expect(s.version).toBe('0.15.0');
+    expect(s.cameras.map((c) => [c.id, c.name, c.online])).toEqual([
+      ['front_door', 'Front door', true],
+      ['driveway', 'Driveway', true],
+      ['garage', 'Garage', false],
+    ]);
+    expect(s.detectors).toEqual([{ name: 'coral', inferenceMs: 11.4 }]);
+    expect(s.storage?.totalBytes).toBeGreaterThan(1_000_000_000_000);
+
+    const view = frigateView(s, ctxOf(s), {
+      openUrl: 'http://10.100.0.20:5000',
+      picture: (id, alt) => ({ ref: `frigate_${id}.signature12345678`, alt, shape: 'wide' }),
+    });
+    expect(slotProblems(view)).toEqual([]);
+    for (const p of view.panels) ThingPagePanel.parse(p);
+    for (const n of view.notices) ThingPageNotice.parse(n);
+    expect(view.refreshS).toBe(10);
+    expect(view.verdict).toBe('Frigate is fine: 2 of 3 cameras are online.');
+
+    const cameras = panel(view.panels, 'cameras');
+    expect(cameras?.kind === 'gallery' && [cameras.look, cameras.shape, cameras.meta]).toEqual([
+      'shelf',
+      'wide',
+      '2 of 3 online',
+    ]);
+    expect(cameras?.kind === 'gallery' && cameras.items.map((c) => [c.id, c.muted ?? false])).toEqual([
+      ['driveway', false],
+      ['front_door', false],
+      ['garage', true],
+    ]);
+
+    const today = panel(view.panels, 'detections');
+    expect(today?.kind === 'list' && today.meta).toBe('34 detections');
+    expect(today?.kind === 'list' && today.items[0]?.title).toBe('Person (Mara) seen at Front door');
+
+    const week = panel(view.panels, 'week');
+    expect(week?.kind === 'chart' && week.labels?.at(-1)).toBe('Today');
+  });
+
+  it('reports card KPIs and verdict cleanly when all cameras are online', () => {
+    const allOnline = snap({ cameras: snap().cameras.map((c) => ({ ...c, online: true, cameraFps: 5 })) });
+    expect(frigateVerdict(allOnline)).toBe('Frigate is fine: all 3 cameras are online.');
+    const kpis = frigateKpis(allOnline, ctxOf(allOnline));
+    expect(kpis.map((k) => [k.key, k.value, k.sub])).toEqual([
+      ['cameras', '3', 'all online'],
+      ['detections', '34', 'most at Driveway'],
+    ]);
+  });
+
+  it('starts only offline cameras and full storage on, and reports slow detectors and dropped frames when on', () => {
+    expect(FRIGATE_KIND.checks).toBe(FRIGATE_CHECKS);
+    expect(FRIGATE_CHECKS.filter((c) => c.startsOn).map((c) => c.check)).toEqual([
+      'frigate.camera_offline',
+      'frigate.storage_full',
+    ]);
+
+    const s = snap({
+      detectors: [{ name: 'cpu1', inferenceMs: 145 }],
+      storage: { mount: '/media/frigate/recordings', totalBytes: 1_000e9, usedBytes: 960e9, freeBytes: 40e9 },
+      cameras: [
+        { id: 'front_door', name: 'Front door', online: true, cameraFps: 5, detectionFps: 1, skippedFps: 2.5 },
+        { id: 'garage', name: 'Garage', online: false, cameraFps: 0, detectionFps: 0, skippedFps: 0 },
+      ],
+    });
+    const notices = frigateNotices(s, ctxOf(s));
+    for (const n of notices) ThingPageNotice.parse(n);
+    expect(notices.map((n) => [n.check, n.tone, n.nature])).toEqual([
+      ['frigate.camera_offline', 'warn', 'problem'],
+      ['frigate.storage_full', 'bad', 'problem'],
+      ['frigate.detector_slow', 'info', 'fyi'],
+      ['frigate.skipped_fps', 'info', 'fyi'],
+    ]);
+    expect(frigateSkipped(snap({ storage: null, detectors: [] }))).toEqual([
+      'frigate.storage_full',
+      'frigate.detector_slow',
+    ]);
+  });
+});

@@ -127,6 +127,21 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
     version: '2026.6.5',
     answers: { '/version': { status: 200, body: '{"version":"2026.6.5"}' } },
   },
+  frigate: {
+    port: 5000,
+    version: '0.15.0-6cb5cfb',
+    answers: {
+      '/': {
+        status: 200,
+        body: '<!doctype html><html><head><title>Frigate</title></head><body></body></html>',
+      },
+      '/api/stats': {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: '{"cameras":{},"detectors":{},"service":{"version":"0.15.0-6cb5cfb"}}',
+      },
+    },
+  },
   pterodactyl: {
     port: 443,
     answers: {
