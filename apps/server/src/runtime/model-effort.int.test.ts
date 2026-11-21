@@ -236,6 +236,11 @@ describe('agents.update (ME-01, ME-04)', () => {
     expect(runtime).not.toHaveProperty('model');
     expect(runtime).not.toHaveProperty('backgroundModel');
     expect(runtime).not.toHaveProperty('effort');
+    // Main model remains limited to Claude Code and ChatGPT (matching main's behaviour).
+    await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'local', model: 'llama3.3' } });
+    const localRuntime = await runtimeOf(IDS.dusty);
+    expect(localRuntime).toMatchObject({ provider: 'local' });
+    expect(localRuntime).not.toHaveProperty('model');
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'claude' } });
   });
 });

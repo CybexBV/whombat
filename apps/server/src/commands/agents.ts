@@ -87,14 +87,14 @@ function takesModels(provider: AgentRuntime['provider']): provider is 'claude' |
 }
 
 /**
- * What the agent's model runtime becomes: model and background model for any provider, effort and fast replies only
- * with Claude Code and ChatGPT.
+ * What the agent's model runtime becomes: main model, effort and fast replies only with Claude Code and ChatGPT;
+ * background model for any provider.
  */
 function modelRuntime(runtime: z.output<typeof AgentModelRuntime>): z.output<typeof AgentModelRuntime> {
   const tool = takesModels(runtime.provider);
   return {
     provider: runtime.provider,
-    ...(runtime.model ? { model: runtime.model } : {}),
+    ...(tool && runtime.model ? { model: runtime.model } : {}),
     ...(runtime.backgroundModel ? { backgroundModel: runtime.backgroundModel } : {}),
     ...(tool && runtime.effort ? { effort: runtime.effort } : {}),
     ...(tool && runtime.fast !== undefined ? { fast: runtime.fast } : {}),
