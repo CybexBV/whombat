@@ -79,6 +79,25 @@ func newTestPkgTasks(t *testing.T, state string) (*pkgTasks, *fakeUnits) {
 	p := newPkgTasks(state)
 	f := &fakeUnits{active: map[string]bool{}}
 	f.install(p)
+	// The watcher reads and writes the state folder every few milliseconds
+	// while a task runs (last.json): it must be done before the folder is
+	// removed, a cleanup registered earlier that runs after this one.
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			p.mu.Lock()
+			watching := p.watching
+			p.mu.Unlock()
+			if !watching {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Error("a package task still runs at the end of the test")
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	})
 	return p, f
 }
 
