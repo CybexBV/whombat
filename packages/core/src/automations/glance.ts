@@ -206,6 +206,7 @@ function stepDoes(step: AutomationStep): AutomationDoes | null {
       return 'reply';
     // It asks the person (3.12, TA-44), as an approval does.
     case 'tracker_decision':
+    case 'connection_actions':
       return 'approval';
     case 'http_callback':
       return 'callback';

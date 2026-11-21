@@ -74,6 +74,7 @@ import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-it
 import { postRunNotice } from './notice';
 import { republishPlanCards } from './plan-cards';
 import { createAutomationPrincipal } from './principal';
+import { proposeConnectionActions } from './proposed-actions';
 import { createRun } from './runs';
 import {
   ACTIVE_RUN_STATUSES,
@@ -936,11 +937,12 @@ export const setAutomationEnabled = defineCommand({
       });
       return { automationId: row.id };
     }
-    const nextMailActiveAt = !input.enabled || !watchesMail
-      ? null
-      : row.status === 'published' && row.mailActiveAt
-        ? row.mailActiveAt
-        : ctx.now;
+    const nextMailActiveAt =
+      !input.enabled || !watchesMail
+        ? null
+        : row.status === 'published' && row.mailActiveAt
+          ? row.mailActiveAt
+          : ctx.now;
     await tx
       .update(automations)
       .set({
@@ -1424,4 +1426,5 @@ export const AUTOMATION_COMMANDS = [
   runAutomationNow,
   controlAutomationRun,
   reviewAutomationStep,
+  proposeConnectionActions,
 ];

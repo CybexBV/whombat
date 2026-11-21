@@ -16,6 +16,11 @@ import type { z } from 'zod';
 import { automationsForAgent } from '../automations/agent-read';
 import { assessesInTurn, NOT_AN_ASSESSMENT, reportAssessment } from '../automations/assessment';
 import { proposeAutomationPlan } from '../automations/plans';
+import {
+  NOT_PROPOSING_ACTIONS,
+  proposeConnectionActions,
+  proposesInTurn,
+} from '../automations/proposed-actions';
 import { automationOpensPrText, automationOwnsPullRequest } from '../automations/workspace';
 import { backupBringBackTool } from '../backups/look/tool';
 import { BROWSER_TOOL_HANDLERS } from '../browser/preview-tool';
@@ -47,7 +52,6 @@ import { runs, searchAnswers } from '../db/schema/index';
 import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
-import { personOfAccountIn } from '../domain/turn-person';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
 import { startGuide } from '../guides/commands';
@@ -553,6 +557,13 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
       line: r.line,
     }));
   },
+  propose_connection_actions: async (ctx, input) => {
+    if (!(await proposesInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id)))
+      throw forbidden(NOT_PROPOSING_ACTIONS);
+    return run(ctx, proposeConnectionActions, { dispatchId: ctx.dispatch.id, input }, (r) => ({
+      count: r.count,
+    }));
+  },
   // Whombat Feedback's assessor (feedback/tools.ts, docs/decisions/feedback.md FB-21).
   submit_assessment: submitAssessmentTool,
   feedback_similar_reports: similarReportsTool,
@@ -668,14 +679,8 @@ export async function onBehalfOf(
     if (message) principalId = message.authorId;
   }
   if (!principalId || principalId === dispatch.agentId) return {};
-  let who = await loadPrincipalRow(db, principalId);
+  const who = await loadPrincipalRow(db, principalId);
   if (!who) return {};
-  // An automation step's prompt is posted by the automation's own system principal while the turn acts for
-  // `dispatch.onBehalfOfAccountId`: attribute the turn to that person so connector reads and approval cards resolve to them.
-  if (who.kind !== 'person' && who.system && dispatch.onBehalfOfAccountId) {
-    const person = await personOfAccountIn(db, dispatch.burrowId, dispatch.onBehalfOfAccountId);
-    if (person) who = person;
-  }
   const conversation = await loadConversationRow(db, conversationId);
   // The person's Chat (their `dm` conversation without a task); one with a task (the Feedback room) goes by its title.
   const where = !conversation

@@ -12,7 +12,15 @@ import {
 } from './mail.js';
 import { triggerMatches } from './match.js';
 import { automationFlow, definitionGrants, planSections } from './plan.js';
-import { describeAutomation, recipeDefinition, recipeProblem } from './recipes.js';
+import {
+  describeAutomation,
+  recipeDefinition,
+  recipeHasEarlierWords,
+  recipeIsCurrent,
+  recipeOf,
+  recipeProblem,
+  recipeWithTodaysWords,
+} from './recipes.js';
 import { renderTemplate, renderTemplateWithin } from './template.js';
 import { triggerSummary, validateDefinition } from './validate.js';
 
@@ -188,11 +196,59 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
     const step = def.steps[0];
     expect(step?.kind).toBe('dispatch_agent');
     if (step?.kind === 'dispatch_agent') {
-      expect(step.prompt).toContain('{{trigger.messageId}}');
-      expect(step.prompt).toContain('{{trigger.provider}}');
+      expect(step.proposeActions).toBe(true);
+      expect(step.prompt).toContain('read_attachment');
+      expect(step.prompt).toContain('propose_connection_actions');
+      expect(step.prompt).not.toContain('mail_attachment');
+      expect(step.prompt).not.toContain('mail_read');
       expect(step.prompt).toContain('{{trigger.text}}');
       expect(step.prompt).toContain('untrusted data');
     }
+    expect(def.steps[1]).toMatchObject({
+      id: 'act',
+      kind: 'connection_actions',
+      from: 'ask',
+      otherwise: 'skip',
+    });
+    expect(sections.find((s) => s.id === 'asks')?.lines.some((l) => l.text.includes('connections'))).toBe(
+      true,
+    );
+  });
+
+  it('upgrades earlier mail automations to today’s outsiders recipe automatically while preserving custom wording', () => {
+    const mailRecipe = {
+      when: {
+        kind: 'mail' as const,
+        connectionId: CON,
+        from: 'example.com',
+        attachmentTypes: ['pdf'],
+      },
+      job: 'custom' as const,
+      instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
+      conversationId: 'cnv_chat',
+    };
+    const before = AutomationDefinition.parse(recipeDefinition(mailRecipe, 'mail-before-outsiders'));
+    const today = AutomationDefinition.parse(recipeDefinition(mailRecipe));
+
+    expect(before.steps).toHaveLength(1);
+    expect(today.steps).toHaveLength(2);
+    expect(recipeOf(before)).not.toBeNull();
+    expect(recipeIsCurrent(before)).toBe(false);
+    expect(recipeHasEarlierWords(before)).toBe(true);
+    expect(recipeHasEarlierWords(today)).toBe(false);
+
+    const upgraded = recipeWithTodaysWords(before);
+    expect(upgraded).toEqual(today);
+    expect(upgraded && recipeIsCurrent(upgraded)).toBe(true);
+
+    // Words a person edited themselves stay theirs.
+    const custom = AutomationDefinition.parse({
+      ...before,
+      steps: before.steps.map((s) =>
+        s.kind === 'dispatch_agent' ? { ...s, prompt: `${s.prompt}\nCustom note.` } : s,
+      ),
+    });
+    expect(recipeHasEarlierWords(custom)).toBe(false);
   });
 });
 
@@ -277,7 +333,11 @@ describe('outsider-content fencing and truncation safety', () => {
     const emptyLen = openMarker.length + 1 + closeMarker.length;
     for (const room of [1, 10, 25, emptyLen - 1]) {
       const prefix = 'P'.repeat(100);
-      const out = renderTemplateWithin(`${prefix}{{trigger.body}}`, { trigger: { body } }, prefix.length + room);
+      const out = renderTemplateWithin(
+        `${prefix}{{trigger.body}}`,
+        { trigger: { body } },
+        prefix.length + room,
+      );
       expect(out.length).toBeLessThanOrEqual(prefix.length + room);
       expect(out).toBe(prefix);
       expect(out).not.toContain('[[');
@@ -285,11 +345,7 @@ describe('outsider-content fencing and truncation safety', () => {
     }
 
     // When room fits exactly the empty fence (no room for content + ellipsis), both delimiters stay intact.
-    const exactEmpty = renderTemplateWithin(
-      'P:{{trigger.body}}',
-      { trigger: { body } },
-      2 + emptyLen,
-    );
+    const exactEmpty = renderTemplateWithin('P:{{trigger.body}}', { trigger: { body } }, 2 + emptyLen);
     expect(exactEmpty).toBe(`P:${openMarker} ${closeMarker}`);
 
     // renderTemplate also never slices inside a fenced value.

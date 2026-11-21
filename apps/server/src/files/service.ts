@@ -172,6 +172,8 @@ export class AttachmentFiles {
             // delegation ends (delegate.md DLG-27).
             sql`not exists (select 1 from council_shots s where ${attachments.id} in (s.before_id, s.after_id, s.compare_id))`,
             sql`not exists (select 1 from delegation_shots s where ${attachments.id} in (s.before_id, s.after_id, s.compare_id))`,
+            // Handed-over attachments from matched emails wait until their dedup row is pruned.
+            sql`not exists (select 1 from mail_trigger_items m where ${attachments.id} = any(m.attachment_ids))`,
           ),
         ),
       )

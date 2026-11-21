@@ -16,6 +16,7 @@ import { MERGE_WORDS, mergeOutputOf } from '../merge';
 import { openedPr, openPrStep } from '../steps';
 import { shotsBranch, shotsSection } from '../steps/shots';
 import { type AutomationStepRow, loadStepRows } from '../store';
+import { runConnectionActions } from './connection-actions-effect';
 import { commentOnGitHub, commentOnOpenedPr } from './github-comments';
 import { mergePullRequest } from './merge-step';
 import { failure, type LeasedRun } from './step-ops';
@@ -54,6 +55,10 @@ export async function runExternal(
   }
   if (step.kind === 'http_callback') {
     await callUrl(lease, row, step);
+    return true;
+  }
+  if (step.kind === 'connection_actions') {
+    await runConnectionActions(lease, row, step);
     return true;
   }
   return false;

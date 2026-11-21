@@ -15,6 +15,7 @@ import {
   AutomationGrant,
   AutomationId,
   AutomationKey,
+  ProposeConnectionActionsInput,
   ReportAssessmentInput,
 } from '../domain/automation.js';
 import {
@@ -749,6 +750,16 @@ export const MCP_TOOLS = {
     // `recommends` required since 0.71 (CT-327, AR-51); the stored assessment keeps it optional for older reports.
     input: ReportAssessmentInput,
     output: commitOutcome({ line: z.string() }),
+    requiredKey: null,
+    readOnly: false,
+  }),
+  propose_connection_actions: tool({
+    name: 'propose_connection_actions',
+    title: 'Propose actions for approval',
+    description:
+      'Only in a turn where an automation asks you to propose actions on the person’s connections (for example, after an incoming email): record the calls you want to make. Nothing runs until the person approves them on a card. Each action names connection (its handle), tool (such as request), arguments, and a short plain-English summary the person reads on the card. To upload a file attached to this message with request, pass upload: { field, attachmentId, fields? } in arguments using the attachmentId from this message. Call again to replace your list; the last call counts.',
+    input: ProposeConnectionActionsInput,
+    output: commitOutcome({ count: z.number().int().nonnegative() }),
     requiredKey: null,
     readOnly: false,
   }),

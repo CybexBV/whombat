@@ -11,7 +11,12 @@
  * High-water marks (`mail_cursors`) and matched messages (`mail_trigger_items`) are written strictly through the
  * commit pipeline, so pre-existing mail never triggers and no message ever triggers twice.
  */
-import { extractMailAddress, type MailMessage, triggerMatches } from '@whombat/core';
+import {
+  CONNECTOR_BINARY_MAX_BYTES,
+  extractMailAddress,
+  type MailMessage,
+  triggerMatches,
+} from '@whombat/core';
 import { eq, isNotNull, lt, or } from 'drizzle-orm';
 import { imapWorkspaceOf } from '../connectors/imap/service';
 import { providerWorkspace } from '../connectors/providers';
@@ -24,11 +29,18 @@ import {
   receivedAtOrAfter,
 } from '../connectors/types';
 import { connections, mailCursors, mailTriggerItems } from '../db/schema/index';
+import { sniffBuffer } from '../files/sniff';
+import type { StagedFile } from '../files/store';
 import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
 import { pruneMailTriggerItems, recordMailReceived, setMailCursor } from './commands';
 import { mailPrincipal } from './principal';
-import { hasMirroredMailItem, type ListenedMailbox, type ListenedMailEntry, listenedMailConnections } from './store';
+import {
+  hasMirroredMailItem,
+  type ListenedMailbox,
+  type ListenedMailEntry,
+  listenedMailConnections,
+} from './store';
 
 const DEFAULT_POLL_MS = 60_000;
 const IDLE_BACKOFF_MIN_MS = 5_000;
@@ -37,6 +49,8 @@ const IDLE_BACKOFF_MAX_MS = 60_000;
 const MAX_READ_FAILURES = 3;
 /** Drop mirrored mail deduplication rows after 30 days. */
 export const MAIL_TRIGGER_ITEM_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Maximum number of attachments downloaded and handed over per matched email. */
+const MAIL_HANDOVER_MAX_ATTACHMENTS = 10;
 
 export interface MailTriggerOptions {
   /** Periodic poll interval for Gmail/Microsoft change feeds and IMAP safety checks (default 60 s). */
@@ -304,7 +318,12 @@ export class MailTriggerService {
           failuresChanged = true;
           skippedProblem = skippedReadProblem(matchedNames);
           this.services.log.warn(
-            { connectionId, messageId: header.id, attempts, err: err instanceof Error ? err.message : String(err) },
+            {
+              connectionId,
+              messageId: header.id,
+              attempts,
+              err: err instanceof Error ? err.message : String(err),
+            },
             'mail trigger skipped unreadable message after 3 failed reads',
           );
           continue;
@@ -315,7 +334,12 @@ export class MailTriggerService {
           readFailures: trimReadFailures(readFailures),
         });
         this.services.log.warn(
-          { connectionId, messageId: header.id, attempts, err: err instanceof Error ? err.message : String(err) },
+          {
+            connectionId,
+            messageId: header.id,
+            attempts,
+            err: err instanceof Error ? err.message : String(err),
+          },
           'mail trigger full read failed; will retry on next poll',
         );
         // Do not advance the cursor yet so the next poll retries this message up to 3 times.
@@ -327,29 +351,83 @@ export class MailTriggerService {
         failuresChanged = true;
       }
       if (!full) continue;
+      // Hand over matched email attachments on the server so the outsiders' turn reads them via `read_attachment`
+      // without ever having access to the person's mailbox.
+      const maxAttBytes = Math.min(CONNECTOR_BINARY_MAX_BYTES, this.services.files.maxBytes);
+      const stagedAttachments: {
+        name: string;
+        declaredType: string;
+        staged: StagedFile;
+        sniffed: {
+          contentType: string;
+          kind: 'image' | 'text' | 'document' | 'file';
+          width: number | null;
+          height: number | null;
+        };
+      }[] = [];
+      for (const att of full.attachments.slice(0, MAIL_HANDOVER_MAX_ATTACHMENTS)) {
+        if (!att.id || att.size > maxAttBytes) continue;
+        try {
+          const downloaded = await workspace.mailAttachment(token, {
+            messageId: full.id,
+            attachmentId: att.id,
+          });
+          const bytes = Buffer.from(downloaded.contentBase64, 'base64');
+          if (bytes.length === 0 || bytes.length > maxAttBytes) continue;
+          const fileName = att.name || downloaded.name || 'attachment';
+          const sniffed = sniffBuffer(bytes, fileName);
+          if (!sniffed.ok) continue;
+          const staged = await this.services.files.store.stage([bytes], { maxBytes: maxAttBytes });
+          stagedAttachments.push({
+            name: fileName,
+            declaredType: att.mimeType || downloaded.mimeType || '',
+            staged,
+            sniffed: sniffed.value,
+          });
+        } catch (err) {
+          this.services.log.warn(
+            {
+              connectionId,
+              messageId: full.id,
+              attachmentId: att.id,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'mail trigger could not hand over an attachment; continuing without it',
+          );
+        }
+      }
       const fromHeader = full.from || header.from;
       const fromAddress = extractMailAddress(fromHeader) ?? '';
-      const res = await this.services.pipeline.commit(
-        recordMailReceived,
-        {
-          connectionId,
-          provider: conn.provider,
-          mailbox: conn.email,
-          externalId: full.id,
-          messageId: header.messageId ?? null,
-          threadId: full.threadId,
-          fromHeader: fromHeader.slice(0, 500),
-          fromAddress: fromAddress.slice(0, 320),
-          subject: full.subject.slice(0, 1000),
-          snippet: full.snippet.slice(0, 500),
-          body: full.body,
-          bodyTruncated: full.bodyTruncated,
-          attachments: full.attachments,
-          receivedAt: safeIso(full.date, now),
-        },
-        { burrowId, actorId },
-      );
-      if (res.status === 'ok' && res.result.created) createdCount++;
+      let committed = false;
+      try {
+        const res = await this.services.pipeline.commit(
+          recordMailReceived,
+          {
+            connectionId,
+            provider: conn.provider,
+            mailbox: conn.email,
+            externalId: full.id,
+            messageId: header.messageId ?? null,
+            threadId: full.threadId,
+            fromHeader: fromHeader.slice(0, 500),
+            fromAddress: fromAddress.slice(0, 320),
+            subject: full.subject.slice(0, 1000),
+            snippet: full.snippet.slice(0, 500),
+            body: full.body,
+            bodyTruncated: full.bodyTruncated,
+            attachments: full.attachments,
+            stagedAttachments,
+            receivedAt: safeIso(full.date, now),
+          },
+          { burrowId, actorId },
+        );
+        committed = res.status === 'ok';
+        if (res.status === 'ok' && res.result.created) createdCount++;
+      } finally {
+        if (!committed && stagedAttachments.length > 0) {
+          await Promise.allSettled(stagedAttachments.map((a) => this.services.files.store.discard(a.staged)));
+        }
+      }
     }
 
     // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline, failures or

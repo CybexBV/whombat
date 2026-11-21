@@ -563,10 +563,10 @@ Automations. Code finds it by kind
   its own thread there: it gets its request and that thread but never the room's recent messages or Files, and its
   tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
-  check its own work, and its automation step's own tools (the assessment, the tracker's report, a pull request from the
-  branch its step checked out); a Feedback assessment has its own five. It gets no mail, calendar, files, Vault,
-  connections, notes or memory, and runs in Hermes's separate `_feedback` profile, so instructions hidden in what
-  strangers send reach none of the person's things. One Hermes holds that profile at a time, so outsiders' turns run
+  check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
+  tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
+  gets no mail, calendar, files, Vault, connections, notes or memory, and runs in Hermes's separate `_feedback` profile,
+  so instructions hidden in what strangers send reach none of the person's things. One Hermes holds that profile at a time, so outsiders' turns run
   one at a time: the claim keeps the next one queued, oldest first, while another holds its place, a person's turn
   never waits for them, and one that still finds the profile busy on the runner is queued again rather than failed
   (`runtime/service.ts`, [outsiders-turns.md](docs/decisions/outsiders-turns.md)). An automation step's turn that waits
@@ -797,14 +797,21 @@ published automation details read their definition and publisher from one versio
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
   retaining each trigger's daylight-saving policies and the bounded search.
 - **Mail triggers** (`apps/server/src/mail-triggers/`): `MailTriggerService` watches only connected mailboxes
-  (`connections` with `mail`) that have a live `mail` automation — via Gmail History API, Microsoft Graph delta or IMAP
-  IDLE with `UIDVALIDITY`/`lastUid` + `BODYSTRUCTURE` and a 60 s safety poll. It reads headers and attachment metadata
-  first and calls `mailRead` only when a message matches a live trigger (`from` address or domain, `subjectContains`,
-  `hasAttachment`, `attachmentTypes`). High-water marks (`mail_cursors`) and deduplicated matched messages
-  (`mail_trigger_items`) commit through the pipeline with content-free signed `mail.received` events; first watches
-  baseline without firing and newly published automations ignore earlier mail. Every sender-controlled field reaches the
-  agent only inside defused `[[mail …]] … [[/mail]]` outsider-content fences (`packages/core/src/text/fence.ts`), while
-  writes still run under the person's keys and approval cards.
+  (`connections` with `mail`) that have a live `mail` automation — via Gmail History API, Microsoft Graph inbox message
+  delta or IMAP IDLE (with a multi-minute socket timeout) paired with `UIDVALIDITY`/`lastUid` + `BODYSTRUCTURE` and a
+  60 s safety poll. It reads headers and attachment metadata first, drops mail received before the automation's
+  activation time (5 s skew margin), deduplicates by provider id and RFC 5322 Message-ID, backfills from activation on
+  the first poll and resyncs expired cursors from the last successful poll time. It fetches full bodies and hands over
+  matched email attachments only when a message matches a live trigger (`from` address or domain, `subjectContains`,
+  `hasAttachment`, `attachmentTypes`), skipping gone messages immediately and unreadable messages after three failed
+  reads with a plain-English problem so a mailbox never stalls. High-water marks (`mail_cursors`) and deduplicated
+  matched items (`mail_trigger_items`, whose cached body and snippet are cleared once the run starts and whose rows are
+  pruned after 30 days) commit through the pipeline with content-free signed `mail.received` events. Mail-triggered
+  runs execute as outsiders' turns (queued for nobody, never reading the person's mailbox or connections directly):
+  sender-controlled fields reach the agent only inside defused `[[mail …]] … [[/mail]]` outsider fences
+  (`packages/core/src/text/fence.ts`, never cut mid-fence) with the email's files attached to the prompt message
+  (`read_attachment`), and any proposed writes (`propose_connection_actions`) always ask the person on an approval card
+  regardless of standing settings before a `connection_actions` step executes them.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An

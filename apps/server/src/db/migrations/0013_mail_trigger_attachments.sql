@@ -1,0 +1,1 @@
+ALTER TABLE "mail_trigger_items" ADD COLUMN "attachment_ids" text[] DEFAULT '{}' NOT NULL;

@@ -3,15 +3,42 @@
  * `mail_trigger_items` goes through the commit pipeline, signed by the burrow's mail system principal. Signed events
  * carry no email text (`text: null`, content-free payloads).
  */
-import { ConnectionId, ConnectorProvider, MAIL_BODY_CAP, MailAttachment, newId } from '@whombat/core';
+import {
+  AttachmentKind,
+  attachmentUrl,
+  ConnectionId,
+  ConnectorProvider,
+  MAIL_BODY_CAP,
+  MailAttachment,
+  newId,
+  safeDisplayName,
+} from '@whombat/core';
 import { and, eq, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { type MailProviderCursor, normalizeRfcMessageId } from '../connectors/types';
-import { mailCursors, mailTriggerItems } from '../db/schema/index';
+import { attachments, mailCursors, mailTriggerItems } from '../db/schema/index';
+import { lockBlob } from '../files/service';
+import { blobKey } from '../files/store';
 import { forbidden } from '../lib/errors';
 import { loadPrincipalRow } from '../read/principals';
 import { mailPrincipal } from './principal';
+
+const StagedMailAttachment = z.object({
+  name: z.string().min(1).max(1000),
+  declaredType: z.string().max(255).default(''),
+  staged: z.object({
+    token: z.string().regex(/^[0-9a-f-]{36}$/),
+    size: z.number().int().positive(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
+  sniffed: z.object({
+    contentType: z.string().min(1).max(120),
+    kind: AttachmentKind,
+    width: z.number().int().positive().nullable(),
+    height: z.number().int().positive().nullable(),
+  }),
+});
 
 const MailProviderCursorSchema: z.ZodType<MailProviderCursor> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('gmail'), historyId: z.string().min(1).max(128) }),
@@ -152,6 +179,7 @@ export const recordMailReceived = defineCommand({
     body: z.string().max(MAIL_BODY_CAP),
     bodyTruncated: z.boolean().default(false),
     attachments: z.array(MailAttachment).max(100).default([]),
+    stagedAttachments: z.array(StagedMailAttachment).max(10).default([]),
     receivedAt: z.string().datetime(),
     cursor: MailProviderCursorSchema.optional(),
   }),
@@ -177,6 +205,7 @@ export const recordMailReceived = defineCommand({
         body: input.body,
         bodyTruncated: input.bodyTruncated,
         attachments: input.attachments,
+        attachmentIds: [],
         receivedAt: new Date(input.receivedAt),
         mirroredAt: ctx.now,
       })
@@ -210,7 +239,50 @@ export const recordMailReceived = defineCommand({
         });
     }
 
-    if (inserted.length === 0) return { created: false, rowId: null };
+    if (inserted.length === 0) {
+      if (input.stagedAttachments.length > 0) {
+        const store = ctx.services.files.store;
+        const leftover = input.stagedAttachments.map((a) => a.staged);
+        ctx.after(async () => {
+          await Promise.allSettled(leftover.map((s) => store.discard(s)));
+        });
+      }
+      return { created: false, rowId: null };
+    }
+
+    // Commit handed-over attachments as ready rows inside the same transaction so the run's outsiders' turn can read
+    // them via `read_attachment` without ever touching the person's mailbox.
+    const attachmentIds: string[] = [];
+    for (const file of input.stagedAttachments) {
+      const key = blobKey(file.staged.sha256);
+      await lockBlob(tx, key);
+      await ctx.services.files.store.commit(file.staged, key);
+      const attId = newId('attachment');
+      await tx.insert(attachments).values({
+        id: attId,
+        burrowId: ctx.burrow.id,
+        conversationId: null,
+        messageId: null,
+        name: safeDisplayName(file.name),
+        declaredType: file.declaredType.replace(/[^\x21-\x7e]/g, '').slice(0, 120),
+        contentType: file.sniffed.contentType,
+        kind: file.sniffed.kind,
+        size: file.staged.size,
+        sha256: file.staged.sha256,
+        blobKey: key,
+        width: file.sniffed.width,
+        height: file.sniffed.height,
+        state: 'ready',
+        url: attachmentUrl(ctx.burrow.slug, attId),
+        uploadedById: ctx.actor.id,
+        createdAt: ctx.now,
+        uploadedAt: ctx.now,
+      });
+      attachmentIds.push(attId);
+    }
+    if (attachmentIds.length > 0) {
+      await tx.update(mailTriggerItems).set({ attachmentIds }).where(eq(mailTriggerItems.id, id));
+    }
 
     // Content-free signed event: no email subject, sender or body enters the signed audit log.
     await ctx.emit({

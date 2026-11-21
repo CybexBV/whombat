@@ -113,7 +113,7 @@ export function fenceMailContent(mail: FencedMailInput, options: { maxBody?: num
   const body = clipText(mail.body, maxBody);
   if (body.text) {
     lines.push('', d(body.text));
-    if (body.clipped || mail.bodyTruncated) lines.push('(Email body shortened; use mail_read for the rest.)');
+    if (body.clipped || mail.bodyTruncated) lines.push('(Email body shortened.)');
   }
   lines.push('[[/mail]]');
   return lines.join('\n');

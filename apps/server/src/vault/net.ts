@@ -151,6 +151,8 @@ export interface VaultFetchOptions {
   truncateAt?: number;
   /** Fail `too_large` beyond this (default 1 MiB). */
   maxBytes?: number;
+  /** Cap outgoing request body bytes (default `VAULT_REQUEST_BODY_MAX`). */
+  maxRequestBytes?: number;
   /** Default `VAULT_CALL_DEADLINE_MS`; a caller with its own deadline passes what is left of it. */
   deadlineMs?: number;
 }
@@ -185,7 +187,7 @@ export async function vaultDestinationPolicy(
     ...(net.dialAddress ? { dialAddress: net.dialAddress } : {}),
     deadlineMs,
     timeoutMs: deadlineMs,
-    maxRequestBytes: VAULT_REQUEST_BODY_MAX,
+    maxRequestBytes: options.maxRequestBytes ?? VAULT_REQUEST_BODY_MAX,
     maxBytes: options.maxBytes ?? 1024 * 1024,
     ...(options.truncateAt !== undefined ? { truncateAt: options.truncateAt } : {}),
   };

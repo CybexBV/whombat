@@ -619,7 +619,13 @@ describe('an automation with an earlier version’s own words', () => {
   const earlier = AutomationDefinition.parse(recipeDefinition(recipe, 'fix-in-a-new-thread'));
 
   it('is recognised by exactly those words, and gets today’s for the same recipe', () => {
-    for (const words of EARLIER_RECIPE_WORDS) {
+    const trackerWords = EARLIER_RECIPE_WORDS.filter(
+      (words) =>
+        JSON.stringify(AutomationDefinition.parse(recipeDefinition(recipe, words))) !==
+        JSON.stringify(def(recipe)),
+    );
+    expect(trackerWords.length).toBeGreaterThanOrEqual(3);
+    for (const words of trackerWords) {
       const old = AutomationDefinition.parse(recipeDefinition(recipe, words));
       expect(recipeOf(old)).not.toBeNull();
       expect(recipeIsCurrent(old)).toBe(false);

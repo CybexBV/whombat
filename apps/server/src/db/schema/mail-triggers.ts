@@ -56,6 +56,8 @@ export const mailTriggerItems = pgTable(
     body: text('body').notNull(),
     bodyTruncated: boolean('body_truncated').notNull().default(false),
     attachments: jsonb('attachments').$type<MailAttachment[]>().notNull().default([]),
+    /** Ready Whombat attachment ids handed over from the matched email for the run's thread prompt. */
+    attachmentIds: text('attachment_ids').array().notNull().default([]),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
     mirroredAt: timestamp('mirrored_at', { withTimezone: true }).notNull().defaultNow(),
   },

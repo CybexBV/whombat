@@ -280,6 +280,9 @@ function postsLines(definition: AutomationDefinition, names: PlanNames): Automat
       case 'tracker_reply':
         outside.push(line(`Replies to the customer in ${connection(step.connectionId)}`));
         break;
+      case 'connection_actions':
+        outside.push(line('Runs proposed actions on your connections', 'After you approve them'));
+        break;
       case 'http_callback': {
         // Core has no URL class (it stays free of platform APIs): the host is what follows the scheme.
         const host = /^https?:\/\/([^/?#]+)/i.exec(step.url)?.[1] ?? step.url;
@@ -338,6 +341,8 @@ function asksLines(
       lines.push(approvalLine(step, recipe?.fix, recipe?.when.kind === 'tracker'));
     // A feature request is the person's to decide (3.12, TA-44, TA-45).
     if (step.kind === 'tracker_decision') lines.push(decisionLine(step));
+    if (step.kind === 'connection_actions')
+      lines.push(line('Before it changes anything in your connections', 'Always asks you on a card first'));
   }
   const said = new Set<string>();
   for (const g of grants) {
@@ -620,6 +625,8 @@ export function automationFlow(
         return 'Replies to the customer';
       case 'tracker_decision':
         return 'Asks you about a feature request';
+      case 'connection_actions':
+        return 'Runs approved actions';
       default:
         return doesLine(step, names)?.text ?? step.name ?? STEP_KIND_LABELS[step.kind];
     }
@@ -731,6 +738,14 @@ export function automationFlow(
           icon: 'ask',
           details: [stop(decisionLine(step).text), stop(decisionLine(step).detail ?? '')],
           marks: [],
+        });
+        break;
+      case 'connection_actions':
+        items.push({
+          ...base,
+          icon: 'ask',
+          details: ['Only after you approve them on a card.'],
+          marks: [asking],
         });
         break;
       case 'http_callback': {

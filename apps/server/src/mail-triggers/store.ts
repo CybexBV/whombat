@@ -147,6 +147,7 @@ export async function mirroredMailItem(db: Db | Tx, rowId: string): Promise<Mirr
     body: row.body,
     bodyTruncated: row.bodyTruncated,
     attachments: row.attachments,
+    attachmentIds: row.attachmentIds ?? [],
     receivedAt: row.receivedAt,
   };
 }

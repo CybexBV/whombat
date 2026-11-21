@@ -168,11 +168,11 @@ export async function runsToday(session: TxSession, automationId: string, now: D
 }
 
 /**
- * Whether a run starts from outsiders' input (one-person.md OP-17, OP-S58): a tracker customer's report or reply, also
- * a test run tried on one. Its agent turns stay apart (queued for nobody).
+ * Whether a run starts from outsiders' input (docs/decisions/one-person.md): a tracker customer's report or reply, or
+ * incoming mail (and test runs tried on them). Their agent turns stay apart (queued for nobody).
  */
 export function outsidersRun(trigger: { kind: string }): boolean {
-  return trigger.kind === 'tracker';
+  return trigger.kind === 'tracker' || trigger.kind === 'mail';
 }
 
 /** The account a run's work is for: the person's (their automations are theirs, OP-17), null for outsiders' input. */

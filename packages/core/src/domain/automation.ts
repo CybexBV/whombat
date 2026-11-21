@@ -467,6 +467,29 @@ export const ReportAssessmentInput = AutomationAssessment.extend({
 });
 export type ReportAssessmentInput = z.input<typeof ReportAssessmentInput>;
 
+/** One proposed call on a person's catalog connection, queued for approval on a card before running. */
+export const ProposedConnectionAction = z
+  .object({
+    /** Handle of the person's catalog connection (e.g. `paperless`, `moneybird`). */
+    connection: z.string().trim().min(1).max(40),
+    /** Tool to call on that connection (e.g. `request`). */
+    tool: z.string().trim().min(1).max(200),
+    /** Tool arguments. For `request`, `upload: { field, attachmentId, fields? }` uploads an attachment from this run's thread. */
+    arguments: z.record(z.string(), z.unknown()).default({}),
+    /** Short plain-English summary shown to the person on the approval card. */
+    summary: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export type ProposedConnectionAction = z.infer<typeof ProposedConnectionAction>;
+
+export const ProposeConnectionActionsInput = z
+  .object({
+    /** Proposed actions to run on the person's connections after they approve on a card (empty list clears earlier proposals). */
+    actions: z.array(ProposedConnectionAction).max(10),
+  })
+  .strict();
+export type ProposeConnectionActionsInput = z.infer<typeof ProposeConnectionActionsInput>;
+
 export const DispatchAgentStep = z
   .object({
     ...StepBase,
@@ -492,6 +515,12 @@ export const DispatchAgentStep = z
      * Without a report the assessment is `unclear`. Not together with `verdict`.
      */
     assessment: z.boolean().optional(),
+    /**
+     * The agent proposes calls on the person's connections with `propose_connection_actions` (used by mail-triggered
+     * outsiders' turns): `steps.<id>.proposedActions`, which a follow-up `connection_actions` step puts to the person
+     * on an approval card before running. Not together with `verdict` or `assessment`.
+     */
+    proposeActions: z.boolean().optional(),
   })
   .strict();
 
@@ -706,6 +735,22 @@ export const MergePullRequestStep = z
   })
   .strict();
 
+/**
+ * Run actions proposed by an earlier `dispatch_agent` step with `proposeActions: true` (such as a mail-triggered
+ * outsiders' turn). Every non-empty set of proposed actions ALWAYS asks the person on an approval card first,
+ * regardless of standing connection or key settings, and runs only after they approve.
+ */
+export const ConnectionActionsStep = z
+  .object({
+    ...StepBase,
+    kind: z.literal('connection_actions'),
+    /** Earlier `dispatch_agent` step with `proposeActions: true` whose proposed actions are reviewed and run. */
+    from: AutomationStepId,
+    /** When declined or blocked: `skip` the step (the run goes on) or `fail` the run. */
+    otherwise: z.enum(['skip', 'fail']).default('skip'),
+  })
+  .strict();
+
 export const AutomationStep = z.discriminatedUnion('kind', [
   DispatchAgentStep,
   PostMessageStep,
@@ -719,6 +764,7 @@ export const AutomationStep = z.discriminatedUnion('kind', [
   MergePullRequestStep,
   TrackerReplyStep,
   TrackerDecisionStep,
+  ConnectionActionsStep,
 ]);
 export type AutomationStep = z.infer<typeof AutomationStep>;
 export type AutomationStepKind = AutomationStep['kind'];
@@ -734,6 +780,7 @@ export const EXTERNAL_STEP_KINDS: readonly AutomationStepKind[] = [
   'tracker_update',
   'merge_pull_request',
   'tracker_reply',
+  'connection_actions',
 ];
 
 /**
@@ -1273,6 +1320,7 @@ export const AutomationRunStep = z.object({
       // 0.75.1 (CT-331): 0.75.0 added the step kind but not here, so a run with a reply didn't parse.
       'tracker_reply',
       'tracker_decision',
+      'connection_actions',
       // A kind this version doesn't know (a finished run of an older version's step): shown as an earlier step.
       'unknown',
     ])
@@ -1343,6 +1391,7 @@ export const STEP_KIND_LABELS: Record<AutomationStepKind, string> = {
   merge_pull_request: 'Merge a pull request',
   tracker_reply: 'Reply to the customer',
   tracker_decision: 'Ask you about a feature request',
+  connection_actions: 'Run approved actions',
 };
 
 /** What a step kind is called; a kind this version doesn't know (an older version's) is “An earlier step”. */
