@@ -105,7 +105,7 @@ describe('Pi-hole declared settings', () => {
       choose: { current: 'NULL' },
     });
     expect(by('dnssec')).toMatchObject({ value: 'Off', on: false });
-    expect(by('rate_limit')).toMatchObject({ value: '1,000 lookups / min', choose: { current: 1000 } });
+    expect(by('rate_limit')).toBeUndefined();
     expect(by('query_logging')).toMatchObject({ value: 'On', on: true });
     expect(by('privacy_level')).toMatchObject({ value: 'Show everything', choose: { current: 0 } });
     expect(by('max_db_days')).toMatchObject({
@@ -123,7 +123,7 @@ describe('Pi-hole declared settings', () => {
     expect(look[0]?.choose?.button.reason).toMatch(/Look only/);
   });
 
-  it('writes via PATCH /api/config, verifies read-back, and handles rate limit off and on', async () => {
+  it('writes via PATCH /api/config and verifies read-back', async () => {
     reset();
     const done = await act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
     expect(done.message).toContain('NXDOMAIN');
@@ -134,11 +134,6 @@ describe('Pi-hole declared settings', () => {
       undo: { target: 'blocking_mode', value: 'NULL', expect: 'NXDOMAIN' },
     });
 
-    await act(ctx, { target: 'rate_limit', value: 0 });
-    expect(ph.store.dns.rateLimit).toEqual({ count: 0, interval: 0 });
-    await act(ctx, { target: 'rate_limit', value: 2000 });
-    expect(ph.store.dns.rateLimit).toEqual({ count: 2000, interval: 60 });
-
     await act(ctx, { target: 'privacy_level', value: 2 });
     expect(ph.store.misc.privacylevel).toBe(2);
   });
@@ -147,6 +142,7 @@ describe('Pi-hole declared settings', () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'rate_limit', value: 2000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'privacy_level', value: 9 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
 

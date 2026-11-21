@@ -22,8 +22,6 @@ export interface PiholeSettingsState {
   blockingMode: string | null;
   dnssec: boolean | null;
   queryLogging: boolean | null;
-  rateLimitCount: number | null;
-  rateLimitInterval: number | null;
   maxDbDays: number | null;
   privacyLevel: number | null;
 }
@@ -39,14 +37,11 @@ export function parsePiholeSettings(parts: {
   const dns = parts.dns !== null ? rec(rec(rec(parts.dns).config).dns) : null;
   const db = parts.database !== null ? rec(rec(rec(parts.database).config).database) : null;
   const misc = parts.misc !== null ? rec(rec(rec(parts.misc).config).misc) : null;
-  const rl = dns ? rec(dns.rateLimit) : null;
   const mode = dns ? str(rec(dns.blocking).mode) : null;
   return {
     blockingMode: mode ? mode.toUpperCase() : null,
     dnssec: dns && typeof dns.dnssec === 'boolean' ? dns.dnssec : null,
     queryLogging: dns && typeof dns.queryLogging === 'boolean' ? dns.queryLogging : null,
-    rateLimitCount: rl ? num(rl.count) : null,
-    rateLimitInterval: rl ? num(rl.interval) : null,
     maxDbDays: db ? num(db.maxDBdays) : null,
     privacyLevel: misc ? num(misc.privacylevel) : null,
   };
@@ -87,20 +82,6 @@ const BLOCKING_SHORT: Record<string, string> = {
   ZERO: 'IPv4 0.0.0.0',
 };
 
-const RATE_LIMITS: SettingChoice[] = [
-  { value: 0, label: 'Off' },
-  { value: 500, label: '500 lookups / min' },
-  { value: 1000, label: '1,000 lookups / min', note: 'default' },
-  { value: 2000, label: '2,000 lookups / min' },
-  { value: 5000, label: '5,000 lookups / min' },
-];
-
-function rateLimitWords(v: SettingValue): string {
-  const n = Number(v);
-  if (n === 0) return 'Off';
-  return RATE_LIMITS.find((c) => c.value === n)?.label ?? `${n.toLocaleString('en-GB')} lookups / min`;
-}
-
 const PRIVACY_LEVELS: SettingChoice[] = [
   { value: 0, label: 'Show everything', note: 'domains and devices' },
   { value: 1, label: 'Hide domains', note: 'counts and devices only' },
@@ -136,26 +117,6 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     read: (s) => s.dnssec ?? undefined,
     write: (v) => patchConfig({ dns: { dnssec: asBool(v) === true } }),
     sentence: (v) => (asBool(v) ? 'DNSSEC is now on in Pi-hole.' : 'DNSSEC is now off in Pi-hole.'),
-  },
-  {
-    id: 'rate_limit',
-    group: 'blocking',
-    label: 'Rate limit per device',
-    help: 'Pause a device briefly if it floods Pi-hole with lookups in a minute.',
-    kind: 'choice',
-    read: (s) => s.rateLimitCount ?? undefined,
-    choices: (s) => withCurrent(RATE_LIMITS, s.rateLimitCount ?? undefined, rateLimitWords),
-    words: rateLimitWords,
-    write: (v, s) => {
-      const count = Number(v);
-      const interval =
-        count === 0 ? 0 : s.rateLimitInterval && s.rateLimitInterval > 0 ? s.rateLimitInterval : 60;
-      return patchConfig({ dns: { rateLimit: { count, interval } } });
-    },
-    sentence: (v) =>
-      Number(v) === 0
-        ? 'Pi-hole’s per-device rate limit is now off.'
-        : `Pi-hole now limits each device to ${rateLimitWords(v)}.`,
   },
   {
     id: 'dns_and_dhcp',
