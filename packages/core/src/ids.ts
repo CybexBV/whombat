@@ -135,6 +135,8 @@ export const ID_PREFIXES = {
   prompt: 'prm',
   /** A website the agent keeps signed in between its turns, until it expires or is stopped (Whombat kept-sites.md). */
   keptSite: 'kst',
+  /** A matched incoming email stored for a mail-triggered automation run. */
+  mailTriggerItem: 'mlm',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
@@ -216,6 +218,8 @@ export const CouncilMemberId = idSchema('cnm');
 export const DelegationId = idSchema('dlg');
 /** One task of a delegation (Whombat delegate.md). */
 export const DelegationTaskId = idSchema('dlt');
+/** A matched incoming email mirrored for a mail-triggered automation run. */
+export const MailTriggerItemId = idSchema('mlm');
 
 /** Random nanoid-style body. Uses `crypto.getRandomValues` (browsers, Node, React Native with polyfill). */
 export function randomIdBody(length = 12): string {

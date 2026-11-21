@@ -219,6 +219,38 @@ export const TrackerTrigger = z
   .strict();
 export type TrackerTrigger = z.infer<typeof TrackerTrigger>;
 
+/** An attachment type filter on a mail trigger: file extension (`pdf`, `csv`) or MIME type (`application/pdf`, `image/*`). */
+export const MailAttachmentType = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(100)
+  .refine((v) => !/[\r\n]/.test(v), 'Attachment type must be a single line.');
+export type MailAttachmentType = z.infer<typeof MailAttachmentType>;
+
+/**
+ * A matching email arriving in one of the person's connected mailboxes (Google, Microsoft 365 or Email/IMAP):
+ * only emails that arrive after the automation starts listening fire, and every sender-controlled field reaches
+ * the agent fenced as outsider content.
+ */
+export const MailTrigger = z
+  .object({
+    kind: z.literal('mail'),
+    /** The connected mailbox (Settings → Connections) to watch for new mail. */
+    connectionId: ConnectionId,
+    /** Sender email address (`billing@example.com`) or domain (`example.com`, `@example.com`), case-insensitive. */
+    from: z.string().trim().min(1).max(320).optional(),
+    /** Words or phrases in the subject (case-insensitive; any one matches). */
+    subjectContains: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+    /** Require at least one attachment (implied when `attachmentTypes` is set). */
+    hasAttachment: z.boolean().optional(),
+    /** Require at least one attachment matching any listed extension (`pdf`) or MIME type (`application/pdf`). */
+    attachmentTypes: z.array(MailAttachmentType).max(10).optional(),
+  })
+  .strict();
+export type MailTrigger = z.infer<typeof MailTrigger>;
+
 /** An authenticated inbound webhook (off until an owner turns it on and a secret exists). */
 export const WebhookTrigger = z.object({ kind: z.literal('webhook') }).strict();
 
@@ -233,6 +265,7 @@ export const AutomationTrigger = z.discriminatedUnion('kind', [
   WebhookTrigger,
   ManualTrigger,
   TrackerTrigger,
+  MailTrigger,
 ]);
 export type AutomationTrigger = z.infer<typeof AutomationTrigger>;
 export type AutomationTriggerInput = z.input<typeof AutomationTrigger>;
@@ -790,6 +823,21 @@ export const RecipeWhen = z.discriminatedUnion('kind', [
       words: TrackerRecipeWords.optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('mail'),
+      /** The connected mailbox (Settings → Connections) whose new mail starts it. */
+      connectionId: ConnectionId,
+      /** Sender email address (`billing@example.com`) or domain (`example.com`, `@example.com`), case-insensitive. */
+      from: z.string().trim().min(1).max(320).optional(),
+      /** Words or phrases in the subject (case-insensitive; any one matches). */
+      subjectContains: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+      /** Require at least one attachment (implied when `attachmentTypes` is set). */
+      hasAttachment: z.boolean().optional(),
+      /** Require at least one attachment matching any listed extension (`pdf`) or MIME type (`application/pdf`). */
+      attachmentTypes: z.array(MailAttachmentType).max(10).optional(),
+    })
+    .strict(),
 ]);
 export type RecipeWhen = z.infer<typeof RecipeWhen>;
 
@@ -1023,6 +1071,7 @@ export const AUTOMATION_RECENT_RUNS = 10;
 export const AutomationSource = z.enum([
   'github',
   'tracker',
+  'mail',
   'schedule',
   'message',
   'reaction',
@@ -1186,7 +1235,16 @@ export const AutomationStepState = z.enum([
 export type AutomationStepState = z.infer<typeof AutomationStepState>;
 
 export const AutomationTriggerInfo = z.object({
-  kind: z.enum(['message_posted', 'reaction_added', 'schedule', 'github', 'webhook', 'manual', 'tracker']),
+  kind: z.enum([
+    'message_posted',
+    'reaction_added',
+    'schedule',
+    'github',
+    'webhook',
+    'manual',
+    'tracker',
+    'mail',
+  ]),
   /** “Mara in #bugs”, “Every day at 09:00”, “Webhook delivery 7f3c…”. */
   summary: z.string().max(200),
   actorId: PrincipalId.nullable(),
@@ -1300,4 +1358,5 @@ export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {
   webhook: 'A webhook is called',
   manual: 'Only when started by hand',
   tracker: 'A report arrives in a tracker',
+  mail: 'Matching mail arrives',
 };

@@ -6,6 +6,7 @@
 import type { AutomationTrigger, GitHubTriggerEvent, TrackerTriggerEvent } from '../domain/automation.js';
 import type { TrackerItemKind } from '../domain/tracker.js';
 import { globMatch } from '../keys/engine.js';
+import { type MailTriggerFacts, mailTriggerMatches } from './mail.js';
 
 export type TriggerFacts =
   | {
@@ -34,7 +35,9 @@ export type TriggerFacts =
       readied?: boolean;
     }
   /** A new report in a tracker connection (0.69, CT-325, TA-04): the `tracker.item_opened` event. */
-  | { kind: 'tracker'; event: TrackerTriggerEvent; connectionId: string; itemKind: TrackerItemKind };
+  | { kind: 'tracker'; event: TrackerTriggerEvent; connectionId: string; itemKind: TrackerItemKind }
+  /** A matching incoming email in a connected mailbox. */
+  | MailTriggerFacts;
 
 export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts): boolean {
   switch (trigger.kind) {
@@ -74,6 +77,8 @@ export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts):
         facts.connectionId === trigger.connectionId &&
         (!trigger.itemKinds || trigger.itemKinds.includes(facts.itemKind))
       );
+    case 'mail':
+      return facts.kind === 'mail' && mailTriggerMatches(trigger, facts);
     default:
       return false;
   }

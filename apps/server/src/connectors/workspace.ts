@@ -36,6 +36,8 @@ const METHODS = [
   'sheetsWrite',
   'contactsSearch',
   'inboxUnread',
+  'mailBaseline',
+  'mailChanges',
 ] as const satisfies readonly (keyof GoogleWorkspace)[];
 
 /** `WHOMBAT_GOOGLE=off`: every method rejects (the tools refuse before calling). */

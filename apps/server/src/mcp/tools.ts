@@ -47,6 +47,7 @@ import { runs, searchAnswers } from '../db/schema/index';
 import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
+import { personOfAccountIn } from '../domain/turn-person';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
 import { startGuide } from '../guides/commands';
@@ -667,9 +668,15 @@ export async function onBehalfOf(
     if (message) principalId = message.authorId;
   }
   if (!principalId || principalId === dispatch.agentId) return {};
-  const who = await loadPrincipalRow(db, principalId);
-  const conversation = await loadConversationRow(db, conversationId);
+  let who = await loadPrincipalRow(db, principalId);
   if (!who) return {};
+  // An automation step's prompt is posted by the automation's own system principal while the turn acts for
+  // `dispatch.onBehalfOfAccountId`: attribute the turn to that person so connector reads and approval cards resolve to them.
+  if (who.kind !== 'person' && who.system && dispatch.onBehalfOfAccountId) {
+    const person = await personOfAccountIn(db, dispatch.burrowId, dispatch.onBehalfOfAccountId);
+    if (person) who = person;
+  }
+  const conversation = await loadConversationRow(db, conversationId);
   // The person's Chat (their `dm` conversation without a task); one with a task (the Feedback room) goes by its title.
   const where = !conversation
     ? null

@@ -41,8 +41,12 @@ import {
   GoogleApiError,
   type GoogleWorkspace,
   type InboxUnread,
+  type MailChangesOptions,
+  type MailChangesResult,
   type MailDraftView,
+  type MailHeader,
   type MailOrganizeInput,
+  type MailProviderCursor,
   type MailSearchInput,
 } from './types';
 
@@ -65,6 +69,8 @@ export interface FakeMail {
   attachments: { id?: string; name: string; mimeType: string; size: number; contentBase64?: string }[];
   /** `In-Reply-To` of a reply. */
   inReplyTo?: string | null;
+  /** Monotonic arrival sequence assigned for fake change-feed polling. */
+  mailSeq?: number;
 }
 
 export interface FakeDraft {
@@ -112,6 +118,8 @@ export interface FakeGoogleState {
   /** Method names in call order. */
   calls: string[];
   nextId: number;
+  /** Monotonic counter for fake mailbox change-feed cursors. */
+  mailSeq: number;
 }
 
 const HOUR = 3_600_000;
@@ -360,6 +368,7 @@ export function seedFakeGoogle(now: Date): FakeGoogleState {
     disabled: new Set(),
     calls: [],
     nextId: 1,
+    mailSeq: 0,
   };
 }
 
@@ -372,6 +381,8 @@ function notFound(what: string): GoogleApiError {
 const SERVICE_OF: Partial<Record<keyof GoogleWorkspace, ConnectorService>> = {
   mailSearch: 'mail',
   inboxUnread: 'mail',
+  mailBaseline: 'mail',
+  mailChanges: 'mail',
   mailRead: 'mail',
   mailDraft: 'mail',
   mailGetDraft: 'mail',
@@ -516,6 +527,86 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
   /** Forgets every account (a fresh seed on next use). */
   reset(): void {
     this.states.clear();
+  }
+
+  /** Test helper: delivers a new inbox message into a fake account and assigns it the next sequence number. */
+  deliverMail(
+    accessToken: string,
+    mail: Omit<FakeMail, 'id' | 'threadId' | 'mailSeq' | 'cc' | 'bcc'> & {
+      id?: string;
+      threadId?: string;
+      cc?: string[];
+      bcc?: string[];
+    },
+  ): FakeMail {
+    const state = this.stateFor(accessToken);
+    this.assignMailSeqs(state);
+    const id = mail.id ?? this.id(state, 'msg');
+    const created: FakeMail = {
+      ...mail,
+      cc: mail.cc ?? [],
+      bcc: mail.bcc ?? [],
+      id,
+      threadId: mail.threadId ?? `thr_${id}`,
+      mailSeq: ++state.mailSeq,
+    };
+    state.messages.push(created);
+    return created;
+  }
+
+  private assignMailSeqs(state: FakeGoogleState): void {
+    for (const m of state.messages) {
+      if (m.mailSeq === undefined) m.mailSeq = ++state.mailSeq;
+    }
+  }
+
+  async mailBaseline(accessToken: string): Promise<MailProviderCursor> {
+    const state = this.use(accessToken, 'mailBaseline');
+    this.assignMailSeqs(state);
+    return { kind: 'fake', seq: state.mailSeq };
+  }
+
+  async mailChanges(
+    accessToken: string,
+    cursor: MailProviderCursor,
+    _options?: MailChangesOptions,
+  ): Promise<MailChangesResult> {
+    const state = this.use(accessToken, 'mailChanges');
+    this.assignMailSeqs(state);
+    if (cursor.kind !== 'fake') {
+      return { cursor: { kind: 'fake', seq: state.mailSeq }, headers: [], reset: true };
+    }
+    const fresh = state.messages
+      .filter(
+        (m) =>
+          (m.mailSeq ?? 0) > cursor.seq &&
+          m.labelIds.includes('INBOX') &&
+          !m.labelIds.includes('DRAFT') &&
+          !m.labelIds.includes('TRASH') &&
+          !m.labelIds.includes('SPAM'),
+      )
+      .sort((a, b) => (a.mailSeq ?? 0) - (b.mailSeq ?? 0));
+    const headers: MailHeader[] = fresh.map((m) => {
+      const text = m.html ? htmlToText(m.body) : m.body;
+      return {
+        id: m.id,
+        threadId: m.threadId,
+        from: m.from,
+        to: m.to,
+        subject: m.subject,
+        snippet: text.replace(/\s+/g, ' ').trim().slice(0, 140),
+        date: m.date.toISOString(),
+        hasAttachments: m.attachments.length > 0,
+        attachments: m.attachments.map((a, i) => ({
+          id: a.id ?? `att_${i + 1}`,
+          name: a.name,
+          mimeType: a.mimeType,
+          size: a.size,
+        })),
+      };
+    });
+    const maxSeq = fresh.reduce((n, m) => Math.max(n, m.mailSeq ?? 0), cursor.seq);
+    return { cursor: { kind: 'fake', seq: Math.max(maxSeq, state.mailSeq) }, headers };
   }
 
   private use(accessToken: string, method: keyof GoogleWorkspace): FakeGoogleState {

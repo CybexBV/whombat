@@ -139,6 +139,7 @@ export const RUN_BAR_TONES: Record<AutomationRunStatus, RunBarTone> = {
 export const AUTOMATION_SOURCE_LABELS: Record<AutomationSource, string> = {
   github: 'GitHub',
   tracker: 'Report tracker',
+  mail: 'Mail',
   schedule: 'Schedule',
   message: 'Message',
   reaction: 'Reaction',
@@ -209,6 +210,7 @@ export function canDeleteAutomation(viewer: Decider): boolean {
 const SOURCE_OF: Record<AutomationTrigger['kind'], AutomationSource> = {
   github: 'github',
   tracker: 'tracker',
+  mail: 'mail',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
@@ -317,6 +319,8 @@ function triggerEvent(t: AutomationTrigger): string | null {
       return GITHUB_NEXT[t.event];
     case 'tracker':
       return t.event === 'item_opened' ? 'a new report' : 'a customer reply';
+    case 'mail':
+      return 'a matching email';
     case 'message_posted':
       return 'the next matching message';
     case 'reaction_added':

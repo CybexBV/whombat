@@ -222,6 +222,86 @@ describe('mail', () => {
       expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
     }
   });
+
+  it('baselines Gmail historyId and reads only header and attachment metadata via History API', async () => {
+    const { workspace, calls } = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile'))
+        return { json: { emailAddress: 'you@example.com', historyId: '500' } };
+      if (c.url.pathname.endsWith('/history')) {
+        if (c.url.searchParams.get('startHistoryId') === '100') {
+          return { status: 404, json: { error: { code: 404, message: 'History expired' } } };
+        }
+        return {
+          json: {
+            historyId: '505',
+            history: [
+              {
+                messagesAdded: [
+                  { message: { id: 'm_new', threadId: 't_new', labelIds: ['INBOX', 'UNREAD'] } },
+                  { message: { id: 'm_draft', threadId: 't_draft', labelIds: ['INBOX', 'DRAFT'] } },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      if (c.url.pathname.endsWith('/messages/m_new')) {
+        return {
+          json: {
+            id: 'm_new',
+            threadId: 't_new',
+            labelIds: ['INBOX', 'UNREAD'],
+            snippet: 'Invoice attached',
+            internalDate: '1761638400000',
+            payload: {
+              mimeType: 'multipart/mixed',
+              headers: [
+                { name: 'From', value: 'Billing <billing@example.com>' },
+                { name: 'To', value: 'you@example.com' },
+                { name: 'Subject', value: 'Invoice 42' },
+              ],
+              parts: [
+                { partId: '0', mimeType: 'text/plain', filename: '' },
+                {
+                  partId: '1',
+                  mimeType: 'application/pdf',
+                  filename: 'invoice-42.pdf',
+                  body: { attachmentId: 'att_42', size: 12345 },
+                },
+              ],
+            },
+          },
+        };
+      }
+      return undefined;
+    });
+
+    const baseline = await workspace.mailBaseline('tok');
+    expect(baseline).toEqual({ kind: 'gmail', historyId: '500' });
+    expect(calls[0]?.url.pathname).toBe('/gmail/v1/users/me/profile');
+
+    const delta = await workspace.mailChanges('tok', baseline);
+    expect(delta.cursor).toEqual({ kind: 'gmail', historyId: '505' });
+    expect(delta.headers).toHaveLength(1);
+    expect(delta.headers[0]).toMatchObject({
+      id: 'm_new',
+      from: 'Billing <billing@example.com>',
+      subject: 'Invoice 42',
+      hasAttachments: true,
+      attachments: [{ id: '1', name: 'invoice-42.pdf', mimeType: 'application/pdf', size: 12345 }],
+    });
+    const msgCall = calls.find((c) => c.url.pathname.endsWith('/messages/m_new'));
+    expect(msgCall?.url.searchParams.get('fields')).toContain('attachmentId');
+    expect(msgCall?.url.searchParams.get('fields')).not.toContain('data');
+
+    // Expired historyId (404) re-baselines cleanly without replaying old mail.
+    const expired = await workspace.mailChanges('tok', { kind: 'gmail', historyId: '100' });
+    expect(expired).toEqual({
+      cursor: { kind: 'gmail', historyId: '500' },
+      headers: [],
+      reset: true,
+    });
+  });
 });
 
 describe('calendar', () => {

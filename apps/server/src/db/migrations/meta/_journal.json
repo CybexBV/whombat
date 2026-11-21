@@ -64,6 +64,13 @@
       "when": 1795017773791,
       "tag": "0008_link",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795290011921,
+      "tag": "0009_mail_triggers",
+      "breakpoints": true
     }
   ]
 }

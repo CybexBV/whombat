@@ -31,6 +31,7 @@ import {
   Inbox,
   LinkIcon,
   type LucideIcon,
+  Mail,
   MessageSquare,
   Play,
   Smile,
@@ -46,6 +47,7 @@ const AVATAR_STALE_MS = 6 * 60 * 60 * 1000;
 /** A report tracker is any ticket system: one icon for all of them, its label names it. */
 const ICONS: Record<Exclude<AutomationSource, 'github'>, LucideIcon> = {
   tracker: Inbox,
+  mail: Mail,
   schedule: Clock,
   message: MessageSquare,
   reaction: Smile,

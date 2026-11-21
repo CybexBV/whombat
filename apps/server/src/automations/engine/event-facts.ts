@@ -15,6 +15,13 @@ import {
   repos,
 } from '../../db/schema/index';
 import { isFeedbackPrincipal, isReportThread } from '../../feedback/principal';
+import {
+  mailHeadline,
+  mailItemKey,
+  mailItemScope,
+  mailTriggerFactsOf,
+  mirroredMailItem,
+} from '../../mail-triggers/index';
 import { actorKind, loadPrincipalRow } from '../../read/principals';
 import { decisionNote } from '../../trackers/features';
 import { trackerHeadline, trackerItemKey, trackerItemScope } from '../../trackers/items';
@@ -51,6 +58,8 @@ export const EVENT_TYPES = [
   'tracker.item_opened',
   // The customer wrote back on, or reopened, a report an automation ran for (report-trackers.md TA-31).
   'tracker.reporter_replied',
+  // A matching incoming email arrived in a connected mailbox watched by a live automation.
+  'mail.received',
 ];
 
 export interface EventFacts {
@@ -59,6 +68,8 @@ export interface EventFacts {
   threadRootId: string | null;
   /** The GitHub issue or pull request the event is about (`itemKeyOf`), else null. */
   itemKey: string | null;
+  /** When an incoming mail message was received by the provider (used to skip pre-existing mail for newer automations). */
+  receivedAt?: Date;
   scope: JsonObject;
   info: (e: EventRow) => AutomationRunRow['trigger'];
 }
@@ -189,6 +200,28 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
       info: (e) => ({
         kind: 'tracker',
         summary: (String(scope.text).split('\n')[0] ?? '').slice(0, 200),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  // A matching incoming email in a watched mailbox: its mirrored row fills the outsider-fenced run scope.
+  if (event.type === 'mail.received') {
+    const rowId = typeof payload.rowId === 'string' ? payload.rowId : null;
+    const item = rowId ? await mirroredMailItem(tx, rowId) : null;
+    if (!item) return null;
+    return {
+      facts: mailTriggerFactsOf(item),
+      conversationId: null,
+      threadRootId: null,
+      itemKey: mailItemKey(item.connectionId, item.externalId),
+      receivedAt: item.receivedAt,
+      scope: mailItemScope(item),
+      info: (e) => ({
+        kind: 'mail',
+        summary: mailHeadline(item),
         actorId: actor.id,
         eventId: e.id,
         messageId: null,

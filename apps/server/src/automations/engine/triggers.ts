@@ -107,6 +107,14 @@ export async function scanBurrow(
       const cause = await eventCause(tx, event, facts);
       for (const { a, v } of live) {
         if (!v.definition.triggers.some((t) => triggerMatches(t, facts.facts))) continue;
+        // Mail already present when an automation was published must never start it, even when another automation was
+        // already watching the same mailbox (allow 5 s for provider/box clock skew on freshly sent mail).
+        if (
+          facts.facts.kind === 'mail' &&
+          (event.createdAt < v.publishedAt ||
+            (facts.receivedAt && facts.receivedAt.getTime() < v.publishedAt.getTime() - 5_000))
+        )
+          continue;
         // Loop guards: automation-caused events stop at a small depth, and never trigger their own automation.
         if (
           cause.depth > limits.maxCausalDepth ||

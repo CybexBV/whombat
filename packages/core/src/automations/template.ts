@@ -62,8 +62,19 @@ export function renderTemplateWithin(template: string, scope: Record<string, unk
   return join(lo);
 }
 
+/** Matches a closing Whombat fence (`[[/mail]]`, `[[/report]]`, …) at the end of a fenced block. */
+const CLOSING_FENCE = /\[\[\/[a-z][a-z0-9 _-]*\]\]$/i;
+
 function cut(value: string, cap: number): string {
-  return value.length <= cap ? value : `${value.slice(0, cap).trimEnd()}…`;
+  if (value.length <= cap) return value;
+  // Preserve the closing fence of an outsider-content block so truncation can never leave a block unclosed.
+  const closing = value.startsWith('[[') ? CLOSING_FENCE.exec(value)?.[0] : undefined;
+  if (closing) {
+    const keep = cap - closing.length - 2;
+    if (keep > 0) return `${value.slice(0, keep).trimEnd()}…\n${closing}`;
+    return closing.length <= cap ? closing : '';
+  }
+  return `${value.slice(0, cap).trimEnd()}…`;
 }
 
 /** Fills placeholders as JSON string contents (for a JSON body template: `{"text": "{{steps.a.text}}"}`). */

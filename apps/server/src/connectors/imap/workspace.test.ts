@@ -413,4 +413,91 @@ describe('Email (IMAP) behind the mail tools', () => {
     expect(refused).toEqual([]);
     await expect(ws.calendarEvents()).rejects.toThrow(IMAP_ONLY_MAIL_TEXT);
   });
+
+  it('tracks new inbox mail via UIDVALIDITY/lastUid and BODYSTRUCTURE without reading message bodies', async () => {
+    const baseline = await ws.mailBaseline(TOKEN);
+    expect(baseline).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
+
+    const beforeReads = server.sourceReads;
+    const empty = await ws.mailChanges(TOKEN, baseline);
+    expect(empty.headers).toEqual([]);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    const newInvoice = [
+      'From: Billing <billing@example.com>',
+      'To: jo@home.test',
+      'Subject: October Invoice',
+      'Date: Mon, 19 Oct 2026 10:00:00 +0000',
+      'Message-ID: <inv-oct@example.com>',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="invb"',
+      '',
+      '--invb',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Please find attached your invoice.',
+      '--invb',
+      'Content-Type: application/pdf',
+      'Content-Transfer-Encoding: base64',
+      'Content-Disposition: attachment; filename="october.pdf"',
+      '',
+      Buffer.from('%PDF-1.4 october').toString('base64'),
+      '--invb--',
+      '',
+    ].join('\r\n');
+    server.add('INBOX', newInvoice, { date: new Date('2026-10-19T10:00:00Z') });
+
+    const delta = await ws.mailChanges(TOKEN, baseline, { needAttachmentTypes: true });
+    expect(delta.headers).toHaveLength(1);
+    expect(delta.headers[0]).toMatchObject({
+      from: 'Billing <billing@example.com>',
+      subject: 'October Invoice',
+      hasAttachments: true,
+      attachments: [expect.objectContaining({ name: 'october.pdf', mimeType: 'application/pdf' })],
+    });
+    // Headers + BODYSTRUCTURE only: zero full message sources downloaded.
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // Polling again with the advanced cursor sees nothing twice.
+    const again = await ws.mailChanges(TOKEN, delta.cursor);
+    expect(again.headers).toEqual([]);
+
+    // UIDVALIDITY renumbering re-baselines cleanly without replaying old messages.
+    server.renumber('INBOX');
+    const reset = await ws.mailChanges(TOKEN, delta.cursor);
+    expect(reset.reset).toBe(true);
+    expect(reset.headers).toEqual([]);
+  });
+
+  it('wakes on IMAP IDLE when new mail arrives and reports unsupported when IDLE is absent', async () => {
+    const ac = new AbortController();
+    let woke!: () => void;
+    const woken = new Promise<void>((resolve) => {
+      woke = resolve;
+    });
+    const watching = ws.watchInbox(
+      TOKEN,
+      () => {
+        woke();
+        ac.abort();
+      },
+      ac.signal,
+    );
+    // Let IDLE attach to INBOX before adding a message.
+    await new Promise((r) => setTimeout(r, 15));
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Alert <alerts@example.com>',
+        subject: 'Wake up',
+        body: 'New arrival',
+        id: '<wake@example.com>',
+      }),
+    );
+    await woken;
+    expect(await watching).toBe('idle');
+
+    server.capabilities = new Set(['IMAP4REV1']);
+    expect(await ws.watchInbox(TOKEN, () => {}, new AbortController().signal)).toBe('unsupported');
+  });
 });

@@ -113,6 +113,7 @@ export function useAutomationWorld(options: { env?: Record<string, string> } = {
     await loadSeedWorld(services, testWorld());
   });
   afterAll(async () => {
+    await services?.mailTriggers.stop();
     await services?.automations.close();
     await services?.background.settle();
     services?.runtime.close();
@@ -153,6 +154,7 @@ export function useAutomationWorld(options: { env?: Record<string, string> } = {
     },
     async restart() {
       const old = get();
+      await old.mailTriggers.stop();
       await old.automations.close();
       old.runtime.close();
       old.typing.close();

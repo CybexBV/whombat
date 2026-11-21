@@ -1,6 +1,12 @@
 /** Query hooks and small shared helpers of the automations screens. */
 import { CHAT_WORDS } from '@whombat/client';
-import { queryHook, useCatalogConnections, useChatRooms, useTheAgent } from '@whombat/client/react';
+import {
+  queryHook,
+  useCatalogConnections,
+  useChatRooms,
+  useConnectors,
+  useTheAgent,
+} from '@whombat/client/react';
 import type { ChatRoom, PlanNames } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useMemo } from 'react';
@@ -78,12 +84,15 @@ export function useAutomationNames(burrow: string): PlanNames {
   const { words } = useTheAgent(burrow);
   const { rooms } = useAutomationRooms(burrow);
   const { connections } = useTrackerConnections(burrow);
+  const connectors = useConnectors({}, { retry: false });
   return useMemo(
     () => ({
       agent: words.name,
       conversationTitle: (id: string) => rooms.find((r) => r.id === id)?.title,
-      connectionLabel: (id: string) => connections.find((c) => c.id === id)?.label,
+      connectionLabel: (id: string) =>
+        connections.find((c) => c.id === id)?.label ??
+        connectors.data?.connections.find((c) => c.id === id)?.email,
     }),
-    [words.name, rooms, connections],
+    [words.name, rooms, connections, connectors.data],
   );
 }
