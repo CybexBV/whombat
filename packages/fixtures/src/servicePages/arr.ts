@@ -27,6 +27,7 @@ const LOOK_ONLY = 'Look only: changes are off for this connection.';
 const SONARR = 'connection:con_sonarr';
 const RADARR = 'connection:con_radarr';
 const HYDRA = 'connection:con_nzbhydra';
+const JELLYFIN = 'connection:con_jellyfin';
 const SAB_HREF = thingHref('connection', 'con_sabnzbd');
 
 /** The parts every page of this group shares: its head, its buttons on Look only, Worth a look, the week, the machine. */
@@ -770,6 +771,144 @@ function nzbhydra(ctx: FixtureServiceCtx) {
   };
 }
 
+/* Jellyfin ----------------------------------------------------------------------------------------------------------- */
+
+function jellyfin(ctx: FixtureServiceCtx) {
+  const k = kit(ctx);
+  const URL = 'http://10.100.0.20:8096';
+  let scanning = false;
+  const page = (): ThingPage => ({
+    ...k.head(
+      JELLYFIN,
+      'jellyfin',
+      'Jellyfin',
+      'ok',
+      '1 stream playing',
+      [
+        [{ text: 'Jellyfin ' }, { text: '10.10.3', strong: true }],
+        [{ text: '3 libraries', strong: true }],
+      ],
+      '10.100.0.20:8096',
+    ),
+    verdict: scanning
+      ? 'Jellyfin is fine: 1 person is watching and libraries are being scanned.'
+      : 'Jellyfin is fine: 1 person is watching and every library is up to date.',
+    suggestions: ['Most watched this month', 'Who watches most', 'Biggest movies'],
+    refreshS: 5,
+    tabs: k.summary(
+      [],
+      [
+        {
+          kind: 'gallery',
+          id: 'playing',
+          place: 'chart',
+          span: 2,
+          look: 'rows',
+          title: 'Now playing',
+          meta: '1 stream · 18 Mb/s out',
+          shape: 'poster',
+          items: [
+            {
+              id: 'sess-1',
+              title: 'Dune: Part Two',
+              sub: 'Film · 2024 · 4K',
+              image: k.poster('Dune: Part Two'),
+              person: { name: 'Anna', note: 'Living room TV' },
+              badge: { text: 'Converting', tone: 'warn' },
+              progress: 0.42,
+              note: '1:10:12 of 2:46:00',
+              noteEnd: '1 h 36 min left',
+            },
+          ] satisfies ThingGalleryItem[],
+          empty: 'Nobody is watching right now.',
+        },
+        {
+          kind: 'list',
+          id: 'libraries',
+          place: 'chart',
+          span: 1,
+          look: 'counts',
+          title: 'Libraries',
+          meta: '3 libraries',
+          ...(scanning ? {} : { buttons: [k.button({ action: 'scan', target: 'all', label: 'Scan all', icon: 'search' })] }),
+          items: [
+            count('library-movies', 'Movies', 'film', '412', {
+              detail: scanning ? 'Scanning' : 'Scanned today',
+              ...(scanning ? {} : { actions: [k.button({ action: 'scan', target: 'movies', label: 'Scan Movies', icon: 'search' })] }),
+            }),
+            count('library-tv', 'TV Shows', 'tv', '68', {
+              detail: scanning ? '2,840 episodes · Scanning' : '2,840 episodes · Scanned today',
+              ...(scanning ? {} : { actions: [k.button({ action: 'scan', target: 'tv', label: 'Scan TV Shows', icon: 'search' })] }),
+            }),
+          ],
+        },
+        {
+          kind: 'gallery',
+          id: 'recent',
+          place: 'chart',
+          span: 3,
+          look: 'shelf',
+          title: 'Recently added',
+          link: { kind: 'url', label: 'See all in Jellyfin', url: `${URL}/web/index.html` },
+          shape: 'poster',
+          items: [
+            {
+              id: 'mov1',
+              title: 'Inside Out 2',
+              sub: 'Film · 2024',
+              image: k.poster('Inside Out 2'),
+              person: { name: 'Ben', note: 'Asked for it' },
+              at: k.ago(2 * HOUR),
+            },
+            {
+              id: 'ep1',
+              title: 'Slow Horses',
+              sub: 'S05E03',
+              image: k.poster('Slow Horses'),
+              at: k.ago(5 * HOUR),
+            },
+          ] satisfies ThingGalleryItem[],
+          empty: 'Nothing added lately.',
+        },
+        k.week({
+          meta: 'Plays per day',
+          label: 'Plays',
+          values: [2, 3, 1, 4, 2, 5, 3],
+          figure: '20',
+          rest: 'plays this week',
+          change: '+11 %',
+          color: 'blue',
+        }),
+        k.machine([{ id: 'jellyfin-version', label: 'Jellyfin', value: '10.10.3', pct: null, sub: 'Linux 6.12' }], 12),
+      ],
+    ),
+  });
+  return {
+    page,
+    row: () => ({
+      line: '1 watching',
+      facts: [
+        { label: 'Movies', value: '412' },
+        { label: 'Shows', value: '68' },
+        { label: 'Watching now', value: '1' },
+      ],
+    }),
+    action: ({ action }: { action: string }) => {
+      if (action === 'scan') {
+        scanning = true;
+        return { message: 'Jellyfin is scanning every library.', recorded: true };
+      }
+      return null;
+    },
+    checks: [
+      { check: 'jellyfin.task_failed', name: 'Failed scheduled tasks', nature: 'problem' as const, perItem: true },
+      { check: 'jellyfin.restart', name: 'Restart needed after changes', nature: 'you' as const, perItem: false },
+      { check: 'jellyfin.converting', name: 'Many streams converting at once', nature: 'fyi' as const, perItem: false },
+      { check: 'jellyfin.scan', name: 'Long library scans', nature: 'fyi' as const, perItem: true },
+    ],
+  };
+}
+
 export const ARR_PAGES: FixtureServicePage[] = [
   {
     thing: SONARR,
@@ -791,5 +930,12 @@ export const ARR_PAGES: FixtureServicePage[] = [
     name: 'NZBHydra2',
     fields: { url: 'http://10.100.0.20:5076' },
     make: nzbhydra,
+  },
+  {
+    thing: JELLYFIN,
+    catalogId: 'jellyfin',
+    name: 'Jellyfin',
+    fields: { url: 'http://10.100.0.20:8096' },
+    make: jellyfin,
   },
 ];

@@ -46,6 +46,7 @@ export const CONNECT_MANAGE_FIRST: readonly string[] = [
   'pihole',
   'adguard',
   'plex',
+  'jellyfin',
   'sonarr',
   'radarr',
   'overseerr',

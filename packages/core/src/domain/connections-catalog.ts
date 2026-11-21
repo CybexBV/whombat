@@ -155,6 +155,7 @@ import { entry as homeassistantEntry } from './connections-catalog/homeassistant
 import { entry as hubspotEntry } from './connections-catalog/hubspot.js';
 import { entry as imapEntry } from './connections-catalog/imap.js';
 import { entry as immichEntry } from './connections-catalog/immich.js';
+import { entry as jellyfinEntry } from './connections-catalog/jellyfin.js';
 import { entry as microsoftEntry } from './connections-catalog/microsoft.js';
 import { entry as mollieEntry } from './connections-catalog/mollie.js';
 import { entry as moneybirdEntry } from './connections-catalog/moneybird.js';
@@ -210,6 +211,7 @@ const ENTRIES = [
   paperlessEntry,
   immichEntry,
   plexEntry,
+  jellyfinEntry,
   overseerrEntry,
   sabnzbdEntry,
   nzbhydraEntry,
@@ -289,6 +291,7 @@ export const CATALOG_IDS = [
   'paperless',
   'immich',
   'plex',
+  'jellyfin',
   'overseerr',
   'sabnzbd',
   'nzbhydra',

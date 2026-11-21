@@ -192,6 +192,23 @@ const media = {
     // Its Now playing's count: the page in slots has no row of figures (Watching now on an older Whombat).
     figure: 'playing',
   },
+  jellyfin: {
+    panels: [
+      {
+        panel: 'playing',
+        name: 'Now playing',
+        line: 'Who’s watching what',
+        always: 'posters',
+        empty: 'Nobody’s watching.',
+        head: (_page, p) => (count(p) ? `${count(p)} watching` : null),
+        poster: plexPlaying,
+        private: true,
+      },
+      { panel: 'recent', line: 'New films and episodes, as posters', poster: noAsker },
+      { panel: 'libraries', name: 'Library', line: 'How much is in each library' },
+    ],
+    figure: 'playing',
+  },
   overseerr: {
     panels: [
       {

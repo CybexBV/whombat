@@ -1,0 +1,24 @@
+[
+  {
+    "Name": "Scan Media Library",
+    "State": "Idle",
+    "Id": "6330ee8fb4a957f33981f89aa78b030f",
+    "Key": "RefreshLibrary",
+    "LastExecutionResult": {
+      "StartTimeUtc": "2026-10-21T16:00:00.0000000Z",
+      "EndTimeUtc": "2026-10-21T16:04:12.0000000Z",
+      "Status": "Completed"
+    }
+  },
+  {
+    "Name": "Extract Chapter Images",
+    "State": "Idle",
+    "Id": "4c105f7b4f784f53b9f5b6b5d74b7f20",
+    "Key": "ChapterImagesTask",
+    "LastExecutionResult": {
+      "StartTimeUtc": "2026-10-21T02:00:00.0000000Z",
+      "EndTimeUtc": "2026-10-21T02:01:05.0000000Z",
+      "Status": "Completed"
+    }
+  }
+]

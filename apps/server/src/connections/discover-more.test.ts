@@ -56,6 +56,17 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
       },
     },
   },
+  jellyfin: {
+    port: 8096,
+    version: '10.10.3',
+    answers: {
+      '/System/Info/Public': {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: '{"LocalAddress":"http://10.100.0.20:8096","ServerName":"Home Jellyfin","Version":"10.10.3","ProductName":"Jellyfin Server","OperatingSystem":"","Id":"8a1e2f3d4c5b6a708192a3b4c5d6e7f8","StartupWizardCompleted":true}',
+      },
+    },
+  },
   overseerr: {
     port: 5055,
     version: '1.34.0',
