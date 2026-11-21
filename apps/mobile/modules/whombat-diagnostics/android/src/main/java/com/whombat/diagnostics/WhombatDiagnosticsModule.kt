@@ -11,6 +11,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 
 /**
  * `WhombatDiagnostics` (Android): what Android itself knows about how the app's earlier runs ended
@@ -36,6 +37,9 @@ class WhombatDiagnosticsModule : Module() {
     /** `[{id, json}]`: the endings not taken yet, oldest first. */
     Function("pending") { runCatching { ExitReasons.pending(context) }.getOrDefault(emptyList()) }
 
+    /** This run's own id, which Android keeps with its ending: a JavaScript error noted in it is that ending's cause. */
+    Function("runId") { ExitReasons.run }
+
     Function("remove") { ids: List<String> ->
       runCatching { ExitReasons.taken(context, ids) }
       Unit
@@ -58,9 +62,12 @@ internal object ExitReasons {
   /** An ending older than this isn't noted any more. */
   private const val MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L
 
+  /** A random id of this run (this process), kept with its ending. */
+  val run: String by lazy { UUID.randomUUID().toString().replace("-", "").take(12) }
+
   /**
-   * The build this run is, kept by Android with the run's ending (the process state summary, 128 bytes at most): an
-   * ending is read by the next start, which may be a newer build after an update.
+   * The build this run is and its id, kept by Android with the run's ending (the process state summary, 128 bytes at
+   * most, `3.141.0 (3141000) run=<id>`): an ending is read by the next start, which may be a newer build after an update.
    */
   fun labelThisRun(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) label(context)
@@ -69,7 +76,7 @@ internal object ExitReasons {
   @RequiresApi(Build.VERSION_CODES.R)
   private fun label(context: Context) {
     val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    val bytes = "${info.versionName ?: "?"} (${codeOf(info)})".toByteArray(Charsets.UTF_8)
+    val bytes = "${info.versionName ?: "?"} (${codeOf(info)}) run=$run".toByteArray(Charsets.UTF_8)
     context.getSystemService(ActivityManager::class.java)?.setProcessStateSummary(bytes.copyOf(minOf(bytes.size, 128)))
   }
 
@@ -87,17 +94,24 @@ internal object ExitReasons {
     val manager = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
     val since = prefs(context).getLong(TAKEN_UNTIL, 0L)
     val oldest = System.currentTimeMillis() - MAX_AGE_MS
+    // Only the app's own process: the package's other processes (WebView's sandboxed renderer of a preview among them)
+    // are filed under it too, and their endings aren't the app's.
+    val own = context.applicationInfo.processName ?: context.packageName
     val (wanted, passed) = manager.getHistoricalProcessExitReasons(context.packageName, 0, MOST)
-      .filter { it.timestamp > since && kept(it.reason) }
+      .filter { it.processName == own && it.timestamp > since && kept(it.reason) }
       .sortedBy { it.timestamp }
       .partition { it.timestamp >= oldest && (it.reason != ApplicationExitInfo.REASON_LOW_MEMORY || onScreen(it)) }
     val firstWanted = wanted.firstOrNull()?.timestamp ?: Long.MAX_VALUE
     passed.filter { it.timestamp < firstWanted }.maxOfOrNull { it.timestamp }?.let { take(context, it) }
-    val traced = wanted.size - TRACED
-    return wanted.mapIndexed { i, exit ->
-      mapOf("id" to "exit-${exit.timestamp}-${exit.pid}", "json" to describe(exit, withTrace = i >= traced).toString())
+    // The newest few of the endings that have a trace at all (an ANR, a native crash).
+    val traced = wanted.filter { hasTrace(it.reason) }.takeLast(TRACED).toSet()
+    return wanted.map { exit ->
+      mapOf("id" to "exit-${exit.timestamp}-${exit.pid}", "json" to describe(exit, withTrace = exit in traced).toString())
     }
   }
+
+  private fun hasTrace(reason: Int) =
+    reason == ApplicationExitInfo.REASON_ANR || reason == ApplicationExitInfo.REASON_CRASH_NATIVE
 
   @RequiresApi(Build.VERSION_CODES.R)
   private fun onScreen(exit: ApplicationExitInfo) =

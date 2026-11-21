@@ -7,8 +7,13 @@
 import Constants from 'expo-constants';
 import { File, Paths } from 'expo-file-system';
 import { AppState, Platform } from 'react-native';
-import { onDiagnostics, pendingDiagnostics, removeDiagnostics } from '../../modules/whombat-diagnostics';
-import { notesOfExit } from './androidExits';
+import {
+  diagnosticsRunId,
+  onDiagnostics,
+  pendingDiagnostics,
+  removeDiagnostics,
+} from '../../modules/whombat-diagnostics';
+import { notesOfExit, readFatalRuns, withFatalRun } from './androidExits';
 import { notesOfPayload } from './diagnostics';
 import { createOpenMarker, noteOfLeftover } from './endedWhileOpen';
 import {
@@ -71,11 +76,17 @@ interface HermesRejections {
   }): void;
 }
 
+// Android: the runs that ended with a JavaScript error noted, by the run id Android keeps with each ending, so the
+// Java crash that error turns into is noted once (`androidExits.ts`).
+const fatalRuns = documentFile('whombat-fatal-runs.json');
+let runId: string | null = null;
+
 /** A fatal error as React Native reports it, noted; never throws (it runs inside React Native's own error handling). */
 function noteFatal(data: ReportedError | null | undefined): void {
   try {
-    if (data?.isFatal)
-      errorNotes.add(noteOfReported(data, { build: buildLabel(), at: new Date(), kind: 'app' }));
+    if (!data?.isFatal) return;
+    errorNotes.add(noteOfReported(data, { build: buildLabel(), at: new Date(), kind: 'app' }));
+    if (runId) fatalRuns.write(withFatalRun(fatalRuns.read(), runId));
   } catch {}
 }
 
@@ -85,6 +96,8 @@ function noteFatal(data: ReportedError | null | undefined): void {
  * noted and the app works as before.
  */
 export function startErrorNotes(): void {
+  // Asked once now: at an error there is no time for it.
+  if (Platform.OS === 'android') runId = diagnosticsRunId();
   // Errors once the app's code has loaded come through React Native's JavaScript handler…
   try {
     const manager: ExceptionsManagerModule | undefined =
@@ -134,8 +147,7 @@ export function startErrorNotes(): void {
 let endingsAsked = false;
 /**
  * On Android, how the earlier runs ended (`androidExits.ts`), noted after the next frame, once a run; the app's root
- * calls it as it mounts. The last run's own JavaScript error is still waiting to be sent then: a crash it explains
- * isn't noted twice.
+ * calls it as it mounts.
  */
 export function noteEndingsAfterFirstFrame(): void {
   if (Platform.OS !== 'android' || endingsAsked) return;
@@ -200,7 +212,11 @@ function noteDiagnostics(): void {
     for (const payload of pendingDiagnostics()) {
       const notes =
         Platform.OS === 'android'
-          ? notesOfExit(payload.json, { build: buildLabel(), now: new Date(), pending: errorNotes.pending() })
+          ? notesOfExit(payload.json, {
+              build: buildLabel(),
+              now: new Date(),
+              fatalRuns: readFatalRuns(fatalRuns.read()),
+            })
           : notesOfPayload(payload.json, { build: buildLabel(), at: new Date() });
       if (!notes) continue;
       for (const note of notes) errorNotes.add(note);
