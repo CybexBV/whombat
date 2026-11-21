@@ -11,7 +11,15 @@
  * fold: there the app draws its own, at the bottom of the page it was opened from, that page's width at most.
  */
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SheetPanel } from '../../modules/whombat-sheet';
 import { Text } from '../theme/Text';
@@ -160,15 +168,30 @@ export function Sheet({
   );
 }
 
-/** How long a sheet takes to go down before what it opens comes (iOS shows no new sheet under one it still shows). */
+/** The longest iOS waits for a sheet to go down when it doesn't say it did. */
 const SHEET_DOWN_MS = 600;
 
-/** Runs something once the sheet is down: on its `onDismissed` (iOS), or after a moment (Android has no such event). */
+/**
+ * Runs `run` once a closing sheet no longer stands in the way of what it opens; returns its cancel. iOS shows no new
+ * sheet or screen under a sheet it still shows, so there it waits for the sheet to go down (its `onDismissed` usually
+ * comes first). On Android a sheet is a dialog of its own that a new sheet or screen can open beside while it leaves,
+ * and its `onDismissed` never comes: the next frame, once the close has rendered.
+ */
+export function whenSheetDown(run: () => void): () => void {
+  if (Platform.OS === 'ios') {
+    const timer = setTimeout(run, SHEET_DOWN_MS);
+    return () => clearTimeout(timer);
+  }
+  const frame = requestAnimationFrame(() => run());
+  return () => cancelAnimationFrame(frame);
+}
+
+/** Runs something once the sheet is down: on its `onDismissed` (iOS), else {@link whenSheetDown}. */
 export function useAfterSheet() {
   const next = useRef<(() => void) | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cancel = useRef<(() => void) | undefined>(undefined);
   const go = useCallback(() => {
-    clearTimeout(timer.current);
+    cancel.current?.();
     const run = next.current;
     next.current = null;
     run?.();
@@ -176,11 +199,11 @@ export function useAfterSheet() {
   const later = useCallback(
     (run: () => void) => {
       next.current = run;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(go, SHEET_DOWN_MS);
+      cancel.current?.();
+      cancel.current = whenSheetDown(go);
     },
     [go],
   );
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => cancel.current?.(), []);
   return { later, onDismissed: go };
 }
