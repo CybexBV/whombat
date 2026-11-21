@@ -15,11 +15,16 @@ import { COPY } from './copy';
 
 export type InstallFailure = 'network' | 'verify' | 'signature' | 'failed';
 
+export type AllowPage = 'setting' | 'details' | 'none';
+
 export type InstallState =
   | { step: 'idle' }
   | { step: 'downloading'; versionCode: number; received: number; total: number }
-  /** Downloaded; waiting for the person to allow installs from Whombat in Android's settings. */
-  | { step: 'allow'; versionCode: number; path: string }
+  /**
+   * Downloaded; waiting for the person to allow installs from Whombat in Android's settings. `opened` is the page that
+   * opened: the setting itself, the app's details page when Android couldn't open the setting, or none.
+   */
+  | { step: 'allow'; versionCode: number; path: string; opened: AllowPage }
   /** Downloaded; “Install” opens Android's installer. */
   | { step: 'ready'; versionCode: number; path: string }
   /** Android's installer is open. */
@@ -33,6 +38,8 @@ export interface Updater {
   ): Promise<string>;
   canInstall(): boolean;
   openInstallSettings(): boolean;
+  /** This app's page in Android's settings, where the setting above wouldn't open. */
+  openAppDetails(): boolean;
   install(path: string): Promise<void>;
   /** The rejection's code (`network`, `verify`, `signature`, …). */
   failureCode(error: unknown): string;
@@ -70,8 +77,13 @@ export function createAppInstaller(updater: Updater, foreground: Foreground): Ap
     }
     afterForeground = false;
     if (!updater.canInstall()) {
-      set({ step: 'allow', versionCode, path });
-      updater.openInstallSettings();
+      // Some phones can't open the per-app setting: their app page has it too, and the words say where to look.
+      const opened: AllowPage = updater.openInstallSettings()
+        ? 'setting'
+        : updater.openAppDetails()
+          ? 'details'
+          : 'none';
+      set({ step: 'allow', versionCode, path, opened });
       return;
     }
     set({ step: 'installing', versionCode, path });
@@ -160,13 +172,10 @@ export function installView(state: InstallState, apk: AndroidDownload, idleLabel
         meta: COPY.update.downloadingMeta(apk.version, s.received, s.total),
         note: null,
       };
-    case 'allow':
-      return {
-        label: COPY.update.allow,
-        busy: false,
-        meta: COPY.update.allowMeta,
-        note: COPY.update.allowMeta,
-      };
+    case 'allow': {
+      const words = COPY.update.allowWhere[s.opened];
+      return { label: COPY.update.allow, busy: false, meta: words, note: words };
+    }
     case 'ready':
     case 'installing':
       return {

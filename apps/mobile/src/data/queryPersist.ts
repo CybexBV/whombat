@@ -1,8 +1,9 @@
 /**
- * The last-seen burrow, kept between launches (AP-717): the app opens at once with the inbox, sidebar, conversations and
- * agents it showed last time while the connection comes up, and refreshes them when it is. Only an allowlist of reads is
- * kept (`PERSISTED_ENDPOINTS`): nothing from the Vault, sign-ins, tokens, devices or settings — no secret ever reaches
- * the disk — and a conversation keeps its newest page of messages. Sealed in the `SecureBox` (encrypted, key in the
+ * The last-seen burrow, kept between launches (AP-717): the app opens at once with Chat's threads, the Overview, the
+ * tab bar's badges, the conversations and the agent it showed last time while the connection comes up, and refreshes
+ * them when it is. Only an allowlist of reads is kept (`PERSISTED_ENDPOINTS`): nothing from the Vault, sign-ins, tokens,
+ * devices or settings — no secret ever reaches the disk — a conversation keeps its newest page of messages, Chat its
+ * newest page of threads and a pinned widget a thinned line. Sealed in the `SecureBox` (encrypted, key in the
  * keystore) under the storage scope (`managed:<org>/<Whombat>`), with the account scope it was saved under: a session
  * that opens as another account (or with other permissions) drops it. A week-old copy isn't shown.
  *
@@ -18,7 +19,11 @@ import { isOptimisticMessage, parseKey } from '@whombat/client/query';
 import type { SecureBox } from './secureBox';
 import { shortAge } from './syncLog';
 
-/** The reads the app opens with. */
+/**
+ * The reads the app opens with: the tabs' (Chat's threads and what is new in them, the rooms behind the tab bar's
+ * badges, the Overview and Needs you) and the conversations'. None carries a secret: titles, the start of messages,
+ * counts, what needs the person and the pinned widgets' readings.
+ */
 export const PERSISTED_ENDPOINTS: ReadonlySet<string> = new Set([
   'me.get',
   'burrows.get',
@@ -29,13 +34,29 @@ export const PERSISTED_ENDPOINTS: ReadonlySet<string> = new Set([
   'messages.thread',
   'notifications.inbox',
   'agent.get',
+  'chats.list',
+  'chats.threads',
+  'chats.unread',
+  'home.overview',
 ]);
+
+/**
+ * The reads kept for today's tabs, in the order they leave a copy too large: they never push out what the copy held
+ * before them (the conversations).
+ */
+const TAB_READS = ['home.overview', 'chats.threads', 'chats.unread', 'chats.list'] as const;
+
+/** A pinned widget's line keeps at most this many readings in the copy, spread over its whole day. */
+export const KEPT_WIDGET_POINTS = 96;
 
 /** The file's name in the box. */
 export const QUERY_CACHE_NAME = 'queries';
 /** Older copies are dropped rather than shown. */
 export const MAX_AGE_MS = 7 * 24 * 3600_000;
-/** A copy larger than this (JSON characters) keeps fewer conversations, then none; a larger one still isn't saved. */
+/**
+ * A copy larger than this (JSON characters) keeps none of the tabs' reads, then fewer conversations, then none; a larger
+ * one still isn't saved.
+ */
 export const MAX_CHARS = 400_000;
 /** The conversations (and threads) whose newest messages are kept: those on screen first, then the most recent. */
 export const KEPT_CONVERSATIONS = 6;
@@ -55,6 +76,13 @@ export interface PersistedQueries {
 export function shouldPersistQuery(query: Pick<Query, 'queryKey' | 'state'>): boolean {
   const key = parseKey(query.queryKey);
   if (!key || !PERSISTED_ENDPOINTS.has(key.endpointId)) return false;
+  // The open threads of a room (Chat, Feedback), as its tab opens with: not the settled ones, nor those about one server
+  // or connection, read on pages opened on the way.
+  if (
+    key.endpointId === 'chats.threads' &&
+    (key.query.state !== 'open' || key.query.subjectKind !== undefined)
+  )
+    return false;
   const { status, data } = query.state;
   return status === 'success' || (status === 'error' && data !== undefined);
 }
@@ -65,6 +93,33 @@ function firstPageOnly(data: unknown): unknown {
   if (!d || !Array.isArray(d.pages) || d.pages.length <= 1) return data;
   return { ...d, pages: d.pages.slice(0, 1), pageParams: (d.pageParams ?? []).slice(0, 1) };
 }
+
+/** Every `n`th reading of a line, its first and last always: the same day drawn with fewer points. */
+function thinned<T>(points: readonly T[], most: number): readonly T[] {
+  if (points.length <= most) return points;
+  const step = (points.length - 1) / (most - 1);
+  return Array.from({ length: most }, (_, i) => points[Math.round(i * step)] as T);
+}
+
+/**
+ * The Overview with its pinned widgets' lines thinned (`KEPT_WIDGET_POINTS`): a day of readings every minute is
+ * thousands of points a widget, while the copy only bridges the moment until the Overview is read again.
+ */
+function slimOverview(data: unknown): unknown {
+  const d = data as { widgets?: { points?: unknown[] }[] } | undefined;
+  if (!d || !Array.isArray(d.widgets)) return data;
+  if (!d.widgets.some((w) => Array.isArray(w.points) && w.points.length > KEPT_WIDGET_POINTS)) return data;
+  return {
+    ...d,
+    widgets: d.widgets.map((w) =>
+      Array.isArray(w.points) && w.points.length > KEPT_WIDGET_POINTS
+        ? { ...w, points: thinned(w.points, KEPT_WIDGET_POINTS) }
+        : w,
+    ),
+  };
+}
+
+const isOverview = (queryKey: readonly unknown[]) => parseKey(queryKey)?.endpointId === 'home.overview';
 
 const optimistic = (v: unknown) =>
   !!v &&
@@ -153,7 +208,8 @@ function snapshot(
     shouldDehydrateMutation: () => false,
   });
   const parts = state.queries.map((q) => {
-    const data = withoutOptimistic(firstPageOnly(q.state.data));
+    const page = firstPageOnly(q.state.data);
+    const data = withoutOptimistic(isOverview(q.queryKey) ? slimOverview(page) : page);
     // A refresh that failed is this run's: the copy keeps the data as an answer, not the failure.
     const failed = q.state.status === 'error';
     const query =
@@ -172,7 +228,12 @@ function snapshot(
               }),
             },
           };
-    return { json: JSON.stringify(query), hash: q.queryHash, rank: kept.get(q.queryHash) ?? -1 };
+    return {
+      json: JSON.stringify(query),
+      hash: q.queryHash,
+      rank: kept.get(q.queryHash) ?? -1,
+      tab: (TAB_READS as readonly string[]).indexOf(parseKey(q.queryKey)?.endpointId ?? ''),
+    };
   });
   // The copy around its reads: `{"v":1,…,"state":{"mutations":[],"queries":[` … `]}}`.
   const meta = JSON.stringify({ v: 1, savedAt: now, account } satisfies Omit<PersistedQueries, 'state'>);
@@ -180,10 +241,14 @@ function snapshot(
   const tail = ']}}';
   let size = parts.reduce((n, p) => n + p.json.length + 1, head.length + tail.length);
   let keep = parts;
-  // Too large: the least important conversation goes first, one at a time.
-  for (let rank = kept.size - 1; size > MAX_CHARS && rank >= 0; rank--) {
-    const out = keep.find((p) => p.rank === rank);
-    if (!out) continue;
+  // Too large: the tabs' reads go first, the Overview first of them (the copy then holds what it held before they were
+  // kept), then the least important conversation, one at a time.
+  const leaving = [
+    ...parts.filter((p) => p.tab >= 0).sort((a, b) => a.tab - b.tab),
+    ...parts.filter((p) => p.rank >= 0).sort((a, b) => b.rank - a.rank),
+  ];
+  for (const out of leaving) {
+    if (size <= MAX_CHARS) break;
     keep = keep.filter((p) => p !== out);
     size -= out.json.length + 1;
   }
@@ -239,7 +304,6 @@ export function createQueryPersister(input: {
   let keptLast = new Set<string>();
   const opened = new Map<string, number>();
 
-  const persisted = (q: Query) => PERSISTED_ENDPOINTS.has(parseKey(q.queryKey)?.endpointId ?? '');
   const remember = () => {
     saved = new Map(
       qc
@@ -313,11 +377,13 @@ export function createQueryPersister(input: {
           }
           return;
         }
-        if (event.type !== 'updated' || event.action.type !== 'success' || !persisted(q)) return;
+        if (event.type !== 'updated' || event.action.type !== 'success' || !shouldPersistQuery(q)) return;
         if (saved.has(q.queryHash) && saved.get(q.queryHash) === q.state.data) return;
         if (isMessages(q.queryKey)) opened.set(q.queryHash, now());
         dirty = true;
-        later();
+        // The Overview changes every minute (its time, the widgets' readings): it goes with the next other change, or
+        // when the app goes to the background, rather than sealing the whole copy again each time.
+        if (!isOverview(q.queryKey)) later();
       });
       return () => {
         stopped = true;

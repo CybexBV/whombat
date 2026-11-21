@@ -364,6 +364,16 @@ export interface ApplianceSession {
    */
   suspend?(): boolean;
   /**
+   * Check that the open connection still answers: one `ping`, and no `pong` within a short wait (the stall check's,
+   * 2.5 s at first) makes it lost and dialed again at once, its subscriptions resuming from their cursors. A phone back
+   * from the background or on another network may hold a socket that died silently while the session still says it is
+   * open. A check already out is replaced by a fresh ping; `onlyIfChecking`: only then (coming back to the foreground
+   * with a check begun before). A check whose wait ends far later than set (the app's JavaScript was frozen) gets one
+   * more short wait; one over a connection still bringing something in waits again, up to the stall check's longest
+   * wait (a slow link working through a backlog). Nothing while not open. The secure transport only.
+   */
+  probe?(options?: { onlyIfChecking?: boolean }): void;
+  /**
    * Dial the bulk connection now, beside the interactive one, so the first photo doesn't wait for a second handshake
    * after the screen asked for it (AP-4406). Once, while connecting or open; a download that finds it failed waits for
    * the interactive connection as before. The secure transport only.

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_STYLE_ID } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  afterPreviewGone,
   HTML_PREVIEW_CSP,
   headingSize,
   PREVIEW_WEBVIEW_PROPS,
@@ -94,5 +95,28 @@ describe('HTML previews on mobile (AP-328)', () => {
     expect(pageHeight(JSON.stringify({ type: 'whombat.height', height: 1e9 }))).toBe(PAGE_MAX_HEIGHT);
     for (const junk of ['x', 'null', '{"type":"whombat.height","height":"9"}', '{"type":"other","height":9}'])
       expect(pageHeight(junk)).toBeNull();
+  });
+});
+
+describe('a preview whose browser stopped', () => {
+  it('starts again twice by itself after a crash, then waits for “Try again”', () => {
+    const crash = { crashed: true, active: true };
+    expect([0, 1, 2, 3].map((n) => afterPreviewGone(n, crash))).toEqual([
+      'restart',
+      'restart',
+      'offer',
+      'offer',
+    ]);
+    expect(afterPreviewGone(2, { crashed: true, active: false })).toBe('offer');
+  });
+
+  it('comes back without counting when Android let it go for memory in the background', () => {
+    expect(afterPreviewGone(0, { crashed: false, active: false })).toBe('remount');
+    expect(afterPreviewGone(5, { crashed: false, active: false })).toBe('remount');
+  });
+
+  it('counts a release for memory while the app is in front, so it can’t loop', () => {
+    const inFront = { crashed: false, active: true };
+    expect([0, 1, 2].map((n) => afterPreviewGone(n, inFront))).toEqual(['restart', 'restart', 'offer']);
   });
 });

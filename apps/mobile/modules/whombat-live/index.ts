@@ -9,7 +9,13 @@
  */
 import type { LiveActivityAttributes, LiveActivityDisplay, PushPayload } from '@whombat/core';
 import { requireOptionalNativeModule } from 'expo';
-import type { ActiveActivity, LiveColors, ShadeNotification } from './src/content';
+import type {
+  ActiveActivity,
+  DeliveryPage,
+  DeliveryStatus,
+  LiveColors,
+  ShadeNotification,
+} from './src/content';
 
 export * from './src/content';
 
@@ -35,6 +41,10 @@ interface NativeWhombatLive {
   launchPushTap?(): string | null;
   /** Android: epoch ms of the last managed push received. */
   lastGenericPushAt?(): number | null;
+  /** Android: what holds notifications back beyond the app-wide permission. */
+  deliveryStatus?(): Partial<DeliveryStatus>;
+  /** Android: a settings page for one of those; false when none opened. */
+  openDeliverySettings?(page: DeliveryPage['page'], channel: string | null): boolean;
   addListener(event: string, listener: (event: Record<string, string>) => void): { remove(): void };
 }
 
@@ -138,6 +148,38 @@ export const WhombatLive = {
   /** Android: when the last managed push arrived (epoch ms), whether or not the app ran. */
   lastGenericPushAt(): number | null {
     return native?.lastGenericPushAt?.() ?? null;
+  },
+
+  /**
+   * Android: what holds Whombat's notifications back beyond the app-wide permission (a channel turned off, background
+   * restriction, battery optimisation, Live Updates); null elsewhere and in a build without it.
+   */
+  deliveryStatus(): DeliveryStatus | null {
+    try {
+      const s = native?.deliveryStatus?.();
+      if (!s) return null;
+      return {
+        enabled: s.enabled ?? null,
+        channels: Array.isArray(s.channels) ? s.channels : [],
+        backgroundRestricted: s.backgroundRestricted ?? null,
+        batteryOptimized: s.batteryOptimized ?? null,
+        liveUpdatesAllowed: s.liveUpdatesAllowed ?? null,
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  /** Android: opens the settings page that turns one of those back on; false when none opened. */
+  openDeliverySettings(target: DeliveryPage): boolean {
+    try {
+      return (
+        native?.openDeliverySettings?.(target.page, target.page === 'channel' ? target.channel : null) ??
+        false
+      );
+    } catch {
+      return false;
+    }
   },
 
   /** Android: FCM rotated the device token. */

@@ -153,7 +153,13 @@ export const COPY = {
       `${version} · ${Math.round(received / 1_000_000)} of ${Math.max(1, Math.round(total / 1_000_000))} MB`,
     /** Android asks once whether Whombat may install apps (“Install unknown apps”). */
     allow: 'Allow installs',
-    allowMeta: 'Allow Whombat to install apps in Android’s settings, then come back here.',
+    /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */
+    allowWhere: {
+      setting: 'Allow Whombat to install apps in Android’s settings, then come back here.',
+      details:
+        'Android opened Whombat’s app info instead. Allow it to install unknown apps there, then come back here.',
+      none: 'Android couldn’t open its settings. In Settings, find Whombat under Apps, allow it to install unknown apps, then come back here.',
+    },
     /** Downloaded; Android's installer opens on it. */
     ready: 'Install',
     readyMeta: (version: string) => `${version} · Downloaded. Android asks before it installs.`,
@@ -184,6 +190,14 @@ export const COPY = {
     failed: 'Couldn’t set up',
     failedMeta: 'Whombat’s service didn’t answer. It tries again the next time you open the app.',
     lastReceived: (ago: string) => `Last one ${ago}`,
+    /** Android lets some through and holds others back (pushView.ts). */
+    partly: 'Partly on',
+    channelsOff: (names: string) => `${names} notifications are off in this phone’s settings.`,
+    heldBack: 'Held back',
+    restrictedMeta: 'Battery use for Whombat is restricted, so notifications can’t arrive while it’s closed.',
+    runsOff: (name: string) => `“${name}” notifications are off, so runs don’t show while they work.`,
+    liveUpdatesOff: 'Live Updates are off for Whombat, so runs show as ordinary notifications.',
+    batteryMeta: 'This phone may hold Whombat’s notifications back to save battery.',
     opening: 'Opening what needs you…',
   },
   /** The parts' names are the shared `THIS_WHOMBAT_TEXT.parts` (this-whombat-sections-android.md AP-1252). */

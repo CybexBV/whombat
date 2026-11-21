@@ -4,7 +4,8 @@
 //
 //   pnpm --filter @whombat/mobile android:apk                     debug APK, x86_64 (emulator)
 //   pnpm --filter @whombat/mobile android:apk --variant release   release APK (JS bundled; signed with the debug key)
-//   pnpm --filter @whombat/mobile android:apk --arch all          x86_64 + arm64-v8a (phones)
+//   pnpm --filter @whombat/mobile android:apk --arch arm64-v8a    phones
+//   pnpm --filter @whombat/mobile android:apk --arch all          x86_64 + arm64-v8a (an emulator and phones)
 //   pnpm --filter @whombat/mobile android:apk --clean             regenerate android/ from scratch
 //   pnpm --filter @whombat/mobile android:apk --metro-port 8195   debug APK that loads JS from Metro on :8195
 //

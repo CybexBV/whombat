@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -30,7 +31,8 @@ private const val PROGRESS_EVERY_MS = 250L
  * (size and SHA-256 from `latest.json`, then Android reads it: this package, the announced `versionCode`, newer than
  * this build, signed with this app's key) and handed to Android's installer through a FileProvider
  * (`ACTION_INSTALL_PACKAGE`), which asks the person and ends with “App installed · Open”. No browser, no Downloads
- * folder. The first time Android asks to allow installs from Whombat (`canInstall` / `openInstallSettings`).
+ * folder. The first time Android asks to allow installs from Whombat (`canInstall` / `openInstallSettings`, or
+ * `openAppDetails` where that page doesn't open).
  *
  * Rejections carry a code: `busy`, `network` (no answer, an HTTP error, a short file), `verify` (the bytes
  * or the APK aren't what was announced), `signature` (not signed like this app: Android would refuse it), `failed`.
@@ -64,6 +66,12 @@ class WhombatUpdaterModule : Module() {
     Function("openInstallSettings") {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return@Function false
       val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+      runCatching { start(intent) }.isSuccess
+    }
+
+    /** This app's own page in Android's settings, for phones that can't open the one above; true when it opened. */
+    Function("openAppDetails") {
+      val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
       runCatching { start(intent) }.isSuccess
     }
 
@@ -181,9 +189,11 @@ class WhombatUpdaterModule : Module() {
   /** What Android reads in the file: this app, the announced version, newer than this build, this app's signer. */
   private fun checkArchive(file: File, versionCode: Long) {
     val pm = context.packageManager
+    // Android 9 reads an archive's certificates only when GET_SIGNATURES is asked for too, so both are.
+    @Suppress("DEPRECATION")
     val flags =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
-      else 0
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+      else PackageManager.GET_SIGNATURES
     val fail = { code: String, message: String ->
       file.delete()
       UpdateException(code, message)
@@ -194,15 +204,37 @@ class WhombatUpdaterModule : Module() {
     val code = codeOf(info)
     if (code != versionCode) throw fail("verify", "The download is version $code, not $versionCode.")
     if (code <= ownVersionCode()) throw fail("verify", "The download isn't newer than this app.")
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      val signers = info.signingInfo?.apkContentsSigners
-      if (
-        !signers.isNullOrEmpty() &&
-        signers.none { pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509) }
-      ) {
-        throw fail("signature", "The download isn't signed like this app.")
-      }
+    // A signer Android can't read counts as a failed check, never as a pass.
+    val theirs = signersOf(info)
+    val ours = signersOf(pm.getPackageInfo(context.packageName, flags))
+    if (theirs.current.isEmpty() || ours.current.isEmpty()) {
+      throw fail("verify", "Android couldn't read who signed the download.")
     }
+    if (!signedLikeUs(theirs, ours)) throw fail("signature", "The download isn't signed like this app.")
+  }
+
+  /** Who signs a package now, and (one signer, Android 9+) the keys its signer's rotation came from, oldest first. */
+  private class Signers(val current: Set<Signature>, val lineage: Set<Signature>)
+
+  private fun signersOf(info: PackageInfo): Signers {
+    @Suppress("DEPRECATION")
+    val legacy = info.signatures.orEmpty().toSet()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return Signers(legacy, emptySet())
+    // Some phones leave `signingInfo` empty for an archive; the older field (asked for too) still has the signer.
+    val signing = info.signingInfo ?: return Signers(legacy, emptySet())
+    val current = signing.apkContentsSigners.orEmpty().toSet().ifEmpty { legacy }
+    val lineage = if (signing.hasMultipleSigners()) emptySet() else signing.signingCertificateHistory.orEmpty().toSet()
+    return Signers(current, lineage)
+  }
+
+  /**
+   * Several signers: exactly ours, as Android requires. One: ours, or a newer key whose rotation came from our current
+   * one (its lineage holds our key). A download signed with an older key of ours never passes.
+   */
+  private fun signedLikeUs(theirs: Signers, ours: Signers): Boolean {
+    if (theirs.current == ours.current) return true
+    if (theirs.current.size != 1 || ours.current.size != 1) return false
+    return ours.current.single() in theirs.lineage
   }
 
   private fun ownVersionCode(): Long = codeOf(context.packageManager.getPackageInfo(context.packageName, 0))

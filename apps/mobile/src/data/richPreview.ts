@@ -59,6 +59,29 @@ export const PREVIEW_WEBVIEW_PROPS = {
   onShouldStartLoadWithRequest: (request: { url: string }) => previewMayLoad(request.url),
 };
 
+/**
+ * How many times a preview whose browser crashed starts again by itself before it waits for the person's “Try again”:
+ * a page that keeps crashing its browser shouldn't loop.
+ */
+export const PREVIEW_AUTO_RESTARTS = 2;
+
+/** How long a page must stay up after it loaded before its earlier crashes are forgotten. */
+export const PREVIEW_STEADY_MS = 10_000;
+
+/**
+ * After a preview's browser went: `remount` when Android let it go for memory while the app was in the background
+ * (nothing wrong with the page; it comes back once the app is in front, uncounted). Anything else counts, a release
+ * for memory while the app is in front too (the page itself may be what fills the memory): `restart` while restarts
+ * are left, else `offer` “Try again”.
+ */
+export function afterPreviewGone(
+  restarts: number,
+  { crashed, active }: { crashed: boolean; active: boolean },
+): 'remount' | 'restart' | 'offer' {
+  if (!crashed && !active) return 'remount';
+  return restarts < PREVIEW_AUTO_RESTARTS ? 'restart' : 'offer';
+}
+
 /** The card's page height in a message until the page says how tall it is (the full-screen view fills the screen). */
 export const PREVIEW_CARD_HEIGHT = 300;
 

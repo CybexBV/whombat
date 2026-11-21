@@ -16,6 +16,7 @@ function appInstaller(): AppInstaller {
       download: (apk, onProgress) => WhombatUpdater.download(apk, onProgress),
       canInstall: () => WhombatUpdater.canInstall(),
       openInstallSettings: () => WhombatUpdater.openInstallSettings(),
+      openAppDetails: () => WhombatUpdater.openAppDetails(),
       install: (path) => WhombatUpdater.install(path),
       failureCode: updaterFailureCode,
     },

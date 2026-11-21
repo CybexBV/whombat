@@ -7,7 +7,13 @@
 import Constants from 'expo-constants';
 import { File, Paths } from 'expo-file-system';
 import { AppState, Platform } from 'react-native';
-import { onDiagnostics, pendingDiagnostics, removeDiagnostics } from '../../modules/whombat-diagnostics';
+import {
+  diagnosticsRunId,
+  onDiagnostics,
+  pendingDiagnostics,
+  removeDiagnostics,
+} from '../../modules/whombat-diagnostics';
+import { notesOfExit, readFatalRuns, withFatalRun } from './androidExits';
 import { notesOfPayload } from './diagnostics';
 import { createOpenMarker, noteOfLeftover } from './endedWhileOpen';
 import {
@@ -70,11 +76,17 @@ interface HermesRejections {
   }): void;
 }
 
+// Android: the runs that ended with a JavaScript error noted, by the run id Android keeps with each ending, so the
+// Java crash that error turns into is noted once (`androidExits.ts`).
+const fatalRuns = documentFile('whombat-fatal-runs.json');
+let runId: string | null = null;
+
 /** A fatal error as React Native reports it, noted; never throws (it runs inside React Native's own error handling). */
 function noteFatal(data: ReportedError | null | undefined): void {
   try {
-    if (data?.isFatal)
-      errorNotes.add(noteOfReported(data, { build: buildLabel(), at: new Date(), kind: 'app' }));
+    if (!data?.isFatal) return;
+    errorNotes.add(noteOfReported(data, { build: buildLabel(), at: new Date(), kind: 'app' }));
+    if (runId) fatalRuns.write(withFatalRun(fatalRuns.read(), runId));
   } catch {}
 }
 
@@ -84,6 +96,8 @@ function noteFatal(data: ReportedError | null | undefined): void {
  * noted and the app works as before.
  */
 export function startErrorNotes(): void {
+  // Asked once now: at an error there is no time for it.
+  if (Platform.OS === 'android') runId = diagnosticsRunId();
   // Errors once the app's code has loaded come through React Native's JavaScript handler…
   try {
     const manager: ExceptionsManagerModule | undefined =
@@ -120,10 +134,25 @@ export function startErrorNotes(): void {
   try {
     watchOpen();
   } catch {}
-  try {
-    noteDiagnostics();
-    onDiagnostics(noteDiagnostics);
-  } catch {}
+  // Android's endings are read once the first screen is drawn (`noteEndingsAfterFirstFrame`): reading a trace costs
+  // time the start shouldn't wait for. iOS's payloads are small files already on the phone.
+  if (Platform.OS === 'ios') {
+    try {
+      noteDiagnostics();
+      onDiagnostics(noteDiagnostics);
+    } catch {}
+  }
+}
+
+let endingsAsked = false;
+/**
+ * On Android, how the earlier runs ended (`androidExits.ts`), noted after the next frame, once a run; the app's root
+ * calls it as it mounts.
+ */
+export function noteEndingsAfterFirstFrame(): void {
+  if (Platform.OS !== 'android' || endingsAsked) return;
+  endingsAsked = true;
+  requestAnimationFrame(() => setTimeout(noteDiagnostics, 0));
 }
 
 function noteQuiet(error: unknown, name: string, where?: string): void {
@@ -146,7 +175,8 @@ export function notePageError(error: unknown, componentStack: string | null | un
 }
 
 // The app ended while it was open (`endedWhileOpen.ts`). iPhone only: on Android the app's own updater ends it while
-// it is open at every update, which would be noted each time.
+// it is open at every update, which would be noted each time; there Android names how each run ended itself
+// (`androidExits.ts`), and an update isn't one of the endings noted.
 const openMarker = createOpenMarker(documentFile('whombat-open-mark.json'), buildLabel());
 const OPEN_SEEN_MS = 60_000;
 
@@ -172,12 +202,22 @@ export function noteRoute(name: string | undefined): void {
   } catch {}
 }
 
-/** What iOS handed over since (`diagnostics.ts`), noted; a payload that can't be read stays for a later version. */
+/**
+ * What iOS handed over since (`diagnostics.ts`), or how Android says the earlier runs ended (`androidExits.ts`), noted;
+ * a payload that can't be read stays for a later version.
+ */
 function noteDiagnostics(): void {
   try {
     const done: string[] = [];
     for (const payload of pendingDiagnostics()) {
-      const notes = notesOfPayload(payload.json, { build: buildLabel(), at: new Date() });
+      const notes =
+        Platform.OS === 'android'
+          ? notesOfExit(payload.json, {
+              build: buildLabel(),
+              now: new Date(),
+              fatalRuns: readFatalRuns(fatalRuns.read()),
+            })
+          : notesOfPayload(payload.json, { build: buildLabel(), at: new Date() });
       if (!notes) continue;
       for (const note of notes) errorNotes.add(note);
       done.push(payload.id);

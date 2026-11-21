@@ -8,14 +8,17 @@ import { type DiagramTheme, mermaidDocumentWith, mermaidScriptElement } from '@w
 import { htmlTitle } from '@whombat/core';
 import { fontFamilies, pageThemeCss } from '@whombat/tokens';
 import mermaidRuntime from 'mermaid/dist/mermaid.min.js';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, ScrollView, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { COPIED_TEXT } from '../data/messageActions';
+import { PAGES_COPY } from '../data/pageSets';
 import { keepPageHeight, keptPage, keptPageHeight } from '../data/previewPages';
 import {
+  afterPreviewGone,
   PAGE_HEIGHT_SCRIPT,
   PREVIEW_CARD_HEIGHT,
+  PREVIEW_STEADY_MS,
   PREVIEW_WEBVIEW_PROPS,
   pageHeight,
   withPreviewPolicy,
@@ -26,6 +29,7 @@ import { copyToClipboard } from './clipboard';
 import { FullScreenModal } from './fullScreen';
 import { Check, Code2, Copy, Globe, type LucideIcon, Maximize2, Workflow, X } from './icons';
 import { useRowInView } from './inView';
+import { Button } from './primitives';
 import { KeepsSideways } from './sideways';
 import { Touchable } from './Touchable';
 import { hitSlopFor } from './touchTarget';
@@ -119,13 +123,98 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     const t = setTimeout(() => setStarted(false), PREVIEW_RELEASE_MS);
     return () => clearTimeout(t);
   }, [inView, started, fit]);
-  if (!started && fit) return <View style={{ height, backgroundColor: 'transparent' }} />;
+  // A WebView whose browser went leaves the page blank: a new WebView starts it again. Android letting it go for memory
+  // in the background only waits for the app to be in front; otherwise it restarts twice by itself, then the person's
+  // “Try again”.
+  const [mount, setMount] = useState(0);
+  // The WebView (by its mount) whose end was last handled: Android can report one death more than once.
+  const handled = useRef(-1);
+  const [restarts, setRestarts] = useState(0);
+  const [gone, setGone] = useState(false);
+  const [asleep, setAsleep] = useState(false);
+  const [loaded, setLoaded] = useState(0);
+  const [shown, setShown] = useState(page);
+  if (shown !== page) {
+    setShown(page);
+    setRestarts(0);
+    setGone(false);
+    setAsleep(false);
+    setLoaded(0);
+  }
+  // Earlier crashes are forgotten once a load has stayed up a while: a page that crashes as it loads still stops.
+  useEffect(() => {
+    if (loaded === 0) return;
+    const t = setTimeout(() => setRestarts(0), PREVIEW_STEADY_MS);
+    return () => clearTimeout(t);
+  }, [loaded]);
+  useEffect(() => {
+    if (!asleep) return;
+    const wake = () => {
+      setAsleep(false);
+      setMount((n) => n + 1);
+    };
+    if (AppState.currentState === 'active') {
+      wake();
+      return;
+    }
+    const sub = AppState.addEventListener('change', (next) => next === 'active' && wake());
+    return () => sub.remove();
+  }, [asleep]);
+  // iOS doesn't say why its page process ended: counted as a crash, so it can't loop.
+  const onGone = (of: number, crashed: boolean) => {
+    if (handled.current === of) return;
+    handled.current = of;
+    setLoaded(0);
+    const next = afterPreviewGone(restarts, { crashed, active: AppState.currentState === 'active' });
+    if (next === 'remount') setAsleep(true);
+    else if (next === 'restart') {
+      setRestarts((n) => n + 1);
+      setMount((n) => n + 1);
+    } else setGone(true);
+  };
+  if ((!started && fit) || asleep)
+    return <View style={fit ? { height, backgroundColor: 'transparent' } : { flex: 1 }} />;
+  if (gone)
+    return (
+      <View
+        style={{
+          // As tall as the card was, or as its words and button need when it was shorter.
+          ...(fit ? { minHeight: height } : { flex: 1 }),
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          padding: 24,
+        }}
+      >
+        <Text
+          size={15}
+          color={theme.colors.ink2}
+          accessibilityLiveRegion="polite"
+          style={{ textAlign: 'center' }}
+        >
+          {PREVIEW_GONE_TEXT}
+        </Text>
+        <Button
+          label={PAGES_COPY.tryAgain}
+          variant="secondary"
+          onPress={() => {
+            setRestarts(0);
+            setMount((n) => n + 1);
+            setGone(false);
+          }}
+        />
+      </View>
+    );
   // The page scrolls itself, sideways too, not the message's swipe; the chat scrolls around the card.
   return (
     <KeepsSideways>
       <WebView
+        key={mount}
         {...PREVIEW_WEBVIEW_PROPS}
         source={source}
+        onRenderProcessGone={(e) => onGone(mount, e.nativeEvent.didCrash)}
+        onContentProcessDidTerminate={() => onGone(mount, true)}
+        onLoad={() => setLoaded((n) => n + 1)}
         // Full screen the page's own background shows once it loads; until then the app's, not a white flash in dark.
         style={
           fit ? { height, backgroundColor: 'transparent' } : { flex: 1, backgroundColor: theme.colors.bg }
@@ -146,6 +235,9 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     </KeepsSideways>
   );
 }
+
+/** Where a preview's browser stopped again and again: the page set viewer's words, for one page. */
+const PREVIEW_GONE_TEXT = 'Couldn’t open this page.';
 
 /** How long a page stays live after its row left the screen (and the two rows either side). */
 const PREVIEW_RELEASE_MS = 20_000;

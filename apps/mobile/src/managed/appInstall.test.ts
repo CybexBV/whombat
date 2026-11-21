@@ -8,6 +8,7 @@ import {
   installView,
   type Updater,
 } from './appInstall';
+import { COPY } from './copy';
 
 const apk = (versionCode = 44_000): AndroidDownload => ({
   version: `0.${Math.floor(versionCode / 1000)}.${versionCode % 1000}`,
@@ -37,6 +38,7 @@ function world({ allowed = true, active = true } = {}) {
     }),
     canInstall: vi.fn(() => phone.allowed),
     openInstallSettings: vi.fn(() => true),
+    openAppDetails: vi.fn(() => true),
     install: vi.fn(async (_path: string) => {}),
     failureCode: (e: unknown) => (e as { code: string }).code,
   } satisfies Updater;
@@ -76,6 +78,20 @@ describe('the app updates itself (AP-813)', () => {
     back();
     await vi.waitFor(() => expect(updater.install).toHaveBeenCalledTimes(1));
     expect(updater.download).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the app’s page when Android can’t open the install setting, and says where to look', async () => {
+    const { installer, updater, phone, back } = world({ allowed: false });
+    updater.openInstallSettings.mockReturnValue(false);
+    await installer.start(apk());
+    expect(installer.get()).toMatchObject({ step: 'allow', opened: 'details' });
+    expect(updater.openAppDetails).toHaveBeenCalledTimes(1);
+    updater.openAppDetails.mockReturnValue(false);
+    await installer.start(apk());
+    expect(installer.get()).toMatchObject({ step: 'allow', opened: 'none' });
+    phone.allowed = true;
+    back();
+    await vi.waitFor(() => expect(updater.install).toHaveBeenCalledTimes(1));
   });
 
   it('offers “Install” again after the installer was cancelled, without downloading again', async () => {
@@ -154,10 +170,12 @@ describe('what the update buttons say', () => {
         'Update',
       ),
     ).toMatchObject({ label: 'Downloading 35%', meta: '0.44.0 · 34 of 96 MB' });
-    expect(installView({ step: 'allow', versionCode: 44_000, path: 'p' }, a, 'Update')).toMatchObject({
-      label: 'Allow installs',
-      note: 'Allow Whombat to install apps in Android’s settings, then come back here.',
-    });
+    expect(
+      installView({ step: 'allow', versionCode: 44_000, path: 'p', opened: 'setting' }, a, 'Update'),
+    ).toMatchObject({ label: 'Allow installs', note: COPY.update.allowWhere.setting });
+    expect(
+      installView({ step: 'allow', versionCode: 44_000, path: 'p', opened: 'details' }, a, 'Update').note,
+    ).toBe(COPY.update.allowWhere.details);
     expect(installView({ step: 'installing', versionCode: 44_000, path: 'p' }, a, 'Update')).toMatchObject({
       label: 'Install',
       busy: true,
