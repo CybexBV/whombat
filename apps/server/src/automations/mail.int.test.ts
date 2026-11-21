@@ -1556,7 +1556,6 @@ describe('mail-arrives automations', () => {
     await w.services.db.insert(connectionTools).values({
       connectionId: t3Id,
       name: 't3_thread_launch',
-      title: 'Launch thread',
       description: 'Start a coding thread',
       inputSchema: { type: 'object', properties: {} },
       access: 'write',
@@ -1589,10 +1588,7 @@ describe('mail-arrives automations', () => {
       const [runRow] = await runsOf(autoId);
       const run = await w.run(runRow?.id as string);
       const dispatchId = run.steps[0]?.dispatchId as string;
-      const [dispatch] = await w.services.db
-        .select()
-        .from(dispatches)
-        .where(eq(dispatches.id, dispatchId));
+      const [dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
       const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
       const prompt = ctx.trigger?.text ?? '';
 
@@ -1809,11 +1805,15 @@ describe('mail-arrives automations', () => {
       expect(card?.question).toContain('POST /12345/sales_invoices/99/send_invoice.json');
       expect(card?.question).not.toContain('Paperless-ngx');
 
-      expect(card?.whatHappens[0]).toContain('Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json');
+      expect(card?.whatHappens[0]).toContain(
+        'Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
+      );
       expect(card?.whatHappens[0]).toContain('amount: 9500.00');
       expect(card?.whatHappens[0]).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
 
-      expect(cardMsg?.text).toContain('• Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json');
+      expect(cardMsg?.text).toContain(
+        '• Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
+      );
       expect(cardMsg?.text).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
@@ -2014,10 +2014,7 @@ describe('mail-arrives automations', () => {
     let mbId = '';
     let autoId = '';
 
-    const runWithActions = async (
-      msgId: string,
-      actions: Record<string, unknown>[],
-    ) => {
+    const runWithActions = async (msgId: string, actions: Record<string, unknown>[]) => {
       w.advance(10_000);
       fake.deliverMail(FAKE_ACCESS_TOKEN, {
         id: msgId,
@@ -2306,7 +2303,12 @@ describe('mail-arrives automations', () => {
   });
 
   it('refuses mail automations with a workspace or disallowed external step at publish and again at execution', async () => {
-    const baseTrigger = { kind: 'mail' as const, connectionId, from: 'example.com', subjectContains: ['unsafe'] };
+    const baseTrigger = {
+      kind: 'mail' as const,
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['unsafe'],
+    };
 
     // 1. Saving & publishing a custom mail definition with a workspace is refused.
     const { automationId: wsDraftId } = await w.ok(IDS.mara, createAutomation, {
@@ -2400,6 +2402,9 @@ describe('mail-arrives automations', () => {
               {
                 id: 'ask',
                 kind: 'dispatch_agent',
+                retries: 0,
+                conversation: 'run',
+                thread: 'run',
                 prompt: 'Inspect {{trigger.text}}',
                 workspace: { repo: 'whombat/billing', access: 'read' },
               },
@@ -2422,6 +2427,8 @@ describe('mail-arrives automations', () => {
               {
                 id: 'comment',
                 kind: 'github_comment',
+                retries: 0,
+                otherwise: 'fail',
                 repo: 'whombat/billing',
                 number: '1',
                 text: '{{trigger.subject}}',

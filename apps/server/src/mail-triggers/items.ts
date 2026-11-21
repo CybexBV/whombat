@@ -67,7 +67,9 @@ function attachmentsSummary(attachments: readonly StoredMailAttachment[]): strin
   return attachments
     .slice(0, 20)
     .map((a) => {
-      const missing = a.missingReason ? ` — not attached: ${missingAttachmentReasonText(a.missingReason)}` : '';
+      const missing = a.missingReason
+        ? ` — not attached: ${missingAttachmentReasonText(a.missingReason)}`
+        : '';
       return `${a.name || 'attachment'} (${a.mimeType}, ${a.size} bytes${missing})`;
     })
     .join('; ');
@@ -75,8 +77,11 @@ function attachmentsSummary(attachments: readonly StoredMailAttachment[]): strin
 
 function missingAttachmentsOf(attachments: readonly StoredMailAttachment[]): MissingMailAttachment[] {
   return attachments
-    .filter((a): a is StoredMailAttachment & { missingReason: NonNullable<StoredMailAttachment['missingReason']> } =>
-      Boolean(a.missingReason),
+    .filter(
+      (
+        a,
+      ): a is StoredMailAttachment & { missingReason: NonNullable<StoredMailAttachment['missingReason']> } =>
+        Boolean(a.missingReason),
     )
     .slice(0, 20)
     .map((a) => ({

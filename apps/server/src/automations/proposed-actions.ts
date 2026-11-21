@@ -64,9 +64,7 @@ const DELETE_TOOL_NAME = /(?:^|[._-])delete(?:$|[._-])/i;
  */
 export function isProposableEntry(entry: CatalogEntry): boolean {
   return (
-    isCallableEntry(entry) &&
-    entry.transport !== 'builtin' &&
-    !DISALLOWED_PROPOSE_CATALOG_IDS.has(entry.id)
+    isCallableEntry(entry) && entry.transport !== 'builtin' && !DISALLOWED_PROPOSE_CATALOG_IDS.has(entry.id)
   );
 }
 
@@ -118,10 +116,14 @@ export function clipTitle(text: string, max: number): string {
 
 /** Collapses line breaks and repeated whitespace so untrusted text stays on one line. */
 function singleLine(text: string): string {
-  return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return text
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-const SECRET_ARG_KEY = /(?:secret|password|passwd|token|api_?key|auth|cookie|credential|private_?key|bearer)/i;
+const SECRET_ARG_KEY =
+  /(?:secret|password|passwd|token|api_?key|auth|cookie|credential|private_?key|bearer)/i;
 const NOTABLE_ARG_PRIORITY: readonly RegExp[] = [
   // Destination, target, recipient, contact, folder, path.
   /(?:^|_)(?:to|dest(?:ination)?|target|recipient|recipients|email|mail|payee|beneficiary|iban|account|contact|customer|client|folder|dir(?:ectory)?|path|file_?name|channel|room|project|board|list|calendar|album|bucket|repo(?:sitory)?|url)(?:$|_)/i,
@@ -137,12 +139,7 @@ interface CollectedArg {
   value: string;
 }
 
-function collectNotableArgs(
-  value: unknown,
-  out: CollectedArg[],
-  seen: Set<string>,
-  depth = 0,
-): void {
+function collectNotableArgs(value: unknown, out: CollectedArg[], seen: Set<string>, depth = 0): void {
   if (depth > 4 || out.length >= 12 || value == null) return;
   if (Array.isArray(value)) {
     for (const item of value.slice(0, 3)) {

@@ -15,11 +15,11 @@ import { automationRunSteps, automationRuns, dispatches, messages } from '../../
 import { postMessage } from '../../domain/messages';
 import { billedTokensSum } from '../../domain/turn-usage';
 import { linkAttachments } from '../../files/commands';
+import { stripMailScopeContent } from '../../mail-triggers/index';
 import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
-import { stripMailScopeContent } from '../../mail-triggers/index';
 import { automationAgent } from '../authority';
 import { proposableConnectionsNote } from '../proposed-actions';
 import {
@@ -241,7 +241,8 @@ export async function executeDispatchAgent({
   const missingParsed = MissingMailAttachment.array()
     .max(20)
     .safeParse((run.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
-  const missingNote = missingParsed.success && missingParsed.data.length > 0 ? missingAttachmentsText(missingParsed.data) : '';
+  const missingNote =
+    missingParsed.success && missingParsed.data.length > 0 ? missingAttachmentsText(missingParsed.data) : '';
   const stepInputSummary = workspace
     ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
     : missingNote

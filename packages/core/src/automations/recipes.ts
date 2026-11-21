@@ -387,11 +387,7 @@ function normalized(recipe: AutomationRecipe): AutomationRecipe {
  * `review-rounds`: the T3 Code fix and review steps before a fix got one review.
  * `before-same-fault`: the fix step before it looked for the same fault elsewhere in the code.
  */
-export const EARLIER_RECIPE_WORDS = [
-  'fix-in-a-new-thread',
-  'review-rounds',
-  'before-same-fault',
-] as const;
+export const EARLIER_RECIPE_WORDS = ['fix-in-a-new-thread', 'review-rounds', 'before-same-fault'] as const;
 export type EarlierRecipeWords = (typeof EARLIER_RECIPE_WORDS)[number];
 
 /**

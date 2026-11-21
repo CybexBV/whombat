@@ -365,7 +365,7 @@ export class MailTriggerService {
           height: number | null;
         };
       }[] = [];
-      const recordedAttachments: (typeof full.attachments[number] & {
+      const recordedAttachments: ((typeof full.attachments)[number] & {
         missingReason?: 'too_large' | 'unsupported_type' | 'download_failed' | 'too_many';
       })[] = [];
       for (let i = 0; i < full.attachments.length; i++) {

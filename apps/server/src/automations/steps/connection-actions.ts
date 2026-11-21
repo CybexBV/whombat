@@ -45,9 +45,7 @@ export async function executeConnectionActions({
   if (!approved || !asked) {
     const bulletLines = plan.actions
       .map((a) =>
-        a.summary
-          ? `• ${a.description}\n  Agent note: ${clipTitle(a.summary, 140)}`
-          : `• ${a.description}`,
+        a.summary ? `• ${a.description}\n  Agent note: ${clipTitle(a.summary, 140)}` : `• ${a.description}`,
       )
       .join('\n');
     const lead =
