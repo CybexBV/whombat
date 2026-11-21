@@ -17,6 +17,7 @@ import {
   type AgentEffort,
   type AgentModelFallback,
   type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentSetupStatus,
   modelOf,
   PROVIDER_LABELS,
@@ -166,7 +167,7 @@ export function createModelFixtures(): ModelFixtures {
   };
 
   /** The server's checks of a new model and effort (ME-04): the refusal's sentence, or null. */
-  const refusal = (runtime: AgentModelRuntime): string | null => {
+  const refusal = (runtime: AgentModelRuntimeUpdate): string | null => {
     if (runtime.provider !== 'claude' && runtime.provider !== 'codex') return null;
     const models = MODELS[runtime.provider];
     const model = modelOf(models, runtime.model);
@@ -185,7 +186,7 @@ export function createModelFixtures(): ModelFixtures {
       if (!m) return null;
       if (m.id === 'host.agents') return json(fixtureSetupStatus());
       if (m.id !== 'agent.update') return null;
-      const body = (await req.clone().json()) as { runtime?: AgentModelRuntime };
+      const body = (await req.clone().json()) as { runtime?: AgentModelRuntimeUpdate };
       const handle = WHOMBAT_HANDLE;
       // The name and the face are another layer's (the one-Whombat world's).
       if (!body.runtime) return null;
@@ -202,11 +203,17 @@ export function createModelFixtures(): ModelFixtures {
         );
       const before = stateOf(handle);
       const { provider, model, backgroundModel, effort, fast } = body.runtime;
+      const resolvedBg =
+        backgroundModel === undefined
+          ? provider === before.runtime.provider
+            ? before.runtime.backgroundModel
+            : undefined
+          : (backgroundModel ?? undefined);
       const tool = provider === 'local' ? null : MODELS[provider];
       const runtime: AgentModelRuntime = {
         provider,
         ...(model ? { model } : {}),
-        ...(backgroundModel ? { backgroundModel } : {}),
+        ...(resolvedBg ? { backgroundModel: resolvedBg } : {}),
         // A custom AI model takes no effort and has no fast replies.
         ...(effort && tool ? { effort } : {}),
         // Fast replies: kept where the model offers them, as the server does.

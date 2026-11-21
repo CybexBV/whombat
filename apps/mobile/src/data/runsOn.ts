@@ -28,7 +28,7 @@ import {
 import { SOURCE_TEXT } from '@whombat/client/signins';
 import {
   type AgentModelFallback,
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProvider,
   type AgentRuntime,
   type AgentSetupStatus,
@@ -109,7 +109,7 @@ export interface ModelEffortChoice {
   /** The model's own line, or what Automatic does. */
   detail: string | null;
   checked: boolean;
-  runtime: AgentModelRuntime;
+  runtime: AgentModelRuntimeUpdate;
 }
 
 export interface ModelEffortView {
@@ -126,7 +126,7 @@ export interface ModelEffortView {
     on: boolean;
     label: string;
     hint: string;
-    runtime: (on: boolean) => AgentModelRuntime;
+    runtime: (on: boolean) => AgentModelRuntimeUpdate;
   } | null;
   /** RUNS ON's line under the provider it is on (AP-2731): “Opus · High effort · Fast”; null for the defaults. */
   summary: string | null;
@@ -138,7 +138,7 @@ export interface ModelEffortView {
    * Local only (AP-5001): the model sheet's “Another model” field — its words and the whole model runtime a typed name
    * saves; null for Claude Code and ChatGPT.
    */
-  another: { label: string; hint: string; use: string; runtime: (name: string) => AgentModelRuntime } | null;
+  another: { label: string; hint: string; use: string; runtime: (name: string) => AgentModelRuntimeUpdate } | null;
 }
 
 /**

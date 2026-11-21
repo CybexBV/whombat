@@ -208,6 +208,27 @@ describe('agents.update (ME-01, ME-04)', () => {
       code: 'validation_failed',
       message: 'Claude Code has no model called “not-a-model” on this Whombat.',
     });
+    // An older app that omits backgroundModel on the same provider must keep it intact.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'opus', effort: 'high' },
+    });
+    expect(await runtimeOf(IDS.dusty)).toMatchObject({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: 'sonnet',
+      effort: 'high',
+    });
+    expect(await lastKeysLine(IDS.dusty)).not.toContain('background model');
+    // Explicit null clears backgroundModel back to “Same as the main model”.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'opus', backgroundModel: null, effort: 'high' },
+    });
+    expect(await lastKeysLine(IDS.dusty)).toBe('Set Dusty’s background model to Same as the main model');
+    expect(await runtimeOf(IDS.dusty)).not.toHaveProperty('backgroundModel');
+    // Switching provider still clears backgroundModel even when omitted.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'sonnet', effort: 'xhigh' },
+    });
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'codex' } });
     expect(await lastKeysLine(IDS.dusty)).toBe('Moved Dusty to codex');
     const runtime = await runtimeOf(IDS.dusty);

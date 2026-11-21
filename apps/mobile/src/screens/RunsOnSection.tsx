@@ -15,7 +15,7 @@
 import { gatewayRunsOn, localModelOf, problemText } from '@whombat/client';
 import { useAgentSetup, useSetAgentModel } from '@whombat/client/react';
 import {
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProfile,
   CHAT_RUNTIME_COPY,
   MODEL_EFFORT_COPY,
@@ -99,7 +99,10 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
       refused: (text) => setPickError(text),
     });
   };
-  const save = (runtime: AgentModelRuntime, then: { done: () => void; refused: (text: string) => void }) =>
+  const save = (
+    runtime: AgentModelRuntimeUpdate,
+    then: { done: () => void; refused: (text: string) => void },
+  ) =>
     update.mutate(
       { params: { burrow: slug }, body: { runtime } },
       {

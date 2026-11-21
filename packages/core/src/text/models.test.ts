@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentModelRuntime } from '../domain/agent.js';
+import { AgentModelRuntime, AgentModelRuntimeUpdate } from '../domain/agent.js';
 import type { ProviderModel } from '../domain/models.js';
 import {
   agentBackgroundModelChangeText,
@@ -63,6 +63,14 @@ describe('model and effort copy (CT-333)', () => {
       },
     );
     expect(AgentModelRuntime.safeParse({ provider: 'claude', backgroundModel: '' }).success).toBe(false);
+    expect(AgentModelRuntimeUpdate.parse({ provider: 'claude', backgroundModel: null })).toEqual({
+      provider: 'claude',
+      backgroundModel: null,
+    });
+    expect(AgentModelRuntimeUpdate.parse({ provider: 'claude', model: 'opus' })).toEqual({
+      provider: 'claude',
+      model: 'opus',
+    });
   });
 
   it('says where the model wasn’t available', () => {

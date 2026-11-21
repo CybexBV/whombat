@@ -8,7 +8,8 @@ import {
   AGENT_NAME_PATTERN,
   AGENT_NAME_RESERVED_TEXT,
   AgentFace,
-  AgentModelRuntime,
+  type AgentModelRuntime,
+  AgentModelRuntimeUpdate,
   type AgentRuntime,
   agentBackgroundModelChangeText,
   agentEffortChangeText,
@@ -426,7 +427,7 @@ export const updateAgent = defineCommand({
     /** One capitalised word, at most 24 letters; empty: Dusty. */
     name: z.string().trim().max(AGENT_NAME_MAX).optional(),
     face: AgentFace.optional(),
-    runtime: AgentModelRuntime.optional(),
+    runtime: AgentModelRuntimeUpdate.optional(),
   }),
   requiredKey: () => personChanges('change the agent'),
   async apply(tx, ctx, input) {
@@ -448,9 +449,21 @@ export const updateAgent = defineCommand({
       texts.push(`Changed ${shownName}’s face`);
     }
     const current = agentRuntimeOf(agent.runtime);
-    // The whole model runtime every time (model-effort.md ME-01): provider, model, effort. A model or an effort that
-    // isn't sent is the tool's default or automatic; a new provider's model and effort come in the same body.
-    const sent = input.runtime ? modelRuntime(input.runtime) : null;
+    // The whole model runtime every time (model-effort.md ME-01): provider, model, effort. Omitting `backgroundModel`
+    // on the same provider keeps the stored one so an older app never erases it; explicit `null` clears it back to
+    // “Same as the main model”.
+    const resolvedRuntime: z.output<typeof AgentModelRuntime> | null = input.runtime
+      ? {
+          ...input.runtime,
+          backgroundModel:
+            input.runtime.backgroundModel === undefined
+              ? input.runtime.provider === current.provider
+                ? current.backgroundModel
+                : undefined
+              : (input.runtime.backgroundModel ?? undefined),
+        }
+      : null;
+    const sent = resolvedRuntime ? modelRuntime(resolvedRuntime) : null;
     if (
       sent &&
       (sent.provider !== current.provider ||

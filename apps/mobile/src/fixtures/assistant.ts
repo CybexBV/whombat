@@ -37,7 +37,7 @@ import {
   AGENT_NAME_RESERVED_TEXT,
   type Agent,
   type AgentFace,
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProfile,
   type AgentRuntime,
   type Approval,
@@ -125,11 +125,18 @@ const HEAT_CONNECTION = 'con_heatpump';
 
 /**
  * An agent's runtime with another model runtime (ME-01): provider, model, effort and fast replies as given, the rest
- * (workdir, checkout, access) kept.
+ * (workdir, checkout, access) kept. Omitting `backgroundModel` on the same provider keeps it; explicit `null` clears it.
  */
-function withModelRuntime(runtime: AgentRuntime, model: AgentModelRuntime): AgentRuntime {
-  const { model: _m, effort: _e, fast: _f, ...rest } = runtime;
-  return { ...rest, ...model };
+function withModelRuntime(runtime: AgentRuntime, model: AgentModelRuntimeUpdate): AgentRuntime {
+  const { model: _m, backgroundModel: _bg, effort: _e, fast: _f, ...rest } = runtime;
+  const { backgroundModel, ...next } = model;
+  const resolvedBg =
+    backgroundModel === undefined
+      ? model.provider === runtime.provider
+        ? runtime.backgroundModel
+        : undefined
+      : (backgroundModel ?? undefined);
+  return { ...rest, ...next, ...(resolvedBg ? { backgroundModel: resolvedBg } : {}) };
 }
 
 /**
