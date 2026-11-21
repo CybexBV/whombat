@@ -317,3 +317,45 @@ describe('Ask before updating (Whombat ask-before-updating.md ABU-01, ABU-03)', 
     expect(askFirstView({ update: { ...base, askFirst: true } })).toMatchObject({ on: true });
   });
 });
+
+describe('Paused update channel', () => {
+  it('shows a calm paused row when healthy and keeps the last update row', () => {
+    const v = view({
+      ...base,
+      paused: true,
+      lastUpdate: { release: 'pve-20260928.6', from: 'pve-20260928.4', at: '2026-09-28T18:10:00Z' },
+    });
+    expect(v.rows).toEqual([
+      { dot: 'mut', title: 'Updates are paused for now.', meta: 'Software pve-20260928.6' },
+      { dot: 'ok', title: 'Updated to pve-20260928.6 on 28 September 2026', lastUpdate: true },
+    ]);
+    expect(v.pollMs).toBeNull();
+  });
+
+  it('replaces a held pre-activation state calmly without an install action or polling', () => {
+    const v = view({
+      ...base,
+      state: 'WaitingForSafeBoundary',
+      candidate: 'pve-20261116.1',
+      paused: true,
+      waiting: { reason: 'hold', since: '2026-09-29T11:02:00Z', blockers: [] },
+    });
+    expect(v.rows).toEqual([
+      { dot: 'mut', title: 'Updates are paused for now.', meta: 'Software pve-20260928.6' },
+    ]);
+    expect(v.pollMs).toBeNull();
+  });
+
+  it('keeps an activation in progress visible and polling while paused', () => {
+    const v = view({ ...base, state: 'Verifying', candidate: 'pve-20261116.1', paused: true });
+    expect(v.rows[0]).toMatchObject({ dot: 'mut', title: 'Checking the update' });
+    expect(v.pollMs).toBe(5_000);
+  });
+
+  it('keeps a rollback or failure row and notes that updates are paused', () => {
+    const v = view({ ...base, state: 'RolledBack', failure: 'health_check_failed', paused: true });
+    expect(v.rows[0]?.dot).toBe('bad');
+    expect(v.rows[1]).toEqual({ dot: 'mut', title: 'Updates are paused for now.' });
+    expect(v.pollMs).toBeNull();
+  });
+});

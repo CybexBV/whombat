@@ -343,6 +343,8 @@ type Status struct {
 	Warnings []string         `json:"warnings"`
 	// AssignmentKeys is the published control/assignment-keys.json document (nil: none yet).
 	AssignmentKeys *release.AssignmentKeys `json:"assignmentKeys"`
+	// PausedChannels names update channels currently carrying the pause marker.
+	PausedChannels []string `json:"pausedChannels,omitempty"`
 }
 
 // Warning thresholds for Status and Refresh.
@@ -365,6 +367,11 @@ func (r *Repo) Status() Status {
 	}, Releases: []ReleaseSummary{}, Warnings: []string{}}
 	if r.clients != nil {
 		s.Roles[trust.ClientsRole] = RoleState{r.clients.Signed.Version, r.clients.Signed.Expires}
+	}
+	for _, c := range trust.Channels {
+		if r.ChannelPaused(c) {
+			s.PausedChannels = append(s.PausedChannels, c)
+		}
 	}
 	if rs, err := r.PublishedReleases(); err != nil {
 		s.Warnings = append(s.Warnings, "release targets: "+err.Error())

@@ -772,6 +772,9 @@
             },
             "askFirst": {
               "type": "boolean"
+            },
+            "paused": {
+              "type": "boolean"
             }
           },
           "required": [

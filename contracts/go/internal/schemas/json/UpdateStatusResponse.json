@@ -54,6 +54,9 @@
     "hold": {
       "type": "boolean"
     },
+    "paused": {
+      "type": "boolean"
+    },
     "readOnly": {
       "type": "boolean"
     }

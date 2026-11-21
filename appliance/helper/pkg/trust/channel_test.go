@@ -1,14 +1,22 @@
 package trust_test
 
 import (
+	"crypto"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CybexBV/whombat/appliance/helper/pkg/trust"
 	"github.com/CybexBV/whombat/appliance/release-tools/devtuf"
+	"github.com/sigstore/sigstore/pkg/signature"
+	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
 
 func channelCfg(r *devtuf.Repo, cache string, c *clock, channel string) trust.Config {
@@ -235,5 +243,210 @@ func TestChannelRoleCached(t *testing.T) {
 	}
 	if _, err := trust.Refresh(channelCfg(r, cache, c, trust.ChannelDevelopment)); err != nil {
 		t.Fatalf("after a torn cached role: %v", err)
+	}
+}
+
+func resignRole[T metadata.Roles](t *testing.T, md *metadata.Metadata[T], key ed25519.PrivateKey) {
+	t.Helper()
+	s, err := signature.LoadSigner(key, crypto.Hash(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md.ClearSignatures()
+	if _, err := md.Sign(s); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// copyDir copies one flat metadata or cache directory so a test can mutate a copy without touching the repository.
+func copyFlatDir(t *testing.T, src string) string {
+	t.Helper()
+	dst := t.TempDir()
+	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+// writeSnapshotAndTimestamp re-signs snapshot and timestamp over the updated channel version in dir.
+func writeSnapshotAndTimestamp(t *testing.T, dir string, snapKey, tsKey ed25519.PrivateKey, channel string, chVersion int64) {
+	t.Helper()
+	ts, err := metadata.Timestamp().FromFile(filepath.Join(dir, "timestamp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv := ts.Signed.Meta["snapshot.json"].Version
+	snap, err := metadata.Snapshot().FromFile(filepath.Join(dir, fmt.Sprintf("%d.snapshot.json", sv)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap.Signed.Version = sv + 1
+	snap.Signed.Meta[channel+".json"] = metadata.MetaFile(chVersion)
+	resignRole(t, snap, snapKey)
+	snapPath := filepath.Join(dir, fmt.Sprintf("%d.snapshot.json", sv+1))
+	if err := snap.ToFile(snapPath, true); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(b)
+	mf := metadata.MetaFile(sv + 1)
+	mf.Length, mf.Hashes = int64(len(b)), metadata.Hashes{"sha256": sum[:]}
+	ts.Signed.Version++
+	ts.Signed.Meta["snapshot.json"] = mf
+	resignRole(t, ts, tsKey)
+	if err := ts.ToFile(filepath.Join(dir, "timestamp.json"), true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChannelPauseResumeExpiryAndWrongKey(t *testing.T) {
+	c := &clock{t0}
+	r := newChannelRepo(t, c)
+	addIn(t, r, trust.ChannelDevelopment, devtuf.StandardRelease("whombat-20261121.1", "26.06.1", "2.0.0"))
+	addIn(t, r, trust.ChannelDevelopment, devtuf.StandardRelease("whombat-20261121.2", "26.06.2", "2.1.0"))
+	if _, err := r.Promote("whombat-20261121.1", trust.ChannelDevelopment, trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Promote("whombat-20261121.2", trust.ChannelDevelopment, trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	prodCache := t.TempDir()
+	prod, err := trust.Refresh(channelCfg(r, prodCache, c, trust.ChannelProduction))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prod.ChannelPaused {
+		t.Fatal("fresh channel reported paused")
+	}
+	if got, err := prod.NewestRelease("", nil, ""); err != nil || got == nil || got.ID() != "whombat-20261121.2" {
+		t.Fatalf("newest before pause: %+v %v", got, err)
+	}
+
+	// Pause production: NewestRelease returns nil, releases stay listed for rollback, development stays unpaused.
+	res, err := r.PauseChannel(trust.ChannelProduction, nil)
+	if err != nil || !res.Paused || res.Already {
+		t.Fatalf("pause: %+v %v", res, err)
+	}
+	prod, err = trust.Refresh(channelCfg(r, prodCache, c, trust.ChannelProduction))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prod.ChannelPaused {
+		t.Fatal("paused channel did not set ChannelPaused")
+	}
+	if got, err := prod.NewestRelease("", nil, ""); err != nil || got != nil {
+		t.Fatalf("paused channel offered %+v %v", got, err)
+	}
+	if got, err := prod.NewestListedRelease("", nil, ""); err != nil || got == nil || got.ID() != "whombat-20261121.2" {
+		t.Fatalf("paused channel newest listed: %+v %v", got, err)
+	}
+	if _, err := prod.Release("whombat-20261121.1"); err != nil {
+		t.Fatalf("paused channel hid previous release for rollback: %v", err)
+	}
+	dev, err := trust.Refresh(channelCfg(r, t.TempDir(), c, trust.ChannelDevelopment))
+	if err != nil || dev.ChannelPaused {
+		t.Fatalf("pausing production affected development: paused=%v err=%v", dev != nil && dev.ChannelPaused, err)
+	}
+
+	// Resume production: NewestRelease works again and unpaused metadata omits the whombat marker.
+	rres, err := r.ResumeChannel(trust.ChannelProduction, nil)
+	if err != nil || rres.Paused || rres.Already {
+		t.Fatalf("resume: %+v %v", rres, err)
+	}
+	raw, err := os.ReadFile(filepath.Join(r.MetadataDir(), fmt.Sprintf("%d.production.json", rres.Version)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"paused"`) {
+		t.Fatalf("resumed production role still carries paused marker: %s", raw)
+	}
+	prod, err = trust.Refresh(channelCfg(r, prodCache, c, trust.ChannelProduction))
+	if err != nil || prod.ChannelPaused {
+		t.Fatalf("after resume: paused=%v err=%v", prod != nil && prod.ChannelPaused, err)
+	}
+	if got, err := prod.NewestRelease("", nil, ""); err != nil || got == nil || got.ID() != "whombat-20261121.2" {
+		t.Fatalf("newest after resume: %+v %v", got, err)
+	}
+
+	// Wrong key: a pause on production signed with the development key or an unknown key is rejected.
+	snapKey, err := devtuf.ReadKeyFile(filepath.Join(r.Dir, "keys", "snapshot-0.json"), "snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsKey, err := devtuf.ReadKeyFile(filepath.Join(r.Dir, "keys", "timestamp-0.json"), "timestamp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, foreignKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, badKey := range map[string]ed25519.PrivateKey{
+		"development key": r.ChannelKey(trust.ChannelDevelopment),
+		"unknown key":     foreignKey,
+	} {
+		dir := copyFlatDir(t, r.MetadataDir())
+		v := r.RoleVersions()[trust.ChannelProduction]
+		md, err := metadata.Targets().FromFile(filepath.Join(dir, fmt.Sprintf("%d.production.json", v)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		md.Signed.Version = v + 1
+		trust.SetChannelPaused(md, true)
+		resignRole(t, md, badKey)
+		if err := md.ToFile(filepath.Join(dir, fmt.Sprintf("%d.production.json", v+1)), true); err != nil {
+			t.Fatal(err)
+		}
+		writeSnapshotAndTimestamp(t, dir, snapKey, tsKey, trust.ChannelProduction, v+1)
+		badCfg := trust.Config{
+			PinnedRoot: r.InitialRoot(), MetadataDir: copyFlatDir(t, prodCache), MetadataURL: "m://x",
+			Fetcher: trust.DirFetcher{BaseURL: "m://x", Dir: dir}, Now: c.t, Channel: trust.ChannelProduction,
+		}
+		if _, err := trust.Refresh(badCfg); !errors.Is(err, trust.ErrSignature) {
+			t.Fatalf("%s: want ErrSignature, got %v", name, err)
+		}
+	}
+
+	// Expired pause metadata: rejected with ErrExpired.
+	expDir := copyFlatDir(t, r.MetadataDir())
+	v := r.RoleVersions()[trust.ChannelProduction]
+	md, err := metadata.Targets().FromFile(filepath.Join(expDir, fmt.Sprintf("%d.production.json", v)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md.Signed.Version = v + 1
+	md.Signed.Expires = c.t.Add(-time.Hour)
+	trust.SetChannelPaused(md, true)
+	resignRole(t, md, r.ChannelKey(trust.ChannelProduction))
+	if err := md.ToFile(filepath.Join(expDir, fmt.Sprintf("%d.production.json", v+1)), true); err != nil {
+		t.Fatal(err)
+	}
+	writeSnapshotAndTimestamp(t, expDir, snapKey, tsKey, trust.ChannelProduction, v+1)
+	expCfg := trust.Config{
+		PinnedRoot: r.InitialRoot(), MetadataDir: copyFlatDir(t, prodCache), MetadataURL: "m://x",
+		Fetcher: trust.DirFetcher{BaseURL: "m://x", Dir: expDir}, Now: c.t, Channel: trust.ChannelProduction,
+	}
+	if _, err := trust.Refresh(expCfg); !errors.Is(err, trust.ErrExpired) {
+		t.Fatalf("expired pause metadata: want ErrExpired, got %v", err)
+	}
+
+	// Rollback protection: once a box verified a paused channel version, replaying an older unpaused snapshot/role fails.
+	unpausedMeta := copyFlatDir(t, r.MetadataDir())
+	if _, err := r.PauseChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	if paused, err := trust.Refresh(channelCfg(r, prodCache, c, trust.ChannelProduction)); err != nil || !paused.ChannelPaused {
+		t.Fatalf("refresh paused before rollback test: paused=%v err=%v", paused != nil && paused.ChannelPaused, err)
+	}
+	replayCfg := trust.Config{
+		PinnedRoot: r.InitialRoot(), MetadataDir: copyFlatDir(t, prodCache), MetadataURL: "m://x",
+		Fetcher: trust.DirFetcher{BaseURL: "m://x", Dir: unpausedMeta}, Now: c.t, Channel: trust.ChannelProduction,
+	}
+	if _, err := trust.Refresh(replayCfg); !errors.Is(err, trust.ErrRollback) {
+		t.Fatalf("replaying older unpaused metadata: want ErrRollback, got %v", err)
 	}
 }

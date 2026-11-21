@@ -319,6 +319,9 @@ func (h *Helper) newest(st *State, repo *trust.Repo, rel *trust.Release) *proto.
 			return nil
 		}
 	}
+	if repo.ChannelPaused {
+		return fail(proto.CodeNotAssigned, "the %s channel is paused", repo.Channel)
+	}
 	n, err := repo.NewestRelease(curID, v, curDigest)
 	if err != nil {
 		return trustErr(err)

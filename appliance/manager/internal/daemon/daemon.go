@@ -220,7 +220,7 @@ func New(cfg *config.Config, recovery bool, log *slog.Logger) (*Daemon, error) {
 		Host:           hostinfo.Host{BootIDPath: cfg.Host.BootIDPath, CurrentSystemLink: cfg.Host.CurrentSystem},
 		Staging:        &tufclient.Downloader{StagingDir: cfg.StagingDir, Source: tufclient.HTTPSource{BaseURL: cfg.TUF.TargetsURL, Client: &http.Client{Timeout: 2 * time.Hour}, Layout: cfg.TUF.TargetsLayout}, Space: tufclient.StatfsSpace{}, ReserveBytes: cfg.ReserveBytes},
 		AssignmentPath: cfg.AssignmentPath, Policy: update.DefaultPolicy(), RecoveryMode: recovery, Log: log,
-		Refresh:      func(ctx context.Context) error { _, err := d.TUF.Refresh(ctx); return err },
+		Refresh:      func(ctx context.Context) error { _, err := d.refreshTUF(ctx); return err },
 		OnTransition: func(st update.State) { d.onTransition(st) },
 		Channel:      d.Channel.Current,
 	}
@@ -296,7 +296,7 @@ func New(cfg *config.Config, recovery bool, log *slog.Logger) (*Daemon, error) {
 					return r, nil
 				}
 			}
-			return d.TUF.Refresh(ctx)
+			return d.refreshTUF(ctx)
 		}
 		src := tufclient.HTTPSource{BaseURL: cfg.TUF.TargetsURL, Client: &http.Client{Timeout: time.Hour}, Layout: cfg.TUF.TargetsLayout}
 		d.Clients, err = clients.New(clients.Config{Root: cfg.Clients.Root, StateDir: cfg.Clients.StateDir, KeysFile: cfg.Clients.ChannelKeys,
@@ -660,13 +660,42 @@ func (d *Daemon) engineLoop(ctx context.Context) {
 	}
 }
 
+// refreshTUF refreshes TUF metadata and records the verified channel pause state in the journal.
+// A failed refresh (wrong key, expired metadata, outage) leaves the previous state untouched.
+func (d *Daemon) refreshTUF(ctx context.Context) (*trust.Repo, error) {
+	repo, err := d.TUF.Refresh(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d.syncChannelPause(repo)
+	return repo, nil
+}
+
+func (d *Daemon) syncChannelPause(repo *trust.Repo) {
+	if repo == nil || repo.Channel == "" || d.Engine == nil {
+		return
+	}
+	wasPaused := false
+	if st, err := d.Engine.Load(); err == nil {
+		wasPaused = st.ChannelPaused
+	}
+	if err := d.Engine.SetChannelPaused(repo.ChannelPaused); err != nil {
+		d.warnOnce("channel pause state not recorded", err)
+		return
+	}
+	if wasPaused != repo.ChannelPaused {
+		d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", repo.ChannelPaused)
+		d.wakeEngine()
+	}
+}
+
 // tufLoop refreshes metadata periodically. Failures never touch the installed release.
 func (d *Daemon) tufLoop(ctx context.Context) {
 	every := config.Seconds(d.Cfg.RefreshSec, time.Hour)
 	bo := &Backoff{Base: time.Minute, Max: every}
 	for ctx.Err() == nil {
 		wait := jitter(every)
-		if repo, err := d.TUF.Refresh(ctx); err != nil {
+		if repo, err := d.refreshTUF(ctx); err != nil {
 			d.warnOnce("TUF refresh failed; the installed release keeps running", err)
 			wait = bo.Next()
 		} else {
@@ -750,7 +779,7 @@ type checkReply struct {
 func (d *Daemon) CheckNow(ctx context.Context) (*broker.CheckResult, error) {
 	if d.newestUpdates() {
 		// A community box (MG-136): its own repository, refreshed now, and its newest release offered.
-		repo, err := d.TUF.Refresh(ctx)
+		repo, err := d.refreshTUF(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("the update repository: %w", err)
 		}

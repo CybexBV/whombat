@@ -1,12 +1,15 @@
 package broker_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/CybexBV/whombat/appliance/manager/internal/broker"
 	"github.com/CybexBV/whombat/appliance/manager/internal/runtimeapi"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
 	"github.com/CybexBV/whombat/appliance/manager/internal/update"
+	"github.com/CybexBV/whombat/contracts/go/local"
 	"github.com/CybexBV/whombat/contracts/go/release"
 )
 
@@ -55,5 +58,41 @@ func TestUpdateFactsTellTheOwner(t *testing.T) {
 	w.NewEngine()
 	if f, _ := factsOf(t, w.State()); f.LastUpdate == nil || f.LastUpdate.Release != testworld.RuntimeGood {
 		t.Fatalf("after restart %+v", f.LastUpdate)
+	}
+}
+
+func TestPausedChannelFactsAndStatus(t *testing.T) {
+	t.Parallel()
+	w := testworld.New(t)
+	if f, body := factsOf(t, w.State()); f.Paused != nil || strings.Contains(body, `"paused"`) {
+		t.Fatalf("unpaused facts should omit paused: %s", body)
+	}
+	if err := w.Engine.SetChannelPaused(true); err != nil {
+		t.Fatal(err)
+	}
+	f, body := factsOf(t, w.State())
+	if f.Paused == nil || !*f.Paused {
+		t.Fatalf("paused facts missing paused=true: %s", body)
+	}
+	st := broker.StatusOf(w.State())
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := local.ParseUpdateStatusResponse(b); err != nil {
+		t.Fatalf("paused status violates contract: %v %s", err, b)
+	}
+	if st.Paused == nil || !*st.Paused || st.Explanation == nil || *st.Explanation != "Updates are paused for now." {
+		t.Fatalf("paused status: %+v", st)
+	}
+	if err := w.Engine.SetChannelPaused(false); err != nil {
+		t.Fatal(err)
+	}
+	if f, body := factsOf(t, w.State()); f.Paused != nil || strings.Contains(body, `"paused"`) {
+		t.Fatalf("resumed facts should omit paused: %s", body)
+	}
+	resumed := broker.StatusOf(w.State())
+	if resumed.Paused != nil || resumed.Explanation != nil {
+		t.Fatalf("resumed status: %+v", resumed)
 	}
 }

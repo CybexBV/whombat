@@ -212,3 +212,47 @@ func TestChannelSurvivesAnOlderHelper(t *testing.T) {
 		t.Fatalf("from state.json: %q", got)
 	}
 }
+
+func TestPausedChannelBlocksNewActivationAllowsRollbackAndResume(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.channels(trust.ChannelProduction)
+	w.addIn(trust.ChannelDevelopment, devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "2.0.0"))
+	w.addIn(trust.ChannelDevelopment, devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "2.1.0"))
+	w.addIn(trust.ChannelDevelopment, devtuf.StandardRelease("whombat-20261121.3", "26.05.1", "2.2.0"))
+	w.promote("whombat-20261121.1")
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.1"); perr != nil {
+		t.Fatal(perr)
+	}
+	// Promote .2 and activate it so .1 is the previous runtime for rollback.
+	w.promote("whombat-20261121.2")
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.2"); perr != nil {
+		t.Fatal(perr)
+	}
+	// Promote .3, then pause production: .3 must be refused, re-activating installed .2 still works, and rolling back
+	// from .2 to .1 still works because listed releases remain intact.
+	w.promote("whombat-20261121.3")
+	if _, err := w.repo.PauseChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.3"); code(perr) != proto.CodeNotAssigned {
+		t.Fatalf("paused channel activated newer release: %v", perr)
+	}
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.2"); perr != nil {
+		t.Fatalf("re-activating installed release while paused failed: %v", perr)
+	}
+	if res, perr := w.do(proto.OpRollbackRuntime, "whombat-20261121.2"); perr != nil || res.ReleaseID != "whombat-20261121.1" {
+		t.Fatalf("rollback while paused failed: %+v %v", res, perr)
+	}
+	// After rollback to .1, production is still paused so .3 is still refused (and no downgrade occurs).
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.3"); code(perr) != proto.CodeNotAssigned {
+		t.Fatalf("paused channel activated .3 after rollback: %v", perr)
+	}
+	// Resuming production allows activating .3.
+	if _, err := w.repo.ResumeChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	if perr := w.activateIn(trust.ChannelProduction, "whombat-20261121.3"); perr != nil {
+		t.Fatalf("activation after resume failed: %v", perr)
+	}
+}

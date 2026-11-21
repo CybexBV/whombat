@@ -191,6 +191,7 @@ func retry[T any](f func() (T, error)) (T, error) {
 // steps (SR-13).
 type foreign struct {
 	Hold              bool
+	ChannelPaused     bool
 	AskFirst          bool
 	Approved          string
 	Lock              *Lock
@@ -205,7 +206,7 @@ type foreign struct {
 }
 
 func foreignOf(st *State) foreign {
-	f := foreign{Hold: st.Hold, AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
+	f := foreign{Hold: st.Hold, ChannelPaused: st.ChannelPaused, AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
 		LastAssignmentSeq: st.LastAssignmentSeq, LastOffer: st.LastOffer, TimeFloor: st.TimeFloor}
 	if c := st.Candidate; c != nil {
 		f.AssignmentSeq, f.NotBefore, f.AssignmentRaw = c.AssignmentSeq, c.NotBefore, c.AssignmentRaw
@@ -214,7 +215,7 @@ func foreignOf(st *State) foreign {
 }
 
 func setForeign(st *State, f foreign) {
-	st.Hold, st.AskFirst, st.Approved = f.Hold, f.AskFirst, f.Approved
+	st.Hold, st.ChannelPaused, st.AskFirst, st.Approved = f.Hold, f.ChannelPaused, f.AskFirst, f.Approved
 	st.Lock, st.Pending, st.LastAssignmentSeq, st.TimeFloor = f.Lock, f.Pending, f.LastAssignmentSeq, f.TimeFloor
 	st.LastOffer = f.LastOffer
 	if c := st.Candidate; c != nil {
@@ -689,6 +690,33 @@ func (e *Engine) setHold(hold bool) error {
 	return e.persist(st, st.Phase, fmt.Sprintf("hold=%v", hold))
 }
 
+// SetChannelPaused records whether the box's update channel currently carries the signed TUF pause marker.
+func (e *Engine) SetChannelPaused(paused bool) error {
+	_, err := retry(func() (struct{}, error) { return struct{}{}, e.setChannelPaused(paused) })
+	return err
+}
+
+func (e *Engine) setChannelPaused(paused bool) error {
+	st, err := e.Load()
+	if err != nil {
+		return err
+	}
+	if st.ChannelPaused == paused {
+		return nil
+	}
+	st.ChannelPaused = paused
+	note := "channel resumed"
+	if paused {
+		note = "channel paused"
+	}
+	return e.persist(st, st.Phase, note)
+}
+
+// channelPaused reports whether a candidate belongs to a channel that is currently paused.
+func channelPaused(st *State, c *Candidate) bool {
+	return st.ChannelPaused && c != nil && c.Channel != ""
+}
+
 // SetAskFirst turns the owner's “Ask before updating” on or off (the runtime, for the owner: Whombat
 // ask-before-updating.md). On, every candidate waits for the owner's approval before it activates; off, one that
 // waits goes ahead at its next step, as any update does.
@@ -726,7 +754,7 @@ func (e *Engine) approve(id string) error {
 		return err
 	}
 	c := st.Candidate
-	if c == nil || c.Deferral == nil || c.Deferral.Waiting != "owner" || (st.Phase != Staged && st.Phase != WaitingForSafeBoundary) {
+	if channelPaused(st, c) || c == nil || c.Deferral == nil || c.Deferral.Waiting != "owner" || (st.Phase != Staged && st.Phase != WaitingForSafeBoundary) {
 		return ErrNotWaiting
 	}
 	if c.Tuple.ReleaseID != id {
@@ -925,7 +953,7 @@ func (e *Engine) steady(ctx context.Context, st *State) (time.Duration, error) {
 			return 0, e.quarantine(ctx, st, c.Failure.Code, fmt.Sprintf("%s after %d attempts: %s", c.Failure.Code, c.Attempts, c.Failure.Message))
 		}
 		if st.Pending == nil {
-			if st.Hold {
+			if st.Hold || channelPaused(st, c) {
 				return e.Policy.IdleInterval, nil
 			}
 			if wait := c.Failure.NextRetry.Sub(e.now()); wait > 0 {
@@ -937,6 +965,9 @@ func (e *Engine) steady(ctx context.Context, st *State) (time.Duration, error) {
 	}
 	if st.Pending != nil {
 		p := st.Pending
+		if st.ChannelPaused && p.Channel != "" {
+			return e.Policy.IdleInterval, nil
+		}
 		if q, ok := st.Quarantine[p.Release.Tuple.ReleaseID]; ok && q.Digest == p.Release.Digest {
 			st.Pending = nil
 			st.LastRefusal = "queued assignment names a quarantined release"
@@ -1031,7 +1062,7 @@ func (e *Engine) afterVerificationFailure(ctx context.Context, st *State) (bool,
 		c.AssignmentRaw = p.Raw
 		return true, 0, e.persist(st, RolledBack, "control assigned "+id+" again")
 	}
-	if !c.Reassigned || st.Hold {
+	if !c.Reassigned || st.Hold || channelPaused(st, c) {
 		return true, e.Policy.IdleInterval, nil // control decides; it holds such a device
 	}
 	if wait := c.Failure.At.Add(e.Policy.VerifyRetryDelay).Sub(e.now()); wait > 0 {
@@ -1043,6 +1074,9 @@ func (e *Engine) afterVerificationFailure(ctx context.Context, st *State) (bool,
 
 func (e *Engine) assigned(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	arts, _, err := e.plan(ctx, c)
 	if err != nil {
 		if failed, ferr := e.planFailure(st, Assigned, err); failed {
@@ -1062,6 +1096,9 @@ func (e *Engine) assigned(ctx context.Context, st *State) (time.Duration, error)
 // downloading plans again (idempotent: what is staged or already in the store is skipped) and downloads what is left.
 func (e *Engine) downloading(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	arts, plans, err := e.plan(ctx, c)
 	if err != nil {
 		if failed, ferr := e.planFailure(st, Downloading, err); failed {
@@ -1136,6 +1173,9 @@ func (e *Engine) retryHelper(ctx context.Context, err error) time.Duration {
 
 func (e *Engine) verified(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	op := proto.OpStageRuntime
 	if c.Class == ClassHost {
 		op = proto.OpStageHost
@@ -1312,7 +1352,7 @@ func (e *Engine) retireOffChannel(st *State) (bool, error) {
 // maintenance lock, or the assignment's notBefore (maintenance window). Only a candidate on its way to activation asks:
 // a rollback to known-good and an activation already under way never come here.
 func (e *Engine) blocked(st *State) (string, time.Duration) {
-	if st.Hold {
+	if st.Hold || channelPaused(st, st.Candidate) {
 		return "hold", e.Policy.IdleInterval
 	}
 	if st.AskFirst && st.Approved != st.Candidate.Tuple.ReleaseID {
@@ -1330,6 +1370,9 @@ func (e *Engine) blocked(st *State) (string, time.Duration) {
 func (e *Engine) explainWait(st *State, why string) string {
 	switch why {
 	case "hold":
+		if channelPaused(st, st.Candidate) {
+			return "Updates are paused for now."
+		}
 		return "Update staged; the rollout is on hold (pause or emergency stop). The installed release keeps running."
 	case "owner":
 		return "Update staged; it waits for the owner to approve it (ask before updating is on). The installed release keeps running."
@@ -1480,6 +1523,11 @@ func (e *Engine) atBoundary(ctx context.Context, st *State) (time.Duration, erro
 			d.Explanation = fmt.Sprintf("Update metadata could not be refreshed (%v); the installed release keeps running and the update retries at the next window.", err)
 			d.WindowStart = e.now().Add(-e.Policy.DrainWindow)
 			return e.endWindowIfDue(ctx, st, true)
+		}
+		if cur, lerr := e.Load(); lerr == nil && channelPaused(cur, c) {
+			// Fresh metadata paused this channel right before activation: release the drain and let waiting() record the pause hold.
+			_ = e.Runtime.Resume(ctx, c.DrainRequestID)
+			return 0, nil
 		}
 	}
 	if s := c.Schema; s != nil && s.NeedsMigration && len(s.NeedsCheckpoint) > 0 && !e.checkpointFresh(c) {
@@ -2140,7 +2188,7 @@ func (e *Engine) failed(ctx context.Context, st *State) (time.Duration, error) {
 	if f.CountsAttempt && c.Attempts >= e.Policy.MaxAttempts && !release.IsRetryableUpdateFailure(f.Code) {
 		return 0, e.quarantine(ctx, st, f.Code, fmt.Sprintf("%s after %d attempts: %s", f.Code, c.Attempts, f.Message))
 	}
-	if st.Hold {
+	if st.Hold || channelPaused(st, c) {
 		return e.Policy.IdleInterval, nil
 	}
 	if wait := f.NextRetry.Sub(now); wait > 0 {

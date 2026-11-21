@@ -7,6 +7,10 @@ package main
 //	        repository's keys, the production key only when --production-key-out is not given (else written there)
 //	tufrepo promote --dir D --release ID [--key-file F]
 //	        list a development release, unchanged, in production (F: the offline production key)
+//	tufrepo pause --dir D [--channel production|development] [--key-file F]
+//	        sign the pause marker into the channel's own role metadata so boxes stop taking new releases from it
+//	tufrepo resume --dir D [--channel production|development] [--key-file F]
+//	        clear the pause marker from the channel's own role metadata so boxes resume taking releases from it
 //	tufrepo gh-continue --from SRC --out D --keys-dir K --offline-keys-dir O --carry ID,… [--from-keys-dir S] [--version-gap N]
 //	        the GitHub repository from a COPY of DEV's (never the live one): root chain and versions carried on,
 //	        channel roles added; K keeps the online keys (root, targets, development, clients), O receives the
@@ -19,6 +23,10 @@ package main
 //	        publish a release directory into development: blobs → release assets → role metadata (git push)
 //	tufrepo gh-promote --dir D --release ID [--key-file F] promote and push (nothing is uploaded again); the production
 //	        key from F, else the repository's own (online since the key ceremony, ONE-05)
+//	tufrepo gh-pause --dir D [--channel production|development] [--key-file F]
+//	        pause the channel and push its signed role metadata (nothing is uploaded)
+//	tufrepo gh-resume --dir D [--channel production|development] [--key-file F]
+//	        resume the channel and push its signed role metadata (nothing is uploaded)
 //	tufrepo gh-rotate --dir D --offline-keys-dir O [--production-key-file F] [--local]
 //	        the key ceremony (ONE-05, devtuf/rotate.go): a new root signed by the current root keys and three new ones
 //	        (two of them sign the next), a new top-level targets key, the targets signed again; the new keys and a copy
@@ -57,8 +65,9 @@ import (
 	"github.com/CybexBV/whombat/appliance/release-tools/ghpublish"
 )
 
-var githubCommands = map[string]bool{"add-channels": true, "promote": true, "gh-continue": true, "gh-init": true, "gh-publish": true,
-	"gh-promote": true, "gh-clients": true, "gh-resign": true, "gh-expiry": true, "gh-rotate": true, "gh-clients-env": true}
+var githubCommands = map[string]bool{"add-channels": true, "promote": true, "pause": true, "resume": true,
+	"gh-continue": true, "gh-init": true, "gh-publish": true, "gh-promote": true, "gh-pause": true, "gh-resume": true,
+	"gh-clients": true, "gh-resign": true, "gh-expiry": true, "gh-rotate": true, "gh-clients-env": true}
 
 func runGitHub(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
@@ -72,7 +81,8 @@ func runGitHub(cmd string, args []string) error {
 	carry := fs.String("carry", "", "gh-continue: release ids listed in development unchanged (the boxes' release before the bridge, the bridge)")
 	prodOut := fs.String("production-key-out", "", "add-channels: write the production key here instead of keeping it")
 	rel := fs.String("release", "", "release id")
-	keyFile := fs.String("key-file", "", "the production key file (offline)")
+	channel := fs.String("channel", trust.ChannelProduction, "pause, resume, gh-pause, gh-resume: update channel (production or development)")
+	keyFile := fs.String("key-file", "", "channel signing key file (when not kept in the repository)")
 	prodKeyFile := fs.String("production-key-file", "", "gh-rotate: the production key, when the repository doesn't hold it")
 	local := fs.Bool("local", false, "gh-rotate: sign in --dir only, push nothing (a copy, a rehearsal)")
 	check := fs.Bool("check", false, "gh-rotate: what a ceremony would do, from the public metadata")
@@ -100,12 +110,13 @@ func runGitHub(cmd string, args []string) error {
 		return ghpublish.New(ghpublish.Config{Dir: *dir, Owner: *owner, Repo: *repo, APIURL: *api, Token: tok, Branch: *branch,
 			Log: func(f string, a ...any) { fmt.Fprintf(os.Stderr, "gh: "+f+"\n", a...) }})
 	}
-	productionKey := func() (devtufKey, error) {
+	channelKey := func(ch string) (devtufKey, error) {
 		if *keyFile == "" {
 			return nil, nil
 		}
-		return devtuf.ReadKeyFile(*keyFile, trust.ChannelProduction)
+		return devtuf.ReadKeyFile(*keyFile, ch)
 	}
+	productionKey := func() (devtufKey, error) { return channelKey(trust.ChannelProduction) }
 	switch cmd {
 	case "add-channels":
 		unlock, err := devtuf.Lock(*dir, time.Minute)
@@ -143,6 +154,33 @@ func runGitHub(cmd string, args []string) error {
 			return err
 		}
 		res, err := r.Promote(*rel, trust.ChannelDevelopment, trust.ChannelProduction, k)
+		if err != nil {
+			return err
+		}
+		return printJSON(res)
+	case "pause", "resume":
+		if !trust.ValidChannel(*channel) {
+			return fmt.Errorf("unknown channel %q (use %s)", *channel, strings.Join(trust.Channels, " or "))
+		}
+		unlock, err := devtuf.Lock(*dir, time.Minute)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		r, err := devtuf.Load(*dir, devtuf.Options{})
+		if err != nil {
+			return err
+		}
+		k, err := channelKey(*channel)
+		if err != nil {
+			return err
+		}
+		var res *devtuf.ChannelPauseResult
+		if cmd == "pause" {
+			res, err = r.PauseChannel(*channel, k)
+		} else {
+			res, err = r.ResumeChannel(*channel, k)
+		}
 		if err != nil {
 			return err
 		}
@@ -199,6 +237,31 @@ func runGitHub(cmd string, args []string) error {
 			return err
 		}
 		return printJSON(res)
+	case "gh-pause", "gh-resume":
+		if !trust.ValidChannel(*channel) {
+			return fmt.Errorf("unknown channel %q (use %s)", *channel, strings.Join(trust.Channels, " or "))
+		}
+		p, err := publisher()
+		if err != nil {
+			return err
+		}
+		k, err := channelKey(*channel)
+		if err != nil {
+			return err
+		}
+		var (
+			res *ghpublish.Result
+			pr  *devtuf.ChannelPauseResult
+		)
+		if cmd == "gh-pause" {
+			res, pr, err = p.PauseChannel(ctx, *channel, k)
+		} else {
+			res, pr, err = p.ResumeChannel(ctx, *channel, k)
+		}
+		if err != nil {
+			return err
+		}
+		return printJSON(map[string]any{"github": res, "channel": pr})
 	case "gh-rotate":
 		if *check {
 			plan, err := devtuf.PlanRotation(filepath.Join(*dir, "metadata"))

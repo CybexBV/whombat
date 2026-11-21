@@ -447,3 +447,119 @@ func checkOldKeysRefused(t *testing.T, srcKeys, keys, offline, meta string, pinn
 		t.Fatalf("the same change signed by the new targets key: %v", err)
 	}
 }
+
+func TestChannelPauseResumePreservedAcrossPromoteAndResign(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	src := devLike(t, clock)
+	pinned := src.InitialRoot()
+	base := t.TempDir()
+	out, keys, offline := filepath.Join(base, "whombat-releases"), filepath.Join(base, "keys"), filepath.Join(base, "offline")
+	if _, err := devtuf.Continue(src.Dir, out, devtuf.ContinueOptions{KeysDir: keys, OfflineKeysDir: offline, VersionGap: 1000, Now: clock}); err != nil {
+		t.Fatal(err)
+	}
+	meta := filepath.Join(out, "metadata")
+	snapKey, err := devtuf.ReadKeyFile(filepath.Join(offline, "snapshot.json"), "snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsKey, err := devtuf.ReadKeyFile(filepath.Join(offline, "timestamp.json"), "timestamp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prodKey, err := devtuf.ReadKeyFile(filepath.Join(offline, "production.json"), "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Publish two releases to development and promote the first to production.
+	gh, err := devtuf.Load(out, devtuf.Options{Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gh.InChannel(trust.ChannelDevelopment)
+	for _, f := range []devtuf.FakeRelease{
+		devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "2.0.0"),
+		devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "2.1.0"),
+	} {
+		if _, err := gh.AddFakeRelease(f); err != nil {
+			t.Fatal(err)
+		}
+		if err := gh.Publish(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gh.InChannel("")
+	if _, err := gh.Promote("whombat-20261121.1", trust.ChannelDevelopment, trust.ChannelProduction, prodKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wrong key or missing offline key is refused even when already in the requested state.
+	if _, err := gh.PauseChannel(trust.ChannelProduction, nil); err == nil {
+		t.Fatal("paused production without its offline key")
+	}
+	if _, err := gh.PauseChannel(trust.ChannelProduction, gh.ChannelKey(trust.ChannelDevelopment)); err == nil {
+		t.Fatal("paused production with development key")
+	}
+	if _, err := gh.ResumeChannel(trust.ChannelProduction, gh.ChannelKey(trust.ChannelDevelopment)); err == nil {
+		t.Fatal("resumed production with development key")
+	}
+
+	// Pause production with its key; repeating is idempotent.
+	pr, err := gh.PauseChannel(trust.ChannelProduction, prodKey)
+	if err != nil || !pr.Paused || pr.Already {
+		t.Fatalf("pause: %+v %v", pr, err)
+	}
+	if !gh.ChannelPaused(trust.ChannelProduction) || gh.ChannelPaused(trust.ChannelDevelopment) {
+		t.Fatal("unexpected ChannelPaused state")
+	}
+	if st := gh.Status(); len(st.PausedChannels) != 1 || st.PausedChannels[0] != trust.ChannelProduction {
+		t.Fatalf("status pausedChannels %v", st.PausedChannels)
+	}
+	again, err := gh.PauseChannel(trust.ChannelProduction, prodKey)
+	if err != nil || !again.Already || again.Version != pr.Version {
+		t.Fatalf("repeat pause: %+v %v", again, err)
+	}
+
+	// Promoting a fix while paused preserves the pause marker until explicitly resumed.
+	gh2, err := devtuf.Load(out, devtuf.Options{Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gh2.Promote("whombat-20261121.2", trust.ChannelDevelopment, trust.ChannelProduction, prodKey); err != nil {
+		t.Fatal(err)
+	}
+	if !gh2.ChannelPaused(trust.ChannelProduction) {
+		t.Fatal("promoting into a paused channel unexpectedly resumed it")
+	}
+
+	// Workflow re-signs snapshot and timestamp over the paused production role cleanly.
+	rr, err := devtuf.ResignOnline(meta, snapKey, tsKey, devtuf.ResignOptions{Now: now})
+	if err != nil || len(rr.Skipped) != 0 {
+		t.Fatalf("resign paused: %+v %v", rr, err)
+	}
+	box := filepath.Join(t.TempDir(), "box")
+	repo, err := refresh(t, pinned, meta, box, trust.ChannelProduction, now)
+	if err != nil || !repo.ChannelPaused || len(repo.ReleaseIDs()) != 2 {
+		t.Fatalf("box after pause+promote: paused=%v ids=%v err=%v", repo != nil && repo.ChannelPaused, repo.ReleaseIDs(), err)
+	}
+	if got, err := repo.NewestRelease("", nil, ""); err != nil || got != nil {
+		t.Fatalf("paused newest: %+v %v", got, err)
+	}
+
+	// Resume production, re-sign snapshot/timestamp, and verify the box now sees the promoted fix.
+	rr2, err := gh2.ResumeChannel(trust.ChannelProduction, prodKey)
+	if err != nil || rr2.Paused || rr2.Already {
+		t.Fatalf("resume: %+v %v", rr2, err)
+	}
+	if _, err := devtuf.ResignOnline(meta, snapKey, tsKey, devtuf.ResignOptions{Now: now.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	repo, err = refresh(t, pinned, meta, box, trust.ChannelProduction, now.Add(time.Minute))
+	if err != nil || repo.ChannelPaused {
+		t.Fatalf("box after resume: paused=%v err=%v", repo != nil && repo.ChannelPaused, err)
+	}
+	if got, err := repo.NewestRelease("", nil, ""); err != nil || got == nil || got.ID() != "whombat-20261121.2" {
+		t.Fatalf("newest after resume: %+v %v", got, err)
+	}
+}

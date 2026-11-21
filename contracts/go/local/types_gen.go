@@ -245,6 +245,7 @@ type UpdateFacts struct {
 	Waiting        *UpdateWaiting               `json:"waiting,omitempty"`
 	LastUpdate     *LastUpdate                  `json:"lastUpdate,omitempty"`
 	AskFirst       *bool                        `json:"askFirst,omitempty"`
+	Paused         *bool                        `json:"paused,omitempty"`
 }
 
 type CheckpointRequest struct {
@@ -274,6 +275,7 @@ type UpdateStatusResponse struct {
 	Explanation *string                    `json:"explanation,omitempty"`
 	Failure     *string                    `json:"failure,omitempty"`
 	Hold        bool                       `json:"hold"`
+	Paused      *bool                      `json:"paused,omitempty"`
 	ReadOnly    bool                       `json:"readOnly"`
 }
 

@@ -151,6 +151,8 @@ const pendingFile = ".publish-pending.json"
 type pendingPublish struct {
 	Channel   string `json:"channel"`
 	ReleaseID string `json:"releaseId"`
+	// Action distinguishes non-release metadata operations on the same channel (e.g. pause vs resume).
+	Action string `json:"action,omitempty"`
 	// Base is what the metadata folder had unpushed before this publish signed (another signer's, never pushed by it);
 	// Files what its signing wrote (path → sha256). Only Files are committed: a role another signer (the client channel
 	// publisher) writes during the upload stays for its own publish. A record without Files (stopped while signing)
@@ -164,7 +166,7 @@ type pendingPublish struct {
 }
 
 func (pp *pendingPublish) same(o *pendingPublish) bool {
-	return pp.Channel == o.Channel && pp.ReleaseID == o.ReleaseID
+	return pp.Channel == o.Channel && pp.ReleaseID == o.ReleaseID && pp.Action == o.Action
 }
 
 // own is what of the metadata folder's unpushed files (path → sha256) this publish signed.
@@ -335,6 +337,9 @@ func (p *Publisher) abandoned(ctx context.Context, pend *pendingPublish) (bool, 
 
 func (pp *pendingPublish) what() string {
 	if pp.ReleaseID == "" {
+		if pp.Action != "" {
+			return pp.Action + " of " + pp.Channel
+		}
 		return "a metadata change of " + pp.Channel
 	}
 	return pp.ReleaseID + " (" + pp.Channel + ")"
@@ -346,6 +351,10 @@ func (pp *pendingPublish) what() string {
 // timestamp). A publish that stopped before its push is finished by running it again (its role is signed already);
 // until then every other publish is refused, so its role never reaches GitHub before its files.
 func (p *Publisher) Publish(ctx context.Context, channel, id string, sign func(r *devtuf.Repo) error) (*Result, error) {
+	return p.publish(ctx, channel, id, "", "", sign)
+}
+
+func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg string, sign func(r *devtuf.Repo) error) (*Result, error) {
 	unlock, err := p.lock(10 * time.Minute)
 	if err != nil {
 		return nil, err
@@ -359,7 +368,7 @@ func (p *Publisher) Publish(ctx context.Context, channel, id string, sign func(r
 	if err != nil {
 		return nil, err
 	}
-	this := &pendingPublish{Channel: channel, ReleaseID: id}
+	this := &pendingPublish{Channel: channel, ReleaseID: id, Action: action}
 	if pend != nil && !pend.same(this) {
 		gone, err := p.abandoned(ctx, pend)
 		if err != nil {
@@ -452,9 +461,12 @@ func (p *Publisher) Publish(ctx context.Context, channel, id string, sign func(r
 	if err := p.Upload(ctx, files, res); err != nil {
 		return res, err
 	}
-	msg := "metadata"
-	if id != "" {
-		msg = channel + ": " + id
+	msg := commitMsg
+	if msg == "" {
+		msg = "metadata"
+		if id != "" {
+			msg = channel + ": " + id
+		}
 	}
 	commit, err := p.commitPush(ctx, msg, this.Files)
 	if err != nil {
@@ -901,6 +913,34 @@ func (p *Publisher) Promote(ctx context.Context, id string, productionKey ed2551
 		_, err := r.Promote(id, trust.ChannelDevelopment, trust.ChannelProduction, productionKey)
 		return err
 	})
+}
+
+// PauseChannel signs the pause marker into channel's role metadata and pushes it (nothing is uploaded).
+func (p *Publisher) PauseChannel(ctx context.Context, channel string, key ed25519.PrivateKey) (*Result, *devtuf.ChannelPauseResult, error) {
+	if !trust.ValidChannel(channel) {
+		return nil, nil, fmt.Errorf("ghpublish: unknown channel %q", channel)
+	}
+	var pr *devtuf.ChannelPauseResult
+	res, err := p.publish(ctx, channel, "", "pause", channel+": pause", func(r *devtuf.Repo) error {
+		var err error
+		pr, err = r.PauseChannel(channel, key)
+		return err
+	})
+	return res, pr, err
+}
+
+// ResumeChannel clears the pause marker from channel's role metadata and pushes it (nothing is uploaded).
+func (p *Publisher) ResumeChannel(ctx context.Context, channel string, key ed25519.PrivateKey) (*Result, *devtuf.ChannelPauseResult, error) {
+	if !trust.ValidChannel(channel) {
+		return nil, nil, fmt.Errorf("ghpublish: unknown channel %q", channel)
+	}
+	var pr *devtuf.ChannelPauseResult
+	res, err := p.publish(ctx, channel, "", "resume", channel+": resume", func(r *devtuf.Repo) error {
+		var err error
+		pr, err = r.ResumeChannel(channel, key)
+		return err
+	})
+	return res, pr, err
 }
 
 // UploadClients sends the clients role's targets (the AI client channel and bundles) to the `clients` release, then
