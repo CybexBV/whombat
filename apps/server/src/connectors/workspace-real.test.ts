@@ -277,10 +277,10 @@ describe('mail', () => {
     });
 
     const baseline = await workspace.mailBaseline('tok');
-    expect(baseline).toEqual({ kind: 'gmail', historyId: '500' });
+    expect(baseline).toEqual({ cursor: { kind: 'gmail', historyId: '500' }, headers: [] });
     expect(calls[0]?.url.pathname).toBe('/gmail/v1/users/me/profile');
 
-    const delta = await workspace.mailChanges('tok', baseline);
+    const delta = await workspace.mailChanges('tok', baseline.cursor);
     expect(delta.cursor).toEqual({ kind: 'gmail', historyId: '505' });
     expect(delta.headers).toHaveLength(1);
     expect(delta.headers[0]).toMatchObject({

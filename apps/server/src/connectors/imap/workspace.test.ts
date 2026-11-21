@@ -418,10 +418,10 @@ describe('Email (IMAP) behind the mail tools', () => {
 
   it('tracks new inbox mail via UIDVALIDITY/lastUid and BODYSTRUCTURE without reading message bodies', async () => {
     const baseline = await ws.mailBaseline(TOKEN);
-    expect(baseline).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
+    expect(baseline.cursor).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
 
     const beforeReads = server.sourceReads;
-    const empty = await ws.mailChanges(TOKEN, baseline);
+    const empty = await ws.mailChanges(TOKEN, baseline.cursor);
     expect(empty.headers).toEqual([]);
     expect(server.sourceReads).toBe(beforeReads);
 
@@ -449,7 +449,7 @@ describe('Email (IMAP) behind the mail tools', () => {
     ].join('\r\n');
     server.add('INBOX', newInvoice, { date: new Date('2026-10-19T10:00:00Z') });
 
-    const delta = await ws.mailChanges(TOKEN, baseline, { needAttachmentTypes: true });
+    const delta = await ws.mailChanges(TOKEN, baseline.cursor, { needAttachmentTypes: true });
     expect(delta.headers).toHaveLength(1);
     expect(delta.headers[0]).toMatchObject({
       from: 'Billing <billing@example.com>',

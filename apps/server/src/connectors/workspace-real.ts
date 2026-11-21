@@ -457,7 +457,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     return { count, newest };
   }
 
-  async mailBaseline(accessToken: string): Promise<MailProviderCursor> {
+  async mailBaseline(accessToken: string, _options: MailChangesOptions = {}): Promise<MailChangesResult> {
     // users.getProfile returns the current historyId in one cheap metadata call without reading any message.
     const profile = await this.json<{ historyId?: string | number }>(
       accessToken,
@@ -465,7 +465,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
       `${GMAIL_API}/profile`,
       { query: { fields: 'historyId' } },
     );
-    return { kind: 'gmail', historyId: String(profile.historyId ?? '0') };
+    return { cursor: { kind: 'gmail', historyId: String(profile.historyId ?? '0') }, headers: [] };
   }
 
   async mailChanges(
@@ -474,7 +474,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     _options: MailChangesOptions = {},
   ): Promise<MailChangesResult> {
     if (cursor.kind !== 'gmail') {
-      return { cursor: await this.mailBaseline(accessToken), headers: [], reset: true };
+      return { ...(await this.mailBaseline(accessToken)), reset: true };
     }
     const addedIds: string[] = [];
     const seen = new Set<string>();
@@ -527,7 +527,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     } catch (err) {
       // History IDs expire after Gmail's retention window (HTTP 404): re-baseline without replaying old mail.
       if (err instanceof GoogleApiError && err.status === 404) {
-        return { cursor: await this.mailBaseline(accessToken), headers: [], reset: true };
+        return { ...(await this.mailBaseline(accessToken)), reset: true };
       }
       throw err;
     }

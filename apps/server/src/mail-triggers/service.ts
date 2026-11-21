@@ -208,7 +208,7 @@ export class MailTriggerService {
         const baseline = await workspace.mailBaseline(token);
         await this.commitCursor(burrowId, actorId, {
           connectionId,
-          cursor: baseline,
+          cursor: baseline.cursor,
           since: now.toISOString(),
           succeeded: true,
         });

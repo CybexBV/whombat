@@ -215,18 +215,57 @@ describe('Microsoft complete observations', () => {
 });
 
 describe('Microsoft mail change feed', () => {
-  it('baselines with $deltaToken=latest, reads metadata only, and fetches attachment metadata only when needed', async () => {
+  it('pages through the documented inbox delta without $deltaToken=latest, keeps only post-activation mail, and fetches attachment metadata only when needed', async () => {
+    const next1 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=page2';
     const delta1 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok1';
     const delta2 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok2';
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(response({ value: [], '@odata.deltaLink': delta1 }))
+      // Initial delta page 1: pre-existing old mail only, continues via @odata.nextLink.
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_preexisting',
+              conversationId: 'c_pre',
+              internetMessageId: '<pre@example.com>',
+              from: { emailAddress: { name: 'Old', address: 'old@example.com' } },
+              subject: 'Before activation',
+              receivedDateTime: '2026-10-20T08:00:00Z',
+              hasAttachments: true,
+              isDraft: false,
+            },
+          ],
+          '@odata.nextLink': next1,
+        }),
+      )
+      // Initial delta page 2: one mail arrived right after activation (within skew), returns @odata.deltaLink.
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_backfill',
+              conversationId: 'c_back',
+              internetMessageId: ' <Backfill@Example.com> ',
+              from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
+              subject: 'Invoice 98',
+              bodyPreview: 'Sent right after activation',
+              receivedDateTime: '2026-10-28T09:59:57Z',
+              hasAttachments: false,
+              isDraft: false,
+            },
+          ],
+          '@odata.deltaLink': delta1,
+        }),
+      )
+      // Incremental delta call.
       .mockResolvedValueOnce(
         response({
           value: [
             {
               id: 'm_old_modified',
               conversationId: 'c_old',
+              internetMessageId: '<old-mod@example.com>',
               from: { emailAddress: { name: 'Old', address: 'old@example.com' } },
               subject: 'Old read-state change',
               receivedDateTime: '2026-10-20T08:00:00Z',
@@ -236,6 +275,7 @@ describe('Microsoft mail change feed', () => {
             {
               id: 'm_new',
               conversationId: 'c_new',
+              internetMessageId: '<inv99@example.com>',
               from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
               subject: 'Invoice 99',
               bodyPreview: 'Attached',
@@ -254,31 +294,46 @@ describe('Microsoft mail change feed', () => {
       );
 
     const ws = new MicrosoftWorkspace(fetcher);
-    const baseline = await ws.mailBaseline('tok');
-    expect(baseline).toEqual({ kind: 'microsoft', deltaLink: delta1 });
-    expect(new URL(String(fetcher.mock.calls[0]?.[0])).searchParams.get('$deltaToken')).toBe('latest');
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const baseline = await ws.mailBaseline('tok', { needAttachmentTypes: true, since: activation });
+    expect(baseline.cursor).toEqual({ kind: 'microsoft', deltaLink: delta1 });
+    // Documented message-delta URL: no $deltaToken=latest, pages through @odata.nextLink, selects internetMessageId.
+    const firstUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
+    expect(firstUrl.pathname).toBe('/v1.0/me/mailFolders/inbox/messages/delta');
+    expect(firstUrl.searchParams.has('$deltaToken')).toBe(false);
+    expect(firstUrl.searchParams.get('$select')).toContain('internetMessageId');
+    expect(String(fetcher.mock.calls[1]?.[0])).toBe(next1);
+    // Pre-existing message dropped (no attachment lookup for it), post-activation message kept with normalized Message-ID.
+    expect(baseline.headers).toHaveLength(1);
+    expect(baseline.headers[0]).toMatchObject({
+      id: 'm_backfill',
+      messageId: '<backfill@example.com>',
+      subject: 'Invoice 98',
+    });
 
-    const changes = await ws.mailChanges('tok', baseline, {
+    const changes = await ws.mailChanges('tok', baseline.cursor, {
       needAttachmentTypes: true,
-      since: new Date('2026-10-28T10:00:00Z'),
+      since: activation,
     });
     expect(changes.cursor).toEqual({ kind: 'microsoft', deltaLink: delta2 });
     expect(changes.headers).toHaveLength(1);
     expect(changes.headers[0]).toMatchObject({
       id: 'm_new',
+      messageId: '<inv99@example.com>',
       from: 'Billing <billing@example.com>',
       subject: 'Invoice 99',
       hasAttachments: true,
       attachments: [{ id: 'a1', name: 'invoice-99.pdf', mimeType: 'application/pdf', size: 4200 }],
     });
     // Attachment metadata endpoint queried with $select (never contentBytes).
-    const attUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
+    const attUrl = new URL(String(fetcher.mock.calls[3]?.[0]));
     expect(attUrl.pathname).toBe('/v1.0/me/messages/m_new/attachments');
     expect(attUrl.searchParams.get('$select')).not.toContain('contentBytes');
   });
 
-  it('skips attachment calls when attachment types are not needed and re-baselines on 410', async () => {
+  it('skips attachment calls when attachment types are not needed and resyncs on 410 from resyncSince', async () => {
     const delta1 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok1';
+    const nextResync = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=r2';
     const deltaFresh =
       'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=fresh';
     const fetcher = vi
@@ -289,6 +344,7 @@ describe('Microsoft mail change feed', () => {
             {
               id: 'm_new',
               conversationId: 'c_new',
+              internetMessageId: '<inv@example.com>',
               from: { emailAddress: { address: 'billing@example.com' } },
               subject: 'Invoice',
               receivedDateTime: '2026-10-28T10:05:00Z',
@@ -302,7 +358,39 @@ describe('Microsoft mail change feed', () => {
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: { code: 'syncStateNotFound' } }), { status: 410 }),
       )
-      .mockResolvedValueOnce(response({ value: [], '@odata.deltaLink': deltaFresh }));
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_before_poll',
+              conversationId: 'c_old',
+              from: { emailAddress: { address: 'old@example.com' } },
+              subject: 'Already polled',
+              receivedDateTime: '2026-10-28T09:00:00Z',
+              hasAttachments: false,
+              isDraft: false,
+            },
+          ],
+          '@odata.nextLink': nextResync,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_missed_during_expiry',
+              conversationId: 'c_missed',
+              internetMessageId: '<missed@example.com>',
+              from: { emailAddress: { address: 'billing@example.com' } },
+              subject: 'Arrived while expired',
+              receivedDateTime: '2026-10-28T10:15:00Z',
+              hasAttachments: false,
+              isDraft: false,
+            },
+          ],
+          '@odata.deltaLink': deltaFresh,
+        }),
+      );
 
     const ws = new MicrosoftWorkspace(fetcher);
     const changes = await ws.mailChanges(
@@ -313,7 +401,21 @@ describe('Microsoft mail change feed', () => {
     expect(changes.headers).toHaveLength(1);
     expect(fetcher).toHaveBeenCalledTimes(1);
 
-    const reset = await ws.mailChanges('tok', { kind: 'microsoft', deltaLink: delta1 });
-    expect(reset).toEqual({ cursor: { kind: 'microsoft', deltaLink: deltaFresh }, headers: [], reset: true });
+    const reset = await ws.mailChanges(
+      'tok',
+      { kind: 'microsoft', deltaLink: delta1 },
+      {
+        since: new Date('2026-10-28T08:00:00Z'),
+        resyncSince: new Date('2026-10-28T10:10:00Z'),
+      },
+    );
+    expect(reset.reset).toBe(true);
+    expect(reset.cursor).toEqual({ kind: 'microsoft', deltaLink: deltaFresh });
+    expect(reset.headers).toHaveLength(1);
+    expect(reset.headers[0]).toMatchObject({
+      id: 'm_missed_during_expiry',
+      messageId: '<missed@example.com>',
+      subject: 'Arrived while expired',
+    });
   });
 });

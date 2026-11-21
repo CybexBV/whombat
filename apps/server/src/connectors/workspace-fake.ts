@@ -560,10 +560,10 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
     }
   }
 
-  async mailBaseline(accessToken: string): Promise<MailProviderCursor> {
+  async mailBaseline(accessToken: string, _options?: MailChangesOptions): Promise<MailChangesResult> {
     const state = this.use(accessToken, 'mailBaseline');
     this.assignMailSeqs(state);
-    return { kind: 'fake', seq: state.mailSeq };
+    return { cursor: { kind: 'fake', seq: state.mailSeq }, headers: [] };
   }
 
   async mailChanges(

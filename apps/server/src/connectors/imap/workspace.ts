@@ -739,7 +739,7 @@ export class ImapWorkspace implements GoogleWorkspace {
     });
   }
 
-  async mailBaseline(token: string): Promise<MailProviderCursor> {
+  async mailBaseline(token: string, _options: MailChangesOptions = {}): Promise<MailChangesResult> {
     return this.withImap(token, async (s) => {
       const folders = await s.list();
       const inbox = folderByRole(folders, 'inbox');
@@ -749,7 +749,10 @@ export class ImapWorkspace implements GoogleWorkspace {
         opened.uidNext !== null
           ? Math.max(0, opened.uidNext - 1)
           : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
-      return { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid };
+      return {
+        cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid },
+        headers: [],
+      };
     });
   }
 
@@ -759,7 +762,7 @@ export class ImapWorkspace implements GoogleWorkspace {
     _options: MailChangesOptions = {},
   ): Promise<MailChangesResult> {
     if (cursor.kind !== 'imap') {
-      return { cursor: await this.mailBaseline(token), headers: [], reset: true };
+      return { ...(await this.mailBaseline(token)), reset: true };
     }
     return this.withImap(token, async (s) => {
       const folders = await s.list();
