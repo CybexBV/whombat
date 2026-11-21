@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"rackoon/internal/agent"
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/proto"
 )
 
@@ -150,7 +151,7 @@ func (d *pveDriver) tool(pty bool, args ...string) []string {
 	} else {
 		w = append(w, "--pipe")
 	}
-	return append(append(w, "--"), args...)
+	return append(append(w, "--"), systemdrun.Literal(args...)...)
 }
 
 // runTool runs a qm/pct command and returns its combined output.

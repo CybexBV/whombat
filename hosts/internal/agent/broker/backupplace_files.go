@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"rackoon/internal/agent/systemdrun"
 )
 
 // placeFS writes below a backup place's root.
@@ -99,7 +101,8 @@ func (outsideFS) runArg(ctx context.Context, op, path, arg string, stdin []byte)
 		defer cancel()
 	}
 	argv := []string{"/usr/bin/systemd-run", "--quiet", "--wait", "--collect", "--pipe", "--service-type=exec",
-		"--description=Whombat backup place files", "--", "/bin/sh", "-c", outsideScript, "sh", op, path, arg}
+		"--description=Whombat backup place files", "--"}
+	argv = append(argv, systemdrun.Literal("/bin/sh", "-c", outsideScript, "sh", op, path, arg)...)
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Env = baseEnv()
 	cmd.Dir = "/"

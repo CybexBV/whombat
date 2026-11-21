@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/proto"
 )
 
@@ -56,7 +57,7 @@ func execUnitArgv(shell, cmd string, timeout time.Duration) []string {
 	for _, e := range execEnv {
 		argv = append(argv, "--setenv="+e)
 	}
-	return append(argv, "--", shell, "-c", cmd)
+	return append(append(argv, "--"), systemdrun.Literal(shell, "-c", cmd)...)
 }
 
 // Exec implements agent.Diagnostics: cmd with /bin/sh -c as root, stdin

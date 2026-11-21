@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"rackoon/internal/agent"
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/proto"
 )
 
@@ -152,12 +153,12 @@ func hostShellArgv(shell string, systemd bool) []string {
 	if !systemd {
 		return []string{shell, "-l"}
 	}
-	return []string{"/usr/bin/systemd-run", "--quiet", "--wait", "--collect", "--pty",
+	return append([]string{"/usr/bin/systemd-run", "--quiet", "--wait", "--collect", "--pty",
 		"--service-type=exec", "--property=KillMode=mixed",
 		"--description=Whombat host shell", "--working-directory=/root",
 		"--setenv=TERM=xterm-256color", "--setenv=HOME=/root", "--setenv=USER=root",
 		"--setenv=LOGNAME=root", "--setenv=SHELL=" + shell, "--setenv=LANG=C.UTF-8",
-		"--", shell, "-l"}
+		"--"}, systemdrun.Literal(shell, "-l")...)
 }
 
 func hostShell(req proto.ConsoleRequest) (agent.ConsoleSession, error) {
