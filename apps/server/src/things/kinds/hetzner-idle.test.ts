@@ -2,7 +2,9 @@
  * Optional idle paid cloud server check on Hetzner (`hetzner.idle`, starts off).
  */
 import { ThingPageNotice } from '@whombat/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Services } from '../../services';
+import type { ThingQuiet } from '../quiet/store';
 import type { RawPoint } from '../series';
 import {
   activityPoints,
@@ -11,9 +13,61 @@ import {
   type HetznerServerActivity,
   type HetznerSnapshot,
   hetznerNotices,
+  hetznerSeen,
   hetznerSkipped,
   isIdlePaidServer,
 } from './hetzner';
+import { rowOf } from './media/testing';
+
+const hz = vi.hoisted(() => ({
+  servers: [] as Record<string, unknown>[],
+  metricsCalls: [] as string[],
+}));
+
+vi.mock('../../connections/http', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../connections/http')>();
+  return {
+    ...real,
+    signedConnectionFetch: async (_s: unknown, _r: unknown, req: { url: string }) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/servers') {
+        return {
+          status: 200,
+          headers: {},
+          body: Buffer.from(
+            JSON.stringify({ servers: hz.servers, meta: { pagination: { total_entries: hz.servers.length } } }),
+          ),
+        };
+      }
+      if (path === '/v1/volumes') {
+        return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ volumes: [] })) };
+      }
+      const match = path.match(/^\/v1\/servers\/([^/]+)\/metrics$/);
+      if (match) {
+        const id = match[1] as string;
+        hz.metricsCalls.push(id);
+        const tsStart = Math.floor((NOW.getTime() - 14 * 24 * 3600_000) / 1000);
+        const vals = Array.from({ length: 14 * 24 }, (_, i) => [tsStart + i * 3600, '0.1']);
+        return {
+          status: 200,
+          headers: {},
+          body: Buffer.from(
+            JSON.stringify({
+              metrics: {
+                time_series: {
+                  cpu: { values: vals },
+                  'network.0.bandwidth.in': { values: vals },
+                  'network.0.bandwidth.out': { values: vals },
+                },
+              },
+            }),
+          ),
+        };
+      }
+      return { status: 404, headers: {}, body: Buffer.from('{}') };
+    },
+  };
+});
 
 const NOW = new Date('2026-10-21T12:00:00Z');
 const HOUR = 3600_000;
@@ -144,5 +198,43 @@ describe('Hetzner idle paid server check', () => {
         ]),
       ),
     ).toEqual([]);
+  });
+
+  it('skips 14-day activity fetches in hetznerSeen while hetzner.idle is off, and fetches when on', async () => {
+    const created = new Date(NOW.getTime() - 45 * DAY).toISOString();
+    hz.servers = [
+      {
+        id: 101,
+        name: 'staging-1',
+        status: 'running',
+        created,
+        server_type: {
+          name: 'cx22',
+          cores: 2,
+          memory: 4,
+          disk: 40,
+          prices: [{ location: 'fsn1', price_monthly: { gross: '4.51' } }],
+        },
+        datacenter: { location: { name: 'fsn1', city: 'Falkenstein' } },
+        public_net: { ipv4: { ip: '203.0.113.12' }, ipv6: null },
+        backup_window: '22-02',
+        protection: { delete: true },
+        outgoing_traffic: 0,
+        included_traffic: 20e12,
+      },
+    ];
+    const rowOff = rowOf('hetzner', { id: 'con_hz_off', baseUrl: 'https://api.hetzner.cloud' });
+    const quietOff: ThingQuiet = { quiets: [], offs: [], ons: [] };
+    hz.metricsCalls = [];
+    const seenOff = await hetznerSeen({} as Services, rowOff, NOW, quietOff);
+    expect(hz.metricsCalls).toEqual([]);
+    expect(seenOff.notices?.some((n) => n.check === 'hetzner.idle')).toBe(false);
+
+    const rowOn = rowOf('hetzner', { id: 'con_hz_on', baseUrl: 'https://api.hetzner.cloud' });
+    const quietOn: ThingQuiet = { quiets: [], offs: [], ons: [{ checkId: 'hetzner.idle', at: NOW }] };
+    hz.metricsCalls = [];
+    const seenOn = await hetznerSeen({} as Services, rowOn, NOW, quietOn);
+    expect(hz.metricsCalls).toEqual(['101']);
+    expect(seenOn.notices?.some((n) => n.check === 'hetzner.idle')).toBe(true);
   });
 });

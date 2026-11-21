@@ -15,8 +15,8 @@ const BOOTSTRAP_OK_MS = 24 * 60 * 60_000;
 const BOOTSTRAP_ERR_MS = 15 * 60_000;
 const DOMAIN_OK_MS = 12 * 60 * 60_000;
 const DOMAIN_ERR_MS = 60 * 60_000;
-const RDAP_TIMEOUT_MS = 5_000;
-const RDAP_DEADLINE_MS = 6_000;
+/** Overall deadline across bootstrap, redirects and domain lookups for one RDAP check. */
+export const RDAP_DEADLINE_MS = 4_000;
 const RDAP_MAX_BYTES = 512 * 1024;
 const RDAP_MAX_REDIRECTS = 2;
 
@@ -41,7 +41,7 @@ export interface RdapFetchResult {
   json?: unknown;
 }
 
-export type RdapFetch = (url: string) => Promise<RdapFetchResult>;
+export type RdapFetch = (url: string, budgetMs?: number) => Promise<RdapFetchResult>;
 
 /**
  * Parses IANA's RFC 9224 DNS bootstrap JSON into a map of lowercase TLD → authoritative HTTPS RDAP base URL
@@ -107,10 +107,19 @@ export function parseRdapExpiration(body: unknown): Date | null {
   return fallback;
 }
 
-/** Fetches JSON from a public HTTPS URL under the outbound SSRF policy, following at most two safe HTTPS hops. */
-export async function defaultRdapFetch(initialUrl: string): Promise<RdapFetchResult> {
+/**
+ * Fetches JSON from a public HTTPS URL under the outbound SSRF policy, following at most two safe HTTPS hops
+ * within one shared deadline across all hops.
+ */
+export async function defaultRdapFetch(
+  initialUrl: string,
+  budgetMs = RDAP_DEADLINE_MS,
+): Promise<RdapFetchResult> {
+  const endAt = Date.now() + Math.max(0, budgetMs);
   let current = initialUrl;
   for (let hop = 0; hop <= RDAP_MAX_REDIRECTS; hop++) {
+    const remaining = endAt - Date.now();
+    if (remaining <= 0) return { ok: false, status: 0 };
     let res: Awaited<ReturnType<typeof outboundRequest>>;
     try {
       res = await outboundRequest(
@@ -123,8 +132,8 @@ export async function defaultRdapFetch(initialUrl: string): Promise<RdapFetchRes
           },
         },
         {
-          timeoutMs: RDAP_TIMEOUT_MS,
-          deadlineMs: RDAP_DEADLINE_MS,
+          timeoutMs: remaining,
+          deadlineMs: remaining,
           maxBytes: RDAP_MAX_BYTES,
         },
       );
@@ -162,6 +171,7 @@ interface CacheEntry<T> {
 interface RdapCache {
   bootstrap: CacheEntry<Map<string, string> | null> | null;
   domains: Map<string, CacheEntry<{ ok: true; expires: Date | null } | { ok: false }>>;
+  warming: Promise<void> | null;
 }
 
 const caches = new WeakMap<Services, RdapCache>();
@@ -169,10 +179,34 @@ const caches = new WeakMap<Services, RdapCache>();
 function cacheOf(services: Services): RdapCache {
   let c = caches.get(services);
   if (!c) {
-    c = { bootstrap: null, domains: new Map() };
+    c = { bootstrap: null, domains: new Map(), warming: null };
     caches.set(services, c);
   }
   return c;
+}
+
+function normalizeDomains(domains: readonly string[]): string[] {
+  return [...new Set(domains.map((d) => d.trim().toLowerCase().replace(/\.+$/, '')).filter(Boolean))];
+}
+
+async function withBudget<T>(
+  budgetMs: number,
+  work: (budget: number) => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  if (budgetMs <= 0) return fallback;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(budgetMs),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), budgetMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function getBootstrap(
@@ -223,7 +257,42 @@ async function readOneDomain(
 }
 
 /**
- * Looks up public RDAP registration expiration dates for a list of domain names.
+ * Reads already-cached RDAP expiration dates without making any network calls, so a page read never
+ * blocks on or fails because of external RDAP registries. `missing` is true when a background refresh
+ * should populate uncached entries.
+ */
+export function cachedDomainExpirations(
+  services: Services,
+  domains: readonly string[],
+  now: Date,
+): { expirations: Map<string, Date | null> | null; partial: boolean; missing: boolean } {
+  const unique = normalizeDomains(domains);
+  if (unique.length === 0) return { expirations: new Map(), partial: false, missing: false };
+  const cache = cacheOf(services);
+  const nowMs = now.getTime();
+  if (!cache.bootstrap || cache.bootstrap.until <= nowMs)
+    return { expirations: null, partial: false, missing: true };
+  if (cache.bootstrap.value === null) return { expirations: null, partial: false, missing: false };
+  const expirations = new Map<string, Date | null>();
+  let partial = false;
+  let missing = false;
+  for (const domain of unique) {
+    const cached = cache.domains.get(domain);
+    if (!cached || cached.until <= nowMs) {
+      missing = true;
+      partial = true;
+      continue;
+    }
+    if (cached.value.ok) expirations.set(domain, cached.value.expires);
+    else partial = true;
+  }
+  if (expirations.size === 0 && partial) return { expirations: null, partial: true, missing };
+  return { expirations, partial, missing };
+}
+
+/**
+ * Looks up public RDAP registration expiration dates for a list of domain names under one overall
+ * deadline covering IANA bootstrap, redirects and domain queries.
  * Returns null if the IANA bootstrap could not be fetched or every domain lookup failed;
  * otherwise returns the map of lowercase domain → expiration date (or null when unavailable)
  * and whether any domain lookup failed transiently (`partial`).
@@ -233,17 +302,28 @@ export async function readDomainExpirations(
   domains: readonly string[],
   now: Date,
   fetchJson: RdapFetch = defaultRdapFetch,
+  deadlineMs = RDAP_DEADLINE_MS,
 ): Promise<{ expirations: Map<string, Date | null>; partial: boolean } | null> {
-  const unique = [...new Set(domains.map((d) => d.trim().toLowerCase().replace(/\.+$/, '')).filter(Boolean))];
+  const unique = normalizeDomains(domains);
   if (unique.length === 0) return { expirations: new Map(), partial: false };
   const cache = cacheOf(services);
   const nowMs = now.getTime();
-  const bootstrap = await getBootstrap(cache, nowMs, fetchJson);
+  const endAt = Date.now() + Math.max(0, deadlineMs);
+  const boundedFetch: RdapFetch = (url) => {
+    const remaining = endAt - Date.now();
+    if (remaining <= 0) return Promise.resolve({ ok: false, status: 0 });
+    return withBudget(
+      remaining,
+      (budget) => fetchJson(url, budget).catch(() => ({ ok: false, status: 0 })),
+      { ok: false, status: 0 },
+    );
+  };
+  const bootstrap = await getBootstrap(cache, nowMs, boundedFetch);
   if (!bootstrap) return null;
   const results = await Promise.all(
     unique.map(async (domain) => ({
       domain,
-      res: await readOneDomain(cache, domain, bootstrap, nowMs, fetchJson),
+      res: await readOneDomain(cache, domain, bootstrap, nowMs, boundedFetch),
     })),
   );
   if (!results.some((r) => r.res.ok)) return null;
@@ -254,4 +334,26 @@ export async function readDomainExpirations(
     else partial = true;
   }
   return { expirations, partial };
+}
+
+/**
+ * Starts a detached RDAP cache refresh when none is already running for this server instance,
+ * swallowing all failures so callers (such as page reads) are never slowed down or broken by RDAP.
+ */
+export function warmDomainExpirations(
+  services: Services,
+  domains: readonly string[],
+  now: Date,
+  fetchJson: RdapFetch = defaultRdapFetch,
+  deadlineMs = RDAP_DEADLINE_MS,
+): void {
+  const cache = cacheOf(services);
+  if (cache.warming) return;
+  const task = readDomainExpirations(services, domains, now, fetchJson, deadlineMs)
+    .catch(() => null)
+    .then(() => undefined)
+    .finally(() => {
+      if (cache.warming === task) cache.warming = null;
+    });
+  cache.warming = task;
 }

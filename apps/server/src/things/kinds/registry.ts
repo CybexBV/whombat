@@ -9,6 +9,7 @@ import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
 import { colours } from '../quiet/glance';
+import type { ThingQuiet } from '../quiet/store';
 import type { KindCheck, KindNotice } from '../quiet/types';
 import type { MachineFigures } from '../runs-on';
 import type { PageRange } from '../series';
@@ -95,7 +96,13 @@ export interface KindModule {
   /** Started before what the connection runs on is known; the page part finds it in the cache. */
   prefetch?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<unknown>;
   /** The health pass's look (SD-05); usually `seenFromView` of a page-less read. */
-  seen?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<KindSeen>;
+  seen?: (
+    services: Services,
+    row: CatalogConnectionRow,
+    now: Date,
+    timeZone: string,
+    quiet?: ThingQuiet,
+  ) => Promise<KindSeen>;
   /** “… · locks and alarms ask first” in the head's access line. */
   asksFirst?: string;
   actions?: Record<string, KindAction>;

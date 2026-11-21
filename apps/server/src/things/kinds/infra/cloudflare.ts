@@ -20,6 +20,7 @@ import type {
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { ApiError } from '../../../lib/errors';
 import type { Services } from '../../../services';
+import { checkWatched } from '../../quiet/defaults';
 import type { KindCheck, KindNotice } from '../../quiet/types';
 import { clip, line, list, num, pct, plural, rec, span, str, thousands } from '../../words';
 import { actAs } from '../act';
@@ -38,7 +39,7 @@ import {
   trend,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
-import { readDomainExpirations } from './rdap';
+import { cachedDomainExpirations, readDomainExpirations, warmDomainExpirations } from './rdap';
 import {
   type ButtonCtx,
   badgeOf,
@@ -413,7 +414,7 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     ]),
   ];
   const accounts = known.slice(0, ACCOUNTS_MAX);
-  const [traffic, tunnels, certificates, domainExpirations] = await Promise.all([
+  const [traffic, tunnels, certificates] = await Promise.all([
     cachedRead(
       services,
       `cloudflare-traffic:${row.id}`,
@@ -423,11 +424,6 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     ).catch(() => null),
     readTunnels(services, row, accounts, now),
     readCertificates(services, row, shown),
-    readDomainExpirations(
-      services,
-      shown.filter((z) => z.status !== 'moved').map((z) => z.name),
-      now,
-    ).catch(() => null),
   ]);
   return {
     readAt: now,
@@ -436,10 +432,9 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     traffic,
     tunnels: tunnels?.tunnels ?? null,
     certificates: certificates?.certificates ?? null,
-    domainExpirations: domainExpirations?.expirations ?? null,
+    domainExpirations: null,
     ...(tunnels && (tunnels.partial || known.length > accounts.length) ? { tunnelsPartial: true } : {}),
     ...(certificates?.partial ? { certificatesPartial: true } : {}),
-    ...(domainExpirations?.partial ? { domainExpirationsPartial: true } : {}),
   };
 });
 
@@ -1125,12 +1120,27 @@ export function signInView(): KindView {
   };
 }
 
+function domainNames(s: CfSnapshot): string[] {
+  return s.zones.filter((z) => z.status !== 'moved').map((z) => z.name);
+}
+
 export async function cloudflarePage(ctx: KindCtx): Promise<KindView> {
   if (!viaToken(ctx.row)) return signInView();
   const read = await cloudflareReader.latest(ctx.services, ctx.row, ctx.now);
   if (!read.ok) return unreadView(read, NAME, { label: 'Open Cloudflare', url: CLOUDFLARE_DASH }, []);
+  let snapshot = read.value;
+  if (ctx.quiet && checkWatched(ctx.quiet, 'cloudflare.domain_expiring')) {
+    const domains = domainNames(snapshot);
+    const cached = cachedDomainExpirations(ctx.services, domains, ctx.now);
+    if (cached.missing) warmDomainExpirations(ctx.services, domains, ctx.now);
+    snapshot = {
+      ...snapshot,
+      domainExpirations: cached.expirations,
+      ...(cached.partial ? { domainExpirationsPartial: true } : {}),
+    };
+  }
   return {
-    ...cloudflareView({ snapshot: read.value, now: ctx.now, row: ctx.row, timeZone: ctx.timeZone }),
+    ...cloudflareView({ snapshot, now: ctx.now, row: ctx.row, timeZone: ctx.timeZone }),
     refreshing: read.refreshing,
   };
 }
@@ -1156,9 +1166,20 @@ const purge: KindAction = async ({ services, row, now }, { target }) => {
 
 export const CLOUDFLARE_KIND: KindModule = {
   page: cloudflarePage,
-  seen: async (services, row, now, timeZone) => {
+  seen: async (services, row, now, timeZone, quiet) => {
     if (!viaToken(row)) return { glance: { facts: [] }, points: {}, ...linesSeen(signInView(), []) };
-    const s = await cloudflareReader.cached(services, row, now);
+    const base = await cloudflareReader.cached(services, row, now);
+    const watchExpiry = quiet ? checkWatched(quiet, 'cloudflare.domain_expiring') : false;
+    const rdap = watchExpiry
+      ? await readDomainExpirations(services, domainNames(base), now).catch(() => null)
+      : null;
+    const s: CfSnapshot = watchExpiry
+      ? {
+          ...base,
+          domainExpirations: rdap?.expirations ?? null,
+          ...(rdap?.partial ? { domainExpirationsPartial: true } : {}),
+        }
+      : base;
     const view = cloudflareCardView({ snapshot: s, now, row, timeZone });
     return {
       glance: cardOf(view, ['requests', 'tunnels'], plural(s.zonesTotal, 'site')),
