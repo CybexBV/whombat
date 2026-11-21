@@ -89,6 +89,8 @@ export interface ChatThreadsView {
    * for its answer (`refetch` returns once it came).
    */
   read: ChatThreadsRead;
+  /** The list's query key, null while it waits for its burrow: a pull to refresh watches that read and no other. */
+  queryKey: readonly unknown[] | null;
 }
 
 /** The parts of the threads' read a screen shows its state with. */
@@ -161,6 +163,7 @@ export function useChatThreads(
     refetch: () => void q.refetch(),
     settledCount: pages?.[0]?.settledCount,
     read: q,
+    queryKey: factory?.queryKey ?? null,
   };
 }
 

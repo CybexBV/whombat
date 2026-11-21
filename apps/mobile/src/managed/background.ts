@@ -131,10 +131,11 @@ export interface BoxReach {
  * says it is online (the connection is then being opened, and reads wait for it). An open connection on a Wi-Fi without
  * internet reaches the box on its direct way; going by the phone's internet check alone, every read waited there.
  *
- * NetInfo is a hint for the connection: connected again after none, or onto another network (`networkKey`), dials now
- * when it isn't open; another network while it is open checks it (`probe`), since its socket may be tied to the old
- * one. Nothing else counts: NetInfo repeats itself, and its internet check coming in (unknown or no internet, then yes)
- * is no new network, so neither dials.
+ * NetInfo is a hint for the connection. While it isn't open, it dials now when the phone is connected again after none,
+ * onto another network (`networkKey`), or online again after its internet check said no (a hotel's sign-in page passed:
+ * the way out may only now be open). While it is open, another network checks it (`probe`), since its socket may be
+ * tied to the old one. Nothing else counts: NetInfo repeats itself, and an internet check that was unknown and comes
+ * in as yes is no change. Dialing is a no-op while open or dialing, so a burst of these can't storm.
  */
 export function createBoxReach(input: {
   session: Pick<ApplianceSession, 'state' | 'onState' | 'reconnectNow' | 'probe'>;
@@ -155,13 +156,16 @@ export function createBoxReach(input: {
   update();
   return {
     net(n) {
-      netOnline = n.isConnected !== false && n.isInternetReachable !== false;
-      // Connected again, or onto another network: the key changes. The internet check coming in doesn't change it.
+      const online = n.isConnected !== false && n.isInternetReachable !== false;
+      const cameOnline = online && !netOnline;
+      netOnline = online;
+      // Connected again, or onto another network: the key changes.
       const next = networkKey(n);
       const moved = key !== undefined && next !== key;
       key = next;
-      if (moved && session.state().status === 'open') session.probe?.();
-      else if (moved && next !== null) session.reconnectNow();
+      if (session.state().status === 'open') {
+        if (moved) session.probe?.();
+      } else if ((moved && next !== null) || cameOnline) session.reconnectNow();
       update();
     },
     dispose: off,

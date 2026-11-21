@@ -299,6 +299,11 @@ export function ApplianceRoot(props: ApplianceRootProps) {
     });
     const offGuard = s.guard.watch(s.raw, orgId);
     const offState = s.raw.onState(setState);
+    // Box reads run while the connection is open, or while the phone says it is online (the connection is then on its
+    // way): a Wi-Fi without internet still reaches the box on its direct way. Another network dials now, or checks an
+    // open connection, whose socket may be tied to the old one. Its listener comes before the one that asks the owed
+    // reads as the connection opens, so they find the reads online and don't wait paused.
+    const reach = createBoxReach({ session: s.raw, setOnline: (on) => onlineManager.setOnline(on) });
     // This phone's sync log (`data/syncLog.ts`): the reads worth knowing about, the connection and the app coming and
     // going; the notes of earlier runs come back from the device, and go there with the copy on the way out.
     const offReads = watchReads(s.queryClient.getQueryCache(), syncLog);
@@ -393,10 +398,6 @@ export function ApplianceRoot(props: ApplianceRootProps) {
         saveNotes();
       }
     });
-    // Box reads run while the connection is open, or while the phone says it is online (the connection is then on its
-    // way): a Wi-Fi without internet still reaches the box on its direct way. Another network dials now, or checks an
-    // open connection, whose socket may be tied to the old one.
-    const reach = createBoxReach({ session: s.raw, setOnline: (on) => onlineManager.setOnline(on) });
     const offNet = NetInfo.addEventListener((n) => reach.net(n));
     const offSignOut = callbacks.current.addSignOutTask(async () => {
       // A phone that joined without a cloud account handed its token to the box: the box forgets it (LNK-36).

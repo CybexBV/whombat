@@ -235,14 +235,30 @@ describe('whether box reads run, and NetInfo as a hint (createBoxReach)', () => 
     r.dispose();
   });
 
-  it('does not dial when only the internet check comes in', () => {
+  it('dials when the phone gets online after its internet check said no, not on repeats', () => {
     const { session, set, r } = reach();
     set({ status: 'reconnecting', attempt: 4, reason: 'offline', retryAt: 0 });
+    // Unknown, then yes: no change.
     r.net(wifi('10.100.0.7', null));
-    r.net(wifi('10.100.0.7', false));
-    r.net(wifi('10.100.0.7', true));
     r.net(wifi('10.100.0.7', true));
     expect(session.reconnectNow).not.toHaveBeenCalled();
+    // A hotel's sign-in page: no internet until it is passed, then the way out is open.
+    r.net(wifi('10.100.0.7', false));
+    expect(session.reconnectNow).not.toHaveBeenCalled();
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).toHaveBeenCalledTimes(1);
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).toHaveBeenCalledTimes(1);
+    r.dispose();
+  });
+
+  it('while open, only another network does something: it checks the connection', () => {
+    const { session, set, r } = reach();
+    r.net(wifi('10.100.0.7', false));
+    set(OPEN);
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).not.toHaveBeenCalled();
+    expect(session.probe).not.toHaveBeenCalled();
     r.dispose();
   });
 

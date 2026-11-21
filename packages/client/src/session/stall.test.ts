@@ -429,6 +429,8 @@ describe('checking an open connection when the phone comes back (probe)', () => 
     await open(session);
     await read;
     expect(appliance.stats().connects).toBe(2);
+    // Quiet first: anything still arriving would make the check wait again.
+    await pass(20);
     appliance.faults.mutePongs();
     session.probe?.();
     await pass(150);
@@ -444,16 +446,70 @@ describe('checking an open connection when the phone comes back (probe)', () => 
     await open(session);
     appliance.faults.mutePongs();
     session.probe?.();
+    // The first ping's answer is lost; the next one would be answered.
+    await pass(1);
+    appliance.faults.mutePongs(false);
     // The clock jumps a minute while no timer runs, as when Android froze the app.
     vi.setSystemTime(Date.now() + 60_000);
     await pass(100);
-    expect(appliance.stats().connects).toBe(1);
-    // The fresh ping's answer comes: kept.
-    appliance.faults.mutePongs(false);
-    session.probe?.({ onlyIfChecking: true });
-    await pass(150);
+    // Its timer fired late: a fresh ping, whose answer keeps the connection.
+    await pass(300);
     expect(appliance.stats().connects).toBe(1);
     expect(session.state().status).toBe('open');
+  });
+
+  describe('while something keeps arriving', () => {
+    const line = { type: 'typing', conversationId: 'cnv_chat', active: false };
+    /** A subscription the appliance keeps sending on, every 50 ms of the session's time, for `ms`. */
+    async function busy(appliance: ReturnType<typeof probed>['appliance'], ms: number) {
+      for (let t = 0; t < ms; t += 50) {
+        appliance.publishLive('conv:cnv_chat', line);
+        await pass(50);
+      }
+    }
+    async function subscribed(s: ApplianceSession) {
+      s.subscribe(['conv:cnv_chat'], { onEvent: () => undefined, onSnapshotRequired: () => undefined });
+      await pass(5);
+    }
+
+    it('a slow link with a backlog is kept while its pong is on the way', async () => {
+      const { appliance, session } = probed();
+      await open(session);
+      await subscribed(session);
+      appliance.faults.delayPongs(350);
+      session.probe?.();
+      await busy(appliance, 400);
+      appliance.faults.delayPongs(0);
+      await pass(1000);
+      expect(appliance.stats().connects).toBe(1);
+      expect(session.state().status).toBe('open');
+    });
+
+    it('the same late pong over silence: lost', async () => {
+      const { appliance, session } = probed();
+      await open(session);
+      await subscribed(session);
+      appliance.faults.delayPongs(350);
+      session.probe?.();
+      await pass(100);
+      appliance.faults.delayPongs(0);
+      await open(session);
+      expect(appliance.stats().connects).toBe(2);
+    });
+
+    it('no pong at all: lost once the stall check’s longest wait has passed', async () => {
+      const { appliance, session } = probed();
+      await open(session);
+      await subscribed(session);
+      appliance.faults.mutePongs();
+      session.probe?.();
+      await busy(appliance, 19_800);
+      expect(appliance.stats().connects).toBe(1);
+      await busy(appliance, 400);
+      appliance.faults.mutePongs(false);
+      await open(session);
+      expect(appliance.stats().connects).toBe(2);
+    });
   });
 
   it('given its one more wait, an unanswered check ends the connection', async () => {
