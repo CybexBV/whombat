@@ -1,7 +1,8 @@
 /**
  * The page the box serves to browsers on its direct ways (hermes-engine.md HE-50; direct-connection.md DC-08): the
- * hosted web build (whombat-app's session build, the release's `web/`, `webDistDir`), over plain HTTP on the local
- * network and over HTTPS on the Tailscale name. The page connects to its own origin's `DIRECT_PATH`.
+ * hosted web build (the app's session build, the release's `web/`, `webDistDir`), only over HTTPS (`listener.ts`: a
+ * plain-HTTP request for a page gets a sentence naming the HTTPS addresses). The page connects to its own origin's
+ * `DIRECT_PATH`.
  *
  * - The files as they are; content-hashed `/assets/*` cached for a year, everything else revalidated, `index.html`
  *   never cached (an update reaches every browser on its next load); a precompressed sibling (`.br`, `.gz`) when the

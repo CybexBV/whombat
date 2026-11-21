@@ -1,7 +1,7 @@
 Visual regression suite (`pnpm visual`): every desktop screen and state against the HTML references,
 light and dark, plus baselines for unmocked screens and Storybook stories. How to run, update and
-extend it: `tools/visual/README.md`. Shared helpers: `support/harness.ts`. The HTML references are
-internal design material, so the suite doesn't run from the public mirror.
+extend it: `tools/visual/README.md`. Shared helpers: `support/harness.ts`. The HTML references are in
+`docs/design-handoff/design/`.
 
 - `*.spec.ts` — one spec per area (see the coverage table in tools/visual/README.md).
 - `mock*.ts` — the mock's data at a given moment (run tick, approval, audit log), patched into the

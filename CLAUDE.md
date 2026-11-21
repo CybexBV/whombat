@@ -16,7 +16,7 @@ Read before changing anything:
 - `docs/design-handoff/README.md` — the product spec (tokens, components, screens, behavior).
 - `docs/design-handoff/design/*.dc.html` — the visual and interaction reference. The seed data and all
   interactive logic are in the `<script data-dc-script>` block at the bottom of `Whombat Desktop.dc.html`.
-- `docs/design-handoff/TODO.md` — the task list. Do not edit it; the orchestrator ticks boxes.
+- `docs/design-handoff/TODO.md` — the task list. Do not edit it; the maintainers tick its boxes.
 
 ## Rules
 

@@ -20,9 +20,10 @@ can and can't see, and what reading this code can't prove. The protocols and the
   welcome; a pull request under the contributor agreement (`CONTRIBUTING.md`, `docs/legal/contributor-agreement.md`).
 - Third-party licences: `THIRD_PARTY_NOTICES.md`. The name, logo, mascot and app icons: `TRADEMARKS.md` (a fork needs
   its own name and logo).
-- Decision IDs in comments and docs (`AP-nn`, `CT-nn`, `MA-nn`, …) refer to internal design records that aren't
-  published, and so do the design references the visual tooling compares against (`pnpm visual`,
-  `pnpm ref:shot` don't run from the public mirror). `pnpm e2e:managed` runs against an in-browser fake.
+- Decision IDs in comments and docs (`AP-nn`, `CT-nn`, `MA-nn`, …) are rows in the decision files
+  (`docs/app/decisions/`, `docs/decisions/`; `DECISIONS.md` lists those in force). The design references the visual
+  tooling compares against (`pnpm visual`, `pnpm ref:shot`) are in `docs/design-handoff/`. `pnpm e2e:managed` runs
+  against an in-browser fake.
 
 ## Development
 
