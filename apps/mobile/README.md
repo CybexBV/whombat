@@ -34,7 +34,8 @@ modules/whombat-fold/    folding phones: the system's vertical bar, the fold, th
 modules/whombat-menu/    iOS only: a message's long-press menu as iOS's own context menu (UIContextMenuInteraction)
 modules/whombat-sheet/   iOS only: the app's sheets as iOS's own form sheets, with the system's grabber
 modules/whombat-system-bars/ Android only: the area under the tab bar drawn for the app's theme
-modules/whombat-diagnostics/ iOS only: the crash and hang reports and exit counts iOS hands the app (MetricKit), kept for its error notes
+modules/whombat-diagnostics/ how the app ended, for its error notes: iOS's crash and hang reports and exit counts
+                         (MetricKit); Android 11+'s exit reasons (crash, native crash, ANR, memory while on screen)
 modules/whombat-transfer/ big files to and from the phone: Android's “Save as”, and the screen kept on while one moves
 src/
   App.tsx                safe area → theme → fonts → the managed app (or, in a demo build, the demo world)

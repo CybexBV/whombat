@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.whombat'
+version = '0.1.0'
+
+android {
+  namespace "com.whombat.diagnostics"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // @RequiresApi on the parts that read Android 11's exit reasons (already in the app through React Native).
+  implementation 'androidx.annotation:annotation:1.9.1'
+}
