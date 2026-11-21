@@ -5,6 +5,7 @@ export {
   mailItemKey,
   mailItemScope,
   mailTriggerFactsOf,
+  stripMailScopeContent,
 } from './items';
 export { mailPrincipal, SYSTEM_MAIL } from './principal';
 export { type MailTriggerOptions, MailTriggerService } from './service';

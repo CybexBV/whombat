@@ -11,6 +11,7 @@ import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
+import { stripMailScopeContent } from '../../mail-triggers/index';
 import { automationAgent } from '../authority';
 import { proposableConnectionsNote } from '../proposed-actions';
 import {
@@ -109,9 +110,17 @@ export async function executeDispatchAgent({
     if (!resolved.ok) return block(ctx, run, idx, resolved.reason);
     workspace = resolved.workspace;
   }
+  const previousInstructions =
+    attempt > 0 &&
+    run.trigger.kind === 'mail' &&
+    typeof previous.instructions === 'string' &&
+    previous.instructions.trim()
+      ? previous.instructions
+      : null;
   const basePrompt = stepInstructions(run.definition, idx, scope);
   const connectionsNote = step.proposeActions ? await proposableConnectionsNote(tx, run.burrowId) : '';
-  const prompt = connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt;
+  const prompt =
+    previousInstructions ?? (connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt);
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
   const reusable = await reusableAssessment(tx, run, step, agent.id, workspace, prompt, ctx.now);
   if (reusable) return reuseAssessment(ctx, run, idx, step, agent, base, prompt, reusable);
@@ -240,9 +249,14 @@ export async function executeDispatchAgent({
     },
     ctx.now,
   );
+  const strippedScope = stripMailScopeContent(run.scope as JsonObject);
   await tx
     .update(automationRuns)
-    .set({ status: 'waiting', updatedAt: ctx.now })
+    .set({
+      status: 'waiting',
+      ...(strippedScope ? { scope: strippedScope } : {}),
+      updatedAt: ctx.now,
+    })
     .where(eq(automationRuns.id, run.id));
   const services = ctx.services;
   ctx.after(async () => {
@@ -372,9 +386,14 @@ async function reuseAssessment(
     },
     ctx.now,
   );
+  const strippedScope = stripMailScopeContent(run.scope as JsonObject);
   await tx
     .update(automationRuns)
-    .set({ status: 'running', updatedAt: ctx.now })
+    .set({
+      status: 'running',
+      ...(strippedScope ? { scope: strippedScope } : {}),
+      updatedAt: ctx.now,
+    })
     .where(eq(automationRuns.id, run.id));
 }
 

@@ -875,8 +875,9 @@ describe('mail-arrives automations', () => {
     // Baseline.
     await pollAndSettle();
 
-    // Deliver a matching email and poll without settling the automation engine yet.
+    // Deliver a matching email (with an attachment) and poll without settling the automation engine yet.
     w.advance(10_000);
+    const f6Pdf = Buffer.from('%PDF-1.4\nPrivacy PDF\n%%EOF');
     fake.deliverMail(FAKE_ACCESS_TOKEN, {
       id: 'msg_f6_one',
       from: 'Billing <billing@example.com>',
@@ -886,7 +887,15 @@ describe('mail-arrives automations', () => {
       messageId: '<f6-one@example.com>',
       date: w.now(),
       labelIds: ['INBOX'],
-      attachments: [],
+      attachments: [
+        {
+          id: 'att_f6_pdf',
+          name: 'privacy-invoice.pdf',
+          mimeType: 'application/pdf',
+          size: f6Pdf.length,
+          contentBase64: f6Pdf.toString('base64'),
+        },
+      ],
     });
     expect(await w.services.mailTriggers.pollOnce()).toBe(1);
     const [beforeRun] = await w.services.db
@@ -898,13 +907,27 @@ describe('mail-arrives automations', () => {
     expect(beforeRun?.body).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     expect(beforeRun?.snippet.length).toBeGreaterThan(0);
 
-    // Once the run starts, the run scope has the fenced email while mail_trigger_items drops body and snippet.
+    // Once the agent step renders its prompt, the rendered prompt has the fenced body, while BOTH mail_trigger_items
+    // AND automation_runs.scope strip body/snippet/text — keeping sender, subject and attachment names on the run.
     await w.settle();
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
-    expect(String((runs[0]?.scope as { body?: string })?.body ?? '')).toContain(
-      'CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED',
-    );
+    const runScope = (runs[0]?.scope ?? {}) as Record<string, unknown>;
+    expect(runScope).not.toHaveProperty('body');
+    expect(runScope).not.toHaveProperty('snippet');
+    expect(runScope).not.toHaveProperty('text');
+    expect(JSON.stringify(runScope)).not.toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+    expect(String(runScope.from ?? '')).toContain('billing@example.com');
+    expect(String(runScope.subject ?? '')).toContain('Privacy invoice #1');
+    expect(String(runScope.attachments ?? '')).toContain('privacy-invoice.pdf');
+
+    const runDetail = await w.run(runs[0]?.id as string);
+    const [f6Dispatch] = await w.services.db
+      .select()
+      .from(dispatches)
+      .where(eq(dispatches.id, runDetail.steps[0]?.dispatchId as string));
+    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
+    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     const [afterRun] = await w.services.db
       .select()
       .from(mailTriggerItems)

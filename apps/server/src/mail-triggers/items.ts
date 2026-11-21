@@ -103,3 +103,15 @@ export function mailItemScope(item: MirroredMailItem): JsonObject {
     }),
   };
 }
+
+/**
+ * Strips mail body text (`body`, `snippet`, `text`) from a mail run's scope once the agent step's prompt has been
+ * rendered, so email contents are not kept forever on `automation_runs`. Keeps sender (`from`), `subject`,
+ * attachment names/metadata (`attachments`, `attachmentIds`, `missingAttachments`) and routing fields.
+ */
+export function stripMailScopeContent(scope: JsonObject | null | undefined): JsonObject | null {
+  if (!scope || (scope as { kind?: unknown }).kind !== 'mail') return null;
+  if (!('body' in scope) && !('snippet' in scope) && !('text' in scope)) return null;
+  const { body: _body, snippet: _snippet, text: _text, ...kept } = scope as Record<string, unknown>;
+  return kept as JsonObject;
+}
