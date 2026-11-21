@@ -16,6 +16,8 @@
 // Layout: <dir>/android/whombat-<version>.apk and <dir>/android/latest.json
 // {version, versionCode, file, size, sha256, publishedAt}. Files are written under a temporary name and renamed, so
 // control never serves half an APK; the previous APK stays (a download that started keeps working), older ones go.
+// Beside them, <dir>/sourcemaps/<versionCode>-<rev>.map and .mapping.txt keep the build's bundle source map and R8's
+// mapping (the newest 30 builds): outside android/, and control serves only the one APK latest.json names.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -68,6 +70,48 @@ const m = /^(\d{1,4})\.(\d{1,3})\.(\d{1,3})$/.exec(version);
 if (!m) throw new Error(`the app version ${version} (apps/web/package.json) isn't X.Y.Z`);
 // app.config.cjs's versionCode (AP-259).
 const versionCode = Number(m[1]) * 1_000_000 + Number(m[2]) * 1_000 + Number(m[3]);
+
+/** How many builds' maps stay: a few weeks of them, each some megabytes. */
+const MAPS_KEPT = 30;
+
+/**
+ * The bundle's source map and R8's mapping, kept per build beside the published files
+ * (`<dir>/sourcemaps/<versionCode>-<rev>.map`, `….mapping.txt`): an error note from the phone names lines of the
+ * minified bundle (src/errors/errorNotes.ts), and a crash's Java frames are R8's short names; these turn them back into
+ * the code's. Never stops a publish.
+ */
+function keepMaps() {
+  try {
+    const rev =
+      spawnSync('git', ['-C', mobile, 'rev-parse', '--short=9', 'HEAD'], {
+        encoding: 'utf8',
+      }).stdout?.trim() || 'local';
+    const maps = join(downloads, 'sourcemaps');
+    mkdirSync(maps, { recursive: true });
+    const name = `${versionCode}-${rev}`;
+    const gradle = join(mobile, 'android/app/build');
+    // React Native's Gradle plugin writes the Hermes bundle's map, composed with Metro's, under the bundle's name.
+    const generated = join(gradle, 'generated/sourcemaps/react/release');
+    const sourceMap = existsSync(generated)
+      ? readdirSync(generated).find((entry) => entry.endsWith('.bundle.map'))
+      : undefined;
+    const mapping = join(gradle, 'outputs/mapping/release/mapping.txt');
+    if (sourceMap) {
+      copyFileSync(join(generated, sourceMap), join(maps, `${name}.map`));
+      console.log(`Kept the bundle's source map as ${join(maps, `${name}.map`)}`);
+    } else console.warn(`No bundle source map in ${generated}: this build's error notes can't be read back`);
+    if (existsSync(mapping)) copyFileSync(mapping, join(maps, `${name}.mapping.txt`));
+    // The newest builds stay, whole: a build is the files that share its name.
+    const byAge = readdirSync(maps)
+      .map((entry) => ({ entry, build: entry.split('.')[0], at: statSync(join(maps, entry)).mtimeMs }))
+      .sort((a, b) => b.at - a.at);
+    const kept = new Set();
+    for (const { build } of byAge) if (kept.size < MAPS_KEPT) kept.add(build);
+    for (const { entry, build } of byAge) if (!kept.has(build)) rmSync(join(maps, entry), { force: true });
+  } catch (error) {
+    console.warn(`The build’s source map wasn’t kept: ${error instanceof Error ? error.message : error}`);
+  }
+}
 
 const built = join(mobile, 'build/whombat-release.apk');
 if (!args.includes('--skip-build')) {
@@ -123,6 +167,8 @@ renameSync(`${latest}.partial`, latest);
 
 for (const entry of readdirSync(out))
   if (entry.endsWith('.apk') && entry !== file && entry !== previous) rmSync(join(out, entry));
+
+keepMaps();
 
 console.log(
   `Published ${file} (${(record.size / 1e6).toFixed(1)} MB, sha256 ${sha256}) for ${envName} in ${out}`,

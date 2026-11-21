@@ -86,6 +86,21 @@ class WhombatLiveModule : Module() {
       consumePushTap(intent)?.let { url -> runCatching { sendEvent("onPushTap", mapOf("url" to url)) } }
     }
 
+    /**
+     * What Android holds back beyond the app-wide permission (`Delivery`): each Whombat channel and whether it is off,
+     * background restriction, battery optimisation and Live Updates.
+     */
+    Function("deliveryStatus") { Delivery.status(context) }
+
+    /** The settings page for one of those (`channel` with its id, `notifications`, `liveUpdates`, `battery`). */
+    Function("openDeliverySettings") { page: String, channel: String? ->
+      Delivery.openSettings(context, page, channel) { intent ->
+        val activity = appContext.currentActivity
+        if (activity != null) activity.startActivity(intent)
+        else context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      }
+    }
+
     /** Epoch ms of the last managed push this install received (“push delivered”, apart from the session). */
     Function("lastGenericPushAt") {
       val at = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(GENERIC_AT_KEY, 0L)

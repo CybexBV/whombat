@@ -13,6 +13,7 @@
  * The note claims no more than that: not that it was a crash, and “no memory warning” doesn't rule memory out.
  */
 import type { AppErrorNote } from '@whombat/core';
+import { ANDROID_EXIT_NAMES } from './androidExits';
 import { DIAGNOSTIC_NAMES } from './diagnostics';
 import type { NoteFile } from './errorNotes';
 
@@ -34,7 +35,11 @@ export interface OpenMark {
 export const ENDED_WHILE_OPEN = 'EndedWhileOpen';
 
 /** The endings noted after the fact, by a later run: never the explanation of another ending. */
-const TOLD_LATER: ReadonlySet<string> = new Set([ENDED_WHILE_OPEN, ...Object.values(DIAGNOSTIC_NAMES)]);
+const TOLD_LATER: ReadonlySet<string> = new Set([
+  ENDED_WHILE_OPEN,
+  ...Object.values(DIAGNOSTIC_NAMES),
+  ...Object.values(ANDROID_EXIT_NAMES),
+]);
 
 const seconds = (from: string, to: string) =>
   Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000)) || 0;

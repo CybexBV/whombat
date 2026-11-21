@@ -184,6 +184,13 @@ export const COPY = {
     failed: 'Couldn’t set up',
     failedMeta: 'Whombat’s service didn’t answer. It tries again the next time you open the app.',
     lastReceived: (ago: string) => `Last one ${ago}`,
+    /** Android lets some through and holds others back (pushView.ts). */
+    partly: 'Partly on',
+    channelsOff: (names: string) => `${names} notifications are off in this phone’s settings.`,
+    heldBack: 'Held back',
+    restrictedMeta: 'Battery use for Whombat is restricted, so notifications can’t arrive while it’s closed.',
+    liveUpdatesOff: 'Live Updates are off for Whombat, so runs show as ordinary notifications.',
+    batteryMeta: 'This phone may hold Whombat’s notifications back to save battery.',
     opening: 'Opening what needs you…',
   },
   /** The parts' names are the shared `THIS_WHOMBAT_TEXT.parts` (this-whombat-sections-android.md AP-1252). */

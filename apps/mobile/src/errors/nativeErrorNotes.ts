@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { File, Paths } from 'expo-file-system';
 import { AppState, Platform } from 'react-native';
 import { onDiagnostics, pendingDiagnostics, removeDiagnostics } from '../../modules/whombat-diagnostics';
+import { notesOfExit } from './androidExits';
 import { notesOfPayload } from './diagnostics';
 import { createOpenMarker, noteOfLeftover } from './endedWhileOpen';
 import {
@@ -146,7 +147,8 @@ export function notePageError(error: unknown, componentStack: string | null | un
 }
 
 // The app ended while it was open (`endedWhileOpen.ts`). iPhone only: on Android the app's own updater ends it while
-// it is open at every update, which would be noted each time.
+// it is open at every update, which would be noted each time; there Android names how each run ended itself
+// (`androidExits.ts`), and an update isn't one of the endings noted.
 const openMarker = createOpenMarker(documentFile('whombat-open-mark.json'), buildLabel());
 const OPEN_SEEN_MS = 60_000;
 
@@ -172,12 +174,18 @@ export function noteRoute(name: string | undefined): void {
   } catch {}
 }
 
-/** What iOS handed over since (`diagnostics.ts`), noted; a payload that can't be read stays for a later version. */
+/**
+ * What iOS handed over since (`diagnostics.ts`), or how Android says the earlier runs ended (`androidExits.ts`), noted;
+ * a payload that can't be read stays for a later version.
+ */
 function noteDiagnostics(): void {
   try {
     const done: string[] = [];
     for (const payload of pendingDiagnostics()) {
-      const notes = notesOfPayload(payload.json, { build: buildLabel(), at: new Date() });
+      const notes =
+        Platform.OS === 'android'
+          ? notesOfExit(payload.json, { build: buildLabel(), now: new Date(), pending: errorNotes.pending() })
+          : notesOfPayload(payload.json, { build: buildLabel(), at: new Date() });
       if (!notes) continue;
       for (const note of notes) errorNotes.add(note);
       done.push(payload.id);
