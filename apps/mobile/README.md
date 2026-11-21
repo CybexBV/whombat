@@ -137,8 +137,7 @@ message --es ref <22 chars>` imitates a tap on a notification FCM itself showed.
 
 ## Screenshots and visual checks
 
-`pnpm ref:shot` renders the internal design references, so the reference half of this doesn't run from the
-public mirror.
+`pnpm ref:shot` renders the design references in `docs/design-handoff/`.
 
 ```sh
 adb -s emulator-5610 exec-out screencap -p > .visual/mobile/inbox.png                  # 1104 × 2466

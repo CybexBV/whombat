@@ -1382,7 +1382,8 @@ Setup and operation: `docs/github.md`.
   the same way (allowed by Talk's own switch) for Talk's box, and the person sends the words as a question. Talk says
   its answers aloud with the speech service (Kokoro in the voice the person chose); an answer in Dutch, told by its
   words, is written out as it is said (numbers, times, names like pve-02) and said in the service's Dutch voice
-  (Supertonic 3) of the same kind, when the service's health lists Dutch
+  (Supertonic 3) of the same kind, when the service's health lists Dutch (the image has no Dutch voice: the
+  appliance's nixos.md NX-528)
   ([desk-display-talk.md](docs/decisions/desk-display-talk.md)). `WHOMBAT_VOICE=fake` brings a fake speech service and a fake fetcher whose downloads take a few seconds.
 - **Notifications** (`domain/message-notify.ts`): one rule decides what notifies the person, at their level for the
   room; the agent and Whombat's signers are never notified. Do not disturb and quiet hours hold push back.

@@ -264,8 +264,8 @@ describe('Home Assistant (CS-22)', () => {
 
   it('names the token after this Whombat', async () => {
     const { stub } = await homeAssistant();
-    await provisionHomeAssistant(stubInput(stub, 'homeassistant', { name: 'Whombat (Pals)' }));
-    expect(created(stub)[0]).toMatchObject({ client_name: 'Whombat (Pals)' });
+    await provisionHomeAssistant(stubInput(stub, 'homeassistant', { name: 'Whombat (Lumio)' }));
+    expect(created(stub)[0]).toMatchObject({ client_name: 'Whombat (Lumio)' });
   });
 
   it('never deletes a token, not even Whombat’s own: it takes the next free name', async () => {

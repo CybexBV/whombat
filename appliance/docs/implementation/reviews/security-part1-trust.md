@@ -1,5 +1,8 @@
 # W4-SEC part 1: trust and permissions (independent review)
 
+> A review of the code as it was on 2026-09-25, kept for its reasoning; the code has changed a lot since. How
+> Whombat handles trust today: `docs/app/privacy-and-security.md`. Report a problem you find today: `SECURITY.md`.
+
 Reviewer: W4-SEC (independent; did not write this code). Date: 2026-09-25.
 
 **Scope and heads reviewed**

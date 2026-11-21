@@ -1,5 +1,9 @@
 # Independent security review: `@whombat/secure-channel`
 
+> A review of the code as it was on 2026-09-25, kept for its reasoning. The re-review further down records the
+> fixes. How Whombat handles trust today: `docs/app/privacy-and-security.md`. Report a problem you find today:
+> `SECURITY.md`.
+
 Date: 2026-09-25. Reviewer: independent agent (did not write the code under review).
 Target: `whombat-contracts` branch `secure-channel` at `0483442` (`packages/secure-channel/**`,
 `docs/decisions/secure-channel.md`, `packages/protocol/src/frame*`, contracts 0.2.0).

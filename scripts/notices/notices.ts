@@ -220,7 +220,7 @@ const MARK_LICENCES: Record<string, string> = {
   'Moneybird brand': 'Moneybird’s brand, drawn as published',
   'Pipedrive brand': 'Pipedrive’s brand, drawn as published',
   Unlicense: 'Unlicense',
-  own: 'John Pals’s own',
+  own: 'Cybex BV’s own',
   unverified: 'not verified yet',
 };
 /** What a mark's upstream offers beyond the licence SOURCES.md records (Simple Icons records one). */

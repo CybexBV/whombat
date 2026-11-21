@@ -429,7 +429,7 @@ function sidebar(active) {
   ${SERVERS.map((s) => `<div class="thing ${active === s.id ? 'on' : ''}"><span class="logo">${L[s.logo]}</span><span class="nm host">${s.id}</span><span class="dot ${s.st[0]}"></span></div>`).join('')}
   <div class="slabel">Services ${ic('plus', 'i xs')}</div>
   ${SERVICES.map((s) => `<div class="thing"><span class="logo">${L[s.logo]}</span><span class="nm">${s.name}</span>${s.st[1] === 'Learning' ? '<span class="lrn">learning</span>' : `<span class="dot ${s.st[0]}"></span>`}</div>`).join('')}
-  <div class="me"><span class="av">JP</span><div><b>John Pals</b><small>Owner</small></div>${ic('gear', 'i')}</div>`;
+  <div class="me"><span class="av">JD</span><div><b>John Doe</b><small>Owner</small></div>${ic('gear', 'i')}</div>`;
 }
 document.querySelectorAll('[data-side]').forEach((el) => (el.innerHTML = sidebar(el.dataset.side)));
 

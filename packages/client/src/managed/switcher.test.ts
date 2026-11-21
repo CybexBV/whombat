@@ -36,7 +36,7 @@ const LIST = [
   summary('dev_tracker', 'Support office', NOW / 1000 - 3 * 3600),
   summary('dev_lumio', 'Lumio', NOW / 1000 - 10),
   summary('dev_lab', 'Lab box', NOW / 1000 - 30),
-  summary('dev_home', 'Pals thuis', NOW / 1000 - 60),
+  summary('dev_home', 'Ons thuis', NOW / 1000 - 60),
   summary('dev_old', 'Old box', NOW / 1000 - 60, 'retired'),
   summary('dev_new', null, null),
 ];

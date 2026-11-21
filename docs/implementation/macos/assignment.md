@@ -3,15 +3,14 @@
 Decisions: `docs/decisions/macos-servers.md` (MAC-01…MAC-11). Read them first. This file fixes the shapes that cross
 the streams' boundaries; anything inside one stream is that stream's to decide (record it: hosts in the hosts service
 `docs/decisions/hosts.md` from HS-263, Whombat in `docs/decisions/macos-servers.md` from MAC-12, the app's in the same
-file). Real target: John's Mac Studio (user `john`, macOS 27.2.1, arm64, passwordless sudo, Screen Sharing on and
-offering RFB security types 30, 33, 36, 35, auto-login as john, FileVault off, SIP on, no MDM, Xcode 27.1, Swift 6.4).
+file). Real target: a Mac Studio on macOS 27 (arm64) with Xcode, Screen Sharing on and SIP on.
 
 ## Rules for every stream
 
 - Read the repository's `CLAUDE.md`, `AGENTS.md` and `CLAUDE.local.md` first. Commit on your own branch, small
   commits, messages ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push, never merge
   into `main`: the lead merges. Never `--no-verify`.
-- The Mac Studio is John's working Mac: no `brew install`/`upgrade`, no keychain changes except the ones a step below
+- The Mac is someone's working Mac: no `brew install`/`upgrade`, no keychain changes except the ones a step below
   names, nothing in `~/Code/whombat-app`, `~/Code/Whombat-publish`, `~/Code/Whombat-ipa` or `~/whombat-ios-build`. Your
   own files go in `~/whombat-macos/<stream>/` there and are removed when you finish. Don't log out, restart, or change
   Sharing, Privacy or login settings. Lock the screen again (`pmset displaysleepnow`) if you unlocked it.

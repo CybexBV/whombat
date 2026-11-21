@@ -682,9 +682,8 @@
               && lib.hasInfix "-voice-models.json " sc.ExecStart
               && lib.hasInfix "/bin/kokoro-speak " sc.ExecStart
               && lib.hasInfix "-kokoro-v1_0-en --kokoro-voices 'heart=3:us:woman,bella=2:us:woman,michael=16:us:man,fenrir=14:us:man,emma=21:gb:woman,george=26:gb:man' " sc.ExecStart
-              # Dutch (NX-476…NX-478): supertonic-speak, the model, F2 for a woman's voice and M4 for a man's.
-              && lib.hasInfix "/bin/supertonic-speak --supertonic-model /nix/store/" sc.ExecStart
-              && lib.hasInfix "-supertonic-3-int8 --supertonic-speakers 1,8" sc.ExecStart;
+              # No Dutch voice in the image: Supertonic's model stays out until the person agrees to its terms.
+              && !(lib.hasInfix "supertonic" sc.ExecStart);
             # The fetcher (NX-473): its own account, the network, of /persist its directory, a socket for the server.
             assert
               let
@@ -720,8 +719,9 @@
               pkgs.voice-test-whisper
               pkgs.voice-kokoro-model
             ];
-            # The one exception, on purpose (NX-477): Supertonic 3, Dutch, under Open RAIL-M (redistributable, with use
-            # restrictions that travel with it), its licence in the package.
+            # The one exception (NX-477), built for the speech check only and not in the image: Supertonic 3,
+            # Dutch, under Open RAIL-M (redistributable, with use restrictions that travel with it), its licence in the
+            # package.
             assert
               pkgs.voice-supertonic-model.licence.fullName == "BigScience Open RAIL-M"
               && !(pkgs.voice-supertonic-model.meta ? license)

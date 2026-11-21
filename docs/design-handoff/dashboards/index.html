@@ -459,7 +459,7 @@ function sidebar(active){
   ${servers.map(([n,s])=>`<div class="thing ${n===active?'on':''}">${ic('server','i s')}<span class="nm host">${n}</span><span class="dot ${s}"></span></div>`).join('')}
   <div class="slabel">Your things ${ic('plus','i s')}</div>
   ${things.map(([i,n,s])=>`<div class="thing ${n===active?'on':''}">${ic(i,'i s')}<span class="nm">${n}</span><span class="dot ${s}"></span></div>`).join('')}
-  <div class="me"><span class="av">JP</span><div style="flex:1"><b>John Pals</b><small>Owner</small></div>${ic('gear','i')}</div>`;
+  <div class="me"><span class="av">JD</span><div style="flex:1"><b>John Doe</b><small>Owner</small></div>${ic('gear','i')}</div>`;
 }
 document.querySelectorAll('.side').forEach(s => s.innerHTML = sidebar(s.dataset.active));
 

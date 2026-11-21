@@ -1,5 +1,9 @@
 # W4-SEC part 2: updates, boot, backup and recovery (independent review)
 
+> A review of the code as it was in September 2026, kept for its reasoning. The re-reviews at the end record the
+> fixes (the critical recovery shell, C-1, among them). How Whombat handles trust today:
+> `docs/app/privacy-and-security.md`. Report a problem you find today: `SECURITY.md`.
+
 Reviewer: W4-SEC (independent; did not write this code). Date: 2026-09-25.
 Head reviewed: the appliance’s `main` at **87e900c** (contains 7e36445, the nixos merge).
 
