@@ -3,8 +3,7 @@ import type { JsonObject } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { callArgsAad } from '../../connections/call';
 import { automationRuns } from '../../db/schema/index';
-import { clipTitle, planConnectionActions } from '../proposed-actions';
-import { approvedBranchRequest } from '../workspace';
+import { approvedActionsRequest, clipTitle, planConnectionActions } from '../proposed-actions';
 import { CONTINUE_STEP, requestStepApproval } from './approval';
 import { block, skipStep, updateStep } from './state';
 import type { StepExecution } from './types';
@@ -35,9 +34,14 @@ export async function executeConnectionActions({
     return skipStep(ctx, run, idx, base, 'No actions were proposed.', { ran: false, count: 0 });
   }
 
-  // Always ask the person on a card first, whatever standing settings on connections or keys say.
+  // Always ask the person on a card first, whatever standing settings on connections or keys say, and require the
+  // approved card's `actionsHash` to match what was just re-planned (if anything changed, ask again instead of running).
   const asked = typeof previous.actionsApprovalId === 'string' ? previous.actionsApprovalId : null;
-  const approved = asked ? await approvedBranchRequest(tx, asked, run.id, step, attempt) : false;
+  const previousHash = typeof previous.actionsHash === 'string' ? previous.actionsHash : null;
+  const approved =
+    asked !== null &&
+    previousHash === plan.actionsHash &&
+    (await approvedActionsRequest(tx, asked, run.id, step, attempt, plan.actionsHash));
   if (!approved || !asked) {
     const bulletLines = plan.actions
       .map((a) =>

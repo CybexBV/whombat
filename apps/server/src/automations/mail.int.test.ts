@@ -23,6 +23,7 @@ import {
   approvals,
   attachments,
   automationPlans,
+  automationRunSteps,
   automationRuns,
   catalogConnections,
   connectionTools,
@@ -1786,6 +1787,171 @@ describe('mail-arrives automations', () => {
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('asks again instead of running when proposed actions change after approval', async () => {
+    const seen: { url: string; body: string }[] = [];
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        seen.push({ url: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') });
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: '1' }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const netId = newId('vaultNetwork');
+    let mbId = '';
+    let autoId = '';
+    try {
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          if (host === 'moneybird-bind.example.com') return [{ address: '10.100.92.21', family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address === '10.100.92.21' ? '127.0.0.1' : address),
+        deadlineMs: 3000,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.92.0/24',
+        ports: [port],
+        note: 'Moneybird bind test',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      mbId = await insertConnection(w.services, {
+        catalogId: 'moneybird',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { administration: '12345' },
+        auth: { type: 'bearer' },
+        secret: 'm'.repeat(64),
+        label: 'Moneybird',
+      });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ baseUrl: `http://moneybird-bind.example.com:${port}/api/v2` })
+        .where(eq(catalogConnections.id, mbId));
+      await syncTools(w.services, mbId);
+      await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+      autoId = await createMailAutomation({
+        kind: 'mail',
+        connectionId,
+        from: 'example.com',
+        subjectContains: ['hash-binding'],
+      });
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_hash_binding',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'hash-binding invoice',
+        body: 'Test hash binding.',
+        messageId: '<hash-binding@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const runId = runRow?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'moneybird',
+              tool: 'request',
+              summary: 'Draft INV-A',
+              arguments: {
+                method: 'POST',
+                path: '/12345/documents/purchase_invoices.json',
+                body: { purchase_invoice: { reference: 'INV-A', amount: '10.00' } },
+              },
+            },
+          ],
+        },
+      );
+      await w.fakeAgentReply(dispatchId, 'Proposed INV-A.');
+      await w.settle();
+
+      const waiting1 = await w.run(runId);
+      const firstApprovalId = waiting1.steps[1]?.approvalId as string;
+      const [card1] = await w.services.db.select().from(approvals).where(eq(approvals.id, firstApprovalId));
+      expect(card1?.state).toBe('pending');
+      expect(card1?.title).toContain('INV-A');
+
+      // Approve card #1 (continueStep puts step 2 back to `pending` with actionsApprovalId = card1.id).
+      await w.ok(IDS.mara, decideApproval, { number: card1?.number as number, decision: 'approve' });
+
+      // Before the engine executes step 2, tamper with step 0's proposedActions to swap in INV-B (amount 9999.00).
+      const [step0] = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.idx, 0)));
+      await w.services.db
+        .update(automationRunSteps)
+        .set({
+          output: {
+            ...(step0?.output as Record<string, unknown>),
+            proposedActions: [
+              {
+                connection: 'moneybird',
+                tool: 'request',
+                summary: 'Draft INV-B',
+                arguments: {
+                  method: 'POST',
+                  path: '/12345/documents/purchase_invoices.json',
+                  body: { purchase_invoice: { reference: 'INV-B', amount: '9999.00' } },
+                },
+              },
+            ],
+          },
+        })
+        .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.idx, 0)));
+
+      // Engine ticks: re-planned actionsHash differs from card #1, so ZERO calls run and a NEW card is posted!
+      await w.settle();
+      expect(seen).toHaveLength(0);
+      const waiting2 = await w.run(runId);
+      expect(waiting2.status).toBe('waiting');
+      expect(waiting2.steps[1]?.state).toBe('waiting');
+      const secondApprovalId = waiting2.steps[1]?.approvalId as string;
+      expect(secondApprovalId).toBeTruthy();
+      expect(secondApprovalId).not.toBe(firstApprovalId);
+
+      const [card2] = await w.services.db.select().from(approvals).where(eq(approvals.id, secondApprovalId));
+      expect(card2?.state).toBe('pending');
+      expect(card2?.title).toContain('9999.00');
+      expect(card2?.title).toContain('INV-B');
+
+      // Approving card #2 runs INV-B.
+      await w.ok(IDS.mara, decideApproval, { number: card2?.number as number, decision: 'approve' });
+      await w.settle();
+      const done = await w.run(runId);
+      expect(done.status).toBe('succeeded');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.body).toContain('INV-B');
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (mbId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
       await pollAndSettle();
     }
   });

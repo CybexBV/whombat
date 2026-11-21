@@ -26,13 +26,14 @@ import { loadGrants } from '../../read/principals';
 import { automationAgent, publisherCheck } from '../authority';
 import {
   actionsDoneLine,
+  approvedActionsRequest,
+  hashPlannedActions,
   isProposableEntry,
   proposeCallRefusal,
   threadAttachment,
 } from '../proposed-actions';
 import { stepRoomsCheck } from '../steps';
 import type { AutomationStepRow } from '../store';
-import { approvedBranchRequest } from '../workspace';
 import type { LeasedRun } from './step-ops';
 
 interface PreparedAction {
@@ -56,6 +57,7 @@ export async function runConnectionActions(
   const db = services.db;
   const out = row.output as {
     actionsApprovalId?: string;
+    actionsHash?: string;
     actions?: PreparedAction[];
   };
   const refuse = (error: string) =>
@@ -66,12 +68,13 @@ export async function runConnectionActions(
   const rooms = await stepRoomsCheck(db, run, row.idx, who.publisher);
   if (!rooms.ok) return void (await refuse(rooms.reason));
 
-  // Belt-and-braces: never execute without a verified approved approval row for this exact run, step and attempt.
+  // Belt-and-braces: never execute without a verified approved approval row matching this run, step, attempt and hash.
   if (
     !out.actionsApprovalId ||
-    !(await approvedBranchRequest(db, out.actionsApprovalId, run.id, step, row.attempt))
+    !out.actionsHash ||
+    !(await approvedActionsRequest(db, out.actionsApprovalId, run.id, step, row.attempt, out.actionsHash))
   ) {
-    return void (await refuse('These actions need your approval before they can run.'));
+    return void (await refuse('These actions changed since you approved them, so they need a new approval.'));
   }
 
   const actions = Array.isArray(out.actions) ? out.actions : [];
@@ -172,6 +175,21 @@ export async function runConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, conn, tool));
     if (outside) return void (await refuse(outside));
     ready.push({ action, args });
+  }
+
+  // Re-verify the exact batch hash against what was approved before sending any network call.
+  const openedHash = hashPlannedActions(
+    ready.map(({ action, args }) => ({
+      connectionId: action.connectionId,
+      tool: action.tool,
+      toolHash: action.toolHash,
+      description: action.description ?? action.summary,
+      summary: action.summary,
+      args,
+    })),
+  );
+  if (openedHash !== out.actionsHash) {
+    return void (await refuse('These actions changed since you approved them, so they need a new approval.'));
   }
 
   // Resolver scoped strictly to ready attachments on THIS run's thread.

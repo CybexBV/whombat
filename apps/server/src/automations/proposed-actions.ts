@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import {
+  type AutomationStep,
   type CatalogEntry,
   CONNECTOR_BINARY_MAX_BYTES,
   canonicalJson,
@@ -33,6 +34,7 @@ import { normaliseSocketArgs } from '../connections/socket/call';
 import type { ConnectionToolRow } from '../connections/types';
 import type { Db, Tx } from '../db/client';
 import {
+  approvals,
   attachments,
   automationRunSteps,
   automationRuns,
@@ -627,20 +629,7 @@ export async function planConnectionActions(
     });
   }
 
-  const actionsHash = createHash('sha256')
-    .update(
-      canonicalJson(
-        planned.map((a) => ({
-          connectionId: a.connectionId,
-          tool: a.tool,
-          toolHash: a.toolHash,
-          description: a.description,
-          summary: a.summary,
-          args: a.args,
-        })),
-      ),
-    )
-    .digest('hex');
+  const actionsHash = hashPlannedActions(planned);
 
   const uniqueLabels = [...new Set(planned.map((a) => singleLine(a.label)).filter(Boolean))];
   const proposal =
@@ -668,6 +657,62 @@ export function actionsDoneLine(
   const textOf = (a: { description?: string; summary: string }) => a.description || a.summary;
   if (actions.length === 1 && actions[0]) return `Done: ${textOf(actions[0])}.`;
   return `Done: ${actions.map(textOf).join('; ')}.`.slice(0, 1000);
+}
+
+/** Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card. */
+export function hashPlannedActions(
+  planned: readonly {
+    connectionId: string;
+    tool: string;
+    toolHash: string;
+    description: string;
+    summary: string;
+    args: Record<string, unknown>;
+  }[],
+): string {
+  return createHash('sha256')
+    .update(
+      canonicalJson(
+        planned.map((a) => ({
+          connectionId: a.connectionId,
+          tool: a.tool,
+          toolHash: a.toolHash,
+          description: a.description,
+          summary: a.summary,
+          args: a.args,
+        })),
+      ),
+    )
+    .digest('hex');
+}
+
+/**
+ * Whether `approvalId` is an approved card for this exact run step, attempt, and planned `actionsHash` (binding what
+ * runs to what the person actually approved).
+ */
+export async function approvedActionsRequest(
+  db: Db | Tx,
+  approvalId: string,
+  runId: string,
+  step: Pick<AutomationStep, 'id'>,
+  attempt: number,
+  actionsHash: string,
+): Promise<boolean> {
+  if (!actionsHash) return false;
+  const [row] = await db.select().from(approvals).where(eq(approvals.id, approvalId));
+  const binding = row?.actionBinding;
+  const approvedHash =
+    row?.command?.name === 'automation.continue_step' &&
+    typeof row.command.input === 'object' &&
+    row.command.input !== null
+      ? (row.command.input as { actionsHash?: unknown }).actionsHash
+      : null;
+  return (
+    row?.state === 'approved' &&
+    binding?.runId === runId &&
+    binding.stepId === `${step.id}#${attempt}` &&
+    approvedHash === actionsHash
+  );
 }
 
 export { REQUEST_TOOL_NAME };
