@@ -33,9 +33,9 @@ CT-1150…CT-1179 in `docs/contracts/decisions/contracts.md`. Nothing is kept fo
 - `RunnerStatus.hermes` (required); `AgentSetupStatus.hermes` (`HermesCheck | null`).
 - `Burrow.localModel` (`LocalModelView | null`, default null).
 - `CHAT_PROVIDERS` / `ChatProvider` / `ChatRuntime` / `RanOn` / `ChatRuntimeProvider` take `local`;
-  `CHAT_PROVIDER_LABELS.local` “Local”; `ChatRuntimeView.providers` up to 3; `CHAT_RUNTIME_COPY.fastHint` has `claude`
+  `CHAT_PROVIDER_LABELS.local` “Custom”; `ChatRuntimeView.providers` up to 3; `CHAT_RUNTIME_COPY.fastHint` has `claude`
   and `codex` only.
-- `PROVIDER_LABELS.local` “A model on your network”; `turnFailureText(…, {provider: 'local'})`.
+- `PROVIDER_LABELS.local` “Custom AI model”; `turnFailureText(…, {provider: 'local'})`.
 - `ModelFallbackWhere.kind` takes `local`.
 - `BackupSettingsRecord.localModel`; `BACKUP_SCHEMA_VERSION` 4.
 

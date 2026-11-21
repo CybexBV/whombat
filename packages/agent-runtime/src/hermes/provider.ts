@@ -654,7 +654,7 @@ export class HermesProvider implements AgentProvider {
       yield {
         type: 'error',
         message:
-          'I can’t reply yet: the model on your network isn’t set up. Set it up in Settings → AI, then ask me again.',
+          'I can’t reply yet: the custom AI model isn’t set up. Set it up in Settings → AI, then ask me again.',
         retryable: false,
       };
       return;
@@ -1006,7 +1006,7 @@ export class HermesProvider implements AgentProvider {
         loop?.kind === 'gateway' && this.kind === 'claude'
           ? 'on Claude DirectSDK through the AI gateway'
           : loop
-            ? `on ${loop.kind === 'key' ? 'an API key' : loop.kind === 'gateway' ? 'the AI gateway' : 'a local model'}`
+            ? `on ${loop.kind === 'key' ? 'an API key' : loop.kind === 'gateway' ? 'the AI gateway' : 'a custom AI model'}`
             : `on ${this.runtime === 'claude_directsdk' ? 'Claude DirectSDK' : 'ChatGPT (openai-codex)'}`,
       );
       if (tornDown || signal.aborted) return;

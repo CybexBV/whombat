@@ -37,7 +37,7 @@ const opus: RanOn = { provider: 'claude', model: 'opus', modelLabel: 'Opus', eff
 
 describe('the popover’s words (CT-463)', () => {
   it('names the providers for the sign-in', () => {
-    expect(CHAT_PROVIDER_LABELS).toEqual({ claude: 'Claude', codex: 'ChatGPT', local: 'Local' });
+    expect(CHAT_PROVIDER_LABELS).toEqual({ claude: 'Claude', codex: 'ChatGPT', local: 'Custom' });
   });
 
   it('puts the assistant’s name and counts in place', () => {

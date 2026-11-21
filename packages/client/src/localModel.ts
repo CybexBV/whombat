@@ -28,14 +28,14 @@ export const LOCAL_MODEL_TEXT = {
   notTested: 'Not tested yet.',
   testing: 'Testing…',
   /** An empty field that needs a value. */
-  noAddress: 'Type the address of the model server.',
+  noAddress: 'Type the address of the AI service or model server.',
   noModel: 'Type the model’s name.',
   /** What a failed write or test says when the Whombat gave no sentence of its own. */
   failed: 'That didn’t save. Try again in a moment.',
   testFailed: 'The test didn’t run. Try again in a moment.',
-  /** The agent's model and the Chat picker on Local (AP-5001, AP-5002): a model the list doesn't name, typed. */
+  /** The agent's model and the Chat picker on Custom: a model the list doesn't name, typed. */
   another: 'Another model',
-  anotherHint: 'Any model on that server, by its name.',
+  anotherHint: 'Any model that service or server offers, by its name.',
   use: 'Use',
 } as const;
 

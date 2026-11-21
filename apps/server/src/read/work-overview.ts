@@ -97,7 +97,7 @@ const TRIGGER_WORDS: Record<DispatchTrigger, string> = {
 const PROVIDER_NAMES: Record<string, string> = {
   claude: 'Claude Code',
   codex: 'ChatGPT',
-  local: 'The model on your network',
+  local: 'Custom AI model',
 };
 
 type Refs = Partial<WorkItem['refs']>;

@@ -121,14 +121,14 @@ describe('a Chat thread (CR-02, CR-07, CR-08; AP-2682, AP-2695…AP-2697)', () =
   });
 });
 
-describe('Local in the picker (hermes-engine-app.md AP-5002, AP-5044)', () => {
-  it('isn’t offered without a model on the network', async () => {
+describe('Custom in the picker', () => {
+  it('isn’t offered without a custom AI model', async () => {
     const user = userEvent.setup();
     renderApp('/chat?new=1', chatShell());
     const room = await screen.findByRole('region', { name: 'Chat' });
     await user.click(await within(room).findByRole('button', { name: BUTTON }));
     const dialog = await screen.findByRole('dialog', { name: BUTTON });
-    expect(within(dialog).queryByRole('radio', { name: /Local/ })).toBeNull();
+    expect(within(dialog).queryByRole('radio', { name: /Custom/ })).toBeNull();
   });
 
   it('lists its models, takes another by name, and has no effort or fast replies', async () => {
@@ -138,7 +138,7 @@ describe('Local in the picker (hermes-engine-app.md AP-5002, AP-5044)', () => {
     const button = await within(room).findByRole('button', { name: BUTTON });
     await user.click(button);
     const dialog = await screen.findByRole('dialog', { name: BUTTON });
-    await user.click(await within(dialog).findByRole('radio', { name: /Local/ }));
+    await user.click(await within(dialog).findByRole('radio', { name: /Custom/ }));
     expect(within(dialog).getByRole('radio', { name: /Llama on the NAS/ })).toHaveProperty('checked', true);
     expect(within(dialog).getByRole('radio', { name: /qwen3:32b/ })).toBeTruthy();
     expect(within(dialog).queryByText('Effort')).toBeNull();
@@ -148,6 +148,6 @@ describe('Local in the picker (hermes-engine-app.md AP-5002, AP-5044)', () => {
     expect(within(dialog).getByRole('radio', { name: /gemma3:27b/ })).toHaveProperty('checked', true);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: BUTTON })).toBeNull());
-    expect(described(button)).toBe('Local · gemma3:27b');
+    expect(described(button)).toBe('Custom · gemma3:27b');
   });
 });

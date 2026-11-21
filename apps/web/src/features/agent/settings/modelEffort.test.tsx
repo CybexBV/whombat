@@ -216,19 +216,19 @@ describe('Saving the model runtime (AP-1129)', () => {
   });
 });
 
-describe('Settings → Advanced → Model and effort on Local (hermes-engine-app.md AP-5041, AP-5043)', () => {
-  it('offers Local only with a model on the network', async () => {
+describe('Settings → Advanced → Model and effort on Custom', () => {
+  it('offers Custom only when a custom AI model is set up', async () => {
     renderApp(MODEL, mockedServices(server().fetch));
     await modelGroup();
-    expect(screen.queryByRole('radio', { name: 'Local' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Custom' })).toBeNull();
   });
 
   it('lists the burrow’s models and takes another by name; no effort, fast replies or sign-in', async () => {
     const { fetch, writes } = server({ localModel: true });
     const user = userEvent.setup();
     renderApp(MODEL, mockedServices(fetch));
-    await user.click(await screen.findByRole('radio', { name: 'Local' }));
-    expect(screen.getByText('Llama on the NAS, on your network. It answers.')).toBeTruthy();
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    expect(screen.getByText('Llama on the NAS. It answers.')).toBeTruthy();
     const models = await modelGroup();
     expect(
       within(models)

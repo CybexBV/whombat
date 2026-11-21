@@ -62,7 +62,7 @@ export interface RunsOnModel {
 }
 
 /** Local's line when the agent is on it and the burrow has none (the agent's own reply says the same, CT-1170). */
-export const LOCAL_NOT_SET_UP = 'The model on your network isn’t set up yet. Set it up in Settings → AI.';
+export const LOCAL_NOT_SET_UP = 'The custom AI model isn’t set up yet. Set it up in Settings → AI.';
 
 export function runsOnModel(
   runtime: AgentRuntime,

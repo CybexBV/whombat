@@ -21,7 +21,7 @@ export type LiveProvider = z.infer<typeof LiveProvider>;
 export const PROVIDER_LABELS: Record<AgentProvider, string> = {
   claude: 'Claude Code',
   codex: 'ChatGPT',
-  local: 'A model on your network',
+  local: 'Custom AI model',
 };
 
 /** What the runner found: `missing` (not installed / not on its PATH), `logged_out`, or another `error`. */

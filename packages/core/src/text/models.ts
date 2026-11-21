@@ -88,7 +88,7 @@ export function modelFallbackText(agentName: string, modelName: string, where: M
       : where.kind === 'org'
         ? 'on the organization’s key'
         : where.kind === 'local'
-          ? 'on the model server on your network'
+          ? 'on the custom AI model'
           : `on ${where.name ? `${where.name}’s` : 'that person’s'} sign-in`;
   return `${modelName} wasn’t available ${on}, so ${agentName} used the default model for that reply.`;
 }

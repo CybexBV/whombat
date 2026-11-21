@@ -146,16 +146,16 @@ async function localModelEndpoint(
   const local = ctx.localModel;
   if (!local)
     throw new TurnRefusal(
-      'I can’t reply yet: the model on your network isn’t set up. Set it up in Settings → AI, then ask me again.',
+      'I can’t reply yet: the custom AI model isn’t set up. Set it up in Settings → AI, then ask me again.',
       'local_model_missing',
     );
   const allowance = await endpointAllowance(local.baseUrl);
   if (!allowance) {
-    deps.log('warn', `${ctx.agent.name} · the model on the network can’t be reached at ${local.baseUrl}`, {
+    deps.log('warn', `${ctx.agent.name} · the custom AI model can’t be reached at ${local.baseUrl}`, {
       dispatchId: id,
     });
     throw new TurnRefusal(
-      'I can’t reach the model on your network at the address it was set up with. You can check it under Settings → AI.',
+      'I can’t reach the custom AI model at the address it was set up with. You can check it under Settings → AI.',
       'local_model_unreachable',
     );
   }

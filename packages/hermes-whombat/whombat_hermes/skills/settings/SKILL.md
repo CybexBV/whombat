@@ -93,7 +93,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 
 ### Advanced — `references/advanced.md` (58 settings)
 - `advanced.model` Settings → Advanced → Model and effort: the model (your name) uses and how hard it thinks
-- `advanced.ai` Settings → Advanced → AI on this Whombat: the AI programs, the AI gateway, a model on your network and web search (a Brave Search key)
+- `advanced.ai` Settings → Advanced → AI on this Whombat: the AI programs, the AI gateway, a custom AI model (an OpenAI-compatible service over https like OpenRouter or Google Gemini, or a model server on your network) and web search (a Brave Search key)
 - `advanced.spend` Settings → Advanced → Spend: what the AI costs, by day and week
 - `advanced.keys` Settings → (your name) → What (your name) may do → Keys: every key (your name) holds and, folded under them, the commands it may always run
 - `advanced.network` Settings → (your name) → What (your name) may do → Local network: whether (your name) reaches your local network and, while it doesn’t, which home networks it may

@@ -47,7 +47,7 @@ describe('runs on', () => {
     const local = runsOnModel(runtime(), status, { agentName: 'Dusty', localModel: LOCAL });
     expect(local.options[2]).toMatchObject({
       key: 'local',
-      label: 'Local',
+      label: 'Custom',
       state: 'Llama on the NAS',
       selectable: true,
       runtime: { provider: 'local' },

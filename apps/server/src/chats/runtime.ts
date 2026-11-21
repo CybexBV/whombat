@@ -115,9 +115,9 @@ function refuse(text: string): never {
   throw new ApiError('validation_failed', text, { fields: { runtime: [text] } });
 }
 
-/** A provider as a sentence names it: Claude, ChatGPT, the model on your network. */
+/** A provider as a sentence names it: Claude, ChatGPT, the custom AI model. */
 function providerInWords(provider: ChatProvider): string {
-  return provider === 'local' ? 'the model on your network' : CHAT_PROVIDER_LABELS[provider];
+  return provider === 'local' ? 'the custom AI model' : CHAT_PROVIDER_LABELS[provider];
 }
 
 /** The words when a started thread is asked for another provider (HN-06): it keeps its own; a new chat can have another. */

@@ -40,7 +40,7 @@ import styles from './ai.module.css';
 import local from './LocalModelSection.module.css';
 
 /** The confirm dialog's kicker (the gateway's “AI GATEWAY” pattern). */
-const KICKER = 'MODEL ON YOUR NETWORK';
+const KICKER = 'CUSTOM AI MODEL';
 
 /** The server's sentence for a refused write, per field where it named one. */
 function refusalOf(

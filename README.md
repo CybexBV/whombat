@@ -48,8 +48,9 @@ Your data lives on the box, and it works with the Claude or ChatGPT you already 
   on.
 - **Backups without the homework.** Every night, to your NAS (where the box can add backups but not delete them), a
   USB disk or a bucket, locked with your passkey. Bring your whole Whombat back on a new box from the app.
-- **Your AI, no margin.** Sign in with your Claude or ChatGPT subscription, use an API key or a model on your own
-  network. Your sign-in stays on the box.
+- **Your AI, no margin.** Sign in with your Claude or ChatGPT subscription, use an API key or connect a custom
+  OpenAI-compatible AI model (services like OpenRouter or Google Gemini, or a server on your own network). Your sign-in
+  stays on the box.
 
 ## Install
 
@@ -147,7 +148,7 @@ Whombat keeps working at home, and away from home with Tailscale. More on [whomb
 - Mail from outsiders is read walled off from your files, Vault and memory. Secrets in the Vault can be used by the
   assistant but never read back out.
 - What leaves the box: what you ask, and what the assistant reads to answer, goes to the AI you connect (Claude,
-  ChatGPT or a model on your own network). With Whombat Link, our service sees the box's status (version, health,
+  ChatGPT or your custom OpenAI-compatible AI model). With Whombat Link, our service sees the box's status (version, health,
   disk use, never your content), and phone notifications carry a short preview through it and Apple's or Google's
   push service (you can switch previews off). The full list is in the security model linked below.
 - A self-installed Whombat doesn't encrypt its disk: whoever has the disk has its data. Put it on an encrypted disk

@@ -626,8 +626,7 @@ Automations. Code finds it by kind
   its tool calls run in. An outsiders' turn gets a sandbox and a Hermes of its own instead.
 - **Where the model runs**, always on Hermes's own loop: Claude subscriptions through Nous's DirectSDK provider (the
   unmodified Claude Code as its model client, [claude-directsdk.md](docs/decisions/claude-directsdk.md)); ChatGPT
-  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a model on the
-  person's network through Hermes's API clients.
+  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a custom OpenAI-compatible AI model (an internet service over HTTPS or a server on the person's network) through Hermes's API clients.
 - **Sessions**: one Chat thread is one Hermes session, resumed on its own provider and model; a turn sends only what
   is new since the session's last turn, a new session gets the window (the thread's first message and last 60 replies,
   in a channel after the room's last 30 top-level messages; a flat room's last 30 messages), and a failed resume is

@@ -156,7 +156,7 @@ function policyOf(net: LocalModelNet, baseUrl: string, deadlineMs: number): Outb
             'destination',
             problem === 'http_public'
               ? `${hostname} is on the internet: use https.`
-              : `${hostname} isn’t an address on your network.`,
+              : `${hostname} isn’t an address Whombat can reach for a custom AI model.`,
           );
       },
     },

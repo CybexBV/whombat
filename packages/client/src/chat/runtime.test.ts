@@ -386,11 +386,11 @@ describe('Local, the model on the burrow’s network (CT-1174, AP-5002)', () => 
       [
         ['claude', 'Claude'],
         ['codex', 'ChatGPT'],
-        ['local', 'Local'],
+        ['local', 'Custom'],
       ],
     );
     const onIt = chatProviderSegments(view(), { provider: 'local' }).at(-1);
-    expect(onIt).toEqual({ provider: 'local', label: 'Local', ready: false, picked: true });
+    expect(onIt).toEqual({ provider: 'local', label: 'Custom', ready: false, picked: true });
     expect(chatProviderHints(withLocal).notSetUp).toEqual([]);
   });
 
@@ -417,7 +417,7 @@ describe('Local, the model on the burrow’s network (CT-1174, AP-5002)', () => 
     expect(local).toEqual({ provider: 'local' });
     const button = chatRuntimeButton(withLocal, local);
     expect([button.providerLabel, button.label, button.effort, button.fast]).toEqual([
-      'Local',
+      'Custom',
       'Llama on the NAS',
       '',
       false,
