@@ -16,6 +16,7 @@ import { isCallableEntry } from '../../connections/callable';
 import { keyTierOf } from '../../connections/context';
 import { limitsProblem } from '../../connections/limits';
 import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../../connections/request';
+import { normaliseSocketArgs } from '../../connections/socket/call';
 import { catalogConnections, connectionTools } from '../../db/schema/index';
 import { limitWordsFor } from '../../devices/store';
 import { thePerson } from '../../domain/the-person';
@@ -23,7 +24,12 @@ import { readAll } from '../../files/previews';
 import { callServerOf } from '../../hosts/asks';
 import { loadGrants } from '../../read/principals';
 import { automationAgent, publisherCheck } from '../authority';
-import { actionsDoneLine, threadAttachment } from '../proposed-actions';
+import {
+  actionsDoneLine,
+  isProposableEntry,
+  proposeCallRefusal,
+  threadAttachment,
+} from '../proposed-actions';
 import { stepRoomsCheck } from '../steps';
 import type { AutomationStepRow } from '../store';
 import { approvedBranchRequest } from '../workspace';
@@ -98,6 +104,8 @@ export async function runConnectionActions(
     const entry = conn ? catalogEntry(conn.catalogId) : null;
     if (!conn || !entry || !isCallableEntry(entry))
       return void (await refuse(`${action.label} isn’t connected any more.`));
+    if (!isProposableEntry(entry))
+      return void (await refuse(`Actions on ${conn.label} can’t be proposed from an outsiders’ run.`));
     if (conn.status !== 'active') return void (await refuse(needsReauthText(conn)));
     const [tool] = await db
       .select()
@@ -122,6 +130,8 @@ export async function runConnectionActions(
           `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
         ));
       }
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
       if (!requestAllowed(entry, conn.fields, String(args.method), String(args.path)))
         return void (await refuse(`${conn.label} no longer allows that request.`));
       const upload = parseRequestUpload(args.upload);
@@ -130,6 +140,19 @@ export async function runConnectionActions(
         if (!att?.blobKey || att.size > maxUpload)
           return void (await refuse(`The attachment to upload to ${conn.label} isn’t available any more.`));
       }
+    } else if (tool.origin === 'socket') {
+      try {
+        args = normaliseSocketArgs(entry, args, conn.label);
+      } catch (err) {
+        return void (await refuse(
+          `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
+        ));
+      }
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
+    } else {
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
     }
     const server = await callServerOf(db, services, conn.burrowId, conn.catalogId, args);
     const decided = callTier(

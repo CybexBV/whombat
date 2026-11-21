@@ -1089,6 +1089,8 @@ describe('mail-arrives automations', () => {
     const mbPort = (moneybirdServer.address() as AddressInfo).port;
 
     let autoId = '';
+    let plId = '';
+    let mbId = '';
     const netId = newId('vaultNetwork');
     try {
       useVaultNetForTests(w.services, {
@@ -1114,7 +1116,7 @@ describe('mail-arrives automations', () => {
       // Standing settings at maximum auto-allow: connections.read/write = 'can' and both tools = 'can'.
       await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
 
-      const plId = await insertConnection(w.services, {
+      plId = await insertConnection(w.services, {
         catalogId: 'paperless',
         burrowId: w.burrowId,
         connectedById: IDS.mara,
@@ -1125,7 +1127,7 @@ describe('mail-arrives automations', () => {
       });
       await syncTools(w.services, plId);
 
-      const mbId = await insertConnection(w.services, {
+      mbId = await insertConnection(w.services, {
         catalogId: 'moneybird',
         burrowId: w.burrowId,
         connectedById: IDS.mara,
@@ -1455,6 +1457,230 @@ describe('mail-arrives automations', () => {
       await new Promise<void>((r) => moneybirdServer.close(() => r()));
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      for (const cid of [plId, mbId].filter(Boolean)) {
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, cid));
+      }
+      await pollAndSettle();
+    }
+  });
+
+  it('narrows proposable connections and calls, omitting labels, built-ins, T3 Code, DELETE and read-only calls', async () => {
+    const privateLabel = 'Secret Family Archive Label';
+    const plId = await insertConnection(w.services, {
+      catalogId: 'paperless',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { url: 'http://paperless-narrow.example.com:8000' },
+      auth: { type: 'header', name: 'Authorization', template: 'Token {secret}' },
+      secret: 'c'.repeat(40),
+      label: privateLabel,
+    });
+    await syncTools(w.services, plId);
+
+    const dropboxId = await insertConnection(w.services, {
+      catalogId: 'dropbox',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: {},
+      auth: { type: 'bearer' },
+      secret: 'd'.repeat(40),
+      label: 'Personal Dropbox Secret Label',
+    });
+    await syncTools(w.services, dropboxId);
+
+    const serversId = newId('connection');
+    await w.services.db.insert(catalogConnections).values({
+      id: serversId,
+      catalogId: 'whombat_servers',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      label: 'Home Servers',
+      handle: 'servers',
+      transport: 'builtin',
+      signIn: 'none',
+      baseUrl: '',
+      fields: {},
+      auth: null,
+      status: 'active',
+      createdAt: w.now(),
+      updatedAt: w.now(),
+    });
+    await syncTools(w.services, serversId);
+
+    const t3Id = await insertConnection(w.services, {
+      catalogId: 't3code',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { url: 'http://10.100.92.20:3773' },
+      auth: { type: 'bearer' },
+      secret: 't'.repeat(40),
+      label: 'Dev Laptop T3',
+    });
+    await w.services.db.insert(connectionTools).values({
+      connectionId: t3Id,
+      name: 't3_thread_launch',
+      title: 'Launch thread',
+      description: 'Start a coding thread',
+      inputSchema: { type: 'object', properties: {} },
+      access: 'write',
+      origin: 'mcp',
+      tier: 'can',
+      hash: 'e'.repeat(64),
+    });
+
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['narrow-surface'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_narrow_surface',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'narrow-surface test',
+        body: 'Test narrow surface.',
+        messageId: '<narrow-surface@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      const dispatchId = run.steps[0]?.dispatchId as string;
+      const [dispatch] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, dispatchId));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      const prompt = ctx.trigger?.text ?? '';
+
+      // Prompt names handles and writable tools, never the person's own labels, read-only tools, delete tools,
+      // whombat_servers, or t3code.
+      expect(prompt).toContain('- paperless: tools [request]');
+      expect(prompt).not.toContain(privateLabel);
+      expect(prompt).not.toContain('Personal Dropbox Secret Label');
+      expect(prompt).not.toContain('files_list');
+      expect(prompt).not.toContain('files_delete');
+      expect(prompt).not.toContain('Home Servers');
+      expect(prompt).not.toContain('servers: tools');
+      expect(prompt).not.toContain('t3_thread_launch');
+      expect(prompt).not.toContain('Dev Laptop T3');
+
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+
+      const [serversConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, serversId));
+      const [t3Conn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, t3Id));
+      const [plConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, plId));
+      const [dbxConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, dropboxId));
+
+      const refusedCases: { name: string; action: Record<string, unknown>; expectedText: string }[] = [
+        {
+          name: 'whombat_servers',
+          action: {
+            connection: serversConn?.handle ?? 'servers',
+            tool: 'guest_power',
+            summary: 'Restart guest',
+            arguments: { server: 'pve-01', guest: 'pve:101', action: 'start' },
+          },
+          expectedText: 'can’t be proposed',
+        },
+        {
+          name: 't3code',
+          action: {
+            connection: t3Conn?.handle ?? 't3',
+            tool: 't3_thread_launch',
+            summary: 'Launch thread',
+            arguments: { projectId: 'p1', title: 'run', message: 'hi' },
+          },
+          expectedText: 'can’t be proposed',
+        },
+        {
+          name: 'HTTP DELETE',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Upload invoice.pdf',
+            arguments: { method: 'DELETE', path: '/api/documents/1/' },
+          },
+          expectedText: 'DELETE',
+        },
+        {
+          name: 'HTTP GET',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'List docs',
+            arguments: { method: 'GET', path: '/api/documents/' },
+          },
+          expectedText: 'read-only GET',
+        },
+        {
+          name: 'HTTP HEAD',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Check docs',
+            arguments: { method: 'HEAD', path: '/api/documents/' },
+          },
+          expectedText: 'read-only HEAD',
+        },
+        {
+          name: 'read-only adapter tool',
+          action: {
+            connection: dbxConn?.handle ?? 'dropbox',
+            tool: 'files_list',
+            summary: 'List files',
+            arguments: { path: '/' },
+          },
+          expectedText: 'read-only',
+        },
+        {
+          name: 'delete adapter tool',
+          action: {
+            connection: dbxConn?.handle ?? 'dropbox',
+            tool: 'files_delete',
+            summary: 'Delete file',
+            arguments: { path: '/old.pdf' },
+          },
+          expectedText: 'files_delete',
+        },
+      ];
+
+      for (const tc of refusedCases) {
+        const res = await callTool(w.services, auth, 'propose_connection_actions', {
+          actions: [tc.action],
+        });
+        expect(res.isError, tc.name).toBe(true);
+        const text = JSON.stringify(res.content);
+        expect(text, tc.name).toContain(tc.expectedText);
+        expect(text, tc.name).not.toContain(privateLabel);
+      }
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      for (const cid of [plId, dropboxId, serversId, t3Id]) {
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, cid));
+      }
       await pollAndSettle();
     }
   });

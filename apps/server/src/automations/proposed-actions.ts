@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import {
+  type CatalogEntry,
   CONNECTOR_BINARY_MAX_BYTES,
   canonicalJson,
   catalogEntry,
@@ -22,10 +23,13 @@ import { and, asc, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { callTier, needsReauthText } from '../connections/call';
+import { connectionCallAccess } from '../connections/call-access';
 import { isCallableEntry } from '../connections/callable';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../connections/request';
+import { normaliseSocketArgs } from '../connections/socket/call';
+import type { ConnectionToolRow } from '../connections/types';
 import type { Db, Tx } from '../db/client';
 import {
   attachments,
@@ -39,11 +43,66 @@ import {
 import { limitWordsFor } from '../devices/store';
 import type { AttachmentRow } from '../files/service';
 import { callServerOf } from '../hosts/asks';
-import { conflict, forbidden } from '../lib/errors';
+import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
 import { type AutomationRunRow, type AutomationStepRow, publishRun } from './store';
+
+/** Built-in or powerful host-control catalog entries that outsiders' runs may never propose actions on. */
+const DISALLOWED_PROPOSE_CATALOG_IDS: ReadonlySet<string> = new Set(['whombat_servers', 't3code']);
+
+/** Tool or socket method names that delete resources (never proposable from an outsiders' run). */
+const DELETE_TOOL_NAME = /(?:^|[._-])delete(?:$|[._-])/i;
+
+/**
+ * Whether an outsiders' run may propose actions on this catalog entry: never the box's own powerful connections
+ * (Servers, T3 Code, devices, or any other built-in that runs commands or controls machines).
+ */
+export function isProposableEntry(entry: CatalogEntry): boolean {
+  return (
+    isCallableEntry(entry) &&
+    entry.transport !== 'builtin' &&
+    !DISALLOWED_PROPOSE_CATALOG_IDS.has(entry.id)
+  );
+}
+
+/**
+ * Plain-English refusal when a proposed call falls outside the narrow surface allowed for outsiders' runs (no
+ * disallowed connections, no DELETE, no read-only GET/HEAD or read-only tools whose results are thrown away).
+ */
+export function proposeCallRefusal(
+  entry: CatalogEntry,
+  tool: Pick<ConnectionToolRow, 'name' | 'access' | 'origin'>,
+  args: Readonly<Record<string, unknown>>,
+  serviceName: string,
+): string | null {
+  if (!isProposableEntry(entry)) {
+    return `Actions on ${serviceName} can’t be proposed from an outsiders’ run.`;
+  }
+  if (DELETE_TOOL_NAME.test(tool.name)) {
+    return `${serviceName}: ${tool.name} can’t be proposed from an outsiders’ run.`;
+  }
+  if (tool.origin === 'request') {
+    const method = String(args.method ?? '').toUpperCase();
+    if (method === 'DELETE') {
+      return `${serviceName}: DELETE requests can’t be proposed from an outsiders’ run.`;
+    }
+    if (method === 'GET' || method === 'HEAD') {
+      return `${serviceName}: read-only ${method} requests can’t be proposed because their results aren’t returned.`;
+    }
+  }
+  if (tool.origin === 'socket') {
+    const method = String(args.method ?? '');
+    if (DELETE_TOOL_NAME.test(method)) {
+      return `${serviceName}: ${method} can’t be proposed from an outsiders’ run.`;
+    }
+  }
+  if (connectionCallAccess(entry, tool, args) === 'read') {
+    return `${serviceName}: read-only calls can’t be proposed because their results aren’t returned.`;
+  }
+  return null;
+}
 
 /** At most `max` characters, cut at a word boundary when possible. */
 function clipTitle(text: string, max: number): string {
@@ -123,6 +182,57 @@ export const proposeConnectionActions = defineCommand({
       .where(and(eq(automationRunSteps.runId, turn.run.id), eq(automationRunSteps.idx, turn.row.idx)));
     if (!run || row?.state !== 'waiting' || row.dispatchId !== dispatchId)
       throw conflict('This step is finished, so its proposed actions can’t change any more.');
+    if (input.actions.length > 0) {
+      const allConnections = await tx
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.burrowId, ctx.burrow.id));
+      const byHandle = new Map(allConnections.map((c) => [c.handle.toLowerCase(), c]));
+      for (const item of input.actions) {
+        const handle = item.connection.trim().toLowerCase();
+        const conn = byHandle.get(handle);
+        const entry = conn ? catalogEntry(conn.catalogId) : null;
+        if (!conn || !entry) {
+          throw badRequest(`No connected service called “${item.connection}”.`);
+        }
+        if (!isProposableEntry(entry)) {
+          throw forbidden(`Actions on ${item.connection} can’t be proposed from an outsiders’ run.`);
+        }
+        if (conn.access === 'read') {
+          throw forbidden(lookOnlyText(item.connection));
+        }
+        const [tool] = await tx
+          .select()
+          .from(connectionTools)
+          .where(and(eq(connectionTools.connectionId, conn.id), eq(connectionTools.name, item.tool)));
+        if (!tool) {
+          throw badRequest(`${item.connection} has no tool called “${item.tool}”.`);
+        }
+        if (tool.tier === 'off') {
+          throw forbidden(`${tool.name} is turned off for ${item.connection}.`);
+        }
+        let args: Record<string, unknown> = { ...item.arguments };
+        if (tool.origin === 'request') {
+          try {
+            args = normaliseRequestArgs(args);
+          } catch (err) {
+            throw badRequest(
+              `${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
+            );
+          }
+        } else if (tool.origin === 'socket') {
+          try {
+            args = normaliseSocketArgs(entry, args, item.connection);
+          } catch (err) {
+            throw badRequest(
+              `${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
+            );
+          }
+        }
+        const refused = proposeCallRefusal(entry, tool, args, item.connection);
+        if (refused) throw forbidden(refused);
+      }
+    }
     await tx
       .update(automationRunSteps)
       .set({
@@ -153,9 +263,10 @@ export const proposeConnectionActions = defineCommand({
 });
 
 /**
- * Short non-secret list of active writable catalog connections (handles, enabled tool names, allowed REST prefixes and
- * static catalog guides) appended to a `proposeActions` step's instructions. Never exposes credentials or live data,
- * and the turn still has no `connection_call` or `connection_tools`.
+ * Short non-secret list of active writable catalog connections (handles, enabled write-capable tool names, allowed
+ * REST prefixes and static catalog guides) appended to a `proposeActions` step's instructions. Never exposes
+ * credentials, the person's own connection labels, live data, or powerful built-in/host-control connections, and the
+ * turn still has no `connection_call` or `connection_tools`.
  */
 export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): Promise<string> {
   const rows = await db
@@ -167,21 +278,27 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
   for (const row of rows) {
     if (row.status !== 'active' || row.access === 'read') continue;
     const entry = catalogEntry(row.catalogId);
-    if (!entry || !isCallableEntry(entry)) continue;
+    if (!entry || !isProposableEntry(entry)) continue;
     const tools = await db
-      .select({ name: connectionTools.name, tier: connectionTools.tier })
+      .select({
+        name: connectionTools.name,
+        tier: connectionTools.tier,
+        access: connectionTools.access,
+      })
       .from(connectionTools)
       .where(eq(connectionTools.connectionId, row.id))
       .orderBy(asc(connectionTools.name));
-    const enabled = tools.filter((t) => t.tier !== 'off').map((t) => t.name);
+    const enabled = tools
+      .filter((t) => t.tier !== 'off' && t.access !== 'read' && !DELETE_TOOL_NAME.test(t.name))
+      .map((t) => t.name);
     if (!enabled.length) continue;
     const prefixes = entry.request ? resolveRequestPrefixes(entry, row.fields) : [];
     const prefixPart = prefixes.length ? `; paths under ${prefixes.join(' or ')}` : '';
     const guidePart = entry.guide ? ` — ${entry.guide.slice(0, 320)}` : '';
-    lines.push(`- ${row.handle} (${row.label}): tools [${enabled.join(', ')}]${prefixPart}${guidePart}`);
+    lines.push(`- ${row.handle}: tools [${enabled.join(', ')}]${prefixPart}${guidePart}`);
   }
   if (!lines.length) return '';
-  return `Connections you can propose actions for (each waits for the person’s approval card):\n${lines.join('\n')}`.slice(
+  return `Connections you can propose write actions for (no DELETE or read-only calls; each waits for the person’s approval card):\n${lines.join('\n')}`.slice(
     0,
     2500,
   );
@@ -265,8 +382,15 @@ export async function planConnectionActions(
     const handle = item.connection.trim().toLowerCase();
     const row = byHandle.get(handle);
     const entry = row ? catalogEntry(row.catalogId) : null;
-    if (!row || !entry || !isCallableEntry(entry)) {
+    if (!row || !entry) {
       return { ok: false, fatal: false, reason: `No connected service called “${item.connection}”.` };
+    }
+    if (!isProposableEntry(entry)) {
+      return {
+        ok: false,
+        fatal: false,
+        reason: `Actions on ${row.label} can’t be proposed from an outsiders’ run.`,
+      };
     }
     if (row.status !== 'active') {
       return { ok: false, fatal: false, reason: needsReauthText(row) };
@@ -289,6 +413,8 @@ export async function planConnectionActions(
           reason: `${row.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
         };
       }
+      const refused = proposeCallRefusal(entry, tool, args, row.label);
+      if (refused) return { ok: false, fatal: false, reason: refused };
       const method = String(args.method);
       const path = String(args.path);
       if (!requestAllowed(entry, row.fields, method, path)) {
@@ -316,6 +442,21 @@ export async function planConnectionActions(
           };
         }
       }
+    } else if (tool.origin === 'socket') {
+      try {
+        args = normaliseSocketArgs(entry, args, row.label);
+      } catch (err) {
+        return {
+          ok: false,
+          fatal: false,
+          reason: `${row.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
+        };
+      }
+      const refused = proposeCallRefusal(entry, tool, args, row.label);
+      if (refused) return { ok: false, fatal: false, reason: refused };
+    } else {
+      const refused = proposeCallRefusal(entry, tool, args, row.label);
+      if (refused) return { ok: false, fatal: false, reason: refused };
     }
     const server = await callServerOf(db as Db, services, row.burrowId, row.catalogId, args);
     const decided = callTier(
