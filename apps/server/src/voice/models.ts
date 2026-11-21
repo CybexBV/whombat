@@ -13,6 +13,7 @@
  */
 import {
   LocalError,
+  VOICE_MODELS_INCLUDE_PARAM,
   VOICE_MODELS_PATHS,
   VoiceModelRequest,
   VoiceModelsState,
@@ -87,16 +88,20 @@ export class VoiceModelsSocketClient implements VoiceModelsPort {
     }
   }
 
+  private withInclude(path: string): string {
+    return `${path}?${VOICE_MODELS_INCLUDE_PARAM}=supertonic`;
+  }
+
   state(): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.state);
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.state));
   }
 
   fetch(model: VoiceDownloadModel): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.fetch, { v: 1, model });
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.fetch), { v: 1, model });
   }
 
   remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.remove, { v: 1, model });
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.remove), { v: 1, model });
   }
 }
 

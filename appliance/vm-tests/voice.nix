@@ -140,10 +140,12 @@ in
     msock = "${modelsSocket}"
     health = f"curl -sS --unix-socket {sock} http://voice/v1/voice/health"
     state = f"curl -sS --unix-socket {msock} http://models/v1/voice-models"
+    state_all = f"curl -sS --unix-socket {msock} 'http://models/v1/voice-models?include=supertonic'"
     def ask(path, model="whisper"):
         return f"curl -sS --fail-with-body --unix-socket {msock} -d '{{\"v\":1,\"model\":\"{model}\"}}' http://models/v1/voice-models/{path}"
     def model_state(model="whisper"):
-        ms = json.loads(machine.succeed(f"runuser -u whombat -- {state}"))["models"]
+        cmd = state_all if model == "supertonic" else state
+        ms = json.loads(machine.succeed(f"runuser -u whombat -- {cmd}"))["models"]
         return next(m for m in ms if m["id"] == model)
 
     machine.wait_for_unit("sockets.target")
@@ -207,10 +209,13 @@ in
         assert "pve" not in journal.lower() and "okay" not in journal.lower(), journal
 
     with subtest("multi-file Dutch model downloads into its directory, activates Dutch dynamically, and removes cleanly"):
+        # Plain v1 state keeps speech-recognition models only so a rolled-back runtime still parses it.
+        plain_ids = [m["id"] for m in json.loads(machine.succeed(f"runuser -u whombat -- {state}"))["models"]]
+        t.assertEqual(plain_ids, ["whisper"])
         t.assertEqual(model_state("supertonic")["state"], "absent")
         machine.succeed(f"runuser -u whombat -- {ask('fetch', 'supertonic')}")
         machine.wait_until_succeeds(
-            f"runuser -u whombat -- {state} | jq -e '.models[] | select(.id == \"supertonic\") | .state == \"ready\"'",
+            f"runuser -u whombat -- {state_all} | jq -e '.models[] | select(.id == \"supertonic\") | .state == \"ready\"'",
             timeout=120,
         )
         t.assertEqual(

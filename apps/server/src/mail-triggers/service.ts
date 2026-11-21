@@ -114,15 +114,31 @@ function sameCursor(a: MailProviderCursor | null | undefined, b: MailProviderCur
   if (!a || a.kind !== b.kind) return false;
   switch (a.kind) {
     case 'gmail':
-      return b.kind === 'gmail' && a.historyId === b.historyId;
+      return (
+        b.kind === 'gmail' &&
+        a.historyId === b.historyId &&
+        Boolean(a.backfill) === Boolean(b.backfill) &&
+        a.backfill?.pageToken === b.backfill?.pageToken &&
+        a.backfill?.afterSeconds === b.backfill?.afterSeconds &&
+        a.backfill?.sinceMs === b.backfill?.sinceMs
+      );
     case 'microsoft':
-      return b.kind === 'microsoft' && a.deltaLink === b.deltaLink;
+      return (
+        b.kind === 'microsoft' &&
+        a.deltaLink === b.deltaLink &&
+        Boolean(a.paging) === Boolean(b.paging) &&
+        a.paging?.sinceMs === b.paging?.sinceMs &&
+        a.paging?.dropHeaders === b.paging?.dropHeaders
+      );
     case 'imap':
       return (
         b.kind === 'imap' &&
         a.mailbox === b.mailbox &&
         a.uidValidity === b.uidValidity &&
-        a.lastUid === b.lastUid
+        a.lastUid === b.lastUid &&
+        Boolean(a.backfill) === Boolean(b.backfill) &&
+        a.backfill?.sinceMs === b.backfill?.sinceMs &&
+        a.backfill?.untilUid === b.backfill?.untilUid
       );
     case 'fake':
       return b.kind === 'fake' && a.seq === b.seq;
@@ -174,9 +190,22 @@ export class MailTriggerService {
     await this.clearUnwatched(listened);
     await this.pruneExpiredItems();
     this.reconcileIdleStop(listened);
+    const results = await Promise.allSettled(
+      [...listened.entries()].map(async ([connectionId, entry]) => {
+        try {
+          return await this.syncConnection(connectionId, entry);
+        } catch (err) {
+          this.services.log.warn(
+            { connectionId, err: err instanceof Error ? err.message : String(err) },
+            'mail trigger sync failed for mailbox',
+          );
+          return 0;
+        }
+      }),
+    );
     let triggered = 0;
-    for (const [connectionId, entry] of listened) {
-      triggered += await this.syncConnection(connectionId, entry);
+    for (const r of results) {
+      if (r.status === 'fulfilled') triggered += r.value;
     }
     return triggered;
   }
@@ -432,11 +461,14 @@ export class MailTriggerService {
 
     // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline, failures or
     // problem state changed, so quiet polls never bloat the signed event log (keep a skipped-mail `read_failed` note
-    // on quiet polls until another write replaces it).
+    // on quiet polls until another write replaces it). While backfill/catch-up still has more batches (`changes.more`),
+    // keep `succeededAt` before the backfill window so a mid-backfill reset never skips unprocessed pages.
+    const morePending = Boolean(changes.more);
     const clearTransientProblem = existing?.problemCode !== null && existing?.problemCode !== 'read_failed';
+    const cursorChanged = !sameCursor(existing?.cursor, changes.cursor);
     if (
       isInitial ||
-      !sameCursor(existing?.cursor, changes.cursor) ||
+      cursorChanged ||
       changes.reset ||
       failuresChanged ||
       skippedProblem !== null ||
@@ -447,13 +479,20 @@ export class MailTriggerService {
         connectionId,
         cursor: changes.cursor,
         since: activationSince.toISOString(),
-        succeeded: true,
+        succeeded: !morePending,
         ...(failuresChanged ? { readFailures: trimReadFailures(readFailures) } : {}),
-        ...(skippedProblem ? { problemCode: 'read_failed', problem: skippedProblem } : {}),
+        ...(skippedProblem
+          ? { problemCode: 'read_failed', problem: skippedProblem }
+          : clearTransientProblem
+            ? { problemCode: null, problem: null }
+            : {}),
       });
     }
 
     if (createdCount > 0) this.services.automations.nudge();
+    if (morePending && (isInitial || cursorChanged) && this.started) {
+      this.pendingNudge.add(connectionId);
+    }
     return createdCount;
   }
 

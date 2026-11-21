@@ -297,10 +297,11 @@ describe('Microsoft mail change feed', () => {
     const activation = new Date('2026-10-28T10:00:00Z');
     const baseline = await ws.mailBaseline('tok', { needAttachmentTypes: true, since: activation });
     expect(baseline.cursor).toEqual({ kind: 'microsoft', deltaLink: delta1 });
-    // Documented message-delta URL: no $deltaToken=latest, pages through @odata.nextLink, selects internetMessageId.
+    // Documented message-delta URL: no $deltaToken=latest, limits to activation - 5 s skew, selects internetMessageId.
     const firstUrl = new URL(String(fetcher.mock.calls[0]?.[0]));
     expect(firstUrl.pathname).toBe('/v1.0/me/mailFolders/inbox/messages/delta');
     expect(firstUrl.searchParams.has('$deltaToken')).toBe(false);
+    expect(firstUrl.searchParams.get('$filter')).toBe('receivedDateTime ge 2026-10-28T09:59:55Z');
     expect(firstUrl.searchParams.get('$select')).toContain('internetMessageId');
     expect(String(fetcher.mock.calls[1]?.[0])).toBe(next1);
     // Pre-existing message dropped (no attachment lookup for it), post-activation message kept with normalized Message-ID.
@@ -417,5 +418,101 @@ describe('Microsoft mail change feed', () => {
       messageId: '<missed@example.com>',
       subject: 'Arrived while expired',
     });
+  });
+
+  it('keeps paging position across polls when a large inbox delta spans more than one poll cap', async () => {
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const totalPages = 25;
+    const finalDelta =
+      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=done';
+    const nextUrl = (n: number) =>
+      `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=page_${n}`;
+
+    let calls = 0;
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      calls++;
+      const pageNum = calls;
+      const body: Record<string, unknown> = {
+        value: [
+          {
+            id: `m_page_${pageNum}`,
+            conversationId: `c_${pageNum}`,
+            internetMessageId: `<page-${pageNum}@example.com>`,
+            from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
+            subject: `Invoice page ${pageNum}`,
+            receivedDateTime: new Date(activation.getTime() + pageNum * 1_000).toISOString(),
+            hasAttachments: false,
+            isDraft: false,
+          },
+        ],
+      };
+      if (pageNum < totalPages) {
+        body['@odata.nextLink'] = nextUrl(pageNum + 1);
+      } else {
+        body['@odata.deltaLink'] = finalDelta;
+      }
+      // First call must limit by receivedDateTime ge activation - 5s.
+      if (pageNum === 1) {
+        const u = new URL(String(url));
+        expect(u.searchParams.get('$filter')).toBe('receivedDateTime ge 2026-10-28T09:59:55Z');
+      }
+      return response(body);
+    });
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    // Poll 1: caps at 20 pages, persists nextLink + paging without throwing, and emits the first 20 headers.
+    const first = await ws.mailBaseline('tok', { since: activation });
+    expect(calls).toBe(20);
+    expect(first.more).toBe(true);
+    expect(first.cursor).toEqual({
+      kind: 'microsoft',
+      deltaLink: nextUrl(21),
+      paging: { sinceMs: activation.getTime() },
+    });
+    expect(first.headers).toHaveLength(20);
+    expect(first.headers[0]?.id).toBe('m_page_1');
+
+    // Poll 2: resumes from page 21 through page 25, reaches @odata.deltaLink, clears paging and emits the rest.
+    const second = await ws.mailChanges('tok', first.cursor, { since: activation });
+    expect(calls).toBe(totalPages);
+    expect(second.more).toBeUndefined();
+    expect(second.cursor).toEqual({ kind: 'microsoft', deltaLink: finalDelta });
+    expect(second.headers).toHaveLength(5);
+    expect(second.headers[4]?.id).toBe('m_page_25');
+
+    // Unfiltered baseline (no `since`) also keeps paging across polls without emitting pre-existing headers.
+    let dropCalls = 0;
+    const dropFetcher = vi.fn<typeof fetch>(async () => {
+      dropCalls++;
+      return response({
+        value: [
+          {
+            id: `m_pre_${dropCalls}`,
+            conversationId: `c_pre_${dropCalls}`,
+            from: { emailAddress: { address: 'old@example.com' } },
+            subject: `Old ${dropCalls}`,
+            receivedDateTime: '2026-10-01T00:00:00Z',
+            hasAttachments: false,
+            isDraft: false,
+          },
+        ],
+        ...(dropCalls < 22
+          ? { '@odata.nextLink': nextUrl(dropCalls + 1) }
+          : { '@odata.deltaLink': finalDelta }),
+      });
+    });
+    const wsDrop = new MicrosoftWorkspace(dropFetcher);
+    const d1 = await wsDrop.mailBaseline('tok');
+    expect(d1.more).toBe(true);
+    expect(d1.headers).toEqual([]);
+    expect(d1.cursor).toEqual({
+      kind: 'microsoft',
+      deltaLink: nextUrl(21),
+      paging: { dropHeaders: true },
+    });
+    const d2 = await wsDrop.mailChanges('tok', d1.cursor);
+    expect(d2.more).toBeUndefined();
+    expect(d2.headers).toEqual([]);
+    expect(d2.cursor).toEqual({ kind: 'microsoft', deltaLink: finalDelta });
   });
 });

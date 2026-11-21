@@ -242,9 +242,26 @@ export interface MailHeader {
 
 /** Provider-specific high-water mark stored in `mail_cursors.cursor`. */
 export type MailProviderCursor =
-  | { kind: 'gmail'; historyId: string }
-  | { kind: 'microsoft'; deltaLink: string }
-  | { kind: 'imap'; mailbox: string; uidValidity: string; lastUid: number }
+  | {
+      kind: 'gmail';
+      historyId: string;
+      /** Resumable `messages.list` backfill position until every eligible page since activation/resync is processed. */
+      backfill?: { pageToken: string; afterSeconds: number; sinceMs: number };
+    }
+  | {
+      kind: 'microsoft';
+      deltaLink: string;
+      /** Resumable `@odata.nextLink` paging state when an initial or resync delta spans more than one poll's page cap. */
+      paging?: { sinceMs?: number; dropHeaders?: boolean };
+    }
+  | {
+      kind: 'imap';
+      mailbox: string;
+      uidValidity: string;
+      lastUid: number;
+      /** Resumable backfill window (`lastUid` advances per batch until every eligible UID up to `untilUid` is processed). */
+      backfill?: { sinceMs: number; untilUid: number };
+    }
   | { kind: 'fake'; seq: number };
 
 export interface MailChangesOptions {
@@ -262,6 +279,8 @@ export interface MailChangesResult {
   headers: MailHeader[];
   /** True when an expired or renumbered provider cursor was re-synced from `resyncSince`/`since`. */
   reset?: boolean;
+  /** True when more backfill or catch-up batches remain before this mailbox is caught up. */
+  more?: boolean;
 }
 
 export interface MailOrganizeInput {

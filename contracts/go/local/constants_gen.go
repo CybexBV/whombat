@@ -193,6 +193,7 @@ const (
 	VoiceModelsPathState         = "/v1/voice-models"
 	VoiceModelsPathFetch         = "/v1/voice-models/fetch"
 	VoiceModelsPathRemove        = "/v1/voice-models/remove"
+	VoiceModelsIncludeParam      = "include"
 	VoiceModelMaxBytes           = 4294967296
 	VoiceModelStateAbsent        = "absent"
 	VoiceModelStateDownloading   = "downloading"

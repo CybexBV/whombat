@@ -506,6 +506,80 @@ describe('Email (IMAP) behind the mail tools', () => {
     expect(server.sourceReads).toBe(beforeReads);
   });
 
+  it('resumes IMAP backfill across UID batches when more than 50 messages arrive before baseline or renumber', async () => {
+    const activation = new Date('2026-10-22T10:00:00Z');
+    // Put an invoice right after activation, followed by 114 newer messages (115 total post-activation).
+    const total = 115;
+    for (let i = 1; i <= total; i++) {
+      server.add(
+        'INBOX',
+        mail({
+          from: i === 1 ? 'Billing <billing@example.com>' : 'News <news@example.com>',
+          subject: i === 1 ? 'Invoice #1' : `Update ${i}`,
+          body: `Body ${i}`,
+          id: `<burst-${i}@example.com>`,
+        }),
+        { date: new Date(activation.getTime() + i * 1_000) },
+      );
+    }
+    const beforeReads = server.sourceReads;
+
+    // Initial baseline processes 50-UID batches without losing <burst-1@example.com> or reading bodies.
+    const seen = new Set<string>();
+    const b1 = await ws.mailBaseline(TOKEN, { since: activation });
+    expect(b1.more).toBe(true);
+    expect(b1.cursor.kind).toBe('imap');
+    if (b1.cursor.kind === 'imap') expect(b1.cursor.backfill).toBeDefined();
+    expect(b1.headers).toHaveLength(50);
+    for (const h of b1.headers) if (h.messageId) seen.add(h.messageId);
+    expect(seen.has('<burst-1@example.com>')).toBe(true);
+
+    // One more message arrives while backfill is mid-way.
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Invoice during backfill',
+        body: 'Arrived mid-backfill',
+        id: '<mid-backfill@example.com>',
+      }),
+      { date: new Date(activation.getTime() + 200_000) },
+    );
+
+    const b2 = await ws.mailChanges(TOKEN, b1.cursor, { since: activation });
+    expect(b2.more).toBe(true);
+    expect(b2.headers).toHaveLength(50);
+    for (const h of b2.headers) if (h.messageId) seen.add(h.messageId);
+
+    const b3 = await ws.mailChanges(TOKEN, b2.cursor, { since: activation });
+    // Backfill window finished (no backfill property left), and `more` flags the mid-backfill arrival.
+    if (b3.cursor.kind === 'imap') expect(b3.cursor.backfill).toBeUndefined();
+    expect(b3.headers).toHaveLength(15);
+    for (const h of b3.headers) if (h.messageId) seen.add(h.messageId);
+    expect(seen.size).toBe(total);
+    expect(seen.has('<burst-1@example.com>')).toBe(true);
+
+    const steady = await ws.mailChanges(TOKEN, b3.cursor, { since: activation });
+    expect(steady.headers.map((h) => h.messageId)).toEqual(['<mid-backfill@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // UIDVALIDITY renumber with >50 eligible messages also backfills every batch without skipping any.
+    server.renumber('INBOX');
+    const resyncSeen = new Set<string>();
+    let step = await ws.mailChanges(TOKEN, steady.cursor, { since: activation, resyncSince: activation });
+    expect(step.reset).toBe(true);
+    expect(step.more).toBe(true);
+    for (const h of step.headers) if (h.messageId) resyncSeen.add(h.messageId);
+    while (step.more) {
+      step = await ws.mailChanges(TOKEN, step.cursor, { since: activation, resyncSince: activation });
+      for (const h of step.headers) if (h.messageId) resyncSeen.add(h.messageId);
+    }
+    expect(resyncSeen.size).toBe(total + 1);
+    expect(resyncSeen.has('<burst-1@example.com>')).toBe(true);
+    expect(resyncSeen.has('<mid-backfill@example.com>')).toBe(true);
+    expect(server.sourceReads).toBe(beforeReads);
+  });
+
   it('wakes on IMAP IDLE when new mail arrives, uses a multi-minute socket timeout, and reports unsupported when IDLE is absent', async () => {
     const openOpts: (ImapOpenOptions | undefined)[] = [];
     const baseImap = connector.imap;

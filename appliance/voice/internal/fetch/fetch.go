@@ -107,12 +107,30 @@ func (f *Fetcher) Start(ctx context.Context) error {
 	return nil
 }
 
-// State is every model and how far it is (VoiceModelsState).
+// State is every model in the manifest and how far it is (VoiceModelsState).
 func (f *Fetcher) State() local.VoiceModelsState {
+	return f.state(nil, true)
+}
+
+// StateFor is the v1 HTTP API state for a caller: speech-recognition models are always returned, while opt-in models
+// such as supertonic are included only when explicitly named in include so a rolled-back runtime whose v1 contract
+// accepts only speech-recognition models still parses the response.
+func (f *Fetcher) StateFor(include []string) local.VoiceModelsState {
+	return f.state(include, false)
+}
+
+func isDefaultV1Model(id string) bool {
+	return id == local.VoiceModelParakeet || id == local.VoiceModelWhisper
+}
+
+func (f *Fetcher) state(include []string, all bool) local.VoiceModelsState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := local.VoiceModelsState{V: 1}
+	out := local.VoiceModelsState{V: 1, Models: []local.VoiceModelState{}}
 	for _, m := range f.Manifest.Models {
+		if !all && !isDefaultV1Model(m.ID) && !slices.Contains(include, m.ID) {
+			continue
+		}
 		e := f.entries[m.ID]
 		s := local.VoiceModelState{ID: m.ID, State: e.state, Size: m.TotalSize(), Received: e.received}
 		if e.problem != "" {

@@ -573,3 +573,95 @@ func TestRemoveMultiWhileDownloading(t *testing.T) {
 		t.Fatal("final dir stays after Remove")
 	}
 }
+
+// TestServerV1RollbackCompatibility ensures plain v1 requests omit supertonic so a previous runtime whose
+// VoiceModelsState schema only accepts speech-recognition models (parakeet, whisper) still parses every response,
+// while callers opting in via ?include=supertonic (or naming supertonic in fetch/remove) receive it.
+func TestServerV1RollbackCompatibility(t *testing.T) {
+	pBody := body(16 << 10)
+	wBody := body(16 << 10)
+	sBody := body(16 << 10)
+	srv := httptest.NewServer(&multiSource{files: map[string]*source{
+		"parakeet.bin": {body: pBody},
+		"whisper.bin":  {body: wBody},
+		"a.onnx":       {body: sBody},
+	}})
+	defer srv.Close()
+	sumOf := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return hex.EncodeToString(s[:])
+	}
+	f := &Fetcher{
+		Manifest: models.Manifest{Models: []models.Model{
+			{ID: local.VoiceModelParakeet, File: "parakeet.bin", URL: srv.URL + "/parakeet.bin", Size: int64(len(pBody)), SHA256: sumOf(pBody)},
+			{ID: local.VoiceModelWhisper, File: "whisper.bin", URL: srv.URL + "/whisper.bin", Size: int64(len(wBody)), SHA256: sumOf(wBody)},
+			{ID: local.VoiceModelSupertonic, Dir: "supertonic-3-int8", Files: []models.File{
+				{Name: "a.onnx", URL: srv.URL + "/a.onnx", Size: int64(len(sBody)), SHA256: sumOf(sBody)},
+			}},
+		}},
+		Dir:     t.TempDir(),
+		Client:  srv.Client(),
+		Free:    func(string) (int64, error) { return 1 << 40, nil },
+		Backoff: func(int) time.Duration { return 10 * time.Millisecond },
+		Idle:    200 * time.Millisecond,
+	}
+	start(t, f)
+	h := (&Server{Fetcher: f}).Handler()
+
+	// Previous runtime's strict v1 schema: only speech-recognition models (parakeet, whisper) are allowed.
+	parsePrevRuntime := func(raw []byte) (*local.VoiceModelsState, error) {
+		st, err := local.ParseVoiceModelsState(raw)
+		if err != nil {
+			return st, err
+		}
+		for _, m := range st.Models {
+			if m.ID != local.VoiceModelParakeet && m.ID != local.VoiceModelWhisper {
+				return st, fmt.Errorf("previous runtime rejects unknown model id %q", m.ID)
+			}
+		}
+		return st, nil
+	}
+	call := func(method, path, reqBody string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(reqBody)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s %s: status %d: %s", method, path, rec.Code, rec.Body)
+		}
+		return rec
+	}
+
+	// Plain GET /v1/voice-models, POST fetch(parakeet), POST remove(parakeet): parsed by previous runtime, no supertonic.
+	for _, tc := range []struct{ name, method, path, body string }{
+		{"state", http.MethodGet, local.VoiceModelsPathState, ""},
+		{"fetch parakeet", http.MethodPost, local.VoiceModelsPathFetch, `{"v":1,"model":"parakeet"}`},
+		{"remove parakeet", http.MethodPost, local.VoiceModelsPathRemove, `{"v":1,"model":"parakeet"}`},
+	} {
+		rec := call(tc.method, tc.path, tc.body)
+		st, err := parsePrevRuntime(rec.Body.Bytes())
+		if err != nil {
+			t.Fatalf("%s failed previous runtime schema: %v (%s)", tc.name, err, rec.Body)
+		}
+		if len(st.Models) != 2 || st.Models[0].ID != local.VoiceModelParakeet || st.Models[1].ID != local.VoiceModelWhisper {
+			t.Fatalf("%s models = %+v", tc.name, st.Models)
+		}
+	}
+
+	// New runtime asks with ?include=supertonic (or names supertonic in fetch/remove): supertonic is returned.
+	for _, tc := range []struct{ name, method, path, body string }{
+		{"state include", http.MethodGet, local.VoiceModelsPathState + "?" + local.VoiceModelsIncludeParam + "=" + local.VoiceModelSupertonic, ""},
+		{"fetch supertonic", http.MethodPost, local.VoiceModelsPathFetch, `{"v":1,"model":"supertonic"}`},
+		{"remove supertonic", http.MethodPost, local.VoiceModelsPathRemove, `{"v":1,"model":"supertonic"}`},
+	} {
+		rec := call(tc.method, tc.path, tc.body)
+		st, err := local.ParseVoiceModelsState(rec.Body.Bytes())
+		if err != nil {
+			t.Fatalf("%s failed current schema: %v (%s)", tc.name, err, rec.Body)
+		}
+		if len(st.Models) != 3 || st.Models[2].ID != local.VoiceModelSupertonic {
+			t.Fatalf("%s models = %+v", tc.name, st.Models)
+		}
+		if _, err := parsePrevRuntime(rec.Body.Bytes()); err == nil {
+			t.Fatalf("%s unexpectedly accepted by previous runtime schema", tc.name)
+		}
+	}
+}

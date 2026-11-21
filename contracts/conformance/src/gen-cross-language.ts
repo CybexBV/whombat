@@ -189,6 +189,7 @@ function constants(pkg: GoPackage): string {
     str('VoiceModelsSocketEnv', local.VOICE_MODELS_SOCKET_ENV);
     str('VoiceModelsSocketDefault', local.VOICE_MODELS_SOCKET_DEFAULT);
     for (const [k, v] of Object.entries(local.VOICE_MODELS_PATHS)) str(`VoiceModelsPath${goName(k)}`, v);
+    str('VoiceModelsIncludeParam', local.VOICE_MODELS_INCLUDE_PARAM);
     num('VoiceModelMaxBytes', local.VOICE_MODEL_MAX_BYTES);
     for (const st of VOICE_MODEL_STATES) str(`VoiceModelState${goName(st)}`, st);
     for (const pr of VOICE_MODEL_PROBLEMS) str(`VoiceModelProblem${goName(pr)}`, pr);

@@ -11,6 +11,10 @@
  * | `POST /v1/voice-models/fetch` | `VoiceModelRequest {v, model}` | `VoiceModelsState` |
  * | `POST /v1/voice-models/remove` | `VoiceModelRequest {v, model}` | `VoiceModelsState` |
  *
+ * Plain v1 responses carry only speech-recognition models (`parakeet`, `whisper`) so an earlier runtime after a
+ * rollback still parses the response; newer runtimes pass `?include=supertonic` (or name `supertonic` in a fetch or
+ * remove request) to receive opt-in TTS models as well.
+ *
  * `fetch` starts a download or queues it behind the one that runs (one at a time); a model that is there or on its way
  * is left as it is, and a failed one starts again. A download that can't go on (no internet) waits and tries again by
  * itself, resuming where it stopped. `remove` stops a download and deletes the model. Policy (what to fetch, when) is
@@ -37,6 +41,9 @@ export const VOICE_MODELS_PATHS = {
   fetch: '/v1/voice-models/fetch',
   remove: '/v1/voice-models/remove',
 } as const;
+
+/** Query parameter opting into non-STT models (e.g. `?include=supertonic`) so older v1 runtimes stay compatible. */
+export const VOICE_MODELS_INCLUDE_PARAM = 'include';
 
 /** A model's size bound (4 GiB): the release's models are well under it. */
 export const VOICE_MODEL_MAX_BYTES = 4_294_967_296;
