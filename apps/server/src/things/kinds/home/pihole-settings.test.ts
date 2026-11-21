@@ -104,6 +104,13 @@ describe('Pi-hole declared settings', () => {
       value: 'Empty address (0.0.0.0)',
       choose: { current: 'NULL' },
     });
+    expect(by('blocking_mode')?.choose?.choices.map((c) => c.value)).toEqual([
+      'NULL',
+      'IP_NODATA_AAAA',
+      'IP',
+      'NXDOMAIN',
+      'NODATA',
+    ]);
     expect(by('dnssec')).toMatchObject({ value: 'Off', on: false });
     expect(by('rate_limit')).toBeUndefined();
     expect(by('query_logging')).toMatchObject({ value: 'On', on: true });
@@ -134,6 +141,9 @@ describe('Pi-hole declared settings', () => {
       undo: { target: 'blocking_mode', value: 'NULL', expect: 'NXDOMAIN' },
     });
 
+    await act(ctx, { target: 'blocking_mode', value: 'IP_NODATA_AAAA' });
+    expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('IP_NODATA_AAAA');
+
     await act(ctx, { target: 'privacy_level', value: 2 });
     expect(ph.store.misc.privacylevel).toBe(2);
   });
@@ -143,6 +153,7 @@ describe('Pi-hole declared settings', () => {
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
     await expect(act(ctx, { target: 'rate_limit', value: 2000 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'blocking_mode', value: 'ZERO' })).rejects.toThrow();
     await expect(act(ctx, { target: 'privacy_level', value: 9 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
 
@@ -168,6 +179,12 @@ describe('Pi-hole declared settings', () => {
     const words = await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
     expect(words?.title).toContain('Pi-hole');
     expect(words?.lines[0]).toContain('0.0.0.0 → NXDOMAIN');
+    const ipv4 = await describeSetting(PIHOLE_SETTINGS, ctx, {
+      target: 'blocking_mode',
+      value: 'IP_NODATA_AAAA',
+    });
+    expect(ipv4?.lines[0]).toContain('0.0.0.0 → Pi-hole’s IPv4 address');
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' })).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'BAD' })).toBeNull();
   });
 });
