@@ -84,7 +84,8 @@ Without Metro it falls back to nothing, so use a release build for a standalone 
 
 ```sh
 pnpm --filter @whombat/mobile android:apk --variant release    # JS bundled, signed with the debug key
-pnpm --filter @whombat/mobile android:apk --arch all            # x86_64 + arm64-v8a (real phones)
+pnpm --filter @whombat/mobile android:apk --arch arm64-v8a      # phones
+pnpm --filter @whombat/mobile android:apk --arch all            # x86_64 + arm64-v8a: an emulator and phones
 pnpm --filter @whombat/mobile android:apk --clean               # regenerate android/ from app.config.cjs
 ```
 
@@ -190,9 +191,12 @@ unless told otherwise (`--env prod`: `api.whombat.com` and `app.whombat.com`). T
 production control's downloads folder; the iPhone app goes to TestFlight (below).
 
 ```sh
-pnpm --filter @whombat/mobile publish:apk --dir <production control's DOWNLOADS_DIR> --arch all
+pnpm --filter @whombat/mobile publish:apk --dir <production control's DOWNLOADS_DIR>
 pnpm --filter @whombat/mobile publish:ios
 ```
+
+The published APK is for `arm64-v8a`, the phones' architecture, so nobody downloads the emulator's libraries;
+`--arch all` adds x86_64 for an emulator.
 
 `--env dev` is still accepted until the move to production is done; it goes with DEV.
 
