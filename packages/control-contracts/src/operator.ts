@@ -1016,7 +1016,7 @@ export const operatorApi = {
     path: '/operator/orgs/:org/trial/extend',
     auth: 'operator',
     summary:
-      'Extend a trial by `days` (`billing.write`): Stripe `trial_end`, or a manual trial’s `currentPeriodEnd`. Refuses `not_trialing` (409), `billing_provider_error` (502).',
+      'Extend a trial by `days` (`billing.write`): Stripe `trial_end`, or a manual trial’s `currentPeriodEnd`. Refuses `not_trialing` (409), `billing_provider_error` (503).',
     body: ExtendTrialBody,
     response: OperatorOrgDetail,
   }),
@@ -1036,7 +1036,7 @@ export const operatorApi = {
     path: '/operator/orgs/:org/subscription/cancel',
     auth: 'operator',
     summary:
-      'Cancel the org’s Stripe subscription now or at the period end (`billing.write`). Refuses `no_subscription` (409), `billing_provider_error` (502).',
+      'Cancel the org’s Stripe subscription now or at the period end (`billing.write`). Refuses `no_subscription` (409), `billing_provider_error` (503).',
     body: CancelSubscriptionBody,
     response: OperatorOrgDetail,
   }),
@@ -1046,7 +1046,7 @@ export const operatorApi = {
     path: '/operator/orgs/:org/billing/sync',
     auth: 'operator',
     summary:
-      'Apply the org’s subscription from Stripe now (`billing.write`). Refuses `no_subscription` (409), `billing_provider_error` (502).',
+      'Apply the org’s subscription from Stripe now (`billing.write`). Refuses `no_subscription` (409), `billing_provider_error` (503).',
     body: z.strictObject({}),
     response: OperatorOrgDetail,
   }),
@@ -1208,7 +1208,7 @@ export const operatorApi = {
     path: '/operator/plans/:plan',
     auth: 'operator',
     summary:
-      'Change a plan (`plans.write`). A price change with Stripe configured creates a new price and moves the lookup key; existing subscribers keep theirs (BL-20). Refuses `plan_not_found` (404), `billing_provider_error` (502).',
+      'Change a plan (`plans.write`). A price change with Stripe configured creates a new price and moves the lookup key; existing subscribers keep theirs (BL-20). Refuses `plan_not_found` (404), `billing_provider_error` (503).',
     body: PlanUpdate,
     response: OperatorPlan,
   }),

@@ -212,7 +212,7 @@ export const billingApi = {
     path: '/orgs/:org/billing/checkout',
     auth: 'session',
     summary:
-      'A Stripe Checkout Session for a public plan × `whombats` (with the trial days when the org may trial, BL-15, BL-17). Refuses `subscription_exists` (409: use the portal), `manual_billing` (409: manual provider), `plan_unavailable` (400: unknown or not public), `billing_provider_error` (502).',
+      'A Stripe Checkout Session for a public plan × `whombats` (with the trial days when the org may trial, BL-15, BL-17). Refuses `subscription_exists` (409: use the portal), `manual_billing` (409: manual provider), `plan_unavailable` (400: unknown or not public), `billing_provider_error` (503).',
     body: BillingCheckoutBody,
     response: BillingRedirect,
   }),
