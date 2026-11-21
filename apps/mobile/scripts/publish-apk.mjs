@@ -18,7 +18,8 @@
 // {version, versionCode, file, size, sha256, publishedAt}. Files are written under a temporary name and renamed, so
 // control never serves half an APK; the previous APK stays (a download that started keeps working), older ones go.
 // Beside them, <dir>/sourcemaps/<versionCode>-<rev>.map and .mapping.txt keep the build's bundle source map and R8's
-// mapping (the newest 30 builds): outside android/, and control serves only the one APK latest.json names.
+// mapping (the newest 30 builds): outside android/, and control serves only the one APK latest.json names. Only maps
+// this run's build wrote are kept: with --skip-build none (they could be another build's).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -79,14 +80,12 @@ const MAPS_KEPT = 30;
  * The bundle's source map and R8's mapping, kept per build beside the published files
  * (`<dir>/sourcemaps/<versionCode>-<rev>.map`, `….mapping.txt`): an error note from the phone names lines of the
  * minified bundle (src/errors/errorNotes.ts), and a crash's Java frames are R8's short names; these turn them back into
- * the code's. Never stops a publish.
+ * the code's. Only files written since `since` (this build's start) are kept, named after `rev`, the revision the build
+ * was made from. Never stops a publish.
  */
-function keepMaps() {
+function keepMaps(since, rev) {
   try {
-    const rev =
-      spawnSync('git', ['-C', mobile, 'rev-parse', '--short=9', 'HEAD'], {
-        encoding: 'utf8',
-      }).stdout?.trim() || 'local';
+    const fresh = (file) => existsSync(file) && statSync(file).mtimeMs >= since;
     const maps = join(downloads, 'sourcemaps');
     mkdirSync(maps, { recursive: true });
     const name = `${versionCode}-${rev}`;
@@ -94,14 +93,17 @@ function keepMaps() {
     // React Native's Gradle plugin writes the Hermes bundle's map, composed with Metro's, under the bundle's name.
     const generated = join(gradle, 'generated/sourcemaps/react/release');
     const sourceMap = existsSync(generated)
-      ? readdirSync(generated).find((entry) => entry.endsWith('.bundle.map'))
+      ? readdirSync(generated).find((entry) => entry.endsWith('.bundle.map') && fresh(join(generated, entry)))
       : undefined;
     const mapping = join(gradle, 'outputs/mapping/release/mapping.txt');
     if (sourceMap) {
       copyFileSync(join(generated, sourceMap), join(maps, `${name}.map`));
       console.log(`Kept the bundle's source map as ${join(maps, `${name}.map`)}`);
-    } else console.warn(`No bundle source map in ${generated}: this build's error notes can't be read back`);
-    if (existsSync(mapping)) copyFileSync(mapping, join(maps, `${name}.mapping.txt`));
+    } else
+      console.warn(
+        `No bundle source map from this build in ${generated}: its error notes can't be read back`,
+      );
+    if (fresh(mapping)) copyFileSync(mapping, join(maps, `${name}.mapping.txt`));
     // The newest builds stay, whole: a build is the files that share its name.
     const byAge = readdirSync(maps)
       .map((entry) => ({ entry, build: entry.split('.')[0], at: statSync(join(maps, entry)).mtimeMs }))
@@ -114,8 +116,19 @@ function keepMaps() {
   }
 }
 
+/** The revision the build is made from, `-dirty` when the working tree has changes: what its maps are named after. */
+function revision() {
+  const git = (...a) => spawnSync('git', ['-C', mobile, ...a], { encoding: 'utf8' }).stdout?.trim() ?? '';
+  const rev = git('rev-parse', '--short=9', 'HEAD') || 'local';
+  return git('status', '--porcelain', '--untracked-files=no') ? `${rev}-dirty` : rev;
+}
+
 const built = join(mobile, 'build/whombat-release.apk');
-if (!args.includes('--skip-build')) {
+const skipBuild = args.includes('--skip-build');
+// Taken before the build starts: the maps it writes are newer, and named after what it was made from.
+const buildStart = Date.now();
+const buildRev = revision();
+if (!skipBuild) {
   const result = spawnSync(
     process.execPath,
     [join(mobile, 'scripts/build-android.mjs'), '--variant', 'release', '--arch', arch],
@@ -169,7 +182,8 @@ renameSync(`${latest}.partial`, latest);
 for (const entry of readdirSync(out))
   if (entry.endsWith('.apk') && entry !== file && entry !== previous) rmSync(join(out, entry));
 
-keepMaps();
+if (skipBuild) console.warn('--skip-build: no source map kept (the one on disk may be another build’s)');
+else keepMaps(buildStart, buildRev);
 
 console.log(
   `Published ${file} (${(record.size / 1e6).toFixed(1)} MB, sha256 ${sha256}) for ${envName} in ${out}`,

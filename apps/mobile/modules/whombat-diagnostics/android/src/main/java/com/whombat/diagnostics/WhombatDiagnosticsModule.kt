@@ -53,6 +53,10 @@ internal object ExitReasons {
   private const val ANR_TRACE_BYTES = 128 * 1024
   /** A native crash's report (Android's tombstone, a protocol buffer); the crashed thread is near its start. */
   private const val TOMBSTONE_BYTES = 1024 * 1024
+  /** How many of the newest endings have their trace read. */
+  private const val TRACED = 3
+  /** An ending older than this isn't noted any more. */
+  private const val MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L
 
   /**
    * The build this run is, kept by Android with the run's ending (the process state summary, 128 bytes at most): an
@@ -72,22 +76,43 @@ internal object ExitReasons {
   fun pending(context: Context): List<Map<String, String>> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) newer(context) else emptyList()
 
+  /**
+   * The endings to hand over, oldest first. One older than a week, or an ending for memory while the app wasn't on
+   * screen (Android does that to any app it needs the room of), is never worth a note: it is passed over without
+   * reading its trace, and taken when it is older than every ending handed over. Only the newest few have their trace
+   * read, which is the costly part.
+   */
   @RequiresApi(Build.VERSION_CODES.R)
   private fun newer(context: Context): List<Map<String, String>> {
     val manager = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
     val since = prefs(context).getLong(TAKEN_UNTIL, 0L)
-    return manager.getHistoricalProcessExitReasons(context.packageName, 0, MOST)
+    val oldest = System.currentTimeMillis() - MAX_AGE_MS
+    val (wanted, passed) = manager.getHistoricalProcessExitReasons(context.packageName, 0, MOST)
       .filter { it.timestamp > since && kept(it.reason) }
       .sortedBy { it.timestamp }
-      .map { mapOf("id" to "exit-${it.timestamp}-${it.pid}", "json" to describe(it).toString()) }
+      .partition { it.timestamp >= oldest && (it.reason != ApplicationExitInfo.REASON_LOW_MEMORY || onScreen(it)) }
+    val firstWanted = wanted.firstOrNull()?.timestamp ?: Long.MAX_VALUE
+    passed.filter { it.timestamp < firstWanted }.maxOfOrNull { it.timestamp }?.let { take(context, it) }
+    val traced = wanted.size - TRACED
+    return wanted.mapIndexed { i, exit ->
+      mapOf("id" to "exit-${exit.timestamp}-${exit.pid}", "json" to describe(exit, withTrace = i >= traced).toString())
+    }
   }
+
+  @RequiresApi(Build.VERSION_CODES.R)
+  private fun onScreen(exit: ApplicationExitInfo) =
+    exit.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
 
   /** These are noted (or not worth a note): the ones up to the newest of them are never handed over again. */
   fun taken(context: Context, ids: List<String>) {
     val newest = ids.mapNotNull { Regex("""^exit-(\d+)-\d+$""").find(it)?.groupValues?.get(1)?.toLongOrNull() }
       .maxOrNull() ?: return
+    take(context, newest)
+  }
+
+  private fun take(context: Context, until: Long) {
     val p = prefs(context)
-    if (newest > p.getLong(TAKEN_UNTIL, 0L)) p.edit().putLong(TAKEN_UNTIL, newest).apply()
+    if (until > p.getLong(TAKEN_UNTIL, 0L)) p.edit().putLong(TAKEN_UNTIL, until).apply()
   }
 
   /**
@@ -102,7 +127,7 @@ internal object ExitReasons {
       reason == ApplicationExitInfo.REASON_LOW_MEMORY
 
   @RequiresApi(Build.VERSION_CODES.R)
-  private fun describe(exit: ApplicationExitInfo): JSONObject =
+  private fun describe(exit: ApplicationExitInfo, withTrace: Boolean): JSONObject =
     JSONObject().apply {
       put("platform", "android")
       put(
@@ -119,9 +144,10 @@ internal object ExitReasons {
       put("status", exit.status)
       put("pss", exit.pss)
       put("rss", exit.rss)
-      exit.description?.let { put("description", it.take(500)) }
+      // Free text: only an ANR's, from which the JavaScript side reads which kind it was and keeps nothing else.
+      if (exit.reason == ApplicationExitInfo.REASON_ANR) exit.description?.let { put("description", it.take(120)) }
       exit.processStateSummary?.let { put("build", String(it, Charsets.UTF_8).take(64)) }
-      when (exit.reason) {
+      if (withTrace) when (exit.reason) {
         ApplicationExitInfo.REASON_ANR ->
           read(exit, ANR_TRACE_BYTES)?.let { put("trace", String(it, Charsets.UTF_8)) }
         ApplicationExitInfo.REASON_CRASH_NATIVE ->

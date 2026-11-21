@@ -10,6 +10,7 @@ const channels = [
   { id: 'whombat.runs', name: 'Runs in progress', blocked: false },
 ];
 const delivery = (over: Partial<DeliveryStatus> = {}): DeliveryStatus => ({
+  enabled: true,
   channels,
   backgroundRestricted: false,
   batteryOptimized: false,
@@ -40,10 +41,38 @@ describe('the Notifications row on Android', () => {
     const v = notificationsView(
       on,
       now,
-      delivery({ channels: blocked('whombat.needs-you', 'whombat.runs') }),
+      delivery({ channels: blocked('whombat.needs-you', 'whombat.updates') }),
     );
     expect(v.page).toEqual({ page: 'notifications' });
-    expect(v.meta).toContain('“Needs you” and “Runs in progress”');
+    expect(v.meta).toContain('“Needs you” and “Mentions and agent updates”');
+  });
+
+  it('with the app-wide switch off (Android 8 to 12 keep the channels), says notifications aren’t allowed', () => {
+    const v = notificationsView(on, now, delivery({ enabled: false }));
+    expect(v).toMatchObject({
+      dot: 'warn',
+      title: 'Not allowed',
+      action: 'delivery',
+      page: { page: 'notifications' },
+    });
+  });
+
+  it('runs in progress off is a calm line with its channel’s page; with another channel off, only that one is named', () => {
+    const runs = notificationsView(on, now, delivery({ channels: blocked('whombat.runs') }));
+    expect(runs).toMatchObject({
+      dot: 'ok',
+      title: 'On',
+      action: 'delivery',
+      page: { page: 'channel', channel: 'whombat.runs' },
+    });
+    expect(runs.meta).toContain('“Runs in progress”');
+    const both = notificationsView(
+      on,
+      now,
+      delivery({ channels: blocked('whombat.runs', 'whombat.needs-you') }),
+    );
+    expect(both).toMatchObject({ dot: 'warn', page: { page: 'channel', channel: 'whombat.needs-you' } });
+    expect(both.meta).not.toContain('Runs in progress');
   });
 
   it('with every channel off, says notifications aren’t allowed', () => {

@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 
 /**
  * Whether Android lets Whombat's notifications through, beyond the app-wide permission: a channel turned off (the
@@ -28,6 +29,9 @@ object Delivery {
   fun status(context: Context): Map<String, Any> {
     val notifications = context.getSystemService(NotificationManager::class.java)
     return buildMap {
+      // The app-wide switch: on Android 8 to 12, turning it off neither ends the app nor marks the channels off, and
+      // a registered app doesn't ask the permission again on its return.
+      put("enabled", NotificationManagerCompat.from(context).areNotificationsEnabled())
       put("channels", channels(context, notifications))
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         context.getSystemService(ActivityManager::class.java)?.let { put("backgroundRestricted", it.isBackgroundRestricted) }
@@ -37,7 +41,7 @@ object Delivery {
           put("batteryOptimized", !it.isIgnoringBatteryOptimizations(context.packageName))
         }
       }
-      liveUpdatesAllowed(notifications)?.let { put("liveUpdatesAllowed", it) }
+      liveUpdatesAllowed(context, notifications)?.let { put("liveUpdatesAllowed", it) }
     }
   }
 
@@ -59,14 +63,19 @@ object Delivery {
 
   /**
    * `NotificationManager.canPostPromotedNotifications()`, Android 16 QPR1+; looked up by name, since the build's SDK
-   * may be older than the method. Null where there is no such choice.
+   * may be older than the method. Null where there is no such choice: the method is missing, or this phone has no
+   * settings page to turn it back on with (some makers leave it out).
    */
-  private fun liveUpdatesAllowed(manager: NotificationManager?): Boolean? {
+  private fun liveUpdatesAllowed(context: Context, manager: NotificationManager?): Boolean? {
     if (Build.VERSION.SDK_INT < 36 || manager == null) return null
+    if (promotionSettings(context).resolveActivity(context.packageManager) == null) return null
     return runCatching {
       NotificationManager::class.java.getMethod("canPostPromotedNotifications").invoke(manager) as? Boolean
     }.getOrNull()
   }
+
+  private fun promotionSettings(context: Context): Intent =
+    Intent(ACTION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
 
   /**
    * Opens the settings page for one thing the row names: `channel` (one channel's page), `notifications` (the app's
@@ -86,7 +95,7 @@ object Delivery {
                   .putExtra(Settings.EXTRA_CHANNEL_ID, channel),
               )
             }
-          "liveUpdates" -> add(Intent(ACTION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg))
+          "liveUpdates" -> add(promotionSettings(context))
         }
         if (page != "battery") add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg))
       }
