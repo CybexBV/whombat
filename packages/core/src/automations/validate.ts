@@ -8,8 +8,11 @@ import {
   AUTOMATION_DEFINITION_MAX_BYTES,
   AutomationDefinition,
   AutomationExport,
+  type AutomationStep,
   type AutomationTrigger,
+  EXTERNAL_STEP_KINDS,
   type GitHubTriggerEvent,
+  stepKindLabel,
   TRIGGER_KIND_LABELS,
 } from '../domain/automation.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
@@ -53,6 +56,32 @@ export function jsonBytes(value: unknown): number {
     } else bytes += 3;
   }
   return bytes;
+}
+
+/**
+ * Plain-English problem when a step is disallowed in a mail-triggered automation: incoming mail comes from outsiders,
+ * so mail automations may never check out a repository (`workspace`) or run any external-effect step other than
+ * `connection_actions` (which always asks a person on a card first).
+ */
+export function mailStepProblem(step: AutomationStep): string | null {
+  if (step.kind === 'dispatch_agent' && step.workspace) {
+    return 'A mail automation can’t give the agent a repository checkout.';
+  }
+  if (step.kind !== 'connection_actions' && EXTERNAL_STEP_KINDS.includes(step.kind)) {
+    return `A mail automation can’t use “${stepKindLabel(step.kind)}” steps; use approved connection actions instead.`;
+  }
+  return null;
+}
+
+/** Validation problems for definitions that include a `mail` trigger. */
+export function mailDefinitionProblems(def: AutomationDefinition): string[] {
+  if (!def.triggers.some((t) => t.kind === 'mail')) return [];
+  const problems: string[] = [];
+  def.steps.forEach((s, i) => {
+    const err = mailStepProblem(s);
+    if (err) problems.push(`steps[${i}]: ${err}`);
+  });
+  return problems;
 }
 
 /** Semantic checks of a definition that already matches the schema. */
@@ -191,6 +220,7 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
         break;
     }
   });
+  problems.push(...mailDefinitionProblems(def));
   return problems;
 }
 

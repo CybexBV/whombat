@@ -355,3 +355,91 @@ describe('outsider-content fencing and truncation safety', () => {
     expect(directTiny).not.toContain('[[/mail]]');
   });
 });
+
+describe('mail automation safety restrictions', () => {
+  const baseDef = {
+    version: 1,
+    conversationId: 'cnv_chat',
+    triggers: [{ kind: 'mail', connectionId: CON, from: 'example.com' }],
+    limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+  };
+
+  it('refuses a mail definition with a repository workspace or any non-connection_actions external step', () => {
+    const withWorkspace = validateDefinition({
+      ...baseDef,
+      steps: [
+        {
+          id: 'ask',
+          kind: 'dispatch_agent',
+          prompt: 'Inspect {{trigger.text}}',
+          workspace: { repo: 'acme/web', access: 'read' },
+        },
+      ],
+    });
+    expect(withWorkspace.ok).toBe(false);
+    expect(withWorkspace.problems.join(' ')).toContain('repository checkout');
+
+    const withGithubComment = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        {
+          id: 'comment',
+          kind: 'github_comment',
+          repo: 'acme/web',
+          number: '1',
+          text: '{{steps.ask.text}}',
+        },
+      ],
+    });
+    expect(withGithubComment.ok).toBe(false);
+    expect(withGithubComment.problems.join(' ')).toContain('Comment on GitHub');
+
+    const withCallback = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        { id: 'hook', kind: 'http_callback', url: 'https://example.com/hook', body: '{}' },
+      ],
+    });
+    expect(withCallback.ok).toBe(false);
+    expect(withCallback.problems.join(' ')).toContain('Call a URL');
+
+    const withOpenPr = validateDefinition({
+      ...baseDef,
+      steps: [
+        {
+          id: 'pr',
+          kind: 'open_pull_request',
+          repo: 'acme/web',
+          branch: 'feat/mail',
+          title: 'From mail',
+          body: '{{trigger.text}}',
+        },
+      ],
+    });
+    expect(withOpenPr.ok).toBe(false);
+    expect(withOpenPr.problems.join(' ')).toContain('Open a pull request');
+
+    // Safe mail definition with proposeActions + connection_actions + post_message passes.
+    const safe = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Handle {{trigger.text}}', proposeActions: true },
+        { id: 'act', kind: 'connection_actions', from: 'ask' },
+      ],
+    });
+    expect(safe.ok).toBe(true);
+
+    // Mail recipe with a repo is also refused.
+    expect(
+      recipeProblem({
+        when: { kind: 'mail', connectionId: CON, from: 'example.com' },
+        job: 'custom',
+        instructions: 'Handle mail.',
+        repo: 'acme/web',
+        conversationId: 'cnv_chat',
+      }),
+    ).toContain('repository checkout');
+  });
+});

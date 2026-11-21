@@ -551,6 +551,7 @@ export function recipeProblem(input: AutomationRecipeInput): string | null {
   if (recipe.when.kind === 'tracker' && new Set(recipe.when.itemKinds).size !== recipe.when.itemKinds.length)
     return 'Each kind of report only once.';
   if (recipe.when.kind === 'mail') {
+    if (recipe.repo) return 'A mail automation can’t use a repository checkout.';
     const mailErr = mailTriggerProblems(recipe.when)[0];
     if (mailErr) return mailErr;
   }

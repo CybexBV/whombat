@@ -26,6 +26,7 @@ import {
   automationPlans,
   automationRunSteps,
   automationRuns,
+  automationVersions,
   catalogConnections,
   connectionTools,
   dispatches,
@@ -45,7 +46,13 @@ import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { useVaultNetForTests } from '../vault/net';
-import { createAutomation, deleteAutomation, setAutomationEnabled } from './commands';
+import {
+  createAutomation,
+  deleteAutomation,
+  publishAutomationDraft,
+  saveAutomationDraft,
+  setAutomationEnabled,
+} from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import { loadAutomationRow, toAutomation } from './store';
 
@@ -2271,6 +2278,176 @@ describe('mail-arrives automations', () => {
       await w.ok(IDS.mara, deleteAutomation, { automationId: msgWatcherId });
       await w.ok(IDS.mara, deleteAutomation, { automationId: reactWatcherId });
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('refuses mail automations with a workspace or disallowed external step at publish and again at execution', async () => {
+    const baseTrigger = { kind: 'mail' as const, connectionId, from: 'example.com', subjectContains: ['unsafe'] };
+
+    // 1. Saving & publishing a custom mail definition with a workspace is refused.
+    const { automationId: wsDraftId } = await w.ok(IDS.mara, createAutomation, {
+      name: 'Unsafe mail workspace',
+      source: { kind: 'blank', conversationId: maraChat.dmId },
+    });
+    const wsDef = {
+      version: 1,
+      conversationId: maraChat.dmId,
+      triggers: [baseTrigger],
+      steps: [
+        {
+          id: 'ask',
+          kind: 'dispatch_agent',
+          prompt: 'Inspect {{trigger.text}}',
+          workspace: { repo: 'whombat/billing', access: 'read' },
+        },
+      ],
+      limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+    };
+    await w.ok(IDS.mara, saveAutomationDraft, { automationId: wsDraftId, definition: wsDef });
+    await expect(
+      w.commit(IDS.mara, publishAutomationDraft, {
+        automationId: wsDraftId,
+        enable: true,
+        definitionHash: 'a'.repeat(64),
+      }),
+    ).rejects.toThrow(/repository checkout/);
+
+    // 2. Saving & publishing a custom mail definition with github_comment is refused.
+    const { automationId: ghDraftId } = await w.ok(IDS.mara, createAutomation, {
+      name: 'Unsafe mail github comment',
+      source: { kind: 'blank', conversationId: maraChat.dmId },
+    });
+    const ghDef = {
+      version: 1,
+      conversationId: maraChat.dmId,
+      triggers: [baseTrigger],
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        {
+          id: 'comment',
+          kind: 'github_comment',
+          repo: 'whombat/billing',
+          number: '1',
+          text: '{{steps.ask.text}}',
+        },
+      ],
+      limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+    };
+    await w.ok(IDS.mara, saveAutomationDraft, { automationId: ghDraftId, definition: ghDef });
+    await expect(
+      w.commit(IDS.mara, publishAutomationDraft, {
+        automationId: ghDraftId,
+        enable: true,
+        definitionHash: 'b'.repeat(64),
+      }),
+    ).rejects.toThrow(/Comment on GitHub/);
+
+    await w.ok(IDS.mara, deleteAutomation, { automationId: wsDraftId });
+    await w.ok(IDS.mara, deleteAutomation, { automationId: ghDraftId });
+
+    // 3. Execution-time defense in depth: even if a published mail automation's stored version is altered in DB
+    // to contain a workspace step or a github_comment step, executing it blocks the unsafe step!
+    const safeWsAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['exec-unsafe-ws'],
+    });
+    const safeGhAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['exec-unsafe-gh'],
+    });
+    try {
+      await pollAndSettle();
+
+      // Tamper version 1 of safeWsAutoId to add a workspace checkout on step 0.
+      const [wsVer] = await w.services.db
+        .select()
+        .from(automationVersions)
+        .where(eq(automationVersions.automationId, safeWsAutoId));
+      await w.services.db
+        .update(automationVersions)
+        .set({
+          definition: {
+            ...(wsVer?.definition as NonNullable<typeof wsVer>['definition']),
+            steps: [
+              {
+                id: 'ask',
+                kind: 'dispatch_agent',
+                prompt: 'Inspect {{trigger.text}}',
+                workspace: { repo: 'whombat/billing', access: 'read' },
+              },
+            ],
+          },
+        })
+        .where(eq(automationVersions.automationId, safeWsAutoId));
+
+      // Tamper version 1 of safeGhAutoId to run a github_comment step directly.
+      const [ghVer] = await w.services.db
+        .select()
+        .from(automationVersions)
+        .where(eq(automationVersions.automationId, safeGhAutoId));
+      await w.services.db
+        .update(automationVersions)
+        .set({
+          definition: {
+            ...(ghVer?.definition as NonNullable<typeof ghVer>['definition']),
+            steps: [
+              {
+                id: 'comment',
+                kind: 'github_comment',
+                repo: 'whombat/billing',
+                number: '1',
+                text: '{{trigger.subject}}',
+              },
+            ],
+          },
+        })
+        .where(eq(automationVersions.automationId, safeGhAutoId));
+
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_exec_unsafe_ws',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'exec-unsafe-ws test',
+        body: 'Should block workspace.',
+        messageId: '<exec-unsafe-ws@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_exec_unsafe_gh',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'exec-unsafe-gh test',
+        body: 'Should block github_comment.',
+        messageId: '<exec-unsafe-gh@example.com>',
+        date: new Date(w.now().getTime() + 100),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(2);
+
+      const [wsRunRow] = await runsOf(safeWsAutoId);
+      const wsRun = await w.run(wsRunRow?.id as string);
+      expect(wsRun.status).toBe('failed');
+      expect(wsRun.steps[0]?.state).toBe('blocked');
+      expect(wsRun.steps[0]?.dispatchId).toBeNull();
+      expect(wsRun.steps[0]?.error).toContain('repository checkout');
+
+      const [ghRunRow] = await runsOf(safeGhAutoId);
+      const ghRun = await w.run(ghRunRow?.id as string);
+      expect(ghRun.status).toBe('failed');
+      expect(ghRun.steps[0]?.state).toBe('blocked');
+      expect(ghRun.steps[0]?.error).toContain('Comment on GitHub');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: safeWsAutoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: safeGhAutoId });
       await pollAndSettle();
     }
   });

@@ -7,7 +7,7 @@
  * `uncertain` for a person) if the process dies in between.
  */
 
-import { type JsonObject, renderTemplate, trackerAccessAsked } from '@whombat/core';
+import { type JsonObject, mailStepProblem, renderTemplate, trackerAccessAsked } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { openPr } from '../commands/agent-tools';
@@ -512,6 +512,10 @@ export async function executeStep(
   const publisher = who.publisher;
   const inRooms = await stepRoomsCheck(tx, run, idx, publisher);
   if (!inRooms.ok) return block(ctx, run, idx, inRooms.reason);
+  if (run.trigger.kind === 'mail' || run.definition.triggers.some((t) => t.kind === 'mail')) {
+    const unsafe = mailStepProblem(step);
+    if (unsafe) return block(ctx, run, idx, unsafe);
+  }
   const execution = { ctx, run, steps, idx, attempt, scope, publisher, base };
   switch (step.kind) {
     case 'dispatch_agent':

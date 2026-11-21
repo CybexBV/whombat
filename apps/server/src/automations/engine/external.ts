@@ -5,7 +5,12 @@
  * lost the lease, or an update restarted): it is reconciled from what the mirror or GitHub shows, sent again when the
  * other side replays requests or provably never got it, or else set `uncertain` for a person — never done twice.
  */
-import { type AutomationStep, namesOrganization, REPEATABLE_EXTERNAL_STEP_KINDS } from '@whombat/core';
+import {
+  type AutomationStep,
+  mailStepProblem,
+  namesOrganization,
+  REPEATABLE_EXTERNAL_STEP_KINDS,
+} from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { mergeTarget } from '../../commands/prs';
 import { repos } from '../../db/schema/index';
@@ -32,6 +37,13 @@ export async function runExternal(
   step: AutomationStep,
   mine: boolean,
 ): Promise<boolean> {
+  if (lease.run.trigger.kind === 'mail' || lease.run.definition.triggers.some((t) => t.kind === 'mail')) {
+    const unsafe = mailStepProblem(step);
+    if (unsafe) {
+      await lease.commit({ op: 'settle', idx: row.idx, state: 'blocked', error: unsafe, from: ['running'] });
+      return true;
+    }
+  }
   if (!mine) return recoverExternal(lease, row, step);
   if (step.kind === 'open_pull_request') {
     await openPullRequest(lease, row, step);
