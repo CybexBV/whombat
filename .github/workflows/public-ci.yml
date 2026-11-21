@@ -57,6 +57,10 @@ jobs:
     timeout-minutes: 40
     env:
       CI: 'true'
+      # A hosted runner has 4 cores and 16 GB; side by side, the parts of `pnpm check` need more (the type check alone
+      # takes over 20 GB with every package at once). Here they run one after another, two type checks at a time.
+      CHECK_JOBS: '1'
+      TYPECHECK_JOBS: '2'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
