@@ -216,19 +216,19 @@ describe('Saving the model runtime (AP-1129)', () => {
   });
 });
 
-describe('Settings → Advanced → Model and effort on Local (hermes-engine-app.md AP-5041, AP-5043)', () => {
-  it('offers Local only with a model on the network', async () => {
+describe('Settings → Advanced → Model and effort on Custom', () => {
+  it('offers Custom only when a custom AI model is set up', async () => {
     renderApp(MODEL, mockedServices(server().fetch));
     await modelGroup();
-    expect(screen.queryByRole('radio', { name: 'Local' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Custom' })).toBeNull();
   });
 
   it('lists the burrow’s models and takes another by name; no effort, fast replies or sign-in', async () => {
     const { fetch, writes } = server({ localModel: true });
     const user = userEvent.setup();
     renderApp(MODEL, mockedServices(fetch));
-    await user.click(await screen.findByRole('radio', { name: 'Local' }));
-    expect(screen.getByText('Llama on the NAS, on your network. It answers.')).toBeTruthy();
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    expect(screen.getByText('Llama on the NAS. It answers.')).toBeTruthy();
     const models = await modelGroup();
     expect(
       within(models)
@@ -246,5 +246,35 @@ describe('Settings → Advanced → Model and effort on Local (hermes-engine-app
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]?.body).toEqual({ runtime: { provider: 'local', model: 'gemma3:27b' } });
     expect(await screen.findByText(`Updated ${ASSISTANT_NAME}’s AI provider and model.`)).toBeTruthy();
+  });
+});
+
+describe('Settings → Advanced → Model and effort background model', () => {
+  it('defaults to “Same as the main model”, lists only the chosen provider’s models, saves and clears on provider switch', async () => {
+    const { fetch, writes } = server();
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await modelGroup();
+    const bgGroup = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(bgGroup)).toEqual(['Same as the main model']);
+    expect(
+      within(bgGroup)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.querySelector('span > span')?.textContent),
+    ).toEqual(['Same as the main model', 'Opus', 'Fable', 'Sonnet', 'Haiku']);
+
+    await user.click(within(bgGroup).getByRole('radio', { name: /^Haiku/ }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.body).toEqual({
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'haiku', effort: 'high' },
+    });
+
+    // Switching provider resets the background model and offers only the new provider's models.
+    await user.click(screen.getByRole('radio', { name: 'ChatGPT' }));
+    const codexBg = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(codexBg)).toEqual(['Same as the main model']);
+    expect(within(codexBg).queryByRole('radio', { name: /^Haiku/ })).toBeNull();
+    expect(within(codexBg).getByRole('radio', { name: /^GPT-6\.1-Sol/ })).toBeTruthy();
   });
 });

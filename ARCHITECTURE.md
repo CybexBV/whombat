@@ -610,7 +610,7 @@ Automations. Code finds it by kind
   plugin ship in the runtime release, so a new Hermes is a runtime update that the box checks (ACP answers, the plugin
   and its providers load) and goes back from by itself; the appliance's latest-tested job checks for a new Hermes
   release daily, has an agent review it against Whombat's use of Hermes, installs and uses it in a test, and when it
-  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta, and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
+  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta (Production gets it only inside a promoted release), and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
   home is `$WHOMBAT_HERMES_ROOT` itself, Hermes's default profile (`config.yaml`, `memories/`, `sessions/`,
   `skills/`, the ChatGPT login); `profiles/_feedback` beside it holds every outsiders' turn. Before a session starts
   the runner writes the profile's `config.yaml`, `SOUL.md` (who the agent is, how its face talks, and that a reply is
@@ -626,8 +626,11 @@ Automations. Code finds it by kind
   its tool calls run in. An outsiders' turn gets a sandbox and a Hermes of its own instead.
 - **Where the model runs**, always on Hermes's own loop: Claude subscriptions through Nous's DirectSDK provider (the
   unmodified Claude Code as its model client, [claude-directsdk.md](docs/decisions/claude-directsdk.md)); ChatGPT
-  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a model on the
-  person's network through Hermes's API clients.
+  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a custom OpenAI-compatible AI model (an internet service over HTTPS or a server on the person's network) through Hermes's API clients.
+  When the agent has an optional `backgroundModel` set ([model-effort.md](docs/decisions/model-effort.md)), automatic
+  Looks, care plans and scheduled automation steps resolve their dispatch runtime to that model of the same provider
+  with automatic effort and without fast replies, while chats and person-started work keep the main model or thread
+  choice.
 - **Sessions**: one Chat thread is one Hermes session, resumed on its own provider and model; a turn sends only what
   is new since the session's last turn, a new session gets the window (the thread's first message and last 60 replies,
   in a channel after the room's last 30 top-level messages; a flat room's last 30 messages), and a failed resume is

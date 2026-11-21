@@ -206,6 +206,7 @@ export type BackupDirectoryEntry = z.infer<typeof BackupDirectoryEntry>;
 export const BackupAgentRuntime = z.object({
   provider: AgentProvider,
   model: z.string().min(1).max(200).nullable().default(null),
+  backgroundModel: z.string().min(1).max(200).nullable().default(null),
   effort: AgentEffort.nullable().default(null),
   /** Fast replies (0.117, CT-904): null as the model says. */
   fast: z.boolean().nullable().default(null),

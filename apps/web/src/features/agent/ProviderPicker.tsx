@@ -48,9 +48,9 @@ export function providerHint(
   if (value === 'local') {
     if (!localModel)
       return setupAt
-        ? `The model on your network isn’t set up yet: set it up in ${setupAt}.`
-        : 'The model on your network isn’t set up yet.';
-    const name = `${localModelName(localModel)}, on your network.`;
+        ? `The custom AI model isn’t set up yet: set it up in ${setupAt}.`
+        : 'The custom AI model isn’t set up yet.';
+    const name = `${localModelName(localModel)}.`;
     return localModel.check
       ? `${name} ${localModelCheckLine(localModel.check, localModel.model).text}`
       : name;

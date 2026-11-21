@@ -94,12 +94,13 @@ export const SETTINGS_PAGES = {
   'advanced.model': {
     where: 'Settings → Advanced → Model and effort',
     path: 'settings?tab=advanced&part=model',
-    about: 'the model {assistant} uses and how hard it thinks',
+    about: 'the main and background models {assistant} uses and how hard it thinks',
   },
   'advanced.ai': {
     where: 'Settings → Advanced → AI on this Whombat',
     path: 'settings?tab=advanced&part=ai',
-    about: 'the AI programs, the AI gateway, a model on your network and web search (a Brave Search key)',
+    about:
+      'the AI programs, the AI gateway, a custom AI model (an OpenAI-compatible service over https like OpenRouter or Google Gemini, or a model server on your network) and web search (a Brave Search key)',
   },
   'advanced.spend': {
     where: 'Settings → Advanced → Spend',

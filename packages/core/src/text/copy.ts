@@ -350,7 +350,7 @@ export function unrunnableReply(cause: UnrunnableCause): string {
     case 'provider':
       return `I can’t reply yet: ${PROVIDER_LABELS[cause.provider]} isn’t set up on this Whombat. Once it is (${AI_PROVIDER_SETTINGS}), ask me again.`;
     case 'local':
-      return `I can’t reply yet: the model on your network isn’t set up. Once it’s set up (${AI_PROVIDER_SETTINGS}), ask me again.`;
+      return `I can’t reply yet: the custom AI model isn’t set up. Once it’s set up (${AI_PROVIDER_SETTINGS}), ask me again.`;
     case 'no_provider':
       return 'I can’t reply yet: I’m not connected to Claude Code or ChatGPT. Pick one in Settings → AI sign-in, then ask me again.';
   }

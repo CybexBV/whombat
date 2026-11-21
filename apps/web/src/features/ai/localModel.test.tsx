@@ -15,9 +15,9 @@ afterEach(() => {});
 
 /** Advanced → AI on this Whombat (settings-groups.md). */
 const AI = '/settings?tab=advanced&part=ai';
-const SECTION = 'A MODEL ON YOUR NETWORK';
+const SECTION = 'CUSTOM AI MODEL';
 
-describe('a model on your network in Settings → Advanced → AI on this Whombat', () => {
+describe('custom AI model in Settings → Advanced → AI on this Whombat', () => {
   it('lets the person try one, save it and see it answer', async () => {
     const user = userEvent.setup();
     renderApp(AI, fixtureServices());
@@ -42,7 +42,7 @@ describe('a model on your network in Settings → Advanced → AI on this Whomba
     const row = await within(section).findByText('Qwen on the NAS');
     expect(row.closest('[data-local-model-row]')?.getAttribute('data-check')).toBe('ok');
     expect(within(section).getByText('qwen3:32b · http://192.168.1.20:11434/v1')).toBeTruthy();
-    expect(await screen.findByText('Saved the model on your network.')).toBeTruthy();
+    expect(await screen.findByText('Saved the custom AI model.')).toBeTruthy();
   });
 
   it('says what a test found for a model the server doesn’t have', async () => {
@@ -77,7 +77,7 @@ describe('a model on your network in Settings → Advanced → AI on this Whomba
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(section.getAttribute('data-local-model')).toBe('none'));
-    expect(await screen.findByText('Removed the model on your network.')).toBeTruthy();
+    expect(await screen.findByText('Removed the custom AI model.')).toBeTruthy();
   });
 
   it('shows a saved one with Check again, Change and Remove, and nobody else’s words', async () => {

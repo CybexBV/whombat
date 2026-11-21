@@ -98,15 +98,16 @@ async function agent(run: RestoreRun, r: BackupAgentRecord): Promise<RecordOutco
 /** The agent's model runtime as this Whombat offers it (BF-19, BF-S06). */
 function runtimeHere(run: RestoreRun, r: BackupAgentRecord): z.output<typeof AgentModelRuntime> {
   const offered = offeredModelRuntime(
-    { services: run.services },
+    { services: run.services, burrow: run.burrow },
     {
       provider: r.runtime.provider,
       ...(r.runtime.model ? { model: r.runtime.model } : {}),
+      ...(r.runtime.backgroundModel ? { backgroundModel: r.runtime.backgroundModel } : {}),
       ...(r.runtime.effort ? { effort: r.runtime.effort } : {}),
       ...(r.runtime.fast !== null ? { fast: r.runtime.fast } : {}),
     },
   );
-  // A model this Whombat doesn't offer: the tool's default, and the preview says so (BF-S06).
+  // A model this Whombat doesn't offer: the tool's default, and the preview says so.
   if (r.runtime.model && (offered.provider !== r.runtime.provider || offered.model !== r.runtime.model))
     run.note('model_unavailable', 'agents');
   return offered;
@@ -177,13 +178,14 @@ async function agentHere(run: RestoreRun, r: BackupAgentRecord, row: PrincipalRo
   const sameRest =
     runtime.provider === model.provider &&
     (runtime.model ?? null) === (model.model ?? null) &&
+    (runtime.backgroundModel ?? null) === (model.backgroundModel ?? null) &&
     (runtime.effort ?? null) === (model.effort ?? null) &&
     (runtime.fast ?? null) === (model.fast ?? null) &&
     grantKey(have) === grantKey(wanted);
   if (sameRest && !naming) return 'unchanged';
   return run.different(async () => {
     const ctx = run.ctx;
-    const { model: _m, effort: _e, fast: _f, ...host } = runtime;
+    const { model: _m, backgroundModel: _bg, effort: _e, fast: _f, ...host } = runtime;
     await run.tx
       .update(principals)
       .set({ runtime: { ...host, ...model } })

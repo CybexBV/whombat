@@ -150,7 +150,7 @@ export function createModelFixtures(): ModelFixtures {
   /** The mock world's agent on its model runtime, on the person's own sign-in. */
   const live = (agent: Agent): Agent => {
     const { runtime } = stateOf(WHOMBAT_HANDLE);
-    const { model: _model, effort: _effort, fast: _fast, ...host } = agent.runtime;
+    const { model: _model, backgroundModel: _bg, effort: _effort, fast: _fast, ...host } = agent.runtime;
     return { ...agent, runtime: { ...host, ...runtime } };
   };
 
@@ -172,6 +172,8 @@ export function createModelFixtures(): ModelFixtures {
     const model = modelOf(models, runtime.model);
     if (runtime.model && !model)
       return `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.model}” on this Whombat.`;
+    if (runtime.backgroundModel && !models.some((m) => m.id === runtime.backgroundModel))
+      return `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.backgroundModel}” on this Whombat.`;
     if (runtime.effort && model && !model.efforts.includes(runtime.effort))
       return `${model.label} doesn’t take ${EFFORT_LABELS[runtime.effort]} effort.`;
     return null;
@@ -199,14 +201,15 @@ export function createModelFixtures(): ModelFixtures {
           422,
         );
       const before = stateOf(handle);
-      const { provider, model, effort, fast } = body.runtime;
+      const { provider, model, backgroundModel, effort, fast } = body.runtime;
       const tool = provider === 'local' ? null : MODELS[provider];
       const runtime: AgentModelRuntime = {
         provider,
         ...(model ? { model } : {}),
-        // A model on the network takes no effort and has no fast replies (CT-1173).
+        ...(backgroundModel ? { backgroundModel } : {}),
+        // A custom AI model takes no effort and has no fast replies.
         ...(effort && tool ? { effort } : {}),
-        // Fast replies (chat-runtime.md CR-10): kept where the model offers them, as the server does.
+        // Fast replies: kept where the model offers them, as the server does.
         ...(fast !== undefined && tool && modelOf(tool, model)?.fast ? { fast } : {}),
       };
       // A new model (a new provider is one too) clears the note (ME-05).

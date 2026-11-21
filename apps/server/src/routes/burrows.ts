@@ -124,7 +124,7 @@ export const burrowRoutes = [
     await commitAs(ctx, recordLocalModelCheck, { updatedAt: saved.updatedAt, check });
     const row = await reloadBurrow(ctx);
     const localModel = localModelView(row);
-    if (!localModel) throw notFound('Model on your network');
+    if (!localModel) throw notFound('Custom AI model');
     return { burrow: await burrowView(ctx.services.db, row), localModel, eventId: saved.eventId };
   }),
 

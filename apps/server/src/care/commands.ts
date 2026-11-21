@@ -155,6 +155,7 @@ export const startCare = defineCommand({
       coalesce: false,
       own: true,
       messageId: posted.id,
+      background: true,
     });
     // Nobody to plan it for here: nothing is posted either (the commit rolls back).
     if (!woken) throw notFound('Chat');

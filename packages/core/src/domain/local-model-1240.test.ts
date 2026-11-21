@@ -39,7 +39,7 @@ describe('the provider (HE-32, CT-1150)', () => {
     expect(AgentProvider.options).toEqual(['claude', 'codex', 'local']);
     for (const gone of ['acp', 'scripted']) expect(AgentProvider.safeParse(gone).success).toBe(false);
     expect(DEFAULT_AGENT_RUNTIME.provider).toBe('claude');
-    expect(PROVIDER_LABELS.local).toBe('A model on your network');
+    expect(PROVIDER_LABELS.local).toBe('Custom AI model');
   });
 });
 
@@ -117,7 +117,8 @@ describe('what people read (CT-1170, CT-1173)', () => {
       expect(words.toLowerCase()).not.toContain('hermes');
     }
     expect(localModelCheckText('no_model', 'llama3.3:70b')).toContain('llama3.3:70b');
-    expect(LOCAL_MODEL_COPY.title).toBe('A model on your network');
+    expect(LOCAL_MODEL_COPY.title).toBe('Custom AI model');
+    expect(LOCAL_MODEL_COPY.hint).toMatch(/OpenRouter|Gemini/);
     expect(localModelKeysText({ actor: 'Mara', change: 'removed', name: 'x' })).toContain('Mara');
     expect(EVENT_TYPES['burrow.local_model_changed']).toBe('Keys');
   });
@@ -141,10 +142,10 @@ describe('turns on it (CT-1172, CT-1174)', () => {
     };
     expect(providerRunnable(down, 'local', view)).toBe(false);
     expect(unrunnableReply({ kind: 'local' })).toContain('Settings → AI');
-    expect(turnFailureText('provider', { provider: 'local' })).toContain('the model on your network');
+    expect(turnFailureText('provider', { provider: 'local' })).toContain('the custom AI model');
     expect(turnFailureText('usage_limit', { provider: 'local' })).toContain('the usage limit');
     expect(modelFallbackText('Dusty', 'qwen3:32b', { kind: 'local', name: 'Llama on the NAS' })).toContain(
-      'on your network',
+      'custom AI model',
     );
   });
 
@@ -155,9 +156,9 @@ describe('turns on it (CT-1172, CT-1174)', () => {
     expect(DispatchContext.shape.localModel.safeParse(undefined).success).toBe(false);
   });
 
-  it('are a choice in Chat, named Local', () => {
+  it('are a choice in Chat, named Custom', () => {
     expect(CHAT_PROVIDERS).toContain('local');
-    expect(CHAT_PROVIDER_LABELS.local).toBe('Local');
+    expect(CHAT_PROVIDER_LABELS.local).toBe('Custom');
     expect(chatRuntimeOf({ provider: 'local' })).toEqual({ provider: 'local' });
     const picked = chatRuntimeWithModel(
       { provider: 'local', effort: 'high' },

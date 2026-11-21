@@ -1,5 +1,7 @@
 import {
   ApiError,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -64,12 +66,13 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
   const update = useSetAgentModel(burrow);
   const toast = useToast();
   const [notice, setNotice] = useState<string | null>(null);
-  const ids = { model: useId(), effortHint: useId() };
+  const ids = { model: useId(), backgroundModel: useId(), backgroundHint: useId(), effortHint: useId() };
   useEffect(() => onDirtyChange(form.dirty), [form.dirty, onDirtyChange]);
   if (!form.draft) return null;
   const { draft } = form;
   const local = draft.provider === 'local';
   const models = providerModels(setup, draft.provider, localModel);
+  const backgroundModels = backgroundModelChoices(models, draft.backgroundModel);
   const efforts = effortChoices(models, draft.model, draft.effort);
   // Fast replies (chat-runtime.md CR-10, AP-2700): only where the picked model offers them, on a runtime with them.
   const fast = fastChoice(draft, models);
@@ -153,6 +156,39 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
           </p>
         ) : null}
       </div>
+      {backgroundModels.length > 1 ? (
+        <div className={styles.group}>
+          <SectionLabel>{MODEL_EFFORT_COPY.backgroundModelSection}</SectionLabel>
+          <div
+            role="radiogroup"
+            aria-label={sentence(MODEL_EFFORT_COPY.backgroundModelSection)}
+            aria-describedby={ids.backgroundHint}
+            className={styles.choices}
+          >
+            {backgroundModels.map((choice) => (
+              <label key={choice.id ?? ''} className={styles.choice}>
+                <input
+                  type="radio"
+                  name={ids.backgroundModel}
+                  className={styles.choiceRadio}
+                  value={choice.id ?? ''}
+                  checked={choice.id === (draft.backgroundModel ?? null)}
+                  onChange={() => form.edit((d) => draftWithBackgroundModel(d, choice.id))}
+                />
+                <span className={styles.choiceText}>
+                  <span className={styles.choiceLabel}>{choice.label}</span>
+                  {choice.description ? (
+                    <span className={styles.choiceDescription}>{choice.description}</span>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p id={ids.backgroundHint} className={styles.fallback}>
+            {MODEL_EFFORT_COPY.backgroundModelHint}
+          </p>
+        </div>
+      ) : null}
       {efforts.length > 0 ? (
         <div className={styles.group}>
           <SectionLabel>{MODEL_EFFORT_COPY.effortSection}</SectionLabel>

@@ -39,7 +39,7 @@ import {
 } from '@whombat/core';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { dispatchRuntimeFor } from '../chats/thread-runtime';
+import { dispatchRuntimeFor, isBackgroundDispatch } from '../chats/thread-runtime';
 import { reopenRun } from '../commands/run-recovery';
 import { type ApplyContext, defineCommand } from '../commit/types';
 import type { Db, Tx } from '../db/client';
@@ -272,12 +272,13 @@ async function requeueAfterLimit(
       retryOfId: row.id,
       requeuedFor: 'usage_limit',
       notBefore,
-      // The thread's choice now, as a new turn there would take it (chat-runtime-server.md CR-S04).
+      // Re-resolve the thread's choice or background model setting as a new turn would take it.
       runtime: await dispatchRuntimeFor(ctx.tx, {
         agent,
         conversation,
         threadRootId: row.threadRootId,
         trigger: row.trigger,
+        background: await isBackgroundDispatch(ctx.tx, row),
       }),
       createdAt: ctx.now,
     })
@@ -462,12 +463,13 @@ async function queueRetry(
       // A scheduled turn tried again still carries its schedule (resourceful-agents.md RA-30).
       scheduleId: row.scheduleId,
       retryOfId: row.id,
-      // The thread's choice now, by the kind of turn it tries again (chat-runtime-server.md CR-S04).
+      // Re-resolve the thread's choice or background model setting by the kind of turn it tries again.
       runtime: await dispatchRuntimeFor(ctx.tx, {
         agent,
         conversation: await loadConversationRow(ctx.tx, row.conversationId),
         threadRootId: row.threadRootId,
         trigger: row.trigger,
+        background: await isBackgroundDispatch(ctx.tx, row),
       }),
       createdAt: ctx.now,
     })

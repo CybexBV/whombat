@@ -200,7 +200,7 @@ export const burrowEndpoints = {
     method: 'PUT',
     path: '/burrows/:burrow/local-model',
     summary:
-      'Set the model on the person’s network (key burrow.manage; CT-1171): an OpenAI-compatible base URL, the model, an optional name and API key (kept on the server, never answered). Saves it, tests it at once (`localModel.check`; a failed test doesn’t undo the save), signs `burrow.local_model_changed` (Keys; `eventId` null when nothing changed) and publishes the burrow. Turns on `local` that start afterwards use it. Feature `ai.local_model`.',
+      'Set the custom OpenAI-compatible AI model (an internet service over https such as OpenRouter or Google Gemini, or a server on the person’s network; key burrow.manage): a base URL, the model, an optional name and API key (kept on the server, never answered). Saves it, tests it at once (`localModel.check`; a failed test doesn’t undo the save), signs `burrow.local_model_changed` (Keys; `eventId` null when nothing changed) and publishes the burrow. Turns on `local` that start afterwards use it. Feature `ai.local_model`.',
     params: B,
     body: SetLocalModelBody,
     response: z.object({ burrow: Burrow, localModel: LocalModelView, eventId: EventId.nullable() }),
@@ -210,7 +210,7 @@ export const burrowEndpoints = {
     method: 'POST',
     path: '/burrows/:burrow/local-model/test',
     summary:
-      'Test a model on the person’s network (key burrow.manage; CT-1171): `GET <base>/models` and one short completion, at most 20 s. A draft is only tried; the saved one is checked again and the result kept. Without a saved model and without a draft: `not_found`. Feature `ai.local_model`.',
+      'Test a custom OpenAI-compatible AI model (key burrow.manage): `GET <base>/models` and one short completion, at most 20 s. A draft is only tried; the saved one is checked again and the result kept. Without a saved model and without a draft: `not_found`. Feature `ai.local_model`.',
     params: B,
     body: TestLocalModelBody,
     response: z.object({ check: LocalModelCheck }),
@@ -220,7 +220,7 @@ export const burrowEndpoints = {
     method: 'DELETE',
     path: '/burrows/:burrow/local-model',
     summary:
-      'Remove the model on the person’s network and its key (key burrow.manage; CT-1171). The agent and Chat threads on `local` keep that choice but can’t reply (“the model on your network isn’t set up”) until it is set again or another is picked. Signs `burrow.local_model_changed` (Keys) and publishes the burrow; `removed` false when there was none. Feature `ai.local_model`.',
+      'Remove the custom AI model and its key (key burrow.manage). The agent and Chat threads on `local` keep that choice but can’t reply (“the custom AI model isn’t set up”) until it is set again or another is picked. Signs `burrow.local_model_changed` (Keys) and publishes the burrow; `removed` false when there was none. Feature `ai.local_model`.',
     params: B,
     response: z.object({ burrow: Burrow, removed: z.boolean(), eventId: EventId.nullable() }),
   }),

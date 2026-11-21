@@ -49,7 +49,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   const update = useSetAgentModel(slug);
   const [error, setError] = useState<string | null>(null);
   const [fastError, setFastError] = useState<string | null>(null);
-  const [picking, setPicking] = useState<'model' | 'effort' | null>(null);
+  const [picking, setPicking] = useState<'model' | 'backgroundModel' | 'effort' | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const localModel = localModelOf(bootstrap.burrow);
   // Its tool goes through the burrow's AI gateway (AIG-17): said first, whatever else the section shows.
@@ -86,7 +86,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     setFastError(null);
     save(fast.runtime(on), { done: () => {}, refused: setFastError });
   };
-  const open = (which: 'model' | 'effort') => {
+  const open = (which: 'model' | 'backgroundModel' | 'effort') => {
     setPickError(null);
     setPicking(which);
   };
@@ -127,7 +127,14 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     ]);
   };
 
-  const sheet = picking && choices ? (picking === 'model' ? choices.model : choices.effort) : null;
+  const sheet =
+    picking && choices
+      ? picking === 'model'
+        ? choices.model
+        : picking === 'backgroundModel'
+          ? choices.backgroundModel
+          : choices.effort
+      : null;
   const editable = !update.isPending;
   return (
     <>
@@ -164,6 +171,18 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             accessibilityLabel={`${agent.name}’s model: ${choices.model.label}, tap to change`}
           />
           {choices.fallback ? <Note>{choices.fallback}</Note> : null}
+        </Section>
+      ) : null}
+      {choices?.backgroundModel ? (
+        <Section title={MODEL_EFFORT_COPY.backgroundModelSection}>
+          <ListRow
+            title={choices.backgroundModel.label}
+            body={choices.backgroundModel.hint}
+            bodyLines={3}
+            trailing="›"
+            onPress={editable ? () => open('backgroundModel') : undefined}
+            accessibilityLabel={`${agent.name}’s background model: ${choices.backgroundModel.label}. ${choices.backgroundModel.hint}, tap to change`}
+          />
         </Section>
       ) : null}
       {choices?.effort ? (
@@ -207,12 +226,26 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             sheet
               ? picking === 'model'
                 ? MODEL_EFFORT_COPY.modelSection
-                : MODEL_EFFORT_COPY.effortSection
+                : picking === 'backgroundModel'
+                  ? MODEL_EFFORT_COPY.backgroundModelSection
+                  : MODEL_EFFORT_COPY.effortSection
               : null
           }
-          label={picking === 'effort' ? `${agent.name}’s effort` : `${agent.name}’s model`}
+          label={
+            picking === 'effort'
+              ? `${agent.name}’s effort`
+              : picking === 'backgroundModel'
+                ? `${agent.name}’s background model`
+                : `${agent.name}’s model`
+          }
           choices={sheet?.choices ?? []}
-          note={picking === 'effort' ? choices.fixedHint : null}
+          note={
+            picking === 'effort'
+              ? choices.fixedHint
+              : picking === 'backgroundModel'
+                ? MODEL_EFFORT_COPY.backgroundModelHint
+                : null
+          }
           another={picking === 'model' ? choices.another : null}
           onAnother={(runtime) => {
             setPickError(null);

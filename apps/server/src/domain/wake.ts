@@ -33,10 +33,12 @@ export interface QuietWake {
    */
   runId?: string | null;
   /**
-   * The message the new turn is about (its trigger message): what a background job said (resourceful-agents.md RA-31).
-   * A queued turn that takes the wake over keeps its own.
+   * The message the new turn is about (its trigger message): what a background job said. A queued turn that takes the
+   * wake over keeps its own.
    */
   messageId?: string | null;
+  /** Automatic background work (Looks and care plans): uses the agent's background model when one is set. */
+  background?: boolean;
 }
 
 /**
@@ -112,6 +114,7 @@ export async function wakeQuietly(
         conversation: room,
         threadRootId: args.threadRootId,
         trigger: args.trigger,
+        background: args.background,
       }),
       createdAt: ctx.now,
     })

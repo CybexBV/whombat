@@ -96,7 +96,7 @@ export const BOX_SETTINGS = {
   'backups.setDefaults': change('appliance.backups', 'Choose what a new backup file includes'),
   'backups.stage': NONE,
 
-  'burrows.clearLocalModel': ask('advanced.ai', 'Remove the model on your network'),
+  'burrows.clearLocalModel': ask('advanced.ai', 'Remove the custom AI model'),
   'burrows.clearWebSearch': ask('advanced.ai', 'Turn off web search'),
   'burrows.create': NONE,
   'burrows.get': read('appliance.overview', 'Read this Whombat’s name and time zone'),
@@ -105,11 +105,14 @@ export const BOX_SETTINGS = {
     'Let the assistant’s commands reach your local network, or not',
   ),
   'burrows.setAiGateway': ask('advanced.ai', 'Send the AI through the AI gateway, or stop'),
-  'burrows.setLocalModel': never('advanced.ai', 'Set a model on your network (it may need a key)'),
+  'burrows.setLocalModel': never(
+    'advanced.ai',
+    'Set a custom AI model (https service or network server; may need a key)',
+  ),
   // The person pastes the key there themselves: the assistant points them to the page.
   'burrows.setWebSearch': never('advanced.ai', 'Turn on web search with a Brave Search key'),
   'burrows.slugCheck': NONE,
-  'burrows.testLocalModel': never('advanced.ai', 'Test the model on your network'),
+  'burrows.testLocalModel': never('advanced.ai', 'Test the custom AI model'),
   'burrows.testWebSearch': change('advanced.ai', 'Check the web search key again'),
   'burrows.update': change('appliance.overview', 'Rename this Whombat, set its time zone or link previews'),
 

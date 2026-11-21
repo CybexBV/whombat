@@ -188,16 +188,32 @@ describe('agents.update (ME-01, ME-04)', () => {
     expect(await runtimeOf(IDS.dusty)).toMatchObject({ model: 'claude-fable-5-1[1m]', effort: 'high' });
   });
 
-  it('a new provider clears the model and the effort, and says only that', async () => {
+  it('a new provider clears the model, background model and effort, and says only that', async () => {
     await beat(CLAUDE_MODELS);
     await t.commit(IDS.mara, updateAgent, {
-      runtime: { provider: 'claude', model: 'fable', effort: 'xhigh' },
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'sonnet', effort: 'xhigh' },
+    });
+    expect(await lastKeysLine(IDS.dusty)).toContain('Set Dusty’s background model to Sonnet');
+    expect(await runtimeOf(IDS.dusty)).toMatchObject({
+      provider: 'claude',
+      model: 'fable',
+      backgroundModel: 'sonnet',
+      effort: 'xhigh',
+    });
+    await expect(
+      t.commit(IDS.mara, updateAgent, {
+        runtime: { provider: 'claude', model: 'fable', backgroundModel: 'not-a-model' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      message: 'Claude Code has no model called “not-a-model” on this Whombat.',
     });
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'codex' } });
     expect(await lastKeysLine(IDS.dusty)).toBe('Moved Dusty to codex');
     const runtime = await runtimeOf(IDS.dusty);
     expect(runtime).toMatchObject({ provider: 'codex' });
     expect(runtime).not.toHaveProperty('model');
+    expect(runtime).not.toHaveProperty('backgroundModel');
     expect(runtime).not.toHaveProperty('effort');
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'claude' } });
   });

@@ -202,7 +202,7 @@ export function advancedRows(agent: string): AdvancedRow[] {
     ai: {
       section: 'ai',
       title: 'AI on this Whombat',
-      line: 'The AI programs installed here, the AI gateway, a model on your own network and web search.',
+      line: 'The AI programs installed here, the AI gateway, a custom AI model and web search.',
     },
     // The Spend report, called Usage everywhere (docs/decisions/final-settings-vault-files-usage.md).
     spend: { section: 'ai', title: 'Usage', line: `What it cost and how much ${N} worked.` },

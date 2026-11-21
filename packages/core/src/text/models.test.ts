@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { AgentModelRuntime } from '../domain/agent.js';
 import type { ProviderModel } from '../domain/models.js';
 import {
+  agentBackgroundModelChangeText,
   agentEffortChangeText,
   agentModelChangeText,
   agentModelSummary,
+  backgroundModelLabel,
   defaultModelLabel,
   effortLabel,
+  MODEL_EFFORT_COPY,
   modelFallbackText,
   modelLabel,
 } from './models.js';
@@ -38,8 +42,27 @@ describe('model and effort copy (CT-333)', () => {
 
   it('writes the Keys lines', () => {
     expect(agentModelChangeText('Banjo', 'Sonnet')).toBe('Set Banjo’s model to Sonnet');
+    expect(agentBackgroundModelChangeText('Banjo', 'Sonnet')).toBe('Set Banjo’s background model to Sonnet');
+    expect(agentBackgroundModelChangeText('Banjo', MODEL_EFFORT_COPY.backgroundModelSame)).toBe(
+      'Set Banjo’s background model to Same as the main model',
+    );
     expect(agentEffortChangeText('Banjo', null)).toBe('Set Banjo’s effort to Automatic');
     expect(agentEffortChangeText('Banjo', 'high')).toBe('Set Banjo’s effort to High');
+  });
+
+  it('labels the background model and parses it on AgentModelRuntime', () => {
+    expect(backgroundModelLabel(models, null)).toBe(MODEL_EFFORT_COPY.backgroundModelSame);
+    expect(backgroundModelLabel(models, 'sonnet')).toBe('Sonnet');
+    expect(backgroundModelLabel(models, 'haiku')).toBe('haiku');
+    expect(AgentModelRuntime.parse({ provider: 'claude' })).toEqual({ provider: 'claude' });
+    expect(AgentModelRuntime.parse({ provider: 'claude', model: 'opus', backgroundModel: 'sonnet' })).toEqual(
+      {
+        provider: 'claude',
+        model: 'opus',
+        backgroundModel: 'sonnet',
+      },
+    );
+    expect(AgentModelRuntime.safeParse({ provider: 'claude', backgroundModel: '' }).success).toBe(false);
   });
 
   it('says where the model wasn’t available', () => {
