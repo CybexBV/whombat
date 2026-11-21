@@ -444,6 +444,8 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
       .select()
       .from(approvals)
       .where(sql`${approvals.action}->>'type' = 'connection_call'`)
+      // The first one asked for (the kitchen lamp): without an order Postgres may hand back a later one.
+      .orderBy(approvals.number)
       .limit(1);
     const viewer = await loadPrincipalRow(db, IDS.mara);
     if (!source || !viewer) throw new Error('no connection approval or viewer');
