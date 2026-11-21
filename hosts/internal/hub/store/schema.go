@@ -394,4 +394,14 @@ CREATE TABLE watch_offs (
 	PRIMARY KEY (server_id, rule, entity)
 ) WITHOUT ROWID
 `,
+	// 14: latest on-request disk usage breakdown per server and mount point.
+	`
+CREATE TABLE server_disk_usage (
+	server_id   TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+	mount       TEXT NOT NULL,
+	measured_at INTEGER NOT NULL,
+	data        BLOB NOT NULL,
+	PRIMARY KEY (server_id, mount)
+) WITHOUT ROWID
+`,
 }

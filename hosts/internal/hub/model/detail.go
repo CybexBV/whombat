@@ -238,6 +238,7 @@ func BuildDetail(s *ServerState, now time.Time, in DetailInput) Detail {
 	d.Unraid = buildUnraid(r)
 	d.BackupPlace = BuildBackupPlace(r)
 	d.Libvirt = buildLibvirt(r)
+	d.DiskUsage = BuildRecentDiskUsage(s.DiskUsage, now)
 	return d
 }
 

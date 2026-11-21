@@ -314,6 +314,8 @@ type Detail struct {
 	Libvirt *LibvirtDetail `json:"libvirt,omitempty"`
 	// MacOS (macos.go): a Mac's own facts, its screen and its helper.
 	MacOS *MacOSDetail `json:"macos,omitempty"`
+	// DiskUsage (diskusage.go): recent on-request breakdowns of what fills a mount.
+	DiskUsage []DiskUsage `json:"disk_usage,omitempty"`
 	// Host health (health.go), both views.
 	Health
 	// proxmox marks the Proxmox view (keeps "storages" and "backups" keys

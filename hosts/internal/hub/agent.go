@@ -766,6 +766,31 @@ func (c *AgentConn) Diagnose(ctx context.Context, req proto.DiagnoseRequest) (pr
 	return resp, nil
 }
 
+// DiskUsage asks the agent to measure what fills one mounted filesystem
+// (proto.StreamDiskUsage; the agent bounds it to at most 45 s).
+func (c *AgentConn) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) (proto.DiskUsageResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	var resp proto.DiskUsageResponse
+	if err := c.rpc(ctx, proto.StreamDiskUsage, req, &resp); err != nil {
+		return resp, err
+	}
+	resp.Code, resp.Message = cleanText(resp.Code, 64), cleanText(resp.Message, 1024)
+	resp.Mount, resp.FSType, resp.Device = cleanText(resp.Mount, 512), cleanText(resp.FSType, 64), cleanText(resp.Device, 256)
+	for i := range resp.Categories {
+		resp.Categories[i].Key = cleanText(resp.Categories[i].Key, 64)
+		resp.Categories[i].Label = cleanText(resp.Categories[i].Label, 120)
+		resp.Categories[i].Detail = cleanText(resp.Categories[i].Detail, 200)
+	}
+	for i := range resp.Folders {
+		resp.Folders[i].Path = cleanText(resp.Folders[i].Path, 512)
+	}
+	for i := range resp.SkippedSpunDown {
+		resp.SkippedSpunDown[i] = cleanText(resp.SkippedSpunDown[i], 64)
+	}
+	return resp, nil
+}
+
 // Exec runs a root command on the host (proto.StreamExec) and waits for
 // it: its own timeout plus a margin.
 func (c *AgentConn) Exec(ctx context.Context, req proto.ExecRequest) (proto.ExecResponse, error) {
