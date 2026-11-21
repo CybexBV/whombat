@@ -179,7 +179,6 @@ export function SideBar({
   const badges = useBadges();
   return (
     <View
-      accessibilityRole="tablist"
       style={{
         width: shape.barWidth,
         backgroundColor: theme.colors.bg,
@@ -195,57 +194,61 @@ export function SideBar({
           paddingTop: shape.barTop + 8,
           paddingBottom: insets.bottom + 8,
           justifyContent: 'center',
-          gap: 6,
         }}
         showsVerticalScrollIndicator={false}
         alwaysBounceVertical={false}
         overScrollMode="never"
+        // A tab tapped with the keyboard up switches tabs, not only closes the keyboard.
+        keyboardShouldPersistTaps="handled"
       >
-        {TAB_SPECS.map((tab) => {
-          const selected = tab.name === active;
-          const color = selected ? theme.colors.ink : theme.colors.mut;
-          const Icon = tab.icon;
-          const badge = badges[tab.name];
-          return (
-            <Touchable
-              key={tab.name}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              accessibilityLabel={
-                badge?.dot && badge.spoken
-                  ? `${tab.label}, ${badge.spoken}`
-                  : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
-              }
-              feedback="fade"
-              ringRadius={12}
-              onPress={() => onSelect(tab.name)}
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                minHeight: 60,
-                paddingHorizontal: 2,
-              }}
-            >
-              <View>
-                <Icon size={24} color={color} strokeWidth={selected ? 2 : 1.7} />
-                <Badge badge={badge} under={theme.colors.bg} left={17} />
-              </View>
-              {/* “Automations” has 72 points; larger text shrinks it to fit instead of cutting it off. */}
-              <Text
-                size={11}
-                weight={selected ? 600 : 500}
-                color={color}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.6}
-                maxFontSizeMultiplier={1.6}
+        {/* The tab list holds the tabs itself, so TalkBack counts them (“Tab 2 of 5”). */}
+        <View accessibilityRole="tablist" style={{ gap: 6 }}>
+          {TAB_SPECS.map((tab) => {
+            const selected = tab.name === active;
+            const color = selected ? theme.colors.ink : theme.colors.mut;
+            const Icon = tab.icon;
+            const badge = badges[tab.name];
+            return (
+              <Touchable
+                key={tab.name}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                accessibilityLabel={
+                  badge?.dot && badge.spoken
+                    ? `${tab.label}, ${badge.spoken}`
+                    : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
+                }
+                feedback="fade"
+                ringRadius={12}
+                onPress={() => onSelect(tab.name)}
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  minHeight: 60,
+                  paddingHorizontal: 2,
+                }}
               >
-                {tab.label}
-              </Text>
-            </Touchable>
-          );
-        })}
+                <View>
+                  <Icon size={24} color={color} strokeWidth={selected ? 2 : 1.7} />
+                  <Badge badge={badge} under={theme.colors.bg} left={17} />
+                </View>
+                {/* “Automations” has 72 points; larger text shrinks it to fit instead of cutting it off. */}
+                <Text
+                  size={11}
+                  weight={selected ? 600 : 500}
+                  color={color}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                  maxFontSizeMultiplier={1.6}
+                >
+                  {tab.label}
+                </Text>
+              </Touchable>
+            );
+          })}
+        </View>
       </ScrollView>
     </View>
   );
