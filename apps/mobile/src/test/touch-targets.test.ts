@@ -177,9 +177,9 @@ const FILES: Record<string, number> = {
   'src/settings/screens/WidgetSheet.tsx': 3,
   'src/settings/screens/AddWidgetSheet.tsx': 3,
   // Voice typing (docs/decisions/dictation.md): the composers' mic and the recording bar's Cancel and Done, 32dp rounds
-  // padded to 44dp; VOICE TYPING is a 44dp switch, segmented controls and Button.
+  // padded to 44dp; VOICE TYPING is 44dp switches, segmented controls, Button and the Dutch voice licence's 44dp link.
   'src/voice/VoiceBar.tsx': 3,
-  'src/managed/VoiceSection.tsx': 0,
+  'src/managed/VoiceSection.tsx': 1,
   'src/ui/ClockField.tsx': 0,
   // The machine (hardware-support-android.md AP-3258): NETWORK and HARDWARE are Button (44dp) and Row; the Wi-Fi sheet's
   // network rows and Other network… share one 52dp row, its Show/Hide and buttons are Button (48dp and 44dp).
@@ -352,8 +352,8 @@ const SWITCH_FILES: Record<string, number> = {
   'src/screens/VaultEntryScreen.tsx': 1,
   // A key or a channel as a switch (AP-713).
   'src/ui/keyRows.tsx': 1,
-  // VOICE TYPING's *Voice typing* (docs/decisions/dictation.md).
-  'src/managed/VoiceSection.tsx': 1,
+  // VOICE TYPING's *Voice typing* and *Dutch voice* switches.
+  'src/managed/VoiceSection.tsx': 2,
   // A guest's sheets: start with the server, protection, memory in a snapshot, start after a restore (AP-1494).
   'src/screens/guest/parts.tsx': 1,
   // Fast replies in the Chat's sheet (chat-runtime-android.md AP-2721) and on Runs on (AP-2730).

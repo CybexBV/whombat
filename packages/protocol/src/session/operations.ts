@@ -296,7 +296,7 @@ import {
   HostTailscaleOutput,
   HostTailscaleSignInInput,
 } from './tailscale.js';
-import { VoiceGetInput, VoiceModelInput, VoiceUpdateInput } from './voice.js';
+import { VoiceDutchInput, VoiceGetInput, VoiceModelInput, VoiceUpdateInput } from './voice.js';
 
 type Api = typeof api;
 /** `burrows.list`, `messages.send`, … — every `api.<area>.<action>`. */
@@ -829,11 +829,12 @@ const SESSION_SPECS = [
   session('screen.unlock', ScreenUnlockInput, ScreenLock, 'screen', true, true, true),
   session('screen.lock', ScreenLockInput, ScreenLock, 'screen', true, true),
   session('screen.image', ScreenImageInput, ScreenImage, 'screen', false),
-  // Voice typing (3.1; Whombat dictation.md): the settings are one commit each; the recording is a `dictation` upload.
+  // Voice typing (3.1; Whombat dictation.md) and opt-in Dutch voice: settings are one commit each; recording is an upload.
   session('voice.get', VoiceGetInput, VoiceTyping, 'app', false),
   session('voice.update', VoiceUpdateInput, VoiceTyping, 'app'),
   session('voice.fetchModel', VoiceModelInput, VoiceTyping, 'app'),
   session('voice.removeModel', VoiceModelInput, VoiceTyping, 'app'),
+  session('voice.setDutchVoice', VoiceDutchInput, VoiceTyping, 'app'),
 ];
 
 /** `enroll.claim`, `backup.runNow`, … — every session-native operation (`SESSION_OPERATIONS`). */

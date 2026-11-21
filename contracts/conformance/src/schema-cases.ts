@@ -3430,6 +3430,31 @@ export const SCHEMA_CASES: Case[] = [
   ...cases('VoiceTtsAnswer', { v: 1, audioWav: deskWav }, [
     ['not base64', { v: 1, audioWav: '%'.repeat(64) }, false],
   ]),
+  ...cases('VoiceModelState', { id: 'parakeet', state: 'ready', size: 668_757_119, received: 668_757_119 }, [
+    [
+      'supertonic downloading',
+      { id: 'supertonic', state: 'downloading', size: 145_310_775, received: 50_000_000 },
+      true,
+    ],
+    ['unknown model', { id: 'canary', state: 'absent', size: 100, received: 0 }, false],
+  ]),
+  ...cases(
+    'VoiceModelsState',
+    {
+      v: 1,
+      models: [
+        { id: 'parakeet', state: 'ready', size: 668_757_119, received: 668_757_119 },
+        { id: 'supertonic', state: 'absent', size: 145_310_775, received: 0 },
+      ],
+      free: 50_000_000_000,
+    },
+    [['unknown model', { v: 1, models: [{ id: 'canary', state: 'absent', size: 1, received: 0 }] }, false]],
+  ),
+  ...cases('VoiceModelRequest', { v: 1, model: 'parakeet' }, [
+    ['supertonic', { v: 1, model: 'supertonic' }, true],
+    ['unknown model', { v: 1, model: 'canary' }, false],
+    ['extra member', { v: 1, model: 'supertonic', url: 'https://example.com' }, false],
+  ]),
   // The presence socket (0.103, CT-597).
   ...cases('PresenceHealth', { v: 1, camera: true, detector: true }, [
     ['no camera', { v: 1, camera: false, detector: true }, true],

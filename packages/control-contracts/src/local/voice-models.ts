@@ -20,9 +20,9 @@
  * method). A peer that isn't the runtime or root gets 403 `forbidden`. Requests are strict, answers tolerant.
  */
 import {
+  VoiceDownloadModel,
   VoiceModelProblem,
   VoiceModelState as VoiceModelStateName,
-  VoiceSttModel,
 } from '@whombat/core/domain';
 import { z } from 'zod';
 
@@ -46,7 +46,7 @@ export const VOICE_MODEL_MAX_BYTES = 4_294_967_296;
  * waits (`waiting`) or stopped (`failed`).
  */
 export const VoiceModelState = z.object({
-  id: VoiceSttModel,
+  id: VoiceDownloadModel,
   state: VoiceModelStateName,
   size: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
   received: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
@@ -62,5 +62,5 @@ export const VoiceModelsState = z.object({
 });
 export type VoiceModelsState = z.infer<typeof VoiceModelsState>;
 
-export const VoiceModelRequest = z.strictObject({ v: V, model: VoiceSttModel });
+export const VoiceModelRequest = z.strictObject({ v: V, model: VoiceDownloadModel });
 export type VoiceModelRequest = z.infer<typeof VoiceModelRequest>;

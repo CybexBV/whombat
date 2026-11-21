@@ -63,6 +63,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Whombat Link (docs/decisions/whombat-link.md): a phone's own push token and the handle control gave the box for it on appliance_endpoints, and the Link stop the owner was pushed about on appliance_state, all nullable; the release before it reads and writes past them."
+    },
+    "0009_dutch_voice": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Opt-in Dutch voice (docs/decisions/desk-display-talk.md): a defaulted boolean switch and three nullable agreement columns (who, when, licence version) on voice_typing; the release before it reads and writes past them."
     }
   }
 }

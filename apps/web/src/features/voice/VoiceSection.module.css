@@ -26,3 +26,39 @@
   background: var(--progress);
   transition: width var(--duration-progress);
 }
+
+.dutchStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.dutchRetry {
+  margin-top: 8px;
+}
+
+.restrictions {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: var(--text-body);
+  line-height: 1.45;
+}
+
+.licenceLink {
+  align-self: flex-start;
+  color: var(--ac);
+  font-size: var(--text-body);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.licenceLink:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}

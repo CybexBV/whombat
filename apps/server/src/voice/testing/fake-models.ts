@@ -19,13 +19,14 @@ import {
   type VoiceModelState,
   type VoiceModelsState,
 } from '@whombat/control-contracts/local';
-import { VOICE_STT_MODELS, type VoiceModelProblem, type VoiceSttModel } from '@whombat/core/domain';
+import { VOICE_DOWNLOAD_MODELS, type VoiceDownloadModel, type VoiceModelProblem } from '@whombat/core/domain';
 import type { VoiceModelsPort } from '../models';
 
-/** The downloads' sizes, as the release pins them (dictation.md). */
-export const FAKE_MODEL_SIZES: Readonly<Record<VoiceSttModel, number>> = {
+/** The downloads' sizes, as the release pins them (Parakeet, Whisper, Supertonic 3). */
+export const FAKE_MODEL_SIZES: Readonly<Record<VoiceDownloadModel, number>> = {
   parakeet: 669_000_000,
   whisper: 574_000_000,
+  supertonic: 145_310_775,
 };
 
 export interface FakeVoiceModelsOptions {
@@ -33,19 +34,19 @@ export interface FakeVoiceModelsOptions {
   downloadMs?: number;
   stepMs?: number;
   /** Models there from the start. */
-  ready?: readonly VoiceSttModel[];
+  ready?: readonly VoiceDownloadModel[];
 }
 
-export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceSttModel };
+export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceDownloadModel };
 
 export class FakeVoiceModels implements VoiceModelsPort {
   /** The next download of that model fails with this problem (once). */
-  readonly failNext: Partial<Record<VoiceSttModel, VoiceModelProblem>> = {};
+  readonly failNext: Partial<Record<VoiceDownloadModel, VoiceModelProblem>> = {};
   /** What it was asked, in order. */
   readonly calls: FakeVoiceModelsCall[] = [];
-  readonly #models = new Map<VoiceSttModel, VoiceModelState>();
+  readonly #models = new Map<VoiceDownloadModel, VoiceModelState>();
   /** Asked for and not started yet, in order. */
-  readonly #queue: VoiceSttModel[] = [];
+  readonly #queue: VoiceDownloadModel[] = [];
   #timer: NodeJS.Timeout | null = null;
   readonly #listeners = new Set<() => void>();
   readonly #downloadMs: number;
@@ -54,7 +55,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
   constructor(options: FakeVoiceModelsOptions = {}) {
     this.#downloadMs = options.downloadMs ?? 6_000;
     this.#stepMs = options.stepMs ?? 250;
-    for (const id of VOICE_STT_MODELS) {
+    for (const id of VOICE_DOWNLOAD_MODELS) {
       const size = FAKE_MODEL_SIZES[id];
       const there = options.ready?.includes(id) ?? false;
       this.#models.set(id, { id, state: there ? 'ready' : 'absent', size, received: there ? size : 0 });
@@ -81,7 +82,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
   }
 
   /** The models downloaded (the fake voice's health). */
-  ready(): VoiceSttModel[] {
+  ready(): VoiceDownloadModel[] {
     return [...this.#models.values()].filter((m) => m.state === 'ready').map((m) => m.id);
   }
 
@@ -93,7 +94,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
     };
   }
 
-  async fetch(model: VoiceSttModel): Promise<VoiceModelsState> {
+  async fetch(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'fetch', model });
     const m = this.#model(model);
     if (m.state === 'absent' || m.state === 'failed') {
@@ -104,7 +105,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
     return this.state();
   }
 
-  async remove(model: VoiceSttModel): Promise<VoiceModelsState> {
+  async remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'remove', model });
     const m = this.#model(model);
     const queued = this.#queue.indexOf(model);
@@ -120,12 +121,12 @@ export class FakeVoiceModels implements VoiceModelsPort {
     this.#stop();
   }
 
-  #set(id: VoiceSttModel, state: VoiceModelState): void {
+  #set(id: VoiceDownloadModel, state: VoiceModelState): void {
     this.#models.set(id, state);
     for (const listener of this.#listeners) listener();
   }
 
-  #model(id: VoiceSttModel): VoiceModelState {
+  #model(id: VoiceDownloadModel): VoiceModelState {
     const m = this.#models.get(id);
     if (!m) throw new Error(`fake voice models: no ${id}`);
     return m;

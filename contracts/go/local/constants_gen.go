@@ -179,6 +179,7 @@ const (
 	VoiceTextPartsMax              = 12
 	VoiceModelParakeet             = "parakeet"
 	VoiceModelWhisper              = "whisper"
+	VoiceModelSupertonic           = "supertonic"
 	VoiceChoiceAuto                = "auto"
 	VoiceChoiceParakeet            = "parakeet"
 	VoiceChoiceWhisper             = "whisper"

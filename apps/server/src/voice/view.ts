@@ -5,8 +5,10 @@
  */
 import type { VoiceModelState } from '@whombat/control-contracts/local';
 import {
+  DUTCH_VOICE_LICENCE_VERSION,
   VOICE_STT_MODELS,
   VOICE_TYPING_MAX_SECONDS,
+  type VoiceDutchVoice,
   type VoiceLanguage,
   type VoiceModelChoice,
   type VoiceSttModel,
@@ -15,15 +17,32 @@ import {
 } from '@whombat/core/domain';
 import type { VoiceAbility } from './speech';
 
-/** The box's voice typing settings (`voice_typing`). */
+/** The box's voice typing and Dutch voice settings (`voice_typing`). */
 export interface VoiceTypingSettings {
   on: boolean;
   model: VoiceModelChoice;
   language: VoiceLanguage;
+  dutchVoice: boolean;
+  dutchVoiceAgreedBy: string | null;
+  dutchVoiceAgreedAt: Date | null;
+  dutchVoiceLicenceVersion: string | null;
 }
 
-/** Until the person changes them: on, Automatic and Automatic. */
-export const DEFAULT_VOICE_TYPING: VoiceTypingSettings = { on: true, model: 'auto', language: 'auto' };
+/** Until the person changes them: voice typing on, Automatic and Automatic; Dutch voice off. */
+export const DEFAULT_VOICE_TYPING: VoiceTypingSettings = {
+  on: true,
+  model: 'auto',
+  language: 'auto',
+  dutchVoice: false,
+  dutchVoiceAgreedBy: null,
+  dutchVoiceAgreedAt: null,
+  dutchVoiceLicenceVersion: null,
+};
+
+/** Whether the person has opted into the Dutch voice under the current licence version. */
+export function wantsDutchVoice(settings: VoiceTypingSettings): boolean {
+  return settings.dutchVoice && settings.dutchVoiceLicenceVersion === DUTCH_VOICE_LICENCE_VERSION;
+}
 
 export interface VoiceFacts {
   settings: VoiceTypingSettings;
@@ -89,10 +108,12 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
   const needed = wantedModels(settings, facts.deskTalk, gpu !== null);
   if (uses && (settings.on || facts.deskTalk)) needed.add(uses);
   // Without a fetcher (or while it doesn't answer) the models are the ones the service runs.
-  const listed: readonly Omit<VoiceTypingModel, 'inUse'>[] =
+  const listed: readonly VoiceModelState[] =
     facts.fetched ?? [...running].map((id) => ({ id, state: 'ready' as const, size: 0, received: 0 }));
-  const models = [...listed]
-    .filter((m) => VOICE_STT_MODELS.includes(m.id))
+  const isSttModel = (m: VoiceModelState): m is VoiceModelState & { id: VoiceSttModel } =>
+    (VOICE_STT_MODELS as readonly string[]).includes(m.id);
+  const models: VoiceTypingModel[] = listed
+    .filter(isSttModel)
     .sort((a, b) => VOICE_STT_MODELS.indexOf(a.id) - VOICE_STT_MODELS.indexOf(b.id))
     .map((m) => ({
       id: m.id,
@@ -102,6 +123,23 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
       ...(m.problem && (m.state === 'waiting' || m.state === 'failed') ? { problem: m.problem } : {}),
       inUse: needed.has(m.id),
     }));
+  const dutchEntry = available ? (facts.fetched?.find((m) => m.id === 'supertonic') ?? null) : null;
+  let dutchVoice: VoiceDutchVoice | null = null;
+  if (dutchEntry) {
+    const dutchOn = wantsDutchVoice(settings);
+    const dutchState = dutchOn ? dutchEntry.state : 'absent';
+    dutchVoice = {
+      on: dutchOn,
+      state: dutchState,
+      size: dutchEntry.size,
+      received: dutchOn ? Math.min(dutchEntry.received, dutchEntry.size) : 0,
+      ...(dutchOn && dutchEntry.problem && (dutchState === 'waiting' || dutchState === 'failed')
+        ? { problem: dutchEntry.problem }
+        : {}),
+      agreedAt: dutchOn && settings.dutchVoiceAgreedAt ? settings.dutchVoiceAgreedAt.toISOString() : null,
+      licenceVersion: dutchOn ? settings.dutchVoiceLicenceVersion : null,
+    };
+  }
   return {
     available,
     on: settings.on,
@@ -112,5 +150,6 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
     gpu,
     models,
     maxSeconds: VOICE_TYPING_MAX_SECONDS,
+    dutchVoice,
   };
 }

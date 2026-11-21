@@ -111,19 +111,30 @@ export class FakeVoice implements VoicePort {
   readonly calls: FakeVoiceCall[] = [];
   #held: { promise: Promise<void>; release: () => void } | null = null;
   readonly #models: (() => readonly VoiceSttModel[]) | null;
+  readonly #languages: (() => readonly VoiceSpeechLanguage[]) | null;
 
-  /** `models`: the speech models it runs, asked at each health (the fake fetcher's downloads). */
-  constructor(options: { models?: () => readonly VoiceSttModel[] } = {}) {
+  /**
+   * `models`: the speech models it runs, asked at each health (the fake fetcher's downloads).
+   * `languages`: the spoken languages it runs, asked at each health (Dutch only when Supertonic is downloaded).
+   */
+  constructor(
+    options: {
+      models?: () => readonly VoiceSttModel[];
+      languages?: () => readonly VoiceSpeechLanguage[];
+    } = {},
+  ) {
     this.#models = options.models ?? null;
+    this.#languages = options.languages ?? null;
   }
 
   async health(): Promise<VoiceAbility> {
     const { voices, models, gpu, languages, ...rest } = this.ability;
     const running = this.#models?.() ?? models;
+    const langs = this.#languages?.() ?? languages;
     return {
       ...rest,
       ...(voices ? { voices: [...voices] } : {}),
-      ...(languages ? { languages: [...languages] } : {}),
+      ...(langs ? { languages: [...langs] } : {}),
       ...(running ? { models: [...running] } : {}),
       ...(gpu ? { gpu: { ...gpu } } : {}),
     };
@@ -202,7 +213,8 @@ export class FakeVoice implements VoicePort {
     if (!this.ability.tts) throw new VoiceCallError('unavailable', 'fake voice: no text to speech');
     if (voice !== undefined && !listed(this.ability, voice))
       throw new VoiceCallError('error', `fake voice: no voice ${voice}`);
-    if (language !== undefined && !speaks(this.ability, language))
+    const current = await this.health();
+    if (language !== undefined && !speaks(current, language))
       throw new VoiceCallError('error', `fake voice: no ${language}`);
     const failure = this.failNext.tts;
     if (failure) {
@@ -375,7 +387,8 @@ async function serve(voice: FakeVoice, req: IncomingMessage, res: ServerResponse
     if (body.data.voice !== undefined && !listed(voice.ability, body.data.voice))
       return fail(res, 400, 'bad_request', 'no such voice');
     // A language it doesn't speak, as the real service refuses it (and one from before 3.4 any `language`).
-    if (body.data.language !== undefined && !speaks(voice.ability, body.data.language))
+    const healthNow = await voice.health();
+    if (body.data.language !== undefined && !speaks(healthNow, body.data.language))
       return fail(res, 400, 'bad_request', 'no such language');
     const wav = await voice.tts(body.data.text, body.data.voice, body.data.language);
     send(res, 200, { v: 1, audioWav: wav.toString('base64') });

@@ -211,6 +211,7 @@ import {
   ScreenStateOutput,
   ScreenUnlockInput,
   SESSION_OPERATIONS,
+  VoiceDutchInput,
   VoiceModelInput,
   VoiceUpdateInput,
 } from '@whombat/protocol/session';
@@ -722,6 +723,9 @@ export const sessionOps = {
   /** *Remove*: `conflict` with `details.code: 'in_use'` for a model the settings need. */
   voiceRemoveModel: (s: ApplianceSession, input: z.input<typeof VoiceModelInput>, o?: CallOptions) =>
     run(s, 'voice.removeModel', VoiceModelInput.parse(input), VoiceTyping, o),
+  /** *Dutch voice*: agree to Supertonic 3's Open RAIL-M licence and download, or turn off and remove its files. */
+  voiceSetDutchVoice: (s: ApplianceSession, input: z.input<typeof VoiceDutchInput>, o?: CallOptions) =>
+    run(s, 'voice.setDutchVoice', VoiceDutchInput.parse(input), VoiceTyping, o),
   /* The appliance licence (LC-08, LC-13, CT-77): the state, and “Check again”. */
   licenceStatus: (s: ApplianceSession, o?: CallOptions) =>
     run(s, 'licence.status', {}, LicenceStatusOutput, o),
