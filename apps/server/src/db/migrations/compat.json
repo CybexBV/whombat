@@ -81,6 +81,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Mail trigger activation time on automations and Message-ID deduplication on mail_trigger_items: nullable columns and a partial unique index; the release before it reads and writes past them."
+    },
+    "0012_mail_read_failures": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Consecutive full-read failure counts per message id on mail_cursors so unreadable emails skip cleanly after 3 attempts: one nullable jsonb column; the release before it reads and writes past it."
     }
   }
 }

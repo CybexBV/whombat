@@ -24,6 +24,8 @@ export const mailCursors = pgTable('mail_cursors', {
   succeededAt: timestamp('succeeded_at', { withTimezone: true }),
   problemCode: text('problem_code'),
   problem: text('problem'),
+  /** Consecutive full-read failure counts per provider message id (cleared once read succeeds or skipped after 3 tries). */
+  readFailures: jsonb('read_failures').$type<Record<string, number> | null>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

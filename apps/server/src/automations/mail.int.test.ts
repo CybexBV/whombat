@@ -6,9 +6,11 @@
 import { turnPrompt } from '@whombat/agent-runtime';
 import { type AutomationPlanCard, type AutomationRecipeInput, agentDefaultGrants } from '@whombat/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
+import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
+import { ApiError } from '../lib/errors';
 import {
   approvals,
   automationPlans,
@@ -673,5 +675,141 @@ describe('mail-arrives automations', () => {
 
     await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
     await pollAndSettle();
+  });
+
+  it('skips gone messages immediately and skips unreadable messages after 3 failed reads with a plain-English problem', async () => {
+    const { automationId: autoId } = await w.ok(IDS.mara, createAutomation, {
+      name: 'Invoice watcher',
+      source: {
+        kind: 'recipe',
+        recipe: {
+          when: {
+            kind: 'mail',
+            connectionId,
+            from: 'example.com',
+            subjectContains: ['invoice'],
+          },
+          job: 'custom',
+          instructions: 'Handle invoice.',
+          conversationId: maraChat.dmId,
+        },
+      },
+      publish: true,
+    });
+    // Baseline.
+    await pollAndSettle();
+
+    // Case A: gone message (404 GoogleApiError and not_found ApiError) is skipped immediately and cursor moves on.
+    w.advance(10_000);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f3_gone_404',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice deleted before read',
+      body: 'Gone',
+      messageId: '<f3-gone-404@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f3_gone_imap',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice moved away on IMAP',
+      body: 'Gone',
+      messageId: '<f3-gone-imap@example.com>',
+      date: new Date(w.now().getTime() + 100),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f3_after_gone',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice healthy after gone',
+      body: 'Good email',
+      messageId: '<f3-healthy-1@example.com>',
+      date: new Date(w.now().getTime() + 200),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+
+    const origRead = fake.mailRead.bind(fake);
+    const readSpy = vi.spyOn(fake, 'mailRead').mockImplementation(async (token, input) => {
+      if (input.messageId === 'msg_f3_gone_404') throw new GoogleApiError(404, 'Not found', 'not_found');
+      if (input.messageId === 'msg_f3_gone_imap') throw new ApiError('not_found', 'That message is gone.');
+      if (input.messageId === 'msg_f3_broken') throw new GoogleApiError(500, 'Backend error', 'other');
+      return origRead(token, input);
+    });
+
+    try {
+      expect(await pollAndSettle()).toBe(1);
+      expect(await runsOf(autoId)).toHaveLength(1);
+      const [afterGone] = await w.services.db
+        .select()
+        .from(mailCursors)
+        .where(eq(mailCursors.connectionId, connectionId));
+      expect(afterGone?.problemCode).toBeNull();
+      expect(afterGone?.problem).toBeNull();
+
+      // Case B: message failing with 500 retries twice without advancing cursor, then skips on attempt 3 with a
+      // plain-English problem naming the automation, letting the next email through.
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_f3_broken',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'Invoice unreadable 500',
+        body: 'Broken',
+        messageId: '<f3-broken@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX'],
+        attachments: [],
+      });
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_f3_after_broken',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'Invoice after broken',
+        body: 'Should run once broken is skipped',
+        messageId: '<f3-healthy-2@example.com>',
+        date: new Date(w.now().getTime() + 100),
+        labelIds: ['INBOX'],
+        attachments: [],
+      });
+
+      // Attempt 1 and Attempt 2: cursor stays behind broken message, failure counter persisted.
+      expect(await pollAndSettle()).toBe(0);
+      expect(await pollAndSettle()).toBe(0);
+      const [midCursor] = await w.services.db
+        .select()
+        .from(mailCursors)
+        .where(eq(mailCursors.connectionId, connectionId));
+      expect(midCursor?.readFailures).toEqual({ msg_f3_broken: 2 });
+      expect(await runsOf(autoId)).toHaveLength(1);
+
+      // Attempt 3: broken message is skipped, problem is recorded naming the automation, cursor advances, and the
+      // following healthy email runs!
+      expect(await pollAndSettle()).toBe(1);
+      expect(await runsOf(autoId)).toHaveLength(2);
+      const [afterSkip] = await w.services.db
+        .select()
+        .from(mailCursors)
+        .where(eq(mailCursors.connectionId, connectionId));
+      expect(afterSkip?.problemCode).toBe('read_failed');
+      expect(afterSkip?.problem).toContain('Invoice watcher');
+      expect(afterSkip?.problem).toContain('couldn’t be read');
+      expect(afterSkip?.readFailures).toBeNull();
+
+      // Quiet poll keeps the cursor moved past the broken message (does not re-read it).
+      const callsBeforeQuiet = readSpy.mock.calls.length;
+      expect(await pollAndSettle()).toBe(0);
+      expect(readSpy.mock.calls.length).toBe(callsBeforeQuiet);
+    } finally {
+      readSpy.mockRestore();
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
   });
 });

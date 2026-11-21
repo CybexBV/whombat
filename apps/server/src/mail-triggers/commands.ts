@@ -41,6 +41,7 @@ export const setMailCursor = defineCommand({
     succeeded: z.boolean().optional(),
     problemCode: z.string().max(64).nullable().optional(),
     problem: z.string().max(500).nullable().optional(),
+    readFailures: z.record(z.string().max(200), z.number().int().positive()).nullable().optional(),
   }),
   async apply(tx, ctx, input) {
     await requireMailSigner(tx, ctx.actor.id);
@@ -52,6 +53,7 @@ export const setMailCursor = defineCommand({
           since: null,
           problemCode: null,
           problem: null,
+          readFailures: null,
           updatedAt: ctx.now,
         })
         .where(eq(mailCursors.connectionId, input.connectionId));
@@ -81,6 +83,8 @@ export const setMailCursor = defineCommand({
           : (existing?.problemCode ?? null);
     const nextProblem =
       input.problem !== undefined ? input.problem : input.succeeded ? null : (existing?.problem ?? null);
+    const nextReadFailures =
+      input.readFailures !== undefined ? input.readFailures : (existing?.readFailures ?? null);
 
     await tx
       .insert(mailCursors)
@@ -93,6 +97,7 @@ export const setMailCursor = defineCommand({
         succeededAt: nextSucceededAt,
         problemCode: nextProblemCode,
         problem: nextProblem,
+        readFailures: nextReadFailures,
         updatedAt: ctx.now,
       })
       .onConflictDoUpdate({
@@ -105,6 +110,7 @@ export const setMailCursor = defineCommand({
           succeededAt: nextSucceededAt,
           problemCode: nextProblemCode,
           problem: nextProblem,
+          readFailures: nextReadFailures,
           updatedAt: ctx.now,
         },
       });
@@ -112,7 +118,8 @@ export const setMailCursor = defineCommand({
     await ctx.emit({
       type: 'mail.cursor_updated',
       kind: 'System',
-      text: null,
+      // Only plain-English skipped-mail problems (naming the automation, never email content) carry event text.
+      text: nextProblemCode === 'read_failed' && nextProblem ? nextProblem : null,
       where: null,
       payload: {
         connectionId: input.connectionId,

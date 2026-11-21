@@ -11,26 +11,30 @@
  * High-water marks (`mail_cursors`) and matched messages (`mail_trigger_items`) are written strictly through the
  * commit pipeline, so pre-existing mail never triggers and no message ever triggers twice.
  */
-import { extractMailAddress, type MailMessage, type MailTrigger, triggerMatches } from '@whombat/core';
+import { extractMailAddress, type MailMessage, triggerMatches } from '@whombat/core';
 import { eq, isNotNull, or } from 'drizzle-orm';
 import { imapWorkspaceOf } from '../connectors/imap/service';
 import { providerWorkspace } from '../connectors/providers';
 import {
   ConnectionUnavailableError,
+  GoogleApiError,
   type MailChangesResult,
   type MailHeader,
   type MailProviderCursor,
   receivedAtOrAfter,
 } from '../connectors/types';
 import { connections, mailCursors } from '../db/schema/index';
+import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
 import { recordMailReceived, setMailCursor } from './commands';
 import { mailPrincipal } from './principal';
-import { hasMirroredMailItem, type ListenedMailbox, listenedMailConnections } from './store';
+import { hasMirroredMailItem, type ListenedMailbox, type ListenedMailEntry, listenedMailConnections } from './store';
 
 const DEFAULT_POLL_MS = 60_000;
 const IDLE_BACKOFF_MIN_MS = 5_000;
 const IDLE_BACKOFF_MAX_MS = 60_000;
+/** Skip a matched message after this many consecutive failed full reads so a mailbox never stalls. */
+const MAX_READ_FAILURES = 3;
 
 export interface MailTriggerOptions {
   /** Periodic poll interval for Gmail/Microsoft change feeds and IMAP safety checks (default 60 s). */
@@ -42,11 +46,11 @@ interface IdleHandle {
   done: Promise<void>;
 }
 
-function headerMatchesAny(
+function matchingAutomationNames(
   connectionId: string,
   header: MailHeader,
-  triggers: readonly MailTrigger[],
-): boolean {
+  entries: readonly ListenedMailEntry[],
+): string[] {
   const facts = {
     kind: 'mail' as const,
     connectionId,
@@ -55,7 +59,34 @@ function headerMatchesAny(
     hasAttachments: header.hasAttachments,
     attachments: header.attachments ?? [],
   };
-  return triggers.some((t) => triggerMatches(t, facts));
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (triggerMatches(entry.trigger, facts)) names.add(entry.automationName);
+  }
+  return [...names];
+}
+
+function isMessageGone(err: unknown): boolean {
+  if (err instanceof GoogleApiError) return err.status === 404 || err.reason === 'not_found';
+  if (err instanceof ApiError) return err.code === 'not_found';
+  return false;
+}
+
+function skippedReadProblem(names: readonly string[]): string {
+  const list = names.length ? names : ['A mail automation'];
+  const who =
+    list.length === 1
+      ? `“${list[0]}”`
+      : list.length === 2
+        ? `“${list[0]}” and “${list[1]}”`
+        : `“${list[0]}” and ${list.length - 1} other automations`;
+  return `${who} skipped one email because it couldn’t be read.`.slice(0, 500);
+}
+
+function trimReadFailures(map: Record<string, number>): Record<string, number> | null {
+  const entries = Object.entries(map);
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries.slice(-100));
 }
 
 function safeIso(raw: string, fallback: Date): string {
@@ -235,24 +266,62 @@ export class MailTriggerService {
     if (this.started && conn.provider === 'imap') this.ensureIdle(connectionId);
 
     let createdCount = 0;
+    const readFailures: Record<string, number> = { ...(existing?.readFailures ?? {}) };
+    let failuresChanged = false;
+    let skippedProblem: string | null = null;
     for (const header of changes.headers) {
       // Drop pre-activation mail defensively even if a provider returned an old moved message.
       if (!receivedAtOrAfter(header.date, activationSince)) continue;
       // Only fetch full message body when headers/attachment metadata match a live trigger.
-      if (!headerMatchesAny(connectionId, header, triggers)) continue;
-      if (await hasMirroredMailItem(this.services.db, connectionId, header.id, header.messageId)) continue;
+      const matchedNames = matchingAutomationNames(connectionId, header, watched.entries);
+      if (matchedNames.length === 0) continue;
+      if (await hasMirroredMailItem(this.services.db, connectionId, header.id, header.messageId)) {
+        if (header.id in readFailures) {
+          delete readFailures[header.id];
+          failuresChanged = true;
+        }
+        continue;
+      }
       let full: MailMessage | undefined;
       try {
         const list = await workspace.mailRead(token, { messageId: header.id });
         full = list[0];
       } catch (err) {
+        if (isMessageGone(err)) {
+          // Message was deleted or moved away before we could read it: skip it and let the cursor move on.
+          if (header.id in readFailures) {
+            delete readFailures[header.id];
+            failuresChanged = true;
+          }
+          continue;
+        }
+        const attempts = (readFailures[header.id] ?? 0) + 1;
+        if (attempts >= MAX_READ_FAILURES) {
+          delete readFailures[header.id];
+          failuresChanged = true;
+          skippedProblem = skippedReadProblem(matchedNames);
+          this.services.log.warn(
+            { connectionId, messageId: header.id, attempts, err: err instanceof Error ? err.message : String(err) },
+            'mail trigger skipped unreadable message after 3 failed reads',
+          );
+          continue;
+        }
+        readFailures[header.id] = attempts;
+        await this.commitCursor(burrowId, actorId, {
+          connectionId,
+          readFailures: trimReadFailures(readFailures),
+        });
         this.services.log.warn(
-          { connectionId, messageId: header.id, err: err instanceof Error ? err.message : String(err) },
+          { connectionId, messageId: header.id, attempts, err: err instanceof Error ? err.message : String(err) },
           'mail trigger full read failed; will retry on next poll',
         );
-        // Do not advance the cursor past an unread match so the next poll retries cleanly.
+        // Do not advance the cursor yet so the next poll retries this message up to 3 times.
         if (createdCount > 0) this.services.automations.nudge();
         return createdCount;
+      }
+      if (header.id in readFailures) {
+        delete readFailures[header.id];
+        failuresChanged = true;
       }
       if (!full) continue;
       const fromHeader = full.from || header.from;
@@ -280,13 +349,17 @@ export class MailTriggerService {
       if (res.status === 'ok' && res.result.created) createdCount++;
     }
 
-    // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline or problem state
-    // changed, so quiet polls never bloat the signed event log.
+    // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline, failures or
+    // problem state changed, so quiet polls never bloat the signed event log (keep a skipped-mail `read_failed` note
+    // on quiet polls until another write replaces it).
+    const clearTransientProblem = existing?.problemCode !== null && existing?.problemCode !== 'read_failed';
     if (
       isInitial ||
       !sameCursor(existing?.cursor, changes.cursor) ||
       changes.reset ||
-      existing?.problemCode !== null ||
+      failuresChanged ||
+      skippedProblem !== null ||
+      clearTransientProblem ||
       existing?.since?.getTime() !== activationSince.getTime()
     ) {
       await this.commitCursor(burrowId, actorId, {
@@ -294,6 +367,8 @@ export class MailTriggerService {
         cursor: changes.cursor,
         since: activationSince.toISOString(),
         succeeded: true,
+        ...(failuresChanged ? { readFailures: trimReadFailures(readFailures) } : {}),
+        ...(skippedProblem ? { problemCode: 'read_failed', problem: skippedProblem } : {}),
       });
     }
 
