@@ -118,6 +118,8 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
           problems.push(`${at}.workspace: an agent that writes code needs a branch of its own.`);
         if (s.assessment && s.verdict)
           problems.push(`${at}: an agent gives a verdict or an assessment, not both.`);
+        if (s.proposeActions && (s.verdict || s.assessment))
+          problems.push(`${at}: an agent can’t combine proposeActions with verdict or assessment.`);
         // `trackerAccess` is ignored since 0.71 (TA-23): looking inside the organization follows the tracker's token.
         break;
       case 'post_message':
@@ -175,6 +177,14 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
           if (decision && (ids.get(s.decision) as number) < i && decision.kind !== 'tracker_decision')
             problems.push(`${at}.decision: “${s.decision}” isn’t a step that asks about a feature request.`);
         }
+        break;
+      }
+      case 'connection_actions': {
+        earlier(i, s.from, `${at}.from`);
+        const from = def.steps[ids.get(s.from) ?? -1];
+        if (from && ids.get(s.from) !== undefined && (ids.get(s.from) as number) < i)
+          if (from.kind !== 'dispatch_agent' || !from.proposeActions)
+            problems.push(`${at}.from: “${s.from}” isn’t an agent step that proposes actions.`);
         break;
       }
       case 'wait':

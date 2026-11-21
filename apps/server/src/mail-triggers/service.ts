@@ -11,25 +11,46 @@
  * High-water marks (`mail_cursors`) and matched messages (`mail_trigger_items`) are written strictly through the
  * commit pipeline, so pre-existing mail never triggers and no message ever triggers twice.
  */
-import { extractMailAddress, type MailMessage, type MailTrigger, triggerMatches } from '@whombat/core';
-import { eq, isNotNull, or } from 'drizzle-orm';
+import {
+  CONNECTOR_BINARY_MAX_BYTES,
+  extractMailAddress,
+  type MailMessage,
+  triggerMatches,
+} from '@whombat/core';
+import { eq, isNotNull, lt, or } from 'drizzle-orm';
 import { imapWorkspaceOf } from '../connectors/imap/service';
 import { providerWorkspace } from '../connectors/providers';
 import {
   ConnectionUnavailableError,
+  GoogleApiError,
   type MailChangesResult,
   type MailHeader,
   type MailProviderCursor,
+  receivedAtOrAfter,
 } from '../connectors/types';
-import { connections, mailCursors } from '../db/schema/index';
+import { connections, mailCursors, mailTriggerItems } from '../db/schema/index';
+import { sniffBuffer } from '../files/sniff';
+import type { StagedFile } from '../files/store';
+import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
-import { recordMailReceived, setMailCursor } from './commands';
+import { pruneMailTriggerItems, recordMailReceived, setMailCursor } from './commands';
 import { mailPrincipal } from './principal';
-import { hasMirroredMailItem, listenedMailConnections } from './store';
+import {
+  hasMirroredMailItem,
+  type ListenedMailbox,
+  type ListenedMailEntry,
+  listenedMailConnections,
+} from './store';
 
 const DEFAULT_POLL_MS = 60_000;
 const IDLE_BACKOFF_MIN_MS = 5_000;
 const IDLE_BACKOFF_MAX_MS = 60_000;
+/** Skip a matched message after this many consecutive failed full reads so a mailbox never stalls. */
+const MAX_READ_FAILURES = 3;
+/** Drop mirrored mail deduplication rows after 30 days. */
+export const MAIL_TRIGGER_ITEM_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Maximum number of attachments downloaded and handed over per matched email. */
+const MAIL_HANDOVER_MAX_ATTACHMENTS = 10;
 
 export interface MailTriggerOptions {
   /** Periodic poll interval for Gmail/Microsoft change feeds and IMAP safety checks (default 60 s). */
@@ -41,11 +62,11 @@ interface IdleHandle {
   done: Promise<void>;
 }
 
-function headerMatchesAny(
+function matchingAutomationNames(
   connectionId: string,
   header: MailHeader,
-  triggers: readonly MailTrigger[],
-): boolean {
+  entries: readonly ListenedMailEntry[],
+): string[] {
   const facts = {
     kind: 'mail' as const,
     connectionId,
@@ -54,7 +75,34 @@ function headerMatchesAny(
     hasAttachments: header.hasAttachments,
     attachments: header.attachments ?? [],
   };
-  return triggers.some((t) => triggerMatches(t, facts));
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (triggerMatches(entry.trigger, facts)) names.add(entry.automationName);
+  }
+  return [...names];
+}
+
+function isMessageGone(err: unknown): boolean {
+  if (err instanceof GoogleApiError) return err.status === 404 || err.reason === 'not_found';
+  if (err instanceof ApiError) return err.code === 'not_found';
+  return false;
+}
+
+function skippedReadProblem(names: readonly string[]): string {
+  const list = names.length ? names : ['A mail automation'];
+  const who =
+    list.length === 1
+      ? `“${list[0]}”`
+      : list.length === 2
+        ? `“${list[0]}” and “${list[1]}”`
+        : `“${list[0]}” and ${list.length - 1} other automations`;
+  return `${who} skipped one email because it couldn’t be read.`.slice(0, 500);
+}
+
+function trimReadFailures(map: Record<string, number>): Record<string, number> | null {
+  const entries = Object.entries(map);
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries.slice(-100));
 }
 
 function safeIso(raw: string, fallback: Date): string {
@@ -119,25 +167,22 @@ export class MailTriggerService {
     this.services.background.run('mail triggers nudge', () => this.pollOnce());
   }
 
-  /** Polls every mailbox with a live mail automation once, reconciles IDLE watchers, and clears unwatched cursors. */
+  /** Polls every mailbox with a live mail automation once, reconciles IDLE watchers, clears unwatched cursors and prunes expired rows. */
   async pollOnce(): Promise<number> {
     if (this.services.schemaAccess === 'read-only') return 0;
     const listened = await listenedMailConnections(this.services.db);
     await this.clearUnwatched(listened);
+    await this.pruneExpiredItems();
     this.reconcileIdleStop(listened);
     let triggered = 0;
     for (const [connectionId, entry] of listened) {
-      triggered += await this.syncConnection(connectionId, entry.burrowId, entry.triggers);
+      triggered += await this.syncConnection(connectionId, entry);
     }
     return triggered;
   }
 
   /** Syncs a single mailbox (serialized per connection so IDLE wakes and periodic polls never overlap). */
-  async syncConnection(
-    connectionId: string,
-    burrowId?: string,
-    triggers?: readonly MailTrigger[],
-  ): Promise<number> {
+  async syncConnection(connectionId: string, watched?: ListenedMailbox): Promise<number> {
     if (this.inFlight.has(connectionId)) {
       this.pendingNudge.add(connectionId);
       return 0;
@@ -145,12 +190,9 @@ export class MailTriggerService {
     this.inFlight.add(connectionId);
     let triggered = 0;
     try {
-      const target =
-        burrowId && triggers
-          ? { burrowId, triggers }
-          : (await listenedMailConnections(this.services.db)).get(connectionId);
+      const target = watched ?? (await listenedMailConnections(this.services.db)).get(connectionId);
       if (!target || target.triggers.length === 0) return 0;
-      triggered = await this.syncOne(connectionId, target.burrowId, target.triggers);
+      triggered = await this.syncOne(connectionId, target);
     } finally {
       this.inFlight.delete(connectionId);
       if (this.pendingNudge.delete(connectionId) && this.started) {
@@ -160,11 +202,8 @@ export class MailTriggerService {
     return triggered;
   }
 
-  private async syncOne(
-    connectionId: string,
-    burrowId: string,
-    triggers: readonly MailTrigger[],
-  ): Promise<number> {
+  private async syncOne(connectionId: string, watched: ListenedMailbox): Promise<number> {
+    const { burrowId, triggers, since: activationSince } = watched;
     const [conn] = await this.services.db.select().from(connections).where(eq(connections.id, connectionId));
     if (!conn?.services.includes('mail')) return 0;
 
@@ -201,97 +240,216 @@ export class MailTriggerService {
     }
 
     const workspace = providerWorkspace(this.services, conn.provider);
-
-    // First time watching this mailbox (or after it was cleared): record baseline high-water mark, emit nothing.
-    if (!existing?.cursor || !existing.since) {
+    const needAttachmentTypes = triggers.some((t) => Boolean(t.attachmentTypes?.length));
+    const isInitial = !existing?.cursor || !existing.since;
+    let changes: MailChangesResult;
+    if (isInitial) {
+      // First poll after activation: backfill from the earliest active trigger's activation time (with 5 s skew
+      // margin) so mail delivered between publishing and the first poll fires, while older mail is dropped.
       try {
-        const baseline = await workspace.mailBaseline(token);
-        await this.commitCursor(burrowId, actorId, {
-          connectionId,
-          cursor: baseline,
-          since: now.toISOString(),
-          succeeded: true,
+        changes = await workspace.mailBaseline(token, {
+          needAttachmentTypes,
+          since: activationSince,
         });
-        if (this.started && conn.provider === 'imap') this.ensureIdle(connectionId);
       } catch (err) {
         this.services.log.warn(
           { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
           'mail trigger baseline failed',
         );
         await recordProblem('baseline_failed', 'Could not read this mailbox right now.');
+        return 0;
       }
-      return 0;
+    } else {
+      const resyncSince =
+        existing.succeededAt && existing.succeededAt > activationSince
+          ? existing.succeededAt
+          : activationSince;
+      try {
+        changes = await workspace.mailChanges(token, existing.cursor as MailProviderCursor, {
+          needAttachmentTypes,
+          since: activationSince,
+          resyncSince,
+        });
+      } catch (err) {
+        this.services.log.warn(
+          { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
+          'mail trigger poll failed',
+        );
+        await recordProblem('poll_failed', 'Could not check this mailbox for new mail right now.');
+        return 0;
+      }
     }
 
     if (this.started && conn.provider === 'imap') this.ensureIdle(connectionId);
 
-    const needAttachmentTypes = triggers.some((t) => Boolean(t.attachmentTypes?.length));
-    let changes: MailChangesResult;
-    try {
-      changes = await workspace.mailChanges(token, existing.cursor, {
-        needAttachmentTypes,
-        since: existing.since,
-      });
-    } catch (err) {
-      this.services.log.warn(
-        { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
-        'mail trigger poll failed',
-      );
-      await recordProblem('poll_failed', 'Could not check this mailbox for new mail right now.');
-      return 0;
-    }
-
     let createdCount = 0;
+    const readFailures: Record<string, number> = { ...(existing?.readFailures ?? {}) };
+    let failuresChanged = false;
+    let skippedProblem: string | null = null;
     for (const header of changes.headers) {
+      // Drop pre-activation mail defensively even if a provider returned an old moved message.
+      if (!receivedAtOrAfter(header.date, activationSince)) continue;
       // Only fetch full message body when headers/attachment metadata match a live trigger.
-      if (!headerMatchesAny(connectionId, header, triggers)) continue;
-      if (await hasMirroredMailItem(this.services.db, connectionId, header.id)) continue;
+      const matchedNames = matchingAutomationNames(connectionId, header, watched.entries);
+      if (matchedNames.length === 0) continue;
+      if (await hasMirroredMailItem(this.services.db, connectionId, header.id, header.messageId)) {
+        if (header.id in readFailures) {
+          delete readFailures[header.id];
+          failuresChanged = true;
+        }
+        continue;
+      }
       let full: MailMessage | undefined;
       try {
         const list = await workspace.mailRead(token, { messageId: header.id });
         full = list[0];
       } catch (err) {
+        if (isMessageGone(err)) {
+          // Message was deleted or moved away before we could read it: skip it and let the cursor move on.
+          if (header.id in readFailures) {
+            delete readFailures[header.id];
+            failuresChanged = true;
+          }
+          continue;
+        }
+        const attempts = (readFailures[header.id] ?? 0) + 1;
+        if (attempts >= MAX_READ_FAILURES) {
+          delete readFailures[header.id];
+          failuresChanged = true;
+          skippedProblem = skippedReadProblem(matchedNames);
+          this.services.log.warn(
+            {
+              connectionId,
+              messageId: header.id,
+              attempts,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'mail trigger skipped unreadable message after 3 failed reads',
+          );
+          continue;
+        }
+        readFailures[header.id] = attempts;
+        await this.commitCursor(burrowId, actorId, {
+          connectionId,
+          readFailures: trimReadFailures(readFailures),
+        });
         this.services.log.warn(
-          { connectionId, messageId: header.id, err: err instanceof Error ? err.message : String(err) },
+          {
+            connectionId,
+            messageId: header.id,
+            attempts,
+            err: err instanceof Error ? err.message : String(err),
+          },
           'mail trigger full read failed; will retry on next poll',
         );
-        // Do not advance the cursor past an unread match so the next poll retries cleanly.
+        // Do not advance the cursor yet so the next poll retries this message up to 3 times.
         if (createdCount > 0) this.services.automations.nudge();
         return createdCount;
       }
+      if (header.id in readFailures) {
+        delete readFailures[header.id];
+        failuresChanged = true;
+      }
       if (!full) continue;
+      // Hand over matched email attachments on the server so the outsiders' turn reads them via `read_attachment`
+      // without ever having access to the person's mailbox.
+      const maxAttBytes = Math.min(CONNECTOR_BINARY_MAX_BYTES, this.services.files.maxBytes);
+      const stagedAttachments: {
+        name: string;
+        declaredType: string;
+        staged: StagedFile;
+        sniffed: {
+          contentType: string;
+          kind: 'image' | 'text' | 'document' | 'file';
+          width: number | null;
+          height: number | null;
+        };
+      }[] = [];
+      for (const att of full.attachments.slice(0, MAIL_HANDOVER_MAX_ATTACHMENTS)) {
+        if (!att.id || att.size > maxAttBytes) continue;
+        try {
+          const downloaded = await workspace.mailAttachment(token, {
+            messageId: full.id,
+            attachmentId: att.id,
+          });
+          const bytes = Buffer.from(downloaded.contentBase64, 'base64');
+          if (bytes.length === 0 || bytes.length > maxAttBytes) continue;
+          const fileName = att.name || downloaded.name || 'attachment';
+          const sniffed = sniffBuffer(bytes, fileName);
+          if (!sniffed.ok) continue;
+          const staged = await this.services.files.store.stage([bytes], { maxBytes: maxAttBytes });
+          stagedAttachments.push({
+            name: fileName,
+            declaredType: att.mimeType || downloaded.mimeType || '',
+            staged,
+            sniffed: sniffed.value,
+          });
+        } catch (err) {
+          this.services.log.warn(
+            {
+              connectionId,
+              messageId: full.id,
+              attachmentId: att.id,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'mail trigger could not hand over an attachment; continuing without it',
+          );
+        }
+      }
       const fromHeader = full.from || header.from;
       const fromAddress = extractMailAddress(fromHeader) ?? '';
-      const res = await this.services.pipeline.commit(
-        recordMailReceived,
-        {
-          connectionId,
-          provider: conn.provider,
-          mailbox: conn.email,
-          externalId: full.id,
-          threadId: full.threadId,
-          fromHeader: fromHeader.slice(0, 500),
-          fromAddress: fromAddress.slice(0, 320),
-          subject: full.subject.slice(0, 1000),
-          snippet: full.snippet.slice(0, 500),
-          body: full.body,
-          bodyTruncated: full.bodyTruncated,
-          attachments: full.attachments,
-          receivedAt: safeIso(full.date, now),
-        },
-        { burrowId, actorId },
-      );
-      if (res.status === 'ok' && res.result.created) createdCount++;
+      let committed = false;
+      try {
+        const res = await this.services.pipeline.commit(
+          recordMailReceived,
+          {
+            connectionId,
+            provider: conn.provider,
+            mailbox: conn.email,
+            externalId: full.id,
+            messageId: header.messageId ?? null,
+            threadId: full.threadId,
+            fromHeader: fromHeader.slice(0, 500),
+            fromAddress: fromAddress.slice(0, 320),
+            subject: full.subject.slice(0, 1000),
+            snippet: full.snippet.slice(0, 500),
+            body: full.body,
+            bodyTruncated: full.bodyTruncated,
+            attachments: full.attachments,
+            stagedAttachments,
+            receivedAt: safeIso(full.date, now),
+          },
+          { burrowId, actorId },
+        );
+        committed = res.status === 'ok';
+        if (res.status === 'ok' && res.result.created) createdCount++;
+      } finally {
+        if (!committed && stagedAttachments.length > 0) {
+          await Promise.allSettled(stagedAttachments.map((a) => this.services.files.store.discard(a.staged)));
+        }
+      }
     }
 
-    // Advance the durable high-water mark through the commit pipeline only when the cursor or problem state changed,
-    // so quiet polls never bloat the signed event log.
-    if (!sameCursor(existing.cursor, changes.cursor) || changes.reset || existing.problemCode !== null) {
+    // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline, failures or
+    // problem state changed, so quiet polls never bloat the signed event log (keep a skipped-mail `read_failed` note
+    // on quiet polls until another write replaces it).
+    const clearTransientProblem = existing?.problemCode !== null && existing?.problemCode !== 'read_failed';
+    if (
+      isInitial ||
+      !sameCursor(existing?.cursor, changes.cursor) ||
+      changes.reset ||
+      failuresChanged ||
+      skippedProblem !== null ||
+      clearTransientProblem ||
+      existing?.since?.getTime() !== activationSince.getTime()
+    ) {
       await this.commitCursor(burrowId, actorId, {
         connectionId,
         cursor: changes.cursor,
-        ...(changes.reset ? { since: now.toISOString() } : {}),
+        since: activationSince.toISOString(),
         succeeded: true,
+        ...(failuresChanged ? { readFailures: trimReadFailures(readFailures) } : {}),
+        ...(skippedProblem ? { problemCode: 'read_failed', problem: skippedProblem } : {}),
       });
     }
 
@@ -317,6 +475,25 @@ export class MailTriggerService {
       const actorId = await mailPrincipal.ensure(this.services, row.burrowId);
       await this.commitCursor(row.burrowId, actorId, { connectionId: row.connectionId, clear: true });
     }
+  }
+
+  private async pruneExpiredItems(): Promise<number> {
+    const cutoff = new Date(this.services.clock().getTime() - MAIL_TRIGGER_ITEM_RETENTION_MS);
+    const burrows = await this.services.db
+      .selectDistinct({ burrowId: mailTriggerItems.burrowId })
+      .from(mailTriggerItems)
+      .where(lt(mailTriggerItems.mirroredAt, cutoff));
+    let deleted = 0;
+    for (const { burrowId } of burrows) {
+      const actorId = await mailPrincipal.ensure(this.services, burrowId);
+      const res = await this.services.pipeline.commit(
+        pruneMailTriggerItems,
+        { before: cutoff.toISOString() },
+        { burrowId, actorId },
+      );
+      if (res.status === 'ok') deleted += res.result.deleted;
+    }
+    return deleted;
   }
 
   private reconcileIdleStop(listened: ReadonlyMap<string, unknown>): void {

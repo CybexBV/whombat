@@ -16,6 +16,7 @@ import { trackerWritePlan } from '../../trackers/write';
 import { keyDecision, publisherCheck } from '../authority';
 import { MERGE_WORDS, mergePlan } from '../merge';
 import { isAutomationPrincipal } from '../principal';
+import { planConnectionActions } from '../proposed-actions';
 import { CONTINUE_STEP, commentPlan, definitionStep, stepBinding, stepRoomsCheck, stepScope } from '../steps';
 import { pullRequestText } from '../steps/open-pull-request';
 import { type AutomationRunRow, loadRunRow, loadStepRows } from '../store';
@@ -156,6 +157,31 @@ export async function approvalGuard(ctx: ApplyContext, row: ApprovalRow): Promis
     }
     input = { runId: run.id, stepId: step.id, attempt: stepRow.attempt, proposal: plan.proposal };
   }
+  if (step.kind === 'connection_actions' && row.command?.name === CONTINUE_STEP) {
+    // Re-validate proposed actions and their exact hash before letting an approved card execute them.
+    const plan = await planConnectionActions(
+      ctx.tx,
+      ctx.services,
+      run,
+      await loadStepRows(ctx.tx, run.id),
+      step,
+    );
+    if (!plan.ok) {
+      await mark('blocked');
+      return plan.reason;
+    }
+    if (plan.actions.length === 0) {
+      await mark('blocked');
+      return 'There are no actions left to run.';
+    }
+    input = {
+      runId: run.id,
+      stepId: step.id,
+      attempt: stepRow.attempt,
+      proposal: plan.proposal,
+      actionsHash: plan.actionsHash,
+    };
+  }
   if (
     !input ||
     approvalActionHash(row.action, { name: row.command?.name ?? '', input }, binding) !== row.actionHash
@@ -181,6 +207,8 @@ export async function reconcileContinue(db: Db, row: ApprovalRow): Promise<'done
   if ((step.output as { replyApprovalId?: string }).replyApprovalId === row.id) return 'done';
   // And a merge approval (automation-recipes.md AR-45).
   if ((step.output as { mergeApprovalId?: string }).mergeApprovalId === row.id) return 'done';
+  // And a proposed connection-actions approval.
+  if ((step.output as { actionsApprovalId?: string }).actionsApprovalId === row.id) return 'done';
   if (step.state === 'waiting') return 'not_done';
   return 'unknown';
 }

@@ -112,6 +112,20 @@ export async function observeStep(
       });
     case 'merge_pull_request':
       return observeMerge(db, run, row, step, now);
+    case 'connection_actions':
+      return awaitingYes(db, row, step, now, (name) => {
+        const reason = `${name} declined the proposed actions.`;
+        return step.otherwise === 'fail'
+          ? { op: 'settle', idx: row.idx, state: 'failed', error: reason, from: ['waiting'] }
+          : {
+              op: 'settle',
+              idx: row.idx,
+              state: 'skipped',
+              error: reason,
+              output: { ran: false, count: 0, reason },
+              from: ['waiting'],
+            };
+      });
     case 'request_approval':
     case 'open_pull_request':
       return observeRequest(db, run, row, step, now);

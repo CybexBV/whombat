@@ -53,8 +53,8 @@ export function offGoogleWorkspace(): GoogleWorkspace {
 }
 
 /** The `GoogleWorkspace` for a mode. */
-export function createGoogleWorkspace(mode: GoogleMode): GoogleWorkspace {
+export function createGoogleWorkspace(mode: GoogleMode, now?: () => Date): GoogleWorkspace {
   if (mode === 'real') return new RealGoogleWorkspace();
-  if (mode === 'fake') return new FakeGoogleWorkspace();
+  if (mode === 'fake') return new FakeGoogleWorkspace(now);
   return offGoogleWorkspace();
 }

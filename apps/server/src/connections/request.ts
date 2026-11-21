@@ -10,9 +10,12 @@
  * and percent-escapes of letters and digits decoded, so `/api/services/%6Cock/…` is the `lock` path the sensitive rules
  * see (CX-31).
  */
+import { randomUUID } from 'node:crypto';
 import {
+  AttachmentId,
   type CatalogEntry,
   CONNECTION_OUTPUT_MAX,
+  CONNECTOR_BINARY_MAX_BYTES,
   type ConnectionToolAccess,
   filterVaultResponseHeaders,
   type JsonObject,
@@ -118,6 +121,70 @@ export function canonicalPath(path: string): string {
   });
 }
 
+/** A multipart file upload referencing an authorized Whombat attachment (e.g. Paperless-ngx document upload). */
+export interface RequestUploadSpec {
+  field: string;
+  attachmentId: string;
+  fields?: Record<string, string>;
+}
+
+/** Resolved attachment bytes for a `request` multipart upload. */
+export type ResolveRequestUpload = (
+  attachmentId: string,
+) => Promise<{ name: string; contentType: string; bytes: Buffer } | null>;
+
+const FORM_FIELD_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** Validates `args.upload` for `request`; returns null when omitted, or throws `ConnectionArgumentError`. */
+export function parseRequestUpload(raw: unknown): RequestUploadSpec | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw))
+    throw new ConnectionArgumentError('upload: give { field, attachmentId, fields? }.');
+  const rec = raw as Record<string, unknown>;
+  if (typeof rec.field !== 'string' || !FORM_FIELD_NAME.test(rec.field))
+    throw new ConnectionArgumentError('upload.field: give a form field name such as “document”.');
+  const att = AttachmentId.safeParse(rec.attachmentId);
+  if (!att.success) throw new ConnectionArgumentError('upload.attachmentId: give a valid attachment id.');
+  let fields: Record<string, string> | undefined;
+  if (rec.fields !== undefined && rec.fields !== null) {
+    if (typeof rec.fields !== 'object' || Array.isArray(rec.fields))
+      throw new ConnectionArgumentError('upload.fields: an object of form field names and text values.');
+    const entries = Object.entries(rec.fields as Record<string, unknown>);
+    if (entries.length > 32) throw new ConnectionArgumentError('upload.fields: at most 32 form fields.');
+    fields = {};
+    for (const [k, v] of entries) {
+      if (!FORM_FIELD_NAME.test(k) || typeof v !== 'string' || v.length > 2000)
+        throw new ConnectionArgumentError(`upload.fields.${k}: must be a short string value.`);
+      fields[k] = v;
+    }
+  }
+  return { field: rec.field, attachmentId: att.data, ...(fields ? { fields } : {}) };
+}
+
+function buildMultipartBody(
+  spec: RequestUploadSpec,
+  file: { name: string; contentType: string; bytes: Buffer },
+): { boundary: string; body: Buffer } {
+  const boundary = `----WhombatForm${randomUUID().replace(/-/g, '')}`;
+  const chunks: Buffer[] = [];
+  for (const [k, v] of Object.entries(spec.fields ?? {})) {
+    chunks.push(
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`, 'utf8'),
+    );
+  }
+  const safeName = (file.name || 'attachment').replace(/["\r\n\\]/g, '_').slice(0, 200);
+  const safeType = (file.contentType || 'application/octet-stream').replace(/[\r\n]/g, '').slice(0, 120);
+  chunks.push(
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${spec.field}"; filename="${safeName}"\r\nContent-Type: ${safeType}\r\n\r\n`,
+      'utf8',
+    ),
+  );
+  chunks.push(file.bytes);
+  chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'));
+  return { boundary, body: Buffer.concat(chunks) };
+}
+
 /**
  * A `request` call's arguments as the server decides on them: method upper-cased, path canonical (refused when it
  * isn't a clean path). Throws `ConnectionArgumentError`.
@@ -131,6 +198,9 @@ export function normaliseRequestArgs(args: Readonly<Record<string, unknown>>): R
     throw new ConnectionArgumentError('path: put the query in “query”, not in the path.');
   const problem = vaultPathProblem(args.path);
   if (problem) throw new ConnectionArgumentError(`path: ${problem}`);
+  const upload = parseRequestUpload(args.upload);
+  if (upload && args.body !== undefined && args.body !== null)
+    throw new ConnectionArgumentError('Give either “body” or “upload”, not both.');
   return { ...args, method: args.method.toUpperCase(), path: canonicalPath(args.path) };
 }
 
@@ -290,6 +360,7 @@ export async function runRequest(
   row: CatalogConnectionRow,
   entry: CatalogEntry,
   args: Readonly<Record<string, unknown>>,
+  options: { uploadAttachment?: ResolveRequestUpload } = {},
 ): Promise<CallOutput> {
   if (!entry.request) throw new ConnectionArgumentError('This connection has no request tool.');
   const method = String(args.method);
@@ -315,14 +386,41 @@ export async function runRequest(
   if (!query.ok) throw new ConnectionArgumentError(`query: ${query.message}`);
   const headers = { ...agentHeaders(entry, row, args.headers, credentialHeader) };
   for (const [name, value] of Object.entries(entry.request.headers)) headers[name] = value;
-  const body = bodyOf(args.body, headers);
-  if (body !== undefined && Buffer.byteLength(body) > VAULT_REQUEST_BODY_MAX)
-    throw new ConnectionArgumentError('body: larger than 256 KB.');
+  const upload = parseRequestUpload(args.upload);
+  let body: string | Buffer | undefined;
+  let maxRequestBytes: number | undefined;
+  if (upload) {
+    if (args.body !== undefined && args.body !== null)
+      throw new ConnectionArgumentError('Give either “body” or “upload”, not both.');
+    if (!options.uploadAttachment)
+      throw new ConnectionArgumentError(
+        'upload: file uploads are only available for approved attachment uploads.',
+      );
+    const file = await options.uploadAttachment(upload.attachmentId);
+    if (!file)
+      throw new ConnectionArgumentError(
+        'upload.attachmentId: that attachment is not available for this upload.',
+      );
+    const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, services.files.maxBytes);
+    if (file.bytes.length > maxUpload)
+      throw new ConnectionArgumentError('upload: that attachment is too large to upload.');
+    const built = buildMultipartBody(upload, file);
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase() === 'content-type') delete headers[k];
+    }
+    headers['Content-Type'] = `multipart/form-data; boundary=${built.boundary}`;
+    body = built.body;
+    maxRequestBytes = Math.max(VAULT_REQUEST_BODY_MAX, built.body.length + 1024);
+  } else {
+    body = bodyOf(args.body, headers);
+    if (body !== undefined && Buffer.byteLength(body) > VAULT_REQUEST_BODY_MAX)
+      throw new ConnectionArgumentError('body: larger than 256 KB.');
+  }
   const res = await signedConnectionFetch(
     services,
     row,
     { method, url: `${base}${path}${query.search}`, headers, ...(body !== undefined ? { body } : {}) },
-    { truncateAt: CONNECTION_OUTPUT_MAX + 1 },
+    { truncateAt: CONNECTION_OUTPUT_MAX + 1, ...(maxRequestBytes ? { maxRequestBytes } : {}) },
   );
   const shown = filterVaultResponseHeaders(res.headers as Record<string, string>, base, path);
   for (const name of EXTRA_RESPONSE_HEADERS) {

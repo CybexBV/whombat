@@ -22,6 +22,8 @@ const STEP_TIMEOUTS: Record<AutomationStep['kind'], { default: number; max: numb
   tracker_decision: { default: 30 * 24 * 60, max: 30 * 24 * 60 },
   // How long a person may take to say yes when its key asks; the checks have their own wait (`waitMinutes`, AR-46).
   merge_pull_request: { default: 7 * 24 * 60, max: 30 * 24 * 60 },
+  // Waiting for a person to approve proposed connection actions on a card.
+  connection_actions: { default: 7 * 24 * 60, max: 30 * 24 * 60 },
 };
 
 export function stepTimeoutMs(step: AutomationStep): number {

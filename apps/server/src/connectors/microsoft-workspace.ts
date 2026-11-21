@@ -25,6 +25,8 @@ import {
   type MailHeader,
   type MailHeaderAttachment,
   type MailProviderCursor,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
 } from './types';
 
 type Obj = Record<string, unknown>;
@@ -161,14 +163,26 @@ function eventBody(input: CalendarEventPatch): Obj {
 /** Delegated Graph adapter. Tokens go only to graph.microsoft.com; downloaded file redirects receive no token. */
 export class MicrosoftWorkspace implements GoogleWorkspace {
   constructor(private readonly fetchImpl: typeof fetch = (url, init) => fetch(url, init)) {}
-  private async request(token: string, path: string, method = 'GET', body?: unknown): Promise<Response> {
+  private async request(
+    token: string,
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    extraPrefer?: string,
+  ): Promise<Response> {
     if (!path.startsWith('/') || path.startsWith('//')) throw badRequest('Invalid Microsoft resource path.');
+    const prefer = [
+      'outlook.body-content-type="text"',
+      'outlook.timezone="UTC"',
+      'IdType="ImmutableId"',
+      ...(extraPrefer ? [extraPrefer] : []),
+    ].join(', ');
     const response = await this.fetchImpl(`${GRAPH}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': typeof body === 'string' ? 'text/plain; charset=utf-8' : 'application/json',
-        prefer: 'outlook.body-content-type="text", outlook.timezone="UTC", IdType="ImmutableId"',
+        prefer,
       },
       ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
       redirect: 'manual',
@@ -192,8 +206,14 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     }
     return response;
   }
-  private async call(token: string, path: string, method = 'GET', body?: unknown): Promise<Obj> {
-    const response = await this.request(token, path, method, body);
+  private async call(
+    token: string,
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    extraPrefer?: string,
+  ): Promise<Obj> {
+    const response = await this.request(token, path, method, body, extraPrefer);
     if (response.status === 204 || response.status === 202) {
       await response.body?.cancel();
       return {};
@@ -270,61 +290,11 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       }),
     };
   }
-  async mailBaseline(token: string): Promise<MailProviderCursor> {
-    // Request Graph's delta token for future inbox changes only, carrying our metadata-only $select forward.
-    const select =
-      'id,conversationId,from,toRecipients,subject,bodyPreview,receivedDateTime,hasAttachments,isDraft';
-    let path = `/me/mailFolders/inbox/messages/delta?${query({ $deltaToken: 'latest', $select: select })}`;
-    for (let page = 0; page < 20; page++) {
-      const res = await this.call(token, path);
-      const delta = res['@odata.deltaLink'];
-      if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`))
-        return { kind: 'microsoft', deltaLink: delta };
-      const next = res['@odata.nextLink'];
-      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
-        path = next.slice(GRAPH.length);
-        continue;
-      }
-      break;
-    }
-    throw badRequest('Microsoft did not return a delta link for the inbox.');
-  }
-  async mailChanges(
+  private async toMailHeaders(
     token: string,
-    cursor: MailProviderCursor,
-    options: MailChangesOptions = {},
-  ): Promise<MailChangesResult> {
-    if (cursor.kind !== 'microsoft' || !cursor.deltaLink.startsWith(`${GRAPH}/`)) {
-      return { cursor: await this.mailBaseline(token), headers: [], reset: true };
-    }
-    let path = cursor.deltaLink.slice(GRAPH.length);
-    let nextDelta = cursor.deltaLink;
-    const rawItems: Obj[] = [];
-    try {
-      for (let page = 0; page < 10; page++) {
-        const res = await this.call(token, path);
-        rawItems.push(...arr(res.value));
-        const delta = res['@odata.deltaLink'];
-        if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
-          nextDelta = delta;
-          break;
-        }
-        const next = res['@odata.nextLink'];
-        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
-          nextDelta = next;
-          path = next.slice(GRAPH.length);
-          continue;
-        }
-        break;
-      }
-    } catch (err) {
-      // Sync state expired (410 Gone) or invalid (404): re-baseline without replaying old mail.
-      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404)) {
-        return { cursor: await this.mailBaseline(token), headers: [], reset: true };
-      }
-      throw err;
-    }
-    const sinceMs = options.since ? options.since.getTime() : null;
+    rawItems: readonly Obj[],
+    options: MailChangesOptions,
+  ): Promise<MailHeader[]> {
     const seenIds = new Set<string>();
     const headers: MailHeader[] = [];
     for (const m of rawItems) {
@@ -334,8 +304,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       seenIds.add(msgId);
       const dateStr = str(m.receivedDateTime) || str(m.createdDateTime);
       const receivedMs = Date.parse(dateStr);
-      // Graph delta also reports metadata edits (e.g. marking read) on older messages: skip anything received before baseline.
-      if (sinceMs !== null && Number.isFinite(receivedMs) && receivedMs < sinceMs) continue;
+      if (Number.isFinite(receivedMs) && !receivedAtOrAfter(receivedMs, options.since)) continue;
       const fromAddr = address(m.from);
       const fromName = str(obj(obj(m.from).emailAddress).name);
       const from = fromName && fromName !== fromAddr ? `${fromName} <${fromAddr}>` : fromAddr;
@@ -363,6 +332,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       headers.push({
         id: msgId,
         threadId: str(m.conversationId) || msgId,
+        messageId: normalizeRfcMessageId(str(m.internetMessageId)),
         from: from.slice(0, 500),
         to: addresses(m.toRecipients),
         subject: str(m.subject).slice(0, 1000),
@@ -373,6 +343,78 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       });
     }
     headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return headers;
+  }
+  async mailBaseline(token: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    // Documented Graph message-delta flow: page through /me/mailFolders/inbox/messages/delta until @odata.deltaLink,
+    // retaining only messages received at or after `options.since` (with the 5-second skew margin).
+    const select =
+      'id,conversationId,internetMessageId,from,toRecipients,subject,bodyPreview,receivedDateTime,hasAttachments,isDraft';
+    let path = `/me/mailFolders/inbox/messages/delta?${query({ $select: select })}`;
+    const kept: Obj[] = [];
+    for (let page = 0; page < 200; page++) {
+      const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
+      if (options.since) {
+        for (const item of arr(res.value)) {
+          if ('@removed' in item || item.isDraft === true) continue;
+          const dateStr = str(item.receivedDateTime) || str(item.createdDateTime);
+          const receivedMs = Date.parse(dateStr);
+          if (!Number.isFinite(receivedMs) || receivedAtOrAfter(receivedMs, options.since)) kept.push(item);
+        }
+      }
+      const delta = res['@odata.deltaLink'];
+      if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
+        const headers = kept.length ? await this.toMailHeaders(token, kept, options) : [];
+        return { cursor: { kind: 'microsoft', deltaLink: delta }, headers };
+      }
+      const next = res['@odata.nextLink'];
+      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+        path = next.slice(GRAPH.length);
+        continue;
+      }
+      break;
+    }
+    throw badRequest('Microsoft did not return a delta link for the inbox.');
+  }
+  async mailChanges(
+    token: string,
+    cursor: MailProviderCursor,
+    options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    const resyncSince = options.resyncSince ?? options.since ?? null;
+    if (cursor.kind !== 'microsoft' || !cursor.deltaLink.startsWith(`${GRAPH}/`)) {
+      const resynced = await this.mailBaseline(token, { ...options, since: resyncSince });
+      return { ...resynced, reset: true };
+    }
+    let path = cursor.deltaLink.slice(GRAPH.length);
+    let nextDelta = cursor.deltaLink;
+    const rawItems: Obj[] = [];
+    try {
+      for (let page = 0; page < 20; page++) {
+        const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
+        rawItems.push(...arr(res.value));
+        const delta = res['@odata.deltaLink'];
+        if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
+          nextDelta = delta;
+          break;
+        }
+        const next = res['@odata.nextLink'];
+        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+          nextDelta = next;
+          path = next.slice(GRAPH.length);
+          continue;
+        }
+        break;
+      }
+    } catch (err) {
+      // Sync state expired (410 Gone) or invalid (404): resync via documented inbox delta from last successful poll.
+      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404)) {
+        const resynced = await this.mailBaseline(token, { ...options, since: resyncSince });
+        return { ...resynced, reset: true };
+      }
+      throw err;
+    }
+    const headers = await this.toMailHeaders(token, rawItems, options);
     return { cursor: { kind: 'microsoft', deltaLink: nextDelta }, headers };
   }
   async mailRead(token: string, input: { messageId?: string; threadId?: string }) {

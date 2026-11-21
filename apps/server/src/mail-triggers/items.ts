@@ -29,6 +29,8 @@ export interface MirroredMailItem {
   body: string;
   bodyTruncated: boolean;
   attachments: readonly MailAttachment[];
+  /** Whombat attachment ids handed over by the server for the run's thread prompt. */
+  attachmentIds: readonly string[];
   receivedAt: Date;
 }
 
@@ -61,15 +63,15 @@ function attachmentsSummary(attachments: readonly MailAttachment[]): string {
   if (attachments.length === 0) return 'none';
   return attachments
     .slice(0, 20)
-    .map((a) => `${a.name || 'attachment'} (${a.mimeType}, ${a.size} bytes${a.id ? `, id ${a.id}` : ''})`)
+    .map((a) => `${a.name || 'attachment'} (${a.mimeType}, ${a.size} bytes)`)
     .join('; ');
 }
 
 /**
  * Scope stored on an automation run (`{{trigger.*}}`). All sender-written content (`text`, `from`, `subject`,
  * `snippet`, `body`, `attachments`) is defused and fenced as outsider data; non-sender metadata (`connectionId`,
- * `provider`, `messageId`, `threadId`, `receivedAt`, `hasAttachments`, `attachmentCount`) stays structured so the
- * agent can call `mail_attachment` and `mail_read`.
+ * `provider`, `messageId`, `threadId`, `receivedAt`, `hasAttachments`, `attachmentCount`, `attachmentIds`) stays
+ * structured so the server can hand over the email's files onto the run's prompt message.
  */
 export function mailItemScope(item: MirroredMailItem): JsonObject {
   const receivedAt = item.receivedAt.toISOString();
@@ -84,6 +86,7 @@ export function mailItemScope(item: MirroredMailItem): JsonObject {
     receivedAt,
     hasAttachments: item.attachments.length > 0,
     attachmentCount: item.attachments.length,
+    attachmentIds: [...item.attachmentIds],
     from: fenceMailField('from', fromRaw, 500),
     subject: fenceMailField('subject', item.subject || '(no subject)', 1000),
     snippet: fenceMailField('snippet', item.snippet, MAIL_TRIGGER_SNIPPET_MAX),
@@ -96,7 +99,7 @@ export function mailItemScope(item: MirroredMailItem): JsonObject {
       receivedAt,
       body: item.body,
       bodyTruncated: item.bodyTruncated,
-      attachments: item.attachments,
+      attachments: item.attachments.map(({ name, mimeType, size }) => ({ name, mimeType, size })),
     }),
   };
 }

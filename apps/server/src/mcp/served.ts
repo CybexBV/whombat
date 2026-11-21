@@ -91,6 +91,8 @@ function validationOnly(key: string, value: unknown, node: JsonObject): boolean 
       return typeof value === 'number' && value >= LEAN_MAX_LENGTH;
     case 'maxItems':
       return typeof value === 'number' && value >= LEAN_MAX_ITEMS;
+    case 'additionalProperties':
+      return value === false;
     default:
       return false;
   }
@@ -369,6 +371,7 @@ export const OUTSIDERS_TOOLS = [
   'read_attachment',
   'completion_evidence',
   'report_assessment',
+  'propose_connection_actions',
   'tracker_item',
   'tracker_read',
   'open_pull_request',
@@ -474,6 +477,11 @@ export interface ServedSelection {
    */
   assesses?: boolean;
   /**
+   * The turn is an automation step that proposes connection actions for approval (`proposeActions: true`):
+   * `propose_connection_actions`. No other turn lists it, and calling it elsewhere is refused.
+   */
+  proposes?: boolean;
+  /**
    * The turn looks into a look or takes the person's step on one (triggers `look`, `look_fix`; look-research.md LR-05):
    * `look_report`. No other turn lists it, and calling it elsewhere is refused.
    */
@@ -545,6 +553,8 @@ function listedOwnTool(name: McpToolName, sel: ServedSelection): boolean {
   if ((CONNECTION_TOOL_NAMES as readonly string[]).includes(name)) return false;
   // An automation's structured assessment: only in the turn of a step that asks for one (AR-24).
   if (name === 'report_assessment' && !sel.assesses) return false;
+  // Proposed connection actions: only in the turn of a step with `proposeActions: true`.
+  if (name === 'propose_connection_actions' && !sel.proposes) return false;
   // What the assistant found out about a look: only in a look's turns (look-research.md LR-05).
   if (name === 'look_report' && !sel.looks) return false;
   // Automations change only when the person asks in Chat, never from inside an automation's own step, and a step

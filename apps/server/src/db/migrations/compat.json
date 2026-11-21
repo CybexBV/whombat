@@ -75,6 +75,24 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Opt-in Dutch voice (docs/decisions/desk-display-talk.md): a defaulted boolean switch and three nullable agreement columns (who, when, licence version) on voice_typing; the release before it reads and writes past them."
+    },
+    "0011_mail_trigger_sync": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Mail trigger activation time on automations and Message-ID deduplication on mail_trigger_items: nullable columns and a partial unique index; the release before it reads and writes past them."
+    },
+    "0012_mail_read_failures": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Consecutive full-read failure counts per message id on mail_cursors so unreadable emails skip cleanly after 3 attempts: one nullable jsonb column; the release before it reads and writes past it."
+    },
+    "0013_mail_trigger_attachments": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Ready attachment ids handed over from matched incoming emails on mail_trigger_items: one defaulted text[] column; the release before it reads and writes past it."
     }
   }
 }

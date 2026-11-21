@@ -19,7 +19,10 @@ by name.
   answers with a verdict, an answer step whose final reply the automation sends to the customer; `tracker_item` and,
   when granted, `tracker_read`. Each runs in its own thread of the run's room, which `automations/rooms.ts` makes the
   publisher's Feedback room (an assessing recipe) or their **Chat**;
-- **incoming mail**: nothing starts a turn from mail yet. When something does, it is an outsiders' turn and gets this.
+- **incoming mail** (`automations/runs.ts` `outsidersRun`, trigger `automation`): a mail-triggered run's agent step
+  gets the matched email fenced (`[[mail …]] … [[/mail]]`) and its attachments handed over onto the prompt message
+  (`read_attachment`), with no direct access to the person's mailbox, files or connections; proposed writes go through
+  `propose_connection_actions` and a `connection_actions` step that always asks the person on a card first.
 
 **What such a turn reached before** (each was served, or ran when called by name): the rest of the person's Chat or
 Feedback room (`read_conversation` of the room, top-level posts, replies and cards in any thread there), files on the

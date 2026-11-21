@@ -78,6 +78,27 @@
       "when": 1795294385069,
       "tag": "0010_dutch_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795298844558,
+      "tag": "0011_mail_trigger_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795299247278,
+      "tag": "0012_mail_read_failures",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795299931593,
+      "tag": "0013_mail_trigger_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -41,11 +41,17 @@ export interface MailTimeouts {
 }
 
 export const MAIL_TIMEOUTS: MailTimeouts = { connectMs: 10_000, greetingMs: 10_000, socketMs: 30_000 };
+/** Socket timeout for long-lived IMAP IDLE sessions (10 minutes, instead of the 30-second command timeout). */
+export const MAIL_IDLE_SOCKET_TIMEOUT_MS = 10 * 60_000;
+/** How often an IDLE session refreshes with DONE + IDLE so servers and NATs keep the connection alive (5 minutes). */
+export const MAIL_IDLE_REFRESH_MS = 5 * 60_000;
 
 export interface ImapConnectOptions extends MailEndpoint {
   user: string;
   pass: string;
   timeouts?: Partial<MailTimeouts>;
+  /** How long imapflow stays in one IDLE command before sending DONE and re-entering IDLE. */
+  maxIdleTimeMs?: number;
   /** Tests only: a certificate authority to trust besides the system's (a fake server's own). */
   ca?: string;
 }
@@ -412,6 +418,7 @@ export const openImapflow: OpenImap = async (o) => {
     connectionTimeout: t.connectMs,
     greetingTimeout: t.greetingMs,
     socketTimeout: t.socketMs,
+    ...(o.maxIdleTimeMs ? { maxIdleTime: o.maxIdleTimeMs } : {}),
     maxLiteralSize: MAX_LITERAL,
     maxResponseSize: MAX_LITERAL * 2,
     maxLineLength: 4 * 1024 * 1024,

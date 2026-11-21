@@ -103,13 +103,18 @@ export function mailConnector(services: Services): MailConnector {
     ...extra(),
   });
   return {
-    async imap(account) {
+    async imap(account, options) {
       const endpoint = await mailEndpoint(services, 'imap', account.imap);
-      return (net().openImap ?? openImapflow)({
+      const seam = net();
+      const timeouts =
+        options?.timeouts || seam.timeouts ? { ...options?.timeouts, ...seam.timeouts } : undefined;
+      return (seam.openImap ?? openImapflow)({
         ...endpoint,
         user: account.user,
         pass: account.password,
-        ...extra(),
+        ...(seam.ca ? { ca: seam.ca } : {}),
+        ...(timeouts ? { timeouts } : {}),
+        ...(options?.maxIdleTimeMs !== undefined ? { maxIdleTimeMs: options.maxIdleTimeMs } : {}),
       });
     },
     async smtpVerify(account) {

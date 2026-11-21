@@ -5,10 +5,12 @@ import { MAIL_CERT } from '../../test/self-signed';
 import { ConnectionUnavailableError } from '../types';
 import { parseMessageId } from './ids';
 import { MemoryMailServer } from './memory';
+import { MAIL_IDLE_REFRESH_MS, MAIL_IDLE_SOCKET_TIMEOUT_MS, MAIL_TIMEOUTS } from './session';
 import { nodemailerSmtp, type SmtpConnectOptions } from './smtp';
 import {
   IMAP_ONLY_MAIL_TEXT,
   type ImapAccount,
+  type ImapOpenOptions,
   ImapWorkspace,
   type MailConnector,
   MESSAGE_GONE_TEXT,
@@ -416,10 +418,10 @@ describe('Email (IMAP) behind the mail tools', () => {
 
   it('tracks new inbox mail via UIDVALIDITY/lastUid and BODYSTRUCTURE without reading message bodies', async () => {
     const baseline = await ws.mailBaseline(TOKEN);
-    expect(baseline).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
+    expect(baseline.cursor).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
 
     const beforeReads = server.sourceReads;
-    const empty = await ws.mailChanges(TOKEN, baseline);
+    const empty = await ws.mailChanges(TOKEN, baseline.cursor);
     expect(empty.headers).toEqual([]);
     expect(server.sourceReads).toBe(beforeReads);
 
@@ -447,9 +449,10 @@ describe('Email (IMAP) behind the mail tools', () => {
     ].join('\r\n');
     server.add('INBOX', newInvoice, { date: new Date('2026-10-19T10:00:00Z') });
 
-    const delta = await ws.mailChanges(TOKEN, baseline, { needAttachmentTypes: true });
+    const delta = await ws.mailChanges(TOKEN, baseline.cursor, { needAttachmentTypes: true });
     expect(delta.headers).toHaveLength(1);
     expect(delta.headers[0]).toMatchObject({
+      messageId: '<inv-oct@example.com>',
       from: 'Billing <billing@example.com>',
       subject: 'October Invoice',
       hasAttachments: true,
@@ -462,14 +465,54 @@ describe('Email (IMAP) behind the mail tools', () => {
     const again = await ws.mailChanges(TOKEN, delta.cursor);
     expect(again.headers).toEqual([]);
 
-    // UIDVALIDITY renumbering re-baselines cleanly without replaying old messages.
+    // Old message moved back into INBOX (gets a brand-new UID) is dropped by `since` (5 s skew margin).
+    const activation = new Date('2026-10-19T09:50:00Z');
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Old <old@example.com>',
+        subject: 'Moved back from Archive',
+        body: 'Ancient email',
+        id: '<ancient@example.com>',
+      }),
+      { date: new Date('2026-10-18T12:00:00Z') },
+    );
+    const moved = await ws.mailChanges(TOKEN, delta.cursor, { since: activation });
+    expect(moved.headers).toEqual([]);
+
+    // First poll with `since` backfills post-activation mail and drops older mail without reading bodies.
+    const backfilled = await ws.mailBaseline(TOKEN, { since: activation });
+    expect(backfilled.headers.map((h) => h.messageId)).toEqual(['<inv-oct@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // UIDVALIDITY renumbering resyncs from resyncSince (last successful poll time) instead of losing mail.
     server.renumber('INBOX');
-    const reset = await ws.mailChanges(TOKEN, delta.cursor);
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Arrived during renumber',
+        body: 'Fresh after renumber',
+        id: '<after-renum@example.com>',
+      }),
+      { date: new Date('2026-10-19T10:30:00Z') },
+    );
+    const reset = await ws.mailChanges(TOKEN, moved.cursor, {
+      since: activation,
+      resyncSince: new Date('2026-10-19T10:15:00Z'),
+    });
     expect(reset.reset).toBe(true);
-    expect(reset.headers).toEqual([]);
+    expect(reset.headers.map((h) => h.messageId)).toEqual(['<after-renum@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
   });
 
-  it('wakes on IMAP IDLE when new mail arrives and reports unsupported when IDLE is absent', async () => {
+  it('wakes on IMAP IDLE when new mail arrives, uses a multi-minute socket timeout, and reports unsupported when IDLE is absent', async () => {
+    const openOpts: (ImapOpenOptions | undefined)[] = [];
+    const baseImap = connector.imap;
+    connector.imap = (a, opts) => {
+      openOpts.push(opts);
+      return baseImap(a, opts);
+    };
     const ac = new AbortController();
     let woke!: () => void;
     const woken = new Promise<void>((resolve) => {
@@ -496,6 +539,12 @@ describe('Email (IMAP) behind the mail tools', () => {
     );
     await woken;
     expect(await watching).toBe('idle');
+    expect(openOpts[0]?.timeouts?.socketMs).toBe(MAIL_IDLE_SOCKET_TIMEOUT_MS);
+    expect(openOpts[0]?.timeouts?.socketMs).toBeGreaterThan(MAIL_TIMEOUTS.socketMs);
+    expect(openOpts[0]?.maxIdleTimeMs).toBe(MAIL_IDLE_REFRESH_MS);
+
+    await ws.mailBaseline(TOKEN);
+    expect(openOpts[1]).toBeUndefined();
 
     server.capabilities = new Set(['IMAP4REV1']);
     expect(await ws.watchInbox(TOKEN, () => {}, new AbortController().signal)).toBe('unsupported');

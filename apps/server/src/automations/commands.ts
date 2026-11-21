@@ -74,6 +74,7 @@ import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-it
 import { postRunNotice } from './notice';
 import { republishPlanCards } from './plan-cards';
 import { createAutomationPrincipal } from './principal';
+import { proposeConnectionActions } from './proposed-actions';
 import { createRun } from './runs';
 import {
   ACTIVE_RUN_STATUSES,
@@ -477,17 +478,36 @@ export async function publishVersion(
   enable: boolean,
 ): Promise<number> {
   const tx = ctx.tx;
-  const prevHadMail =
+  const [currentAuto] = await tx
+    .select({ status: automations.status, mailActiveAt: automations.mailActiveAt })
+    .from(automations)
+    .where(eq(automations.id, row.id));
+  const prevDef =
     row.currentVersion !== null
-      ? ((
+      ? (
           await tx
             .select({ definition: automationVersions.definition })
             .from(automationVersions)
             .where(
               and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)),
             )
-        )[0]?.definition.triggers.some((t) => t.kind === 'mail') ?? false)
-      : false;
+        )[0]?.definition
+      : undefined;
+  const prevMailConnections = new Set(
+    (prevDef?.triggers ?? []).flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : [])),
+  );
+  const nextMailConnections = def.triggers.flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : []));
+  const prevHadMail = prevMailConnections.size > 0;
+  const nextHasMail = nextMailConnections.length > 0;
+  // Keep an active mail trigger's activation time across edits to steps/wording while staying enabled on the same
+  // mailbox(es); record a fresh activation time when turning on, adding mail, or switching to a new mailbox.
+  const sameLiveMail =
+    enable &&
+    nextHasMail &&
+    currentAuto?.status === 'published' &&
+    currentAuto.mailActiveAt !== null &&
+    nextMailConnections.every((c) => prevMailConnections.has(c));
+  const mailActiveAt = !enable || !nextHasMail ? null : sameLiveMail ? currentAuto.mailActiveAt : ctx.now;
   const n = (row.currentVersion ?? 0) + 1;
   const hash = definitionHash(def);
   await tx.insert(automationVersions).values({
@@ -514,6 +534,7 @@ export async function publishVersion(
       draftUpdatedAt: ctx.now,
       draftUpdatedById: ctx.actor.id,
       scheduleAnchor: ctx.now,
+      mailActiveAt,
       nextFireAt: enable ? scheduleNext(def, ctx.now, ctx.now) : null,
       updatedAt: ctx.now,
     })
@@ -866,6 +887,7 @@ export const setAutomationEnabled = defineCommand({
       .where(and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)));
     if (!current) throw notFound('Automation version');
     const def = current.definition;
+    const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
     // new version of the same definition, checked and signed the way publishing is.
@@ -887,6 +909,7 @@ export const setAutomationEnabled = defineCommand({
           currentVersion: n,
           status: 'published',
           scheduleAnchor: ctx.now,
+          mailActiveAt: watchesMail ? ctx.now : null,
           nextFireAt: scheduleNext(def, ctx.now, ctx.now),
           updatedAt: ctx.now,
         })
@@ -910,15 +933,22 @@ export const setAutomationEnabled = defineCommand({
       const services = ctx.services;
       ctx.after(async () => {
         services.automations.nudge();
-        if (def.triggers.some((t) => t.kind === 'mail')) services.mailTriggers.nudge();
+        if (watchesMail) services.mailTriggers.nudge();
       });
       return { automationId: row.id };
     }
+    const nextMailActiveAt =
+      !input.enabled || !watchesMail
+        ? null
+        : row.status === 'published' && row.mailActiveAt
+          ? row.mailActiveAt
+          : ctx.now;
     await tx
       .update(automations)
       .set({
         status: input.enabled ? 'published' : 'disabled',
         scheduleAnchor: input.enabled ? ctx.now : row.scheduleAnchor,
+        mailActiveAt: nextMailActiveAt,
         nextFireAt: input.enabled ? scheduleNext(def, ctx.now, ctx.now) : null,
         updatedAt: ctx.now,
       })
@@ -934,7 +964,6 @@ export const setAutomationEnabled = defineCommand({
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
     const services = ctx.services;
-    const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     if (input.enabled || watchesMail) {
       ctx.after(async () => {
         if (input.enabled) services.automations.nudge();
@@ -1253,6 +1282,7 @@ export async function removeAutomation(
     .set({
       deletedAt: ctx.now,
       status: row.status === 'published' ? 'disabled' : row.status,
+      mailActiveAt: null,
       nextFireAt: null,
       webhookEnabled: false,
       webhookSecretEnc: null,
@@ -1396,4 +1426,5 @@ export const AUTOMATION_COMMANDS = [
   runAutomationNow,
   controlAutomationRun,
   reviewAutomationStep,
+  proposeConnectionActions,
 ];

@@ -259,6 +259,7 @@ describe('mail', () => {
                 { name: 'From', value: 'Billing <billing@example.com>' },
                 { name: 'To', value: 'you@example.com' },
                 { name: 'Subject', value: 'Invoice 42' },
+                { name: 'Message-ID', value: '<Inv-42@Example.com>' },
               ],
               parts: [
                 { partId: '0', mimeType: 'text/plain', filename: '' },
@@ -277,14 +278,15 @@ describe('mail', () => {
     });
 
     const baseline = await workspace.mailBaseline('tok');
-    expect(baseline).toEqual({ kind: 'gmail', historyId: '500' });
+    expect(baseline).toEqual({ cursor: { kind: 'gmail', historyId: '500' }, headers: [] });
     expect(calls[0]?.url.pathname).toBe('/gmail/v1/users/me/profile');
 
-    const delta = await workspace.mailChanges('tok', baseline);
+    const delta = await workspace.mailChanges('tok', baseline.cursor);
     expect(delta.cursor).toEqual({ kind: 'gmail', historyId: '505' });
     expect(delta.headers).toHaveLength(1);
     expect(delta.headers[0]).toMatchObject({
       id: 'm_new',
+      messageId: '<inv-42@example.com>',
       from: 'Billing <billing@example.com>',
       subject: 'Invoice 42',
       hasAttachments: true,
@@ -294,13 +296,108 @@ describe('mail', () => {
     expect(msgCall?.url.searchParams.get('fields')).toContain('attachmentId');
     expect(msgCall?.url.searchParams.get('fields')).not.toContain('data');
 
-    // Expired historyId (404) re-baselines cleanly without replaying old mail.
+    // Expired historyId (404) without since re-baselines cleanly.
     const expired = await workspace.mailChanges('tok', { kind: 'gmail', historyId: '100' });
     expect(expired).toEqual({
       cursor: { kind: 'gmail', historyId: '500' },
       headers: [],
       reset: true,
     });
+  });
+
+  it('enforces activation time with 5 s skew, backfills on initial poll, and resyncs on expired historyId', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const messages: Record<string, object> = {
+      m_old_moved: {
+        id: 'm_old_moved',
+        threadId: 't_old',
+        labelIds: ['INBOX'],
+        snippet: 'Moved back from Archive',
+        internalDate: String(activation.getTime() - 60_000),
+        payload: {
+          headers: [
+            { name: 'From', value: 'billing@example.com' },
+            { name: 'Subject', value: 'Old invoice moved back' },
+            { name: 'Message-ID', value: '<old-moved@example.com>' },
+          ],
+        },
+      },
+      m_within_skew: {
+        id: 'm_within_skew',
+        threadId: 't_skew',
+        labelIds: ['INBOX'],
+        snippet: 'Arrived 3s before activation',
+        internalDate: String(activation.getTime() - 3_000),
+        payload: {
+          headers: [
+            { name: 'From', value: 'billing@example.com' },
+            { name: 'Subject', value: 'Fresh invoice' },
+            { name: 'Message-ID', value: '<fresh@example.com>' },
+          ],
+        },
+      },
+      m_during_expiry: {
+        id: 'm_during_expiry',
+        threadId: 't_exp',
+        labelIds: ['INBOX'],
+        snippet: 'Arrived while expired',
+        internalDate: String(activation.getTime() + 120_000),
+        payload: {
+          headers: [
+            { name: 'From', value: 'billing@example.com' },
+            { name: 'Subject', value: 'Missed during expiry' },
+            { name: 'Message-ID', value: '<missed@example.com>' },
+          ],
+        },
+      },
+    };
+    const { workspace, calls } = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile')) return { json: { historyId: '700' } };
+      if (c.url.pathname.endsWith('/messages')) {
+        return {
+          json: {
+            messages: [{ id: 'm_old_moved' }, { id: 'm_within_skew' }, { id: 'm_during_expiry' }],
+          },
+        };
+      }
+      if (c.url.pathname.endsWith('/history')) {
+        if (c.url.searchParams.get('startHistoryId') === '600') {
+          return { status: 404, json: { error: { message: 'Start history id too old' } } };
+        }
+        return {
+          json: {
+            historyId: '705',
+            history: [
+              { id: '705', messagesAdded: [{ message: { id: 'm_old_moved', labelIds: ['INBOX'] } }] },
+            ],
+          },
+        };
+      }
+      const id = c.url.pathname.split('/').at(-1) ?? '';
+      return { json: messages[id] };
+    });
+
+    // Initial baseline backfills messages at/after activation - 5s and drops older ones.
+    const initial = await workspace.mailBaseline('tok', { since: activation });
+    expect(initial.cursor).toEqual({ kind: 'gmail', historyId: '700' });
+    expect(initial.headers.map((h) => h.id)).toEqual(['m_within_skew', 'm_during_expiry']);
+    expect(initial.headers[0]?.messageId).toBe('<fresh@example.com>');
+    const listCall = calls.find((c) => c.url.pathname.endsWith('/messages'));
+    expect(listCall?.url.searchParams.get('labelIds')).toBe('INBOX');
+    expect(listCall?.url.searchParams.get('q')).toMatch(/^after:\d+$/);
+
+    // An old message moved back into INBOX in history.list is dropped by `since`.
+    const movedBack = await workspace.mailChanges('tok', initial.cursor, { since: activation });
+    expect(movedBack.headers).toEqual([]);
+
+    // Expired historyId resyncs from resyncSince (last successful poll time).
+    const resynced = await workspace.mailChanges(
+      'tok',
+      { kind: 'gmail', historyId: '600' },
+      { since: activation, resyncSince: new Date(activation.getTime() + 60_000) },
+    );
+    expect(resynced.reset).toBe(true);
+    expect(resynced.headers.map((h) => h.id)).toEqual(['m_during_expiry']);
   });
 });
 

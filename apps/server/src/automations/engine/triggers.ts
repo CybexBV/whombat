@@ -4,6 +4,7 @@
  */
 import { triggerMatches } from '@whombat/core';
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { MAIL_SINCE_SKEW_MS } from '../../connectors/types';
 import type { Db } from '../../db/client';
 import {
   automationCursors,
@@ -11,6 +12,7 @@ import {
   automations,
   automationVersions,
   events,
+  mailTriggerItems,
 } from '../../db/schema/index';
 import { inBurrow } from '../../read/conversations';
 import type { Services } from '../../services';
@@ -107,14 +109,16 @@ export async function scanBurrow(
       const cause = await eventCause(tx, event, facts);
       for (const { a, v } of live) {
         if (!v.definition.triggers.some((t) => triggerMatches(t, facts.facts))) continue;
-        // Mail already present when an automation was published must never start it, even when another automation was
-        // already watching the same mailbox (allow 5 s for provider/box clock skew on freshly sent mail).
-        if (
-          facts.facts.kind === 'mail' &&
-          (event.createdAt < v.publishedAt ||
-            (facts.receivedAt && facts.receivedAt.getTime() < v.publishedAt.getTime() - 5_000))
-        )
-          continue;
+        // Mail already present when this automation's mail trigger became active must never start it (allow 5 s for
+        // provider/box clock skew on freshly arrived mail).
+        if (facts.facts.kind === 'mail') {
+          const activeAt = a.mailActiveAt ?? v.publishedAt;
+          if (
+            event.createdAt < activeAt ||
+            (facts.receivedAt && facts.receivedAt.getTime() < activeAt.getTime() - MAIL_SINCE_SKEW_MS)
+          )
+            continue;
+        }
         // Loop guards: automation-caused events stop at a small depth, and never trigger their own automation.
         if (
           cause.depth > limits.maxCausalDepth ||
@@ -208,6 +212,17 @@ export async function scanBurrow(
           now,
         });
         if (runId) created++;
+      }
+      // Once the run has started and the trigger cursor moves past this mail event, drop the cached body and snippet
+      // while keeping the row for deduplication.
+      if (event.type === 'mail.received') {
+        const mailRowId = (event.payload as { rowId?: unknown }).rowId;
+        if (typeof mailRowId === 'string') {
+          await tx
+            .update(mailTriggerItems)
+            .set({ body: '', snippet: '' })
+            .where(eq(mailTriggerItems.id, mailRowId));
+        }
       }
     }
     const last = batch[batch.length - 1];

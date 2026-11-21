@@ -454,6 +454,8 @@ describe('an outsiders’ turn (outsiders-turns.md OT-01…OT-03)', () => {
 
   it('gets its automation step’s own tools only where the step has them', () => {
     expect(servedToolNames({ ...outside, assesses: true })).toContain('report_assessment');
+    expect(servedToolNames({ ...outside, proposes: false })).not.toContain('propose_connection_actions');
+    expect(servedToolNames({ ...outside, proposes: true })).toContain('propose_connection_actions');
     expect(servedToolNames({ ...outside, tracker: { report: true, read: false } })).toContain('tracker_item');
     expect(servedToolNames({ ...outside, tracker: { report: true, read: false } })).not.toContain(
       'tracker_read',

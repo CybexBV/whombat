@@ -1,4 +1,5 @@
 import type { MailAttachment } from '@whombat/core';
+import { sql } from 'drizzle-orm';
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { MailProviderCursor } from '../../connectors/types';
 import { connections } from './connectors';
@@ -23,6 +24,8 @@ export const mailCursors = pgTable('mail_cursors', {
   succeededAt: timestamp('succeeded_at', { withTimezone: true }),
   problemCode: text('problem_code'),
   problem: text('problem'),
+  /** Consecutive full-read failure counts per provider message id (cleared once read succeeds or skipped after 3 tries). */
+  readFailures: jsonb('read_failures').$type<Record<string, number> | null>(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -43,6 +46,8 @@ export const mailTriggerItems = pgTable(
     provider: text('provider').notNull(),
     mailbox: text('mailbox').notNull(),
     externalId: text('external_id').notNull(),
+    /** Normalized RFC 5322 Message-ID when the provider reports one (deduplicates moves across folders/UIDs). */
+    messageId: text('message_id'),
     threadId: text('thread_id').notNull(),
     fromHeader: text('from_header').notNull(),
     fromAddress: text('from_address').notNull(),
@@ -51,11 +56,16 @@ export const mailTriggerItems = pgTable(
     body: text('body').notNull(),
     bodyTruncated: boolean('body_truncated').notNull().default(false),
     attachments: jsonb('attachments').$type<MailAttachment[]>().notNull().default([]),
+    /** Ready Whombat attachment ids handed over from the matched email for the run's thread prompt. */
+    attachmentIds: text('attachment_ids').array().notNull().default([]),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
     mirroredAt: timestamp('mirrored_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('mail_trigger_items_connection_external_idx').on(t.connectionId, t.externalId),
+    uniqueIndex('mail_trigger_items_connection_message_id_idx')
+      .on(t.connectionId, t.messageId)
+      .where(sql`${t.messageId} is not null`),
     index('mail_trigger_items_burrow_idx').on(t.burrowId, t.mirroredAt),
   ],
 );

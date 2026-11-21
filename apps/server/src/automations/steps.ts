@@ -31,6 +31,7 @@ import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
 import { CONTINUE_STEP } from './steps/approval';
 import { stepRoomsCheck } from './steps/checks';
+import { executeConnectionActions } from './steps/connection-actions';
 import { executeCondition, executeRequestApproval, executeWait } from './steps/control';
 import { executeDispatchAgent, resumeDispatchAgent } from './steps/dispatch-agent';
 import { executeGitHubComment } from './steps/github-comment';
@@ -288,7 +289,8 @@ export const automationStep = defineCommand({
             step.kind === 'github_comment' ||
             step.kind === 'tracker_update' ||
             step.kind === 'tracker_reply' ||
-            step.kind === 'merge_pull_request')
+            step.kind === 'merge_pull_request' ||
+            step.kind === 'connection_actions')
         ) {
           await executeStep(ctx, run, steps, input.idx, row.attempt + 1);
         } else if (input.state === 'pending') {
@@ -341,6 +343,16 @@ export const automationStep = defineCommand({
                 output.message,
               ).slice(0, 12_000),
             );
+            if (said) output.announced = true;
+          }
+          if (
+            step.kind === 'connection_actions' &&
+            input.state === 'succeeded' &&
+            output.ran === true &&
+            typeof output.summary === 'string' &&
+            !output.announced
+          ) {
+            said = await postInRunThread(ctx, run, output.summary.slice(0, 2000));
             if (said) output.announced = true;
           }
           if (
@@ -525,6 +537,8 @@ export async function executeStep(
       return executeMergePullRequest({ ...execution, step });
     case 'http_callback':
       return executeHttpCallback({ ...execution, step });
+    case 'connection_actions':
+      return executeConnectionActions({ ...execution, step });
   }
 }
 
@@ -538,6 +552,7 @@ export const continueStep = defineCommand({
     stepId: z.string(),
     attempt: z.number().int().nonnegative(),
     proposal: z.object({ title: z.string(), details: z.string() }),
+    actionsHash: z.string().optional(),
   }),
   async apply(tx, ctx, input) {
     if (!ctx.approvalId) throw conflict('Only an approval continues an automation.');
@@ -621,6 +636,22 @@ export const continueStep = defineCommand({
           output: {
             ...(step.output as JsonObject),
             commentApprovalId: ctx.approvalId,
+            decidedById: approval?.decidedById ?? null,
+          },
+        },
+        ctx.now,
+      );
+    } else if (kind === 'connection_actions') {
+      // A person approved the proposed connection actions on the card: the step now moves to running.
+      await updateStep(
+        tx,
+        run.id,
+        step.idx,
+        {
+          state: 'pending',
+          output: {
+            ...(step.output as JsonObject),
+            actionsApprovalId: ctx.approvalId,
             decidedById: approval?.decidedById ?? null,
           },
         },

@@ -40,6 +40,7 @@ import { commandsTurn } from '../agent-commands/context';
 import { type AgentAuth, slideAgentToken, verifyAgentToken } from '../auth/agent-tokens';
 import { bearerOf } from '../auth/request';
 import { assessesInTurn, NOT_AN_ASSESSMENT } from '../automations/assessment';
+import { NOT_PROPOSING_ACTIONS, proposesInTurn } from '../automations/proposed-actions';
 import { HANDED_TURN_ENDED } from '../automations/turn-waits';
 import { seesActiveConnection } from '../connections/context';
 import { personalAccess, usableServices } from '../connectors/access';
@@ -212,6 +213,12 @@ function turnFacts(services: Services, agentId: string, dispatchId: string | und
       return seesActiveConnection(db, agentId, row, agentRow);
     }),
     assesses: once(() => assessesInTurn(db, agentId, dispatchId)),
+    proposes: once(async () => {
+      const row = await dispatch();
+      return row?.trigger === 'automation' && row.agentId === agentId
+        ? proposesInTurn(db, agentId, dispatchId)
+        : false;
+    }),
     looks: once(() => looksInTurn(db, agentId, dispatchId)),
     tracker,
     unavailableActions: async () =>
@@ -287,6 +294,7 @@ async function notServed(
   row: DispatchRow | undefined,
 ): Promise<CallToolResult> {
   if (name === 'report_assessment') return errorResult('forbidden', NOT_AN_ASSESSMENT);
+  if (name === 'propose_connection_actions') return errorResult('forbidden', NOT_PROPOSING_ACTIONS);
   if (name === 'look_report') return errorResult('forbidden', NOT_A_LOOK);
   const account = row?.onBehalfOfAccountId ?? null;
   const connector = mcpToolConnector(name);

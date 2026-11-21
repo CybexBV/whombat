@@ -21,6 +21,7 @@ export function stepActsIn(step: AutomationStep, runConversationId: string): str
     case 'request_approval':
     case 'open_pull_request':
     case 'merge_pull_request':
+    case 'connection_actions':
       // The approval card, the prepared pull request, or a merge's card and its “Merged PR #10 into main.” line (0.70),
       // is posted in the run's room.
       return runConversationId;
@@ -87,7 +88,12 @@ export function stepReads(step: AutomationStep): { trigger: boolean; steps: stri
   if (step.kind === 'post_message') for (const id of step.attachFrom) steps.add(id);
   // A tracker write-back sends what step `from`'s agent assessed (0.69, TA-11).
   // A reply sends that agent's reply (0.75, TA-25).
-  if (step.kind === 'tracker_update' || step.kind === 'tracker_reply' || step.kind === 'tracker_decision')
+  if (
+    step.kind === 'tracker_update' ||
+    step.kind === 'tracker_reply' ||
+    step.kind === 'tracker_decision' ||
+    step.kind === 'connection_actions'
+  )
     steps.add(step.from);
   // A reply that tells a person's decision reads it (3.12, TA-46).
   if (step.kind === 'tracker_reply' && step.decision) steps.add(step.decision);

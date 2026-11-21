@@ -78,6 +78,7 @@ import {
   type CallOutput,
   ConnectionArgumentError,
   ConnectionOutcomeUnknownError,
+  type ResolveRequestUpload,
   runRequest,
 } from './request';
 import { runSocketCall, SocketCallError } from './socket/call';
@@ -450,6 +451,8 @@ export async function executeConnectionCall(
     change?: string | null;
     /** The approval whose yes runs it (a task it starts is known by it, task-feedback.md TF-10). */
     approvalId?: string | null;
+    /** Optional resolver for authorized multipart attachment uploads in `request` calls. */
+    uploadAttachment?: ResolveRequestUpload;
   },
 ): Promise<CallResult> {
   const started = Date.now();
@@ -616,9 +619,20 @@ async function runTool(
   tool: ConnectionToolRow,
   args: Record<string, unknown>,
   /** Who the call is for: a device action records its change with it (a read for a change or a widget has none). */
-  call?: DeviceCallContext & { threadRootId?: string | null; approvalId?: string | null },
+  call?: DeviceCallContext & {
+    threadRootId?: string | null;
+    approvalId?: string | null;
+    uploadAttachment?: ResolveRequestUpload;
+  },
 ): Promise<CallOutput> {
-  if (tool.origin === 'request') return runRequest(services, row, entry, args);
+  if (tool.origin === 'request')
+    return runRequest(
+      services,
+      row,
+      entry,
+      args,
+      call?.uploadAttachment ? { uploadAttachment: call.uploadAttachment } : {},
+    );
   // A socket's `call`: one method over the service's socket (docs/decisions/connections-more.md CM-14).
   if (tool.origin === 'socket') return runSocketCall(services, row, entry, args);
   // A device's tools run its profile through the built-in drivers (one-whombat.md ONE-16).

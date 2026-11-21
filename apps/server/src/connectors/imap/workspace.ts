@@ -40,6 +40,8 @@ import {
   type MailHeader,
   type MailOrganizeInput,
   type MailProviderCursor,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
 } from '../types';
 import {
   attachmentBinary,
@@ -75,7 +77,14 @@ import {
   threadRoot,
 } from './ids';
 import { type FolderPick, parseMailQuery } from './search';
-import type { ImapSession, MailboxInfo, MessageMeta } from './session';
+import {
+  type ImapSession,
+  MAIL_IDLE_REFRESH_MS,
+  MAIL_IDLE_SOCKET_TIMEOUT_MS,
+  type MailboxInfo,
+  type MailTimeouts,
+  type MessageMeta,
+} from './session';
 
 export const IMAP_ONLY_MAIL_TEXT = 'Email (IMAP) only does mail.';
 export const MESSAGE_GONE_TEXT = 'That message isn’t there any more: search again.';
@@ -106,9 +115,14 @@ export interface ImapAccount {
   savesSent: boolean;
 }
 
+export interface ImapOpenOptions {
+  timeouts?: Partial<MailTimeouts>;
+  maxIdleTimeMs?: number;
+}
+
 /** Opens the two sides of an account, under the destination policy (`net.ts`). */
 export interface MailConnector {
-  imap(account: ImapAccount): Promise<ImapSession>;
+  imap(account: ImapAccount, options?: ImapOpenOptions): Promise<ImapSession>;
   smtpVerify(account: ImapAccount): Promise<void>;
   /** How many recipients the server refused while taking the message for the others. */
   smtpSend(
@@ -727,27 +741,93 @@ export class ImapWorkspace implements GoogleWorkspace {
     });
   }
 
-  async mailBaseline(token: string): Promise<MailProviderCursor> {
+  private imapHeadersOf(
+    opened: { path: string; uidValidity: string },
+    folders: readonly MailboxInfo[],
+    uids: readonly number[],
+    metas: readonly MessageMeta[],
+    since?: Date | null,
+  ): MailHeader[] {
+    const byUid = new Map(metas.map((m) => [m.uid, m]));
+    const headers: MailHeader[] = [];
+    for (const uid of uids) {
+      const m = byUid.get(uid);
+      if (!m) continue;
+      if (has(m.flags, '\\Draft') || has(m.flags, '\\Deleted')) continue;
+      const dateIso = m.internalDate ?? m.date ?? this.deps.now().toISOString();
+      if (!receivedAtOrAfter(dateIso, since)) continue;
+      const ref = { mailbox: opened.path, uidValidity: opened.uidValidity, uid: m.uid };
+      const attachments = m.attachments ?? [];
+      headers.push({
+        id: messageIdOf(ref),
+        threadId: threadIdOf(ref, threadRoot(m), threadHome(folders, opened.path)),
+        messageId: normalizeRfcMessageId(m.messageId),
+        from: m.from[0] ? shownAddress(m.from[0]) : '',
+        to: m.to.map(shownAddress),
+        subject: m.subject,
+        snippet: '',
+        date: dateIso,
+        hasAttachments: attachments.length > 0,
+        attachments,
+      });
+    }
+    return headers;
+  }
+
+  private async imapBackfill(
+    s: ImapSession,
+    opened: { path: string; uidValidity: string; uidNext: number | null },
+    folders: readonly MailboxInfo[],
+    since: Date | null | undefined,
+  ): Promise<{ cursor: MailProviderCursor; headers: MailHeader[] }> {
+    const lastUid =
+      opened.uidNext !== null
+        ? Math.max(0, opened.uidNext - 1)
+        : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
+    const cursor: MailProviderCursor = {
+      kind: 'imap',
+      mailbox: opened.path,
+      uidValidity: opened.uidValidity,
+      lastUid,
+    };
+    if (!since) return { cursor, headers: [] };
+    // IMAP SEARCH SINCE matches whole calendar days in the server's timezone: look back one full day, then filter
+    // accurately by `internalDate` with the 5-second skew margin.
+    const dayBefore = new Date(since.getTime() - 24 * 3_600_000);
+    const uids = (await s.search({ since: dayBefore })).sort((a, b) => a - b).slice(-50);
+    if (uids.length === 0) return { cursor, headers: [] };
+    const metas = await s.meta(uids, { bodyStructure: true });
+    const headers = this.imapHeadersOf(opened, folders, uids, metas, since);
+    const maxUid = uids[uids.length - 1] ?? lastUid;
+    return {
+      cursor: {
+        kind: 'imap',
+        mailbox: opened.path,
+        uidValidity: opened.uidValidity,
+        lastUid: Math.max(lastUid, maxUid),
+      },
+      headers,
+    };
+  }
+
+  async mailBaseline(token: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
     return this.withImap(token, async (s) => {
       const folders = await s.list();
       const inbox = folderByRole(folders, 'inbox');
       const path = inbox?.path ?? 'INBOX';
       const opened = await s.open(path, { write: false });
-      const lastUid =
-        opened.uidNext !== null
-          ? Math.max(0, opened.uidNext - 1)
-          : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
-      return { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid };
+      return this.imapBackfill(s, opened, folders, options.since);
     });
   }
 
   async mailChanges(
     token: string,
     cursor: MailProviderCursor,
-    _options: MailChangesOptions = {},
+    options: MailChangesOptions = {},
   ): Promise<MailChangesResult> {
+    const resyncSince = options.resyncSince ?? options.since ?? null;
     if (cursor.kind !== 'imap') {
-      return { cursor: await this.mailBaseline(token), headers: [], reset: true };
+      return { ...(await this.mailBaseline(token, { ...options, since: resyncSince })), reset: true };
     }
     return this.withImap(token, async (s) => {
       const folders = await s.list();
@@ -760,15 +840,7 @@ export class ImapWorkspace implements GoogleWorkspace {
         'INBOX';
       const opened = await s.open(path, { write: false });
       if (opened.uidValidity !== cursor.uidValidity) {
-        const lastUid =
-          opened.uidNext !== null
-            ? Math.max(0, opened.uidNext - 1)
-            : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
-        return {
-          cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid },
-          headers: [],
-          reset: true,
-        };
+        return { ...(await this.imapBackfill(s, opened, folders, resyncSince)), reset: true };
       }
       const found = (await s.search({ uid: `${cursor.lastUid + 1}:*` }))
         .filter((u) => u > cursor.lastUid)
@@ -777,26 +849,7 @@ export class ImapWorkspace implements GoogleWorkspace {
       const batch = found.slice(0, 50);
       // Fetch envelope, flags and BODYSTRUCTURE only — never raw message bodies until a trigger matches.
       const metas = await s.meta(batch, { bodyStructure: true });
-      const byUid = new Map(metas.map((m) => [m.uid, m]));
-      const headers: MailHeader[] = [];
-      for (const uid of batch) {
-        const m = byUid.get(uid);
-        if (!m) continue;
-        if (has(m.flags, '\\Draft') || has(m.flags, '\\Deleted')) continue;
-        const ref = { mailbox: opened.path, uidValidity: opened.uidValidity, uid: m.uid };
-        const attachments = m.attachments ?? [];
-        headers.push({
-          id: messageIdOf(ref),
-          threadId: threadIdOf(ref, threadRoot(m), threadHome(folders, opened.path)),
-          from: m.from[0] ? shownAddress(m.from[0]) : '',
-          to: m.to.map(shownAddress),
-          subject: m.subject,
-          snippet: '',
-          date: m.internalDate ?? m.date ?? this.deps.now().toISOString(),
-          hasAttachments: attachments.length > 0,
-          attachments,
-        });
-      }
+      const headers = this.imapHeadersOf(opened, folders, batch, metas, options.since);
       const nextUid = batch[batch.length - 1] ?? cursor.lastUid;
       return {
         cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid: nextUid },
@@ -817,7 +870,10 @@ export class ImapWorkspace implements GoogleWorkspace {
     const account = await this.deps.account(token);
     let session: ImapSession;
     try {
-      session = await this.deps.connector.imap(account);
+      session = await this.deps.connector.imap(account, {
+        timeouts: { socketMs: MAIL_IDLE_SOCKET_TIMEOUT_MS },
+        maxIdleTimeMs: MAIL_IDLE_REFRESH_MS,
+      });
     } catch (err) {
       throw await this.failure(token, err);
     }
