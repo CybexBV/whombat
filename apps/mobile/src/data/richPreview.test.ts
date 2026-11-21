@@ -100,16 +100,23 @@ describe('HTML previews on mobile (AP-328)', () => {
 
 describe('a preview whose browser stopped', () => {
   it('starts again twice by itself after a crash, then waits for “Try again”', () => {
-    expect([0, 1, 2, 3].map((n) => afterPreviewGone(n, true))).toEqual([
+    const crash = { crashed: true, active: true };
+    expect([0, 1, 2, 3].map((n) => afterPreviewGone(n, crash))).toEqual([
       'restart',
       'restart',
       'offer',
       'offer',
     ]);
+    expect(afterPreviewGone(2, { crashed: true, active: false })).toBe('offer');
   });
 
-  it('comes back without counting when Android let it go for memory', () => {
-    expect(afterPreviewGone(0, false)).toBe('remount');
-    expect(afterPreviewGone(5, false)).toBe('remount');
+  it('comes back without counting when Android let it go for memory in the background', () => {
+    expect(afterPreviewGone(0, { crashed: false, active: false })).toBe('remount');
+    expect(afterPreviewGone(5, { crashed: false, active: false })).toBe('remount');
+  });
+
+  it('counts a release for memory while the app is in front, so it can’t loop', () => {
+    const inFront = { crashed: false, active: true };
+    expect([0, 1, 2].map((n) => afterPreviewGone(n, inFront))).toEqual(['restart', 'restart', 'offer']);
   });
 });

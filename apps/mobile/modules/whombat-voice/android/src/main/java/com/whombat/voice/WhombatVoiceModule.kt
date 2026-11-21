@@ -47,6 +47,11 @@ private class Recording(
 ) {
   @Volatile var running = true
   @Volatile var samples = 0L
+  /**
+   * Set by the reader under the recording's own lock as it starts letting go, so nobody stops a microphone it is
+   * releasing; the letting go itself happens outside the lock, so a slow release or flush never holds up a stop.
+   */
+  var releasing = false
   /** Set by the reader under the recording's own lock once it let go of the microphone and the file. */
   var released = false
   /** Set when nobody waits for the file any more: the reader deletes it when it finally lets go. */
@@ -98,7 +103,8 @@ class WhombatVoiceModule : Module() {
 
     AsyncFunction("cancel") { -> cancel() }
 
-    OnDestroy { cancel() }
+    // The app is closing: nothing may wait here, so the microphone is let go on a thread of its own.
+    OnDestroy { Thread({ runCatching { cancel() } }, "whombat-voice-end").start() }
   }
 
   private fun start(maxSeconds: Int, id: Int): Unit = synchronized(session) {
@@ -106,7 +112,7 @@ class WhombatVoiceModule : Module() {
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
       throw MicrophoneException()
     }
-    if (!cancel()) throw RecorderException("The microphone didn’t stop.")
+    if (!cancel() || !settled()) throw RecorderException("The microphone didn’t stop.")
     // The file first: nothing holds the microphone yet if it can't be made.
     val file = try {
       val dir = File(appContext.cacheDirectory, "dictation").apply { mkdirs() }
@@ -176,10 +182,11 @@ class WhombatVoiceModule : Module() {
       ended = "error"
     } finally {
       try {
+        synchronized(r) { r.releasing = true }
+        runCatching { r.record.stop() }
+        runCatching { r.record.release() }
+        runCatching { r.out.close() }
         synchronized(r) {
-          runCatching { r.record.stop() }
-          runCatching { r.record.release() }
-          runCatching { r.out.close() }
           r.released = true
           if (r.discard) runCatching { r.file.delete() }
         }
@@ -236,7 +243,7 @@ class WhombatVoiceModule : Module() {
     r.running = false
     synchronized(r) {
       // Stopping the microphone wakes a reader waiting inside read().
-      if (!r.released) runCatching { r.record.stop() }
+      if (!r.releasing) runCatching { r.record.stop() }
     }
     if (r.done.await(HALT_WAIT_MS, TimeUnit.MILLISECONDS)) return true
     synchronized(r) {
@@ -258,15 +265,21 @@ class WhombatVoiceModule : Module() {
   private fun stop(): String = synchronized(session) {
     val r = synchronized(lock) { current.also { current = null } } ?: throw RecorderException("Nothing is recording.")
     if (!halt(r)) throw RecorderException("The microphone didn’t stop.")
-    writeHeader(r.file, r.samples)
+    try {
+      writeHeader(r.file, r.samples)
+    } catch (_: Throwable) {
+      r.file.delete()
+      throw RecorderException("The recording couldn’t be stored.")
+    }
     r.file.toURI().toString()
   }
 
-  /** Drops the recording under way; false when the microphone is still held (by it, or by one before it). */
+  /** Drops the recording under way; false at once when its microphone didn't let go in time. */
   private fun cancel(): Boolean = synchronized(session) {
-    val r = synchronized(lock) { current.also { current = null } }
-    if (r != null && halt(r)) r.file.delete()
-    settled()
+    val r = synchronized(lock) { current.also { current = null } } ?: return true
+    if (!halt(r)) return false
+    r.file.delete()
+    true
   }
 
   /** The 44-byte RIFF header of a 16 kHz mono 16-bit WAV of `samples` samples. */
