@@ -38,6 +38,7 @@ import {
   trend,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { readDomainExpirations } from './rdap';
 import {
   type ButtonCtx,
   badgeOf,
@@ -61,6 +62,8 @@ const API = '/client/v4';
 export const CLOUDFLARE_DASH = 'https://dash.cloudflare.com/';
 /** Sites one read looks at (GraphQL takes 10 zones a query). */
 export const ZONES_MAX = 10;
+const DOMAIN_WARN_DAYS = 30;
+const DOMAIN_URGENT_DAYS = 7;
 const ACCOUNTS_MAX = 3;
 /** Tunnels whose connections one read asks for (SD-S05). */
 const CONNECTIONS_MAX = 12;
@@ -129,6 +132,10 @@ export interface CfSnapshot {
   tunnelsPartial?: boolean;
   /** Not every shown site's certificates were read. */
   certificatesPartial?: boolean;
+  /** Domain registration expiry per lowercase zone name from public RDAP; null when RDAP couldn't be read. */
+  domainExpirations?: Map<string, Date | null> | null;
+  /** Not every shown site's domain registration could be looked up via RDAP. */
+  domainExpirationsPartial?: boolean;
 }
 
 /* Reading -------------------------------------------------------------------------------------------------------------- */
@@ -406,7 +413,7 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     ]),
   ];
   const accounts = known.slice(0, ACCOUNTS_MAX);
-  const [traffic, tunnels, certificates] = await Promise.all([
+  const [traffic, tunnels, certificates, domainExpirations] = await Promise.all([
     cachedRead(
       services,
       `cloudflare-traffic:${row.id}`,
@@ -416,6 +423,11 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     ).catch(() => null),
     readTunnels(services, row, accounts, now),
     readCertificates(services, row, shown),
+    readDomainExpirations(
+      services,
+      shown.filter((z) => z.status !== 'moved').map((z) => z.name),
+      now,
+    ).catch(() => null),
   ]);
   return {
     readAt: now,
@@ -424,8 +436,10 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     traffic,
     tunnels: tunnels?.tunnels ?? null,
     certificates: certificates?.certificates ?? null,
+    domainExpirations: domainExpirations?.expirations ?? null,
     ...(tunnels && (tunnels.partial || known.length > accounts.length) ? { tunnelsPartial: true } : {}),
     ...(certificates?.partial ? { certificatesPartial: true } : {}),
+    ...(domainExpirations?.partial ? { domainExpirationsPartial: true } : {}),
   };
 });
 
@@ -530,6 +544,13 @@ export const CLOUDFLARE_CHECKS: readonly KindCheck[] = [
   },
   { check: 'cloudflare.cert', name: 'Certificates ending', nature: 'problem', perItem: true, startsOn: true },
   {
+    check: 'cloudflare.domain_expiring',
+    name: 'Domains about to expire',
+    nature: 'you',
+    perItem: true,
+    startsOn: false,
+  },
+  {
     check: 'cloudflare.zone',
     name: 'Sites that aren’t active',
     nature: 'you',
@@ -551,7 +572,9 @@ export function cloudflareSkipped(s: CfSnapshot): string[] {
   const out: string[] = [];
   if (!s.tunnels || s.tunnelsPartial) out.push('cloudflare.tunnel_down', 'cloudflare.tunnel_degraded');
   if (!s.certificates || s.certificatesPartial) out.push('cloudflare.cert');
-  if (s.zonesTotal > s.zones.length) out.push('cloudflare.cert', 'cloudflare.zone', 'cloudflare.paused');
+  if (s.domainExpirations === null || s.domainExpirationsPartial) out.push('cloudflare.domain_expiring');
+  if (s.zonesTotal > s.zones.length)
+    out.push('cloudflare.cert', 'cloudflare.domain_expiring', 'cloudflare.zone', 'cloudflare.paused');
   return out;
 }
 
@@ -671,6 +694,34 @@ export function cloudflareNotices(s: CfSnapshot, now: Date): KindNotice[] {
       episode: (c.expires as Date).toISOString(),
       ignore: { lifts: 'newer', words: 'Until it’s renewed.' },
       badge: badgeOf(expired ? `Certificate expired: ${name}` : `Certificate ending: ${name}`),
+    });
+  }
+  for (const z of s.zones.filter((x) => x.status !== 'moved')) {
+    const expires = s.domainExpirations?.get(z.name.toLowerCase()) ?? null;
+    if (!expires || daysUntil(expires, now) >= DOMAIN_WARN_DAYS) continue;
+    const expired = expires <= now;
+    const urgent = daysUntil(expires, now) < DOMAIN_URGENT_DAYS;
+    out.push({
+      id: `domain-expiring-${z.id}`,
+      tone: expired || urgent ? 'bad' : 'warn',
+      icon: 'clock',
+      title: clip(
+        expired
+          ? `${z.name}’s domain registration has expired`
+          : `${z.name}’s domain registration expires ${inTime(expires, now)}`,
+        120,
+      ),
+      detail: expired
+        ? 'Renew it with your domain registrar right away so your website and email come back.'
+        : 'Renew it with your domain registrar before it expires so your website and email don’t stop working.',
+      link: { kind: 'url', label: 'Open Cloudflare', url: CLOUDFLARE_DASH },
+      nature: 'you',
+      check: 'cloudflare.domain_expiring',
+      subject: siteSubject(s, z.id),
+      // Renewing pushes the registration expiry date forward, lifting an ignore automatically.
+      episode: expires.toISOString(),
+      ignore: { lifts: 'newer', words: 'Until it’s renewed.' },
+      badge: badgeOf(expired ? `Domain expired: ${z.name}` : `Domain expiring: ${z.name}`),
     });
   }
   for (const z of s.zones.filter((x) => x.status !== 'active')) {

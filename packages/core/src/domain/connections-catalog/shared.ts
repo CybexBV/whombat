@@ -140,14 +140,18 @@ export const JsonPathText = z.string().regex(/^[A-Za-z_*][A-Za-z0-9_*]*(\.[A-Za-
 /** A query parameter's name. */
 export const QueryName = z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/);
 
+/** A cookie's name (`SID`, `frigate_token`). */
+export const CookieName = z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/);
+
 /**
- * How a session token goes on each request (0.97, CT-470; Whombat connections-more.md CM-10): bearer, `{token}` in a
- * header template, or a query parameter.
+ * How a session token goes on each request: bearer, `{token}` in a header template, a query parameter, or a named
+ * cookie.
  */
 export const SessionApply = z.discriminatedUnion('type', [
   z.object({ type: z.literal('bearer') }),
   z.object({ type: z.literal('header'), name: HeaderName, template: z.string().max(200).default('{token}') }),
   z.object({ type: z.literal('query'), name: QueryName }),
+  z.object({ type: z.literal('cookie'), name: CookieName }),
 ]);
 
 export type SessionApply = z.infer<typeof SessionApply>;
@@ -207,19 +211,28 @@ export type SessionLoginFailureReason = z.infer<typeof SessionLoginFailureReason
 export const HttpStatuses = z.array(z.number().int().min(100).max(599)).min(1).max(10);
 
 /**
- * A sign-in answer that refuses (0.110, CT-706): what it holds (as `SessionAnswerMatch`), the reason, and the person's
- * words when the entry has its own (absent: `SESSION_LOGIN_FAILURE_WORDS`). `status` (0.111, CT-734; Whombat
- * connection-signin.md SG-10): only answers with one of these statuses (Pi-hole's 200 with `session.validity` −1 is a
- * Pi-hole without a password, its 401 with the same value a wrong one); absent: any status.
+ * A sign-in answer that refuses: matched by JSON/XML value (`json` or `xml` with `values`) or by a case-insensitive
+ * pattern on the response text (`bodyPattern`, for plain-text answers like qBittorrent's `Fails.`), optionally limited
+ * to specific HTTP statuses.
  */
 export const SessionFailure = z
   .object({
-    ...SessionAnswerFields,
+    json: JsonPathText.optional(),
+    xml: XmlTag.optional(),
+    values: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+    bodyPattern: Pattern.optional(),
     status: HttpStatuses.optional(),
     reason: SessionLoginFailureReason,
     text: z.string().min(1).max(300).optional(),
   })
-  .refine(oneOfJsonXml, ONE_OF_JSON_XML);
+  .refine(
+    (m) => {
+      if (m.bodyPattern !== undefined)
+        return m.json === undefined && m.xml === undefined && m.values === undefined;
+      return oneOfJsonXml(m) && m.values !== undefined && m.values.length > 0;
+    },
+    { message: 'Provide either bodyPattern, or values with exactly one of json and xml.', path: ['json'] },
+  );
 
 export type SessionFailure = z.infer<typeof SessionFailure>;
 
@@ -305,13 +318,12 @@ export const TokenAuth = z.discriminatedUnion('type', [
          */
         encoding: z.enum(['json', 'form']).optional(),
       }),
-      /** Where the session token is in the JSON answer (`session.sid`, `token`); or (0.110) `tokenXmlTag`. */
+      /** Where the session token is in the JSON answer (`session.sid`, `token`). */
       tokenJsonPath: JsonPathText.optional(),
-      /**
-       * The XML element whose text is the session token (0.110, CT-704; QNAP's `authSid`): exactly one of `tokenJsonPath`
-       * and `tokenXmlTag`.
-       */
+      /** The XML element whose text is the session token (QNAP's `authSid`). */
       tokenXmlTag: XmlTag.optional(),
+      /** The `Set-Cookie` cookie holding the session token (qBittorrent's `SID`, Frigate's `frigate_token`). */
+      tokenCookie: CookieName.optional(),
       /** Where its lifetime is: a number of seconds (`session.validity`) or an ISO time (`expires`). */
       expiresJsonPath: JsonPathText.optional(),
       /** Used when the answer doesn't say; at most a day. */
@@ -353,10 +365,13 @@ export const TokenAuth = z.discriminatedUnion('type', [
        */
       twoStep: SessionTwoStep.optional(),
     })
-    .refine((a) => (a.tokenJsonPath === undefined) !== (a.tokenXmlTag === undefined), {
-      message: 'A session reads its token from exactly one of tokenJsonPath and tokenXmlTag.',
-      path: ['tokenJsonPath'],
-    }),
+    .refine(
+      (a) => [a.tokenJsonPath, a.tokenXmlTag, a.tokenCookie].filter((x) => x !== undefined).length === 1,
+      {
+        message: 'A session reads its token from exactly one of tokenJsonPath, tokenXmlTag and tokenCookie.',
+        path: ['tokenJsonPath'],
+      },
+    ),
 ]);
 
 export type TokenAuth = z.infer<typeof TokenAuth>;

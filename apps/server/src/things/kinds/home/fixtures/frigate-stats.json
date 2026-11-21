@@ -1,0 +1,63 @@
+{
+  "cameras": {
+    "front_door": {
+      "camera_fps": 5.0,
+      "capture_pid": 412,
+      "detection_enabled": true,
+      "detection_fps": 1.2,
+      "pid": 415,
+      "process_fps": 5.0,
+      "skipped_fps": 0.0
+    },
+    "driveway": {
+      "camera_fps": 5.0,
+      "capture_pid": 420,
+      "detection_enabled": true,
+      "detection_fps": 0.8,
+      "pid": 423,
+      "process_fps": 5.0,
+      "skipped_fps": 0.0
+    },
+    "garage": {
+      "camera_fps": 0.0,
+      "capture_pid": 430,
+      "detection_enabled": true,
+      "detection_fps": 0.0,
+      "pid": 433,
+      "process_fps": 0.0,
+      "skipped_fps": 0.0
+    }
+  },
+  "detectors": {
+    "coral": {
+      "detection_start": 0.0,
+      "inference_speed": 11.4,
+      "pid": 380
+    }
+  },
+  "service": {
+    "latest_version": "0.15.0",
+    "storage": {
+      "/media/frigate/clips": {
+        "free": 812000.0,
+        "mount_type": "ext4",
+        "total": 1907729.0,
+        "used": 1095729.0
+      },
+      "/media/frigate/recordings": {
+        "free": 812000.0,
+        "mount_type": "ext4",
+        "total": 1907729.0,
+        "used": 1095729.0
+      },
+      "/tmp/cache": {
+        "free": 900.0,
+        "mount_type": "tmpfs",
+        "total": 1024.0,
+        "used": 124.0
+      }
+    },
+    "uptime": 432000,
+    "version": "0.15.0-6cb5cfb"
+  }
+}

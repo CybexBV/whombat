@@ -34,6 +34,7 @@ import {
   connectionHost,
   connectionPromptLine,
   connectionTransport,
+  cookieHeaderValue,
   defaultConnectionLabel,
   defaultToolTier,
   deletesByName,
@@ -67,7 +68,13 @@ import {
   resolveRequestPrefixes,
   resolveTokenUrl,
   sensitiveReason,
+  sessionAnswerExpiresAt,
+  sessionAnswerToken,
+  sessionCredential,
+  sessionLoginFailure,
+  sessionLoginRequest,
   TASKS_TOOLS,
+  TokenAuth,
   templateFields,
   tokenAuthProblem,
   tokenCredential,
@@ -1090,5 +1097,61 @@ describe('why an entry is not offered (contracts 4.5)', () => {
     expect(
       CatalogEntryStatus.safeParse({ catalogId: 'dropbox', available: false, reason: 'later' }).success,
     ).toBe(false);
+  });
+});
+
+describe('cookie-based session sign-ins', () => {
+  const cookieAuth = TokenAuth.parse({
+    type: 'session',
+    login: {
+      method: 'POST',
+      path: '/api/v2/auth/login',
+      encoding: 'form',
+      body: { username: '{username}', password: '{secret}' },
+    },
+    tokenCookie: 'SID',
+    ttlSeconds: 3600,
+    apply: { type: 'cookie', name: 'SID' },
+    logout: { method: 'POST', path: '/api/v2/auth/logout' },
+    failures: [
+      { status: [200], bodyPattern: '^\\s*Fails\\.?\\s*$', reason: 'refused' },
+      { status: [403], bodyPattern: 'banned', reason: 'locked' },
+    ],
+  });
+
+  it('extracts a named cookie from Set-Cookie headers, ignoring cleared or malformed values', () => {
+    expect(cookieHeaderValue('SID=abc123; HttpOnly; Path=/; SameSite=Strict', 'SID')).toBe('abc123');
+    expect(cookieHeaderValue(['other=1; Path=/', 'SID="quoted-tok"; Path=/'], 'SID')).toBe('quoted-tok');
+    expect(cookieHeaderValue(['SID=old; Path=/', 'SID=; Max-Age=0'], 'SID')).toBeNull();
+    expect(cookieHeaderValue(['SID=old; Path=/', 'SID=fresh; HttpOnly'], 'SID')).toBe('fresh');
+    expect(cookieHeaderValue('sid=wrongcase; Path=/', 'SID')).toBeNull();
+    expect(cookieHeaderValue(undefined, 'SID')).toBeNull();
+  });
+
+  it('reads cookie tokens, sends them in the Cookie header, and matches bodyPattern login failures', () => {
+    if (cookieAuth.type !== 'session') throw new Error('expected session');
+    expect(sessionAnswerToken(cookieAuth, 'Ok.', ['SID=qbt-sid-1; HttpOnly; Path=/'])).toBe('qbt-sid-1');
+    expect(sessionAnswerToken(cookieAuth, 'Ok.', undefined)).toBeNull();
+    expect(sessionAnswerExpiresAt(cookieAuth, 'Ok.', 1_000)).toBe(3_601_000);
+    expect(sessionCredential(cookieAuth.apply, 'qbt-sid-1')).toEqual({
+      headers: { Cookie: 'SID=qbt-sid-1' },
+      query: {},
+    });
+    const req = sessionLoginRequest(entry('nginx_proxy_manager'), cookieAuth, 'pw', { username: 'admin' });
+    expect(req).toEqual({
+      method: 'POST',
+      path: '/api/v2/auth/login',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: '*/*' },
+      body: 'username=admin&password=pw',
+    });
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'Fails.', 200)?.reason).toBe('refused');
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'Ok.', 200)).toBeNull();
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'User IP is banned', 403)?.reason).toBe(
+      'locked',
+    );
+    expect(TokenAuth.safeParse({ ...cookieAuth, tokenJsonPath: 'token' }).success).toBe(false);
+    expect(
+      tokenAuthProblem(entry('nginx_proxy_manager'), { ...cookieAuth, tokenJsonPath: 'token' }),
+    ).toContain('one of them');
   });
 });

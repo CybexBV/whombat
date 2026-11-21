@@ -283,7 +283,10 @@ describe('the overview’s entries (CX-70, AP-755)', () => {
       'grafana',
       'pterodactyl',
     ]);
-    expect(CONNECTABLE.filter((e) => matchesSearch(e, 'camera')).map((e) => e.id)).toEqual(['unifi_protect']);
+    expect(CONNECTABLE.filter((e) => matchesSearch(e, 'camera')).map((e) => e.id)).toEqual([
+      'unifi_protect',
+      'frigate',
+    ]);
     expect(CONNECTABLE.filter((e) => matchesSearch(e, 'zzz'))).toEqual([]);
   });
 

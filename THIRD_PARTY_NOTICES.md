@@ -115,7 +115,7 @@ The mobile app loads its fonts from the `@expo-google-fonts` packages listed und
 ### Service and system marks (`packages/brand`)
 
 The marks of the services people connect and the systems their servers run, listed one by one with their sources in
-`packages/brand/assets/marks/SOURCES.md`. 81 of them are path data from Simple Icons (<https://simpleicons.org>), released under
+`packages/brand/assets/marks/SOURCES.md`. 84 of them are path data from Simple Icons (<https://simpleicons.org>), released under
 CC0 1.0 Universal. The others:
 
 | Mark | From | Licence |

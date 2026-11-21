@@ -20,6 +20,9 @@ Changes `quiet-notices.md` QN-S10 (“every check starts on”).
 | WD-05 | **Servers' alert rules** are the hosts service's: Whombat switches the rules that start off off there itself (`PUT /servers/{id}/watch`, as Whombat) on every server where nobody turned them on, in the 5-minute pass (`quietServerPass`), so they show nowhere and their open alert resolves; a new server gets them at the next pass. Turning one on switches it on there and keeps a `watch_ons` row, which the pass leaves alone. An alert rule this version doesn't know stays on. Hint kinds are left out in Whombat (`markHints`). | The hosts service already drops what a switched-off rule would raise, everywhere at once (dot, banner, card, Watch, the desk, the assistant's reads). |
 | WD-06 | **Nothing is migrated.** At the update, checks that start off go quiet on every Whombat, also those someone had ignored (their rows hold nothing until the check is on). | The defaults are the point; whoever wants one back turns it on. |
 | WD-07 | **Words**: the toast after turning a check on is “Whombat watches {name} now.” (no “again”, which was wrong for a check that started off). | Plain and true either way. |
+| WD-08 | **Optional domain registration expiry check on Cloudflare** (`cloudflare.domain_expiring`, `startsOn: false`, `nature: 'you'`, per site): looks up each non-moved zone’s registration expiry through public RDAP (IANA RFC 9224 bootstrap + RFC 9083 domain queries via `things/kinds/infra/rdap.ts`, cached in memory, strictly public HTTPS through `outboundRequest`, skipping local/reserved TLDs). Flags domains expiring within 30 days (red under 7 days or already expired) with plain renewal instructions. | Domain expiry is only verifiable outside Cloudflare’s zone API via public RDAP and depends on external registries, so it stays opt-in. |
+| WD-09 | **Optional idle paid cloud server check on Hetzner** (`hetzner.idle`, `startsOn: false`, `nature: 'you'`, per server): extends the cached 14-day hourly metrics fetch to `cpu,network` (no extra API calls) and flags running paid servers at least 14 days old with mean CPU under 1 %, 95th-percentile CPU under 5 %, and combined inbound + outbound mean traffic under 120 B/s across at least 13 days (260 samples), stating the monthly `€` cost and next steps. | Standby or low-traffic servers can be intentional; opting in avoids false alarms while catching forgotten paid machines. |
+| WD-10 | **Optional never-verified backups check on Proxmox Backup Server** (`pbs.never_verified`, `startsOn: false`, `nature: 'you'`, per active guest): checks kept snapshots from `/admin/datastore/{store}/snapshots` for whether any snapshot in an active group has ever been verified (`verification.state`). Not added to TrueNAS, Synology, Home Assistant or hosts (their APIs do not report restore or verification drills) or to Whombat’s own backups (`box-backup.ts`, which already runs automatic weekly restore drills and has no per-check watch toggle). | Only PBS exposes per-snapshot verification state reliably; unverified backups are worth flagging only when the person asks to watch for them. |
 
 ## The review (2026-10-30)
 
@@ -31,18 +34,21 @@ What starts on. Every other check starts off (the full list with natures: `start
 | Devices, mail | Whether it answers, whether it's still signed in | Readings it can't read, counting unread mail |
 | Home Assistant | Recovery mode, integrations not loading, backups | Repairs, an integration filling the log, updates, devices not answering |
 | UniFi Network | The gateway offline, access points and switches offline | A busy gateway, firmware updates |
-| Hetzner | Servers not running, traffic past what's included (it costs money) | No Hetzner backups, delete protection off |
+| Hetzner | Servers not running, traffic past what's included (it costs money) | No Hetzner backups, delete protection off, paid servers that look idle |
 | Fusebox | Expired sign-ins | Claude or ChatGPT used up, a week running out early, failing requests, its usage history, its own warnings, one subscription used up or switched off |
 | NZBHydra2 | — | All: indexers resting, VIP ending, daily limits, an old version |
 | Seerr | Reaching Sonarr and Radarr, versions with known security problems | Failed requests, open issues, a restart it needs, moving to Seerr, updates |
 | Plex | Reaching Plex from outside | Converting, long scans, unmatched items, updates |
+| Jellyfin | — | All: failed tasks, restart needed, many conversions, long scans |
 | Sonarr, Radarr | The media disk filling up | Their own health checks, downloads that can't be imported |
 | SABnzbd | The download disk filling up, news servers not working | Paused downloads, failed downloads, its other warnings |
+| qBittorrent | The download disk filling up, disconnected from peers | Firewalled, errored torrents, stalled downloads, slow speed limits |
 | ESPHome | — | All: devices offline, installs that fail, older versions |
 | UniFi Protect | The alarm, cameras offline | Following detections |
+| Frigate | Cameras offline, recordings disk filling up | Slow object detector, cameras dropping frames |
 | UniFi Access | Doors left open or kept unlocked, readers and hubs offline | — |
 | Pi-hole, AdGuard Home | DNS stopping | Blocking or lists switched off, lists failing or old, its own warnings, new versions |
-| Cloudflare | Tunnels down, certificates ending | Tunnels losing connections, sites not active or paused, the API token hint |
+| Cloudflare | Tunnels down, certificates ending | Tunnels losing connections, domains about to expire, sites not active or paused, the API token hint |
 | Grafana | Its database, firing alerts | Data sources failing |
 | Nginx Proxy Manager | Certificates ending, sites not answering | Config errors, switched-off sites |
 | OPNsense | Gateways down, services stopping | Packet loss, the connection table filling up, its own messages, a restart after an update, updates |
@@ -51,7 +57,7 @@ What starts on. Every other check starts off (the full list with natures: `start
 | Tailscale | Device keys ending | Devices waiting for approval, updates, devices offline for a week |
 | Paperless-ngx | Its own checks (database, worker), the disk filling up | Imports failing, the classifier, updates |
 | Nextcloud | Free space running out | Not an admin account, updates, app updates |
-| Proxmox Backup Server | Datastores unusable or full, guests without a recent backup, backups failing verification, jobs failing | Full within a month, other tasks failing, old guests in the backups |
+| Proxmox Backup Server | Datastores unusable or full, guests without a recent backup, backups failing verification, jobs failing | Full within a month, backups never verified, other tasks failing, old guests in the backups |
 | TrueNAS | Storage not working, damage found, storage filling up, snapshot, replication and cloud tasks, apps that crashed | Data checks overdue, its other alerts, disks running hot, updates |
 | Immich | The disk filling up, missing or changed files | Paused queues, failed jobs, updates |
 | Synology | Storage not healthy, volumes filling up, disks to replace, Hyper Backup failing or late | Partly done backups, disks running hot, Security Advisor, DSM updates, storage for administrators only |

@@ -146,14 +146,65 @@ describe('cloudflare page', () => {
   it('says which checks it couldn’t read', () => {
     const s = snapshot();
     expect(cloudflareSkipped(s)).toEqual([]);
+    expect(cloudflareSkipped({ ...s, domainExpirations: null })).toEqual(['cloudflare.domain_expiring']);
+    expect(cloudflareSkipped({ ...s, domainExpirationsPartial: true })).toEqual([
+      'cloudflare.domain_expiring',
+    ]);
     expect(cloudflareSkipped({ ...s, tunnels: null, certificatesPartial: true, zonesTotal: 40 })).toEqual([
       'cloudflare.tunnel_down',
       'cloudflare.tunnel_degraded',
       'cloudflare.cert',
       'cloudflare.cert',
+      'cloudflare.domain_expiring',
       'cloudflare.zone',
       'cloudflare.paused',
     ]);
+  });
+
+  it('warns when a domain registration is expiring via RDAP and starts off by default', () => {
+    const check = CLOUDFLARE_CHECKS.find((c) => c.check === 'cloudflare.domain_expiring');
+    expect(check).toMatchObject({ nature: 'you', perItem: true, startsOn: false });
+
+    const s = snapshot();
+    const soon = new Date(NOW.getTime() + 12 * 86_400_000);
+    const expired = new Date(NOW.getTime() - 2 * 86_400_000);
+    const far = new Date(NOW.getTime() + 90 * 86_400_000);
+
+    const warnNotices = cloudflareNotices(
+      {
+        ...s,
+        domainExpirations: new Map([
+          ['example.com', soon],
+          ['example.org', far],
+        ]),
+      },
+      NOW,
+    ).filter((n) => n.check === 'cloudflare.domain_expiring');
+    expect(warnNotices).toHaveLength(1);
+    for (const n of warnNotices) ThingPageNotice.parse(n);
+    expect(warnNotices[0]).toMatchObject({
+      tone: 'warn',
+      nature: 'you',
+      subject: { id: `site:${ZONE}`, name: 'example.com' },
+      episode: soon.toISOString(),
+      ignore: { lifts: 'newer' },
+    });
+    expect(warnNotices[0]?.title).toContain('example.com');
+    expect(warnNotices[0]?.detail).toContain('registrar');
+
+    const badNotices = cloudflareNotices(
+      { ...s, domainExpirations: new Map([['example.com', expired]]) },
+      NOW,
+    ).filter((n) => n.check === 'cloudflare.domain_expiring');
+    expect(badNotices[0]).toMatchObject({ tone: 'bad', check: 'cloudflare.domain_expiring' });
+
+    // Moved zones are skipped.
+    const moved = { ...s, zones: s.zones.map((z) => ({ ...z, status: 'moved' })) };
+    expect(
+      cloudflareNotices({ ...moved, domainExpirations: new Map([['example.com', soon]]) }, NOW).filter(
+        (n) => n.check === 'cloudflare.domain_expiring',
+      ),
+    ).toEqual([]);
   });
 
   it('has Clear cache✱ per site', () => {

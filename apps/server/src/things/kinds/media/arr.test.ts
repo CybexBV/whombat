@@ -365,6 +365,34 @@ describe('the page (SD-24)', () => {
     expect(arrView(input(sonarr())).machine).toBe('after');
   });
 
+  it('links torrent queue rows and panel header to qBittorrent when connected', () => {
+    const base = parseQueue(fixture('sonarr-queue.json'), 'sonarr');
+    const mixed = {
+      ...base,
+      items: base.items.map((item, idx) =>
+        idx === 0
+          ? { ...item, client: 'qBittorrent', protocol: 'torrent' }
+          : { ...item, client: 'SABnzbd', protocol: 'usenet' },
+      ),
+    };
+    const view = arrView(
+      input(sonarr({ queue: mixed }), {
+        sabnzbd: { href: '/things/connection:con_sab', name: 'SABnzbd' },
+        qbittorrent: { href: '/things/connection:con_qbt', name: 'qBittorrent' },
+      }),
+    );
+    const q = panel(view.panels, 'queue');
+    expect(q?.kind === 'gallery' && q.link).toEqual({
+      kind: 'href',
+      label: 'Open qBittorrent',
+      href: '/things/connection:con_qbt',
+    });
+    expect(q?.kind === 'gallery' && q.items.map((i) => i.href)).toEqual([
+      '/things/connection:con_qbt',
+      '/things/connection:con_sab',
+    ]);
+  });
+
   it('words air times', () => {
     expect(airWords(new Date('2026-10-21T19:00:00Z'), now, TZ)).toBe('Today 21:00');
     expect(airWords(new Date('2026-10-22T19:00:00Z'), now, TZ)).toBe('Tomorrow 21:00');

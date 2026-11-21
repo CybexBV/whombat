@@ -1,0 +1,7 @@
+[
+  { "camera": "front_door", "count": 14, "day": "2026-10-21", "label": "person" },
+  { "camera": "driveway", "count": 20, "day": "2026-10-21", "label": "car" },
+  { "camera": "front_door", "count": 18, "day": "2026-10-20", "label": "person" },
+  { "camera": "driveway", "count": 12, "day": "2026-10-19", "label": "car" },
+  { "camera": "front_door", "count": 10, "day": "2026-10-14", "label": "person" }
+]

@@ -1,0 +1,66 @@
+{
+  "rid": 1,
+  "full_update": true,
+  "server_state": {
+    "dl_info_speed": 18400000,
+    "up_info_speed": 2100000,
+    "alltime_dl": 4820000000000,
+    "alltime_ul": 8910000000000,
+    "global_ratio": "1.85",
+    "free_space_on_disk": 480000000000,
+    "connection_status": "connected",
+    "use_alt_speed_limits": false,
+    "dl_rate_limit": 0,
+    "up_rate_limit": 0
+  },
+  "torrents": {
+    "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2": {
+      "name": "Slow.Horses.S05E03.1080p.WEB-DL.DDP5.1-GRP",
+      "size": 3100000000,
+      "amount_left": 1800000000,
+      "progress": 0.42,
+      "dlspeed": 18400000,
+      "upspeed": 250000,
+      "eta": 98,
+      "state": "downloading",
+      "category": "tv-sonarr",
+      "ratio": 0.12,
+      "num_seeds": 42,
+      "num_leechs": 6,
+      "completion_on": 0,
+      "added_on": 1792610000
+    },
+    "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3": {
+      "name": "Conclave.2024.2160p.WEB-DL.HDR-GRP",
+      "size": 18200000000,
+      "amount_left": 18200000000,
+      "progress": 0,
+      "dlspeed": 0,
+      "upspeed": 0,
+      "eta": 8640000,
+      "state": "stalledDL",
+      "category": "radarr",
+      "ratio": 0,
+      "num_seeds": 0,
+      "num_leechs": 1,
+      "completion_on": 0,
+      "added_on": 1792600000
+    },
+    "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4": {
+      "name": "Ubuntu.24.04.LTS.Server.amd64.iso",
+      "size": 2700000000,
+      "amount_left": 0,
+      "progress": 1,
+      "dlspeed": 0,
+      "upspeed": 1850000,
+      "eta": 8640000,
+      "state": "uploading",
+      "category": "linux",
+      "ratio": 4.2,
+      "num_seeds": 120,
+      "num_leechs": 8,
+      "completion_on": 1792605000,
+      "added_on": 1792602000
+    }
+  }
+}

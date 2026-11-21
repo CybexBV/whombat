@@ -960,8 +960,10 @@ Setup and operation: `docs/github.md`.
 
 - **Catalog definitions** (`packages/core/src/domain/connections-catalog/`) are pure data in one file per service,
   assembled in order by the original public module. Adapters and dashboard kinds use their existing registries.
-  Bundled tool definitions refresh on use when their hashes differ from the stored tools, preserving the person’s
-  tiers; remote MCP discovery keeps its hourly refresh.
+  Session-authenticated catalog connections (`connections/session.ts`) support both header/query tokens and HTTP
+  cookie sessions (`tokenCookie` extracted from `Set-Cookie`, applied as `Cookie: <name>=<value>`, with optional
+  `bodyPattern` login-failure matching). Bundled tool definitions refresh on use when their hashes differ from the
+  stored tools, preserving the person’s tiers; remote MCP discovery keeps its hourly refresh.
 - **Catalog connections** (`apps/server/src/connections/`): services the person connects (Home Assistant, Proxmox,
   UniFi, Plex, mail over IMAP/SMTP and many more), each the burrow's, at most 50, every change signed. The agent
   calls them in the person's turns through `connection_call` under its keys; calls that change things ask. Each

@@ -1,0 +1,11 @@
+{
+  "LocalAddress": "http://10.100.0.20:8096",
+  "ServerName": "Home Jellyfin",
+  "Version": "10.10.3",
+  "ProductName": "Jellyfin Server",
+  "OperatingSystem": "Linux",
+  "OperatingSystemDisplayName": "Linux 6.12",
+  "Id": "8a1e2f3d4c5b6a708192a3b4c5d6e7f8",
+  "HasPendingRestart": false,
+  "StartupWizardCompleted": true
+}
