@@ -5994,7 +5994,7 @@ runtime reports Claude Code's client adapter alone (contracts 3.0.0, HN-A02): th
   -3 dBFS, the model's 44.1 kHz kept (an answer of 600 characters is about 40 s, under 4 MB; the contract allows 6 MB).
   Without `--seed` every answer is drawn afresh.
 
-## NX-477 Supertonic 3 is in the image, under Open RAIL-M (2026-10-27)
+## NX-477 Supertonic 3 is in the image, under Open RAIL-M (2026-10-27) — superseded by NX-528: not in the image
 
 - `pkgs.voice-supertonic-model`: sherpa-onnx's int8 packing from a pinned Hugging Face revision
   (`csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11` at `cca5a0e6`, the same bytes as sherpa-onnx's GitHub
@@ -6753,3 +6753,18 @@ looked at and none skipped or loosened.
   box has its boot partition. The first start asks the update helper for its channel (NX-526), and the helper's
   sandbox needs `/boot`; Lanzaboote's setup made it only after that in `console-self`, the helper failed and systemd
   stopped its socket.
+
+## NX-528 Supertonic 3 is not in the image (2026-11-21; before the public launch)
+
+- `whombat.voice.supertonic.model` defaults to null, so the image carries no Dutch voice model and the voice service's
+  health lists only English. `checks.voice-config` asserts that the service starts without it; `checks.voice-speech`
+  still builds the model and checks Dutch speech, so the voice comes back working.
+- Why: Open RAIL-M needs its use restrictions (Attachment A) in an agreement that binds the people who use the model.
+  NX-477 put that on the Appliance Terms before production; they don't name it, and a self-installed box accepts no
+  terms at all, so the notices that travel with the model were not enough. A council of four (three for this route)
+  chose to leave the model out now and bring it back as a download the person switches on and agrees to at that
+  moment, the way the speech-to-text models are fetched after install (NX-473). That download needs the fetcher to
+  take a model of several files, and a switch in Settings with the restrictions to accept.
+- What changes for a box: a Dutch answer at the desk is spoken by the English voice, as before NX-476. Dutch speech
+  recognition (Parakeet, Whisper) is unchanged. The voice service, `supertonic-speak` and the model's package stay in
+  the repository; an image that sets the option takes on the licence's terms for its users.

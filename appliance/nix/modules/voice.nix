@@ -136,11 +136,14 @@ in
     supertonic = {
       model = mkOption {
         type = types.nullOr types.package;
-        default = pkgs.voice-supertonic-model;
-        defaultText = lib.literalExpression "pkgs.voice-supertonic-model";
+        # Off in the image (NX-528): its licence's use restrictions must be agreed to by the person who uses it, and
+        # nothing on the box asks for that yet.
+        default = null;
         description = ''
-          Supertonic 3 (int8, sherpa-onnx's packing; NX-476, NX-477), the box's Dutch: `bin/supertonic-speak` of the
-          Kokoro package says it. null: the box speaks English only (the health's `languages` is ["en"]).
+          Supertonic 3 (int8, sherpa-onnx's packing; `pkgs.voice-supertonic-model`, NX-476, NX-477), the box's Dutch:
+          `bin/supertonic-speak` of the Kokoro package says it. null (the default, NX-528): the box speaks English only
+          (the health's `languages` is ["en"]). Whoever sets it also takes on the model's Open RAIL-M use restrictions
+          for the people who use the box.
         '';
       };
       speakers = {
