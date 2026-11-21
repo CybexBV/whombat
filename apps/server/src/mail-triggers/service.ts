@@ -12,7 +12,7 @@
  * commit pipeline, so pre-existing mail never triggers and no message ever triggers twice.
  */
 import { extractMailAddress, type MailMessage, triggerMatches } from '@whombat/core';
-import { eq, isNotNull, or } from 'drizzle-orm';
+import { eq, isNotNull, lt, or } from 'drizzle-orm';
 import { imapWorkspaceOf } from '../connectors/imap/service';
 import { providerWorkspace } from '../connectors/providers';
 import {
@@ -23,10 +23,10 @@ import {
   type MailProviderCursor,
   receivedAtOrAfter,
 } from '../connectors/types';
-import { connections, mailCursors } from '../db/schema/index';
+import { connections, mailCursors, mailTriggerItems } from '../db/schema/index';
 import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
-import { recordMailReceived, setMailCursor } from './commands';
+import { pruneMailTriggerItems, recordMailReceived, setMailCursor } from './commands';
 import { mailPrincipal } from './principal';
 import { hasMirroredMailItem, type ListenedMailbox, type ListenedMailEntry, listenedMailConnections } from './store';
 
@@ -35,6 +35,8 @@ const IDLE_BACKOFF_MIN_MS = 5_000;
 const IDLE_BACKOFF_MAX_MS = 60_000;
 /** Skip a matched message after this many consecutive failed full reads so a mailbox never stalls. */
 const MAX_READ_FAILURES = 3;
+/** Drop mirrored mail deduplication rows after 30 days. */
+export const MAIL_TRIGGER_ITEM_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface MailTriggerOptions {
   /** Periodic poll interval for Gmail/Microsoft change feeds and IMAP safety checks (default 60 s). */
@@ -151,11 +153,12 @@ export class MailTriggerService {
     this.services.background.run('mail triggers nudge', () => this.pollOnce());
   }
 
-  /** Polls every mailbox with a live mail automation once, reconciles IDLE watchers, and clears unwatched cursors. */
+  /** Polls every mailbox with a live mail automation once, reconciles IDLE watchers, clears unwatched cursors and prunes expired rows. */
   async pollOnce(): Promise<number> {
     if (this.services.schemaAccess === 'read-only') return 0;
     const listened = await listenedMailConnections(this.services.db);
     await this.clearUnwatched(listened);
+    await this.pruneExpiredItems();
     this.reconcileIdleStop(listened);
     let triggered = 0;
     for (const [connectionId, entry] of listened) {
@@ -394,6 +397,25 @@ export class MailTriggerService {
       const actorId = await mailPrincipal.ensure(this.services, row.burrowId);
       await this.commitCursor(row.burrowId, actorId, { connectionId: row.connectionId, clear: true });
     }
+  }
+
+  private async pruneExpiredItems(): Promise<number> {
+    const cutoff = new Date(this.services.clock().getTime() - MAIL_TRIGGER_ITEM_RETENTION_MS);
+    const burrows = await this.services.db
+      .selectDistinct({ burrowId: mailTriggerItems.burrowId })
+      .from(mailTriggerItems)
+      .where(lt(mailTriggerItems.mirroredAt, cutoff));
+    let deleted = 0;
+    for (const { burrowId } of burrows) {
+      const actorId = await mailPrincipal.ensure(this.services, burrowId);
+      const res = await this.services.pipeline.commit(
+        pruneMailTriggerItems,
+        { before: cutoff.toISOString() },
+        { burrowId, actorId },
+      );
+      if (res.status === 'ok') deleted += res.result.deleted;
+    }
+    return deleted;
   }
 
   private reconcileIdleStop(listened: ReadonlyMap<string, unknown>): void {

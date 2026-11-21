@@ -4,7 +4,7 @@
  * carry no email text (`text: null`, content-free payloads).
  */
 import { ConnectionId, ConnectorProvider, MAIL_BODY_CAP, MailAttachment, newId } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { type MailProviderCursor, normalizeRfcMessageId } from '../connectors/types';
@@ -229,4 +229,30 @@ export const recordMailReceived = defineCommand({
   },
 });
 
-export const MAIL_TRIGGER_COMMANDS = [setMailCursor, recordMailReceived];
+/** Deletes mirrored mail deduplication rows older than the retention window through the commit pipeline. */
+export const pruneMailTriggerItems = defineCommand({
+  name: 'mail.items_pruned',
+  schema: z.object({
+    before: z.string().datetime(),
+  }),
+  async apply(tx, ctx, input) {
+    await requireMailSigner(tx, ctx.actor.id);
+    const cutoff = new Date(input.before);
+    const deleted = await tx
+      .delete(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), lt(mailTriggerItems.mirroredAt, cutoff)))
+      .returning({ id: mailTriggerItems.id });
+    if (deleted.length > 0) {
+      await ctx.emit({
+        type: 'mail.items_pruned',
+        kind: 'System',
+        text: null,
+        where: null,
+        payload: { count: deleted.length },
+      });
+    }
+    return { deleted: deleted.length };
+  },
+});
+
+export const MAIL_TRIGGER_COMMANDS = [setMailCursor, recordMailReceived, pruneMailTriggerItems];

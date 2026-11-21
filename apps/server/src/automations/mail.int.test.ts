@@ -812,4 +812,113 @@ describe('mail-arrives automations', () => {
       await pollAndSettle();
     }
   });
+
+  it('clears cached mail body and snippet once the run starts, keeps the dedup row, and drops rows older than 30 days', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['privacy'],
+    });
+    // Baseline.
+    await pollAndSettle();
+
+    // Deliver a matching email and poll without settling the automation engine yet.
+    w.advance(10_000);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f6_one',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Privacy invoice #1',
+      body: 'CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED',
+      messageId: '<f6-one@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+    const [beforeRun] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, 'msg_f6_one')));
+    expect(beforeRun?.body).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+    expect(beforeRun?.snippet.length).toBeGreaterThan(0);
+
+    // Once the run starts, the run scope has the fenced email while mail_trigger_items drops body and snippet.
+    await w.settle();
+    const runs = await runsOf(autoId);
+    expect(runs).toHaveLength(1);
+    expect(String((runs[0]?.scope as { body?: string })?.body ?? '')).toContain(
+      'CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED',
+    );
+    const [afterRun] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, 'msg_f6_one')));
+    expect(afterRun).toBeDefined();
+    expect(afterRun?.body).toBe('');
+    expect(afterRun?.snippet).toBe('');
+    expect(afterRun?.messageId).toBe('<f6-one@example.com>');
+
+    // The retained row still deduplicates a re-delivered copy with the same Message-ID.
+    w.advance(10_000);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f6_one_refiled',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Privacy invoice #1',
+      body: 'Re-delivered copy',
+      messageId: '<f6-one@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    expect(await pollAndSettle()).toBe(0);
+    expect(await runsOf(autoId)).toHaveLength(1);
+
+    // At 29 days old, the first row is still kept; a second row arrives.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    w.advance(29 * DAY_MS);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f6_two',
+      from: 'Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Privacy invoice #2',
+      body: 'Second confidential body',
+      messageId: '<f6-two@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    expect(await pollAndSettle()).toBe(1);
+    const [day29Row] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, 'msg_f6_one')));
+    expect(day29Row).toBeDefined();
+
+    // Two days later (31 days old for the first row, 2 days old for the second), pollOnce drops only rows > 30 days old.
+    w.advance(2 * DAY_MS);
+    expect(await pollAndSettle()).toBe(0);
+    const [day31Row] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, 'msg_f6_one')));
+    const [recentRow] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, 'msg_f6_two')));
+    expect(day31Row).toBeUndefined();
+    expect(recentRow).toBeDefined();
+    expect(recentRow?.body).toBe('');
+    expect(recentRow?.snippet).toBe('');
+
+    // A quiet poll after pruning emits zero signed events.
+    const seqAfterPrune = await headSeq();
+    expect(await pollAndSettle()).toBe(0);
+    expect(await eventsSince(seqAfterPrune)).toEqual([]);
+
+    await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+    await pollAndSettle();
+  });
 });

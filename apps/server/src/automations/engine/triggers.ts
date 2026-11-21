@@ -12,6 +12,7 @@ import {
   automations,
   automationVersions,
   events,
+  mailTriggerItems,
 } from '../../db/schema/index';
 import { inBurrow } from '../../read/conversations';
 import type { Services } from '../../services';
@@ -211,6 +212,17 @@ export async function scanBurrow(
           now,
         });
         if (runId) created++;
+      }
+      // Once the run has started and the trigger cursor moves past this mail event, drop the cached body and snippet
+      // while keeping the row for deduplication.
+      if (event.type === 'mail.received') {
+        const mailRowId = (event.payload as { rowId?: unknown }).rowId;
+        if (typeof mailRowId === 'string') {
+          await tx
+            .update(mailTriggerItems)
+            .set({ body: '', snippet: '' })
+            .where(eq(mailTriggerItems.id, mailRowId));
+        }
       }
     }
     const last = batch[batch.length - 1];
