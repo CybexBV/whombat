@@ -43,6 +43,7 @@ import {
 } from '../read';
 import type { KindAction, KindModule, KindSeen } from '../registry';
 import { seenFromView } from '../registry';
+import { declaredSettings } from '../settings';
 import {
   addedNote,
   countByDay,
@@ -56,6 +57,7 @@ import {
   weekChange,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { arrSettings } from './arr-settings';
 import {
   badgeOf,
   clockMs,
@@ -1485,6 +1487,7 @@ function arrKind(app: ArrApp): KindModule {
     seen: arrSeen(app),
     asksFirst: 'deleting and settings ask first',
     actions: { search_missing: searchMissing(app) },
+    settings: declaredSettings(arrSettings(app)),
     liveS: ARR_LIVE_S,
     checks: arrChecks(app),
     activityLine: 'What’s downloading',
