@@ -147,16 +147,14 @@ export function actionFor(
   return run;
 }
 
-/** `things.action`: runs one of the page's buttons for the person. */
-export async function runThingAction(
+async function executeThingAction(
   services: Services,
   viewer: ConnectionViewer,
   value: string,
   input: ThingActionInput,
   timeZone = 'UTC',
-  /** Put it back (SST-03): the change this run undoes. */
   undoes?: string,
-): Promise<ThingActionOutcome> {
+): Promise<{ outcome: ThingActionOutcome; uncertain: boolean }> {
   const target = await findThing(services, viewer, value);
   if (target.kind !== 'connection') throw badRequest('This has no such action.');
   const row = target.row;
@@ -176,7 +174,8 @@ export async function runThingAction(
     forgetConnectionReads(services, row.id);
   }
   // Already so: nothing changed, nothing to record.
-  if (done.unchanged) return { message: done.message.slice(0, 200), refresh: true };
+  if (done.unchanged) return { outcome: { message: done.message.slice(0, 200), refresh: true }, uncertain: false };
+  const uncertain = done.uncertain === true;
   const agentId = actingAgentId();
   const result = await services.pipeline.commit(
     recordThingAction,
@@ -188,7 +187,7 @@ export async function runThingAction(
       ...(done.everyday ? { everyday: true } : {}),
       ...(done.changeKind ? { changeKind: done.changeKind } : {}),
       ...(done.detail ? { detail: done.detail.slice(0, 200) } : {}),
-      ...(done.undo
+      ...(done.undo && !uncertain
         ? {
             undo: {
               connectionId: row.id,
@@ -200,17 +199,33 @@ export async function runThingAction(
           }
         : {}),
       ...(agentId ? { agentId } : {}),
-      ...(undoes ? { undoes } : {}),
+      ...(undoes && !uncertain ? { undoes } : {}),
     },
     { burrowId: viewer.burrowId, actorId: viewer.principal.id },
   );
   const changeId = result.status === 'ok' ? result.result.changeId : undefined;
   return {
-    message: done.message.slice(0, 200),
-    ...(changeId ? { changeId } : {}),
-    ...(changeId && done.undo ? { undoable: true } : {}),
-    refresh: true,
+    outcome: {
+      message: done.message.slice(0, 200),
+      ...(changeId ? { changeId } : {}),
+      ...(changeId && done.undo && !uncertain ? { undoable: true } : {}),
+      refresh: true,
+    },
+    uncertain,
   };
+}
+
+/** `things.action`: runs one of the page's buttons for the person. */
+export async function runThingAction(
+  services: Services,
+  viewer: ConnectionViewer,
+  value: string,
+  input: ThingActionInput,
+  timeZone = 'UTC',
+  /** Put it back (SST-03): the change this run undoes. */
+  undoes?: string,
+): Promise<ThingActionOutcome> {
+  return (await executeThingAction(services, viewer, value, input, timeZone, undoes)).outcome;
 }
 
 /**
@@ -261,8 +276,10 @@ export const undoThingAction: DirectUndoer = async (ctx, change) => {
   const principal = await loadPrincipalRow(ctx.services.db, ctx.person.id);
   if (!principal?.accountId) return { ok: false, reason: 'Only you can put this back.' };
   const viewer: ConnectionViewer = { accountId: principal.accountId, burrowId: ctx.burrowId, principal };
+  let uncertain = false;
+  let outcome: ThingActionOutcome;
   try {
-    await runThingAction(
+    ({ outcome, uncertain } = await executeThingAction(
       ctx.services,
       viewer,
       `connection:${recipe.connectionId}`,
@@ -274,12 +291,13 @@ export const undoThingAction: DirectUndoer = async (ctx, change) => {
       },
       'UTC',
       change.id,
-    );
+    ));
   } catch (err) {
     // Changed again since, refused, or the service didn't answer: its words.
     if (err instanceof ApiError) return { ok: false, reason: err.message };
     throw err;
   }
+  if (uncertain) return { ok: false, reason: outcome.message };
   return { ok: true, state: 'undone' };
 };
 

@@ -60,6 +60,8 @@ export interface KindActionResult {
   everyday?: boolean;
   /** Nothing changed (the setting already had that value): no change is recorded. */
   unchanged?: boolean;
+  /** The change was sent, but Whombat couldn't confirm it took: recorded without Undo and does not finish an undo. */
+  uncertain?: boolean;
   /** The change's kind after `thing.` in place of the action's (`setting.remote_quality`, SST-03). */
   changeKind?: string;
   /** The change's detail: the old value in words (“4 Mbps”), for “… changed this yesterday from 4 Mbps.”. */
