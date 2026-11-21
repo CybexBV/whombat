@@ -40,6 +40,12 @@ export const PERSISTED_ENDPOINTS: ReadonlySet<string> = new Set([
   'home.overview',
 ]);
 
+/**
+ * The reads kept for today's tabs, in the order they leave a copy too large: they never push out what the copy held
+ * before them (the conversations).
+ */
+const TAB_READS = ['home.overview', 'chats.threads', 'chats.unread', 'chats.list'] as const;
+
 /** A pinned widget's line keeps at most this many readings in the copy, spread over its whole day. */
 export const KEPT_WIDGET_POINTS = 96;
 
@@ -47,7 +53,10 @@ export const KEPT_WIDGET_POINTS = 96;
 export const QUERY_CACHE_NAME = 'queries';
 /** Older copies are dropped rather than shown. */
 export const MAX_AGE_MS = 7 * 24 * 3600_000;
-/** A copy larger than this (JSON characters) keeps fewer conversations, then none; a larger one still isn't saved. */
+/**
+ * A copy larger than this (JSON characters) keeps none of the tabs' reads, then fewer conversations, then none; a larger
+ * one still isn't saved.
+ */
 export const MAX_CHARS = 400_000;
 /** The conversations (and threads) whose newest messages are kept: those on screen first, then the most recent. */
 export const KEPT_CONVERSATIONS = 6;
@@ -67,8 +76,13 @@ export interface PersistedQueries {
 export function shouldPersistQuery(query: Pick<Query, 'queryKey' | 'state'>): boolean {
   const key = parseKey(query.queryKey);
   if (!key || !PERSISTED_ENDPOINTS.has(key.endpointId)) return false;
-  // A room's own threads (Chat, Feedback); not those about one server or connection, on pages opened on the way.
-  if (key.endpointId === 'chats.threads' && key.query.subjectKind !== undefined) return false;
+  // The open threads of a room (Chat, Feedback), as its tab opens with: not the settled ones, nor those about one server
+  // or connection, read on pages opened on the way.
+  if (
+    key.endpointId === 'chats.threads' &&
+    (key.query.state !== 'open' || key.query.subjectKind !== undefined)
+  )
+    return false;
   const { status, data } = query.state;
   return status === 'success' || (status === 'error' && data !== undefined);
 }
@@ -218,7 +232,7 @@ function snapshot(
       json: JSON.stringify(query),
       hash: q.queryHash,
       rank: kept.get(q.queryHash) ?? -1,
-      overview: isOverview(q.queryKey),
+      tab: (TAB_READS as readonly string[]).indexOf(parseKey(q.queryKey)?.endpointId ?? ''),
     };
   });
   // The copy around its reads: `{"v":1,…,"state":{"mutations":[],"queries":[` … `]}}`.
@@ -227,10 +241,10 @@ function snapshot(
   const tail = ']}}';
   let size = parts.reduce((n, p) => n + p.json.length + 1, head.length + tail.length);
   let keep = parts;
-  // Too large: the Overview goes first (the copy then holds what it held before the Overview was kept), then the
-  // least important conversation, one at a time.
+  // Too large: the tabs' reads go first, the Overview first of them (the copy then holds what it held before they were
+  // kept), then the least important conversation, one at a time.
   const leaving = [
-    ...parts.filter((p) => p.overview),
+    ...parts.filter((p) => p.tab >= 0).sort((a, b) => a.tab - b.tab),
     ...parts.filter((p) => p.rank >= 0).sort((a, b) => b.rank - a.rank),
   ];
   for (const out of leaving) {
@@ -290,7 +304,6 @@ export function createQueryPersister(input: {
   let keptLast = new Set<string>();
   const opened = new Map<string, number>();
 
-  const persisted = (q: Query) => PERSISTED_ENDPOINTS.has(parseKey(q.queryKey)?.endpointId ?? '');
   const remember = () => {
     saved = new Map(
       qc
@@ -364,11 +377,13 @@ export function createQueryPersister(input: {
           }
           return;
         }
-        if (event.type !== 'updated' || event.action.type !== 'success' || !persisted(q)) return;
+        if (event.type !== 'updated' || event.action.type !== 'success' || !shouldPersistQuery(q)) return;
         if (saved.has(q.queryHash) && saved.get(q.queryHash) === q.state.data) return;
         if (isMessages(q.queryKey)) opened.set(q.queryHash, now());
         dirty = true;
-        later();
+        // The Overview changes every minute (its time, the widgets' readings): it goes with the next other change, or
+        // when the app goes to the background, rather than sealing the whole copy again each time.
+        if (!isOverview(q.queryKey)) later();
       });
       return () => {
         stopped = true;
