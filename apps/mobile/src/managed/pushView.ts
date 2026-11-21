@@ -1,6 +1,6 @@
 /** What the notifications row says for a push state (pure; `NotificationsRow.tsx` draws it). */
 import { agoText } from '@whombat/client/managed';
-import type { DeliveryPage, DeliveryStatus } from '../../modules/whombat-live/src/content';
+import { type DeliveryPage, type DeliveryStatus, RUNS_CHANNEL } from '../../modules/whombat-live/src/content';
 import type { ManagedPush } from './context';
 import { COPY } from './copy';
 
@@ -22,15 +22,17 @@ const quotedList = (names: readonly string[]) => {
 };
 
 /**
- * What Android holds back although notifications are allowed (Android only; `delivery` is null elsewhere), the most
- * important first: every channel off is as good as not allowed, then the channels that are off, then the app's battery
- * use restricted (its pushes don't arrive while it is closed). Null when nothing is.
+ * What Android holds back although the app's push is set up (Android only; `delivery` is null elsewhere), the most
+ * important first: the app-wide switch off (Android 8 to 12 leave the app running and its channels as they were) or
+ * every channel off is “Not allowed”, then the channels that are off (runs in progress aside: `calmLine`), then the
+ * app's battery use restricted (its pushes don't arrive while it is closed). Null when nothing is.
  */
 function heldBack(delivery: DeliveryStatus | null): NotificationsView | null {
   if (!delivery) return null;
   const t = COPY.notifications;
-  const off = delivery.channels.filter((c) => c.blocked);
-  if (off.length && off.length === delivery.channels.length)
+  const blocked = delivery.channels.filter((c) => c.blocked);
+  const off = blocked.filter((c) => c.id !== RUNS_CHANNEL);
+  if (delivery.enabled === false || (blocked.length && blocked.length === delivery.channels.length))
     return {
       dot: 'warn',
       title: t.denied,
@@ -59,12 +61,14 @@ function heldBack(delivery: DeliveryStatus | null): NotificationsView | null {
 }
 
 /**
- * At most one calm line while everything arrives: Live Updates turned off (a choice the person may have made, with a
- * way back), else battery optimisation, which is Android's default and lets these pushes through on most phones, so
- * it gets no button that would send the person off to change it.
+ * At most one calm line while what matters arrives: runs in progress turned off, then Live Updates turned off (both
+ * usually the person's choice, each with a way back), else battery optimisation, which is Android's default and lets
+ * these pushes through on most phones, so it gets no button that would send the person off to change it.
  */
 function calmLine(delivery: DeliveryStatus | null): { line: string; page?: DeliveryPage } | null {
   const t = COPY.notifications;
+  const runs = delivery?.channels.find((c) => c.id === RUNS_CHANNEL && c.blocked);
+  if (runs) return { line: t.runsOff(runs.name), page: { page: 'channel', channel: runs.id } };
   if (delivery?.liveUpdatesAllowed === false)
     return { line: t.liveUpdatesOff, page: { page: 'liveUpdates' } };
   if (delivery?.batteryOptimized) return { line: t.batteryMeta };

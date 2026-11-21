@@ -159,6 +159,7 @@ export const WhombatLive = {
       const s = native?.deliveryStatus?.();
       if (!s) return null;
       return {
+        enabled: s.enabled ?? null,
         channels: Array.isArray(s.channels) ? s.channels : [],
         backgroundRestricted: s.backgroundRestricted ?? null,
         batteryOptimized: s.batteryOptimized ?? null,

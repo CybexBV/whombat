@@ -189,6 +189,7 @@ export const COPY = {
     channelsOff: (names: string) => `${names} notifications are off in this phone’s settings.`,
     heldBack: 'Held back',
     restrictedMeta: 'Battery use for Whombat is restricted, so notifications can’t arrive while it’s closed.',
+    runsOff: (name: string) => `“${name}” notifications are off, so runs don’t show while they work.`,
     liveUpdatesOff: 'Live Updates are off for Whombat, so runs show as ordinary notifications.',
     batteryMeta: 'This phone may hold Whombat’s notifications back to save battery.',
     opening: 'Opening what needs you…',
