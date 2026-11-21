@@ -6,6 +6,7 @@
 export { looseModeIssue } from './config';
 export { createDb } from './db/client';
 export {
+  binarySchema,
   CheckpointRequired,
   CompatManifestError,
   checkSchema,
