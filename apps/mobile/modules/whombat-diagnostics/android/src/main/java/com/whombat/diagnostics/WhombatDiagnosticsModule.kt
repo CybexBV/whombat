@@ -36,7 +36,10 @@ class WhombatDiagnosticsModule : Module() {
     /** `[{id, json}]`: the endings not taken yet, oldest first. */
     Function("pending") { runCatching { ExitReasons.pending(context) }.getOrDefault(emptyList()) }
 
-    Function("remove") { ids: List<String> -> runCatching { ExitReasons.taken(context, ids) } }
+    Function("remove") { ids: List<String> ->
+      runCatching { ExitReasons.taken(context, ids) }
+      Unit
+    }
   }
 }
 
@@ -56,14 +59,21 @@ internal object ExitReasons {
    * ending is read by the next start, which may be a newer build after an update.
    */
   fun labelThisRun(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-    val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    val label = "${info.versionName ?: "?"} (${codeOf(info)})".toByteArray(Charsets.UTF_8)
-    context.getSystemService(ActivityManager::class.java)?.setProcessStateSummary(label.copyOf(minOf(label.size, 128)))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) label(context)
   }
 
-  fun pending(context: Context): List<Map<String, String>> {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
+  @RequiresApi(Build.VERSION_CODES.R)
+  private fun label(context: Context) {
+    val info = context.packageManager.getPackageInfo(context.packageName, 0)
+    val bytes = "${info.versionName ?: "?"} (${codeOf(info)})".toByteArray(Charsets.UTF_8)
+    context.getSystemService(ActivityManager::class.java)?.setProcessStateSummary(bytes.copyOf(minOf(bytes.size, 128)))
+  }
+
+  fun pending(context: Context): List<Map<String, String>> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) newer(context) else emptyList()
+
+  @RequiresApi(Build.VERSION_CODES.R)
+  private fun newer(context: Context): List<Map<String, String>> {
     val manager = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
     val since = prefs(context).getLong(TAKEN_UNTIL, 0L)
     return manager.getHistoricalProcessExitReasons(context.packageName, 0, MOST)
