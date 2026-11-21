@@ -66,6 +66,7 @@ describe('a command in a scope of its own (memoryHigh)', () => {
         '--scope',
         '--quiet',
         '--collect',
+        '--expand-environment=no',
         '--unit=wb-run-1-1.scope',
         '--slice=app-t3code-agents-3b09d19b1f5d.slice',
         '-p',
@@ -89,6 +90,7 @@ describe('a command in a scope of its own (memoryHigh)', () => {
       '--scope',
       '--quiet',
       '--collect',
+      '--expand-environment=no',
       '--unit=u.scope',
       '-p',
       'MemoryHigh=512M',
@@ -125,6 +127,11 @@ describe('a command in a scope of its own (memoryHigh)', () => {
         `sh -c 'cat /proc/self/cgroup; cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.high"; exit 3'`,
       );
       expect(readFileSync(logFile, 'utf8')).toMatch(/^\n\$ \(cd \S+ && sh -c /);
+      // The arguments reach the command as they are: systemd-run would otherwise expand `${HOME}` and turn `$$` into `$`.
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: these words, as they are, are what is checked
+      const words = '${HOME} $$ $HOME';
+      const literal = await run('printf', ['%s\\n', words], { cwd: dir, memoryHigh: '256M' });
+      expect([literal.code, literal.stdout]).toEqual([0, `${words}\n`]);
       const signalled = await run('sh', ['-c', 'kill -TERM $$'], { cwd: dir, memoryHigh: '256M' });
       expect([signalled.code, signalled.signal]).toEqual([null, 'SIGTERM']);
       const piped = await run('sh', ['-c', 'cat; exit 200'], { cwd: dir, memoryHigh: '256M', input: 'in\n' });

@@ -106,7 +106,9 @@ export const RECLAIM_SH = [
  * `cmd args` under `systemd-run --user --scope`, which starts the scope and then execs what it runs: the same pid and
  * process group, stdio, environment and working directory. With `reclaim` it runs `/bin/sh -c RECLAIM_SH`, which
  * runs the command and passes on its exit code; without, the command itself. The scope is named `unit` (to stop
- * it), in the caller's slice and stopped with the caller's unit.
+ * it), in the caller's slice and stopped with the caller's unit. `--expand-environment=no` keeps the arguments as
+ * they are: newer systemd (259) expands `${NAME}` and turns `$$` into `$` in a scope's command line, as it does for
+ * a service's, which would change a shell script, a Nix expression or RECLAIM_SH itself.
  */
 export function scopeCommand(
   cmd: string,
@@ -126,7 +128,15 @@ export function scopeCommand(
   return {
     cmd: 'systemd-run',
     args: [
-      ...['--user', '--scope', '--quiet', '--collect', `--unit=${o.unit}`, ...caller],
+      ...[
+        '--user',
+        '--scope',
+        '--quiet',
+        '--collect',
+        '--expand-environment=no',
+        `--unit=${o.unit}`,
+        ...caller,
+      ],
       ...['-p', `MemoryHigh=${o.memoryHigh}`, '--'],
       ...(o.reclaim ? ['/bin/sh', '-c', RECLAIM_SH, 'sh'] : []),
       cmd,
@@ -141,16 +151,21 @@ let scopeCount = 0;
 /**
  * Whether commands may run in a scope of their own: not with WB_MEMORY_SCOPE=0, in a nix build or a container (no
  * user manager there, and their own cgroup already holds what they read), and only where `systemd-run --user --scope`
- * works (asked once).
+ * works with the options `scopeCommand` gives it (asked once): a systemd older than 254 doesn't know
+ * `--expand-environment`, and its commands run as they are.
  */
 export function scopes(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.WB_MEMORY_SCOPE === '0' || env.NIX_BUILD_TOP || env.container) return false;
   if (existsSync('/.dockerenv') || existsSync('/run/.containerenv')) return false;
   scopesWork ??=
-    spawnSync('systemd-run', ['--user', '--scope', '--quiet', '--collect', '--', 'true'], {
-      stdio: 'ignore',
-      timeout: 15_000,
-    }).status === 0;
+    spawnSync(
+      'systemd-run',
+      ['--user', '--scope', '--quiet', '--collect', '--expand-environment=no', '--', 'true'],
+      {
+        stdio: 'ignore',
+        timeout: 15_000,
+      },
+    ).status === 0;
   return scopesWork;
 }
 
