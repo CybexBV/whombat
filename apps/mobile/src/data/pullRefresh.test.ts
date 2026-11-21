@@ -1,10 +1,10 @@
 /** A pull to refresh ends when its reads answer, or as soon as they wait to get online. */
-import { onlineManager, QueryClient } from '@tanstack/query-core';
+import { onlineManager, QueryClient, QueryObserver } from '@tanstack/query-core';
 import { afterEach, describe, expect, it } from 'vitest';
-import { pullSettled } from './pullRefresh';
+import { pullSettled, pullTargets } from './pullRefresh';
 
 const KEY = ['whombat', 'chats.threads', { burrow: 'b' }, { room: 'chat', state: 'open' }, 'infinite'];
-const watched = [{ queryKey: ['whombat', 'chats.threads'] }];
+const SETTLED = ['whombat', 'chats.threads', { burrow: 'b' }, { room: 'chat', state: 'settled' }, 'infinite'];
 
 afterEach(() => onlineManager.setOnline(true));
 
@@ -14,7 +14,7 @@ describe('a pull to refresh', () => {
     let answer: (v: string) => void = () => {};
     const read = qc.fetchQuery({ queryKey: KEY, queryFn: () => new Promise<string>((r) => (answer = r)) });
     let ended = false;
-    const pull = pullSettled(qc, [read], watched).then(() => (ended = true));
+    const pull = pullSettled(qc, [read], pullTargets(qc, { exact: [KEY] })).then(() => (ended = true));
     await Promise.resolve();
     expect(ended).toBe(false);
     answer('threads');
@@ -29,7 +29,7 @@ describe('a pull to refresh', () => {
       queryFn: () => Promise.reject(new Error('no')),
       retry: false,
     });
-    await pullSettled(qc, [read], watched);
+    await pullSettled(qc, [read], pullTargets(qc, { exact: [KEY] }));
     expect(qc.getQueryState(KEY)?.status).toBe('error');
   });
 
@@ -39,11 +39,50 @@ describe('a pull to refresh', () => {
     // Mounted, as the app's provider does: it then hears the phone get online.
     qc.mount();
     const read = qc.fetchQuery({ queryKey: KEY, queryFn: async () => 'threads' });
-    await pullSettled(qc, [read], watched);
+    await pullSettled(qc, [read], pullTargets(qc, { exact: [KEY] }));
     expect(qc.getQueryState(KEY)?.fetchStatus).toBe('paused');
     onlineManager.setOnline(true);
     await expect(read).resolves.toBe('threads');
     expect(qc.getQueryState(KEY)?.status).toBe('success');
     qc.unmount();
+  });
+
+  it('another list of the same kind left waiting doesn’t end it', async () => {
+    const qc = new QueryClient();
+    // The settled list went to wait while the phone was offline, and nothing woke it (the client isn't mounted).
+    onlineManager.setOnline(false);
+    void qc.fetchQuery({ queryKey: SETTLED, queryFn: async () => 'settled' }).catch(() => {});
+    onlineManager.setOnline(true);
+    expect(qc.getQueryState(SETTLED)?.fetchStatus).toBe('paused');
+    let answer: (v: string) => void = () => {};
+    const read = qc.fetchQuery({ queryKey: KEY, queryFn: () => new Promise<string>((r) => (answer = r)) });
+    let ended = false;
+    const pull = pullSettled(qc, [read], pullTargets(qc, { exact: [KEY] })).then(() => (ended = true));
+    // Something changes in the cache meanwhile: the pull looks again, and still waits.
+    qc.setQueryData(['whombat', 'chats.unread'], { threads: [] });
+    await Promise.resolve();
+    expect(ended).toBe(false);
+    answer('threads');
+    await pull;
+    expect(ended).toBe(true);
+  });
+
+  it('asks for the exact list and the reads on screen under a key, not those off screen', () => {
+    const qc = new QueryClient();
+    const unread = (room: string) => ['whombat', 'chats.unread', { burrow: 'b' }, { room }];
+    qc.setQueryData(unread('chat'), { threads: [] });
+    qc.setQueryData(unread('feedback'), { threads: [] });
+    qc.setQueryData(KEY, { pages: [] });
+    const off = new QueryObserver(qc, {
+      queryKey: unread('chat'),
+      queryFn: async () => ({ threads: [] }),
+      staleTime: Number.POSITIVE_INFINITY,
+    }).subscribe(() => {});
+    const hashes = pullTargets(qc, { exact: [KEY, null], active: [['whombat', 'chats.unread']] });
+    off();
+    const cache = qc.getQueryCache();
+    expect(hashes.sort()).toEqual(
+      [cache.find({ queryKey: KEY })?.queryHash, cache.find({ queryKey: unread('chat') })?.queryHash].sort(),
+    );
   });
 });

@@ -47,7 +47,7 @@ import {
 import { CHAT_COPY } from '../data/chatRoom';
 import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
-import { pullSettled } from '../data/pullRefresh';
+import { pullSettled, pullTargets } from '../data/pullRefresh';
 import { threadQuery } from '../data/threadPages';
 import { SETTLE_COPY } from '../data/threadSettle';
 import { showToast } from '../data/toast';
@@ -207,10 +207,12 @@ export function ChatInbox({
   const [pulling, setPulling] = useState(false);
   const refresh = () => {
     setPulling(true);
+    const unreadKey = queryKeys.scope('chats.unread');
+    const watched = pullTargets(qc, { exact: [threads.queryKey], active: [unreadKey] });
     void pullSettled(
       qc,
-      [threads.read.refetch(), qc.invalidateQueries({ queryKey: queryKeys.scope('chats.unread') })],
-      [{ queryKey: queryKeys.scope('chats.threads') }, { queryKey: queryKeys.scope('chats.unread') }],
+      [threads.read.refetch(), qc.invalidateQueries({ queryKey: unreadKey })],
+      watched,
     ).then(() => setPulling(false));
   };
 
@@ -282,8 +284,9 @@ export function ChatInbox({
           }
           ListEmptyComponent={<View style={{ flex: 1, justifyContent: 'center' }}>{empty}</View>}
         />
-        {/* Over old threads: “Updating…” or “Couldn’t update · Try again”, as over a conversation. A pull has its spinner. */}
-        {pulling ? null : <ReadStatePill source={threads.read} />}
+        {/* Over old threads: “Updating…” or “Couldn’t update · Try again”, as over a conversation. A pull has its
+            spinner, and an empty list showing its own error says it already. */}
+        {pulling || (shown.length === 0 && !!threads.error) ? null : <ReadStatePill source={threads.read} />}
         <NewChatButton
           label={newChat.label}
           selected={newChat.selected}
