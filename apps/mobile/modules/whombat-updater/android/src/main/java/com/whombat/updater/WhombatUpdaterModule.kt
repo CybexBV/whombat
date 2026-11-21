@@ -205,32 +205,36 @@ class WhombatUpdaterModule : Module() {
     if (code != versionCode) throw fail("verify", "The download is version $code, not $versionCode.")
     if (code <= ownVersionCode()) throw fail("verify", "The download isn't newer than this app.")
     // A signer Android can't read counts as a failed check, never as a pass.
-    val unread = "Android couldn't read who signed the download."
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      val ours = { s: Signature ->
-        pm.hasSigningCertificate(context.packageName, s.toByteArray(), PackageManager.CERT_INPUT_RAW_X509)
-      }
-      val signing = info.signingInfo
-      val multiple = signing?.hasMultipleSigners() == true
-      // One signer: its rotation history counts, so an update signed with a newer key that came from ours passes.
-      // Several: each must be one of ours, as Android requires.
-      val read = (if (multiple) signing?.apkContentsSigners else signing?.signingCertificateHistory).orEmpty()
-      // Some phones leave `signingInfo` empty for an archive; the older field (asked for too) still has the signer.
-      @Suppress("DEPRECATION")
-      val signers = read.ifEmpty { info.signatures.orEmpty() }
-      if (signers.isEmpty()) throw fail("verify", unread)
-      val matches = if (multiple) signers.all(ours) else signers.any(ours)
-      if (!matches) throw fail("signature", "The download isn't signed like this app.")
-    } else {
-      @Suppress("DEPRECATION")
-      val signers = info.signatures
-      if (signers.isNullOrEmpty()) throw fail("verify", unread)
-      @Suppress("DEPRECATION")
-      val own = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES).signatures
-      if (own.isNullOrEmpty()) throw fail("verify", unread)
-      // Before Android 9 an update must carry exactly this app's signers.
-      if (signers.toSet() != own.toSet()) throw fail("signature", "The download isn't signed like this app.")
+    val theirs = signersOf(info)
+    val ours = signersOf(pm.getPackageInfo(context.packageName, flags))
+    if (theirs.current.isEmpty() || ours.current.isEmpty()) {
+      throw fail("verify", "Android couldn't read who signed the download.")
     }
+    if (!signedLikeUs(theirs, ours)) throw fail("signature", "The download isn't signed like this app.")
+  }
+
+  /** Who signs a package now, and (one signer, Android 9+) the keys its signer's rotation came from, oldest first. */
+  private class Signers(val current: Set<Signature>, val lineage: Set<Signature>)
+
+  private fun signersOf(info: PackageInfo): Signers {
+    @Suppress("DEPRECATION")
+    val legacy = info.signatures.orEmpty().toSet()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return Signers(legacy, emptySet())
+    // Some phones leave `signingInfo` empty for an archive; the older field (asked for too) still has the signer.
+    val signing = info.signingInfo ?: return Signers(legacy, emptySet())
+    val current = signing.apkContentsSigners.orEmpty().toSet().ifEmpty { legacy }
+    val lineage = if (signing.hasMultipleSigners()) emptySet() else signing.signingCertificateHistory.orEmpty().toSet()
+    return Signers(current, lineage)
+  }
+
+  /**
+   * Several signers: exactly ours, as Android requires. One: ours, or a newer key whose rotation came from our current
+   * one (its lineage holds our key). A download signed with an older key of ours never passes.
+   */
+  private fun signedLikeUs(theirs: Signers, ours: Signers): Boolean {
+    if (theirs.current == ours.current) return true
+    if (theirs.current.size != 1 || ours.current.size != 1) return false
+    return ours.current.single() in theirs.lineage
   }
 
   private fun ownVersionCode(): Long = codeOf(context.packageManager.getPackageInfo(context.packageName, 0))
