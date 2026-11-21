@@ -9,6 +9,8 @@
  */
 import {
   agentModelLine,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -112,6 +114,8 @@ export interface ModelEffortChoice {
 
 export interface ModelEffortView {
   model: { label: string; description: string | null; choices: ModelEffortChoice[] };
+  /** Optional model for background work; null when the provider lists no models and none is set. */
+  backgroundModel: { label: string; hint: string; choices: ModelEffortChoice[] } | null;
   /** Null when the model takes no effort. */
   effort: { label: string; hint: string; choices: ModelEffortChoice[] } | null;
   /**
@@ -156,6 +160,13 @@ export function modelEffortView(
   const models = providerModels(status, agent.runtime.provider, localModel);
   const draft = modelRuntimeDraft(agent.runtime);
   const labels = modelEffortLabels(draft, models);
+  const bgChoices = backgroundModelChoices(models, draft.backgroundModel).map((c) => ({
+    key: c.id ?? 'same',
+    label: c.label,
+    detail: c.description,
+    checked: c.id === (draft.backgroundModel ?? null),
+    runtime: modelRuntimeBody(draftWithBackgroundModel(draft, c.id)),
+  }));
   const efforts = effortChoices(models, draft.model, draft.effort).map((c) => ({
     key: c.value ?? 'automatic',
     label: c.label,
@@ -175,6 +186,10 @@ export function modelEffortView(
         runtime: modelRuntimeBody(draftWithModel(draft, c.id, models)),
       })),
     },
+    backgroundModel:
+      bgChoices.length > 1
+        ? { label: labels.backgroundModel, hint: MODEL_EFFORT_COPY.backgroundModelHint, choices: bgChoices }
+        : null,
     effort: efforts.length
       ? { label: labels.effort, hint: effortHint(draft.effort), choices: efforts }
       : null,

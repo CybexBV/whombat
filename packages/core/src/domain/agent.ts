@@ -112,10 +112,15 @@ export const AgentModelRuntime = z.object({
   provider: AgentProvider,
   /**
    * One of the tool's models (`ProviderModel.id`, 0.77 CT-333); absent: the tool's default. With `local` (CT-1173) any
-   * model the server on the person's network serves, typed or picked from `localProviderModels`; absent: the burrow's
+   * model the custom AI endpoint serves, typed or picked from `localProviderModels`; absent: the burrow's
    * own (`LocalModelView.model`).
    */
   model: z.string().min(1).optional(),
+  /**
+   * Optional model of the same provider used for background work (automatic Looks, care plans and scheduled automation
+   * steps); absent: uses the agent's main model.
+   */
+  backgroundModel: z.string().min(1).optional(),
   /**
    * How hard it thinks in every turn (0.77, CT-333; Whombat model-effort.md ME-02); absent: automatic, `high` for code
    * work and `medium` for conversation (`turnEffort`). A `local` model takes none, so none is sent.

@@ -119,7 +119,10 @@ export function createLocalModelFixtures({ seeded = false }: { seeded?: boolean 
           const draft = parsed.data.draft;
           if (draft) return json({ check: fixtureLocalCheck(draft.baseUrl, draft.model) });
           if (!view)
-            return json({ error: { code: 'not_found', message: 'There is no custom AI model set up.' } }, 404);
+            return json(
+              { error: { code: 'not_found', message: 'There is no custom AI model set up.' } },
+              404,
+            );
           view = { ...view, check: fixtureLocalCheck(view.baseUrl, view.model) };
           return json({ check: view.check });
         }

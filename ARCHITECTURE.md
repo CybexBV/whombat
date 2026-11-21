@@ -627,6 +627,10 @@ Automations. Code finds it by kind
 - **Where the model runs**, always on Hermes's own loop: Claude subscriptions through Nous's DirectSDK provider (the
   unmodified Claude Code as its model client, [claude-directsdk.md](docs/decisions/claude-directsdk.md)); ChatGPT
   through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a custom OpenAI-compatible AI model (an internet service over HTTPS or a server on the person's network) through Hermes's API clients.
+  When the agent has an optional `backgroundModel` set ([model-effort.md](docs/decisions/model-effort.md)), automatic
+  Looks, care plans and scheduled automation steps resolve their dispatch runtime to that model of the same provider
+  with automatic effort and without fast replies, while chats and person-started work keep the main model or thread
+  choice.
 - **Sessions**: one Chat thread is one Hermes session, resumed on its own provider and model; a turn sends only what
   is new since the session's last turn, a new session gets the window (the thread's first message and last 60 replies,
   in a channel after the room's last 30 top-level messages; a flat room's last 30 messages), and a failed resume is

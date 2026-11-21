@@ -9,7 +9,8 @@ export const LOCAL_MODEL_COPY = {
   title: 'Custom AI model',
   hint: 'Use an OpenAI-compatible service over https (like OpenRouter or Google Gemini) with an API key, or a model server on your own network (like Ollama or LM Studio).',
   address: 'Address',
-  addressHint: 'Where its OpenAI-compatible API is, usually ending in /v1. Use https:// for internet services.',
+  addressHint:
+    'Where its OpenAI-compatible API is, usually ending in /v1. Use https:// for internet services.',
   model: 'Model',
   modelHint: 'The model’s name on that service or server, like gemini-2.5-flash or llama3.3:70b.',
   label: 'Name (optional)',

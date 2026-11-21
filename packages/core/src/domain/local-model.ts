@@ -46,7 +46,8 @@ export const LocalModelUrlProblem = z.enum(LOCAL_MODEL_URL_PROBLEMS);
 export type LocalModelUrlProblem = z.infer<typeof LocalModelUrlProblem>;
 
 export const LOCAL_MODEL_URL_PROBLEM_TEXT: Readonly<Record<LocalModelUrlProblem, string>> = {
-  invalid: 'That isn’t a web address. Write it like https://api.example.com/v1 or http://192.168.1.20:11434/v1.',
+  invalid:
+    'That isn’t a web address. Write it like https://api.example.com/v1 or http://192.168.1.20:11434/v1.',
   scheme: 'Use an address that starts with http:// or https://.',
   credentials: 'Leave the username and password out of the address. Put a key under API key instead.',
   query: 'Leave ?… and #… out of the address.',

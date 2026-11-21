@@ -49,6 +49,7 @@ export async function collectAgents(scope: CollectScope, out: CategoryOut): Prom
         runtime: {
           provider: runtime.provider,
           model: runtime.model ?? null,
+          backgroundModel: runtime.backgroundModel ?? null,
           effort: runtime.effort ?? null,
           fast: runtime.fast ?? null,
         },

@@ -284,3 +284,36 @@ describe('SIGN-IN (OP-09, AP-5763)', () => {
     expect(signInLine({ provider: 'local' })).toBeNull();
   });
 });
+
+describe('background model on Runs on', () => {
+  it('defaults to “Same as the main model” and preserves main model and effort when picked', () => {
+    const view = modelEffortView(
+      { name: 'Banjo', runtime: runtime({ model: 'opus', effort: 'high' }) },
+      withModels,
+      true,
+      null,
+    );
+    expect(view?.backgroundModel?.label).toBe('Same as the main model');
+    expect(view?.backgroundModel?.choices.map((c) => [c.label, c.checked, c.runtime])).toEqual([
+      ['Same as the main model', true, { provider: 'claude', model: 'opus', effort: 'high' }],
+      ['Opus', false, { provider: 'claude', model: 'opus', backgroundModel: 'opus', effort: 'high' }],
+      ['Sonnet', false, { provider: 'claude', model: 'opus', backgroundModel: 'sonnet', effort: 'high' }],
+    ]);
+  });
+
+  it('hides the picker when the provider lists no models and none is set', () => {
+    const unknown = modelEffortView({ name: 'Banjo', runtime: runtime() }, status, true, null);
+    expect(unknown?.backgroundModel).toBeNull();
+    const withStored = modelEffortView(
+      { name: 'Banjo', runtime: runtime({ backgroundModel: 'haiku' }) },
+      status,
+      true,
+      null,
+    );
+    expect(withStored?.backgroundModel?.label).toBe('haiku');
+    expect(withStored?.backgroundModel?.choices.map((c) => c.label)).toEqual([
+      'Same as the main model',
+      'haiku',
+    ]);
+  });
+});

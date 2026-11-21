@@ -1,5 +1,6 @@
 import { type AutomationStep, blockedEventFields, type JsonObject, keyLabel, newId } from '@whombat/core';
 import { and, asc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
+import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
 import type { Db, Tx } from '../../db/client';
 import { automationRunSteps, automationRuns, dispatches, messages } from '../../db/schema/index';
@@ -8,6 +9,7 @@ import { billedTokensSum } from '../../domain/turn-usage';
 import { linkAttachments } from '../../files/commands';
 import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
+import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
 import { automationAgent } from '../authority';
 import {
@@ -180,16 +182,18 @@ export async function executeDispatchAgent({
     await tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));
   // The dispatch is created with the step's new state (outbox-style): a crash leaves both or neither.
   const dispatchId = newId('dispatch');
+  const runtime = automationDispatchRuntime(agentRuntimeOf(agent.runtime), run.trigger.kind);
   const [queuedTurn] = await tx
     .insert(dispatches)
     .values({
       id: dispatchId,
       burrowId: run.burrowId,
       agentId: agent.id,
-      // An automation's work is the person's; a run started by outsiders' input stays apart (OP-17).
+      // An automation's work is the person's; a run started by outsiders' input stays apart.
       onBehalfOfAccountId: await runPersonOf(tx, run),
       trigger: 'automation',
       mode: 'reply',
+      runtime,
       conversationId: conversation.id,
       messageId: posted.id,
       threadRootId,
@@ -274,6 +278,7 @@ export async function resumeDispatchAgent(
       onBehalfOfAccountId: handed.onBehalfOfAccountId,
       trigger: 'automation',
       mode: 'reply',
+      runtime: handed.runtime,
       conversationId: handed.conversationId,
       messageId: handed.messageId,
       threadRootId: handed.threadRootId,

@@ -2,6 +2,8 @@ import type { AgentModelFallback, ProviderModel } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import {
   agentModelLine,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -143,11 +145,13 @@ describe('the pickers’ choices and words (ME-06)', () => {
     expect(modelEffortLabels({ model: 'sonnet', effort: 'xhigh' }, CLAUDE)).toEqual({
       model: 'Sonnet',
       description: 'Sonnet 5 · Fast and capable',
+      backgroundModel: 'Same as the main model',
       effort: 'Extra high',
     });
     expect(modelEffortLabels({ model: null, effort: null }, CLAUDE)).toEqual({
       model: 'Default (Opus)',
       description: null,
+      backgroundModel: 'Same as the main model',
       effort: 'Automatic',
     });
   });
@@ -256,5 +260,48 @@ describe('fast replies in Configure → Model (CR-10, AP-2700)', () => {
 
   it('adds “· Fast” to the profile’s line', () => {
     expect(agentModelLine({ provider: 'claude', fast: true }, FAST, true)).toBe('Default model · Fast');
+  });
+});
+
+describe('background model in Configure → Model', () => {
+  it('carries backgroundModel through draft and body, and clears it when switching provider', () => {
+    const d = draft({ model: 'opus', backgroundModel: 'haiku', effort: 'high' });
+    expect(d.backgroundModel).toBe('haiku');
+    expect(modelRuntimeBody(d)).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: 'haiku',
+      effort: 'high',
+    });
+    expect(draftWithModel(d, 'sonnet', CLAUDE).backgroundModel).toBe('haiku');
+    expect(draftWithEffort(d, 'low').backgroundModel).toBe('haiku');
+    expect(draftWithBackgroundModel(d, 'sonnet').backgroundModel).toBe('sonnet');
+    expect('backgroundModel' in draftWithBackgroundModel(d, null)).toBe(false);
+    expect(modelRuntimeBody(draftWithBackgroundModel(d, null))).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      effort: 'high',
+    });
+    expect(draftWithProvider(d, 'codex')).toEqual({ provider: 'codex', model: null, effort: null });
+  });
+
+  it('offers “Same as the main model” first, followed only by models the provider lists', () => {
+    expect(backgroundModelChoices(CLAUDE, null).map((c) => [c.id, c.label])).toEqual([
+      [null, 'Same as the main model'],
+      ['opus', 'Opus'],
+      ['fable', 'Fable'],
+      ['sonnet', 'Sonnet'],
+      ['haiku', 'Haiku'],
+    ]);
+    expect(backgroundModelChoices(undefined, null)).toEqual([
+      { id: null, label: 'Same as the main model', description: null },
+    ]);
+    expect(backgroundModelChoices(CLAUDE, 'haiku-old').at(-1)).toEqual({
+      id: 'haiku-old',
+      label: 'haiku-old',
+      description: null,
+    });
+    expect(modelEffortLabels(draft({ backgroundModel: 'haiku' }), CLAUDE).backgroundModel).toBe('Haiku');
+    expect(modelEffortLabels(draft(), CLAUDE).backgroundModel).toBe('Same as the main model');
   });
 });

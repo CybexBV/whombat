@@ -248,3 +248,33 @@ describe('Settings → Advanced → Model and effort on Custom', () => {
     expect(await screen.findByText(`Updated ${ASSISTANT_NAME}’s AI provider and model.`)).toBeTruthy();
   });
 });
+
+describe('Settings → Advanced → Model and effort background model', () => {
+  it('defaults to “Same as the main model”, lists only the chosen provider’s models, saves and clears on provider switch', async () => {
+    const { fetch, writes } = server();
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await modelGroup();
+    const bgGroup = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(bgGroup)).toEqual(['Same as the main model']);
+    expect(
+      within(bgGroup)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.querySelector('span > span')?.textContent),
+    ).toEqual(['Same as the main model', 'Opus', 'Fable', 'Sonnet', 'Haiku']);
+
+    await user.click(within(bgGroup).getByRole('radio', { name: /^Haiku/ }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.body).toEqual({
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'haiku', effort: 'high' },
+    });
+
+    // Switching provider resets the background model and offers only the new provider's models.
+    await user.click(screen.getByRole('radio', { name: 'ChatGPT' }));
+    const codexBg = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(codexBg)).toEqual(['Same as the main model']);
+    expect(within(codexBg).queryByRole('radio', { name: /^Haiku/ })).toBeNull();
+    expect(within(codexBg).getByRole('radio', { name: /^GPT-6\.1-Sol/ })).toBeTruthy();
+  });
+});

@@ -94,7 +94,7 @@ export const SETTINGS_PAGES = {
   'advanced.model': {
     where: 'Settings → Advanced → Model and effort',
     path: 'settings?tab=advanced&part=model',
-    about: 'the model {assistant} uses and how hard it thinks',
+    about: 'the main and background models {assistant} uses and how hard it thinks',
   },
   'advanced.ai': {
     where: 'Settings → Advanced → AI on this Whombat',
