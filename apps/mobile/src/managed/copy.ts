@@ -156,7 +156,8 @@ export const COPY = {
     /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */
     allowWhere: {
       setting: 'Allow Whombat to install apps in Android’s settings, then come back here.',
-      details: 'Android opened Whombat’s app info instead. Allow it to install unknown apps there, then come back here.',
+      details:
+        'Android opened Whombat’s app info instead. Allow it to install unknown apps there, then come back here.',
       none: 'Android couldn’t open its settings. In Settings, find Whombat under Apps, allow it to install unknown apps, then come back here.',
     },
     /** Downloaded; Android's installer opens on it. */
