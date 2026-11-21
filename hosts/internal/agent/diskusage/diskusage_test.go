@@ -44,7 +44,7 @@ func newTestRunner(t *testing.T, root string, mounts []mountInfo, inv *proto.Rep
 		statfs: func(string) (fsStat, error) {
 			return fsStat{TotalBytes: 200 << 30, UsedBytes: 120 << 30}, nil
 		},
-		checkStandby:   func(context.Context, string) bool { return false },
+		checkStandby:   func(context.Context, string) standbyState { return standbyAwake },
 		runCmd:         func(context.Context, string, ...string) ([]byte, error) { return nil, os.ErrNotExist },
 		now:            func() time.Time { return fixedNow },
 		maxEntries:     DefaultMaxEntries,
@@ -195,9 +195,12 @@ func TestSkipsSpunDownHDDViaInventoryAndStandbyProbe(t *testing.T) {
 		statfsCalled.Add(1)
 		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
 	}
-	r.checkStandby = func(_ context.Context, dev string) bool {
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
 		probed = append(probed, dev)
-		return dev == "sda"
+		if dev == "sda" {
+			return standbyAsleep
+		}
+		return standbyAwake
 	}
 
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
@@ -508,11 +511,23 @@ func TestPickLargestFoldersDrillsWrapperDirs(t *testing.T) {
 }
 
 func TestStandbyFromSmartctl(t *testing.T) {
-	if !standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in STANDBY mode, exit(2)"}]}}`)) {
-		t.Error("expected STANDBY JSON to be detected")
+	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in STANDBY mode, exit(2)"}]}}`), os.ErrInvalid); got != standbyAsleep {
+		t.Errorf("expected STANDBY JSON -> standbyAsleep, got %v", got)
 	}
-	if standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":0,"messages":[]}}`)) {
-		t.Error("active disk flagged as standby")
+	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":0,"messages":[]}}`), nil); got != standbyAwake {
+		t.Errorf("active disk -> %v, want standbyAwake", got)
+	}
+	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Open device failed: Permission denied"}]}}`), os.ErrPermission); got != standbyUnknown {
+		t.Errorf("permission error -> %v, want standbyUnknown", got)
+	}
+	if got := standbyFromHdparm([]byte(" drive state is:  standby\n")); got != standbyAsleep {
+		t.Errorf("hdparm standby -> %v", got)
+	}
+	if got := standbyFromHdparm([]byte(" drive state is:  active/idle\n")); got != standbyAwake {
+		t.Errorf("hdparm active/idle -> %v", got)
+	}
+	if got := standbyFromHdparm([]byte(" drive state is:  unknown\n")); got != standbyUnknown {
+		t.Errorf("hdparm unknown -> %v", got)
 	}
 }
 
@@ -762,5 +777,124 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	}
 	if volBytes < 28*1024 || volBytes >= 128*1024 {
 		t.Errorf("container_volumes = %d, want ~28 KiB (categories=%+v)", volBytes, resp.Categories)
+	}
+}
+
+func TestFallbackBackingDisksPartitionLVMMdraidAndUnknownStandby(t *testing.T) {
+	root := t.TempDir()
+
+	// Build fake /dev + /sys tree with NO inventory report at all:
+	// 1. /dev/sda1 -> partition of rotational sda
+	// 2. /dev/mapper/vg0-archive -> ../dm-1 -> slaves md0 -> slaves sdb1, sdc1 -> disks sdb (HDD), sdc (HDD)
+	// 3. /dev/sdd1 -> rotational sdd whose standby state is unknown
+	// 4. /dev/sde1 -> non-rotational SSD sde (queue/rotational = 0)
+	for _, dir := range []string{
+		"dev/mapper",
+		"sys/block/sda/queue",
+		"sys/block/sdb/queue",
+		"sys/block/sdc/queue",
+		"sys/block/sdd/queue",
+		"sys/block/sde/queue",
+		"sys/class/block/dm-1/slaves",
+		"sys/class/block/md0/slaves",
+		"srv/part",
+		"srv/lvm",
+		"srv/unknown",
+		"srv/ssd",
+	} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sda/queue/rotational"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdb/queue/rotational"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdc/queue/rotational"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdd/queue/rotational"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sde/queue/rotational"), []byte("0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../dm-1", filepath.Join(root, "dev/mapper/vg0-archive")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../md0", filepath.Join(root, "sys/class/block/dm-1/slaves/md0")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../sdb1", filepath.Join(root, "sys/class/block/md0/slaves/sdb1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../sdc1", filepath.Join(root, "sys/class/block/md0/slaves/sdc1")); err != nil {
+		t.Fatal(err)
+	}
+	writeBytes(t, filepath.Join(root, "srv/ssd/data/file.bin"), 16*1024)
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/srv/part", FSType: "ext4", Source: "/dev/sda1"},
+		{ID: 2, MountPoint: "/srv/lvm", FSType: "xfs", Source: "/dev/mapper/vg0-archive"},
+		{ID: 3, MountPoint: "/srv/unknown", FSType: "ext4", Source: "/dev/sdd1"},
+		{ID: 4, MountPoint: "/srv/ssd", FSType: "ext4", Source: "/dev/sde1"},
+	}
+
+	var statfsCalled atomic.Int32
+	r := newTestRunner(t, root, mounts, nil)
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		switch dev {
+		case "sda", "sdc":
+			return standbyAsleep
+		case "sdb":
+			return standbyAwake
+		case "sdd":
+			return standbyUnknown
+		default:
+			t.Errorf("unexpected standby probe for non-rotational dev %q", dev)
+			return standbyUnknown
+		}
+	}
+
+	// 1. Partition fallback: /dev/sda1 -> sda asleep -> skipped without touching mount.
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/part"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sda"}) {
+		t.Fatalf("/srv/part: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on sleeping partition backing disk")
+	}
+
+	// 2. LVM over mdraid fallback: dm-1 -> md0 -> sdb1, sdc1 -> sdc asleep -> skipped without touching mount.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/lvm"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) {
+		t.Fatalf("/srv/lvm: %+v", resp)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on LVM/mdraid with sleeping member disk")
+	}
+
+	// 3. Unknown standby state on rotational disk -> skipped and says so, never walked.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unknown"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdd"}) {
+		t.Fatalf("/srv/unknown: %+v", resp)
+	}
+	if !strings.Contains(resp.Message, "could not be checked") {
+		t.Errorf("unknown standby message = %q, want explanation that spin state could not be checked", resp.Message)
+	}
+	if statfsCalled.Load() != 0 {
+		t.Fatalf("statfs called on rotational disk with unknown spin state")
+	}
+
+	// 4. Non-rotational SSD (queue/rotational == 0) is not probed and walks normally.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/ssd"})
+	if resp.Code != "" || len(resp.Folders) == 0 {
+		t.Fatalf("/srv/ssd: %+v", resp)
 	}
 }
