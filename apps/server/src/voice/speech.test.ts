@@ -349,11 +349,16 @@ describe('which voice and its health', () => {
     expect(await answeringVoiceHealth(services)).toBeNull();
   });
 
-  it('gives the fake voice the models the fake fetcher has downloaded', async () => {
+  it('gives the fake voice the models and spoken languages the fake fetcher has downloaded', async () => {
     const services = config({ WHOMBAT_VOICE: 'fake' });
     expect(voiceModelsFor(services)).toBeInstanceOf(FakeVoiceModels);
-    expect((await voiceFor(services)?.health())?.models).toEqual([]);
+    expect(await voiceFor(services)?.health()).toMatchObject({ models: [], languages: ['en'] });
     setVoiceModelsFor(services, new FakeVoiceModels({ ready: ['parakeet'] }));
-    expect((await voiceFor(services)?.health())?.models).toEqual(['parakeet']);
+    expect(await voiceFor(services)?.health()).toMatchObject({ models: ['parakeet'], languages: ['en'] });
+    setVoiceModelsFor(services, new FakeVoiceModels({ ready: ['parakeet', 'supertonic'] }));
+    expect(await voiceFor(services)?.health()).toMatchObject({
+      models: ['parakeet'],
+      languages: ['en', 'nl'],
+    });
   });
 });

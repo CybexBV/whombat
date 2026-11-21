@@ -50,12 +50,16 @@ type STT struct {
 	gpuJobs int
 }
 
-// bin is the program that runs model id.
+// bin is the program that runs speech-to-text model id, or "" for models that aren't speech-to-text.
 func (s *STT) bin(id string) string {
-	if id == local.VoiceModelParakeet {
+	switch id {
+	case local.VoiceModelParakeet:
 		return s.Parakeet
+	case local.VoiceModelWhisper:
+		return s.Whisper
+	default:
+		return ""
 	}
-	return s.Whisper
 }
 
 // usable says whether model id is downloaded and its program can run.

@@ -22,10 +22,11 @@ import {
   VOICE_TYPING_MAX_SECONDS,
   VOICE_TYPING_TEXT_MAX,
   VOICE_WORDS,
-  type VoiceSttModel,
+  type VoiceDownloadModel,
   type VoiceTyping,
   type VoiceTypingPatch,
 } from '@whombat/core/domain';
+import type { VoiceDutchInput } from '@whombat/protocol/session';
 import { asc } from 'drizzle-orm';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
 import { burrows } from '../db/schema/index';
@@ -46,8 +47,8 @@ import {
   WavError,
   wavPeak,
 } from './speech';
-import { loadVoiceSettings, updateVoiceTyping } from './store';
-import { type VoiceFacts, voiceTypingView, wantedModels } from './view';
+import { loadVoiceSettings, setDutchVoice, updateVoiceTyping } from './store';
+import { type VoiceFacts, voiceTypingView, wantedModels, wantsDutchVoice } from './view';
 
 export interface VoiceTypingTimings {
   /** How often the fetcher is asked while a model downloads or waits. */
@@ -108,7 +109,7 @@ export class VoiceTypingService {
   readonly #services: Services;
   readonly #timings: VoiceTypingTimings;
   /** Failed downloads asked for again by themselves since this start: once each. */
-  readonly #retried = new Set<VoiceSttModel>();
+  readonly #retried = new Set<VoiceDownloadModel>();
   /** Checks and the person's changes run one at a time. */
   #tail: Promise<unknown> = Promise.resolve();
   /** The models the fetcher had ready when last asked (null: not asked yet). */
@@ -181,9 +182,48 @@ export class VoiceTypingService {
     return this.#serial(() => this.#check(changes ? 'now' : 'changed'));
   }
 
+  /** `voice.setDutchVoice`: record the person's agreement and start downloading, or turn off and remove the files. */
+  async setDutchVoice(principal: SessionPrincipal, input: VoiceDutchInput): Promise<VoiceTyping> {
+    const person = await this.#person(principal);
+    // Turning on requires the model fetcher so we never record consent for a download the box can't run.
+    const fetcher = input.on ? this.#fetcher() : voiceModelsFor(this.#services);
+    const res = await this.#services.pipeline.commit(setDutchVoice, input, {
+      burrowId: person.burrowId,
+      actorId: person.id,
+    });
+    if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
+    return this.#serial(async () => {
+      if (input.on) {
+        await externalEffect(
+          'voice.fetch_model',
+          () => (fetcher as NonNullable<typeof fetcher>).fetch('supertonic'),
+          {
+            idempotent: true,
+          },
+        ).catch(fetcherDown);
+      } else if (fetcher) {
+        await externalEffect('voice.remove_model', () => fetcher.remove('supertonic')).catch(
+          (err: unknown) => {
+            this.#services.log.warn(
+              { err: String(err) },
+              'voice: Dutch voice files weren’t removed yet; will retry when the fetcher answers',
+            );
+          },
+        );
+        forgetVoiceHealth(this.#services);
+      }
+      return this.#check('now', { ensure: false });
+    });
+  }
+
   /** `voice.fetchModel`: *Download* and *Try again*. */
-  async fetchModel(principal: SessionPrincipal, model: VoiceSttModel): Promise<VoiceTyping> {
+  async fetchModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
     await this.#person(principal);
+    if (model === 'supertonic') {
+      const settings = await loadVoiceSettings(this.#services.db);
+      if (!wantsDutchVoice(settings))
+        throw forbidden('Agree to the Dutch voice licence before downloading it.');
+    }
     const fetcher = this.#fetcher();
     return this.#serial(async () => {
       // A download asked twice is one download (the fetcher leaves one on its way as it is).
@@ -195,15 +235,23 @@ export class VoiceTypingService {
   }
 
   /** `voice.removeModel`: *Remove*, only for a model the settings don't need. */
-  async removeModel(principal: SessionPrincipal, model: VoiceSttModel): Promise<VoiceTyping> {
+  async removeModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
     await this.#person(principal);
     const fetcher = this.#fetcher();
     return this.#serial(async () => {
-      const view = voiceTypingView(await this.#facts());
-      if (view.models.find((m) => m.id === model)?.inUse)
-        throw new ApiError('conflict', 'Voice typing needs this speech model now.', {
-          details: { code: 'in_use' },
-        });
+      const facts = await this.#facts();
+      if (model === 'supertonic') {
+        if (wantsDutchVoice(facts.settings))
+          throw new ApiError('conflict', 'Turn Dutch voice off to remove it.', {
+            details: { code: 'in_use' },
+          });
+      } else {
+        const view = voiceTypingView(facts);
+        if (view.models.find((m) => m.id === model)?.inUse)
+          throw new ApiError('conflict', 'Voice typing needs this speech model now.', {
+            details: { code: 'in_use' },
+          });
+      }
       await externalEffect('voice.remove_model', () => fetcher.remove(model)).catch(fetcherDown);
       forgetVoiceHealth(this.#services);
       return this.#check('now', { ensure: false });
@@ -334,16 +382,35 @@ export class VoiceTypingService {
   }
 
   /**
-   * Asks the fetcher for the wanted models that aren't there, and (with `retry`) once per start for a failed one; true
-   * when it asked for any.
+   * Asks the fetcher for the wanted models that aren't there, and (with `retry`) once per start for a failed one; also
+   * removes the opt-in Dutch voice model if files remain while Dutch voice is off. True when it asked for any change.
    */
   async #ask(facts: VoiceFacts, retry = true): Promise<boolean> {
     const fetcher = voiceModelsFor(this.#services);
     if (!fetcher || !facts.fetched) return false;
     const gpu = voiceTypingView(facts).gpu !== null;
-    const want = wantedModels(facts.settings, facts.deskTalk, gpu);
+    const want = new Set<VoiceDownloadModel>(wantedModels(facts.settings, facts.deskTalk, gpu));
+    const dutchWanted = wantsDutchVoice(facts.settings);
+    if (dutchWanted) want.add('supertonic');
     let asked = false;
     for (const model of facts.fetched) {
+      if (model.id === 'supertonic' && !dutchWanted) {
+        // Turning Dutch voice off removes its files; clean up any leftover files if an earlier removal didn't reach the fetcher.
+        if (model.state !== 'absent') {
+          try {
+            await externalEffect('voice.remove_model', () => fetcher.remove('supertonic'));
+            forgetVoiceHealth(this.#services);
+            this.#services.log.info({ model: model.id }, 'voice: removed disabled Dutch voice model');
+            asked = true;
+          } catch (err) {
+            this.#services.log.warn(
+              { err: String(err), model: model.id },
+              'voice: disabled Dutch voice model wasn’t removed',
+            );
+          }
+        }
+        continue;
+      }
       if (!want.has(model.id)) continue;
       const again = retry && model.state === 'failed' && !this.#retried.has(model.id);
       if (model.state !== 'absent' && !again) continue;

@@ -3,7 +3,9 @@
   "format": 1,
   "schemaBase": 76,
   "postgres": {
-    "majors": [17]
+    "majors": [
+      17
+    ]
   },
   "runtime": {
     "readsFrom": "0000_baseline",
@@ -69,6 +71,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them."
+    },
+    "0010_dutch_voice": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Opt-in Dutch voice (docs/decisions/desk-display-talk.md): a defaulted boolean switch and three nullable agreement columns (who, when, licence version) on voice_typing; the release before it reads and writes past them."
     }
   }
 }

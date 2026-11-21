@@ -202,6 +202,11 @@ export const BOX_SETTINGS = {
   'voice.fetchModel': change('appliance.overview', 'Download the voice typing model'),
   'voice.get': read('appliance.overview', 'Read the voice typing settings'),
   'voice.removeModel': ask('appliance.overview', 'Delete the voice typing model'),
+  // Agreeing to Supertonic 3's Open RAIL-M licence must be the person's own act.
+  'voice.setDutchVoice': never(
+    'appliance.overview',
+    'Turn the Dutch voice on or off (you must agree to its licence yourself)',
+  ),
   'voice.update': change('appliance.overview', 'Change the voice typing settings'),
 
   'widgets.list': read('overview', 'Read the widgets on the Overview'),

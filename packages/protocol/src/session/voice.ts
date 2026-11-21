@@ -11,6 +11,9 @@
  * - `voice.fetchModel {model}` → `VoiceTyping`: *Download* and *Try again*.
  * - `voice.removeModel {model}` → `VoiceTyping`: *Remove*, only for a model the settings don't need (`inUse` false,
  *   else `conflict` with `details.code: 'in_use'`).
+ * - `voice.setDutchVoice {on: true, licenceVersion} | {on: false}` → `VoiceTyping`: turns the opt-in Dutch voice
+ *   (Supertonic 3) on after recording the person's agreement to its Open RAIL-M licence, or turns it off and removes
+ *   its downloaded files.
  *
  * A recording (16 kHz mono 16-bit WAV, at most `VOICE_TYPING_MAX_SECONDS`) goes up as an upload without a reservation:
  * `open{stream, spec: {kind: 'upload', target: {type: 'dictation', burrow}, size, sha256, chunkSize}}`, its chunks, then
@@ -18,14 +21,25 @@
  * `stream_done{output: DictationOutput}` once it is text, or `error{stream, details: {code: DictationErrorCode}}`. A size
  * over `VOICE_TYPING_MAX_BYTES` is refused at `open` (`stream_refused`, `details.code: 'too_long'`).
  */
-import { VoiceSttModel, VoiceTypingPatch } from '@whombat/core/domain';
+import { DUTCH_VOICE_LICENCE_VERSION, VoiceDownloadModel, VoiceTypingPatch } from '@whombat/core/domain';
 import { z } from 'zod';
 
 export const VoiceGetInput = z.strictObject({});
 export const VoiceUpdateInput = VoiceTypingPatch;
 export type VoiceUpdateInput = z.infer<typeof VoiceUpdateInput>;
-export const VoiceModelInput = z.strictObject({ model: VoiceSttModel });
+export const VoiceModelInput = z.strictObject({ model: VoiceDownloadModel });
 export type VoiceModelInput = z.infer<typeof VoiceModelInput>;
+
+export const VoiceDutchInput = z.discriminatedUnion('on', [
+  z.strictObject({
+    on: z.literal(true),
+    licenceVersion: z.literal(DUTCH_VOICE_LICENCE_VERSION),
+  }),
+  z.strictObject({
+    on: z.literal(false),
+  }),
+]);
+export type VoiceDutchInput = z.infer<typeof VoiceDutchInput>;
 
 /** `error.details.code` of `voice.removeModel` for a model the settings need. */
 export const VOICE_IN_USE = 'in_use';

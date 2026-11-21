@@ -7,6 +7,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { encodeWav, VOICE_TEXT, type VoiceRecorder } from '@whombat/client/voice';
 import { FAKE_TRANSCRIPT, type FakeVoiceWorld } from '@whombat/client/voice/fake';
+import { DUTCH_VOICE_LICENCE_URL } from '@whombat/core/domain';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { PVE_THREAD } from '../../app/chatChannelFixtures';
 import { fixtureServices, renderApp } from '../../test/renderApp';
@@ -162,5 +163,43 @@ describe('Settings → This Whombat → VOICE TYPING (DT-06)', () => {
     renderApp('/settings?tab=appliance', fixtureServices({ host: true }));
     await screen.findByRole('heading', { level: 2, name: 'AT A GLANCE' }, { timeout: 5000 });
     expect(screen.queryByRole('heading', { level: 2, name: VOICE_TEXT.sectionLabel })).toBeNull();
+  });
+
+  it('asks for Open RAIL-M agreement before downloading the Dutch voice, and removes it when switched off', async () => {
+    const user = userEvent.setup();
+    renderApp('/settings?tab=appliance', fixtureServices({ voice: 'ready', host: true }));
+    const s = await section();
+    const dutchRow = s.querySelector('[data-row="voice-dutch"]') as HTMLElement;
+    const dutchSwitch = within(dutchRow).getByRole('switch', { name: VOICE_TEXT.dutchVoice.label });
+    expect(dutchSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(dutchRow.textContent).toContain('145 MB');
+
+    // Turning on opens the licence dialog without downloading yet.
+    await user.click(dutchSwitch);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(VOICE_TEXT.dutchVoice.dialog.title)).toBeTruthy();
+    const link = within(dialog).getByRole('link', { name: VOICE_TEXT.dutchVoice.dialog.licenceLink });
+    expect(link.getAttribute('href')).toBe(DUTCH_VOICE_LICENCE_URL);
+    expect(link.getAttribute('target')).toBe('_blank');
+
+    // Cancelling leaves it off and starts no download.
+    await user.click(within(dialog).getByRole('button', { name: VOICE_TEXT.dutchVoice.dialog.cancel }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(dutchSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(dutchRow.getAttribute('data-state')).toBe('absent');
+
+    // Agreeing turns it on and begins downloading.
+    await user.click(dutchSwitch);
+    const dialog2 = await screen.findByRole('dialog');
+    await user.click(within(dialog2).getByRole('button', { name: VOICE_TEXT.dutchVoice.dialog.agree }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(dutchSwitch.getAttribute('aria-checked')).toBe('true'));
+    expect(dutchRow.getAttribute('data-state')).toBe('downloading');
+    expect(within(dutchRow).getByRole('progressbar')).toBeTruthy();
+
+    // Turning it off removes the model.
+    await user.click(dutchSwitch);
+    await waitFor(() => expect(dutchSwitch.getAttribute('aria-checked')).toBe('false'));
+    expect(dutchRow.getAttribute('data-state')).toBe('absent');
   });
 });

@@ -9,11 +9,14 @@
 import {
   type DictationErrorCode,
   type DictationOutput,
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_DOWNLOAD_MODELS,
   VOICE_LANGUAGES,
   VOICE_MODEL_CHOICES,
   VOICE_SAMPLE_RATE,
   VOICE_STT_MODELS,
   VOICE_TYPING_MAX_SECONDS,
+  type VoiceDownloadModel,
   type VoiceLanguage,
   type VoiceModelChoice,
   type VoiceModelProblem,
@@ -24,10 +27,11 @@ import {
 import { type FakeApplianceOptions, type FakeHandler, FakeUploadRefusal } from '../session/fake';
 import { readWavHeader } from './wav';
 
-/** The models' downloads (DT-02's files: Parakeet `q8_0`, Whisper turbo `q5_0`). */
-export const FAKE_VOICE_SIZES: Record<VoiceSttModel, number> = {
+/** The models' downloads (Parakeet `q8_0`, Whisper turbo `q5_0`, Supertonic 3 int8). */
+export const FAKE_VOICE_SIZES: Record<VoiceDownloadModel, number> = {
   parakeet: 669_000_000,
   whisper: 574_000_000,
+  supertonic: 145_310_775,
 };
 
 /** What a recording becomes in the fake: a question one might ask one's Whombat. */
@@ -45,12 +49,18 @@ export interface FakeVoiceSnapshot {
   model: VoiceModelChoice;
   language: VoiceLanguage;
   gpu: { name: string } | null;
-  models: Record<VoiceSttModel, FakeModel>;
+  dutchVoice: {
+    on: boolean;
+    agreedAt: string | null;
+    licenceVersion: string | null;
+  };
+  models: Record<VoiceDownloadModel, FakeModel>;
 }
 
 export interface FakeVoiceOptions {
-  initial?: Partial<Omit<FakeVoiceSnapshot, 'models'>> & {
-    models?: Partial<Record<VoiceSttModel, Partial<FakeModel>>>;
+  initial?: Partial<Omit<FakeVoiceSnapshot, 'models' | 'dutchVoice'>> & {
+    dutchVoice?: Partial<FakeVoiceSnapshot['dutchVoice']>;
+    models?: Partial<Record<VoiceDownloadModel, Partial<FakeModel>>>;
   };
   /** How long a whole download takes (default 8 s). */
   downloadMs?: number;
@@ -98,8 +108,8 @@ const REFUSALS: Record<DictationErrorCode, string> = {
 const refusal = (code: DictationErrorCode) =>
   new FakeUploadRefusal(REFUSALS[code], 'The recording wasn’t turned into text.', { code });
 
-const isModel = (v: unknown): v is VoiceSttModel =>
-  typeof v === 'string' && (VOICE_STT_MODELS as readonly string[]).includes(v);
+const isDownloadModel = (v: unknown): v is VoiceDownloadModel =>
+  typeof v === 'string' && (VOICE_DOWNLOAD_MODELS as readonly string[]).includes(v);
 
 const TICK_MS = 500;
 
@@ -115,9 +125,16 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
     model: initial.model ?? 'auto',
     language: initial.language ?? 'auto',
     gpu: initial.gpu ?? null,
+    dutchVoice: {
+      on: false,
+      agreedAt: null,
+      licenceVersion: null,
+      ...initial.dutchVoice,
+    },
     models: {
       parakeet: { state: 'ready', received: FAKE_VOICE_SIZES.parakeet, ...initial.models?.parakeet },
       whisper: { state: 'absent', received: 0, ...initial.models?.whisper },
+      supertonic: { state: 'absent', received: 0, ...initial.models?.supertonic },
     },
   };
   const listeners = new Set<() => void>();
@@ -128,7 +145,7 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
   const heard: number[] = [];
   let timer: unknown = null;
 
-  const ready = (m: VoiceSttModel) => s.models[m].state === 'ready';
+  const ready = (m: VoiceDownloadModel) => s.models[m].state === 'ready';
   /** What the settings need (DT-05): Parakeet while voice typing is on; Whisper when chosen, or Automatic with a chip. */
   const needs = (m: VoiceSttModel) =>
     m === 'parakeet' ? s.on : s.model === 'whisper' || (s.model === 'auto' && s.gpu !== null);
@@ -143,6 +160,9 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
 
   function state(): VoiceTyping {
     const now = uses();
+    const dutchModel = s.models.supertonic;
+    const dutchOn = s.dutchVoice.on;
+    const dutchState = dutchOn ? dutchModel.state : 'absent';
     return {
       available: s.available,
       on: s.on,
@@ -163,6 +183,17 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
         };
       }),
       maxSeconds: VOICE_TYPING_MAX_SECONDS,
+      dutchVoice: {
+        on: dutchOn,
+        state: dutchState,
+        size: FAKE_VOICE_SIZES.supertonic,
+        received: dutchOn ? (dutchState === 'ready' ? FAKE_VOICE_SIZES.supertonic : dutchModel.received) : 0,
+        ...(dutchOn && dutchModel.problem && (dutchState === 'waiting' || dutchState === 'failed')
+          ? { problem: dutchModel.problem }
+          : {}),
+        agreedAt: dutchOn ? s.dutchVoice.agreedAt : null,
+        licenceVersion: dutchOn ? s.dutchVoice.licenceVersion : null,
+      },
     };
   }
 
@@ -170,7 +201,7 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
   function tick() {
     timer = null;
     let any = false;
-    for (const id of VOICE_STT_MODELS) {
+    for (const id of VOICE_DOWNLOAD_MODELS) {
       const m = s.models[id];
       if (m.state !== 'downloading') continue;
       m.received = Math.min(FAKE_VOICE_SIZES[id], m.received + (FAKE_VOICE_SIZES[id] * TICK_MS) / downloadMs);
@@ -183,7 +214,7 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
     changed();
   }
 
-  function download(id: VoiceSttModel) {
+  function download(id: VoiceDownloadModel) {
     const m = s.models[id];
     if (m.state === 'ready' || m.state === 'downloading') return;
     s.models[id] = { state: 'downloading', received: 0 };
@@ -196,7 +227,8 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
   }
 
   // A world that starts with a download under way moves it on.
-  if (VOICE_STT_MODELS.some((id) => s.models[id].state === 'downloading')) timer = setTimer(tick, TICK_MS);
+  if (VOICE_DOWNLOAD_MODELS.some((id) => s.models[id].state === 'downloading'))
+    timer = setTimer(tick, TICK_MS);
 
   function call(op: string, raw: unknown) {
     if (!s.available) return err(404, 'unknown_op', `No operation ${op}`);
@@ -217,15 +249,42 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
         changed();
         return ok(state());
       }
+      case 'voice.setDutchVoice': {
+        const keys = Object.keys(input);
+        if (input.on === true) {
+          if (
+            keys.some((k) => !['on', 'licenceVersion'].includes(k)) ||
+            input.licenceVersion !== DUTCH_VOICE_LICENCE_VERSION
+          )
+            return invalid();
+          s.dutchVoice = {
+            on: true,
+            agreedAt: new Date().toISOString(),
+            licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+          };
+          download('supertonic');
+          changed();
+          return ok(state());
+        }
+        if (input.on === false && keys.every((k) => k === 'on')) {
+          s.dutchVoice = { on: false, agreedAt: null, licenceVersion: null };
+          s.models.supertonic = { state: 'absent', received: 0 };
+          changed();
+          return ok(state());
+        }
+        return invalid();
+      }
       case 'voice.fetchModel': {
-        if (!isModel(input.model)) return invalid();
+        if (!isDownloadModel(input.model)) return invalid();
+        if (input.model === 'supertonic' && !s.dutchVoice.on)
+          return err(403, 'forbidden', 'Agree to the Dutch voice licence before downloading it.');
         download(input.model);
         changed();
         return ok(state());
       }
       case 'voice.removeModel': {
-        if (!isModel(input.model)) return invalid();
-        if (needs(input.model))
+        if (!isDownloadModel(input.model)) return invalid();
+        if (input.model === 'supertonic' ? s.dutchVoice.on : needs(input.model))
           return err(409, 'conflict', 'The settings use this model.', { code: 'in_use' });
         s.models[input.model] = { state: 'absent', received: 0 };
         changed();

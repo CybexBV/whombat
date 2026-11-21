@@ -342,3 +342,210 @@ func TestServer(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
+
+// multiSource serves named files for a multi-file model, each backed by its own source.
+type multiSource struct {
+	files map[string]*source
+}
+
+func (m *multiSource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	src, ok := m.files[name]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	src.ServeHTTP(w, r)
+}
+
+func newMultiFetcher(t *testing.T, files map[string]*source, order []string, free int64) (*Fetcher, models.Model, func()) {
+	t.Helper()
+	srv := httptest.NewServer(&multiSource{files: files})
+	var mf []models.File
+	for _, name := range order {
+		b := files[name].body
+		sum := sha256.Sum256(b)
+		mf = append(mf, models.File{
+			Name:   name,
+			URL:    srv.URL + "/" + name,
+			Size:   int64(len(b)),
+			SHA256: hex.EncodeToString(sum[:]),
+		})
+	}
+	m := models.Model{ID: local.VoiceModelSupertonic, Dir: "supertonic-3-int8", Files: mf}
+	f := &Fetcher{
+		Manifest: models.Manifest{Models: []models.Model{m}},
+		Dir:      t.TempDir(),
+		Client:   srv.Client(),
+		Free:     func(string) (int64, error) { return free, nil },
+		Backoff:  func(int) time.Duration { return 10 * time.Millisecond },
+		Idle:     200 * time.Millisecond,
+	}
+	return f, m, srv.Close
+}
+
+func TestFetchMultiAndRemove(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx":  {body: body(512 << 10)},
+		"b.onnx":  {body: body(256 << 10)},
+		"LICENSE": {body: []byte("BigScience Open RAIL-M")},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx", "LICENSE"}, 1<<40)
+	defer stop()
+	start(t, f)
+	if s := f.State().Models[0]; s.ID != "supertonic" || s.State != "absent" || s.Size != m.TotalSize() {
+		t.Fatalf("%+v", s)
+	}
+	h := (&Server{Fetcher: f}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, local.VoiceModelsPathFetch, strings.NewReader(`{"v":1,"model":"supertonic"}`)))
+	if rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	s := until(t, f, "ready")
+	if s.Received != m.TotalSize() || !models.Present(f.Dir, m) {
+		t.Fatalf("%+v", s)
+	}
+	if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+		t.Fatal("staging dir stays after ready")
+	}
+	for name, src := range files {
+		got, err := os.ReadFile(filepath.Join(models.Path(f.Dir, m), name))
+		if err != nil || !bytes.Equal(got, src.body) {
+			t.Fatalf("%s: err=%v len=%d", name, err, len(got))
+		}
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, local.VoiceModelsPathRemove, strings.NewReader(`{"v":1,"model":"supertonic"}`)))
+	if rec.Code != 200 || models.Present(f.Dir, m) || f.State().Models[0].State != "absent" {
+		t.Fatalf("%d %+v", rec.Code, f.State().Models[0])
+	}
+	if _, err := os.Stat(models.Path(f.Dir, m)); !os.IsNotExist(err) {
+		t.Fatal("model dir stays after remove")
+	}
+}
+
+func TestFetchMultiResumesMidFileAndAcrossRestart(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx": {body: body(256 << 10)},
+		"b.onnx": {body: body(512 << 10), stopAt: 128 << 10},
+		"c.bin":  {body: body(64 << 10), status: http.StatusServiceUnavailable},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx", "c.bin"}, 1<<40)
+	defer stop()
+	// First drop (b.onnx mid-file) resumes right away; second drop (c.bin 503) pauses so we can test restart.
+	f.Backoff = func(n int) time.Duration {
+		if n == 1 {
+			return 5 * time.Millisecond
+		}
+		return time.Hour
+	}
+	cancel := start(t, f)
+	_ = f.Fetch("supertonic")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s := f.State().Models[0]
+		if s.State == "waiting" && s.Received == int64(len(files["a.onnx"].body)+len(files["b.onnx"].body)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("did not pause at c.bin: %+v", s)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Final dir must not exist while incomplete.
+	if models.Present(f.Dir, m) {
+		t.Fatal("final dir exposed before all files verified")
+	}
+	cancel()
+	// Restart fetcher over same dir with c.bin now available: a.onnx and b.onnx must NOT be requested again.
+	files["c.bin"].mu.Lock()
+	files["c.bin"].status = 0
+	files["c.bin"].mu.Unlock()
+	g := &Fetcher{Manifest: f.Manifest, Dir: f.Dir, Client: f.Client, Free: f.Free, Backoff: func(int) time.Duration { return 10 * time.Millisecond }}
+	start(t, g)
+	if got := g.State().Models[0].Received; got < int64(len(files["a.onnx"].body)+len(files["b.onnx"].body)) {
+		t.Fatalf("lost partial progress on restart: %d", got)
+	}
+	until(t, g, "ready")
+	if !models.Present(g.Dir, m) {
+		t.Fatal("not present after restart resume")
+	}
+	if len(files["a.onnx"].ranges) != 1 {
+		t.Fatalf("a.onnx re-downloaded: %q", files["a.onnx"].ranges)
+	}
+	if len(files["b.onnx"].ranges) != 2 || files["b.onnx"].ranges[1] != "bytes=131072-" {
+		t.Fatalf("b.onnx ranges: %q", files["b.onnx"].ranges)
+	}
+}
+
+func TestFetchMultiDamagedAndNoRoom(t *testing.T) {
+	// Damaged second file: first file stays verified across retry, final dir never exposed, staging removed on second bad download.
+	files := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+		"b.onnx": {body: body(64 << 10), corrupt: true},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+	defer stop()
+	start(t, f)
+	_ = f.Fetch("supertonic")
+	s := until(t, f, "failed")
+	if s.Problem == nil || *s.Problem != "bad_download" || models.Present(f.Dir, m) {
+		t.Fatalf("%+v", s)
+	}
+	if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+		t.Fatal("staging dir stays after terminal bad_download")
+	}
+	if len(files["a.onnx"].ranges) != 1 || len(files["b.onnx"].ranges) != 2 {
+		t.Fatalf("ranges a=%q b=%q", files["a.onnx"].ranges, files["b.onnx"].ranges)
+	}
+	// Recover once fixed.
+	files["b.onnx"].mu.Lock()
+	files["b.onnx"].corrupt = false
+	files["b.onnx"].mu.Unlock()
+	_ = f.Fetch("supertonic")
+	until(t, f, "ready")
+
+	// No room: refuses before making any request.
+	files2 := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+		"b.onnx": {body: body(64 << 10)},
+	}
+	g, _, stop2 := newMultiFetcher(t, files2, []string{"a.onnx", "b.onnx"}, 100<<20)
+	defer stop2()
+	start(t, g)
+	_ = g.Fetch("supertonic")
+	if s := until(t, g, "failed"); s.Problem == nil || *s.Problem != "no_room" || len(files2["a.onnx"].ranges) != 0 {
+		t.Fatalf("%+v %q", s, files2["a.onnx"].ranges)
+	}
+}
+
+func TestRemoveMultiWhileDownloading(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+		"b.onnx": {body: body(256 << 10), stopAt: 64 << 10, hang: make(chan struct{})},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+	defer stop()
+	defer close(files["b.onnx"].hang)
+	f.Idle = time.Hour
+	start(t, f)
+	_ = f.Fetch("supertonic")
+	until(t, f, "downloading")
+	for f.State().Models[0].Received < int64(len(files["a.onnx"].body)) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := f.Remove("supertonic"); err != nil {
+		t.Fatal(err)
+	}
+	if s := until(t, f, "absent"); s.Received != 0 {
+		t.Fatalf("%+v", s)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+		t.Fatal("staging dir stays after Remove")
+	}
+	if _, err := os.Stat(models.Path(f.Dir, m)); !os.IsNotExist(err) {
+		t.Fatal("final dir stays after Remove")
+	}
+}

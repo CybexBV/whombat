@@ -292,12 +292,18 @@ describe('a typed question (DK-06)', () => {
     // A voice service from before 3.4 speaks English only: the Dutch answer goes as it is, without a language.
     s.voice.ability = { ...s.voice.ability, languages: undefined };
     await ask('Ja, alles draait.');
+    // If Dutch TTS fails after health listed it (e.g. model removed mid-flight), fall back to English.
+    s.voice.ability = { ...s.voice.ability, languages: ['en', 'nl'] };
+    s.voice.failNext.tts = new VoiceCallError('error', 'no such language');
+    const fallback = await ask('Het gaat goed met alles.');
+    expect(fallback?.audio).toBe(true);
     const said = s.voice.calls.filter((c) => c.kind === 'tts');
     expect(said[0]).toMatchObject({ voice: 'george', language: 'nl' });
     expect(said[0]?.kind === 'tts' && said[0].text).toContain('P V E nul twee');
     expect(said[0]?.kind === 'tts' && said[0].text).toContain('drie uur');
     expect(said[1]).toEqual({ kind: 'tts', text: 'Yes, pve-02 is fine.', voice: 'george' });
     expect(said[2]).toEqual({ kind: 'tts', text: 'Ja, alles draait.', voice: 'george' });
+    expect(said[3]).toEqual({ kind: 'tts', text: 'Het gaat goed met alles.', voice: 'george' });
   });
 
   it('is still working after 90 s (slow), or couldn’t be asked (failed)', async () => {

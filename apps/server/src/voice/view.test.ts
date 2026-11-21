@@ -3,16 +3,23 @@
  * settings want downloaded, and the view from the settings, the desk's Talk, the speech service and the downloads.
  */
 import type { VoiceModelState } from '@whombat/control-contracts/local';
-import { VoiceTyping } from '@whombat/core/domain';
+import { DUTCH_VOICE_LICENCE_VERSION, type VoiceDownloadModel, VoiceTyping } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import type { VoiceAbility } from './speech';
-import { DEFAULT_VOICE_TYPING, modelFor, type VoiceFacts, voiceTypingView, wantedModels } from './view';
+import {
+  DEFAULT_VOICE_TYPING,
+  modelFor,
+  type VoiceFacts,
+  voiceTypingView,
+  wantedModels,
+  wantsDutchVoice,
+} from './view';
 
 const ready = (...ids: ('parakeet' | 'whisper')[]) => new Set(ids);
 
 const HEALTH: VoiceAbility = { stt: true, tts: true, microphone: true, speaker: true, models: [] };
 
-function model(id: 'parakeet' | 'whisper', state: VoiceModelState['state'], extra = {}): VoiceModelState {
+function model(id: VoiceDownloadModel, state: VoiceModelState['state'], extra = {}): VoiceModelState {
   return { id, state, size: 1000, received: state === 'ready' ? 1000 : 0, ...extra };
 }
 
@@ -161,5 +168,57 @@ describe('the view', () => {
       { id: 'parakeet', state: 'downloading', received: 400, size: 1000 },
       { id: 'whisper', state: 'waiting', problem: 'no_network' },
     ]);
+  });
+
+  it('tracks the opt-in Dutch voice separately from dictation models and requires the current licence version', () => {
+    const agreedAt = new Date('2026-11-21T20:00:00.000Z');
+    const fetched = [
+      model('parakeet', 'ready'),
+      model('whisper', 'absent'),
+      model('supertonic', 'downloading', { size: 145_310_775, received: 50_000_000 }),
+    ];
+    // Off by default: state stays absent and supertonic isn't listed in dictation models.
+    const off = voiceTypingView(facts({ fetched }));
+    expect(off.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
+    expect(off.dutchVoice).toEqual({
+      on: false,
+      state: 'absent',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    expect(wantsDutchVoice(DEFAULT_VOICE_TYPING)).toBe(false);
+
+    // Agreed under an outdated licence version: still treated as off.
+    const stale = {
+      ...DEFAULT_VOICE_TYPING,
+      dutchVoice: true,
+      dutchVoiceAgreedBy: 'prn_mara',
+      dutchVoiceAgreedAt: agreedAt,
+      dutchVoiceLicenceVersion: 'old-version',
+    };
+    expect(wantsDutchVoice(stale)).toBe(false);
+    expect(voiceTypingView(facts({ settings: stale, fetched })).dutchVoice?.on).toBe(false);
+
+    // Agreed under the current licence version: exposes progress and agreement metadata.
+    const on = {
+      ...DEFAULT_VOICE_TYPING,
+      dutchVoice: true,
+      dutchVoiceAgreedBy: 'prn_mara',
+      dutchVoiceAgreedAt: agreedAt,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    };
+    expect(wantsDutchVoice(on)).toBe(true);
+    const active = voiceTypingView(facts({ settings: on, fetched }));
+    expect(VoiceTyping.parse(active)).toEqual(active);
+    expect(active.dutchVoice).toEqual({
+      on: true,
+      state: 'downloading',
+      size: 145_310_775,
+      received: 50_000_000,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
   });
 });

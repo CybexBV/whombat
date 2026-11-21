@@ -640,9 +640,15 @@ export function createDeskTalkWith(deps: DeskTalkDeps): DeskTalks {
       // The person's voice when the service has it (DK-S53); a voice it doesn't list would be refused.
       const chosen = (await Promise.resolve(host.speechVoice?.()).catch(() => null)) ?? null;
       const named = chosen && can.voices?.includes(chosen) ? chosen : undefined;
-      // A Dutch answer in the service's Dutch voice of the same kind, written out as it is said (DK-T22, DK-T23).
-      if (can.languages?.includes('nl') && speechLanguage(text) === 'nl')
-        return await voice.tts(dutchSpeechText(text), named, 'nl');
+      // A Dutch answer in the service's Dutch voice of the same kind, written out as it is said; falls back to English
+      // if Dutch speech isn't installed or stopped being available mid-flight.
+      if (can.languages?.includes('nl') && speechLanguage(text) === 'nl') {
+        try {
+          return await voice.tts(dutchSpeechText(text), named, 'nl');
+        } catch (err) {
+          log.warn({ err: errorCode(err) }, 'desk talk: Dutch speech failed, falling back to English');
+        }
+      }
       return await voice.tts(text, named);
     } catch (err) {
       log.warn({ err: errorCode(err) }, 'desk talk: text to speech failed');

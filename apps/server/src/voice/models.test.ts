@@ -24,10 +24,13 @@ describe('the fake fetcher', () => {
     expect(both.models.map((m) => [m.id, m.state])).toEqual([
       ['parakeet', 'downloading'],
       ['whisper', 'waiting'],
+      ['supertonic', 'absent'],
     ]);
     // Asked again while on its way: one download.
     await fake.fetch('parakeet');
-    await fake.until((models) => models.every((m) => m.state === 'ready'));
+    await fake.until((models) =>
+      models.filter((m) => m.id !== 'supertonic').every((m) => m.state === 'ready'),
+    );
     expect(fake.ready()).toEqual(['parakeet', 'whisper']);
     expect(seen).toContain('parakeet');
     expect(fake.calls).toEqual([
@@ -57,6 +60,7 @@ describe('the fake fetcher', () => {
     expect(after.models.map((m) => [m.id, m.state])).toEqual([
       ['parakeet', 'absent'],
       ['whisper', 'downloading'],
+      ['supertonic', 'absent'],
     ]);
     await fake.until((models) => models.some((m) => m.id === 'whisper' && m.state === 'ready'));
     expect(fake.ready()).toEqual(['whisper']);
@@ -77,6 +81,7 @@ describe('the socket client', () => {
     expect(before.models.map((m) => [m.id, m.state])).toEqual([
       ['parakeet', 'absent'],
       ['whisper', 'absent'],
+      ['supertonic', 'absent'],
     ]);
     expect((await client.fetch('parakeet')).models[0]?.state).toBe('downloading');
     await server.models.until((models) => models.some((m) => m.id === 'parakeet' && m.state === 'ready'));
@@ -85,9 +90,14 @@ describe('the socket client', () => {
       received: before.models[0]?.size,
     });
     expect((await client.remove('parakeet')).models[0]?.state).toBe('absent');
+    expect((await client.fetch('supertonic')).models[2]?.state).toBe('downloading');
+    await server.models.until((models) => models.some((m) => m.id === 'supertonic' && m.state === 'ready'));
+    expect((await client.remove('supertonic')).models[2]?.state).toBe('absent');
     expect(server.models.calls).toEqual([
       { kind: 'fetch', model: 'parakeet' },
       { kind: 'remove', model: 'parakeet' },
+      { kind: 'fetch', model: 'supertonic' },
+      { kind: 'remove', model: 'supertonic' },
     ]);
   });
 

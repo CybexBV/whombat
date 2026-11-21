@@ -821,6 +821,7 @@ const TABLE = {
   'voice.update': RECEIPT,
   'voice.fetchModel': RECEIPT,
   'voice.removeModel': DESTRUCTIVE,
+  'voice.setDutchVoice': DESTRUCTIVE,
 } satisfies Record<OperationName, OperationSafety>;
 
 /** `TABLE`, frozen (0.29.1, CT-195). `satisfies` keeps typecheck failing on a missing or an extra op. */

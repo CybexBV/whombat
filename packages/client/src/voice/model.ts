@@ -6,9 +6,12 @@
  */
 import {
   DICTATION_ERROR_CODES,
+  DUTCH_VOICE_LICENCE_URL,
+  DUTCH_VOICE_LICENCE_VERSION,
   VOICE_LANGUAGES,
   VOICE_MODEL_CHOICES,
   VOICE_WORDS,
+  type VoiceDutchVoice,
   type VoiceLanguage,
   type VoiceModelChoice,
   type VoiceModelState,
@@ -143,6 +146,32 @@ export interface VoiceModelRow {
   action: { kind: 'download' | 'retry' | 'remove'; label: string } | null;
 }
 
+/** The opt-in Dutch voice switch row and its licence agreement dialog copy. */
+export interface VoiceDutchRow {
+  title: string;
+  meta: string;
+  on: boolean;
+  /** “145 MB”. */
+  size: string;
+  state: VoiceModelState;
+  status: string;
+  tone: 'ok' | 'warn' | 'bad' | 'mut';
+  progress: number | null;
+  problem: string | null;
+  /** *Try again* when on and the download failed; otherwise null. */
+  retryLabel: string | null;
+  licenceVersion: typeof DUTCH_VOICE_LICENCE_VERSION;
+  licenceUrl: string;
+  dialog: {
+    title: string;
+    intro: string;
+    restrictions: readonly string[];
+    licenceLink: string;
+    agree: string;
+    cancel: string;
+  };
+}
+
 export interface VoiceSectionView {
   on: { title: string; meta: string; on: boolean };
   model: {
@@ -156,6 +185,8 @@ export interface VoiceSectionView {
   };
   language: { title: string; options: VoiceChoice<VoiceLanguage>[]; value: VoiceLanguage };
   models: { title: string; rows: VoiceModelRow[] };
+  /** Opt-in Dutch speaking voice (Supertonic 3), or null when the box doesn't offer it. */
+  dutchVoice: VoiceDutchRow | null;
   /** The graphics chip line. */
   gpu: string;
 }
@@ -209,6 +240,41 @@ export function voiceModelRow(model: VoiceTypingModel): VoiceModelRow {
   };
 }
 
+export function voiceDutchRow(dutch: VoiceDutchVoice): VoiceDutchRow {
+  const size = formatModelSize(dutch.size);
+  const progress =
+    dutch.on && dutch.state === 'downloading' && dutch.size > 0
+      ? Math.min(1, dutch.received / dutch.size)
+      : null;
+  const status =
+    dutch.state === 'downloading'
+      ? fillVoiceWords(VOICE_TEXT.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
+      : VOICE_TEXT.states[dutch.state];
+  const shownProblem = dutch.on && (dutch.state === 'waiting' || dutch.state === 'failed');
+  return {
+    title: VOICE_TEXT.dutchVoice.label,
+    meta: fillVoiceWords(VOICE_TEXT.dutchVoice.meta, { size }),
+    on: dutch.on,
+    size,
+    state: dutch.state,
+    status,
+    tone: TONES[dutch.state],
+    progress,
+    problem: shownProblem && dutch.problem ? VOICE_TEXT.problems[dutch.problem] : null,
+    retryLabel: dutch.on && dutch.state === 'failed' ? VOICE_TEXT.actions.retry : null,
+    licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    licenceUrl: DUTCH_VOICE_LICENCE_URL,
+    dialog: {
+      title: VOICE_TEXT.dutchVoice.dialog.title,
+      intro: fillVoiceWords(VOICE_TEXT.dutchVoice.dialog.intro, { size }),
+      restrictions: VOICE_TEXT.dutchVoice.dialog.restrictions,
+      licenceLink: VOICE_TEXT.dutchVoice.dialog.licenceLink,
+      agree: VOICE_TEXT.dutchVoice.dialog.agree,
+      cancel: VOICE_TEXT.dutchVoice.dialog.cancel,
+    },
+  };
+}
+
 /** The section's rows, from `voice.get`. */
 export function voiceSectionView(voice: VoiceTyping): VoiceSectionView {
   const usesShown = voice.uses !== null && (voice.model === 'auto' || voice.uses !== voice.model);
@@ -227,6 +293,7 @@ export function voiceSectionView(voice: VoiceTyping): VoiceSectionView {
       value: voice.language,
     },
     models: { title: VOICE_TEXT.models.label, rows: voice.models.map(voiceModelRow) },
+    dutchVoice: voice.dutchVoice ? voiceDutchRow(voice.dutchVoice) : null,
     gpu: voice.gpu ? fillVoiceWords(VOICE_TEXT.gpu.found, { name: voice.gpu.name }) : VOICE_TEXT.gpu.none,
   };
 }

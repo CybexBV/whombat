@@ -7,7 +7,14 @@
  */
 import { createHash } from 'node:crypto';
 import { topics } from '@whombat/core';
-import { VOICE_TYPING_MAX_BYTES, VoiceTyping } from '@whombat/core/domain';
+import {
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_STT_MODELS,
+  VOICE_TYPING_MAX_BYTES,
+  type VoiceDownloadModel,
+  type VoiceSttModel,
+  VoiceTyping,
+} from '@whombat/core/domain';
 import { and, asc, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { events, voiceTyping } from '../db/schema/index';
@@ -17,7 +24,7 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { useManagedRuntime } from '../test/managed';
 import { setVoiceModelsFor } from './models';
 import { setVoiceTypingFor, VoiceTypingService } from './service';
-import { setVoiceFor, VoiceCallError } from './speech';
+import { setVoiceFor, VoiceCallError, voiceHealth } from './speech';
 import { FakeVoiceModels } from './testing/fake-models';
 import { FAKE_TRANSCRIPT, FakeVoice, fakeRecording } from './testing/fake-voice';
 
@@ -35,14 +42,20 @@ beforeAll(async () => {
 });
 
 /** A speech service and a fetcher of their own, and voice typing with short timings (not started). */
-function fresh(options: { ready?: ('parakeet' | 'whisper')[]; fetcher?: boolean } = {}) {
+function fresh(options: { ready?: VoiceDownloadModel[]; fetcher?: boolean } = {}) {
   fetcher = new FakeVoiceModels({
     downloadMs: 30,
     stepMs: 10,
     ...(options.ready ? { ready: options.ready } : {}),
   });
   const models = fetcher;
-  voice = new FakeVoice({ models: () => models.ready() });
+  voice = new FakeVoice({
+    models: () =>
+      models
+        .ready()
+        .filter((id): id is VoiceSttModel => (VOICE_STT_MODELS as readonly string[]).includes(id)),
+    languages: () => (models.ready().includes('supertonic') ? ['en', 'nl'] : ['en']),
+  });
   setVoiceModelsFor(m.t.services, options.fetcher === false ? null : fetcher);
   setVoiceFor(m.t.services, voice);
   typing = new VoiceTypingService(m.t.services, { pollMs: 10, announceMs: 10, startRetryMs: 20 });
@@ -225,7 +238,109 @@ describe('voice typing’s settings and models', () => {
       code: 'not_implemented',
     });
     setVoiceFor(m.t.services, null);
-    expect(await view(c)).toMatchObject({ available: false, ready: false, uses: null });
+    expect(await view(c)).toMatchObject({ available: false, ready: false, uses: null, dutchVoice: null });
+  });
+
+  it('requires licence agreement for Dutch voice, records it via the commit pipeline, downloads it, and removes files when turned off', async () => {
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+
+    // Off by default: Dutch not in health, and downloading supertonic without agreeing is refused.
+    expect((await view(c)).dutchVoice).toMatchObject({
+      on: false,
+      state: 'absent',
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+    expect(await c.request('voice.fetchModel', { model: 'supertonic' })).toMatchObject({
+      t: 'error',
+      code: 'forbidden',
+    });
+
+    // Wrong licence version is refused at schema validation.
+    expect(
+      await c.request('voice.setDutchVoice', { on: true, licenceVersion: 'wrong-version' }),
+    ).toMatchObject({ t: 'error', code: 'validation_failed' });
+
+    // Agreeing records who, when and licence version in DB and the signed audit log, and downloads Supertonic.
+    const agreed = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreed).toMatchObject({ t: 'result' });
+    const [row] = await m.t.services.db.select().from(voiceTyping);
+    expect(row).toMatchObject({
+      dutchVoice: true,
+      dutchVoiceAgreedBy: IDS.mara,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(row?.dutchVoiceAgreedAt).toBeInstanceOf(Date);
+    const signedAgree = await m.t.services.db
+      .select({ actorId: events.actorId, payload: events.payload })
+      .from(events)
+      .where(and(eq(events.burrowId, TEST_BURROW_ID), eq(events.type, 'voice.dutch_agreed')))
+      .orderBy(asc(events.seq));
+    expect(signedAgree.at(-1)).toMatchObject({
+      actorId: IDS.mara,
+      payload: {
+        on: true,
+        agreedBy: IDS.mara,
+        licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+      },
+    });
+
+    const ready = await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(ready.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    // Voice health refreshed and now speaks Dutch.
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+    // Can't remove directly while on.
+    expect(await c.request('voice.removeModel', { model: 'supertonic' })).toMatchObject({
+      t: 'error',
+      code: 'conflict',
+      details: { code: 'in_use' },
+    });
+
+    // Turning it off clears agreement, signs the event, removes the files and falls back to English only.
+    const offRes = await c.request('voice.setDutchVoice', { on: false });
+    expect(offRes).toMatchObject({ t: 'result' });
+    const offView = VoiceTyping.parse((offRes as { output: unknown }).output);
+    expect(offView.dutchVoice).toMatchObject({
+      on: false,
+      state: 'absent',
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    const [afterRow] = await m.t.services.db.select().from(voiceTyping);
+    expect(afterRow).toMatchObject({
+      dutchVoice: false,
+      dutchVoiceAgreedBy: null,
+      dutchVoiceAgreedAt: null,
+      dutchVoiceLicenceVersion: null,
+    });
+    const signedOff = await m.t.services.db
+      .select({ actorId: events.actorId, payload: events.payload })
+      .from(events)
+      .where(and(eq(events.burrowId, TEST_BURROW_ID), eq(events.type, 'voice.dutch_disabled')))
+      .orderBy(asc(events.seq));
+    expect(signedOff.at(-1)).toMatchObject({ actorId: IDS.mara, payload: { on: false } });
+    expect(fetcher.calls).toContainEqual({ kind: 'remove', model: 'supertonic' });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+
+    // Failed download can be retried once agreed.
+    fetcher.failNext.supertonic = 'no_room';
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    const failed = await until(c, (v) => v.dutchVoice?.state === 'failed');
+    expect(failed.dutchVoice?.problem).toBe('no_room');
+    expect(await c.request('voice.fetchModel', { model: 'supertonic' })).toMatchObject({ t: 'result' });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    // Clean up back to off for subsequent tests.
+    await c.request('voice.setDutchVoice', { on: false });
   });
 });
 

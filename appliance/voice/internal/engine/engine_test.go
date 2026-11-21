@@ -464,6 +464,81 @@ func TestSpeakDutch(t *testing.T) {
 	}
 }
 
+func TestSpeakDutchDownloadedFromManifest(t *testing.T) {
+	t.Parallel()
+	bin, modelRoot, tmp := setup(t)
+	dir := t.TempDir()
+	var mFiles []models.File
+	for _, name := range append(slices.Clone(SupertonicFiles), "LICENSE") {
+		mFiles = append(mFiles, models.File{Name: name, Size: 5})
+	}
+	manifest := models.Manifest{
+		Models: []models.Model{
+			{ID: "parakeet", File: "ok", Size: 5},
+			{ID: "supertonic", Dir: "ok", Files: mFiles},
+		},
+	}
+	_ = os.WriteFile(filepath.Join(dir, "ok.parakeet"), []byte("model"), 0o644)
+	manifest.Models[0].File = "ok.parakeet"
+
+	sttEngine := &STT{Whisper: bin, Parakeet: bin, Dir: dir, Manifest: manifest, TmpDir: tmp, Timeout: time.Minute}
+	voices := []KokoroVoice{{"heart", 3, "us", false}, {"george", 26, "gb", true}}
+	tts := TTS{
+		Kokoro: Kokoro{Bin: bin, Model: filepath.Join(modelRoot, "kokoro", "ok"), Voices: voices, TmpDir: tmp, Timeout: time.Minute},
+		Dutch:  Supertonic{Bin: bin, Dir: dir, Manifest: manifest, Woman: 1, Man: 8, Threads: 2, TmpDir: tmp, Timeout: time.Minute},
+	}
+	// Before supertonic is downloaded: English only, and STT lists only parakeet.
+	if tts.Dutch.Ready() || !slices.Equal(tts.Languages(), []string{"en"}) {
+		t.Fatalf("ready before download: %v", tts.Languages())
+	}
+	if _, err := tts.Speak(context.Background(), "Hallo.", "", "nl"); !errors.Is(err, ErrUnknownLanguage) {
+		t.Fatalf("expected ErrUnknownLanguage, got %v", err)
+	}
+	if got := sttEngine.Models(); !slices.Equal(got, []string{"parakeet"}) {
+		t.Fatalf("STT models before supertonic: %v", got)
+	}
+
+	// Put the downloaded model directory in place: Dutch activates without restarting; STT still ignores supertonic.
+	superDir := filepath.Join(dir, "ok")
+	if err := os.MkdirAll(superDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range mFiles {
+		if err := os.WriteFile(filepath.Join(superDir, mf.Name), []byte("model"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !tts.Dutch.Ready() || !slices.Equal(tts.Languages(), []string{"en", "nl"}) {
+		t.Fatalf("not ready after download: %v", tts.Languages())
+	}
+	if got := sttEngine.Models(); !slices.Equal(got, []string{"parakeet"}) {
+		t.Fatalf("STT listed supertonic: %v", got)
+	}
+	if _, _, err := sttEngine.Transcribe(context.Background(), "supertonic", []wav.Audio{speechOf(time.Second)}, "", ""); !errors.Is(err, ErrNoModel) {
+		t.Fatalf("STT accepted supertonic: %v", err)
+	}
+	b, err := tts.Speak(context.Background(), "Goedemorgen.", "george", "nl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := wav.Parse(b)
+	if err != nil || a.Rate != 44100 || a.Samples[1] != 8 {
+		t.Fatalf("rate=%d speaker=%d err=%v", a.Rate, a.Samples[1], err)
+	}
+	assertEmpty(t, tmp)
+
+	// Missing even LICENSE marks the manifest entry absent.
+	_ = os.Remove(filepath.Join(superDir, "LICENSE"))
+	if tts.Dutch.Ready() || !slices.Equal(tts.Languages(), []string{"en"}) {
+		t.Fatalf("ready without LICENSE: %v", tts.Languages())
+	}
+	// Removing the whole directory returns to English only.
+	_ = os.RemoveAll(superDir)
+	if tts.Dutch.Ready() || !slices.Equal(tts.Languages(), []string{"en"}) {
+		t.Fatalf("ready after remove: %v", tts.Languages())
+	}
+}
+
 func TestReady(t *testing.T) {
 	t.Parallel()
 	bin, models, _ := setup(t)
