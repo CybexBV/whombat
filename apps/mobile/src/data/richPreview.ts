@@ -69,11 +69,16 @@ export const PREVIEW_AUTO_RESTARTS = 2;
 export const PREVIEW_STEADY_MS = 10_000;
 
 /**
- * After a preview's browser went: `remount` when Android let it go for memory (nothing wrong with the page; it comes
- * back once the app is in front), `restart` after a crash while restarts are left, else `offer` “Try again”.
+ * After a preview's browser went: `remount` when Android let it go for memory while the app was in the background
+ * (nothing wrong with the page; it comes back once the app is in front, uncounted). Anything else counts, a release
+ * for memory while the app is in front too (the page itself may be what fills the memory): `restart` while restarts
+ * are left, else `offer` “Try again”.
  */
-export function afterPreviewGone(restarts: number, crashed: boolean): 'remount' | 'restart' | 'offer' {
-  if (!crashed) return 'remount';
+export function afterPreviewGone(
+  restarts: number,
+  { crashed, active }: { crashed: boolean; active: boolean },
+): 'remount' | 'restart' | 'offer' {
+  if (!crashed && !active) return 'remount';
   return restarts < PREVIEW_AUTO_RESTARTS ? 'restart' : 'offer';
 }
 

@@ -8,7 +8,7 @@ import { type DiagramTheme, mermaidDocumentWith, mermaidScriptElement } from '@w
 import { htmlTitle } from '@whombat/core';
 import { fontFamilies, pageThemeCss } from '@whombat/tokens';
 import mermaidRuntime from 'mermaid/dist/mermaid.min.js';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, ScrollView, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { COPIED_TEXT } from '../data/messageActions';
@@ -124,8 +124,11 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     return () => clearTimeout(t);
   }, [inView, started, fit]);
   // A WebView whose browser went leaves the page blank: a new WebView starts it again. Android letting it go for memory
-  // only waits for the app to be in front; a crash restarts it twice by itself, then the person's “Try again”.
+  // in the background only waits for the app to be in front; otherwise it restarts twice by itself, then the person's
+  // “Try again”.
   const [mount, setMount] = useState(0);
+  // The WebView (by its mount) whose end was last handled: Android can report one death more than once.
+  const handled = useRef(-1);
   const [restarts, setRestarts] = useState(0);
   const [gone, setGone] = useState(false);
   const [asleep, setAsleep] = useState(false);
@@ -135,6 +138,8 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     setShown(page);
     setRestarts(0);
     setGone(false);
+    setAsleep(false);
+    setLoaded(0);
   }
   // Earlier crashes are forgotten once a load has stayed up a while: a page that crashes as it loads still stops.
   useEffect(() => {
@@ -156,9 +161,11 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     return () => sub.remove();
   }, [asleep]);
   // iOS doesn't say why its page process ended: counted as a crash, so it can't loop.
-  const onGone = (crashed: boolean) => {
+  const onGone = (of: number, crashed: boolean) => {
+    if (handled.current === of) return;
+    handled.current = of;
     setLoaded(0);
-    const next = afterPreviewGone(restarts, crashed);
+    const next = afterPreviewGone(restarts, { crashed, active: AppState.currentState === 'active' });
     if (next === 'remount') setAsleep(true);
     else if (next === 'restart') {
       setRestarts((n) => n + 1);
@@ -205,8 +212,8 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
         key={mount}
         {...PREVIEW_WEBVIEW_PROPS}
         source={source}
-        onRenderProcessGone={(e) => onGone(e.nativeEvent.didCrash)}
-        onContentProcessDidTerminate={() => onGone(true)}
+        onRenderProcessGone={(e) => onGone(mount, e.nativeEvent.didCrash)}
+        onContentProcessDidTerminate={() => onGone(mount, true)}
         onLoad={() => setLoaded((n) => n + 1)}
         // Full screen the page's own background shows once it loads; until then the app's, not a white flash in dark.
         style={
