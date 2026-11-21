@@ -1,8 +1,9 @@
 import { api } from '@whombat/core/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeAppliance, type FakeApplianceOptions } from './fake';
 import { createSecureSession, type SecureSessionOptions } from './secure';
 import type { ApplianceSession } from './types';
+import type { SessionConnector } from './wire';
 
 /** Stuck connections and stuck dials (open-speed.md AP-4400…AP-4403). */
 
@@ -291,62 +292,205 @@ describe('the bulk connection, warmed beside the interactive one (AP-4406)', () 
 });
 
 describe('checking an open connection when the phone comes back (probe)', () => {
-  // A long backoff: a reconnect that waited it out would not come within the test's wait.
-  const slowBackoff = { backoff: { initialMs: 60_000, maxMs: 60_000 } };
+  // Fake timers and a fake clock: the waits below are the session's own, not time passing on this machine.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // A long backoff and heartbeat: a reconnect that waited the backoff out, or a heartbeat, would come far later.
+  const quiet = { backoff: { initialMs: 60_000, maxMs: 60_000 }, heartbeatMs: 600_000 };
+
+  /** The fake appliance behind a wire whose sends can be made to fail while it stays open. */
+  function probed(session: Partial<SecureSessionOptions> = {}) {
+    const appliance = createFakeAppliance({ handle: async (op) => ({ status: 200, body: { op } }) });
+    let failSends = false;
+    const connector: SessionConnector = {
+      async connect(request) {
+        const w = await appliance.connector.connect(request);
+        return {
+          send: (frame) => {
+            if (failSends) throw new Error('socket gone');
+            w.send(frame);
+          },
+          onFrame: (l) => w.onFrame(l),
+          onClose: (l) => w.onClose(l),
+          close: (r) => w.close(r),
+          bytesSent: () => w.bytesSent(),
+          congested: () => w.congested(),
+          drained: () => w.drained(),
+        };
+      },
+    };
+    const s = createSecureSession({ connector, raceAfterMs: 0, stallMs: 100, ...quiet, ...session });
+    live.push(s);
+    return { appliance, session: s, failSends: (on: boolean) => (failSends = on) };
+  }
+
+  /** Lets the fake answer (its frames go through microtasks) and `ms` of the session's time pass. */
+  const pass = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
+  async function open(s: ApplianceSession) {
+    s.connect();
+    for (let i = 0; i < 500 && s.state().status !== 'open'; i++) await pass(1);
+    expect(s.state().status).toBe('open');
+  }
 
   it('replaces a connection that died silently, at once and without the backoff', async () => {
-    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
-    session.connect();
-    await opened(session);
+    const { appliance, session } = probed();
+    await open(session);
     appliance.faults.stall();
     session.probe?.();
-    await until(() => appliance.stats().connects === 2, 1000);
-    await opened(session);
+    await pass(99);
+    expect(appliance.stats().connects).toBe(1);
+    await pass(1);
+    await open(session);
+    expect(appliance.stats().connects).toBe(2);
   });
 
   it('replaces one whose pings go unanswered while older answers still come', async () => {
-    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
-    session.connect();
-    await opened(session);
+    const { appliance, session } = probed();
+    await open(session);
     appliance.faults.mutePongs();
     session.probe?.();
-    await until(() => appliance.stats().connects === 2, 1000);
+    await pass(100);
     appliance.faults.mutePongs(false);
-    await opened(session);
+    await open(session);
+    expect(appliance.stats().connects).toBe(2);
   });
 
-  it('keeps a connection that answers', async () => {
-    const { appliance, session } = setup({}, { stallMs: 20, ...slowBackoff });
-    session.connect();
-    await opened(session);
+  it('keeps a connection that answers, and its answer ends the check', async () => {
+    const { appliance, session } = probed();
+    await open(session);
     session.probe?.();
-    session.probe?.();
-    await sleep(80);
+    await pass(10);
+    const pings = appliance.stats().pings;
+    // Answered: no check is out, so coming back to the foreground has nothing to ask again.
+    session.probe?.({ onlyIfChecking: true });
+    await pass(1);
+    expect(appliance.stats().pings).toBe(pings);
+    await pass(500);
     expect(appliance.stats().connects).toBe(1);
     expect(session.state().status).toBe('open');
   });
 
-  it('does nothing while the session is not open', async () => {
-    const { appliance, session } = setup({}, { stallMs: 20 });
+  it('a second change while a check is out pings again and waits its own time', async () => {
+    const { appliance, session } = probed();
+    await open(session);
+    appliance.faults.mutePongs();
     session.probe?.();
-    await sleep(40);
+    await pass(80);
+    const pings = appliance.stats().pings;
+    session.probe?.();
+    await pass(1);
+    expect(appliance.stats().pings).toBe(pings + 1);
+    // The first check's time is over; the second's isn't.
+    await pass(60);
+    expect(appliance.stats().connects).toBe(1);
+    await pass(40);
+    appliance.faults.mutePongs(false);
+    await open(session);
+    expect(appliance.stats().connects).toBe(2);
+  });
+
+  it('back in the foreground, a check begun before pings again', async () => {
+    const { appliance, session } = probed();
+    await open(session);
+    appliance.faults.mutePongs();
+    session.probe?.();
+    await pass(1);
+    const pings = appliance.stats().pings;
+    appliance.faults.mutePongs(false);
+    session.probe?.({ onlyIfChecking: true });
+    await pass(1);
+    expect(appliance.stats().pings).toBe(pings + 1);
+    await pass(500);
+    expect(appliance.stats().connects).toBe(1);
+  });
+
+  it('a ping that cannot be sent is a lost connection, dialed again at once', async () => {
+    const { appliance, session, failSends } = probed();
+    await open(session);
+    failSends(true);
+    session.probe?.();
+    failSends(false);
+    await open(session);
+    expect(appliance.stats().connects).toBe(2);
+  });
+
+  it('waits as long as the stall check does now, longer after a stuck connection', async () => {
+    const { appliance, session } = probed({ backoff: { initialMs: 2, maxMs: 2 } });
+    await open(session);
+    // A stuck read: the stall check finds it and its wait doubles for the next two minutes.
+    appliance.faults.stall();
+    const read = session.call(api.health.get, EMPTY);
+    await pass(200);
+    await open(session);
+    await read;
+    expect(appliance.stats().connects).toBe(2);
+    appliance.faults.mutePongs();
+    session.probe?.();
+    await pass(150);
+    expect(appliance.stats().connects).toBe(2);
+    await pass(50);
+    appliance.faults.mutePongs(false);
+    await open(session);
+    expect(appliance.stats().connects).toBe(3);
+  });
+
+  it('a check whose time ends far later than set (the app was frozen) gets one more short wait', async () => {
+    const { appliance, session } = probed();
+    await open(session);
+    appliance.faults.mutePongs();
+    session.probe?.();
+    // The clock jumps a minute while no timer runs, as when Android froze the app.
+    vi.setSystemTime(Date.now() + 60_000);
+    await pass(100);
+    expect(appliance.stats().connects).toBe(1);
+    // The fresh ping's answer comes: kept.
+    appliance.faults.mutePongs(false);
+    session.probe?.({ onlyIfChecking: true });
+    await pass(150);
+    expect(appliance.stats().connects).toBe(1);
+    expect(session.state().status).toBe('open');
+  });
+
+  it('given its one more wait, an unanswered check ends the connection', async () => {
+    const { appliance, session } = probed();
+    await open(session);
+    appliance.faults.mutePongs();
+    session.probe?.();
+    vi.setSystemTime(Date.now() + 60_000);
+    await pass(100);
+    expect(appliance.stats().connects).toBe(1);
+    await pass(100);
+    appliance.faults.mutePongs(false);
+    await open(session);
+    expect(appliance.stats().connects).toBe(2);
+  });
+
+  it('does nothing while the session is not open', async () => {
+    const { appliance, session } = probed();
+    session.probe?.();
+    await pass(200);
     expect(appliance.stats().connects).toBe(0);
     expect(session.state().status).toBe('idle');
   });
 
   it('does not lengthen the stall check that follows', async () => {
-    const { appliance, session } = setup({}, { stallMs: 40 });
-    session.connect();
-    await opened(session);
+    const { appliance, session } = probed({ backoff: { initialMs: 2, maxMs: 2 } });
+    await open(session);
     appliance.faults.stall();
     session.probe?.();
-    await until(() => appliance.stats().connects === 2, 1000);
-    await opened(session);
-    // A read stuck on the new connection is found after about 2 × 40 ms, not twice that.
+    await pass(100);
+    await open(session);
+    // A read stuck on the new connection is found after 2 × 100 ms of the session's time, not twice that.
     appliance.faults.stall();
-    const started = Date.now();
-    await session.call(api.health.get, EMPTY);
-    expect(Date.now() - started).toBeLessThan(140);
+    const read = session.call(api.health.get, EMPTY);
+    await pass(200);
+    await open(session);
+    await read;
     expect(appliance.stats().connects).toBe(3);
   });
 });
