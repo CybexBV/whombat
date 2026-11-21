@@ -42,7 +42,7 @@ import {
   Zap,
 } from './icons';
 import { focusRowSoon, registerRowFocus } from './rowFocus';
-import { Sheet, whenSheetDown } from './sheet';
+import { Sheet, useAfterSheet } from './sheet';
 import { Touchable } from './Touchable';
 
 /** The smallest target: 44pt on iPhone, 48dp on Android. */
@@ -158,20 +158,11 @@ function PlacesSheet({
     () => placesThings(overview.data?.things, servers),
     [overview.data?.things, servers],
   );
-  const next = useRef<(() => void) | null>(null);
-  const cancel = useRef<(() => void) | undefined>(undefined);
-  useEffect(() => () => cancel.current?.(), []);
-  const go = () => {
-    cancel.current?.();
-    const run = next.current;
-    next.current = null;
-    run?.();
-  };
+  const after = useAfterSheet();
+  const go = after.onDismissed;
   const choose = (run: () => void) => {
-    next.current = run;
+    after.later(run);
     onChosen();
-    cancel.current?.();
-    cancel.current = whenSheetDown(go);
   };
   const openPlace = (place: PlaceId) =>
     choose(() => {
