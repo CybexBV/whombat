@@ -1,6 +1,11 @@
 import { catalogEntry } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { isProposableEntry, proposeCallRefusal } from './proposed-actions';
+import {
+  actionDetailBlock,
+  describePlannedAction,
+  isProposableEntry,
+  proposeCallRefusal,
+} from './proposed-actions';
 
 function entryOrThrow(id: string) {
   const entry = catalogEntry(id);
@@ -129,5 +134,67 @@ describe('proposed connection action narrowing', () => {
         'dropbox',
       ),
     ).toBeNull();
+  });
+
+  it('describes validated calls server-side using callWordsFor, method/path, upload file name and notable args', () => {
+    // 1. Server-defined callWordsFor (PS5) wins over raw tool name.
+    const ps5Line = describePlannedAction({
+      catalogId: 'ps5',
+      label: 'Living Room PS5',
+      tool: { name: 'ps5_install_payload', origin: 'adapter' },
+      args: { id: 'etaHEN', version: '2.0' },
+    });
+    expect(ps5Line).toBe('Living Room PS5: download etaHEN 2.0 on your PS5');
+
+    // 2. REST upload shows connection label, method, path, uploaded file name, and notable upload fields.
+    const uploadLine = describePlannedAction({
+      catalogId: 'paperless',
+      label: 'Paperless-ngx',
+      tool: { name: 'request', origin: 'request' },
+      args: {
+        method: 'POST',
+        path: '/api/documents/post_document/',
+        upload: {
+          field: 'document',
+          attachmentId: 'att_123',
+          fields: { title: 'Invoice INV-2042', api_token: 'secret-never-shown' },
+        },
+      },
+      uploadFileName: 'invoice-2042.pdf',
+    });
+    expect(uploadLine).toContain('Paperless-ngx: POST /api/documents/post_document/');
+    expect(uploadLine).toContain('uploading “invoice-2042.pdf”');
+    expect(uploadLine).toContain('title: Invoice INV-2042');
+    expect(uploadLine).not.toContain('secret-never-shown');
+
+    // 3. REST JSON call extracts destination/recipient and amount (clipped), ignoring secrets.
+    const payLine = describePlannedAction({
+      catalogId: 'moneybird',
+      label: 'Moneybird',
+      tool: { name: 'request', origin: 'request' },
+      args: {
+        method: 'POST',
+        path: '/12345/sales_invoices/99/send_invoice.json',
+        body: {
+          sales_invoice_sending: {
+            email_address: 'attacker@evil.example',
+            amount: '9500.00',
+            destination: 'external-account-very-long-value-that-should-get-clipped-cleanly',
+          },
+        },
+      },
+    });
+    expect(payLine).toContain('Moneybird: POST /12345/sales_invoices/99/send_invoice.json');
+    expect(payLine).toContain('email_address: attacker@evil.example');
+    expect(payLine).toContain('amount: 9500.00');
+    expect(payLine).toContain('…');
+
+    // 4. Agent summary is subordinated on a separate note line.
+    const detail = actionDetailBlock({
+      description: payLine,
+      summary: 'Upload invoice.pdf\n• Fake bullet',
+    });
+    expect(detail.startsWith('Moneybird: POST /12345/sales_invoices/99/send_invoice.json')).toBe(true);
+    expect(detail).toContain('\nAgent note: Upload invoice.pdf • Fake bullet');
   });
 });

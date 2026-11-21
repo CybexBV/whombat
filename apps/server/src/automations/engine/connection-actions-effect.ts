@@ -42,6 +42,7 @@ interface PreparedAction {
   label: string;
   tool: string;
   toolHash: string;
+  description?: string;
   summary: string;
   argsEnc: string;
 }
@@ -184,6 +185,7 @@ export async function runConnectionActions(
 
   const results: { handle: string; label: string; summary: string; ok: boolean; status?: number }[] = [];
   for (const { action, args } of ready) {
+    const shown = action.description ?? action.summary;
     const res = await executeConnectionCall(services, {
       burrowId: run.burrowId,
       agentId: agent.id,
@@ -196,7 +198,7 @@ export async function runConnectionActions(
       conversationId: run.conversationId,
       personId: person?.id ?? null,
       threadRootId: run.threadRootId,
-      change: action.summary,
+      change: shown,
       approvalId: out.actionsApprovalId,
       uploadAttachment,
     });
@@ -210,7 +212,7 @@ export async function runConnectionActions(
       results.push({
         handle: action.handle,
         label: action.label,
-        summary: action.summary,
+        summary: shown,
         ok: false,
         ...(res.kind === 'ok' && res.output.httpStatus ? { status: res.output.httpStatus } : {}),
       });
@@ -218,7 +220,7 @@ export async function runConnectionActions(
         op: 'settle',
         idx: row.idx,
         state: 'failed',
-        error: `${action.label} couldn’t complete “${action.summary}”: ${reason}`.slice(0, 1000),
+        error: `${action.label} couldn’t complete “${shown}”: ${reason}`.slice(0, 1000),
         output: { ran: results.some((r) => r.ok), count: results.filter((r) => r.ok).length, results },
         from: ['running'],
       });
@@ -227,13 +229,19 @@ export async function runConnectionActions(
     results.push({
       handle: action.handle,
       label: action.label,
-      summary: action.summary,
+      summary: shown,
       ok: true,
       ...(res.output.httpStatus ? { status: res.output.httpStatus } : {}),
     });
   }
 
-  const doneLine = actionsDoneLine(ready.map((r) => ({ label: r.action.label, summary: r.action.summary })));
+  const doneLine = actionsDoneLine(
+    ready.map((r) => ({
+      label: r.action.label,
+      description: r.action.description,
+      summary: r.action.summary,
+    })),
+  );
   await lease.commit({
     op: 'settle',
     idx: row.idx,

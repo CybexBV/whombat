@@ -22,6 +22,7 @@ import {
 import { and, asc, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
+import { callWordsFor } from '../connections/adapters/index';
 import { callTier, needsReauthText } from '../connections/call';
 import { connectionCallAccess } from '../connections/call-access';
 import { isCallableEntry } from '../connections/callable';
@@ -105,12 +106,138 @@ export function proposeCallRefusal(
 }
 
 /** At most `max` characters, cut at a word boundary when possible. */
-function clipTitle(text: string, max: number): string {
+export function clipTitle(text: string, max: number): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max - 1);
   const space = /\s/.test(text.charAt(max - 1)) ? cut.length : cut.search(/\s\S*$/);
   const kept = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/, '');
   return `${kept}…`;
+}
+
+/** Collapses line breaks and repeated whitespace so untrusted text stays on one line. */
+function singleLine(text: string): string {
+  return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const SECRET_ARG_KEY = /(?:secret|password|passwd|token|api_?key|auth|cookie|credential|private_?key|bearer)/i;
+const NOTABLE_ARG_PRIORITY: readonly RegExp[] = [
+  // Destination, target, recipient, contact, folder, path.
+  /(?:^|_)(?:to|dest(?:ination)?|target|recipient|recipients|email|mail|payee|beneficiary|iban|account|contact|customer|client|folder|dir(?:ectory)?|path|file_?name|channel|room|project|board|list|calendar|album|bucket|repo(?:sitory)?|url)(?:$|_)/i,
+  // Amount, price, total, currency, quantity.
+  /(?:^|_)(?:amount|price|total|subtotal|sum|currency|cost|fee|payment|balance|qty|quantity|tax|vat)(?:$|_)/i,
+  // Reference, invoice, title, subject, name, date.
+  /(?:^|_)(?:reference|ref|invoice|title|subject|name|label|description|date|due|status|state|action|content)(?:$|_)/i,
+];
+
+interface CollectedArg {
+  priority: number;
+  key: string;
+  value: string;
+}
+
+function collectNotableArgs(
+  value: unknown,
+  out: CollectedArg[],
+  seen: Set<string>,
+  depth = 0,
+): void {
+  if (depth > 4 || out.length >= 12 || value == null) return;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 3)) {
+      collectNotableArgs(item, out, seen, depth + 1);
+    }
+    return;
+  }
+  if (typeof value !== 'object') return;
+  for (const [rawKey, v] of Object.entries(value as Record<string, unknown>)) {
+    if (out.length >= 12) break;
+    if (SECRET_ARG_KEY.test(rawKey)) continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      const text = singleLine(String(v));
+      if (!text) continue;
+      const priority = NOTABLE_ARG_PRIORITY.findIndex((re) => re.test(rawKey));
+      if (priority === -1) continue;
+      const key = rawKey.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ priority, key: rawKey, value: clipTitle(text, 48) });
+    } else if (v && typeof v === 'object') {
+      collectNotableArgs(v, out, seen, depth + 1);
+    }
+  }
+}
+
+/**
+ * Extracts up to 4 notable argument values (destination, recipient, amount, reference/title), clipped and single-line,
+ * so the approval card always reflects what the validated call actually sends.
+ */
+function notableArgsSummary(
+  toolOrigin: ConnectionToolRow['origin'],
+  args: Readonly<Record<string, unknown>>,
+): string {
+  const collected: CollectedArg[] = [];
+  const seen = new Set<string>();
+  if (toolOrigin === 'request') {
+    const upload = args.upload;
+    if (upload && typeof upload === 'object' && !Array.isArray(upload)) {
+      collectNotableArgs((upload as Record<string, unknown>).fields, collected, seen);
+    }
+    collectNotableArgs(args.body, collected, seen);
+    collectNotableArgs(args.query, collected, seen);
+  } else if (toolOrigin === 'socket') {
+    collectNotableArgs(args.params, collected, seen);
+  } else {
+    collectNotableArgs(args, collected, seen);
+  }
+  collected.sort((a, b) => a.priority - b.priority);
+  const picked = collected.slice(0, 4);
+  if (!picked.length) return '';
+  return ` (${picked.map((p) => `${p.key}: ${p.value}`).join(', ')})`;
+}
+
+/**
+ * Builds the server-side plain-English description of one validated connection action: connection name, server-defined
+ * call words where available (`callWordsFor`), otherwise HTTP method & path (or socket method / tool name), uploaded
+ * file name, and notable argument values. Never relies on the agent-written summary.
+ */
+export function describePlannedAction(input: {
+  catalogId: string;
+  label: string;
+  tool: Pick<ConnectionToolRow, 'name' | 'origin'>;
+  args: Readonly<Record<string, unknown>>;
+  uploadFileName?: string | null;
+}): string {
+  const label = singleLine(input.label) || 'Service';
+  const serverWords = callWordsFor(input.catalogId)?.ask(input.tool.name, input.args);
+  if (serverWords) {
+    return clipTitle(`${label}: ${singleLine(serverWords)}`, 220);
+  }
+  const uploadPart = input.uploadFileName
+    ? ` uploading “${clipTitle(singleLine(input.uploadFileName), 80)}”`
+    : '';
+  const argPart = notableArgsSummary(input.tool.origin, input.args);
+  if (input.tool.origin === 'request') {
+    const method = singleLine(String(input.args.method ?? '')).toUpperCase() || 'POST';
+    const path = clipTitle(singleLine(String(input.args.path ?? '/')), 100);
+    return clipTitle(`${label}: ${method} ${path}${uploadPart}${argPart}`, 240);
+  }
+  if (input.tool.origin === 'socket') {
+    const method = clipTitle(singleLine(String(input.args.method ?? input.tool.name)), 100);
+    return clipTitle(`${label}: ${method}${argPart}`, 240);
+  }
+  return clipTitle(`${label}: ${input.tool.name}${uploadPart}${argPart}`, 240);
+}
+
+/** Formats one action line for an approval card detail block: Whombat's description first, agent summary as a secondary note. */
+export function actionDetailBlock(action: { description: string; summary: string }): string {
+  const note = singleLine(action.summary);
+  return note ? `${action.description}\nAgent note: ${clipTitle(note, 140)}` : action.description;
+}
+
+function joinList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
 /** What an agent hears when it calls `propose_connection_actions` outside a proposing turn. */
@@ -337,6 +464,9 @@ export interface PlannedConnectionAction {
   label: string;
   tool: string;
   toolHash: string;
+  /** Server-built plain-English description of the real validated call. */
+  description: string;
+  /** Agent-written summary, shown only as a secondary note. */
   summary: string;
   args: Record<string, unknown>;
 }
@@ -403,6 +533,7 @@ export async function planConnectionActions(
       return { ok: false, fatal: false, reason: `${row.label} has no tool called “${item.tool}”.` };
     }
     let args: Record<string, unknown> = { ...item.arguments };
+    let uploadFileName: string | null = null;
     if (tool.origin === 'request') {
       try {
         args = normaliseRequestArgs(args);
@@ -441,6 +572,7 @@ export async function planConnectionActions(
             reason: `${att.name} is too large to upload to ${row.label}.`,
           };
         }
+        uploadFileName = att.name;
       }
     } else if (tool.origin === 'socket') {
       try {
@@ -475,13 +607,22 @@ export async function planConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, row, tool));
     if (outside) return { ok: false, fatal: false, reason: outside };
 
+    const description = describePlannedAction({
+      catalogId: row.catalogId,
+      label: row.label,
+      tool,
+      args,
+      uploadFileName,
+    });
+
     planned.push({
       connectionId: row.id,
       handle: row.handle,
       label: row.label,
       tool: tool.name,
       toolHash: tool.hash,
-      summary: item.summary.trim(),
+      description,
+      summary: singleLine(item.summary),
       args,
     });
   }
@@ -493,6 +634,7 @@ export async function planConnectionActions(
           connectionId: a.connectionId,
           tool: a.tool,
           toolHash: a.toolHash,
+          description: a.description,
           summary: a.summary,
           args: a.args,
         })),
@@ -500,16 +642,17 @@ export async function planConnectionActions(
     )
     .digest('hex');
 
+  const uniqueLabels = [...new Set(planned.map((a) => singleLine(a.label)).filter(Boolean))];
   const proposal =
     planned.length === 1 && planned[0]
       ? {
-          title: clipTitle(planned[0].summary, 160),
-          details: `${planned[0].label}: ${planned[0].summary}.`.slice(0, 2000),
+          title: clipTitle(planned[0].description, 160),
+          details: actionDetailBlock(planned[0]).slice(0, 2000),
         }
       : {
-          title: `Approve ${planned.length} actions from this email`,
+          title: clipTitle(`Run ${planned.length} actions on ${joinList(uniqueLabels)}`, 160),
           details: planned
-            .map((a) => `${a.label}: ${a.summary}`)
+            .map((a) => actionDetailBlock(a))
             .join('\n\n')
             .slice(0, 2000),
         };
@@ -518,10 +661,13 @@ export async function planConnectionActions(
 }
 
 /** Short plain-English confirmation posted in the run thread after approved actions finish. */
-export function actionsDoneLine(actions: readonly { label: string; summary: string }[]): string {
+export function actionsDoneLine(
+  actions: readonly { label: string; description?: string; summary: string }[],
+): string {
   if (actions.length === 0) return 'Done.';
-  if (actions.length === 1 && actions[0]) return `Done: ${actions[0].summary}.`;
-  return `Done: ${actions.map((a) => a.summary).join('; ')}.`.slice(0, 1000);
+  const textOf = (a: { description?: string; summary: string }) => a.description || a.summary;
+  if (actions.length === 1 && actions[0]) return `Done: ${textOf(actions[0])}.`;
+  return `Done: ${actions.map(textOf).join('; ')}.`.slice(0, 1000);
 }
 
 export { REQUEST_TOOL_NAME };
