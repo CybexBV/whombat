@@ -113,4 +113,9 @@ func TestExecUnitArgv(t *testing.T) {
 	if argv[0] != "/usr/bin/systemd-run" || !slices.Equal(argv[len(argv)-4:], []string{"--", "/bin/sh", "-c", "df -h | sort"}) {
 		t.Fatalf("argv %q", argv)
 	}
+	// systemd would read "${f}" and "$$" in the command itself: each "$" goes doubled.
+	argv = execUnitArgv("/bin/sh", `for f in a b; do echo "[${f}] $$"; done`, time.Minute)
+	if got := argv[len(argv)-1]; got != `for f in a b; do echo "[$${f}] $$$$"; done` {
+		t.Fatalf("command %q", got)
+	}
 }

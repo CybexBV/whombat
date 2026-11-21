@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/proto"
 )
 
@@ -130,7 +131,7 @@ func systemdRunPipe(argv []string, timeout time.Duration) []string {
 		"--service-type=exec", "--property=KillMode=mixed",
 		fmt.Sprintf("--property=RuntimeMaxSec=%ds", int(timeout.Seconds())),
 		"--description=Whombat diagnostics helper", "--"}
-	return append(w, argv...)
+	return append(w, systemdrun.Literal(argv...)...)
 }
 
 // runStep runs one step and returns its text.

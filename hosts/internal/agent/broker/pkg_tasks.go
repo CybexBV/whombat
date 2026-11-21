@@ -23,6 +23,7 @@ import (
 	"rackoon/internal/agent"
 	"rackoon/internal/agent/macos"
 	"rackoon/internal/agent/pkgs"
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/proto"
 )
 
@@ -366,7 +367,7 @@ func pkgUnitArgv(unit, op string, argv []string) []string {
 		fmt.Sprintf("--property=TimeoutStopSec=%ds", int(stop.Seconds())),
 		fmt.Sprintf("--property=RuntimeMaxSec=%ds", int((pkgs.Limit(op) + pkgUnitSlack).Seconds())),
 		"--working-directory=/", "--"}
-	return append(out, argv...)
+	return append(out, systemdrun.Literal(argv...)...)
 }
 
 // status answers task.status (logStart -1: no log).

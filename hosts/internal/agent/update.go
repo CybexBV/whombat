@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"rackoon/internal/agent/systemdrun"
 	"rackoon/internal/agentver"
 	"rackoon/internal/proto"
 	"rackoon/internal/wire"
@@ -530,11 +531,12 @@ func installWithHelper(helper, src, dst, backup string) error {
 		return err
 	}
 	argv := []string{"/usr/bin/systemd-run", "--quiet", "--wait", "--collect", "--pipe",
-		"--service-type=exec", "--description=Whombat agent update",
-		"--", helper, "update-install", "--from", src, "--to", dst}
+		"--service-type=exec", "--description=Whombat agent update", "--"}
+	args := []string{helper, "update-install", "--from", src, "--to", dst}
 	if backup != "" {
-		argv = append(argv, "--backup", backup)
+		args = append(args, "--backup", backup)
 	}
+	argv = append(argv, systemdrun.Literal(args...)...)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
