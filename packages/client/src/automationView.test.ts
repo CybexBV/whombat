@@ -215,12 +215,12 @@ describe('a mail-triggered automation', () => {
       name: 'Handle mail from example.com',
       definition: mailDef,
       grants: definitionGrants(mailDef),
-      triggerSummary: 'When mail from example.com with a PDF arrives',
-      summary: 'When mail from example.com with a PDF arrives, Dusty runs it in Chat.',
+      triggerSummary: 'When mail from example.com with a PDF arrives in your inbox',
+      summary: 'When mail from example.com with a PDF arrives in your inbox, Dusty runs it in Chat.',
     });
     const row = automationListRow(item, now, zone, mailNames);
     expect(row.tile).toMatchObject({ source: 'mail', label: 'Mail' });
-    expect(row.when).toBe('When mail from example.com with a PDF arrives');
+    expect(row.when).toBe('When mail from example.com with a PDF arrives in your inbox');
     expect(row.state.next).toBe('Next run on a matching email');
 
     const page = automationPage(item, {
@@ -232,7 +232,7 @@ describe('a mail-triggered automation', () => {
     });
     expect(page.flow?.[0]).toMatchObject({
       kind: 'when',
-      text: 'When mail from example.com with a PDF arrives',
+      text: 'When mail from example.com with a PDF arrives in your inbox',
     });
     if (page.flow?.[0]?.kind === 'when') {
       expect(page.flow[0].details).toContain('In you@example.com');

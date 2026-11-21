@@ -295,8 +295,8 @@ function displayFrom(from: string): string {
 
 /**
  * Plain-English description of when a mail trigger runs:
- * “When mail from example.com with a PDF arrives”, “When mail with “invoice” in the subject and a PDF arrives”,
- * “When mail arrives in you@example.com”.
+ * “When mail from example.com with a PDF arrives in your inbox”, “When mail with “invoice” in the subject and a PDF
+ * arrives in your inbox”, “When mail arrives in you@example.com’s inbox”.
  */
 export function mailWhenText(
   trigger: Pick<MailTrigger, 'from' | 'subjectContains' | 'hasAttachment' | 'attachmentTypes'>,
@@ -318,8 +318,8 @@ export function mailWhenText(
   const withClause = withParts.length ? `with ${withParts.join(' and ')}` : null;
   const hasFilters = Boolean(fromPart || withClause);
   const core = ['mail', fromPart, withClause].filter(Boolean).join(' ');
-  if (!hasFilters && mailbox) return `When mail arrives in ${mailbox}`;
-  return `When ${core} arrives`;
+  if (!hasFilters && mailbox) return `When mail arrives in ${mailbox}’s inbox`;
+  return `When ${core} arrives in your inbox`;
 }
 
 /** Detail line under `whenLine` naming which mailbox is watched (“In you@example.com”). */

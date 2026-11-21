@@ -134,12 +134,13 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
 
   it('reads mail triggers in natural English on rows, plan cards and automation pages', () => {
     expect(mailWhenText({ from: 'example.com', attachmentTypes: ['pdf'] }, 'you@example.com')).toBe(
-      'When mail from example.com with a PDF arrives',
+      'When mail from example.com with a PDF arrives in your inbox',
     );
     expect(
       mailWhenText({ subjectContains: ['invoice'], attachmentTypes: ['pdf', 'csv'] }, 'you@example.com'),
-    ).toBe('When mail with “invoice” in the subject and a PDF or CSV arrives');
-    expect(mailWhenText({}, 'you@example.com')).toBe('When mail arrives in you@example.com');
+    ).toBe('When mail with “invoice” in the subject and a PDF or CSV arrives in your inbox');
+    expect(mailWhenText({}, 'you@example.com')).toBe('When mail arrives in you@example.com’s inbox');
+    expect(mailWhenText({})).toBe('When mail arrives in your inbox');
 
     const def = AutomationDefinition.parse(
       recipeDefinition({
@@ -156,18 +157,20 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
     );
 
     expect(triggerSummary(def.triggers, names.conversationTitle, names.connectionLabel)).toBe(
-      'When mail from example.com with a PDF arrives',
+      'When mail from example.com with a PDF arrives in your inbox',
     );
-    expect(describeAutomation(def, names)).toContain('When mail from example.com with a PDF arrives');
+    expect(describeAutomation(def, names)).toContain(
+      'When mail from example.com with a PDF arrives in your inbox',
+    );
     expect(automationGlance(def, names)).toMatchObject({
       source: 'mail',
-      trigger: 'When mail from example.com with a PDF arrives',
+      trigger: 'When mail from example.com with a PDF arrives in your inbox',
     });
 
     const sections = planSections(def, definitionGrants(def), names);
     const when = sections.find((s) => s.id === 'when')?.lines[0];
     expect(when).toEqual({
-      text: 'When mail from example.com with a PDF arrives',
+      text: 'When mail from example.com with a PDF arrives in your inbox',
       detail: 'In you@example.com',
     });
     expect(sections.find((s) => s.id === 'posts')?.lines[0]?.text).toBe('One thread per email in Chat');
@@ -175,7 +178,7 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
     const [flowWhen] = automationFlow(def, definitionGrants(def), names);
     expect(flowWhen).toMatchObject({
       kind: 'when',
-      text: 'When mail from example.com with a PDF arrives',
+      text: 'When mail from example.com with a PDF arrives in your inbox',
     });
     if (flowWhen?.kind === 'when') {
       expect(flowWhen.details).toContain('In you@example.com');

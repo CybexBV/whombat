@@ -126,7 +126,7 @@ describe('mail-arrives automations', () => {
       await loadAutomationRow(w.services.db, w.burrowId, autoId),
     );
     expect(auto.triggerSummary).toBe(
-      'When mail from example.com with “invoice” in the subject and a PDF arrives',
+      'When mail from example.com with “invoice” in the subject and a PDF arrives in your inbox',
     );
 
     const state = fake.stateFor(FAKE_ACCESS_TOKEN);
@@ -458,7 +458,7 @@ describe('mail-arrives automations', () => {
     const card = loaded?.card as AutomationPlanCard | undefined;
     const whenSection = card?.plan?.sections.find((s) => s.id === 'when');
     expect(whenSection?.lines).toEqual([
-      { text: 'When mail from example.com with a PDF arrives', detail: 'In you@example.com' },
+      { text: 'When mail from example.com with a PDF arrives in your inbox', detail: 'In you@example.com' },
     ]);
 
     await w.ok(IDS.mara, acceptAutomationPlan, { planId: proposal.planId as string });
@@ -467,7 +467,7 @@ describe('mail-arrives automations', () => {
       await loadAutomationRow(w.services.db, w.burrowId, proposal.automationId as string),
     );
     expect(published.status).toBe('published');
-    expect(published.triggerSummary).toBe('When mail from example.com with a PDF arrives');
+    expect(published.triggerSummary).toBe('When mail from example.com with a PDF arrives in your inbox');
 
     // Mirrored mail items table records matched emails only once per connection + external id.
     const mirrored = await w.services.db.select().from(mailTriggerItems);
