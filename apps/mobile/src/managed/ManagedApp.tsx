@@ -62,6 +62,7 @@ import { WhombatLive } from '../../modules/whombat-live';
 import { QUERY_CACHE_NAME } from '../data/queryPersist';
 import { deviceBox } from '../data/secureBoxNative';
 import { LookAround } from '../demo/LookAround';
+import { clearCloudStatusWidget } from '../live/statusWidget';
 import { prefetchNavigation } from '../navigation/useNavigationPersistence';
 import { phoneNotifications } from '../push/phoneNotifications';
 import { initialNotificationUrl, onNotificationTap } from '../push/taps';
@@ -388,13 +389,11 @@ export function ManagedApp() {
   useEffect(() => {
     if (cloud === null) {
       void start.kept.clear();
-      if (!community && knownCommunityBoxes(communityRegistry).length === 0) {
-        void WhombatLive.clearStatusWidget().catch(() => {});
-      }
+      void clearCloudStatusWidget(WhombatLive);
     } else if (typeof cloud === 'object') {
       void start.kept.set(cloud);
     }
-  }, [cloud, start, community, communityRegistry]);
+  }, [cloud, start]);
   // Opened with the kept session and control didn't answer: asked again on coming back to the app.
   const signedInNow = cloud !== null && typeof cloud === 'object';
   useEffect(() => {
@@ -501,7 +500,7 @@ export function ManagedApp() {
     // Also from the appliance list (no session at hand): control forgets this install's push handle.
     await capped(clearPush(env.control, pushStore));
     await capped(phoneNotifications.endAll());
-    await capped(WhombatLive.clearStatusWidget());
+    await capped(clearCloudStatusWidget(WhombatLive));
     await capped(env.control.signOut());
     setCloud(null);
   }, [env, start]);

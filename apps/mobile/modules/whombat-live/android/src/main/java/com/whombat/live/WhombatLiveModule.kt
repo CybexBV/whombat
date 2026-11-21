@@ -58,9 +58,9 @@ class WhombatLiveModule : Module() {
       StatusWidgetStore.save(context, snapshotJson)
     }
 
-    /** Clear the home-screen widget back to its signed-out state (optionally only for one box). */
-    AsyncFunction("clearStatusWidget") { applianceId: String? ->
-      StatusWidgetStore.clear(context, applianceId)
+    /** Clear the home-screen widget back to its signed-out state (optionally only for one box and/or source). */
+    AsyncFunction("clearStatusWidget") { applianceId: String?, source: String? ->
+      StatusWidgetStore.clear(context, applianceId, source)
     }
 
     /** Ongoing activities on screen (to end the ones that finished while the app was closed). */

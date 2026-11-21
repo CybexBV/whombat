@@ -14,10 +14,21 @@ import type { ActiveActivity, LiveColors, ShadeNotification } from './src/conten
 
 export * from './src/content';
 
+/** Whether a widget snapshot belongs to a cloud-signed-in box or a direct community box. */
+export type StatusWidgetSource = 'cloud' | 'community';
+
+/** Optional scope for `clearStatusWidget`: clear only if the saved snapshot matches the given box and/or source. */
+export interface ClearStatusWidgetFilter {
+  applianceId?: string;
+  source?: StatusWidgetSource;
+}
+
 /** Saved calm status pushed to the Android and iOS home-screen widgets. */
 export interface StatusWidgetPayload extends HomeWidgetStatus {
   /** Appliance id on this phone, so forgetting one box only clears its own widget status. */
   applianceId: string;
+  /** Account/connection kind, so cloud sign-out or expiry clears cloud snapshots without wiping community boxes. */
+  source?: StatusWidgetSource;
 }
 
 /** The native module's surface (`WhombatLiveModule` on Android and iOS). */
@@ -31,8 +42,8 @@ interface NativeWhombatLive {
   endAll(): Promise<void>;
   /** Save the latest calm status for the home-screen widget and refresh it. */
   setStatusWidget?(snapshotJson: string): Promise<void>;
-  /** Clear the home-screen widget back to its signed-out state (optionally only when showing `applianceId`). */
-  clearStatusWidget?(applianceId: string | null): Promise<void>;
+  /** Clear the home-screen widget back to its signed-out state (optionally only for `applianceId` and/or `source`). */
+  clearStatusWidget?(applianceId: string | null, source?: StatusWidgetSource | null): Promise<void>;
   active(): Promise<ActiveActivity[]>;
   /** Android: keys of the activities shown in the last 24 hours, on screen or not (MN-02). */
   recent?(): Promise<string[]>;
@@ -98,8 +109,12 @@ export const WhombatLive = {
   },
 
   /** Forget the saved home-screen widget status (on sign-out, revocation or box removal). */
-  async clearStatusWidget(applianceId?: string): Promise<void> {
-    await native?.clearStatusWidget?.(applianceId ?? null);
+  async clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void> {
+    if (typeof filter === 'string') {
+      await native?.clearStatusWidget?.(filter, null);
+      return;
+    }
+    await native?.clearStatusWidget?.(filter?.applianceId ?? null, filter?.source ?? null);
   },
 
   /** Ongoing activities on screen. */

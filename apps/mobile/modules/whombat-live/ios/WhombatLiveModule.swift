@@ -104,7 +104,7 @@ public class WhombatLiveModule: Module {
       }
     }
 
-    AsyncFunction("clearStatusWidget") { (applianceId: String?) in
+    AsyncFunction("clearStatusWidget") { (applianceId: String?, source: String?) in
       guard let group = Self.statusWidgetAppGroup,
             let defaults = UserDefaults(suiteName: group)
       else { return }
@@ -112,15 +112,27 @@ public class WhombatLiveModule: Module {
         guard let existing = defaults.string(forKey: Self.statusWidgetDefaultsKey) else {
           return false
         }
-        if let applianceId = applianceId?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !applianceId.isEmpty,
+        let filterId = applianceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let filterSource = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !filterId.isEmpty || !filterSource.isEmpty,
            let data = existing.data(using: .utf8),
-           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-           let savedId = obj["applianceId"] as? String,
-           !savedId.isEmpty,
-           savedId != applianceId
+           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         {
-          return false
+          if !filterId.isEmpty,
+             let savedId = obj["applianceId"] as? String,
+             !savedId.isEmpty,
+             savedId != filterId
+          {
+            return false
+          }
+          if !filterSource.isEmpty {
+            let savedSource = (obj["source"] as? String)?
+              .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let matches = savedSource == filterSource || (savedSource.isEmpty && filterSource == "cloud")
+            if !matches {
+              return false
+            }
+          }
         }
         defaults.removeObject(forKey: Self.statusWidgetDefaultsKey)
         return true
