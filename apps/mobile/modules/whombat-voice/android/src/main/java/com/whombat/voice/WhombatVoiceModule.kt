@@ -15,6 +15,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -127,6 +128,8 @@ class WhombatVoiceModule : Module() {
       }
       file.delete()
       if (error is CodedException) throw error
+      // A full or broken cache isn't the microphone's fault: the app shouldn't ask to allow it.
+      if (error is IOException) throw RecorderException("The recording couldn’t be stored.")
       throw MicrophoneException()
     }
     // A stop right after start waits on `done`, which only the reader counts down, so the reader must start: nothing
