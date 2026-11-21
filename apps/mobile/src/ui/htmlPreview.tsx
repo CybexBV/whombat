@@ -17,8 +17,8 @@ import { keepPageHeight, keptPage, keptPageHeight } from '../data/previewPages';
 import {
   afterPreviewGone,
   PAGE_HEIGHT_SCRIPT,
-  PREVIEW_STEADY_MS,
   PREVIEW_CARD_HEIGHT,
+  PREVIEW_STEADY_MS,
   PREVIEW_WEBVIEW_PROPS,
   pageHeight,
   withPreviewPolicy,

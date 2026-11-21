@@ -15,8 +15,14 @@ interface NativeWhombatVoice {
   /** The WAV's `file://` URI. */
   stop(): Promise<string>;
   cancel(): Promise<void>;
-  addListener(event: 'onLevel', listener: (event: { decibels: number; id?: number }) => void): { remove(): void };
-  addListener(event: 'onEnd', listener: (event: { reason: 'limit' | 'error'; id?: number }) => void): {
+  addListener(
+    event: 'onLevel',
+    listener: (event: { decibels: number; id?: number }) => void,
+  ): { remove(): void };
+  addListener(
+    event: 'onEnd',
+    listener: (event: { reason: 'limit' | 'error'; id?: number }) => void,
+  ): {
     remove(): void;
   };
 }
