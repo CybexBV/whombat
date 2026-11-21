@@ -213,3 +213,107 @@ describe('Microsoft complete observations', () => {
     ).toThrow('timeZone');
   });
 });
+
+describe('Microsoft mail change feed', () => {
+  it('baselines with $deltaToken=latest, reads metadata only, and fetches attachment metadata only when needed', async () => {
+    const delta1 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok1';
+    const delta2 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok2';
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ value: [], '@odata.deltaLink': delta1 }))
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_old_modified',
+              conversationId: 'c_old',
+              from: { emailAddress: { name: 'Old', address: 'old@example.com' } },
+              subject: 'Old read-state change',
+              receivedDateTime: '2026-10-20T08:00:00Z',
+              hasAttachments: false,
+              isDraft: false,
+            },
+            {
+              id: 'm_new',
+              conversationId: 'c_new',
+              from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
+              subject: 'Invoice 99',
+              bodyPreview: 'Attached',
+              receivedDateTime: '2026-10-28T10:05:00Z',
+              hasAttachments: true,
+              isDraft: false,
+            },
+          ],
+          '@odata.deltaLink': delta2,
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          value: [{ id: 'a1', name: 'invoice-99.pdf', contentType: 'application/pdf', size: 4200 }],
+        }),
+      );
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    const baseline = await ws.mailBaseline('tok');
+    expect(baseline).toEqual({ kind: 'microsoft', deltaLink: delta1 });
+    expect(new URL(String(fetcher.mock.calls[0]?.[0])).searchParams.get('$deltaToken')).toBe('latest');
+
+    const changes = await ws.mailChanges('tok', baseline, {
+      needAttachmentTypes: true,
+      since: new Date('2026-10-28T10:00:00Z'),
+    });
+    expect(changes.cursor).toEqual({ kind: 'microsoft', deltaLink: delta2 });
+    expect(changes.headers).toHaveLength(1);
+    expect(changes.headers[0]).toMatchObject({
+      id: 'm_new',
+      from: 'Billing <billing@example.com>',
+      subject: 'Invoice 99',
+      hasAttachments: true,
+      attachments: [{ id: 'a1', name: 'invoice-99.pdf', mimeType: 'application/pdf', size: 4200 }],
+    });
+    // Attachment metadata endpoint queried with $select (never contentBytes).
+    const attUrl = new URL(String(fetcher.mock.calls[2]?.[0]));
+    expect(attUrl.pathname).toBe('/v1.0/me/messages/m_new/attachments');
+    expect(attUrl.searchParams.get('$select')).not.toContain('contentBytes');
+  });
+
+  it('skips attachment calls when attachment types are not needed and re-baselines on 410', async () => {
+    const delta1 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=tok1';
+    const deltaFresh =
+      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=fresh';
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({
+          value: [
+            {
+              id: 'm_new',
+              conversationId: 'c_new',
+              from: { emailAddress: { address: 'billing@example.com' } },
+              subject: 'Invoice',
+              receivedDateTime: '2026-10-28T10:05:00Z',
+              hasAttachments: true,
+              isDraft: false,
+            },
+          ],
+          '@odata.deltaLink': deltaFresh,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: 'syncStateNotFound' } }), { status: 410 }),
+      )
+      .mockResolvedValueOnce(response({ value: [], '@odata.deltaLink': deltaFresh }));
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    const changes = await ws.mailChanges(
+      'tok',
+      { kind: 'microsoft', deltaLink: delta1 },
+      { needAttachmentTypes: false, since: new Date('2026-10-28T10:00:00Z') },
+    );
+    expect(changes.headers).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    const reset = await ws.mailChanges('tok', { kind: 'microsoft', deltaLink: delta1 });
+    expect(reset).toEqual({ cursor: { kind: 'microsoft', deltaLink: deltaFresh }, headers: [], reset: true });
+  });
+});

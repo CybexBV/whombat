@@ -16,7 +16,16 @@ import { badRequest } from '../lib/errors';
 import { attachmentDigest, boundedBytes, checkAttachmentTotal } from './binary';
 import { graphRecurrence } from './microsoft-recurrence';
 import { htmlToText } from './mime';
-import { GoogleApiError, type GoogleWorkspace, type InboxUnread } from './types';
+import {
+  GoogleApiError,
+  type GoogleWorkspace,
+  type InboxUnread,
+  type MailChangesOptions,
+  type MailChangesResult,
+  type MailHeader,
+  type MailHeaderAttachment,
+  type MailProviderCursor,
+} from './types';
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
@@ -260,6 +269,111 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
         return name && name !== summary.from ? { ...summary, from: `${name} <${summary.from}>` } : summary;
       }),
     };
+  }
+  async mailBaseline(token: string): Promise<MailProviderCursor> {
+    // Request Graph's delta token for future inbox changes only, carrying our metadata-only $select forward.
+    const select =
+      'id,conversationId,from,toRecipients,subject,bodyPreview,receivedDateTime,hasAttachments,isDraft';
+    let path = `/me/mailFolders/inbox/messages/delta?${query({ $deltaToken: 'latest', $select: select })}`;
+    for (let page = 0; page < 20; page++) {
+      const res = await this.call(token, path);
+      const delta = res['@odata.deltaLink'];
+      if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`))
+        return { kind: 'microsoft', deltaLink: delta };
+      const next = res['@odata.nextLink'];
+      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+        path = next.slice(GRAPH.length);
+        continue;
+      }
+      break;
+    }
+    throw badRequest('Microsoft did not return a delta link for the inbox.');
+  }
+  async mailChanges(
+    token: string,
+    cursor: MailProviderCursor,
+    options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    if (cursor.kind !== 'microsoft' || !cursor.deltaLink.startsWith(`${GRAPH}/`)) {
+      return { cursor: await this.mailBaseline(token), headers: [], reset: true };
+    }
+    let path = cursor.deltaLink.slice(GRAPH.length);
+    let nextDelta = cursor.deltaLink;
+    const rawItems: Obj[] = [];
+    try {
+      for (let page = 0; page < 10; page++) {
+        const res = await this.call(token, path);
+        rawItems.push(...arr(res.value));
+        const delta = res['@odata.deltaLink'];
+        if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
+          nextDelta = delta;
+          break;
+        }
+        const next = res['@odata.nextLink'];
+        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+          nextDelta = next;
+          path = next.slice(GRAPH.length);
+          continue;
+        }
+        break;
+      }
+    } catch (err) {
+      // Sync state expired (410 Gone) or invalid (404): re-baseline without replaying old mail.
+      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404)) {
+        return { cursor: await this.mailBaseline(token), headers: [], reset: true };
+      }
+      throw err;
+    }
+    const sinceMs = options.since ? options.since.getTime() : null;
+    const seenIds = new Set<string>();
+    const headers: MailHeader[] = [];
+    for (const m of rawItems) {
+      if ('@removed' in m || m.isDraft === true) continue;
+      const msgId = str(m.id);
+      if (!msgId || seenIds.has(msgId)) continue;
+      seenIds.add(msgId);
+      const dateStr = str(m.receivedDateTime) || str(m.createdDateTime);
+      const receivedMs = Date.parse(dateStr);
+      // Graph delta also reports metadata edits (e.g. marking read) on older messages: skip anything received before baseline.
+      if (sinceMs !== null && Number.isFinite(receivedMs) && receivedMs < sinceMs) continue;
+      const fromAddr = address(m.from);
+      const fromName = str(obj(obj(m.from).emailAddress).name);
+      const from = fromName && fromName !== fromAddr ? `${fromName} <${fromAddr}>` : fromAddr;
+      const hasAttachments = Boolean(m.hasAttachments);
+      let attachments: MailHeaderAttachment[] | null = hasAttachments ? null : [];
+      if (hasAttachments && options.needAttachmentTypes) {
+        let list: Obj[];
+        try {
+          list = await this.collection(
+            token,
+            `/me/messages/${id(msgId)}/attachments?$select=id,name,contentType,size`,
+            100,
+          );
+        } catch (err) {
+          if (err instanceof GoogleApiError && err.status === 404) continue;
+          throw err;
+        }
+        attachments = list.map((a) => ({
+          ...(str(a.id) ? { id: str(a.id) } : {}),
+          name: str(a.name).slice(0, 500),
+          mimeType: (str(a.contentType) || 'application/octet-stream').slice(0, 200),
+          size: Math.max(0, Number(a.size) || 0),
+        }));
+      }
+      headers.push({
+        id: msgId,
+        threadId: str(m.conversationId) || msgId,
+        from: from.slice(0, 500),
+        to: addresses(m.toRecipients),
+        subject: str(m.subject).slice(0, 1000),
+        snippet: str(m.bodyPreview).slice(0, 500),
+        date: Number.isFinite(receivedMs) ? new Date(receivedMs).toISOString() : new Date().toISOString(),
+        hasAttachments,
+        attachments,
+      });
+    }
+    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return { cursor: { kind: 'microsoft', deltaLink: nextDelta }, headers };
   }
   async mailRead(token: string, input: { messageId?: string; threadId?: string }) {
     const messages = input.messageId

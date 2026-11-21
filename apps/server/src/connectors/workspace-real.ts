@@ -57,8 +57,12 @@ import {
   type GoogleWorkspace,
   type InboxUnread,
   isGoogleUrl,
+  type MailChangesOptions,
+  type MailChangesResult,
   type MailDraftView,
+  type MailHeader,
   type MailOrganizeInput,
+  type MailProviderCursor,
   type MailSearchInput,
 } from './types';
 
@@ -451,6 +455,125 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
         ? await this.mailSearch(accessToken, { query: 'is:unread in:inbox', limit: input.newest ?? 0 })
         : [];
     return { count, newest };
+  }
+
+  async mailBaseline(accessToken: string): Promise<MailProviderCursor> {
+    // users.getProfile returns the current historyId in one cheap metadata call without reading any message.
+    const profile = await this.json<{ historyId?: string | number }>(
+      accessToken,
+      'GET',
+      `${GMAIL_API}/profile`,
+      { query: { fields: 'historyId' } },
+    );
+    return { kind: 'gmail', historyId: String(profile.historyId ?? '0') };
+  }
+
+  async mailChanges(
+    accessToken: string,
+    cursor: MailProviderCursor,
+    _options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    if (cursor.kind !== 'gmail') {
+      return { cursor: await this.mailBaseline(accessToken), headers: [], reset: true };
+    }
+    const addedIds: string[] = [];
+    const seen = new Set<string>();
+    let nextHistoryId = cursor.historyId;
+    let lastIncludedHistoryId: string | null = null;
+    let truncated = false;
+    let pageToken: string | undefined;
+    try {
+      for (let page = 0; page < 5; page++) {
+        const res = await this.json<{
+          historyId?: string | number;
+          nextPageToken?: string;
+          history?: {
+            id?: string | number;
+            messagesAdded?: { message?: { id?: string; labelIds?: string[] } }[];
+          }[];
+        }>(accessToken, 'GET', `${GMAIL_API}/history`, {
+          query: {
+            startHistoryId: cursor.historyId,
+            historyTypes: 'messageAdded',
+            labelId: 'INBOX',
+            maxResults: 100,
+            ...(pageToken ? { pageToken } : {}),
+          },
+        });
+        if (res.historyId !== undefined) nextHistoryId = String(res.historyId);
+        for (const h of res.history ?? []) {
+          if (addedIds.length >= 50) {
+            truncated = true;
+            break;
+          }
+          for (const added of h.messagesAdded ?? []) {
+            const msg = added.message;
+            if (!msg?.id || seen.has(msg.id)) continue;
+            const labels = msg.labelIds ?? [];
+            if (labels.includes('DRAFT') || labels.includes('TRASH') || labels.includes('SPAM')) continue;
+            seen.add(msg.id);
+            addedIds.push(msg.id);
+          }
+          if (h.id !== undefined) lastIncludedHistoryId = String(h.id);
+        }
+        if (truncated) break;
+        if (!res.nextPageToken) break;
+        if (page === 4) {
+          truncated = true;
+          break;
+        }
+        pageToken = res.nextPageToken;
+      }
+    } catch (err) {
+      // History IDs expire after Gmail's retention window (HTTP 404): re-baseline without replaying old mail.
+      if (err instanceof GoogleApiError && err.status === 404) {
+        return { cursor: await this.mailBaseline(accessToken), headers: [], reset: true };
+      }
+      throw err;
+    }
+    const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
+    if (addedIds.length === 0) {
+      return { cursor: { kind: 'gmail', historyId: finalHistoryId }, headers: [] };
+    }
+    // Partial response omits body.data so Gmail sends only headers, snippet and attachment metadata.
+    const partFields = 'partId,mimeType,filename,body/size,body/attachmentId';
+    const fields = `id,threadId,internalDate,labelIds,snippet,payload(headers,${partFields},parts(${partFields},parts(${partFields},parts(${partFields}))))`;
+    const fetched = await mapLimit(addedIds, FETCH_CONCURRENCY, async (id) => {
+      try {
+        return await this.json<GmailMessage>(accessToken, 'GET', `${GMAIL_API}/messages/${enc(id)}`, {
+          query: { format: 'full', fields },
+        });
+      } catch (err) {
+        if (err instanceof GoogleApiError && err.status === 404) return null;
+        throw err;
+      }
+    });
+    const headers: MailHeader[] = [];
+    for (const m of fetched) {
+      if (!m) continue;
+      const ids = m.labelIds ?? [];
+      if (!ids.includes('INBOX') || ids.includes('DRAFT') || ids.includes('TRASH') || ids.includes('SPAM'))
+        continue;
+      const attachments = extractBody(m.payload).attachments.map((a) => ({
+        ...(a.id !== undefined ? { id: a.id } : {}),
+        name: clip(a.name, 500),
+        mimeType: clip(a.mimeType, 200),
+        size: a.size,
+      }));
+      headers.push({
+        id: m.id,
+        threadId: m.threadId,
+        from: clip(headerOf(m.payload, 'From') ?? '', 500),
+        to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
+        subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
+        snippet: clip(decodeEntities(m.snippet ?? ''), 500),
+        date: isoFromMs(m.internalDate),
+        hasAttachments: attachments.length > 0,
+        attachments,
+      });
+    }
+    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return { cursor: { kind: 'gmail', historyId: finalHistoryId }, headers };
   }
 
   async mailRead(

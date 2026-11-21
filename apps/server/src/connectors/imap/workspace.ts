@@ -34,8 +34,12 @@ import {
   ConnectionUnavailableError,
   type GoogleWorkspace,
   type InboxUnread,
+  type MailChangesOptions,
+  type MailChangesResult,
   type MailDraftView,
+  type MailHeader,
   type MailOrganizeInput,
+  type MailProviderCursor,
 } from '../types';
 import {
   attachmentBinary,
@@ -721,6 +725,114 @@ export class ImapWorkspace implements GoogleWorkspace {
         .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
       return { count, newest };
     });
+  }
+
+  async mailBaseline(token: string): Promise<MailProviderCursor> {
+    return this.withImap(token, async (s) => {
+      const folders = await s.list();
+      const inbox = folderByRole(folders, 'inbox');
+      const path = inbox?.path ?? 'INBOX';
+      const opened = await s.open(path, { write: false });
+      const lastUid =
+        opened.uidNext !== null
+          ? Math.max(0, opened.uidNext - 1)
+          : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
+      return { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid };
+    });
+  }
+
+  async mailChanges(
+    token: string,
+    cursor: MailProviderCursor,
+    _options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    if (cursor.kind !== 'imap') {
+      return { cursor: await this.mailBaseline(token), headers: [], reset: true };
+    }
+    return this.withImap(token, async (s) => {
+      const folders = await s.list();
+      const path =
+        resolveMailbox(
+          cursor.mailbox,
+          folders.map((f) => f.path),
+        ) ??
+        folderByRole(folders, 'inbox')?.path ??
+        'INBOX';
+      const opened = await s.open(path, { write: false });
+      if (opened.uidValidity !== cursor.uidValidity) {
+        const lastUid =
+          opened.uidNext !== null
+            ? Math.max(0, opened.uidNext - 1)
+            : (await s.search({ all: true })).reduce((max, u) => Math.max(max, u), 0);
+        return {
+          cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid },
+          headers: [],
+          reset: true,
+        };
+      }
+      const found = (await s.search({ uid: `${cursor.lastUid + 1}:*` }))
+        .filter((u) => u > cursor.lastUid)
+        .sort((a, b) => a - b);
+      if (found.length === 0) return { cursor, headers: [] };
+      const batch = found.slice(0, 50);
+      // Fetch envelope, flags and BODYSTRUCTURE only — never raw message bodies until a trigger matches.
+      const metas = await s.meta(batch, { bodyStructure: true });
+      const byUid = new Map(metas.map((m) => [m.uid, m]));
+      const headers: MailHeader[] = [];
+      for (const uid of batch) {
+        const m = byUid.get(uid);
+        if (!m) continue;
+        if (has(m.flags, '\\Draft') || has(m.flags, '\\Deleted')) continue;
+        const ref = { mailbox: opened.path, uidValidity: opened.uidValidity, uid: m.uid };
+        const attachments = m.attachments ?? [];
+        headers.push({
+          id: messageIdOf(ref),
+          threadId: threadIdOf(ref, threadRoot(m), threadHome(folders, opened.path)),
+          from: m.from[0] ? shownAddress(m.from[0]) : '',
+          to: m.to.map(shownAddress),
+          subject: m.subject,
+          snippet: '',
+          date: m.internalDate ?? m.date ?? this.deps.now().toISOString(),
+          hasAttachments: attachments.length > 0,
+          attachments,
+        });
+      }
+      const nextUid = batch[batch.length - 1] ?? cursor.lastUid;
+      return {
+        cursor: { kind: 'imap', mailbox: opened.path, uidValidity: opened.uidValidity, lastUid: nextUid },
+        headers,
+      };
+    });
+  }
+
+  /**
+   * Opens a long-lived IMAP IDLE session on INBOX when the server advertises IDLE, calling `onExists` whenever new
+   * mail arrives. Returns `'unsupported'` when the server does not support IDLE so the watcher falls back to polling.
+   */
+  async watchInbox(
+    token: string,
+    onExists: () => void,
+    signal: AbortSignal,
+  ): Promise<'idle' | 'unsupported'> {
+    const account = await this.deps.account(token);
+    let session: ImapSession;
+    try {
+      session = await this.deps.connector.imap(account);
+    } catch (err) {
+      throw await this.failure(token, err);
+    }
+    try {
+      if (!session.capabilities.has('IDLE') || !session.idle) return 'unsupported';
+      const folders = await session.list();
+      const inbox = folderByRole(folders, 'inbox');
+      await session.open(inbox?.path ?? 'INBOX', { write: false });
+      await session.idle(onExists, signal);
+      return 'idle';
+    } catch (err) {
+      throw await this.failure(token, err);
+    } finally {
+      await session.close();
+    }
   }
 
   /* Checks ----------------------------------------------------------------------------------------- */
