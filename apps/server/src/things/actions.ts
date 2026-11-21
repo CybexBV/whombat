@@ -174,7 +174,8 @@ async function executeThingAction(
     forgetConnectionReads(services, row.id);
   }
   // Already so: nothing changed, nothing to record.
-  if (done.unchanged) return { outcome: { message: done.message.slice(0, 200), refresh: true }, uncertain: false };
+  if (done.unchanged)
+    return { outcome: { message: done.message.slice(0, 200), refresh: true }, uncertain: false };
   const uncertain = done.uncertain === true;
   const agentId = actingAgentId();
   const result = await services.pipeline.commit(

@@ -1776,7 +1776,9 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
         return json({ grants, events });
       }
       case 'agent.update': {
-        const body = await bodyOf<{ name?: string; face?: AgentFace; runtime?: AgentModelRuntime }>(init);
+        const body = await bodyOf<{ name?: string; face?: AgentFace; runtime?: AgentModelRuntimeUpdate }>(
+          init,
+        );
         const name = body.name?.trim();
         // The server's checks (OA-08): not “Whombat”, one capitalised word; there is no other agent to clash with.
         if (name !== undefined) {
@@ -1791,7 +1793,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
           // AP-2732).
           ...(body.runtime ? { runtime: withModelRuntime(assistant.runtime, body.runtime) } : {}),
         };
-        if (body.runtime) rooms?.runtime.setDefault(body.runtime);
+        if (body.runtime) rooms?.runtime.setDefault(assistant.runtime);
         // Mara's Chat is called after the agent (AN-07).
         const dm = chats.get(DEFAULT_CHAT_ID);
         if (dm && name !== undefined) dm.conversation = { ...dm.conversation, title: name };

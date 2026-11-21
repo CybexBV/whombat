@@ -153,11 +153,18 @@ describe('RDAP parsing and lookup', () => {
       if (hop === 1) {
         return {
           status: 302,
-          headers: { location: 'https://rdap.verisign.com/com/v1/domain/example.com' },
+          headers: { location: 'https://rdap.verisign.com/com/v1/domain/example.com' } as Record<
+            string,
+            string
+          >,
           body: Buffer.alloc(0),
         };
       }
-      return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(RDAP_DOMAIN_OK)) };
+      return {
+        status: 200,
+        headers: {} as Record<string, string>,
+        body: Buffer.from(JSON.stringify(RDAP_DOMAIN_OK)),
+      };
     };
 
     const res = await defaultRdapFetch('https://rdap.iana.org/domain/example.com', 200);

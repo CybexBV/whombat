@@ -138,7 +138,12 @@ export interface ModelEffortView {
    * Local only (AP-5001): the model sheet's “Another model” field — its words and the whole model runtime a typed name
    * saves; null for Claude Code and ChatGPT.
    */
-  another: { label: string; hint: string; use: string; runtime: (name: string) => AgentModelRuntimeUpdate } | null;
+  another: {
+    label: string;
+    hint: string;
+    use: string;
+    runtime: (name: string) => AgentModelRuntimeUpdate;
+  } | null;
 }
 
 /**

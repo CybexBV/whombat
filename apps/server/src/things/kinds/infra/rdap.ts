@@ -312,11 +312,10 @@ export async function readDomainExpirations(
   const boundedFetch: RdapFetch = (url) => {
     const remaining = endAt - Date.now();
     if (remaining <= 0) return Promise.resolve({ ok: false, status: 0 });
-    return withBudget(
-      remaining,
-      (budget) => fetchJson(url, budget).catch(() => ({ ok: false, status: 0 })),
-      { ok: false, status: 0 },
-    );
+    return withBudget(remaining, (budget) => fetchJson(url, budget).catch(() => ({ ok: false, status: 0 })), {
+      ok: false,
+      status: 0,
+    });
   };
   const bootstrap = await getBootstrap(cache, nowMs, boundedFetch);
   if (!bootstrap) return null;

@@ -45,7 +45,10 @@ vi.mock('../../connections/http', async (importOriginal) => {
           status: 200,
           headers: {},
           body: Buffer.from(
-            JSON.stringify({ servers: hz.servers, meta: { pagination: { total_entries: hz.servers.length } } }),
+            JSON.stringify({
+              servers: hz.servers,
+              meta: { pagination: { total_entries: hz.servers.length } },
+            }),
           ),
         };
       }
@@ -259,7 +262,11 @@ describe('Hetzner idle paid server check', () => {
     expect(seenOff.notices?.some((n) => n.check === 'hetzner.idle')).toBe(false);
 
     const rowOn = rowOf('hetzner', { id: 'con_hz_on', baseUrl: 'https://api.hetzner.cloud' });
-    const quietOn: ThingQuiet = { quiets: [], offs: [], ons: [{ checkId: 'hetzner.idle', at: NOW }] };
+    const quietOn: ThingQuiet = {
+      quiets: [],
+      offs: [],
+      ons: [{ checkId: 'hetzner.idle', at: NOW, byId: null, ownerId: 'brw_1', thingId: 'connection:con_hz' }],
+    };
     hz.metricsCalls = [];
     const seenOn = await hetznerSeen({} as Services, rowOn, NOW, quietOn);
     expect(hz.metricsCalls).toEqual(['101']);
@@ -301,7 +308,11 @@ describe('Hetzner idle paid server check', () => {
     hz.inFlight = 0;
     hz.maxInFlight = 0;
 
-    const quietOn: ThingQuiet = { quiets: [], offs: [], ons: [{ checkId: 'hetzner.idle', at: NOW }] };
+    const quietOn: ThingQuiet = {
+      quiets: [],
+      offs: [],
+      ons: [{ checkId: 'hetzner.idle', at: NOW, byId: null, ownerId: 'brw_1', thingId: 'connection:con_hz' }],
+    };
     const rowSeen = rowOf('hetzner', { id: 'con_hz_many_seen', baseUrl: 'https://api.hetzner.cloud' });
     const seen = await hetznerSeen({} as Services, rowSeen, NOW, quietOn);
 
@@ -335,7 +346,12 @@ describe('Hetzner idle paid server check', () => {
       'server:9',
     ]);
     expect(hz.metricsCalls).toContain('9');
-    expect(idleEligibleServers({ readAt: NOW, servers: [server({ id: 'a' }), server({ id: 'b', status: 'off' })], volumes: null }, NOW).map((x) => x.id)).toEqual(['a']);
+    expect(
+      idleEligibleServers(
+        { readAt: NOW, servers: [server({ id: 'a' }), server({ id: 'b', status: 'off' })], volumes: null },
+        NOW,
+      ).map((x) => x.id),
+    ).toEqual(['a']);
     hz.busyIds = new Set();
   });
 });

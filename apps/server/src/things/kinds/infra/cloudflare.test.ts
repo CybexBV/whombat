@@ -35,7 +35,9 @@ import {
 
 const io = vi.hoisted(() => ({
   rdapCalls: [] as string[],
-  rdapHandler: null as ((url: string) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>) | null,
+  rdapHandler: null as
+    | ((url: string) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>)
+    | null,
 }));
 
 vi.mock('../../../connections/http', async (importOriginal) => {
@@ -71,6 +73,7 @@ vi.mock('../../../lib/outbound', async (importOriginal) => {
     },
   };
 });
+
 import {
   CF_CERTIFICATE_PACKS,
   CF_CONNECTIONS,
@@ -360,7 +363,15 @@ describe('cloudflare page', () => {
     const onQuiet: ThingQuiet = {
       quiets: [],
       offs: [],
-      ons: [{ checkId: 'cloudflare.domain_expiring', at: NOW }],
+      ons: [
+        {
+          checkId: 'cloudflare.domain_expiring',
+          at: NOW,
+          byId: null,
+          ownerId: 'brw_1',
+          thingId: 'connection:con_cf',
+        },
+      ],
     };
     const makeCtx = (services: Services, id: string, quiet: ThingQuiet): KindCtx => ({
       services,
@@ -379,7 +390,11 @@ describe('cloudflare page', () => {
     io.rdapCalls = [];
     io.rdapHandler = null;
     const servicesOff = {} as Services;
-    const rowOff = rowOf('cloudflare', { id: 'con_cf_off', signIn: 'token', baseUrl: 'https://api.cloudflare.com' });
+    const rowOff = rowOf('cloudflare', {
+      id: 'con_cf_off',
+      signIn: 'token',
+      baseUrl: 'https://api.cloudflare.com',
+    });
     await CLOUDFLARE_KIND.seen?.(servicesOff, rowOff, NOW, 'UTC', emptyQuiet);
     await cloudflarePage(makeCtx(servicesOff, 'con_cf_off', emptyQuiet));
     expect(io.rdapCalls).toEqual([]);
@@ -427,7 +442,11 @@ describe('cloudflare page', () => {
       return { status: 404, headers: {}, body: Buffer.alloc(0) };
     };
     const servicesOn = {} as Services;
-    const rowOn = rowOf('cloudflare', { id: 'con_cf_on', signIn: 'token', baseUrl: 'https://api.cloudflare.com' });
+    const rowOn = rowOf('cloudflare', {
+      id: 'con_cf_on',
+      signIn: 'token',
+      baseUrl: 'https://api.cloudflare.com',
+    });
     const seen = await CLOUDFLARE_KIND.seen?.(servicesOn, rowOn, NOW, 'UTC', onQuiet);
     expect(io.rdapCalls.length).toBeGreaterThan(0);
     expect(seen?.notices?.some((n) => n.check === 'cloudflare.domain_expiring')).toBe(true);
