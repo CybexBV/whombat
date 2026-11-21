@@ -6,6 +6,7 @@
 import { levelOfDecibels, MicrophoneError, type VoiceRecorder } from '@whombat/client/voice';
 import { File } from 'expo-file-system';
 import { isMicrophoneRefusal, WhombatVoice } from '../../modules/whombat-voice';
+import { createRecordingGate } from '../../modules/whombat-voice/gate';
 
 /** Reads the WAV at `uri` and deletes it. */
 async function take(uri: string): Promise<Uint8Array> {
@@ -31,19 +32,27 @@ export function nativeRecorder(): VoiceRecorder | null {
     return recorder;
   }
   let offs: (() => void)[] = [];
+  // An earlier recording's last events can still arrive after the next one started: only the current one's count.
+  const gate = createRecordingGate();
   const quiet = () => {
+    gate.end();
     for (const off of offs) off();
     offs = [];
   };
   recorder = {
     async start({ maxSeconds, onLevel, onEnd }) {
       quiet();
+      const id = gate.begin();
       offs = [
-        WhombatVoice.onLevel((decibels) => onLevel?.(levelOfDecibels(decibels))),
-        WhombatVoice.onEnd((reason) => onEnd?.(reason)),
+        WhombatVoice.onLevel((decibels, from) => {
+          if (gate.accepts(from)) onLevel?.(levelOfDecibels(decibels));
+        }),
+        WhombatVoice.onEnd((reason, from) => {
+          if (gate.accepts(from)) onEnd?.(reason);
+        }),
       ];
       try {
-        await WhombatVoice.start(maxSeconds);
+        await WhombatVoice.start(maxSeconds, id);
       } catch (error) {
         quiet();
         if (isMicrophoneRefusal(error)) throw new MicrophoneError();

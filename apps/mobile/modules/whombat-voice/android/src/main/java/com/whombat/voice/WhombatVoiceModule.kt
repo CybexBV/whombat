@@ -35,9 +35,11 @@ internal class RecorderException(message: String) : CodedException("recorder", m
 /**
  * One recording under way: the microphone, the thread reading it and the file it goes into. The reader thread owns the
  * microphone and the file: it alone releases and closes them, when it leaves its loop, so nothing is let go while it
- * is still inside `read()`.
+ * is still inside `read()`. `id` is the JavaScript side's number for it, on every event it sends, so an event of an
+ * earlier recording can't act on a later one.
  */
 private class Recording(
+  val id: Int,
   val record: AudioRecord,
   val file: File,
   val out: BufferedOutputStream,
@@ -57,9 +59,10 @@ private class Recording(
  * `WhombatVoice` (Android): the phone's microphone for voice typing (docs/decisions/dictation.md DT-07). `AudioRecord`
  * records 16 kHz mono 16-bit, the speech recogniser's source where the phone has it, straight into a WAV in the app's
  * cache, at most `maxSeconds`; `onLevel` says the loudness in decibels about twenty times a second, and `onEnd` when it
- * stopped by itself (the time is up, or the microphone went). `stop` finishes the WAV's header and answers its
- * `file://` URI; the JavaScript side reads it, sends it and deletes it. `cancel` drops it. RECORD_AUDIO is asked for
- * only when the person first presses a mic (`requestPermission`). The JavaScript side is `modules/whombat-voice/index.ts`.
+ * stopped by itself (the time is up, or the microphone went), each with the recording's `id`. `stop` finishes the WAV's
+ * header and answers its `file://` URI; the JavaScript side reads it, sends it and deletes it. `cancel` drops it.
+ * RECORD_AUDIO is asked for only when the person first presses a mic (`requestPermission`). The JavaScript side is
+ * `modules/whombat-voice/index.ts`.
  */
 class WhombatVoiceModule : Module() {
   /** Start, stop and cancel run one at a time, so two quick starts can't both open the microphone. */
@@ -67,6 +70,11 @@ class WhombatVoiceModule : Module() {
   /** Guards `current`, briefly; the reader takes it too, so nothing slow happens under it. */
   private val lock = Any()
   private var current: Recording? = null
+  /**
+   * A recording whose reader didn't let go in time (under `session`): until it has, no new recording starts, as a
+   * second `AudioRecord` beside an unreleased one fails or takes the microphone from it.
+   */
+  private var lingering: Recording? = null
 
   private val permissions: Permissions
     get() = appContext.permissions ?: throw RecorderException("No permissions here.")
@@ -83,7 +91,7 @@ class WhombatVoiceModule : Module() {
       Permissions.askForPermissionsWithPermissionsManager(permissions, promise, Manifest.permission.RECORD_AUDIO)
     }
 
-    AsyncFunction("start") { maxSeconds: Int -> start(maxSeconds) }
+    AsyncFunction("start") { maxSeconds: Int, id: Int -> start(maxSeconds, id) }
 
     /** The WAV's `file://` URI. */
     AsyncFunction("stop") { -> stop() }
@@ -93,21 +101,29 @@ class WhombatVoiceModule : Module() {
     OnDestroy { cancel() }
   }
 
-  private fun start(maxSeconds: Int): Unit = synchronized(session) {
+  private fun start(maxSeconds: Int, id: Int): Unit = synchronized(session) {
     val context = appContext.reactContext ?: throw RecorderException("No app to record in.")
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
       throw MicrophoneException()
     }
-    cancel()
+    if (!cancel()) throw RecorderException("The microphone didn’t stop.")
+    // The file first: nothing holds the microphone yet if it can't be made.
+    val file = try {
+      val dir = File(appContext.cacheDirectory, "dictation").apply { mkdirs() }
+      File.createTempFile("recording-", ".wav", dir)
+    } catch (_: Throwable) {
+      throw RecorderException("The recording couldn’t be stored.")
+    }
     val minBuffer = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-    if (minBuffer <= 0) throw MicrophoneException()
     // Half a second of room, so a busy moment on the phone loses nothing.
-    val buffer = max(minBuffer, RATE)
-    val record = open(MediaRecorder.AudioSource.VOICE_RECOGNITION, buffer)
-      ?: open(MediaRecorder.AudioSource.MIC, buffer)
-      ?: throw MicrophoneException()
-    val dir = File(appContext.cacheDirectory, "dictation").apply { mkdirs() }
-    val file = File(dir, "recording-${System.currentTimeMillis()}.wav")
+    val record = if (minBuffer <= 0) null else {
+      val buffer = max(minBuffer, RATE)
+      open(MediaRecorder.AudioSource.VOICE_RECOGNITION, buffer) ?: open(MediaRecorder.AudioSource.MIC, buffer)
+    }
+    if (record == null) {
+      file.delete()
+      throw MicrophoneException()
+    }
     var out: BufferedOutputStream? = null
     val recording = try {
       val stream = BufferedOutputStream(FileOutputStream(file))
@@ -115,17 +131,11 @@ class WhombatVoiceModule : Module() {
       stream.write(ByteArray(HEADER))
       record.startRecording()
       if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw RecorderException("The microphone is busy.")
-      Recording(record, file, stream, maxSeconds.toLong() * RATE)
+      Recording(id, record, file, stream, maxSeconds.toLong() * RATE)
     } catch (error: Throwable) {
-      try {
-        record.stop()
-      } catch (_: Throwable) {
-      }
-      record.release()
-      try {
-        out?.close()
-      } catch (_: Throwable) {
-      }
+      runCatching { record.stop() }
+      runCatching { record.release() }
+      runCatching { out?.close() }
       file.delete()
       if (error is CodedException) throw error
       // A full or broken cache isn't the microphone's fault: the app shouldn't ask to allow it.
@@ -149,78 +159,73 @@ class WhombatVoiceModule : Module() {
     null
   }
 
+  /** From the reader thread: the JavaScript runtime may be going away, and that mustn't end the thread early. */
+  private fun send(name: String, body: Map<String, Any?>) {
+    runCatching { sendEvent(name, body) }
+  }
+
   /**
    * Reads the microphone 50 ms at a time into the file until stopped, full, or the microphone fails, then lets go of
-   * the microphone and the file.
+   * the microphone and the file, whatever happened.
    */
   private fun read(r: Recording) {
-    val frames = ShortArray(RATE / 20)
-    val bytes = ByteBuffer.allocate(frames.size * 2).order(ByteOrder.LITTLE_ENDIAN)
     var ended: String? = null
-    // A microphone that gives nothing (an audio route change gone wrong) would otherwise spin a core.
-    var silentSince = 0L
     try {
-      while (r.running) {
-        val n = r.record.read(frames, 0, frames.size)
-        if (n < 0) {
-          ended = "error"
-          break
-        }
-        if (n == 0) {
-          val now = SystemClock.elapsedRealtime()
-          if (silentSince == 0L) silentSince = now
-          if (now - silentSince > EMPTY_READS_MS) {
-            ended = "error"
-            break
-          }
-          Thread.sleep(10)
-          continue
-        }
-        silentSince = 0L
-        val take = min(n.toLong(), r.maxSamples - r.samples).toInt()
-        bytes.clear()
-        var sum = 0.0
-        for (i in 0 until take) {
-          val s = frames[i]
-          bytes.putShort(s)
-          sum += (s.toDouble() / 32768.0) * (s.toDouble() / 32768.0)
-        }
-        try {
-          r.out.write(bytes.array(), 0, take * 2)
-        } catch (_: Throwable) {
-          ended = "error"
-          break
-        }
-        r.samples += take
-        val rms = if (take > 0) sqrt(sum / take) else 0.0
-        sendEvent("onLevel", mapOf("decibels" to if (rms > 0) 20 * log10(rms) else -160.0))
-        if (r.samples >= r.maxSamples) {
-          ended = "limit"
-          break
-        }
-      }
+      ended = readLoop(r)
     } catch (_: Throwable) {
       ended = "error"
+    } finally {
+      try {
+        synchronized(r) {
+          runCatching { r.record.stop() }
+          runCatching { r.record.release() }
+          runCatching { r.out.close() }
+          r.released = true
+          if (r.discard) runCatching { r.file.delete() }
+        }
+      } finally {
+        r.done.countDown()
+      }
     }
-    // Only the recording people still wait for says it ended: an older one that a new start replaced stays quiet.
+    // Only the recording still current says it ended; the JavaScript side also drops events of any other `id`.
     val tell = ended != null && synchronized(lock) {
       (current === r && r.running).also { if (it) r.running = false }
     }
-    synchronized(r) {
-      try {
-        r.record.stop()
-      } catch (_: Throwable) {
+    if (tell) send("onEnd", mapOf("id" to r.id, "reason" to ended))
+  }
+
+  /** The reading itself; why it ended by itself (`limit`, `error`), or null when it was stopped. */
+  private fun readLoop(r: Recording): String? {
+    val frames = ShortArray(RATE / 20)
+    val bytes = ByteBuffer.allocate(frames.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+    // A microphone that gives nothing (an audio route change gone wrong) would otherwise spin a core.
+    var silentSince = 0L
+    while (r.running) {
+      val n = r.record.read(frames, 0, frames.size)
+      if (n < 0) return "error"
+      if (n == 0) {
+        val now = SystemClock.elapsedRealtime()
+        if (silentSince == 0L) silentSince = now
+        if (now - silentSince > EMPTY_READS_MS) return "error"
+        Thread.sleep(10)
+        continue
       }
-      r.record.release()
-      try {
-        r.out.close()
-      } catch (_: Throwable) {
+      silentSince = 0L
+      val take = min(n.toLong(), r.maxSamples - r.samples).toInt()
+      bytes.clear()
+      var sum = 0.0
+      for (i in 0 until take) {
+        val s = frames[i]
+        bytes.putShort(s)
+        sum += (s.toDouble() / 32768.0) * (s.toDouble() / 32768.0)
       }
-      r.released = true
-      if (r.discard) r.file.delete()
+      r.out.write(bytes.array(), 0, take * 2)
+      r.samples += take
+      val rms = if (take > 0) sqrt(sum / take) else 0.0
+      send("onLevel", mapOf("id" to r.id, "decibels" to if (rms > 0) 20 * log10(rms) else -160.0))
+      if (r.samples >= r.maxSamples) return "limit"
     }
-    r.done.countDown()
-    if (tell) sendEvent("onEnd", mapOf("reason" to ended))
+    return null
   }
 
   /**
@@ -231,19 +236,23 @@ class WhombatVoiceModule : Module() {
     r.running = false
     synchronized(r) {
       // Stopping the microphone wakes a reader waiting inside read().
-      if (!r.released) {
-        try {
-          r.record.stop()
-        } catch (_: Throwable) {
-        }
-      }
+      if (!r.released) runCatching { r.record.stop() }
     }
     if (r.done.await(HALT_WAIT_MS, TimeUnit.MILLISECONDS)) return true
     synchronized(r) {
       if (r.released) return true
       r.discard = true
     }
+    lingering = r
     return false
+  }
+
+  /** False while an earlier recording still holds the microphone after the wait. */
+  private fun settled(): Boolean {
+    val l = lingering ?: return true
+    if (!l.done.await(HALT_WAIT_MS, TimeUnit.MILLISECONDS)) return false
+    lingering = null
+    return true
   }
 
   private fun stop(): String = synchronized(session) {
@@ -253,9 +262,11 @@ class WhombatVoiceModule : Module() {
     r.file.toURI().toString()
   }
 
-  private fun cancel(): Unit = synchronized(session) {
-    val r = synchronized(lock) { current.also { current = null } } ?: return
-    if (halt(r)) r.file.delete()
+  /** Drops the recording under way; false when the microphone is still held (by it, or by one before it). */
+  private fun cancel(): Boolean = synchronized(session) {
+    val r = synchronized(lock) { current.also { current = null } }
+    if (r != null && halt(r)) r.file.delete()
+    settled()
   }
 
   /** The 44-byte RIFF header of a 16 kHz mono 16-bit WAV of `samples` samples. */
