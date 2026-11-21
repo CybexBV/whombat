@@ -762,3 +762,34 @@ func TestPromotionPushedOnRetry(t *testing.T) {
 		t.Fatalf("signed files left unpushed:\n%s", out)
 	}
 }
+
+func TestChannelPauseAndResumePushOnlyMetadata(t *testing.T) {
+	e := setup(t, 0)
+	uploadsBefore := e.gh.APICalls["POST uploads"]
+	res, pr, err := e.pub.PauseChannel(e.ctx, trust.ChannelProduction, nil)
+	if err != nil || !res.MetadataPushed || pr == nil || !pr.Paused || pr.Already {
+		t.Fatalf("pause: %+v %+v %v", res, pr, err)
+	}
+	if e.gh.APICalls["POST uploads"] != uploadsBefore {
+		t.Fatalf("pause uploaded assets: %v", e.gh.APICalls)
+	}
+	if files := pushedFiles(t, e.dir); !strings.Contains(files, fmt.Sprintf("metadata/%d.production.json", pr.Version)) {
+		t.Fatalf("paused role not pushed:\n%s", files)
+	}
+	// Repeating pause pushes nothing.
+	res2, pr2, err := e.pub.PauseChannel(e.ctx, trust.ChannelProduction, nil)
+	if err != nil || res2.MetadataPushed || pr2 == nil || !pr2.Already {
+		t.Fatalf("repeat pause: %+v %+v %v", res2, pr2, err)
+	}
+	// Resume pushes the new version, then repeating pushes nothing.
+	res3, pr3, err := e.pub.ResumeChannel(e.ctx, trust.ChannelProduction, nil)
+	if err != nil || !res3.MetadataPushed || pr3 == nil || pr3.Paused || pr3.Already {
+		t.Fatalf("resume: %+v %+v %v", res3, pr3, err)
+	}
+	if e.gh.APICalls["POST uploads"] != uploadsBefore {
+		t.Fatalf("resume uploaded assets: %v", e.gh.APICalls)
+	}
+	if out, _ := exec.Command("git", "-C", e.dir, "status", "--porcelain", "--", "metadata").Output(); len(out) != 0 {
+		t.Fatalf("signed files left unpushed:\n%s", out)
+	}
+}

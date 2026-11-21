@@ -135,7 +135,7 @@ var prodCommands = map[string]bool{
 
 // features are what this tufrepo supports beyond the commands of its first version (`tufrepo features`; an older
 // tufrepo fails on the unknown command).
-var features = []string{"closure-index", "channels", "channel-publish"}
+var features = []string{"closure-index", "channels", "channel-publish", "channel-pause"}
 
 // mode turns --env/--custody/--keys-dir into options, refusing every mix (MA-14).
 func mode(cmd, env, custody, keysDir string) (devtuf.Options, error) {

@@ -11,12 +11,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/CybexBV/whombat/appliance/helper/pkg/trust"
 	"github.com/CybexBV/whombat/appliance/release-tools/devtuf"
+	"github.com/CybexBV/whombat/appliance/release-tools/fakegithub"
 	"github.com/CybexBV/whombat/appliance/release-tools/nixexport"
 	"github.com/CybexBV/whombat/contracts/go/release"
 )
@@ -579,5 +581,92 @@ func TestPublishReleaseInChannel(t *testing.T) {
 	}
 	if kinds["tuple"] != 1 || kinds["index"] != 2 || kinds["blob"] == 0 {
 		t.Fatalf("the release's files: %v", kinds)
+	}
+}
+
+func TestPauseAndResumeCommands(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "repo")
+	prodKeyFile := filepath.Join(base, "production.key.json")
+	if _, err := devtuf.New(dir, devtuf.Options{Env: "local"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runGitHub("add-channels", []string{"--dir", dir, "--production-key-out", prodKeyFile}); err != nil {
+		t.Fatal(err)
+	}
+	// Production is default; offline key is required.
+	if err := runGitHub("pause", []string{"--dir", dir}); err == nil {
+		t.Fatal("paused offline production channel without --key-file")
+	}
+	if err := runGitHub("pause", []string{"--dir", dir, "--channel", "beta"}); err == nil {
+		t.Fatal("accepted unknown channel")
+	}
+	if err := runGitHub("pause", []string{"--dir", dir, "--key-file", prodKeyFile}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := devtuf.Load(dir, devtuf.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.ChannelPaused(trust.ChannelProduction) || r.ChannelPaused(trust.ChannelDevelopment) {
+		t.Fatal("production should be paused and development unpaused")
+	}
+	// Development uses the repository's own key.
+	if err := runGitHub("pause", []string{"--dir", dir, "--channel", trust.ChannelDevelopment}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runGitHub("resume", []string{"--dir", dir, "--key-file", prodKeyFile}); err != nil {
+		t.Fatal(err)
+	}
+	r, err = devtuf.Load(dir, devtuf.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.ChannelPaused(trust.ChannelProduction) || !r.ChannelPaused(trust.ChannelDevelopment) {
+		t.Fatal("expected production resumed and development paused")
+	}
+	if err := runGitHub("resume", []string{"--dir", dir, "--channel", trust.ChannelDevelopment}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGitHubPauseAndResumeCommands(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv("WHOMBAT_RELEASES_TOKEN", "tok")
+	base := t.TempDir()
+	dir := filepath.Join(base, "work")
+	origin := filepath.Join(base, "origin.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", "-b", "main", origin).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if _, err := devtuf.New(dir, devtuf.Options{Env: "local", Layout: devtuf.LayoutGitHub}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runGitHub("add-channels", []string{"--dir", dir}); err != nil {
+		t.Fatal(err)
+	}
+	gh := fakegithub.New("CybexBV", "whombat-releases", "tok", filepath.Join(base, "pages"))
+	defer gh.Close()
+	common := []string{"--dir", dir, "--api", gh.APIURL}
+	if err := runGitHub("gh-init", append(append([]string{}, common...), "--remote", origin)); err != nil {
+		t.Fatal(err)
+	}
+	if err := runGitHub("gh-pause", common); err != nil {
+		t.Fatal(err)
+	}
+	r, err := devtuf.Load(dir, devtuf.Options{})
+	if err != nil || !r.ChannelPaused(trust.ChannelProduction) {
+		t.Fatalf("after gh-pause: paused=%v err=%v", r != nil && r.ChannelPaused(trust.ChannelProduction), err)
+	}
+	if err := runGitHub("gh-resume", common); err != nil {
+		t.Fatal(err)
+	}
+	r, err = devtuf.Load(dir, devtuf.Options{})
+	if err != nil || r.ChannelPaused(trust.ChannelProduction) {
+		t.Fatalf("after gh-resume: paused=%v err=%v", r != nil && r.ChannelPaused(trust.ChannelProduction), err)
 	}
 }
