@@ -321,6 +321,8 @@ export interface FakeAppliance {
   };
   stats(): {
     connects: number;
+    /** `ping`s that arrived, on every connection. */
+    pings: number;
     /** Connects that hung (`hangConnects`) and were then given up. */
     abandoned: number;
     open: number;
@@ -366,6 +368,7 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
   let connects = 0;
   let hanging = 0;
   let pongless = false;
+  let pings = 0;
   let abandoned = 0;
   /** Each live connection's `stall` switch. */
   const stallers = new Set<() => void>();
@@ -702,6 +705,7 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
           this.subs.delete(m.sub);
           return;
         case 'ping':
+          pings += 1;
           if (pongless) return;
           return this.send({ t: 'pong', n: m.n });
         case 'open':
@@ -1542,6 +1546,7 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
     },
     stats: () => ({
       connects,
+      pings,
       abandoned,
       open: sessions.size,
       executed,

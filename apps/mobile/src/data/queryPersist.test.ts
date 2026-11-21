@@ -218,7 +218,11 @@ describe('the last-seen burrow (AP-717)', () => {
       ],
       pageParams: [undefined, 'c1'],
     });
-    // A server's own threads, read on its page on the way: not what a tab opens with.
+    // The settled threads, and a server's own: read on pages opened on the way, not what a tab opens with.
+    qc.setQueryData(
+      [...key('chats.threads', { burrow: 'burrow-hq' }, { ...chat, state: 'settled' }), 'infinite'],
+      { pages: [{ threads: [{ rootId: 'msg_settled' }], next: null }], pageParams: [undefined] },
+    );
     qc.setQueryData(
       [
         ...key(
@@ -243,6 +247,8 @@ describe('the last-seen burrow (AP-717)', () => {
     // The newest page only.
     expect(JSON.stringify(threads?.state.data)).toContain('msg_new');
     expect(JSON.stringify(threads?.state.data)).not.toContain('msg_old');
+    expect(JSON.stringify(snap)).not.toContain('msg_settled');
+    expect(JSON.stringify(snap)).not.toContain('msg_server');
   });
 
   it('keeps a pinned widget’s whole day with fewer readings, and leaves the cache as it is', () => {
@@ -264,13 +270,73 @@ describe('the last-seen burrow (AP-717)', () => {
     expect(qc.getQueryData<typeof overview>(key('home.overview'))?.widgets[0]?.points).toHaveLength(1440);
   });
 
-  it('too large: the Overview goes before any conversation', () => {
+  it('near the limit, the tabs’ reads never push out the conversations: the Overview goes, then the threads', () => {
+    const tabThreads = (text: string) =>
+      [
+        [...key('chats.threads', { burrow: 'burrow-hq' }, { room: 'chat', state: 'open' }), 'infinite'],
+        { pages: [{ threads: [{ rootId: 'msg_t', text }], next: null }], pageParams: [undefined] },
+      ] as const;
     const qc = seeded();
-    qc.setQueryData(key('home.overview'), { needsYou: [{ id: 'x'.repeat(MAX_CHARS) }], widgets: [] });
-    const snap = snapshotQueries(qc, 'acc', 1);
-    const ids = snap?.state.queries.map((q) => q.queryKey[1]);
-    expect(ids).not.toContain('home.overview');
-    expect(conversationsOf(snap)).toEqual(['cv_1']);
+    // The conversations and the older reads fill the copy to about 3,500 characters below the limit.
+    qc.setQueryData([...key('messages.list', { burrow: 'burrow-hq', conversationId: 'cv_2' }), 'infinite'], {
+      pages: [{ messages: [{ id: 'msg_big', text: 'x'.repeat(MAX_CHARS - 6000) }] }],
+      pageParams: [undefined],
+    });
+    expect(snapshotJson(qc, 'acc', 1)?.length).toBeLessThan(MAX_CHARS - 3000);
+    qc.setQueryData(key('home.overview'), { needsYou: [{ id: 'o'.repeat(4000) }], widgets: [] });
+    qc.setQueryData(key('chats.unread', { burrow: 'burrow-hq' }, { room: 'chat' }), { threads: [] });
+    qc.setQueryData(...tabThreads('t'.repeat(4000)));
+    const both = snapshotQueries(qc, 'acc', 1);
+    const ids = (snap: PersistedQueries | null) => snap?.state.queries.map((q) => q.queryKey[1]) ?? [];
+    expect(ids(both)).not.toContain('home.overview');
+    expect(ids(both)).not.toContain('chats.threads');
+    expect(ids(both)).toContain('chats.unread');
+    expect(conversationsOf(both)).toEqual(['cv_1', 'cv_2']);
+    // With room for the threads once the Overview is out, they stay.
+    qc.setQueryData(...tabThreads('short'));
+    const one = snapshotQueries(qc, 'acc', 1);
+    expect(ids(one)).not.toContain('home.overview');
+    expect(ids(one)).toContain('chats.threads');
+    expect(conversationsOf(one)).toEqual(['cv_1', 'cv_2']);
+  });
+
+  it('saves for what it keeps only: not a server’s own threads, not the Overview alone (AP-928)', async () => {
+    vi.useFakeTimers();
+    try {
+      const box = createSecureBox(memoryBoxDeps(defaultCrypto as unknown as BoxCrypto));
+      const saves = vi.spyOn(box, 'saveJson');
+      const qc = new QueryClient();
+      const persister = createQueryPersister({ qc, box, scope: 's', account: () => 'acc' });
+      const stop = persister.start();
+      for (let i = 0; i < 3; i++) {
+        qc.setQueryData(
+          [
+            ...key(
+              'chats.threads',
+              { burrow: 'b' },
+              { room: 'chat', state: 'open', subjectKind: 'server', subjectId: 's1' },
+            ),
+            'infinite',
+          ],
+          { pages: [{ threads: [{ rootId: `msg_${i}` }], next: null }], pageParams: [undefined] },
+        );
+        qc.setQueryData(key('home.overview'), { generatedAt: `t${i}`, widgets: [] });
+        await vi.advanceTimersByTimeAsync(SAVE_EVERY_MS);
+      }
+      expect(saves).toHaveBeenCalledTimes(0);
+      // The next other change takes the Overview with it.
+      qc.setQueryData(key('agent.get'), { agent: null });
+      await vi.advanceTimersByTimeAsync(SAVE_EVERY_MS);
+      expect(saves).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(await box.load('s', QUERY_CACHE_NAME))).toContain('t2');
+      // Going to the background saves the Overview alone too.
+      qc.setQueryData(key('home.overview'), { generatedAt: 't9', widgets: [] });
+      await persister.flush();
+      expect(saves).toHaveBeenCalledTimes(2);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the conversations on screen and the most recent ones, not every one in the cache', () => {

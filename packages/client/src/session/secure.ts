@@ -350,6 +350,8 @@ const SNAPSHOT_REPEAT_MS = 10_000;
 
 /** The longest the stall check waits (AP-4401), and how long stuck connections count as one spell. */
 const MAX_STALL_MS = 20_000;
+/** A `probe()`'s wait when the stall check is turned off. */
+const DEFAULT_CHECK_MS = 2500;
 const STUCK_SPELL_MS = 120_000;
 
 interface StreamHandler {
@@ -381,8 +383,12 @@ interface Conn {
   pongN: number;
   /** The next stall check, armed while something is sent. */
   watch: ReturnType<typeof setTimeout> | null;
-  /** The `probe()` waiting for its `pong`. */
+  /** The `probe()` waiting for its `pong`: its timer, its ping's number, when it is due (`now()`), and whether it
+   * already had its one more wait after firing late. */
   check: ReturnType<typeof setTimeout> | null;
+  checkN: number;
+  checkDue: number;
+  checkLate: boolean;
   /**
    * Until when the appliance owes this connection another frame: an agent's thinking line is refreshed every few
    * seconds while its turn runs, so silence before then is a dead path, checked at once like an unanswered request.
@@ -640,6 +646,9 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
           pongN: 0,
           watch: null,
           check: null,
+          checkN: 0,
+          checkDue: 0,
+          checkLate: false,
           liveUntil: 0,
           draining: false,
           streams: new Map(),
@@ -843,23 +852,49 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
   }
 
   /**
-   * `probe()`: one `ping`; no `pong` within the stall check's first wait and the connection is lost, dialed again at once.
-   * Not a stuck spell (the stall check's wait isn't doubled after it): a socket that died while the app was away says
-   * nothing about the network now.
+   * `probe()`: one `ping`; no `pong` within the stall check's wait and the connection is lost, dialed again at once. A
+   * check already out is replaced by a fresh ping: what asked again (another network) may have left the first one's
+   * answer on the old path. Not a stuck spell (the stall check's wait isn't doubled after it): a socket that died while
+   * the app was away says nothing about the network now.
    */
-  function probe(c: Conn) {
-    if (c.closed || c.draining || c.check) return;
-    const n = ++pingN;
-    if (!send(c, { t: 'ping', n })) return;
-    c.check = setTimeout(
-      () => {
-        c.check = null;
-        if (c.closed || conn !== c || c.pongN >= n) return;
-        connectionEnded(c, 'lost');
-        dialNow();
-      },
-      baseStallMs > 0 ? baseStallMs : 2500,
-    );
+  function probe(c: Conn, onlyIfChecking: boolean) {
+    if (c.closed || c.draining) return;
+    if (onlyIfChecking && !c.check) return;
+    if (c.check) clearTimeout(c.check);
+    c.check = null;
+    c.checkLate = false;
+    checkPing(c);
+  }
+
+  function checkPing(c: Conn) {
+    c.checkN = ++pingN;
+    if (!send(c, { t: 'ping', n: c.checkN })) {
+      checkFailed(c);
+      return;
+    }
+    const wait = stallWait() || DEFAULT_CHECK_MS;
+    c.checkDue = now() + wait;
+    c.check = setTimeout(() => checkEnded(c, wait), wait);
+  }
+
+  function checkEnded(c: Conn, wait: number) {
+    c.check = null;
+    if (c.closed || conn !== c || c.pongN >= c.checkN) return;
+    // Fired far later than it was set for: the app's JavaScript was frozen (in the background), and the answer may be
+    // waiting behind the timer. One more short wait, on a fresh ping, before giving up on it.
+    if (!c.checkLate && now() - c.checkDue > wait) {
+      c.checkLate = true;
+      checkPing(c);
+      return;
+    }
+    checkFailed(c);
+  }
+
+  /** The check went unanswered, or its ping couldn't be sent: lost, and dialed again without the backoff. */
+  function checkFailed(c: Conn) {
+    if (conn !== c) return;
+    connectionEnded(c, 'lost');
+    dialNow();
   }
 
   /** Dial now instead of waiting out the backoff (a no-op while open or dialing). */
@@ -1195,6 +1230,11 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
         return;
       case 'pong':
         c.pongN = Math.max(c.pongN, m.n);
+        // The check's own answer ends it: the next network change gets a check of its own.
+        if (c.check && c.pongN >= c.checkN) {
+          clearTimeout(c.check);
+          c.check = null;
+        }
         return;
       case 'welcome':
         return;
@@ -2371,8 +2411,8 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
       connectNow();
     },
     reconnectNow: dialNow,
-    probe() {
-      if (conn && state.status === 'open') probe(conn);
+    probe(options) {
+      if (conn && state.status === 'open') probe(conn, options?.onlyIfChecking === true);
     },
     close(reason = 'closed') {
       terminate(reason);

@@ -2,13 +2,11 @@
  * The appliance connection while the app is away (AP-925, AP-926). In the background the connection is let go after
  * `BACKGROUND_GRACE_MS` (a quick look at another app keeps it), unless work is under way (the session says so) or a live
  * activity is on screen (a managed Whombat sends no live pushes, NT-13: its updates come only through the connection);
- * those are asked again every `BUSY_RETRY_MS`. A connection opened less than `PUSH_HOLD_MS` ago is let go at once
- * instead: the box holds the person's pushes for that long after one of their connections opens, so a quick question
- * and a switch to another app would otherwise get its reply without a notification. Something that needs the
- * connection while it is let go (a push that reloads a list) opens it again, and it goes again after the grace. Back
- * in the foreground it opens at once; the subscriptions resume from their cursors, and the appliance asks for a resync
- * where it can't (WE-04). One that still says it is open after a while away is checked (`probe`): Android stops the
- * app's timers in the background and mobile networks drop quiet sockets without a word.
+ * those are asked again every `BUSY_RETRY_MS`. Something that needs the connection while it is let go (a push that
+ * reloads a list) opens it again, and it goes again after the grace. Back in the foreground it opens at once; the
+ * subscriptions resume from their cursors, and the appliance asks for a resync where it can't (WE-04). One that still
+ * says it is open after a while away is checked (`probe`): Android stops the app's timers in the background and mobile
+ * networks drop quiet sockets without a word.
  *
  * A read is refetched on coming back or on getting online only when it may have missed a change: the live updates
  * came back without picking up where they left off since it was answered, or nothing changed it for a while
@@ -29,11 +27,6 @@ import type { ApplianceSession } from '@whombat/client/session';
 export const BACKGROUND_GRACE_MS = 2 * 60_000;
 /** Work under way or a live activity on screen: asked again this much later. */
 export const BUSY_RETRY_MS = 30_000;
-/**
- * The box holds a push for this long after one of the person's connections opens (they are at a screen): one opened
- * more recently is let go as soon as the app goes to the background.
- */
-export const PUSH_HOLD_MS = 60_000;
 /** Back after this long away, a connection that says it is open is checked before it is trusted. */
 export const WAKE_CHECK_AFTER_MS = 30_000;
 
@@ -64,9 +57,6 @@ export function createBackgroundRelease(input: {
   const now = input.now ?? Date.now;
   let away = false;
   let awayAt = 0;
-  // When the connection last opened, as seen here; one already open when this started counts as old.
-  let openedAt = Number.NEGATIVE_INFINITY;
-  let wasOpen = session.state().status === 'open';
   let timer: ReturnType<typeof setTimeout> | null = null;
   const clear = () => {
     if (timer) clearTimeout(timer);
@@ -74,35 +64,29 @@ export function createBackgroundRelease(input: {
   };
   const schedule = (ms: number) => {
     clear();
-    timer = setTimeout(() => void release(false), ms);
+    timer = setTimeout(() => void release(), ms);
   };
-  /** `early`: right on going to the background; something that holds the connection then gives it the grace. */
-  async function release(early: boolean) {
+  async function release() {
     timer = null;
     if (!away) return;
     const kept = await input.keep().catch(() => false);
     // Back in the foreground meanwhile, or asked again.
     if (!away || timer) return;
-    if (early && kept) schedule(graceMs);
-    else if (kept || !session.suspend?.()) schedule(retryMs);
+    if (kept || !session.suspend?.()) schedule(retryMs);
   }
+  // Opened again while away (something needed it): let go again after the grace.
   const off = session.onState((s) => {
-    const open = s.status === 'open';
-    if (open && !wasOpen) openedAt = now();
-    wasOpen = open;
-    // Opened again while away (something needed it): let go again after the grace.
-    if (away && open && !timer) schedule(graceMs);
+    if (away && s.status === 'open' && !timer) schedule(graceMs);
   });
   return {
     background() {
       away = true;
       awayAt = now();
-      clear();
-      if (session.state().status === 'open' && now() - openedAt < PUSH_HOLD_MS) void release(true);
-      else schedule(graceMs);
+      schedule(graceMs);
     },
     foreground() {
-      const awayFor = away ? now() - awayAt : 0;
+      const wasAway = away;
+      const awayFor = wasAway ? now() - awayAt : 0;
       away = false;
       clear();
       const status = session.state().status;
@@ -110,6 +94,8 @@ export function createBackgroundRelease(input: {
       else if (status !== 'open') session.reconnectNow();
       // Its timers stopped while away: the socket may have died without the session hearing of it.
       else if (awayFor >= WAKE_CHECK_AFTER_MS) session.probe?.();
+      // A check begun in the background (another network) pinged before the freeze: it pings again now.
+      else if (wasAway) session.probe?.({ onlyIfChecking: true });
     },
     dispose() {
       away = false;
@@ -145,9 +131,10 @@ export interface BoxReach {
  * says it is online (the connection is then being opened, and reads wait for it). An open connection on a Wi-Fi without
  * internet reaches the box on its direct way; going by the phone's internet check alone, every read waited there.
  *
- * NetInfo is a hint for the connection: getting online, or onto another network, dials now when it isn't open; another
- * network while it is open checks it (`probe`), since its socket may be tied to the old one. Only a change of network or
- * of being online counts: NetInfo repeats itself (its internet check coming in), and that must not dial again.
+ * NetInfo is a hint for the connection: connected again after none, or onto another network (`networkKey`), dials now
+ * when it isn't open; another network while it is open checks it (`probe`), since its socket may be tied to the old
+ * one. Nothing else counts: NetInfo repeats itself, and its internet check coming in (unknown or no internet, then yes)
+ * is no new network, so neither dials.
  */
 export function createBoxReach(input: {
   session: Pick<ApplianceSession, 'state' | 'onState' | 'reconnectNow' | 'probe'>;
@@ -168,15 +155,13 @@ export function createBoxReach(input: {
   update();
   return {
     net(n) {
-      const online = n.isConnected !== false && n.isInternetReachable !== false;
+      netOnline = n.isConnected !== false && n.isInternetReachable !== false;
+      // Connected again, or onto another network: the key changes. The internet check coming in doesn't change it.
       const next = networkKey(n);
       const moved = key !== undefined && next !== key;
-      const cameOnline = online && !netOnline;
-      netOnline = online;
       key = next;
-      if (session.state().status === 'open') {
-        if (moved) session.probe?.();
-      } else if (next !== null && (moved || cameOnline)) session.reconnectNow();
+      if (moved && session.state().status === 'open') session.probe?.();
+      else if (moved && next !== null) session.reconnectNow();
       update();
     },
     dispose: off,
