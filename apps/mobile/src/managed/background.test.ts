@@ -14,7 +14,6 @@ import {
   failedReadDue,
   type NetSnapshot,
   networkKey,
-  PUSH_HOLD_MS,
   QUIET_READ_MS,
   retryFailedReads,
   WAKE_CHECK_AFTER_MS,
@@ -139,87 +138,6 @@ describe('the connection in the background (AP-925)', () => {
   });
 });
 
-describe('a connection opened a moment ago, on going to the background', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  /** A session that opens (as seen by the release) `ago` ms before the app goes to the background. */
-  async function openedAgo(ago: number, keep = async () => false, busy = () => false) {
-    const { session, set } = fakeSession(busy);
-    set({ status: 'connecting', attempt: 0 });
-    const release = createBackgroundRelease({ session, keep, now: () => Date.now() });
-    set(OPEN);
-    await vi.advanceTimersByTimeAsync(ago);
-    return { session, set, release };
-  }
-
-  it('is let go at once, so the box does not hold the reply’s push', async () => {
-    const { session, release } = await openedAgo(PUSH_HOLD_MS - 1000);
-    release.background();
-    await settle();
-    expect(session.suspend).toHaveBeenCalledTimes(1);
-    expect(session.state()).toEqual({ status: 'idle' });
-    release.dispose();
-  });
-
-  it('an older one keeps the grace', async () => {
-    const { session, release } = await openedAgo(PUSH_HOLD_MS);
-    release.background();
-    await settle();
-    expect(session.suspend).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(BACKGROUND_GRACE_MS);
-    await settle();
-    expect(session.state()).toEqual({ status: 'idle' });
-    release.dispose();
-  });
-
-  it('kept by a waiting message or a live activity, it waits the grace', async () => {
-    let kept = true;
-    const { session, release } = await openedAgo(1000, async () => kept);
-    release.background();
-    await settle();
-    expect(session.suspend).not.toHaveBeenCalled();
-    kept = false;
-    await vi.advanceTimersByTimeAsync(BUSY_RETRY_MS);
-    await settle();
-    expect(session.suspend).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(BACKGROUND_GRACE_MS - BUSY_RETRY_MS);
-    await settle();
-    expect(session.state()).toEqual({ status: 'idle' });
-    release.dispose();
-  });
-
-  it('with work under way, asked again soon', async () => {
-    let busy = true;
-    const { session, release } = await openedAgo(
-      1000,
-      async () => false,
-      () => busy,
-    );
-    release.background();
-    await settle();
-    expect(session.suspend).toHaveBeenCalledTimes(1);
-    expect(session.state().status).toBe('open');
-    busy = false;
-    await vi.advanceTimersByTimeAsync(BUSY_RETRY_MS);
-    await settle();
-    expect(session.state()).toEqual({ status: 'idle' });
-    release.dispose();
-  });
-
-  it('back before the check answered, it stays', async () => {
-    let answer: (kept: boolean) => void = () => {};
-    const keep = () => new Promise<boolean>((resolve) => (answer = resolve));
-    const { session, release } = await openedAgo(1000, keep);
-    release.background();
-    release.foreground();
-    answer(false);
-    await settle();
-    expect(session.suspend).not.toHaveBeenCalled();
-    release.dispose();
-  });
-});
-
 describe('a connection that says it is open when the app comes back', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -241,9 +159,12 @@ describe('a connection that says it is open when the app comes back', () => {
     release.background();
     await vi.advanceTimersByTimeAsync(WAKE_CHECK_AFTER_MS - 1);
     release.foreground();
+    // Only a check already out (begun in the background) pings again.
+    expect(session.probe).toHaveBeenCalledTimes(1);
+    expect(session.probe).toHaveBeenLastCalledWith({ onlyIfChecking: true });
     await vi.advanceTimersByTimeAsync(WAKE_CHECK_AFTER_MS);
     release.foreground();
-    expect(session.probe).not.toHaveBeenCalled();
+    expect(session.probe).toHaveBeenCalledTimes(1);
     release.dispose();
   });
 });
@@ -301,7 +222,7 @@ describe('whether box reads run, and NetInfo as a hint (createBoxReach)', () => 
     r.dispose();
   });
 
-  it('dials now on getting a network back while not open', () => {
+  it('dials now on getting a network back, or another one, while not open', () => {
     const { session, set, r } = reach();
     set({ status: 'reconnecting', attempt: 4, reason: 'offline', retryAt: 0 });
     r.net(none);
@@ -309,10 +230,19 @@ describe('whether box reads run, and NetInfo as a hint (createBoxReach)', () => 
     // A LAN without internet reaches the box all the same.
     r.net(wifi('10.100.0.7', false));
     expect(session.reconnectNow).toHaveBeenCalledTimes(1);
-    r.net(wifi('10.100.0.7', true));
+    r.net({ type: 'cellular', isConnected: true, isInternetReachable: true });
     expect(session.reconnectNow).toHaveBeenCalledTimes(2);
+    r.dispose();
+  });
+
+  it('does not dial when only the internet check comes in', () => {
+    const { session, set, r } = reach();
+    set({ status: 'reconnecting', attempt: 4, reason: 'offline', retryAt: 0 });
+    r.net(wifi('10.100.0.7', null));
+    r.net(wifi('10.100.0.7', false));
     r.net(wifi('10.100.0.7', true));
-    expect(session.reconnectNow).toHaveBeenCalledTimes(2);
+    r.net(wifi('10.100.0.7', true));
+    expect(session.reconnectNow).not.toHaveBeenCalled();
     r.dispose();
   });
 

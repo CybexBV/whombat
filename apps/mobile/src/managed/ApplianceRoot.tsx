@@ -377,8 +377,8 @@ export function ApplianceRoot(props: ApplianceRootProps) {
     );
     // Back in the foreground or back online: reconnect now (a fresh handshake), instead of waiting out the backoff, and
     // after a while away check a connection that says it is open. In the background the connection is let go after a
-    // grace (at once when it opened in the last minute, so the box doesn't hold the reply's push), unless work is under
-    // way, messages wait to be sent or a live activity is on screen (AP-925); what is kept on the device is saved at once.
+    // grace, unless work is under way, messages wait to be sent or a live activity is on screen (AP-925); what is kept on
+    // the device is saved at once.
     const release = createBackgroundRelease({
       session: s.raw,
       keep: async () => s.holds.outbox || (await liveActivityShown()),
