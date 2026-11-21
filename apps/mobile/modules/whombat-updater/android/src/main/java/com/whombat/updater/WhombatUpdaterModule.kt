@@ -30,7 +30,8 @@ private const val PROGRESS_EVERY_MS = 250L
  * (size and SHA-256 from `latest.json`, then Android reads it: this package, the announced `versionCode`, newer than
  * this build, signed with this app's key) and handed to Android's installer through a FileProvider
  * (`ACTION_INSTALL_PACKAGE`), which asks the person and ends with “App installed · Open”. No browser, no Downloads
- * folder. The first time Android asks to allow installs from Whombat (`canInstall` / `openInstallSettings`).
+ * folder. The first time Android asks to allow installs from Whombat (`canInstall` / `openInstallSettings`, or
+ * `openAppDetails` where that page doesn't open).
  *
  * Rejections carry a code: `busy`, `network` (no answer, an HTTP error, a short file), `verify` (the bytes
  * or the APK aren't what was announced), `signature` (not signed like this app: Android would refuse it), `failed`.
@@ -64,6 +65,12 @@ class WhombatUpdaterModule : Module() {
     Function("openInstallSettings") {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return@Function false
       val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+      runCatching { start(intent) }.isSuccess
+    }
+
+    /** This app's own page in Android's settings, for phones that can't open the one above; true when it opened. */
+    Function("openAppDetails") {
+      val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
       runCatching { start(intent) }.isSuccess
     }
 
@@ -181,9 +188,11 @@ class WhombatUpdaterModule : Module() {
   /** What Android reads in the file: this app, the announced version, newer than this build, this app's signer. */
   private fun checkArchive(file: File, versionCode: Long) {
     val pm = context.packageManager
+    // Android 9 reads an archive's certificates only when GET_SIGNATURES is asked for too, so both are.
+    @Suppress("DEPRECATION")
     val flags =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
-      else 0
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+      else PackageManager.GET_SIGNATURES
     val fail = { code: String, message: String ->
       file.delete()
       UpdateException(code, message)
@@ -194,14 +203,23 @@ class WhombatUpdaterModule : Module() {
     val code = codeOf(info)
     if (code != versionCode) throw fail("verify", "The download is version $code, not $versionCode.")
     if (code <= ownVersionCode()) throw fail("verify", "The download isn't newer than this app.")
+    // A signer Android can't read counts as a failed check, never as a pass.
+    val unread = "Android couldn't read who signed the download."
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       val signers = info.signingInfo?.apkContentsSigners
-      if (
-        !signers.isNullOrEmpty() &&
-        signers.none { pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509) }
-      ) {
+      if (signers.isNullOrEmpty()) throw fail("verify", unread)
+      if (signers.none { pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509) }) {
         throw fail("signature", "The download isn't signed like this app.")
       }
+    } else {
+      @Suppress("DEPRECATION")
+      val signers = info.signatures
+      if (signers.isNullOrEmpty()) throw fail("verify", unread)
+      @Suppress("DEPRECATION")
+      val own = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES).signatures
+      if (own.isNullOrEmpty()) throw fail("verify", unread)
+      // Before Android 9 an update must carry exactly this app's signers.
+      if (signers.toSet() != own.toSet()) throw fail("signature", "The download isn't signed like this app.")
     }
   }
 

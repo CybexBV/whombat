@@ -153,7 +153,13 @@ export const COPY = {
       `${version} · ${Math.round(received / 1_000_000)} of ${Math.max(1, Math.round(total / 1_000_000))} MB`,
     /** Android asks once whether Whombat may install apps (“Install unknown apps”). */
     allow: 'Allow installs',
-    allowMeta: 'Allow Whombat to install apps in Android’s settings, then come back here.',
+    /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */
+    allowWhere: {
+      setting: 'Allow Whombat to install apps in Android’s settings, then come back here.',
+      details:
+        'Android opened Whombat’s app info instead. Allow it to install unknown apps there, then come back here.',
+      none: 'Android couldn’t open its settings. In Settings, find Whombat under Apps, allow it to install unknown apps, then come back here.',
+    },
     /** Downloaded; Android's installer opens on it. */
     ready: 'Install',
     readyMeta: (version: string) => `${version} · Downloaded. Android asks before it installs.`,

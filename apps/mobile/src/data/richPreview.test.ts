@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_STYLE_ID } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  afterPreviewGone,
   HTML_PREVIEW_CSP,
   headingSize,
   PREVIEW_WEBVIEW_PROPS,
@@ -94,5 +95,11 @@ describe('HTML previews on mobile (AP-328)', () => {
     expect(pageHeight(JSON.stringify({ type: 'whombat.height', height: 1e9 }))).toBe(PAGE_MAX_HEIGHT);
     for (const junk of ['x', 'null', '{"type":"whombat.height","height":"9"}', '{"type":"other","height":9}'])
       expect(pageHeight(junk)).toBeNull();
+  });
+});
+
+describe('a preview whose browser stopped', () => {
+  it('starts again twice by itself, then waits for “Try again”', () => {
+    expect([0, 1, 2, 3].map(afterPreviewGone)).toEqual(['restart', 'restart', 'offer', 'offer']);
   });
 });

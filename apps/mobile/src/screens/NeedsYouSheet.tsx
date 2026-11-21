@@ -66,6 +66,7 @@ import { haptic } from '../ui/haptics';
 import { LookSays } from '../ui/LookSays';
 import { OneCardBody, type OneCardContent, OneCardPage, OneSheet } from '../ui/oneSheet';
 import { ErrorState, QuietText, SkeletonRows } from '../ui/primitives';
+import { whenSheetDown } from '../ui/sheet';
 import { showFailure, showLookFix, showNotice, useDecisionFeedback } from './feedback';
 
 /** Takes an item out of the list at once; the function it returns puts Home back as it was (a refusal). */
@@ -379,16 +380,13 @@ export function NeedsYouSheet({ item, onClose }: { item: NeedsYouItem | null; on
     (route) => {
       next.current = route;
       onClose();
-      setTimeout(go, SHEET_DOWN_MS);
+      whenSheetDown(go);
     },
     onClose,
   );
   if (!card) return <OneSheet visible={false} onClose={onClose} onDismissed={go} title="" buttons={[]} />;
   return <OneSheet visible onClose={card.busy ? () => {} : onClose} onDismissed={go} {...card} />;
 }
-
-/** The longest a screen waits for the sheet to go down, should the system not say it did. */
-const SHEET_DOWN_MS = 600;
 
 type ItemProps = NativeStackScreenProps<RootStackParamList, 'NeedsYouItem'>;
 

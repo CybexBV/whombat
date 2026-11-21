@@ -3,7 +3,8 @@
 // environment (its control and hosted-UI origins are inlined into the bundle), signed with the release key so the
 // sign-in links and the QR code open it (AP-291), and writes it with `latest.json` into control's `DOWNLOADS_DIR`.
 //
-//   pnpm --filter @whombat/mobile publish:apk --dir <dir> --arch all      # production, the one app for everyone
+//   pnpm --filter @whombat/mobile publish:apk --dir <dir>      # production, the one app for everyone (arm64-v8a)
+//   … --arch all      x86_64 too, for an emulator (every phone would download its libraries)
 //   pnpm --filter @whombat/mobile publish:apk --env dev --dir ~/.whombat-stack-dev/downloads
 //   … --skip-build    publish build/whombat-release.apk as it is (it must have been built for the same --env)
 //
