@@ -343,8 +343,9 @@ appliance sends prompts and workspace context to the provider you chose, which s
 
 ### 5.2 Updates
 
-**Signing and delivery.** The appliance's software (the agent included) and the Claude Code binary it runs come
-from Whombat's update repository, which uses TUF (The Update Framework). Its signed metadata is public at
+**Signing and delivery.** The appliance's software (the agent included) comes from Whombat's update repository,
+which uses TUF (The Update Framework); the Claude Code binary comes from Anthropic's own download site, at the version,
+size and SHA-256 the repository's signed client channel names. Its signed metadata is public at
 `releases.whombat.com`; its files are release assets on GitHub. Each appliance follows one channel: Production, or
 Beta when its person picks it (Settings → This Whombat → About), and installs that channel's newest release. Nobody
 chooses a release for one appliance. On the appliance, both the manager and a separate root helper verify the TUF
@@ -388,7 +389,7 @@ against this, and auditing the clients cannot rule it out.**
 | Offline threshold root: 2-of-3 keys; an offline top-level targets key | in place: root version 4 in `appliance/manifest/prod/tuf-root.json` |
 | Threshold signing of releases | **not in place**: one online key per channel (above) |
 | Separation between the update signers and the cloud service | in place: the cloud service holds no update key and has no part in choosing updates |
-| The client channel (Claude Code) | signed by one online key limited to those files. The binaries are the unmodified upstream executables, checked against Whombat's recorded SHA-256. Upstream vendor signatures are not checked. |
+| The client channel (Claude Code) | signed by one online key limited to those files. The box downloads the unmodified binary from Anthropic's site and installs it only when it matches the SHA-256 Whombat recorded. Upstream vendor signatures are not checked. |
 | Beta before Production | in place; no staged rollout or emergency stop within a channel |
 | Reproducible appliance builds | partial: the contracts npm packages rebuild byte for byte; other artifacts are not verified |
 | Customer approval of each update | in place, off by default (*Ask before updating*, above) |

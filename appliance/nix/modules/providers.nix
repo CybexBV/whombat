@@ -1,6 +1,7 @@
 # AI clients for the runner (SUB-09, contracts CT-72…CT-74, NX-37; manager MG-33). Claude Code and Codex are not part
-# of the image any more: on an owner's request the manager installs the latest tested version from the signed client
-# channel into /persist/whombat/clients/<provider>/<version>/ — unmodified, read-only, owned by whombat-manager,
+# of the image any more: on an owner's request the manager installs the latest tested version the signed client channel
+# names (Claude Code from Anthropic's own download site, checked against the channel's SHA-256) into
+# /persist/whombat/clients/<provider>/<version>/ — unmodified, read-only, owned by whombat-manager,
 # executable by the runner — and pushes the executable paths and digests to the runtime (`POST /clients`). The
 # server keeps that status in WHOMBAT_CLIENTS_FILE, which the runner reads before each turn (Whombat SUB-25): it runs
 # exactly that path after checking its sha256, so the pins come from the installed bundles, not from the image.

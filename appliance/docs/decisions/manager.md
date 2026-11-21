@@ -558,6 +558,8 @@ IPv6).
 
 ## MG-33 The manager installs the AI clients from the signed client channel (2026-09-26; SUB-09, CT-72…CT-74, contracts 0.9.0)
 
+*Superseded in part by MG-184: Claude Code comes from Anthropic's download site, not the channel's artifact.*
+
 Claude Code and Codex are no longer part of the image (NX-37). On an owner's request the manager installs the latest
 tested version and keeps it current (`manager/internal/clients`, `manager/pkg/clientbundle`).
 
@@ -2799,3 +2801,21 @@ manager stores nothing of its own” holds only once a box has signed in.
   (`Daemon.claimWindowRequired`; a warning in the log, once). A box claimed on its own pages keeps the setting: there
   the person at the box can open the window.
 - Checked: `manager/internal/daemon` `TestClaimWindowRequiredOnlyWhereItCanBeOpened`.
+
+## MG-184 Claude Code comes from Anthropic's own download site (2026-11-21; John, before the public launch)
+
+- Whombat installs Claude Code but doesn't hand out a copy of its own: for a Claude bundle whose source is a bare
+  executable (`binary`) at `https://downloads.claude.ai/claude-code-releases/…`, the manager downloads that address
+  straight into the version's folder, never past the signed size, and installs it only when its size and SHA-256 match
+  the channel's executable (and the channel's source and executable agree). The channel stays the signed statement of
+  which version Whombat tested and what its bytes are; Anthropic's site only delivers them.
+- No fallback to the TUF artifact: a site that doesn't answer, or a file that doesn't match, fails the install (what
+  was installed keeps running and the retry backs off as before). A bundle on any other address (another host or port,
+  a path outside `claude-code-releases`, a query) and Codex install from the TUF artifact as before.
+- The download uses its own HTTPS client: bounded waits to connect and for an answer, redirects only to HTTPS. The
+  box's egress already allows port 443 for the manager.
+- The update host keeps publishing the artifact while boxes run an older manager, which knows only that path. Once
+  Production runs this manager, the publisher stops uploading Claude Code and its copies leave the update repository.
+- Checked: `manager/internal/clients` `TestClaudeComesFromAnthropic`, `TestClaudeElsewhereComesFromItsTarget`,
+  `TestClaudeSiteDown`, and `TestDigestMismatch` (a corrupt file on Anthropic's site; a channel whose source and
+  executable disagree).

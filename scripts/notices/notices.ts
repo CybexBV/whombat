@@ -245,9 +245,11 @@ cover it and grants nothing in it, and it is used under Anthropic’s own terms.
   \`pnpm install\` downloads the binary for the machine’s architecture from the npm registry.
 - **Whombat’s builds** leave it out: the runtime bundle (\`pnpm bundle:runtime\`) keeps it external and its manifest says
   \`claude.bundled: false\`; the web, widget and admin pages and the Android and iPhone apps don’t contain it.
-- **On an appliance** it is not in the image. On an owner’s request the manager installs it from Whombat’s signed
-  client channel (\`appliance/release-tools/clientchannel\`): Anthropic’s published binary, checked against
-  Anthropic’s digest and served unmodified, packed in a \`tar.gz\`, from Whombat’s update host.`,
+- **On an appliance** it is not in the image. On an owner’s request the manager downloads it from Anthropic’s own
+  download site (\`downloads.claude.ai\`), at the version Whombat tested: Whombat’s signed client channel
+  (\`appliance/release-tools/clientchannel\`) names its address, size and SHA-256, and the box installs Anthropic’s
+  file, unmodified, only when it matches. Until every Whombat runs a manager that does this, Whombat’s update host also
+  keeps that unmodified binary for older ones.`,
   },
 ];
 
