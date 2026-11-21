@@ -8,6 +8,7 @@ import type { ApplyContext } from '../commit/types';
 import { postMessage } from '../domain/messages';
 import { loadConversationRow } from '../read/conversations';
 import { publisherCheck } from './authority';
+import { runProvenanceOf } from './runs';
 import { startsRunThread } from './steps/thread';
 
 /** At most `max` characters, cut at a word with “…”. */
@@ -36,7 +37,7 @@ export async function postRunNotice(
     publishedById: string;
     conversationId: string;
     threadRootId: string | null;
-    trigger: { messageId?: string | null };
+    trigger: { kind: string; messageId?: string | null };
   },
   name: string,
   status: 'failed' | 'cancelled' | 'needs_review',
@@ -62,6 +63,7 @@ export async function postRunNotice(
     threadRootId: run.threadRootId,
     mentions: [],
     dispatch: false,
+    provenance: runProvenanceOf(run),
   });
   if (!run.threadRootId) await startsRunThread(ctx.tx, run.id, posted.id);
 }

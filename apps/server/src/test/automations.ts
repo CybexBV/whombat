@@ -24,6 +24,7 @@ import type { CommandDef, CommitOptions, CommitResult } from '../commit/types';
 import { loadConfig } from '../config';
 import { automationRuns, dispatches, messages } from '../db/schema/index';
 import { MemoryMailer } from '../mail/mailer';
+import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
 import { loadSeedWorld } from '../seed/load';
 import { TEST_BURROW_ID, testWorld } from '../seed/test-world';
 import { createServices, type Services } from '../services';
@@ -216,14 +217,16 @@ export function useAutomationWorld(options: { env?: Record<string, string> } = {
       const [d] = await s.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
       if (!d) throw new Error(`no dispatch ${dispatchId}`);
       for (const one of typeof text === 'string' ? [text] : text) {
-        const res = await s.pipeline.commit(
-          sendMessage,
-          {
-            conversationId: d.conversationId,
-            text: one,
-            ...(d.threadRootId ? { threadRootId: d.threadRootId } : {}),
-          },
-          { burrowId: d.burrowId, actorId: d.agentId },
+        const res = await runInDispatchScope(dispatchScopeOf(d), () =>
+          s.pipeline.commit(
+            sendMessage,
+            {
+              conversationId: d.conversationId,
+              text: one,
+              ...(d.threadRootId ? { threadRootId: d.threadRootId } : {}),
+            },
+            { burrowId: d.burrowId, actorId: d.agentId },
+          ),
         );
         if (res.status !== 'ok') throw new Error(`fake agent could not reply: ${res.status}`);
       }

@@ -33,7 +33,7 @@ import {
 import { automationSamples, sampleReport } from '../automations/routes';
 import { updateAutomationsWords } from '../automations/words';
 import { decideApproval } from '../commands/approvals';
-import { sendMessage } from '../commands/messages';
+import { reactToMessage, sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
 import { visibleConnections } from '../connections/context';
 import { connectionViews } from '../connections/views';
@@ -1168,5 +1168,69 @@ describe('a stuck intake tells the person', () => {
     expect(rows[0]?.text).toContain('Acme dev');
     expect((await poll()).problem).toBeUndefined();
     await done(id);
+  });
+
+  it('stamps outsiders_run provenance on tracker run messages so message and reaction automations skip them', async () => {
+    const trackerAutoId = await recipe({ writeBack: false });
+    await poll();
+
+    const msgWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: IDS.billing,
+        triggers: [
+          {
+            kind: 'message_posted',
+            conversationId: IDS.billing,
+            contains: ['TRACKER_TRIGGER_PHRASE'],
+            includeAgents: true,
+            includeReplies: true,
+          },
+        ],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Tracker message watcher' },
+    );
+    const reactWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: IDS.billing,
+        triggers: [{ kind: 'reaction_added', conversationId: IDS.billing, value: '👍' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered reaction' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Tracker reaction watcher' },
+    );
+    try {
+      w.advance(10_000);
+      file({
+        title: 'Bug with TRACKER_TRIGGER_PHRASE',
+        description: 'Echo TRACKER_TRIGGER_PHRASE',
+      });
+      await poll();
+      const [run] = await w.runs(trackerAutoId);
+      expect(run).toBeDefined();
+      const dispatchId = run?.steps[0]?.dispatchId as string;
+      expect(dispatchId).toBeTruthy();
+
+      await w.fakeAgentReply(dispatchId, 'Assessment mentions TRACKER_TRIGGER_PHRASE.');
+      await w.settle();
+
+      const threadMsgs = await w.runThread(run?.id as string);
+      expect(threadMsgs.length).toBeGreaterThanOrEqual(2);
+      for (const m of threadMsgs) {
+        expect(m.provenance, m.text).toBe('outsiders_run');
+        await w.ok(IDS.mara, reactToMessage, { messageId: m.id, value: '👍', on: true });
+      }
+      await w.settle();
+
+      expect(await w.runs(msgWatcherId)).toHaveLength(0);
+      expect(await w.runs(reactWatcherId)).toHaveLength(0);
+    } finally {
+      await done(trackerAutoId);
+      await done(msgWatcherId);
+      await done(reactWatcherId);
+    }
   });
 });

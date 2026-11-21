@@ -54,6 +54,7 @@ import { accountInBurrow, loadPrincipalRow, type PrincipalRow } from '../read/pr
 import { publishDispatch } from './activity';
 import type { DispatchRow } from './context';
 import { claudeExtraUsageText } from './failure-text';
+import { outsidersTurn } from './person';
 
 /** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
 export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode'>): boolean {
@@ -195,6 +196,7 @@ export const recordTurnFailure = defineCommand({
           // Quiet: no mentions, no follow-up work.
           mentions: [],
           dispatch: false,
+          provenance: outsidersTurn(row) ? 'outsiders_run' : null,
         });
         messageId = posted.id;
       }

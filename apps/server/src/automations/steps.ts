@@ -29,6 +29,7 @@ import { replyLine } from '../trackers/reply';
 import { assessmentOutput, assessmentReported } from './assessment';
 import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
+import { runProvenanceOf } from './runs';
 import { CONTINUE_STEP } from './steps/approval';
 import { stepRoomsCheck } from './steps/checks';
 import { executeConnectionActions } from './steps/connection-actions';
@@ -875,6 +876,7 @@ export const mergePrStep = defineCommand({
           threadRootId: place.threadRootId,
           mentions: [],
           dispatch: false,
+          provenance: runProvenanceOf(run),
         })
       : null;
     if (posted && place.startsThread)

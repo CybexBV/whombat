@@ -190,6 +190,13 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
   // What answered the assistant's reply in its person's Chat (chat-runtime.md CR-07, chat-runtime-server.md CR-S06).
   const ran = await ranOnForPost(ctx, conv, args.card);
   const scope = currentDispatchScope();
+  const outsidersAgentPost =
+    actor.kind === 'agent' &&
+    scope?.agentId === actor.id &&
+    scope.dispatchId !== null &&
+    scope.onBehalfOfAccountId === null;
+  const provenance =
+    args.provenance !== undefined ? args.provenance : outsidersAgentPost ? 'outsiders_run' : null;
 
   await tx.insert(messages).values({
     id,
@@ -209,7 +216,7 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     attachmentIds: args.attachmentIds ?? [],
     threadRootId: rootId,
     clientId: args.clientId ?? null,
-    provenance: args.provenance ?? null,
+    provenance,
     jobResult: args.jobResult ?? null,
     // A thread's subject is on its first message only (CHT-05).
     ...(args.subject && !rootId

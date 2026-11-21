@@ -16,6 +16,7 @@ import { and, asc, eq, gt } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
+import { reactToMessage, sendMessage } from '../commands/messages';
 import { syncTools } from '../connections/sync';
 import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
@@ -2142,6 +2143,134 @@ describe('mail-arrives automations', () => {
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       if (mbId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('stamps outsiders_run provenance on mail run messages so message_posted and reaction_added automations never fire on them', async () => {
+    const mbId = await insertConnection(w.services, {
+      catalogId: 'moneybird',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { administration: '12345' },
+      auth: { type: 'bearer' },
+      secret: 'm'.repeat(64),
+      label: 'Moneybird',
+    });
+    await syncTools(w.services, mbId);
+    await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+    const msgWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [
+          {
+            kind: 'message_posted',
+            conversationId: maraChat.dmId,
+            contains: ['TRIGGER_PHRASE'],
+            includeAgents: true,
+            includeReplies: true,
+          },
+        ],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered by message' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Message watcher' },
+    );
+    const reactWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'reaction_added', conversationId: maraChat.dmId, value: '👍' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered by reaction' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Reaction watcher' },
+    );
+    const mailAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['provenance-check'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_provenance_check',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'provenance-check TRIGGER_PHRASE',
+        body: 'Echo TRIGGER_PHRASE back in Chat.',
+        messageId: '<provenance-check@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(mailAutoId);
+      const runId = runRow?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'moneybird',
+              tool: 'request',
+              summary: 'Draft TRIGGER_PHRASE',
+              arguments: {
+                method: 'POST',
+                path: '/12345/documents/purchase_invoices.json',
+                body: { purchase_invoice: { reference: 'TRIGGER_PHRASE' } },
+              },
+            },
+          ],
+        },
+      );
+      await w.fakeAgentReply(dispatchId, 'Here is TRIGGER_PHRASE from the incoming email.');
+      await w.settle();
+
+      // Every message in the mail run thread (prompt root, agent reply, approval card) has `outsiders_run` provenance.
+      const threadMsgs = await w.runThread(runId);
+      expect(threadMsgs.length).toBeGreaterThanOrEqual(3);
+      for (const m of threadMsgs) {
+        expect(m.provenance, m.text).toBe('outsiders_run');
+      }
+
+      // Neither the message_posted watcher (even with includeAgents + includeReplies) nor reaction_added fired.
+      expect(await runsOf(msgWatcherId)).toHaveLength(0);
+      expect(await runsOf(reactWatcherId)).toHaveLength(0);
+
+      // Mara reacts 👍 to every message in the outsiders' run thread: reaction_added must STILL not fire!
+      for (const m of threadMsgs) {
+        await w.ok(IDS.mara, reactToMessage, { messageId: m.id, value: '👍', on: true });
+      }
+      await w.settle();
+      expect(await runsOf(reactWatcherId)).toHaveLength(0);
+
+      // Control check: Mara's own normal message and reaction STILL fire both watchers.
+      const own = await w.ok(IDS.mara, sendMessage, {
+        conversationId: maraChat.dmId,
+        text: 'Normal message with TRIGGER_PHRASE',
+      });
+      await w.ok(IDS.mara, reactToMessage, { messageId: own.id, value: '👍', on: true });
+      await w.settle();
+      expect(await runsOf(msgWatcherId)).toHaveLength(1);
+      expect(await runsOf(reactWatcherId)).toHaveLength(1);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: mailAutoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: msgWatcherId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: reactWatcherId });
+      await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
       await pollAndSettle();
     }
   });

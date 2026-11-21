@@ -20,6 +20,7 @@ import {
   isPersonalAction,
   KEY_CATALOG,
   type KeyId,
+  type MessageProvenance,
   newId,
   topics,
 } from '@whombat/core';
@@ -89,6 +90,8 @@ export interface NewApproval {
    * the requesting agent's dispatch scope says, else the person's.
    */
   onBehalfOfAccountId?: string | null;
+  /** Message provenance for the approval card's message (e.g. `'outsiders_run'` for mail/tracker runs). */
+  provenance?: MessageProvenance | null;
 }
 
 /**
@@ -273,6 +276,7 @@ export async function createApproval(
     // The card's text describes the action (an event title, a file name): an `@Name` in it mentions no one.
     mentions: [],
     dispatch: false,
+    ...(a.provenance !== undefined ? { provenance: a.provenance } : {}),
   });
   await tx.update(approvals).set({ messageId: posted.id }).where(eq(approvals.id, id));
 

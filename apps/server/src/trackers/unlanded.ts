@@ -6,6 +6,7 @@
  */
 import type { AutomationStep, JsonObject } from '@whombat/core';
 import { and, desc, eq, gt, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+import { runProvenanceOf } from '../automations/runs';
 import { type AutomationRunRow, type AutomationStepRow, loadStepRows } from '../automations/store';
 import { loadBurrowRow } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
@@ -139,6 +140,7 @@ export async function noticeUnlandedFix(
           dispatch: false,
           // The person hears through the notification below, once.
           notifyDmPerson: false,
+          provenance: runProvenanceOf(run),
         })
       : null;
   const { services } = ctx;
