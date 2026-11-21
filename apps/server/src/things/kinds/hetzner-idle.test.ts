@@ -13,15 +13,24 @@ import {
   type HetznerServerActivity,
   type HetznerSnapshot,
   hetznerNotices,
+  hetznerPage,
   hetznerSeen,
   hetznerSkipped,
+  IDLE_BATCH_CONCURRENCY,
+  idleEligibleServers,
   isIdlePaidServer,
+  METRICS_SERVERS,
 } from './hetzner';
 import { rowOf } from './media/testing';
+import type { KindCtx } from './types';
 
 const hz = vi.hoisted(() => ({
   servers: [] as Record<string, unknown>[],
   metricsCalls: [] as string[],
+  busyIds: new Set<string>(),
+  delayMs: 0,
+  inFlight: 0,
+  maxInFlight: 0,
 }));
 
 vi.mock('../../connections/http', async (importOriginal) => {
@@ -29,7 +38,8 @@ vi.mock('../../connections/http', async (importOriginal) => {
   return {
     ...real,
     signedConnectionFetch: async (_s: unknown, _r: unknown, req: { url: string }) => {
-      const path = new URL(req.url).pathname;
+      const parsed = new URL(req.url);
+      const path = parsed.pathname;
       if (path === '/v1/servers') {
         return {
           status: 200,
@@ -42,12 +52,30 @@ vi.mock('../../connections/http', async (importOriginal) => {
       if (path === '/v1/volumes') {
         return { status: 200, headers: {}, body: Buffer.from(JSON.stringify({ volumes: [] })) };
       }
+      if (path === '/v1/images') {
+        return {
+          status: 200,
+          headers: {},
+          body: Buffer.from(JSON.stringify({ images: [], meta: { pagination: { total_entries: 0 } } })),
+        };
+      }
       const match = path.match(/^\/v1\/servers\/([^/]+)\/metrics$/);
       if (match) {
         const id = match[1] as string;
-        hz.metricsCalls.push(id);
+        const isActivity = parsed.searchParams.get('type') === 'cpu,network';
+        if (isActivity) {
+          hz.metricsCalls.push(id);
+          hz.inFlight += 1;
+          hz.maxInFlight = Math.max(hz.maxInFlight, hz.inFlight);
+          if (hz.delayMs > 0) await new Promise((r) => setTimeout(r, hz.delayMs));
+          hz.inFlight -= 1;
+        }
         const tsStart = Math.floor((NOW.getTime() - 14 * 24 * 3600_000) / 1000);
-        const vals = Array.from({ length: 14 * 24 }, (_, i) => [tsStart + i * 3600, '0.1']);
+        const busy = hz.busyIds.has(id);
+        const cpuVal = busy ? '40.0' : '0.1';
+        const netVal = busy ? '5000' : '0.1';
+        const cpuVals = Array.from({ length: 14 * 24 }, (_, i) => [tsStart + i * 3600, cpuVal]);
+        const netVals = Array.from({ length: 14 * 24 }, (_, i) => [tsStart + i * 3600, netVal]);
         return {
           status: 200,
           headers: {},
@@ -55,9 +83,9 @@ vi.mock('../../connections/http', async (importOriginal) => {
             JSON.stringify({
               metrics: {
                 time_series: {
-                  cpu: { values: vals },
-                  'network.0.bandwidth.in': { values: vals },
-                  'network.0.bandwidth.out': { values: vals },
+                  cpu: { values: cpuVals },
+                  'network.0.bandwidth.in': { values: netVals },
+                  'network.0.bandwidth.out': { values: netVals },
                 },
               },
             }),
@@ -236,5 +264,78 @@ describe('Hetzner idle paid server check', () => {
     const seenOn = await hetznerSeen({} as Services, rowOn, NOW, quietOn);
     expect(hz.metricsCalls).toEqual(['101']);
     expect(seenOn.notices?.some((n) => n.check === 'hetzner.idle')).toBe(true);
+  });
+
+  it('checks every eligible paid server beyond the six-server chart cap in bounded batches', async () => {
+    const oldCreated = new Date(NOW.getTime() - 45 * DAY).toISOString();
+    const youngCreated = new Date(NOW.getTime() - 3 * DAY).toISOString();
+    const makeRaw = (id: number, over: { name?: string; status?: string; created?: string } = {}) => ({
+      id,
+      name: over.name ?? `srv-${id}`,
+      status: over.status ?? 'running',
+      created: over.created ?? oldCreated,
+      server_type: {
+        name: 'cx22',
+        cores: 2,
+        memory: 4,
+        disk: 40,
+        prices: [{ location: 'fsn1', price_monthly: { gross: '4.51' } }],
+      },
+      datacenter: { location: { name: 'fsn1', city: 'Falkenstein' } },
+      public_net: { ipv4: { ip: `203.0.113.${id}` }, ipv6: null },
+      backup_window: '22-02',
+      protection: { delete: true },
+      outgoing_traffic: 0,
+      included_traffic: 20e12,
+    });
+    // 10 eligible paid servers (> METRICS_SERVERS=6), plus 1 young and 1 stopped server that are ineligible.
+    hz.servers = [
+      ...Array.from({ length: 10 }, (_, i) => makeRaw(i + 1)),
+      makeRaw(11, { name: 'brand-new', created: youngCreated }),
+      makeRaw(12, { name: 'stopped-box', status: 'off' }),
+    ];
+    // Servers 1..8 and 10 are busy; server 9 (outside the 6-server chart list) is idle.
+    hz.busyIds = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '10']);
+    hz.metricsCalls = [];
+    hz.delayMs = 15;
+    hz.inFlight = 0;
+    hz.maxInFlight = 0;
+
+    const quietOn: ThingQuiet = { quiets: [], offs: [], ons: [{ checkId: 'hetzner.idle', at: NOW }] };
+    const rowSeen = rowOf('hetzner', { id: 'con_hz_many_seen', baseUrl: 'https://api.hetzner.cloud' });
+    const seen = await hetznerSeen({} as Services, rowSeen, NOW, quietOn);
+
+    expect(hz.metricsCalls.length).toBe(10);
+    expect(hz.metricsCalls.length).toBeGreaterThan(METRICS_SERVERS);
+    expect(hz.metricsCalls).not.toContain('11');
+    expect(hz.metricsCalls).not.toContain('12');
+    expect(hz.maxInFlight).toBeLessThanOrEqual(IDLE_BATCH_CONCURRENCY);
+    const idleNotices = seen.notices?.filter((n) => n.check === 'hetzner.idle') ?? [];
+    expect(idleNotices.map((n) => n.subject?.id)).toEqual(['server:9']);
+    expect(seen.skipped).toEqual([]);
+
+    // The page also flags server 9 while keeping its weekly traffic trend scoped to the 6 chart servers.
+    hz.metricsCalls = [];
+    hz.delayMs = 0;
+    const rowPage = rowOf('hetzner', { id: 'con_hz_many_page', baseUrl: 'https://api.hetzner.cloud' });
+    const ctx: KindCtx = {
+      services: { db: null } as unknown as Services,
+      row: rowPage,
+      entry: {} as KindCtx['entry'],
+      now: NOW,
+      timeZone: 'UTC',
+      machine: null,
+      range: '24h',
+      burrowId: 'brw_1',
+      disk: { pct: [], gb: [] },
+      quiet: quietOn,
+    };
+    const view = await hetznerPage(ctx);
+    expect(view.notices.filter((n) => n.check === 'hetzner.idle').map((n) => n.subject?.id)).toEqual([
+      'server:9',
+    ]);
+    expect(hz.metricsCalls).toContain('9');
+    expect(idleEligibleServers({ readAt: NOW, servers: [server({ id: 'a' }), server({ id: 'b', status: 'off' })], volumes: null }, NOW).map((x) => x.id)).toEqual(['a']);
+    hz.busyIds = new Set();
   });
 });

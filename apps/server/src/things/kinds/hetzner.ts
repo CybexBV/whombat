@@ -20,6 +20,7 @@ import {
 } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { ConnectionGlance } from '../../home/types';
+import { sideBySide } from '../../lib/side-by-side';
 import type { Services } from '../../services';
 import { within } from '../part-of';
 import { checkWatched } from '../quiet/defaults';
@@ -806,6 +807,20 @@ export function hetznerNotices(
   return out;
 }
 
+/** Maximum concurrent 14-day metrics requests when checking paid servers for idleness. */
+export const IDLE_BATCH_CONCURRENCY = 4;
+
+/** Running paid servers old enough to be checked for 14-day idleness. */
+export function idleEligibleServers(s: HetznerSnapshot, now: Date): HetznerServer[] {
+  return s.servers.filter(
+    (x) =>
+      x.status === 'running' &&
+      x.monthlyEur !== null &&
+      x.monthlyEur > 0 &&
+      (!x.createdAt || now.getTime() - x.createdAt.getTime() >= IDLE_DAYS * DAY_MS),
+  );
+}
+
 /** The checks this read couldn't fully see: every one when the list of servers was capped, or idle when activity wasn't read for every running paid server. */
 export function hetznerSkipped(
   s: HetznerSnapshot,
@@ -813,28 +828,24 @@ export function hetznerSkipped(
 ): string[] {
   if (s.serversCapped) return HETZNER_CHECKS.map((c) => c.check);
   if (activity !== undefined) {
-    const eligible = s.servers.filter(
-      (x) =>
-        x.status === 'running' &&
-        x.monthlyEur !== null &&
-        x.monthlyEur > 0 &&
-        (!x.createdAt || s.readAt.getTime() - x.createdAt.getTime() >= IDLE_DAYS * DAY_MS),
-    );
+    const eligible = idleEligibleServers(s, s.readAt);
     if (eligible.some((x) => !activity?.has(x.id))) return ['hetzner.idle'];
   }
   return [];
 }
 
-/** Reads 14-day hourly activity for running servers (cached 1h), indexed by server id. */
+/** Reads 14-day hourly activity for servers in bounded batches (cached 1 h), indexed by server id. */
 async function readAllActivity(
   services: Services,
   row: CatalogConnectionRow,
   servers: readonly HetznerServer[],
   now: Date,
 ): Promise<Map<string, HetznerServerActivity>> {
-  const got = await Promise.all(servers.map((x) => readHetznerActivity(services, row, x, now)));
   const map = new Map<string, HetznerServerActivity>();
-  for (const a of got) if (a) map.set(a.serverId, a);
+  await sideBySide(servers, IDLE_BATCH_CONCURRENCY, async (x) => {
+    const a = await readHetznerActivity(services, row, x, now);
+    if (a) map.set(a.serverId, a);
+  });
   return map;
 }
 
@@ -847,12 +858,10 @@ export async function hetznerSeen(
 ): Promise<KindSeen> {
   const s = await hetznerSnapshot(services, row, now);
   const watchIdle = quiet ? checkWatched(quiet, 'hetzner.idle') : false;
-  const runningPaid = watchIdle
-    ? metricsServers(s).filter((x) => x.status === 'running' && x.monthlyEur !== null && x.monthlyEur > 0)
-    : [];
+  const eligible = watchIdle ? idleEligibleServers(s, now) : [];
   const activity = watchIdle
-    ? runningPaid.length
-      ? await readAllActivity(services, row, runningPaid, now)
+    ? eligible.length
+      ? await readAllActivity(services, row, eligible, now)
       : new Map<string, HetznerServerActivity>()
     : undefined;
   const notices = hetznerNotices(s, now, activity);
@@ -1419,16 +1428,26 @@ export async function hetznerPage(ctx: KindCtx): Promise<KindView> {
   const s = latest.value;
   const servers = metricsServers(s);
   const watchIdle = ctx.quiet ? checkWatched(ctx.quiet, 'hetzner.idle') : false;
-  const [metrics, machines, snapshots, activities] = await Promise.all([
+  const chartIds = new Set(servers.map((x) => x.id));
+  const extraIdle = watchIdle ? idleEligibleServers(s, ctx.now).filter((x) => !chartIds.has(x.id)) : [];
+  const [metrics, machines, snapshots, activities, extraActivity] = await Promise.all([
     Promise.all(servers.map((x) => readHetznerMetrics(ctx.services, ctx.row, x, ctx.range, ctx.now))),
     within(watched(ctx), 5_000, []),
     readHetznerSnapshots(ctx.services, ctx.row),
     Promise.all(servers.map((x) => readHetznerActivity(ctx.services, ctx.row, x, ctx.now))),
+    extraIdle.length
+      ? readAllActivity(ctx.services, ctx.row, extraIdle, ctx.now)
+      : Promise.resolve(new Map<string, HetznerServerActivity>()),
   ]);
   const read = metrics.map((m) => m.metrics).filter((m): m is HetznerMetrics => m !== null);
   const readActivity = activities.filter((a): a is HetznerServerActivity => a !== null);
   const points = readActivity.map((a) => a.netOut);
-  const activity = watchIdle ? new Map(readActivity.map((a) => [a.serverId, a])) : undefined;
+  const activity = watchIdle
+    ? new Map<string, HetznerServerActivity>([
+        ...readActivity.map((a) => [a.serverId, a] as const),
+        ...extraActivity.entries(),
+      ])
+    : undefined;
   return {
     ...base,
     ...hetznerView({
