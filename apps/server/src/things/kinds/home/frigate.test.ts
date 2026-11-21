@@ -243,12 +243,10 @@ describe('Frigate page in slots', () => {
     expect(slotProblems(view)).toEqual([]);
     const shelfPanel = panel(view.panels, 'cameras');
     expect(
-      shelfPanel?.kind === 'gallery' &&
-        shelfPanel.items.find((i) => i.id === 'guest_room'),
+      shelfPanel?.kind === 'gallery' && shelfPanel.items.find((i) => i.id === 'guest_room'),
     ).toMatchObject({ id: 'guest_room', sub: 'Disabled', muted: true });
     expect(
-      shelfPanel?.kind === 'gallery' &&
-        shelfPanel.items.find((i) => i.id === 'guest_room')?.badge,
+      shelfPanel?.kind === 'gallery' && shelfPanel.items.find((i) => i.id === 'guest_room')?.badge,
     ).toBeUndefined();
   });
 });

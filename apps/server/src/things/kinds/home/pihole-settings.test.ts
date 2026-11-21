@@ -184,7 +184,9 @@ describe('Pi-hole declared settings', () => {
       value: 'IP_NODATA_AAAA',
     });
     expect(ipv4?.lines[0]).toContain('0.0.0.0 → Pi-hole’s IPv4 address');
-    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' })).toBeNull();
+    expect(
+      await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' }),
+    ).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'BAD' })).toBeNull();
   });
 });

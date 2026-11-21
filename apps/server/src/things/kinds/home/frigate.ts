@@ -373,7 +373,9 @@ const moment = (at: Date, now: Date, timeZone: string) => {
 
 export function frigateNotices(s: FrigateSnapshot, ctx: FrigateCtx): KindNotice[] {
   const out: KindNotice[] = [];
-  const offline = s.cameras.filter((c) => c.enabled && !c.online).sort((a, b) => a.name.localeCompare(b.name));
+  const offline = s.cameras
+    .filter((c) => c.enabled && !c.online)
+    .sort((a, b) => a.name.localeCompare(b.name));
   out.push(
     ...itemLines(
       offline,
