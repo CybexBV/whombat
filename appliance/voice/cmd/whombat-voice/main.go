@@ -93,7 +93,7 @@ func main() {
 	tts := engine.TTS{
 		Kokoro: engine.Kokoro{Bin: *kokoro, Model: *kokoroModel, Voices: voices, Threads: *threads, TmpDir: *tmp, Timeout: *ttsTimeout},
 		Dutch: engine.Supertonic{
-			Bin: *supertonic, Model: *supertonicModel, Woman: woman, Man: man, Threads: *threads, TmpDir: *tmp, Timeout: *ttsTimeout,
+			Bin: *supertonic, Model: *supertonicModel, Dir: dir, Manifest: m, Woman: woman, Man: man, Threads: *threads, TmpDir: *tmp, Timeout: *ttsTimeout,
 		},
 	}
 	s := &api.Server{

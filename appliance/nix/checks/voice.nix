@@ -37,6 +37,7 @@ let
           size = 32166155;
           sha256 = "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b";
         }
+        voice-supertonic-model.manifestEntry
       ];
     }
   );
@@ -65,13 +66,19 @@ runCommand "voice-check"
           v: "${v.name}=${toString v.speaker}:${v.accent}:${if v.man or false then "man" else "woman"}"
         ) voice-kokoro-model.deskVoices
       } \
-      --supertonic ${voice-kokoro}/bin/supertonic-speak --supertonic-model ${voice-supertonic-model} \
+      --supertonic ${voice-kokoro}/bin/supertonic-speak \
       --supertonic-speakers 1,8 &
     voice=$!
     trap 'kill $voice 2>/dev/null || true' EXIT
     for _ in $(seq 100); do [ -S v.sock ] && break; sleep 0.1; done
     call() { curl -sS --fail-with-body --unix-socket v.sock -H 'Content-Type: application/json' "$@"; }
 
+    # Without the downloaded Supertonic directory, the service speaks English only and lists only STT models.
+    call http://voice/v1/voice/health \
+      | jq -e '. == {v: 1, stt: true, tts: true, microphone: true, speaker: true, voices: ["heart", "bella", "michael", "fenrir", "emma", "george"], languages: ["en"], models: ["parakeet", "whisper"]}'
+
+    # Once the Supertonic model directory is present in models/, Dutch turns on without restarting the service.
+    ln -s ${voice-supertonic-model} models/${voice-supertonic-model.manifestEntry.dir}
     call http://voice/v1/voice/health \
       | jq -e '. == {v: 1, stt: true, tts: true, microphone: true, speaker: true, voices: ["heart", "bella", "michael", "fenrir", "emma", "george"], languages: ["en", "nl"], models: ["parakeet", "whisper"]}'
 
@@ -131,6 +138,12 @@ runCommand "voice-check"
       || fail "a man's voice in Dutch"
     code=$(curl -sS -o de.out -w '%{http_code}' --unix-socket v.sock -d '{"v":1,"text":"Hallo.","language":"de"}' http://voice/v1/voice/tts)
     [ "$code" = 400 ] && jq -e '.error.code == "bad_request"' de.out > /dev/null || fail "an unknown language: $code"
+
+    # Removing the downloaded Supertonic directory returns the service to English only without restarting.
+    rm models/${voice-supertonic-model.manifestEntry.dir}
+    call http://voice/v1/voice/health | jq -e '.languages == ["en"] and .models == ["parakeet", "whisper"]' > /dev/null
+    code=$(curl -sS -o nl.out -w '%{http_code}' --unix-socket v.sock -d '{"v":1,"text":"Hallo.","language":"nl"}' http://voice/v1/voice/tts)
+    [ "$code" = 400 ] && jq -e '.error.code == "bad_request"' nl.out > /dev/null || fail "Dutch after removal: $code"
 
     # Voice typing: 40 s of speech (the two sentences, again and again) cut at its pauses into two pieces, heard by Whisper.
     sox -n -r 16000 -c 1 -b 16 pause.wav trim 0 0.6

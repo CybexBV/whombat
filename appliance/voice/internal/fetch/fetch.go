@@ -92,11 +92,9 @@ func (f *Fetcher) Start(ctx context.Context) error {
 	for _, m := range f.Manifest.Models {
 		e := &entry{model: m, state: local.VoiceModelStateAbsent}
 		if models.Present(f.Dir, m) {
-			e.state, e.received = local.VoiceModelStateReady, m.Size
+			e.state, e.received = local.VoiceModelStateReady, m.TotalSize()
 		} else {
-			if fi, err := os.Stat(models.PartPath(f.Dir, m)); err == nil {
-				e.received = min(fi.Size(), m.Size)
-			}
+			e.received = models.PartialSize(f.Dir, m)
 			if slices.Contains(wanted, m.ID) {
 				e.state, e.wanted, e.asked = local.VoiceModelStateWaiting, true, now
 			}
@@ -114,7 +112,7 @@ func (f *Fetcher) State() local.VoiceModelsState {
 	out := local.VoiceModelsState{V: 1}
 	for _, m := range f.Manifest.Models {
 		e := f.entries[m.ID]
-		s := local.VoiceModelState{ID: m.ID, State: e.state, Size: m.Size, Received: e.received}
+		s := local.VoiceModelState{ID: m.ID, State: e.state, Size: m.TotalSize(), Received: e.received}
 		if e.problem != "" {
 			p := e.problem
 			s.Problem = &p
@@ -145,7 +143,7 @@ func (f *Fetcher) Fetch(id string) error {
 	e.state, e.problem = local.VoiceModelStateWaiting, ""
 	f.saveWanted()
 	f.poke()
-	f.logf("%s: asked for (%d MB)", id, e.model.Size>>20)
+	f.logf("%s: asked for (%d MB)", id, e.model.TotalSize()>>20)
 	return nil
 }
 
@@ -165,7 +163,7 @@ func (f *Fetcher) Remove(id string) error {
 	f.saveWanted()
 	f.mu.Unlock()
 	for _, p := range []string{models.Path(f.Dir, e.model), models.PartPath(f.Dir, e.model)} {
-		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.RemoveAll(p); err != nil {
 			return err
 		}
 	}
@@ -239,15 +237,16 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 	defer f.mu.Unlock()
 	e.cancel = nil
 	if !e.wanted { // removed while it ran: nothing of it stays, even if it had just finished
-		_ = os.Remove(models.Path(f.Dir, e.model))
-		_ = os.Remove(models.PartPath(f.Dir, e.model))
+		_ = os.RemoveAll(models.Path(f.Dir, e.model))
+		_ = os.RemoveAll(models.PartPath(f.Dir, e.model))
 		e.state, e.received = local.VoiceModelStateAbsent, 0
 		return
 	}
+	total := e.model.TotalSize()
 	switch {
 	case err == nil:
-		e.state, e.received, e.problem, e.wanted = local.VoiceModelStateReady, e.model.Size, "", false
-		f.logf("%s: ready, %d MB in %s", e.model.ID, e.model.Size>>20, time.Since(start).Round(time.Second))
+		e.state, e.received, e.problem, e.wanted = local.VoiceModelStateReady, total, "", false
+		f.logf("%s: ready, %d MB in %s", e.model.ID, total>>20, time.Since(start).Round(time.Second))
 	case ctx.Err() != nil: // the service stops: the part stays, the next start carries on
 		e.state = local.VoiceModelStateWaiting
 		return
@@ -256,6 +255,8 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 		e.state, e.problem = local.VoiceModelStateWaiting, local.VoiceModelProblemBadDownload
 		f.logf("%s: the download was damaged, starting again: %v", e.model.ID, err)
 	case errors.Is(err, errBadBytes):
+		_ = os.RemoveAll(models.PartPath(f.Dir, e.model))
+		e.received = 0
 		f.fail(e, local.VoiceModelProblemBadDownload, err)
 	case errors.Is(err, errNoRoom):
 		f.fail(e, local.VoiceModelProblemNoRoom, err)
@@ -268,7 +269,7 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 			e.problem = local.VoiceModelProblemFailed
 		}
 		e.retryAt = time.Now().Add(f.Backoff(e.tries))
-		f.logf("%s: stopped at %d of %d MB, trying again in %s: %v", e.model.ID, e.received>>20, e.model.Size>>20, f.Backoff(e.tries), err)
+		f.logf("%s: stopped at %d of %d MB, trying again in %s: %v", e.model.ID, e.received>>20, total>>20, f.Backoff(e.tries), err)
 	}
 	f.saveWanted()
 }
@@ -278,10 +279,72 @@ func (f *Fetcher) fail(e *entry, problem string, err error) {
 	f.logf("%s: failed (%s): %v", e.model.ID, problem, err)
 }
 
-// download fetches e's model into its part file (resuming), checks it and renames it into place.
+// download fetches e's model into its staging file or directory (resuming), checks it and renames it into place.
 func (f *Fetcher) download(ctx context.Context, e *entry) error {
+	if e.model.Multi() {
+		return f.downloadMulti(ctx, e)
+	}
 	m := e.model
-	part := models.PartPath(f.Dir, m)
+	if err := f.fetchFile(ctx, e, m.URL, models.PartPath(f.Dir, m), models.Path(f.Dir, m), m.Size, m.SHA256, 0, m.Size); err != nil {
+		return err
+	}
+	syncDir(f.Dir)
+	return nil
+}
+
+// downloadMulti fetches every file of a multi-file model into a staging directory, checks each file's size and sha256,
+// and renames the directory into place only once every file matches.
+func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
+	m := e.model
+	stage := models.PartPath(f.Dir, m)
+	final := models.Path(f.Dir, m)
+	total := m.TotalSize()
+	already := models.PartialSize(f.Dir, m)
+	if free, err := f.Free(f.Dir); err == nil && free < total-already+Margin {
+		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (total-already+Margin)>>20)
+	}
+	if err := os.MkdirAll(stage, 0o750); err != nil {
+		return fmt.Errorf("%w: %v", errNoRoom, err)
+	}
+	want := make(map[string]bool, len(m.Files))
+	var done int64
+	for _, mf := range m.Files {
+		want[mf.Name] = true
+		dest := filepath.Join(stage, mf.Name)
+		part := filepath.Join(stage, "."+mf.Name+models.PartSuffix)
+		if verifyFile(dest, mf.Size, mf.SHA256) {
+			_ = os.Remove(part)
+			done += mf.Size
+			f.progress(e, done)
+			continue
+		}
+		_ = os.Remove(dest)
+		if err := f.fetchFile(ctx, e, mf.URL, part, dest, mf.Size, mf.SHA256, done, total); err != nil {
+			return err
+		}
+		done += mf.Size
+		f.progress(e, done)
+	}
+	if entries, err := os.ReadDir(stage); err == nil {
+		for _, ent := range entries {
+			if !want[ent.Name()] {
+				_ = os.RemoveAll(filepath.Join(stage, ent.Name()))
+			}
+		}
+	}
+	syncDir(stage)
+	// An incomplete final directory would block Rename; we only reach here when the model isn't complete yet.
+	_ = os.RemoveAll(final)
+	if err := os.Rename(stage, final); err != nil {
+		return err
+	}
+	syncDir(f.Dir)
+	return nil
+}
+
+// fetchFile downloads one file from url into part (resuming where it stopped), verifies its size and sha256, and
+// renames it to dest.
+func (f *Fetcher) fetchFile(ctx context.Context, e *entry, url, part, dest string, size int64, wantSHA string, progressBase, total int64) error {
 	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNoRoom, err)
@@ -291,7 +354,7 @@ func (f *Fetcher) download(ctx context.Context, e *entry) error {
 	if err != nil {
 		return err
 	}
-	if have > m.Size {
+	if have > size {
 		if err := restart(fh); err != nil {
 			return err
 		}
@@ -306,45 +369,46 @@ func (f *Fetcher) download(ctx context.Context, e *entry) error {
 			return err
 		}
 	}
-	f.progress(e, have)
-	if free, err := f.Free(f.Dir); err == nil && free < m.Size-have+Margin {
-		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (m.Size-have+Margin)>>20)
+	f.progress(e, progressBase+have)
+	remaining := max(total-(progressBase+have), size-have)
+	if free, err := f.Free(f.Dir); err == nil && free < remaining+Margin {
+		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (remaining+Margin)>>20)
 	}
-	if have < m.Size {
-		got, err := f.get(ctx, e, fh, h, have)
+	if have < size {
+		got, err := f.get(ctx, e, url, fh, h, have, size, progressBase)
 		have = got
 		if err != nil {
+			if errors.Is(err, errBadBytes) {
+				_ = fh.Close()
+				_ = os.Remove(part)
+				f.progress(e, progressBase)
+			}
 			return err
 		}
 	}
-	if have != m.Size {
-		return fmt.Errorf("%d of %d bytes", have, m.Size)
+	if have != size {
+		return fmt.Errorf("%d of %d bytes", have, size)
 	}
-	if sum := hex.EncodeToString(h.Sum(nil)); sum != m.SHA256 {
+	if sum := hex.EncodeToString(h.Sum(nil)); sum != wantSHA {
 		_ = fh.Close()
 		_ = os.Remove(part)
-		f.progress(e, 0)
+		f.progress(e, progressBase)
 		return fmt.Errorf("%w: sha256 %s", errBadBytes, sum)
 	}
 	if err := fh.Sync(); err != nil {
 		return err
 	}
-	if err := os.Rename(part, models.Path(f.Dir, m)); err != nil {
+	if err := fh.Close(); err != nil {
 		return err
 	}
-	if d, err := os.Open(f.Dir); err == nil {
-		_ = d.Sync()
-		_ = d.Close()
-	}
-	return nil
+	return os.Rename(part, dest)
 }
 
-// get requests the rest of the model from have on and appends it to fh, hashing as it goes; the bytes it holds then.
-func (f *Fetcher) get(ctx context.Context, e *entry, fh *os.File, h hash.Hash, have int64) (int64, error) {
-	m := e.model
+// get requests the rest of url from have on and appends it to fh, hashing as it goes; returns the bytes fh holds then.
+func (f *Fetcher) get(ctx context.Context, e *entry, url string, fh *os.File, h hash.Hash, have, size, progressBase int64) (int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return have, fmt.Errorf("%w: %v", errRefused, err)
 	}
@@ -371,13 +435,13 @@ func (f *Fetcher) get(ctx context.Context, e *entry, fh *os.File, h hash.Hash, h
 			}
 			h.Reset()
 			have = 0
-			f.progress(e, 0)
+			f.progress(e, progressBase)
 		}
-	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && have == m.Size:
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && have == size:
 		return have, nil
 	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
 		_ = restart(fh)
-		f.progress(e, 0)
+		f.progress(e, progressBase)
 		return 0, fmt.Errorf("%w: range %d refused", errServer, have)
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= 500:
 		return have, fmt.Errorf("%w: %s", errServer, resp.Status)
@@ -395,8 +459,8 @@ func (f *Fetcher) get(ctx context.Context, e *entry, fh *os.File, h hash.Hash, h
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
 			idle.Reset(f.Idle)
-			if have+int64(n) > m.Size {
-				return have, fmt.Errorf("%w: more than %d bytes", errBadBytes, m.Size)
+			if have+int64(n) > size {
+				return have, fmt.Errorf("%w: more than %d bytes", errBadBytes, size)
 			}
 			if _, err := fh.Write(buf[:n]); err != nil {
 				if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
@@ -406,7 +470,7 @@ func (f *Fetcher) get(ctx context.Context, e *entry, fh *os.File, h hash.Hash, h
 			}
 			_, _ = h.Write(buf[:n])
 			have += int64(n)
-			f.progress(e, have)
+			f.progress(e, progressBase+have)
 		}
 		if rerr == io.EOF {
 			return have, nil
@@ -414,6 +478,28 @@ func (f *Fetcher) get(ctx context.Context, e *entry, fh *os.File, h hash.Hash, h
 		if rerr != nil {
 			return have, rerr
 		}
+	}
+}
+
+func verifyFile(path string, size int64, wantSHA string) bool {
+	fi, err := os.Stat(path)
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() != size {
+		return false
+	}
+	fh, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer fh.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, fh)
+	return err == nil && n == size && hex.EncodeToString(h.Sum(nil)) == wantSHA
+}
+
+func syncDir(path string) {
+	if d, err := os.Open(path); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
 	}
 }
 

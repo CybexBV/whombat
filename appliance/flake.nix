@@ -682,8 +682,12 @@
               && lib.hasInfix "-voice-models.json " sc.ExecStart
               && lib.hasInfix "/bin/kokoro-speak " sc.ExecStart
               && lib.hasInfix "-kokoro-v1_0-en --kokoro-voices 'heart=3:us:woman,bella=2:us:woman,michael=16:us:man,fenrir=14:us:man,emma=21:gb:woman,george=26:gb:man' " sc.ExecStart
-              # No Dutch voice in the image: Supertonic's model stays out until the person agrees to its terms.
-              && !(lib.hasInfix "supertonic" sc.ExecStart);
+              # The GPL-3.0 supertonic-speak runner stays wired for downloaded Dutch weights, while the Open RAIL-M
+              # Supertonic 3 model itself stays out of the image.
+              && lib.hasInfix "/bin/supertonic-speak " sc.ExecStart
+              && lib.hasInfix "--supertonic-speakers 1,8 " sc.ExecStart
+              && !(lib.hasInfix "--supertonic-model" sc.ExecStart)
+              && !(lib.hasInfix "supertonic-3-int8" sc.ExecStart);
             # The fetcher (NX-473): its own account, the network, of /persist its directory, a socket for the server.
             assert
               let
@@ -727,10 +731,18 @@
               && !(pkgs.voice-supertonic-model.meta ? license)
               && !(lib.hasPrefix "whombat" pkgs.voice-supertonic-model.name);
             assert
-              map (m: m.id) (builtins.fromJSON (builtins.readFile pkgs.voice-models-manifest)).models == [
+              let
+                manifest = builtins.fromJSON (builtins.readFile pkgs.voice-models-manifest);
+                st = lib.findFirst (m: m.id == "supertonic") null manifest.models;
+              in
+              map (m: m.id) manifest.models == [
                 "parakeet"
                 "whisper"
-              ];
+                "supertonic"
+              ]
+              && st != null
+              && st.dir == "supertonic-3-int8"
+              && lib.elem "LICENSE" (map (f: f.name) st.files);
             pkgs.runCommand "voice-config-check" { } "touch $out";
           # Stay unlocked while you're here (NX-280…NX-289): presence-watch and the whole service on pictures in the build
           # sandbox (its Go tests run in its build), and its unit, socket and account as the appliance has them.

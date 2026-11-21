@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CybexBV/whombat/appliance/voice/internal/models"
 	"github.com/CybexBV/whombat/appliance/voice/internal/speech"
 	"github.com/CybexBV/whombat/appliance/voice/internal/wav"
 	"github.com/CybexBV/whombat/contracts/go/local"
@@ -170,10 +171,14 @@ var SupertonicFiles = []string{
 	"tts.json", "unicode_indexer.bin", "voice.bin",
 }
 
-// Supertonic is Dutch text to speech with supertonic-speak (Supertonic 3 through sherpa-onnx, NX-476…NX-478).
+// Supertonic is Dutch text to speech with supertonic-speak (Supertonic 3 through sherpa-onnx).
 type Supertonic struct {
-	// Bin is `supertonic-speak`; Model the model's directory (SupertonicFiles). Empty: the service speaks no Dutch.
+	// Bin is `supertonic-speak`; Model is an explicit model directory when set, otherwise the downloaded supertonic
+	// model in Dir from Manifest is used whenever present. Empty Bin: the service speaks no Dutch.
 	Bin, Model string
+	// Dir holds the downloaded models, Manifest names them.
+	Dir      string
+	Manifest models.Manifest
 	// Woman and Man are the model's speakers (0–4 its women F1…F5, 5–9 its men M1…M5) Dutch is said in, for a woman's
 	// and a man's English voice.
 	Woman, Man int
@@ -183,29 +188,46 @@ type Supertonic struct {
 	Timeout time.Duration
 }
 
-// Ready says whether the program and the model's files are there.
-func (s Supertonic) Ready() bool {
-	if s.Bin == "" || s.Model == "" || !executable(s.Bin) {
-		return false
+// modelDir returns the active Supertonic model directory, or "" when no complete model is available.
+func (s Supertonic) modelDir() string {
+	dir := s.Model
+	if dir == "" {
+		if s.Dir == "" {
+			return ""
+		}
+		m, ok := s.Manifest.Find(local.VoiceModelSupertonic)
+		if !ok || !models.Present(s.Dir, m) {
+			return ""
+		}
+		dir = models.Path(s.Dir, m)
 	}
 	for _, f := range SupertonicFiles {
-		if !nonEmpty(filepath.Join(s.Model, f)) {
-			return false
+		if !nonEmpty(filepath.Join(dir, f)) {
+			return ""
 		}
 	}
-	return true
+	return dir
+}
+
+// Ready says whether the program and the model's files are there.
+func (s Supertonic) Ready() bool {
+	return s.Bin != "" && executable(s.Bin) && s.modelDir() != ""
 }
 
 // Speak says text (one line, written out as it is said) in lang with the man's or the woman's speaker and returns a
 // 16-bit mono WAV at the model's rate (44.1 kHz). The text goes in on stdin.
 func (s Supertonic) Speak(ctx context.Context, text, lang string, man bool) ([]byte, error) {
+	dir := s.modelDir()
+	if dir == "" {
+		return nil, ErrUnknownLanguage
+	}
 	speaker := s.Woman
 	if man {
 		speaker = s.Man
 	}
 	return speakWith(ctx, s.Timeout, s.TmpDir, s.Bin, "supertonic", text, func(out string) []string {
 		return []string{
-			"--model", s.Model, "--speaker", strconv.Itoa(speaker), "--lang", lang,
+			"--model", dir, "--speaker", strconv.Itoa(speaker), "--lang", lang,
 			"--threads", strconv.Itoa(Threads(s.Threads)), "--output-file", out,
 		}
 	})
