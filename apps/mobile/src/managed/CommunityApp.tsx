@@ -25,6 +25,7 @@ import { type ApplianceSession, type ConnectionState, createSecureSession } from
 import { DIRECT_PATH, DirectIdentity } from '@whombat/protocol/direct';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler } from 'react-native';
+import { WhombatLive } from '../../modules/whombat-live';
 import { UpdateRow } from '../settings/UpdateCard';
 import { Button, Loading } from '../ui/primitives';
 import { ApplianceRoot } from './ApplianceRoot';
@@ -152,6 +153,7 @@ export function CommunityApp(props: CommunityAppProps) {
   if (!active?.enrolled) return <GoJoin go={() => join()} />;
   const leave = () => {
     registry.setLastUsed(null);
+    void WhombatLive.clearStatusWidget().catch(() => {});
     onLeave();
   };
   return (
@@ -177,6 +179,7 @@ export function CommunityApp(props: CommunityAppProps) {
       // A community box has no recovery kit journey and no bring back of its own here: their buttons are hidden.
       onForget={() => {
         registry.remove(active.device);
+        void WhombatLive.clearStatusWidget(active.device).catch(() => {});
         join();
       }}
       onGone={() => leave()}
@@ -204,6 +207,7 @@ export function CommunityApp(props: CommunityAppProps) {
         // A removed phone's key stays removed: a new key, and a new link from another of your devices (AP-39).
         forgetEnrollments(registry);
         registry.setLastUsed(null);
+        void WhombatLive.clearStatusWidget().catch(() => {});
         await props.rekey();
         join();
       }}
