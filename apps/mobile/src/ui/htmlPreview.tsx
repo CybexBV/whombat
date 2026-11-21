@@ -9,7 +9,7 @@ import { htmlTitle } from '@whombat/core';
 import { fontFamilies, pageThemeCss } from '@whombat/tokens';
 import mermaidRuntime from 'mermaid/dist/mermaid.min.js';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { AppState, ScrollView, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { COPIED_TEXT } from '../data/messageActions';
 import { PAGES_COPY } from '../data/pageSets';
@@ -17,6 +17,7 @@ import { keepPageHeight, keptPage, keptPageHeight } from '../data/previewPages';
 import {
   afterPreviewGone,
   PAGE_HEIGHT_SCRIPT,
+  PREVIEW_STEADY_MS,
   PREVIEW_CARD_HEIGHT,
   PREVIEW_WEBVIEW_PROPS,
   pageHeight,
@@ -122,23 +123,56 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     const t = setTimeout(() => setStarted(false), PREVIEW_RELEASE_MS);
     return () => clearTimeout(t);
   }, [inView, started, fit]);
-  // Android stops a WebView's browser to free memory (or it crashes), which leaves the page blank: a new WebView starts
-  // it again, twice by itself, then the person's “Try again”.
+  // A WebView whose browser went leaves the page blank: a new WebView starts it again. Android letting it go for memory
+  // only waits for the app to be in front; a crash restarts it twice by itself, then the person's “Try again”.
   const [mount, setMount] = useState(0);
   const [restarts, setRestarts] = useState(0);
   const [gone, setGone] = useState(false);
-  const onGone = () => {
-    if (afterPreviewGone(restarts) === 'restart') {
+  const [asleep, setAsleep] = useState(false);
+  const [loaded, setLoaded] = useState(0);
+  const [shown, setShown] = useState(page);
+  if (shown !== page) {
+    setShown(page);
+    setRestarts(0);
+    setGone(false);
+  }
+  // Earlier crashes are forgotten once a load has stayed up a while: a page that crashes as it loads still stops.
+  useEffect(() => {
+    if (loaded === 0) return;
+    const t = setTimeout(() => setRestarts(0), PREVIEW_STEADY_MS);
+    return () => clearTimeout(t);
+  }, [loaded]);
+  useEffect(() => {
+    if (!asleep) return;
+    const wake = () => {
+      setAsleep(false);
+      setMount((n) => n + 1);
+    };
+    if (AppState.currentState === 'active') {
+      wake();
+      return;
+    }
+    const sub = AppState.addEventListener('change', (next) => next === 'active' && wake());
+    return () => sub.remove();
+  }, [asleep]);
+  // iOS doesn't say why its page process ended: counted as a crash, so it can't loop.
+  const onGone = (crashed: boolean) => {
+    setLoaded(0);
+    const next = afterPreviewGone(restarts, crashed);
+    if (next === 'remount') setAsleep(true);
+    else if (next === 'restart') {
       setRestarts((n) => n + 1);
       setMount((n) => n + 1);
     } else setGone(true);
   };
-  if (!started && fit) return <View style={{ height, backgroundColor: 'transparent' }} />;
+  if ((!started && fit) || asleep)
+    return <View style={fit ? { height, backgroundColor: 'transparent' } : { flex: 1 }} />;
   if (gone)
     return (
       <View
         style={{
-          ...(fit ? { height } : { flex: 1 }),
+          // As tall as the card was, or as its words and button need when it was shorter.
+          ...(fit ? { minHeight: height } : { flex: 1 }),
           alignItems: 'center',
           justifyContent: 'center',
           gap: 14,
@@ -171,8 +205,9 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
         key={mount}
         {...PREVIEW_WEBVIEW_PROPS}
         source={source}
-        onRenderProcessGone={onGone}
-        onContentProcessDidTerminate={onGone}
+        onRenderProcessGone={(e) => onGone(e.nativeEvent.didCrash)}
+        onContentProcessDidTerminate={() => onGone(true)}
+        onLoad={() => setLoaded((n) => n + 1)}
         // Full screen the page's own background shows once it loads; until then the app's, not a white flash in dark.
         style={
           fit ? { height, backgroundColor: 'transparent' } : { flex: 1, backgroundColor: theme.colors.bg }
