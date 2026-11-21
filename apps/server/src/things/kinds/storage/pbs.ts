@@ -103,6 +103,8 @@ export interface PbsGroup {
   verified: 'ok' | 'failed' | null;
   /** Snapshots of this group whose verification failed. */
   damaged: number;
+  /** Whether any kept snapshot in this group has ever been verified. */
+  everVerified?: boolean;
   /** Its oldest snapshot kept, when the snapshots could be read (a guest that moved began its new group then). */
   first: Date | null;
   /** The usual time between its backups, in seconds (`rhythmOf`), when the snapshots could be read. */
@@ -257,6 +259,7 @@ export interface SnapshotsOf {
   size: number | null;
   verified: 'ok' | 'failed' | null;
   damaged: number;
+  everVerified: boolean;
   first: number;
   rhythmS: number | null;
   /** When each was made, newest first (at most `TIMES_MAX`). */
@@ -278,11 +281,12 @@ export function parseSnapshots(body: unknown): Map<string, SnapshotsOf> {
     const verified = state === 'ok' || state === 'failed' ? state : null;
     const was = out.get(key);
     const damaged = (was?.damaged ?? 0) + (verified === 'failed' ? 1 : 0);
+    const everVerified = (was?.everVerified ?? false) || verified !== null;
     const first = Math.min(was?.first ?? time, time);
     if (time > 0) times.set(key, [...(times.get(key) ?? []), time]);
     if (!was || time > was.time)
-      out.set(key, { time, size: num(s.size), verified, damaged, first, rhythmS: null, times: [] });
-    else Object.assign(was, { damaged, first });
+      out.set(key, { time, size: num(s.size), verified, damaged, everVerified, first, rhythmS: null, times: [] });
+    else Object.assign(was, { damaged, everVerified, first });
   }
   for (const [key, t] of times) {
     const o = out.get(key);
@@ -373,6 +377,7 @@ async function readStore(
                 size: s.size,
                 verified: s.verified,
                 damaged: s.damaged,
+                everVerified: s.everVerified,
                 first: s.first > 0 ? new Date(s.first * 1000) : null,
                 rhythmS: s.rhythmS,
                 times: s.times,
@@ -1063,6 +1068,42 @@ function notices(input: PbsInput): KindNotice[] {
       }),
     ),
   );
+  if (s.snapshotsRead) {
+    const neverVerified = ordered.filter((g) => {
+      const st = standing.get(g);
+      return (st === 'ok' || st === 'late') && g.count > 0 && g.everVerified === false;
+    });
+    const detail =
+      'They haven’t been checked for damage yet. Run a verify job on this page or add a verify schedule in Proxmox Backup Server so you know they can be restored.';
+    out.push(
+      ...itemLines(
+        neverVerified,
+        (g) => ({
+          id: lineId('never-verified', `${g.store}-${g.ns}-${g.type}-${g.id}`),
+          tone: 'info',
+          icon: 'backup',
+          title: clip(`Backups of ${guestName(g, names)} have never been verified`, 120),
+          detail,
+          link: { kind: 'url', label: 'Open PBS', url },
+          nature: 'you',
+          check: 'pbs.never_verified',
+          subject: guestSubject(g, names),
+          ignore: fixed('Until a backup is verified.'),
+        }),
+        (g) => guestSubject(g, names).id,
+        (rest) => ({
+          id: 'never-verified-more',
+          tone: 'info',
+          icon: 'backup',
+          title: `Backups of ${plural(rest.length, 'more guest')} have never been verified`,
+          detail,
+          link: { kind: 'url', label: 'Open PBS', url },
+          nature: 'you',
+          check: 'pbs.never_verified',
+        }),
+      ),
+    );
+  }
   return worstFirst(out);
 }
 
@@ -1103,6 +1144,13 @@ export const PBS_CHECKS: readonly KindCheck[] = [
     perItem: true,
     startsOn: true,
   },
+  {
+    check: 'pbs.never_verified',
+    name: 'Backups never verified',
+    nature: 'you',
+    perItem: true,
+    startsOn: false,
+  },
   { check: 'pbs.job_failed', name: 'Jobs failing', nature: 'problem', perItem: true, startsOn: true },
   {
     check: 'pbs.task_failed',
@@ -1125,7 +1173,7 @@ export function pbsSkipped(s: PbsSnapshot): string[] {
   const out: string[] = [];
   if (!s.storesComplete) out.push('pbs.store_unavailable', 'pbs.store_full', 'pbs.store_full_soon');
   if (!s.groupsComplete) out.push('pbs.backup_late', 'pbs.retired');
-  if (!s.groupsComplete || !s.snapshotsRead) out.push('pbs.verify_failed');
+  if (!s.groupsComplete || !s.snapshotsRead) out.push('pbs.verify_failed', 'pbs.never_verified');
   if (!s.jobs) out.push('pbs.job_failed');
   if (!s.tasks || s.tasksCapped) out.push('pbs.task_failed');
   return out;

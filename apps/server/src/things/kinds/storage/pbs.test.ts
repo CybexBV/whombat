@@ -272,6 +272,7 @@ describe('Proxmox Backup Server’s page (SD-50)', () => {
       ['job-gc-offsite', 'warn'],
       ['store-usb', 'info'],
       ['retired-tank--vm-102', 'info'],
+      ['never-verified-tank--ct-131', 'info'],
     ]);
     // The failed backups of CT 131 are told by its late line, the failed cleanup by its job's line.
     expect(v.notices.find((n) => n.id === 'late-tank--ct-131')?.detail).toContain('connection reset');
@@ -478,9 +479,10 @@ describe('what Whombat watches on Proxmox Backup Server (QN-01…QN-04)', () => 
   it('says which checks it couldn’t see whole', async () => {
     const s = await snapshotOf();
     // The unplugged datastore's guests weren't read.
-    expect(pbsSkipped(s)).toEqual(['pbs.backup_late', 'pbs.retired', 'pbs.verify_failed']);
+    expect(pbsSkipped(s)).toEqual(['pbs.backup_late', 'pbs.retired', 'pbs.verify_failed', 'pbs.never_verified']);
     const whole = { ...s, groupsComplete: true };
     expect(pbsSkipped(whole)).toEqual([]);
+    expect(pbsSkipped({ ...whole, snapshotsRead: false })).toEqual(['pbs.verify_failed', 'pbs.never_verified']);
     expect(pbsSkipped({ ...whole, jobs: null, tasksCapped: true })).toEqual([
       'pbs.job_failed',
       'pbs.task_failed',
@@ -489,6 +491,36 @@ describe('what Whombat watches on Proxmox Backup Server (QN-01…QN-04)', () => 
     expect(seen?.skipped).toContain('pbs.backup_late');
     expect(seen?.notices?.map((n) => n.id)).toContain('late-tank--ct-131');
     expect(PBS_KIND.checks).toBe(PBS_CHECKS);
+  });
+
+  it('flags active backup groups that have never been verified and starts off by default', async () => {
+    expect(PBS_CHECKS.find((c) => c.check === 'pbs.never_verified')).toMatchObject({
+      nature: 'you',
+      perItem: true,
+      startsOn: false,
+    });
+    const s = await snapshotOf();
+    const unverified = group({ id: '401', last: daysAgo(1), everVerified: false });
+    const verified = group({ id: '402', last: daysAgo(1), verified: 'ok', everVerified: true });
+    const retired = group({ id: '403', last: daysAgo(40), everVerified: false });
+    const found = lines(only(s, [unverified, verified, retired])).filter(
+      (n) => n.check === 'pbs.never_verified',
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      id: 'never-verified-tank--vm-401',
+      tone: 'info',
+      nature: 'you',
+      check: 'pbs.never_verified',
+      subject: { id: 'guest:tank//vm/401', name: 'VM 401' },
+      ignore: { lifts: 'fixed' },
+      link: { kind: 'url', url },
+    });
+    expect(found[0]?.detail).toContain('verify');
+    // Not raised when snapshots weren't read.
+    expect(
+      lines({ ...only(s, [unverified]), snapshotsRead: false }).filter((n) => n.check === 'pbs.never_verified'),
+    ).toEqual([]);
   });
 });
 
