@@ -610,7 +610,7 @@ Automations. Code finds it by kind
   plugin ship in the runtime release, so a new Hermes is a runtime update that the box checks (ACP answers, the plugin
   and its providers load) and goes back from by itself; the appliance's latest-tested job checks for a new Hermes
   release daily, has an agent review it against Whombat's use of Hermes, installs and uses it in a test, and when it
-  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta, and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
+  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta (Production gets it only inside a promoted release), and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
   home is `$WHOMBAT_HERMES_ROOT` itself, Hermes's default profile (`config.yaml`, `memories/`, `sessions/`,
   `skills/`, the ChatGPT login); `profiles/_feedback` beside it holds every outsiders' turn. Before a session starts
   the runner writes the profile's `config.yaml`, `SOUL.md` (who the agent is, how its face talks, and that a reply is

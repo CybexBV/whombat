@@ -31,7 +31,7 @@ annotate rows in this file. A new cross-cutting decision gets a row in the secti
 | # | Decision |
 |---|---|
 | HE-01, HE-32 | **Every turn runs on Hermes Agent** (pinned, driven over ACP), always on Hermes's own loop. (`hermes-engine.md`) |
-| HU-01…HU-09 | **Hermes updates only to versions Whombat tested**: no update button; an agent reviews each new release and adapts Whombat or asks, DEV takes it after a simple install-and-use test, production weekly by itself (not built yet); it ships with the runtime (no reboot, automatic go-back) and This Whombat shows its version. (`hermes-updates.md`) |
+| HU-01…HU-07, HU-09, HU-10 | **Hermes updates only to versions Whombat tested**: no update button; an agent reviews each new release and adapts Whombat or asks, Beta takes it through the latest-tested job after an install-and-use test, and Production gets it only inside a promoted release (no weekly automated promotion, no waves); it ships with the runtime (no reboot, automatic go-back) and This Whombat shows its version. (`hermes-updates.md`) |
 | CDS-01…CDS-03 | **Claude subscriptions use Nous's pinned DirectSDK provider on unpatched Hermes**; the unmodified Claude Code is its model client. Hermes owns tools, approvals, history, compression, memory and skills. (`claude-directsdk.md`) |
 | HN-02, HN-03 | **ChatGPT runs on Hermes's built-in `openai-codex`** with Hermes's own login in the person's profile; there is no Codex CLI. (`hermes-native.md`) |
 | HN-07 | **A thread keeps the provider it started with**; one Chat thread is one Hermes session. (`hermes-native.md`) |
