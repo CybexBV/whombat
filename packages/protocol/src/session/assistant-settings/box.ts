@@ -107,7 +107,7 @@ export const BOX_SETTINGS = {
   'burrows.setAiGateway': ask('advanced.ai', 'Send the AI through the AI gateway, or stop'),
   'burrows.setLocalModel': never(
     'advanced.ai',
-    'Set a custom AI model (OpenAI-compatible internet service over https or a server on your network; may need a key)',
+    'Set a custom AI model (https service or network server; may need a key)',
   ),
   // The person pastes the key there themselves: the assistant points them to the page.
   'burrows.setWebSearch': never('advanced.ai', 'Turn on web search with a Brave Search key'),

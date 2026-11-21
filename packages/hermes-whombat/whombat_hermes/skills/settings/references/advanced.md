@@ -7,7 +7,7 @@ The AI programs, the AI gateway, a custom AI model (an OpenAI-compatible service
 - Remove the custom AI model — `burrows.clearLocalModel` · change, always asks
 - Turn off web search — `burrows.clearWebSearch` · change, always asks
 - Send the AI through the AI gateway, or stop — `burrows.setAiGateway` · change, always asks
-- Set a custom AI model (OpenAI-compatible internet service over https or a server on your network; may need a key) — `burrows.setLocalModel` · theirs: send them there
+- Set a custom AI model (https service or network server; may need a key) — `burrows.setLocalModel` · theirs: send them there
 - Turn on web search with a Brave Search key — `burrows.setWebSearch` · theirs: send them there
 - Test the custom AI model — `burrows.testLocalModel` · theirs: send them there
 - Check the web search key again — `burrows.testWebSearch` · change
