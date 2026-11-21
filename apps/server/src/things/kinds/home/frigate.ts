@@ -311,7 +311,7 @@ export const FRIGATE_CHECKS: readonly KindCheck[] = [
     name: 'Recordings disk filling up',
     nature: 'problem',
     perItem: false,
-    startsOn: true,
+    startsOn: false,
   },
   {
     check: 'frigate.detector_slow',

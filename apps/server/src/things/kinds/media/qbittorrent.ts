@@ -248,7 +248,7 @@ export const QBT_CHECKS: readonly KindCheck[] = [
     name: 'Download disk low on space',
     nature: 'problem',
     perItem: false,
-    startsOn: true,
+    startsOn: false,
   },
   {
     check: 'qbittorrent.disconnected',

@@ -4,13 +4,43 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Services } from '../../../services';
 import {
+  cachedDomainExpirations,
+  defaultRdapFetch,
   IANA_RDAP_BOOTSTRAP_URL,
   parseRdapBootstrap,
   parseRdapExpiration,
+  RDAP_DEADLINE_MS,
   type RdapFetch,
   rdapUrlForDomain,
   readDomainExpirations,
+  warmDomainExpirations,
 } from './rdap';
+
+const outbound = vi.hoisted(() => ({
+  calls: [] as { url: string; timeoutMs?: number; deadlineMs?: number }[],
+  handler: null as
+    | ((
+        url: string,
+        opts: { timeoutMs?: number; deadlineMs?: number },
+      ) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>)
+    | null,
+}));
+
+vi.mock('../../../lib/outbound', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../lib/outbound')>();
+  return {
+    ...real,
+    outboundRequest: async (
+      url: string,
+      _init: unknown,
+      opts: { timeoutMs?: number; deadlineMs?: number } = {},
+    ) => {
+      outbound.calls.push({ url, timeoutMs: opts.timeoutMs, deadlineMs: opts.deadlineMs });
+      if (!outbound.handler) throw new Error('unexpected outboundRequest');
+      return outbound.handler(url, opts);
+    },
+  };
+});
 
 const BOOTSTRAP = {
   version: '1.0',
@@ -111,5 +141,92 @@ describe('RDAP parsing and lookup', () => {
       fetchJson,
     );
     expect(res).toBeNull();
+  });
+
+  it('shares one overall 4 s deadline across redirect hops in defaultRdapFetch', async () => {
+    expect(RDAP_DEADLINE_MS).toBe(4_000);
+    outbound.calls = [];
+    let hop = 0;
+    outbound.handler = async () => {
+      hop += 1;
+      await new Promise((r) => setTimeout(r, 30));
+      if (hop === 1) {
+        return {
+          status: 302,
+          headers: { location: 'https://rdap.verisign.com/com/v1/domain/example.com' } as Record<
+            string,
+            string
+          >,
+          body: Buffer.alloc(0),
+        };
+      }
+      return {
+        status: 200,
+        headers: {} as Record<string, string>,
+        body: Buffer.from(JSON.stringify(RDAP_DOMAIN_OK)),
+      };
+    };
+
+    const res = await defaultRdapFetch('https://rdap.iana.org/domain/example.com', 200);
+    expect(res.ok).toBe(true);
+    expect(outbound.calls).toHaveLength(2);
+    expect(outbound.calls[0]?.deadlineMs).toBeLessThanOrEqual(200);
+    expect(outbound.calls[1]?.deadlineMs).toBeLessThan(outbound.calls[0]?.deadlineMs ?? 200);
+    expect(outbound.calls[1]?.timeoutMs).toBe(outbound.calls[1]?.deadlineMs);
+
+    // Exhausting the budget on hop 1 prevents hop 2 from running at all.
+    outbound.calls = [];
+    outbound.handler = async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      return {
+        status: 302,
+        headers: { location: 'https://rdap.verisign.com/com/v1/domain/example.com' },
+        body: Buffer.alloc(0),
+      };
+    };
+    const expired = await defaultRdapFetch('https://rdap.iana.org/domain/example.com', 40);
+    expect(expired.ok).toBe(false);
+    expect(outbound.calls).toHaveLength(1);
+    outbound.handler = null;
+  });
+
+  it('enforces one overall deadline across bootstrap and domain queries and warms cache without blocking', async () => {
+    const services = fakeServices();
+    const now = new Date('2026-10-21T12:00:00Z');
+    // Bootstrap takes longer than the overall deadline: domain queries must never start.
+    const slowBootstrap = vi.fn<RdapFetch>(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+      return { ok: true, status: 200, json: BOOTSTRAP };
+    });
+    const t0 = Date.now();
+    const timedOut = await readDomainExpirations(services, ['example.com'], now, slowBootstrap, 40);
+    expect(timedOut).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(110);
+    expect(slowBootstrap).toHaveBeenCalledTimes(1);
+
+    // Cold cache reports missing synchronously without network I/O; warm populates it asynchronously.
+    const services2 = fakeServices();
+    expect(cachedDomainExpirations(services2, ['example.com'], now)).toEqual({
+      expirations: null,
+      partial: false,
+      missing: true,
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fastFetch = vi.fn<RdapFetch>(async (url) => {
+      await gate;
+      if (url === IANA_RDAP_BOOTSTRAP_URL) return { ok: true, status: 200, json: BOOTSTRAP };
+      return { ok: true, status: 200, json: RDAP_DOMAIN_OK };
+    });
+    warmDomainExpirations(services2, ['example.com'], now, fastFetch, 1_000);
+    warmDomainExpirations(services2, ['example.com'], now, fastFetch, 1_000);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fastFetch).toHaveBeenCalledTimes(2);
+    const hit = cachedDomainExpirations(services2, ['example.com'], now);
+    expect(hit.missing).toBe(false);
+    expect(hit.expirations?.get('example.com')?.toISOString()).toBe('2026-11-02T00:00:00.000Z');
   });
 });

@@ -135,6 +135,15 @@ export const AgentModelRuntime = z.object({
 export type AgentModelRuntime = z.infer<typeof AgentModelRuntime>;
 
 /**
+ * `agent.update`'s `runtime` input: omitting `backgroundModel` keeps the current one on the same provider (so an
+ * older app never erases it); explicit `null` clears it back to “Same as the main model”.
+ */
+export const AgentModelRuntimeUpdate = AgentModelRuntime.extend({
+  backgroundModel: z.string().min(1).nullable().optional(),
+});
+export type AgentModelRuntimeUpdate = z.infer<typeof AgentModelRuntimeUpdate>;
+
+/**
  * What the agent's turns run on (Whombat one-person.md OP-09, contracts 3.0, CT-1503): the model part. There is no
  * credential source to pick: every turn runs on the person's own sign-in for the provider, which is a subscription or
  * an API key the person added, in the one credential home per provider. Every turn runs on the person's Whombat

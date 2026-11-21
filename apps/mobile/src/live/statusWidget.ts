@@ -5,15 +5,27 @@
  */
 import { homeWidgetStatus } from '@whombat/client';
 import type { HomeOverview } from '@whombat/core';
-import type { StatusWidgetPayload } from '../../modules/whombat-live';
+import type {
+  ClearStatusWidgetFilter,
+  StatusWidgetPayload,
+  StatusWidgetSource,
+} from '../../modules/whombat-live';
+import { COMMUNITY_ORG } from '../managed/community';
 
 export interface StatusWidgetInput {
   overview: Pick<HomeOverview, 'summary' | 'needsYou' | 'things' | 'generatedAt'>;
   applianceId: string;
   applianceName: string | null | undefined;
   burrowName: string | null | undefined;
+  /** Whether the open box is a cloud-managed or direct community box; defaults to `'cloud'`. */
+  source?: StatusWidgetSource;
   timeZone: string;
   now?: Date | number;
+}
+
+/** Whether an open box's org id belongs to a direct community box or a cloud-signed-in box. */
+export function statusWidgetSourceFor(orgId: string | null | undefined): StatusWidgetSource {
+  return orgId === COMMUNITY_ORG ? 'community' : 'cloud';
 }
 
 /** Builds the widget payload for a box; prefers the directory/registry name, else the burrow's name. */
@@ -24,12 +36,42 @@ export function statusWidgetPayload(input: StatusWidgetInput): StatusWidgetPaylo
     timeZone: input.timeZone,
     ...(input.now !== undefined ? { now: input.now } : {}),
   });
-  return { ...widget, applianceId: input.applianceId };
+  return { ...widget, applianceId: input.applianceId, source: input.source ?? 'cloud' };
+}
+
+/**
+ * Mirrors the native widget store's conditional clear rule: clears unconditionally when no filter is given,
+ * matches `applianceId` when specified, and matches `source` when specified (treating pre-upgrade snapshots
+ * with no `source` as `'cloud'` so cloud sign-out/expiry never leaves them behind).
+ */
+export function shouldClearStatusWidget(
+  saved: Pick<StatusWidgetPayload, 'applianceId' | 'source'> | null,
+  filter?: string | ClearStatusWidgetFilter,
+): boolean {
+  if (!saved) return false;
+  const applianceId = (typeof filter === 'string' ? filter : filter?.applianceId)?.trim() ?? '';
+  const source = (typeof filter === 'string' ? undefined : filter?.source)?.trim() ?? '';
+  if (applianceId && saved.applianceId && saved.applianceId !== applianceId) return false;
+  if (source) {
+    const savedSource = saved.source?.trim() ?? '';
+    if (savedSource !== source && !(savedSource === '' && source === 'cloud')) return false;
+  }
+  return true;
 }
 
 export interface StatusWidgetTarget {
   setStatusWidget(payload: StatusWidgetPayload): Promise<void>;
-  clearStatusWidget(applianceId?: string): Promise<void>;
+  clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void>;
+}
+
+/**
+ * Clears the home-screen widget on cloud sign-out or session expiry when it is showing a cloud box,
+ * even if community boxes are known on this phone (a widget showing a community box stays untouched).
+ */
+export async function clearCloudStatusWidget(
+  target: Pick<StatusWidgetTarget, 'clearStatusWidget'>,
+): Promise<void> {
+  await target.clearStatusWidget({ source: 'cloud' }).catch(() => {});
 }
 
 /**
@@ -52,9 +94,9 @@ export function createStatusWidgetSync(target: StatusWidgetTarget) {
         return false;
       }
     },
-    async clear(applianceId?: string): Promise<void> {
+    async clear(filter?: string | ClearStatusWidgetFilter): Promise<void> {
       lastKey = null;
-      await target.clearStatusWidget(applianceId).catch(() => {});
+      await target.clearStatusWidget(filter).catch(() => {});
     },
     reset(): void {
       lastKey = null;

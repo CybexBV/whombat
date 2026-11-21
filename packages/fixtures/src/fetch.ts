@@ -274,13 +274,26 @@ function createWorld() {
       return { grants: after, events };
     },
     /** `agent.update` (owners): the name, the face or the model; one Keys event when anything changed. */
-    update(body: { name?: string; face?: Agent['face']; runtime?: Partial<Agent['runtime']> }) {
+    update(body: UpdateAgentBody) {
       const before = currentAgent;
+      const nextRuntime: Agent['runtime'] | undefined = body.runtime
+        ? (() => {
+            const { backgroundModel, ...rest } = body.runtime;
+            const resolvedBg =
+              backgroundModel === undefined
+                ? body.runtime.provider === before.runtime.provider
+                  ? before.runtime.backgroundModel
+                  : undefined
+                : (backgroundModel ?? undefined);
+            const { backgroundModel: _prevBg, ...kept } = before.runtime;
+            return { ...kept, ...rest, ...(resolvedBg ? { backgroundModel: resolvedBg } : {}) };
+          })()
+        : undefined;
       const updated: Agent = {
         ...before,
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.face !== undefined ? { face: body.face } : {}),
-        ...(body.runtime ? { runtime: { ...before.runtime, ...body.runtime } } : {}),
+        ...(nextRuntime ? { runtime: nextRuntime } : {}),
       };
       const changed =
         updated.name !== before.name ||

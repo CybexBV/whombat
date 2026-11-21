@@ -11,7 +11,6 @@ import {
   checkChoice,
   fiveHourUsage,
   followsThreadChoice,
-  lookDispatchRuntime,
   ranOnAtCompletion,
   ranOnAtPost,
   resolveThreadRuntime,
@@ -85,20 +84,6 @@ describe('background model selection', () => {
   it('falls back to the main model when no background model is set', () => {
     expect(backgroundTurnRuntime(AGENT)).toBeNull();
     expect(turnRuntimeOf(AGENT, backgroundTurnRuntime(AGENT))).toBe(AGENT);
-  });
-
-  it('applies to automatic Looks and care plans, not person-started handleLook or look_fix turns', () => {
-    expect(lookDispatchRuntime(WITH_BG, { trigger: 'look', askedById: null })).toEqual({
-      provider: 'claude',
-      model: 'haiku',
-    });
-    expect(lookDispatchRuntime(WITH_BG, { trigger: 'look' })).toEqual({
-      provider: 'claude',
-      model: 'haiku',
-    });
-    expect(lookDispatchRuntime(WITH_BG, { trigger: 'look', askedById: 'prn_mara' })).toBeNull();
-    expect(lookDispatchRuntime(WITH_BG, { trigger: 'look_fix', askedById: null })).toBeNull();
-    expect(lookDispatchRuntime(AGENT, { trigger: 'look', askedById: null })).toBeNull();
   });
 
   it('applies to scheduled automation steps, not manual, test or event-triggered runs', () => {

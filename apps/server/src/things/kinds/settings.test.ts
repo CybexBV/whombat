@@ -3,17 +3,26 @@
  * per-row elsewhere addresses), and `withCurrent`.
  */
 import { ThingPageTab } from '@whombat/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Services } from '../../services';
 import { rowOf } from './media/testing';
 import {
   type DeclaredSettings,
   declaredSettings,
   SERVICE_SETTINGS_TAB_KEY,
+  settingAction,
   settingsTab,
   withCurrent,
 } from './settings';
 import type { KindCtx } from './types';
+
+vi.mock('../../connections/http', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../connections/http')>();
+  return {
+    ...real,
+    signedConnectionFetch: async () => ({ status: 200, headers: {}, body: Buffer.from('{}') }),
+  };
+});
 
 interface DemoState {
   flag: boolean;
@@ -157,5 +166,107 @@ describe('settingsTab and declaredSettings', () => {
     expect(withCurrent(base, 10, (v) => `${v} min`)).toBe(base);
     expect(withCurrent(base, 45, (v) => `${v} min`)).toEqual([...base, { value: 45, label: '45 min' }]);
     expect(withCurrent(base, undefined, (v) => `${v} min`)).toBe(base);
+  });
+});
+
+describe('settingAction read-back verification', () => {
+  const actionCtx = () => ({
+    services: {} as Services,
+    row: rowOf('plex', { id: 'con_rb', baseUrl: 'http://192.0.2.15' }),
+    now: new Date('2026-11-04T20:13:00Z'),
+    timeZone: 'UTC',
+  });
+
+  it('records an uncertain outcome with no Changed and no Undo when read-back fails', async () => {
+    let calls = 0;
+    const act = settingAction(
+      makeDeclared({
+        read: async () => {
+          calls += 1;
+          if (calls === 1) return { flag: true, level: 'high' };
+          throw new Error('timeout');
+        },
+      }),
+    );
+    const out = await act(actionCtx(), { target: 'level', value: 'low' });
+    expect(out.uncertain).toBe(true);
+    expect(out.undo).toBeUndefined();
+    expect(out.changeKind).toBeUndefined();
+    expect(out.title).not.toMatch(/Changed/);
+    expect(out.title).toContain('Demo');
+    expect(out.message).toMatch(/couldn’t check/i);
+    expect(out.message).not.toMatch(/Changed|is now/);
+  });
+
+  it('records an uncertain outcome with no Changed and no Undo when read-back drops the setting', async () => {
+    let calls = 0;
+    const act = settingAction(
+      makeDeclared({
+        read: async () => {
+          calls += 1;
+          if (calls === 1) return { flag: true, level: 'high' };
+          return { flag: true, level: undefined as unknown as string };
+        },
+      }),
+    );
+    const out = await act(actionCtx(), { target: 'level', value: 'low' });
+    expect(out.uncertain).toBe(true);
+    expect(out.undo).toBeUndefined();
+    expect(out.changeKind).toBeUndefined();
+    expect(out.title).not.toMatch(/Changed/);
+    expect(out.message).toMatch(/couldn’t check/i);
+  });
+
+  it('records an uncertain outcome with no Changed and no Undo when read-back returns a different third value', async () => {
+    let calls = 0;
+    const act = settingAction(
+      makeDeclared({
+        read: async () => {
+          calls += 1;
+          if (calls === 1) return { flag: true, level: 'high' };
+          return { flag: true, level: 'medium' };
+        },
+      }),
+    );
+    const out = await act(actionCtx(), { target: 'level', value: 'low' });
+    expect(out.uncertain).toBe(true);
+    expect(out.undo).toBeUndefined();
+    expect(out.changeKind).toBeUndefined();
+    expect(out.title).not.toMatch(/Changed/);
+    expect(out.message).toContain('Custom (medium)');
+    expect(out.message).not.toMatch(/Changed|Checked with/);
+  });
+
+  it('still throws when read-back shows the old value unchanged, and records Changed + Undo only on match', async () => {
+    const deaf = settingAction(
+      makeDeclared({
+        read: async () => ({ flag: true, level: 'high' }),
+      }),
+    );
+    await expect(deaf(actionCtx(), { target: 'level', value: 'low' })).rejects.toThrow(/didn’t take/);
+
+    let current = 'high';
+    const ok = settingAction(
+      makeDeclared({
+        read: async () => ({ flag: true, level: current }),
+        specs: makeDeclared().specs.map((s) =>
+          s.id === 'level'
+            ? {
+                ...s,
+                write: (v) => {
+                  current = String(v);
+                  return { method: 'POST', path: '/level', body: { level: current } };
+                },
+              }
+            : s,
+        ),
+      }),
+    );
+    const confirmed = await ok(actionCtx(), { target: 'level', value: 'low' });
+    expect(confirmed.uncertain).toBeUndefined();
+    expect(confirmed.title).toContain('Changed');
+    expect(confirmed.changeKind).toBe('setting.level');
+    expect(confirmed.undo).toEqual({ target: 'level', value: 'high', expect: 'low' });
+    expect(confirmed.message).toContain('Checked with Demo');
   });
 });

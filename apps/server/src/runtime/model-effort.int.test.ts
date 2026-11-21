@@ -23,7 +23,7 @@ import { loadPrincipalRow } from '../read/principals';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
-import { fallbackWhere } from './model-fallback';
+import { fallbackWhere, noteModelFallback } from './model-fallback';
 
 const t = useTestServer({ seed: true, app: true });
 const AUTH = { authorization: 'Bearer dev-runner-token' };
@@ -208,6 +208,27 @@ describe('agents.update (ME-01, ME-04)', () => {
       code: 'validation_failed',
       message: 'Claude Code has no model called “not-a-model” on this Whombat.',
     });
+    // An older app that omits backgroundModel on the same provider must keep it intact.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'opus', effort: 'high' },
+    });
+    expect(await runtimeOf(IDS.dusty)).toMatchObject({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: 'sonnet',
+      effort: 'high',
+    });
+    expect(await lastKeysLine(IDS.dusty)).not.toContain('background model');
+    // Explicit null clears backgroundModel back to “Same as the main model”.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'opus', backgroundModel: null, effort: 'high' },
+    });
+    expect(await lastKeysLine(IDS.dusty)).toBe('Set Dusty’s background model to Same as the main model');
+    expect(await runtimeOf(IDS.dusty)).not.toHaveProperty('backgroundModel');
+    // Switching provider still clears backgroundModel even when omitted.
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'sonnet', effort: 'xhigh' },
+    });
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'codex' } });
     expect(await lastKeysLine(IDS.dusty)).toBe('Moved Dusty to codex');
     const runtime = await runtimeOf(IDS.dusty);
@@ -215,6 +236,11 @@ describe('agents.update (ME-01, ME-04)', () => {
     expect(runtime).not.toHaveProperty('model');
     expect(runtime).not.toHaveProperty('backgroundModel');
     expect(runtime).not.toHaveProperty('effort');
+    // Main model remains limited to Claude Code and ChatGPT (matching main's behaviour).
+    await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'local', model: 'llama3.3' } });
+    const localRuntime = await runtimeOf(IDS.dusty);
+    expect(localRuntime).toMatchObject({ provider: 'local' });
+    expect(localRuntime).not.toHaveProperty('model');
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'claude' } });
   });
 });
@@ -288,5 +314,59 @@ describe('the model fallback (ME-05)', () => {
       kind: 'account',
       name: 'Mara',
     });
+  });
+
+  it('is not cleared when a background Look or non-main model turn finishes cleanly', async () => {
+    await beat(CLAUDE_MODELS);
+    await t.commit(IDS.mara, updateAgent, {
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'sonnet', effort: 'high' },
+    });
+    // Record a main-model fallback warning for Fable.
+    await turn({
+      outcome: 'done',
+      modelFallback: { model: 'fable', detail: 'model unavailable' },
+    });
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    const [maraRow] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
+    const account = maraRow?.accountId ?? null;
+    const baseRow = {
+      agentId: IDS.dusty,
+      burrowId: t.burrowId,
+      gatewayProvider: null,
+      onBehalfOfAccountId: account,
+    };
+
+    // Background-model dispatch completing cleanly keeps the main-model fallback warning.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(
+        tx,
+        { ...baseRow, trigger: 'look', runtime: { provider: 'claude', model: 'sonnet' } },
+        { outcome: 'done', ran: { model: 'sonnet' } },
+        new Date(),
+      ),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // A background Look completing cleanly keeps it even without a dispatch runtime override.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(tx, { ...baseRow, trigger: 'look', runtime: null }, { outcome: 'done' }, new Date()),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // Any turn whose reported ran.model differs from the agent's main model keeps it.
+    await t.services.db.transaction((tx) =>
+      noteModelFallback(
+        tx,
+        { ...baseRow, trigger: 'mention', runtime: null },
+        { outcome: 'done', ran: { model: 'sonnet' } },
+        new Date(),
+      ),
+    );
+    expect((await profile('dusty')).modelFallback).toMatchObject({ model: 'fable' });
+
+    // A main-model turn finishing cleanly clears the warning.
+    await turn({ outcome: 'done', ran: { model: 'fable', effort: 'high', fast: false } });
+    expect((await profile('dusty')).modelFallback).toBeNull();
   });
 });

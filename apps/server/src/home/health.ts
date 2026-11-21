@@ -169,13 +169,14 @@ async function seenOf(
   row: CatalogConnectionRow,
   entry: CatalogEntry,
   now: Date,
+  quiet?: Awaited<ReturnType<typeof thingQuiet>>,
 ): Promise<KindSeen | null> {
   if (entry.id === 'unraid') {
     const hostname = await unraidHostname(services, row);
     return { glance: { facts: [], ...(hostname ? { hostname } : {}) }, points: {} };
   }
   const seen = kindFor(row)?.seen;
-  return seen ? seen(services, row, now, await zoneOf(services, row)) : null;
+  return seen ? seen(services, row, now, await zoneOf(services, row), quiet) : null;
 }
 
 /**
@@ -311,7 +312,8 @@ export async function checkConnectionHealth(
       points = { [RTT_KEY]: Date.now() - started };
       // What the answer filled (Nextcloud's user id, connection-signin.md SG-15a), for the next calls.
       await recordFromCheck(services, row, outcome);
-      const seen = await seenOf(services, row, entry, now).catch(() => undefined);
+      const quiet = (await kept.catch(() => null))?.[0];
+      const seen = await seenOf(services, row, entry, now, quiet).catch(() => undefined);
       lines = genericNotices({ ...row, glance: null }, 0, null);
       if (seen === undefined) {
         // The check answered but the reader didn't: what showed stays, and none of the kind's checks were read.

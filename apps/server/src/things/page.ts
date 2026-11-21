@@ -190,10 +190,11 @@ export async function connectionPage(
   const range = offeredRange(asked, kind?.ranges);
   // The kind's read starts now (its page part finds it in the cache) while Whombat finds what it runs on.
   kind?.prefetch?.(services, row, now, timeZone).catch(() => undefined);
-  const [resolved, points] = await Promise.all([
+  const [resolved, points, quiet] = await Promise.all([
     within(resolveRunsOn(services, viewer.burrowId, row), 5_000, null as ResolvedMachine | null),
     // The response time over the range (at least a day, for Problems) and the disk over 30 days (its forecast).
     readPoints(services.db, row.id, [RTT_KEY, DISK_PCT_KEY, DISK_GB_KEY], now, POINTS_KEEP_MS),
+    thingQuiet(services.db, row.burrowId, id),
   ]);
   const figures: MachineFigures | null = resolved
     ? await within(readMachine(services, resolved, range), 5_000, null)
@@ -210,14 +211,14 @@ export async function connectionPage(
     burrowId: viewer.burrowId,
     disk,
     viewer,
+    quiet,
   };
-  const [view, tools, changed, partOf, connected, quiet, states] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
     within(partOfServer(services, viewer.burrowId, row), 5_000, null),
     connectedByLine(services, row, viewer, timeZone),
-    thingQuiet(services.db, row.burrowId, id),
     thingStates(services.db, id),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.

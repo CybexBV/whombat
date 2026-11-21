@@ -295,7 +295,11 @@ describe('background model on Runs on', () => {
     );
     expect(view?.backgroundModel?.label).toBe('Same as the main model');
     expect(view?.backgroundModel?.choices.map((c) => [c.label, c.checked, c.runtime])).toEqual([
-      ['Same as the main model', true, { provider: 'claude', model: 'opus', effort: 'high' }],
+      [
+        'Same as the main model',
+        true,
+        { provider: 'claude', model: 'opus', backgroundModel: null, effort: 'high' },
+      ],
       ['Opus', false, { provider: 'claude', model: 'opus', backgroundModel: 'opus', effort: 'high' }],
       ['Sonnet', false, { provider: 'claude', model: 'opus', backgroundModel: 'sonnet', effort: 'high' }],
     ]);

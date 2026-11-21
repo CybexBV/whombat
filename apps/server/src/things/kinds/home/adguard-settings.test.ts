@@ -125,8 +125,16 @@ describe('AdGuard Home declared settings', () => {
     expect(by('filter_update_interval')).toMatchObject({ value: 'Every day', choose: { current: 24 } });
     expect(by('safebrowsing')).toMatchObject({ value: 'On', on: true });
     expect(by('parental')).toMatchObject({ value: 'Off', on: false });
-    expect(by('querylog_interval')).toMatchObject({ value: '7 days', choose: { current: 604_800_000 } });
-    expect(by('stats_interval')).toMatchObject({ value: '24 hours', choose: { current: 86_400_000 } });
+    expect(by('querylog_interval')).toMatchObject({
+      value: '7 days',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('querylog_interval')?.choose).toBeUndefined();
+    expect(by('stats_interval')).toMatchObject({
+      value: '24 hours',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('stats_interval')?.choose).toBeUndefined();
     expect(by('dns_and_access')?.elsewhere).toEqual({
       label: 'In AdGuard Home',
       url: 'http://192.0.2.15:3000/#dns',
@@ -139,21 +147,21 @@ describe('AdGuard Home declared settings', () => {
 
   it('writes settings, preserves sibling querylog fields, and reads back to verify', async () => {
     reset();
-    const done = await act(ctx, { target: 'querylog_interval', value: 2_592_000_000 });
-    expect(done.message).toContain('30 days');
+    const done = await act(ctx, { target: 'anonymize_ip', value: true });
+    expect(done.message).toContain('leaves device addresses out');
     expect(done.message).toContain('Checked with AdGuard Home');
     expect(done).toMatchObject({
-      changeKind: 'setting.querylog_interval',
-      detail: '7 days',
-      undo: { target: 'querylog_interval', value: 604_800_000, expect: 2_592_000_000 },
+      changeKind: 'setting.anonymize_ip',
+      detail: 'Off',
+      undo: { target: 'anonymize_ip', value: false, expect: true },
     });
     const put = ag.store.calls.find(
       (c) => c.method === 'PUT' && c.path === '/control/querylog/config/update',
     );
     expect(put?.body).toMatchObject({
       enabled: true,
-      interval: 2_592_000_000,
-      anonymize_client_ip: false,
+      interval: 604_800_000,
+      anonymize_client_ip: true,
       ignored: ['example.com'],
     });
 
@@ -170,6 +178,8 @@ describe('AdGuard Home declared settings', () => {
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_access', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'querylog_interval', value: 2_592_000_000 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'stats_interval', value: 604_800_000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'filter_update_interval', value: 999 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: true })).rejects.toThrow();
 
@@ -180,14 +190,14 @@ describe('AdGuard Home declared settings', () => {
     await expect(act(ctx, { target: 'safebrowsing', value: false })).rejects.toThrow(/didn’t take/);
 
     ag.store.deaf = false;
-    const done = await act(ctx, { target: 'stats_interval', value: 604_800_000 });
-    ag.store.stats.interval = 2_592_000_000;
+    const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
+    ag.store.filtering.interval = 72;
     await expect(
-      act(ctx, { target: 'stats_interval', value: done.undo?.value, expect: done.undo?.expect }),
+      act(ctx, { target: 'filter_update_interval', value: done.undo?.value, expect: done.undo?.expect }),
     ).rejects.toThrow(/changed again since/);
-    ag.store.stats.interval = 604_800_000;
-    await act(ctx, { target: 'stats_interval', value: done.undo?.value, expect: done.undo?.expect });
-    expect(ag.store.stats.interval).toBe(86_400_000);
+    ag.store.filtering.interval = 12;
+    await act(ctx, { target: 'filter_update_interval', value: done.undo?.value, expect: done.undo?.expect });
+    expect(ag.store.filtering.interval).toBe(24);
   });
 
   it('describes changes in plain words for the approval card', async () => {

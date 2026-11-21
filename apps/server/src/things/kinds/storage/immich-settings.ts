@@ -129,21 +129,6 @@ function resolutionWords(v: SettingValue): string {
   return RESOLUTION_CHOICES.find((c) => c.value === s)?.label ?? `${s}p`;
 }
 
-const TRASH_DAYS: SettingChoice[] = [
-  { value: 7, label: '7 days' },
-  { value: 14, label: '14 days' },
-  { value: 30, label: '30 days' },
-  { value: 60, label: '60 days' },
-  { value: 90, label: '90 days' },
-];
-
-const BACKUP_KEEP: SettingChoice[] = [
-  { value: 7, label: '7 backups' },
-  { value: 14, label: '14 backups' },
-  { value: 30, label: '30 backups' },
-  { value: 60, label: '60 backups' },
-];
-
 const daysWords = (v: SettingValue) => (Number(v) === 1 ? '1 day' : `${Number(v)} days`);
 const backupsWords = (v: SettingValue) => (Number(v) === 1 ? '1 backup' : `${Number(v)} backups`);
 
@@ -228,14 +213,11 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     id: 'trash_days',
     group: 'safety',
     label: 'Keep trash for',
-    help: 'Deleted photos stay in the trash this long before Immich removes them permanently.',
-    kind: 'choice',
-    // Never offer turning the trash off; only offer how long it keeps deleted items when enabled.
+    help: 'How long deleted photos stay in the trash before permanent removal. Shortening it deletes older items, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => (boolAt(s, ['trash', 'enabled']) === false ? undefined : numAt(s, ['trash', 'days'])),
-    choices: (s) => withCurrent(TRASH_DAYS, numAt(s, ['trash', 'days']), daysWords),
     words: daysWords,
-    write: (v, s) => putAt(s, ['trash', 'days'], Number(v)),
-    sentence: (v) => `Immich now keeps deleted items in the trash for ${daysWords(v)}.`,
+    elsewhere: (base) => `${base}/admin/system-settings`,
   },
   {
     id: 'db_backup_enabled',
@@ -254,14 +236,11 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     id: 'db_backup_keep',
     group: 'safety',
     label: 'Database backups to keep',
-    help: 'How many recent database backups Immich keeps.',
-    kind: 'choice',
+    help: 'How many recent database backups Immich keeps. Lowering it deletes older backups, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => numAt(s, ['backup', 'database', 'keepLastAmount']),
-    choices: (s) =>
-      withCurrent(BACKUP_KEEP, numAt(s, ['backup', 'database', 'keepLastAmount']), backupsWords),
     words: backupsWords,
-    write: (v, s) => putAt(s, ['backup', 'database', 'keepLastAmount'], Number(v)),
-    sentence: (v) => `Immich now keeps the last ${backupsWords(v)}.`,
+    elsewhere: (base) => `${base}/admin/system-settings`,
   },
   {
     id: 'version_check',

@@ -9,6 +9,7 @@ import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
 import { colours } from '../quiet/glance';
+import type { ThingQuiet } from '../quiet/store';
 import type { KindCheck, KindNotice } from '../quiet/types';
 import type { MachineFigures } from '../runs-on';
 import type { PageRange } from '../series';
@@ -60,6 +61,8 @@ export interface KindActionResult {
   everyday?: boolean;
   /** Nothing changed (the setting already had that value): no change is recorded. */
   unchanged?: boolean;
+  /** The change was sent, but Whombat couldn't confirm it took: recorded without Undo and does not finish an undo. */
+  uncertain?: boolean;
   /** The change's kind after `thing.` in place of the action's (`setting.remote_quality`, SST-03). */
   changeKind?: string;
   /** The change's detail: the old value in words (“4 Mbps”), for “… changed this yesterday from 4 Mbps.”. */
@@ -93,7 +96,13 @@ export interface KindModule {
   /** Started before what the connection runs on is known; the page part finds it in the cache. */
   prefetch?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<unknown>;
   /** The health pass's look (SD-05); usually `seenFromView` of a page-less read. */
-  seen?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<KindSeen>;
+  seen?: (
+    services: Services,
+    row: CatalogConnectionRow,
+    now: Date,
+    timeZone: string,
+    quiet?: ThingQuiet,
+  ) => Promise<KindSeen>;
   /** “… · locks and alarms ask first” in the head's access line. */
   asksFirst?: string;
   actions?: Record<string, KindAction>;

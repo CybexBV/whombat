@@ -72,7 +72,7 @@ export const HETZNER_KIND: KindModule = {
   page: keepsResponseChart(hetznerPage),
   prefetch: (services, row, now) => hetznerLatest(services, row, now),
   // Servers running.
-  seen: (services, row, now) => hetznerSeen(services, row, now),
+  seen: (services, row, now, _timeZone, quiet) => hetznerSeen(services, row, now, quiet),
   checks: HETZNER_CHECKS,
 };
 

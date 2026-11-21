@@ -40,22 +40,36 @@ export async function fallbackWhere(
 
 /**
  * What a completed turn says about its agent's model (in the completion's transaction): a fallback is kept (only while
- * the agent still has that model), a turn that finished on the agent's own model clears the last one. Returns the stored
- * fallback, if one was kept.
+ * the agent still has that model), a turn that finished on the agent's own model clears the last one. Turns running on
+ * a thread override or background model (`row.runtime`) and background Look turns never set or clear the agent's
+ * main-model fallback warning. Returns the stored fallback, if one was kept.
  */
 export async function noteModelFallback(
   tx: Tx,
-  row: Pick<DispatchRow, 'agentId' | 'burrowId' | 'gatewayProvider' | 'onBehalfOfAccountId'>,
-  body: { outcome: string; modelFallback?: ModelFallbackReport | undefined },
+  row: Pick<DispatchRow, 'agentId' | 'burrowId' | 'gatewayProvider' | 'onBehalfOfAccountId'> &
+    Partial<Pick<DispatchRow, 'runtime' | 'trigger'>>,
+  body: {
+    outcome: string;
+    modelFallback?: ModelFallbackReport | undefined;
+    ran?: { model?: string | null } | undefined;
+  },
   now: Date,
 ): Promise<StoredModelFallback | null> {
+  if (row.runtime) return null;
   const report = body.modelFallback;
   if (!report) {
-    if (body.outcome === 'done')
+    if (body.outcome === 'done') {
+      if (row.trigger === 'look') return null;
+      if (body.ran && body.ran.model !== undefined) {
+        const agent = await loadPrincipalRow(tx, row.agentId);
+        if (agent?.kind !== 'agent') return null;
+        if ((agentRuntimeOf(agent.runtime).model ?? null) !== (body.ran.model ?? null)) return null;
+      }
       await tx
         .update(principals)
         .set({ modelFallback: null })
         .where(and(eq(principals.id, row.agentId), isNotNull(principals.modelFallback)));
+    }
     return null;
   }
   const agent = await loadPrincipalRow(tx, row.agentId);

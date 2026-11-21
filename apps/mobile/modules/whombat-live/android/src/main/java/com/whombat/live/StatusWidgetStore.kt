@@ -12,6 +12,7 @@ import java.util.TimeZone
  */
 data class StatusWidgetSnapshot(
   val applianceId: String,
+  val source: String = "",
   val boxName: String,
   val status: String,
   val tone: String,
@@ -52,6 +53,7 @@ data class StatusWidgetSnapshot(
       val asOfEarlier = obj.optString("asOfEarlier").trim().ifEmpty { asOf }
       return StatusWidgetSnapshot(
         applianceId = obj.optString("applianceId").trim(),
+        source = obj.optString("source").trim(),
         boxName = boxName,
         status = status,
         tone = obj.optString("tone", "ok"),
@@ -80,18 +82,31 @@ object StatusWidgetStore {
   }
 
   @Synchronized
-  fun clear(context: Context, applianceId: String? = null): Boolean {
+  fun clear(context: Context, applianceId: String? = null, source: String? = null): Boolean {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val existing = prefs.getString(KEY, null) ?: return false
-    if (!applianceId.isNullOrBlank()) {
+    val filterId = applianceId?.trim().orEmpty()
+    val filterSource = source?.trim().orEmpty()
+    if (filterId.isNotEmpty() || filterSource.isNotEmpty()) {
       val current = StatusWidgetSnapshot.parse(existing)
-      if (current != null && current.applianceId.isNotEmpty() && current.applianceId != applianceId) {
-        return false
+      if (current != null) {
+        if (filterId.isNotEmpty() && current.applianceId.isNotEmpty() && current.applianceId != filterId) {
+          return false
+        }
+        if (filterSource.isNotEmpty() && !matchesSource(current.source, filterSource)) {
+          return false
+        }
       }
     }
     prefs.edit().remove(KEY).apply()
     WhombatStatusWidgetProvider.refreshAll(context)
     return true
+  }
+
+  /** Pre-upgrade snapshots without a saved source are cleared on cloud sign-out/expiry so they never linger. */
+  private fun matchesSource(savedSource: String, requestedSource: String): Boolean {
+    if (savedSource == requestedSource) return true
+    return savedSource.isEmpty() && requestedSource == "cloud"
   }
 
   @Synchronized

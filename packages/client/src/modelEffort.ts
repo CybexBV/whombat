@@ -12,6 +12,7 @@ import {
   type AgentEffort,
   type AgentModelFallback,
   type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProvider,
   effortsFor,
   type LocalModelView,
@@ -56,7 +57,7 @@ export function hasModelEffort(provider: AgentProvider): provider is 'claude' | 
 
 /** An agent's stored model runtime as a draft. */
 export function modelRuntimeDraft(
-  runtime: Pick<AgentModelRuntime, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
+  runtime: Pick<AgentModelRuntimeUpdate, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
 ): ModelRuntimeDraft {
   const own = hasModelEffort(runtime.provider);
   return {
@@ -94,14 +95,14 @@ export function draftWithModel(
   return { ...rest, model, effort, ...(fast !== undefined && (!known || known.fast) ? { fast } : {}) };
 }
 
-/** Another background model picked (null: same as the main model). */
+/** Another background model picked (null: explicit “Same as the main model”). */
 export function draftWithBackgroundModel(
   draft: ModelRuntimeDraft,
   backgroundModel: string | null,
 ): ModelRuntimeDraft {
   const { backgroundModel: _bg, ...rest } = draft;
   const trimmed = backgroundModel?.trim();
-  return trimmed ? { ...rest, backgroundModel: trimmed } : rest;
+  return { ...rest, backgroundModel: trimmed || null };
 }
 
 /** Another effort picked (null: automatic). */
@@ -142,16 +143,21 @@ export function fastChoice(
 
 /**
  * `agents.update`'s `runtime`: the whole model runtime, every time, so saving one field never drops another:
- * `{provider, model?, backgroundModel?, effort?, fast?}` (on `local` model and backgroundModel only).
+ * `{provider, model?, backgroundModel?, effort?, fast?}` (explicit `null` clears `backgroundModel`; omitted keeps it
+ * on the same provider).
  */
-export function modelRuntimeBody(draft: ModelRuntimeDraft): AgentModelRuntime {
+export function modelRuntimeBody(draft: ModelRuntimeDraft): AgentModelRuntimeUpdate {
   const own = hasModelEffort(draft.provider);
   const model = draft.model?.trim();
   const backgroundModel = draft.backgroundModel?.trim();
   return {
     provider: draft.provider,
     ...(model ? { model } : {}),
-    ...(backgroundModel ? { backgroundModel } : {}),
+    ...(backgroundModel
+      ? { backgroundModel }
+      : draft.backgroundModel === null
+        ? { backgroundModel: null }
+        : {}),
     ...(own && draft.effort ? { effort: draft.effort } : {}),
     ...(own && draft.fast !== undefined ? { fast: draft.fast } : {}),
   };

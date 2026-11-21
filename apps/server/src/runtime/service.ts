@@ -921,10 +921,10 @@ export class RunnerRuntime {
       if ((guard.lease && this.lost(row, guard.lease)) || renewed) return 'lease_lost' as const;
       // The unrunnable sweep: a runner claimed it meanwhile after all.
       if (guard.queuedOnly && row.state !== 'queued') return 'lease_lost' as const;
-      // The agent's model wasn't available for this turn, which ran on the default (model-effort.md ME-05); or a turn on
-      // its own model finished, and the last fallback is history. A turn on its Chat thread's choice says nothing about
-      // the agent's own model (chat-runtime.md CR-08): its reply says it instead (`correctRanOn`).
-      const fallback = row.runtime ? null : await noteModelFallback(tx, row, body, now);
+      // The agent's model wasn't available for this turn, which ran on the default; or a turn on its own main model
+      // finished, and the last fallback is history. Turns on a Chat thread's choice or the background model (and
+      // background Look turns) never set or clear the main-model fallback warning.
+      const fallback = await noteModelFallback(tx, row, body, now);
       if (fallback)
         this.services.log.info(
           {

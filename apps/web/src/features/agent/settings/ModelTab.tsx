@@ -173,7 +173,16 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
                   className={styles.choiceRadio}
                   value={choice.id ?? ''}
                   checked={choice.id === (draft.backgroundModel ?? null)}
-                  onChange={() => form.edit((d) => draftWithBackgroundModel(d, choice.id))}
+                  onChange={() =>
+                    form.edit((d) => {
+                      const next = draftWithBackgroundModel(d, choice.id);
+                      if (choice.id === null && !form.base?.backgroundModel) {
+                        const { backgroundModel: _bg, ...rest } = next;
+                        return rest;
+                      }
+                      return next;
+                    })
+                  }
                 />
                 <span className={styles.choiceText}>
                   <span className={styles.choiceLabel}>{choice.label}</span>

@@ -270,6 +270,14 @@ describe('Settings → Advanced → Model and effort background model', () => {
       runtime: { provider: 'claude', model: 'fable', backgroundModel: 'haiku', effort: 'high' },
     });
 
+    // Picking “Same as the main model” sends explicit null so the server clears it.
+    await user.click(within(bgGroup).getByRole('radio', { name: 'Same as the main model' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]?.body).toEqual({
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: null, effort: 'high' },
+    });
+
     // Switching provider resets the background model and offers only the new provider's models.
     await user.click(screen.getByRole('radio', { name: 'ChatGPT' }));
     const codexBg = screen.getByRole('radiogroup', { name: 'Background model' });

@@ -94,9 +94,17 @@ describe('Immich declared settings', () => {
     expect(by('smart_search')).toMatchObject({ value: 'On', on: true });
     expect(by('face_recognition')).toMatchObject({ value: 'On', on: true });
     expect(by('duplicate_detection')).toMatchObject({ value: 'On', on: true });
-    expect(by('trash_days')).toMatchObject({ value: '30 days', choose: { current: 30 } });
+    expect(by('trash_days')).toMatchObject({
+      value: '30 days',
+      elsewhere: { label: 'In Immich', url: 'http://192.0.2.30:2283/admin/system-settings' },
+    });
+    expect(by('trash_days')?.choose).toBeUndefined();
     expect(by('db_backup_enabled')).toMatchObject({ value: 'On', on: true });
-    expect(by('db_backup_keep')).toMatchObject({ value: '14 backups', choose: { current: 14 } });
+    expect(by('db_backup_keep')).toMatchObject({
+      value: '14 backups',
+      elsewhere: { label: 'In Immich', url: 'http://192.0.2.30:2283/admin/system-settings' },
+    });
+    expect(by('db_backup_keep')?.choose).toBeUndefined();
     expect(by('version_check')).toMatchObject({ value: 'On', on: true });
     expect(by('auth_and_users')?.elsewhere).toEqual({
       label: 'In Immich',
@@ -168,24 +176,26 @@ describe('Immich declared settings', () => {
   it('refuses invalid targets, detects deaf writes, enforces undo guard, and describes approval cards', async () => {
     reset();
     await expect(act(ctx, { target: 'auth_and_users', value: true })).rejects.toThrow();
-    await expect(act(ctx, { target: 'trash_days', value: 3 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'trash_days', value: 60 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'db_backup_keep', value: 7 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'video_resolution', value: '999' })).rejects.toThrow();
     expect((await act(ctx, { target: 'machine_learning', value: true })).unchanged).toBe(true);
 
     im.store.deaf = true;
     await expect(act(ctx, { target: 'version_check', value: false })).rejects.toThrow(/didn’t take/);
 
     im.store.deaf = false;
-    const done = await act(ctx, { target: 'trash_days', value: 60 });
-    (im.store.config.trash as Record<string, unknown>).days = 90;
+    const done = await act(ctx, { target: 'video_resolution', value: '1080' });
+    (im.store.config.ffmpeg as Record<string, unknown>).targetResolution = '1440';
     await expect(
-      act(ctx, { target: 'trash_days', value: done.undo?.value, expect: done.undo?.expect }),
+      act(ctx, { target: 'video_resolution', value: done.undo?.value, expect: done.undo?.expect }),
     ).rejects.toThrow(/changed again since/);
-    (im.store.config.trash as Record<string, unknown>).days = 60;
-    await act(ctx, { target: 'trash_days', value: done.undo?.value, expect: done.undo?.expect });
-    expect((im.store.config.trash as Record<string, unknown>).days).toBe(30);
+    (im.store.config.ffmpeg as Record<string, unknown>).targetResolution = '1080';
+    await act(ctx, { target: 'video_resolution', value: done.undo?.value, expect: done.undo?.expect });
+    expect((im.store.config.ffmpeg as Record<string, unknown>).targetResolution).toBe('720');
 
-    const words = await describeSetting(IMMICH_SETTINGS, ctx, { target: 'trash_days', value: 60 });
+    const words = await describeSetting(IMMICH_SETTINGS, ctx, { target: 'video_resolution', value: '1080' });
     expect(words?.title).toContain('Immich');
-    expect(words?.lines[0]).toContain('30 days → 60 days');
+    expect(words?.lines[0]).toContain('720p → 1080p');
   });
 });

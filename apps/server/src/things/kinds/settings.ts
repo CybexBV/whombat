@@ -186,19 +186,36 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
     forgetConnectionReads(ctx.services, ctx.row.id);
     const after = await d.read(ctx.services, ctx.row).catch(() => null);
     const now = after ? spec.read(after) : undefined;
-    if (after && (now === undefined || !sameValue(now, value)))
-      throw new ApiError(
-        'unavailable',
-        `${d.name} didn’t take the change. It still says ${valueWords(spec, now ?? old, after)}.`,
-      );
-    const s = after ?? before;
-    const said = spec.sentence?.(value, s) ?? `${spec.label} is now ${valueWords(spec, value, s)}.`;
+    if (!after || now === undefined)
+      return {
+        message:
+          `Asked ${d.name} to set ${spec.label} to ${valueWords(spec, value, before)}, but Whombat couldn’t check whether it took.`.slice(
+            0,
+            200,
+          ),
+        title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, before)} (not checked)`,
+        uncertain: true,
+      };
+    if (!sameValue(now, value)) {
+      if (sameValue(now, old))
+        throw new ApiError(
+          'unavailable',
+          `${d.name} didn’t take the change. It still says ${valueWords(spec, now, after)}.`,
+        );
+      return {
+        message:
+          `Asked ${d.name} to set ${spec.label} to ${valueWords(spec, value, after)}, but ${d.name} now says ${valueWords(spec, now, after)}.`.slice(
+            0,
+            200,
+          ),
+        title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, after)} (now ${shortWords(spec, now, after)})`,
+        uncertain: true,
+      };
+    }
+    const said = spec.sentence?.(value, after) ?? `${spec.label} is now ${valueWords(spec, value, after)}.`;
     return {
-      message: (after
-        ? `${said} Checked with ${d.name}.`
-        : `${said} Whombat couldn’t check it with ${d.name} just now.`
-      ).slice(0, 200),
-      title: `Changed ${spec.label} in ${d.name} from ${shortWords(spec, old, before)} to ${shortWords(spec, value, s)}`,
+      message: `${said} Checked with ${d.name}.`.slice(0, 200),
+      title: `Changed ${spec.label} in ${d.name} from ${shortWords(spec, old, before)} to ${shortWords(spec, value, after)}`,
       changeKind: `setting.${spec.id}`,
       detail: shortWords(spec, old, before),
       undo: { target: spec.id, value: old, expect: value },

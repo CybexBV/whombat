@@ -122,6 +122,26 @@ describe('home-screen status widget tokens and copy', () => {
       expect(widgetSwift).toContain(shared);
     }
   });
+
+  it('filters conditional widget clears by applianceId and source on both Android and iOS', () => {
+    const storeKt = readFileSync(
+      join(ROOT, 'android/src/main/java/com/whombat/live/StatusWidgetStore.kt'),
+      'utf8',
+    );
+    const moduleKt = readFileSync(
+      join(ROOT, 'android/src/main/java/com/whombat/live/WhombatLiveModule.kt'),
+      'utf8',
+    );
+    const moduleSwift = readFileSync(join(ROOT, 'ios/WhombatLiveModule.swift'), 'utf8');
+
+    expect(storeKt).toContain('val source: String');
+    expect(storeKt).toContain('source: String? = null');
+    expect(storeKt).toContain('requestedSource == "cloud"');
+    expect(moduleKt).toContain('applianceId: String?, source: String?');
+    expect(moduleSwift).toContain('(applianceId: String?, source: String?)');
+    expect(moduleSwift).toContain('obj["source"]');
+    expect(moduleSwift).toContain('filterSource == "cloud"');
+  });
 });
 
 interface MockXcodeProject {

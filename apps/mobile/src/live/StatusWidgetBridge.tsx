@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { WhombatLive } from '../../modules/whombat-live';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useManaged } from '../managed/context';
-import { createStatusWidgetSync, statusWidgetPayload } from './statusWidget';
+import { createStatusWidgetSync, statusWidgetPayload, statusWidgetSourceFor } from './statusWidget';
 
 export function StatusWidgetBridge() {
   const { slug, timeZone, clock, currentBootstrap } = useBurrowBase();
@@ -27,6 +27,7 @@ export function StatusWidgetBridge() {
 
   const applianceId = managed?.applianceId ?? null;
   const applianceName = managed?.applianceName ?? null;
+  const source = statusWidgetSourceFor(managed?.orgId);
   const burrowName = currentBootstrap().burrow.name;
 
   const payload = useMemo(() => {
@@ -36,10 +37,11 @@ export function StatusWidgetBridge() {
       applianceId,
       applianceName,
       burrowName,
+      source,
       timeZone,
       now: clock(),
     });
-  }, [overview, applianceId, applianceName, burrowName, timeZone, clock]);
+  }, [overview, applianceId, applianceName, burrowName, source, timeZone, clock]);
 
   useEffect(() => {
     if (!payload) return;

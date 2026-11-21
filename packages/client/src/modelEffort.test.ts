@@ -276,10 +276,11 @@ describe('background model in Configure → Model', () => {
     expect(draftWithModel(d, 'sonnet', CLAUDE).backgroundModel).toBe('haiku');
     expect(draftWithEffort(d, 'low').backgroundModel).toBe('haiku');
     expect(draftWithBackgroundModel(d, 'sonnet').backgroundModel).toBe('sonnet');
-    expect('backgroundModel' in draftWithBackgroundModel(d, null)).toBe(false);
+    expect(draftWithBackgroundModel(d, null).backgroundModel).toBeNull();
     expect(modelRuntimeBody(draftWithBackgroundModel(d, null))).toEqual({
       provider: 'claude',
       model: 'opus',
+      backgroundModel: null,
       effort: 'high',
     });
     expect(draftWithProvider(d, 'codex')).toEqual({ provider: 'codex', model: null, effort: null });
