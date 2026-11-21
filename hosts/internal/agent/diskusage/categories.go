@@ -137,12 +137,6 @@ type dockerSystemDF struct {
 		SharedSize int64 `json:"SharedSize"`
 		Containers int64 `json:"Containers"`
 	} `json:"Images"`
-	Volumes []struct {
-		UsageData *struct {
-			Size     int64 `json:"Size"`
-			RefCount int64 `json:"RefCount"`
-		} `json:"UsageData"`
-	} `json:"Volumes"`
 	BuildCache []struct {
 		Size   int64 `json:"Size"`
 		InUse  bool  `json:"InUse"`
@@ -157,7 +151,7 @@ func (r *Runner) collectDocker(ctx context.Context, scope mountScope, rootDev, r
 	dockerRoot := "/var/lib/docker"
 	sock := r.findDockerSocket()
 	var df *dockerSystemDF
-	var rootOnMount, volOnMount bool
+	var rootOnMount bool
 
 	if sock != "" && ctx.Err() == nil {
 		client := unixHTTPClient(sock, 10*time.Second)
@@ -165,72 +159,65 @@ func (r *Runner) collectDocker(ctx context.Context, scope mountScope, rootDev, r
 		if err := dockerGet(ctx, client, "/info", &info); err == nil && info.DockerRootDir != "" {
 			dockerRoot = filepath.Clean(info.DockerRootDir)
 		}
-		volDir := filepath.Join(dockerRoot, "volumes")
 		// Check mount table before any stat, then verify st_dev and mount ID.
+		// Request only images and build cache so dockerd never runs an unbounded
+		// high-priority volume/container walk past our deadline.
 		rootOnMount = r.pathInScope(scope, dockerRoot, rootDev, rootMntID)
-		volOnMount = r.pathInScope(scope, volDir, rootDev, rootMntID)
-		if rootOnMount || volOnMount {
+		if rootOnMount {
 			var res dockerSystemDF
-			if err := dockerGet(ctx, client, "/system/df", &res); err == nil {
+			if err := dockerGet(ctx, client, "/system/df?type=image&type=build-cache", &res); err == nil {
 				df = &res
+			} else if ctx.Err() != nil {
+				partial = true
 			}
 		}
-	} else {
-		rootOnMount = r.pathInScope(scope, dockerRoot, rootDev, rootMntID)
-		volOnMount = r.pathInScope(scope, filepath.Join(dockerRoot, "volumes"), rootDev, rootMntID)
 	}
 
-	volDir := filepath.Join(dockerRoot, "volumes")
-
-	if df != nil {
-		if rootOnMount {
-			imgBytes, imgReclaim, imgUnused := summarizeDockerImages(df)
-			detail := ""
-			if len(df.Images) > 0 {
-				detail = fmt.Sprintf("%d %s", len(df.Images), plural(len(df.Images), "image", "images"))
-				if imgUnused > 0 {
-					detail += fmt.Sprintf(", %d unused", imgUnused)
-				}
-			}
-			if imgBytes > 0 {
-				out = append(out, proto.DiskUsageCategory{
-					Key:              proto.DiskCatContainerImages,
-					Label:            "Container images",
-					Bytes:            imgBytes,
-					ReclaimableBytes: imgReclaim,
-					Detail:           detail,
-				})
-			}
-
-			bcBytes, bcReclaim := summarizeDockerBuildCache(df)
-			if bcBytes > 0 {
-				out = append(out, proto.DiskUsageCategory{
-					Key:              proto.DiskCatContainerBuildCache,
-					Label:            "Container build cache",
-					Bytes:            bcBytes,
-					ReclaimableBytes: bcReclaim,
-				})
+	if df != nil && rootOnMount {
+		imgBytes, imgReclaim, imgUnused := summarizeDockerImages(df)
+		detail := ""
+		if len(df.Images) > 0 {
+			detail = fmt.Sprintf("%d %s", len(df.Images), plural(len(df.Images), "image", "images"))
+			if imgUnused > 0 {
+				detail += fmt.Sprintf(", %d unused", imgUnused)
 			}
 		}
+		if imgBytes > 0 {
+			out = append(out, proto.DiskUsageCategory{
+				Key:              proto.DiskCatContainerImages,
+				Label:            "Container images",
+				Bytes:            imgBytes,
+				ReclaimableBytes: imgReclaim,
+				Detail:           detail,
+			})
+		}
 
-		if volOnMount {
-			volBytes, volReclaim, unknown := summarizeDockerVolumes(df)
-			if unknown && volBytes == 0 && ctx.Err() == nil {
-				seen := map[inodeKey]struct{}{}
-				b, p := r.walkDirBytes(ctx, scope, volDir, rootDev, rootMntID, 6, seen)
-				volBytes = b
-				if p {
-					partial = true
-				}
-			}
-			if volBytes > 0 {
-				out = append(out, proto.DiskUsageCategory{
-					Key:              proto.DiskCatContainerVolumes,
-					Label:            "Container volumes",
-					Bytes:            volBytes,
-					ReclaimableBytes: volReclaim,
-				})
-			}
+		bcBytes, bcReclaim := summarizeDockerBuildCache(df)
+		if bcBytes > 0 {
+			out = append(out, proto.DiskUsageCategory{
+				Key:              proto.DiskCatContainerBuildCache,
+				Label:            "Container build cache",
+				Bytes:            bcBytes,
+				ReclaimableBytes: bcReclaim,
+			})
+		}
+	}
+
+	// Measure Docker volumes with our own low-priority bounded walk inside the
+	// mount scope, never delegating volume walks to dockerd.
+	if ctx.Err() == nil {
+		volDir := filepath.Join(dockerRoot, "volumes")
+		seen := map[inodeKey]struct{}{}
+		volBytes, volPartial := r.walkDirBytes(ctx, scope, volDir, rootDev, rootMntID, 6, seen)
+		if volPartial {
+			partial = true
+		}
+		if volBytes > 0 {
+			out = append(out, proto.DiskUsageCategory{
+				Key:   proto.DiskCatContainerVolumes,
+				Label: "Container volumes",
+				Bytes: volBytes,
+			})
 		}
 	}
 
@@ -294,20 +281,6 @@ func summarizeDockerBuildCache(df *dockerSystemDF) (total, reclaimable uint64) {
 		}
 	}
 	return total, reclaimable
-}
-
-func summarizeDockerVolumes(df *dockerSystemDF) (total, reclaimable uint64, anyUnknown bool) {
-	for _, v := range df.Volumes {
-		if v.UsageData == nil || v.UsageData.Size < 0 {
-			anyUnknown = true
-			continue
-		}
-		total += uint64(v.UsageData.Size)
-		if v.UsageData.RefCount <= 0 {
-			reclaimable += uint64(v.UsageData.Size)
-		}
-	}
-	return total, reclaimable, anyUnknown
 }
 
 func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (uint64, bool) {

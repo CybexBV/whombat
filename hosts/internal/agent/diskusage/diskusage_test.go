@@ -330,11 +330,15 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var dfTypes []string
+	var dfCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
 	})
 	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
+		dfCalls.Add(1)
+		dfTypes = append([]string(nil), r.URL.Query()["type"]...)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"LayersSize": 500_000_000,
 			"Images": []map[string]any{
@@ -405,14 +409,18 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 		byKey[c.Key] = c
 	}
 
+	if dfCalls.Load() != 1 || !slices.Equal(dfTypes, []string{"image", "build-cache"}) {
+		t.Errorf("/system/df calls=%d types=%v, want 1 call with [image build-cache]", dfCalls.Load(), dfTypes)
+	}
 	if c := byKey[proto.DiskCatContainerImages]; c.Bytes != 500_000_000 || c.ReclaimableBytes != 200_000_000 {
 		t.Errorf("container_images = %+v", c)
 	}
 	if c := byKey[proto.DiskCatContainerBuildCache]; c.Bytes != 100_000_000 || c.ReclaimableBytes != 80_000_000 {
 		t.Errorf("container_build_cache = %+v", c)
 	}
-	if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes != 150_000_000 || c.ReclaimableBytes != 30_000_000 {
-		t.Errorf("container_volumes = %+v", c)
+	// Volumes are measured with the agent's own bounded walk (16 KiB on disk), not dockerd's /system/df.
+	if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 16*1024 || c.Bytes >= 100*1024 {
+		t.Errorf("container_volumes = %+v, want ~16 KiB from bounded local walk", c)
 	}
 	if c := byKey[proto.DiskCatContainerLogs]; c.Bytes < 24*1024 {
 		t.Errorf("container_logs = %+v", c)
@@ -687,5 +695,72 @@ func TestBuildMountScopeOvermountAndMountIDs(t *testing.T) {
 	}
 	if scope.containsPath("/mnt/data/bind/file") {
 		t.Error("bind mount under active overmount should be excluded by mount ID")
+	}
+}
+
+func TestDockerVolumesMountScope(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/app/data.bin"), 28*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/mounted-vol/huge.bin"), 256*1024)
+
+	sockDir, err := os.MkdirTemp("", "du-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sockPath := filepath.Join(sockDir, "d.sock")
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dfCalls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
+	})
+	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
+		dfCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"LayersSize": 100_000})
+	})
+	srv := &http.Server{Handler: mux}
+	go srv.Serve(ln)
+	t.Cleanup(func() {
+		srv.Close()
+		ln.Close()
+	})
+	inRootSock := filepath.Join(root, "var/run/docker.sock")
+	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sockPath, inRootSock); err != nil {
+		t.Fatal(err)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+		{ID: 2, ParentID: 1, MountPoint: "/var/lib/docker/volumes", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		{ID: 3, ParentID: 2, MountPoint: "/var/lib/docker/volumes/mounted-vol", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+	}
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.dockerSockets = []string{"/var/run/docker.sock"}
+
+	// Scanning /var/lib/docker/volumes: dockerRoot is on /, so /system/df must NOT be called;
+	// volumes on this mount are measured locally while skipping the nested bind mount.
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/var/lib/docker/volumes"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+	if dfCalls.Load() != 0 {
+		t.Errorf("/system/df called %d times when dockerRoot is outside target mount", dfCalls.Load())
+	}
+	var volBytes uint64
+	for _, c := range resp.Categories {
+		if c.Key == proto.DiskCatContainerVolumes {
+			volBytes = c.Bytes
+		}
+	}
+	if volBytes < 28*1024 || volBytes >= 128*1024 {
+		t.Errorf("container_volumes = %d, want ~28 KiB (categories=%+v)", volBytes, resp.Categories)
 	}
 }
