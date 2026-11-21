@@ -334,6 +334,12 @@ func (a *simAgent) handleStream(ctx context.Context, st *yamux.Stream, send func
 			return
 		}
 		_ = wire.WriteMsg(st, a.exec(req))
+	case proto.StreamDiskUsage:
+		var req proto.DiskUsageRequest
+		if wire.ReadMsg(st, &req) != nil {
+			return
+		}
+		_ = wire.WriteMsg(st, a.diskUsage(req))
 	case proto.StreamUpdate:
 		a.update(st)
 	case proto.StreamConsole:
@@ -384,4 +390,64 @@ func (a *simAgent) action(req proto.ActionRequest) proto.ActionResponse {
 		return proto.ActionResponse{OK: true, State: proto.StateRunning, Message: "Restarted."}
 	}
 	return proto.ActionResponse{Code: "unsupported", Message: "Unknown action."}
+}
+
+func (a *simAgent) diskUsage(req proto.DiskUsageRequest) proto.DiskUsageResponse {
+	now := time.Now().UTC()
+	if !a.host.Policy.Diagnose {
+		return proto.DiskUsageResponse{Code: "remote_control_disabled", Message: "Remote control (diagnose) is turned off in this host's agent.toml", MeasuredAt: now}
+	}
+	mount := req.Mount
+	if mount == "" {
+		mount = "/"
+	}
+	rep := a.host.Report(now, 0, a.agentVersion())
+	var fs *proto.Filesystem
+	for i := range rep.Filesystems {
+		if rep.Filesystems[i].Mount == mount {
+			fs = &rep.Filesystems[i]
+			break
+		}
+	}
+	if fs == nil {
+		return proto.DiskUsageResponse{Code: "invalid_request", Message: mount + " is not a mounted filesystem.", Mount: mount, MeasuredAt: now}
+	}
+	if rep.Unraid != nil {
+		for _, d := range rep.Unraid.Array.Disks {
+			if d.SpunDown && mount == "/mnt/"+d.Name {
+				return proto.DiskUsageResponse{
+					Code:            "spun_down",
+					Message:         "Skipped " + mount + " because " + d.Name + " is spun down; sleeping disks are not woken.",
+					Mount:           mount,
+					FSType:          fs.FSType,
+					Device:          fs.Device,
+					MeasuredAt:      now,
+					SkippedSpunDown: []string{d.Name},
+				}
+			}
+		}
+	}
+	used := fs.UsedBytes
+	const gib = 1 << 30
+	return proto.DiskUsageResponse{
+		Mount:      mount,
+		FSType:     fs.FSType,
+		Device:     fs.Device,
+		MeasuredAt: now,
+		DurationMs: 420,
+		TotalBytes: fs.SizeBytes,
+		UsedBytes:  used,
+		Categories: []proto.DiskUsageCategory{
+			{Key: proto.DiskCatContainerImages, Label: "Container images", Bytes: min(used/4, 18*gib), ReclaimableBytes: 4 * gib, Detail: "12 images, 3 unused"},
+			{Key: proto.DiskCatContainerVolumes, Label: "Container volumes", Bytes: min(used/5, 14*gib)},
+			{Key: proto.DiskCatContainerBuildCache, Label: "Container build cache", Bytes: min(used/10, 6*gib), ReclaimableBytes: 5 * gib},
+			{Key: proto.DiskCatJournal, Label: "System journal", Bytes: min(used/20, 3*gib)},
+			{Key: proto.DiskCatPackageCache, Label: "Package caches", Bytes: min(used/30, 1*gib), Detail: "apt"},
+		},
+		Folders: []proto.DiskUsageFolder{
+			{Path: "/var/lib/docker", Bytes: min(used/2, 38*gib)},
+			{Path: "/var/log/journal", Bytes: min(used/20, 3*gib)},
+			{Path: "/var/backups", Bytes: min(used/12, 9*gib)},
+		},
+	}
 }

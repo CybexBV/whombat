@@ -28,6 +28,7 @@ const (
 	inspectTimeout   = 60 * time.Second // package lists can be slow
 	manageTimeout    = 90 * time.Second // long operations answer with a task id
 	diagnoseTimeout  = 60 * time.Second // the checks bound themselves to less
+	diskUsageTimeout = 55 * time.Second // disk usage bounds itself to at most 45 s
 	screenGrace      = 5 * time.Second  // past the step's own limit (proto.ScreenStepLimit)
 	rpcWriteTimeout  = 30 * time.Second
 	consoleWriteMax  = 60 * time.Second // a hub that stops reading ends the session
@@ -60,6 +61,8 @@ func (rt *Runtime) handleStream(ctx context.Context, st streamConn) {
 		rt.serveExec(ctx, st)
 	case proto.StreamScreen:
 		rt.serveScreen(ctx, st)
+	case proto.StreamDiskUsage:
+		rt.serveDiskUsage(ctx, st)
 	default:
 		rt.Log.Warn("hub opened a stream of unknown kind", "kind", h.Kind)
 	}
@@ -274,6 +277,30 @@ func (rt *Runtime) serveDiagnose(ctx context.Context, st streamConn) {
 	}
 	rt.Log.Info("diagnose", "check", req.Check, "args", req.Args, "code", resp.Code,
 		"bytes", len(resp.Output), "truncated", resp.Truncated, "duration", time.Since(start).Round(time.Millisecond))
+	writeReply(st, resp)
+}
+
+func (rt *Runtime) serveDiskUsage(ctx context.Context, st streamConn) {
+	var req proto.DiskUsageRequest
+	if err := wire.ReadMsg(st, &req); err != nil {
+		return
+	}
+	st.SetReadDeadline(time.Time{})
+	start := time.Now()
+	var resp proto.DiskUsageResponse
+	switch {
+	case !rt.Policy().Diagnose:
+		resp = proto.DiskUsageResponse{Code: CodeRemoteControlDisabled, Message: "Remote control (diagnose) is turned off in this host's agent.toml"}
+	case rt.DiskUsage == nil:
+		resp = proto.DiskUsageResponse{Code: CodeUnsupported, Message: "this agent cannot measure disk usage"}
+	default:
+		dctx, cancel := context.WithTimeout(ctx, diskUsageTimeout)
+		resp = rt.DiskUsage.DiskUsage(dctx, req)
+		cancel()
+	}
+	rt.Log.Info("disk_usage", "mount", logCommand(req.Mount), "code", resp.Code, "partial", resp.Partial,
+		"categories", len(resp.Categories), "folders", len(resp.Folders),
+		"duration", time.Since(start).Round(time.Millisecond))
 	writeReply(st, resp)
 }
 

@@ -18,6 +18,7 @@ import {
   type HostConsoleSession,
   type HostControlLevel,
   type HostDisk,
+  type HostDiskUsage,
   type HostEnrollment,
   type HostFirewall,
   type HostFleet,
@@ -784,6 +785,10 @@ export function toHostServerDetail(
     alerts: alerts.filter((a) => obj(a).server === id).map(toHostAlert),
     health: health(d),
   };
+  if (Array.isArray(d.disk_usage)) {
+    const list = d.disk_usage.map((u) => toHostDiskUsage(u, now)).filter((u) => u.mount.length > 0);
+    if (list.length) out.diskUsage = list;
+  }
   if (d.incus && typeof d.incus === 'object') out.incus = toHostIncusDetail(d.incus);
   if (d.unraid && typeof d.unraid === 'object') out.unraid = toHostUnraidDetail(d.unraid);
   if (d.libvirt && typeof d.libvirt === 'object') out.libvirt = toHostLibvirtDetail(d.libvirt);
@@ -1547,6 +1552,61 @@ export function toHostInspect(raw: unknown, kind: HostInspectKind, now: Date): H
     truncated: bool(r.truncated),
     items,
   } as HostInspectResult;
+}
+
+/** One on-request disk usage breakdown (`GET /servers/{id}` `disk_usage`, `POST /servers/{id}/disk-usage`). */
+export function toHostDiskUsage(raw: unknown, now: Date): HostDiskUsage {
+  const r = obj(raw);
+  const nonNeg = (v: unknown) => {
+    const n = num(v);
+    return n !== null && n >= 0 ? n : 0;
+  };
+  const categories = arr(r.categories)
+    .map((item) => {
+      const c = obj(item);
+      const key = text(c.key).slice(0, 64);
+      const label = text(c.label).slice(0, 120);
+      if (!key || !label) return null;
+      const reclaimable = num(c.reclaimable_bytes);
+      return defined({
+        key,
+        label,
+        bytes: nonNeg(c.bytes),
+        reclaimableBytes: reclaimable !== null && reclaimable > 0 ? reclaimable : undefined,
+        detail: str(c.detail)?.slice(0, 200) || undefined,
+      });
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
+  const folders = arr(r.folders)
+    .map((item) => {
+      const f = obj(item);
+      const path = text(f.path).slice(0, 512);
+      if (!path) return null;
+      return defined({
+        path,
+        bytes: nonNeg(f.bytes),
+        partial: f.partial === true ? true : undefined,
+      });
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+  const spunDown = arr(r.skipped_spun_down).filter((x): x is string => typeof x === 'string' && x.length > 0);
+  const durationMs = num(r.duration_ms);
+  return defined({
+    mount: text(r.mount).slice(0, 512),
+    fsType: str(r.fs_type)?.slice(0, 64) || undefined,
+    device: str(r.device)?.slice(0, 256) || undefined,
+    measuredAt: ts(r.measured_at) ?? now.toISOString(),
+    durationMs: durationMs !== null && durationMs >= 0 ? durationMs : undefined,
+    totalBytes: nonNeg(r.total_bytes),
+    usedBytes: nonNeg(r.used_bytes),
+    partial: r.partial === true ? true : undefined,
+    skippedSpunDown: spunDown.length ? spunDown : undefined,
+    categories,
+    folders,
+    ok: typeof r.ok === 'boolean' ? r.ok : undefined,
+    code: str(r.code)?.slice(0, 64) || undefined,
+    message: str(r.message)?.slice(0, 500) || undefined,
+  }) as HostDiskUsage;
 }
 
 export function toHostSnapshots(raw: unknown): HostSnapshot[] {

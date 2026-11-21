@@ -164,6 +164,8 @@ const AFTER: Partial<Record<string, readonly string[]>> = {
   'hosts.serverAction': ['hosts.getServer', 'hosts.fleet'],
   // A Mac's screen step changes what its page says (the password, the lock, the helper).
   'hosts.screen': ['hosts.getServer'],
+  // An on-request disk breakdown updates what the Storage tab shows.
+  'hosts.diskUsage': ['hosts.getServer'],
   // Update now also clears the halt (Whombat agent-updates.md AU-05).
   'hosts.updateAgent': ['hosts.serverSettings', 'hosts.getServer', 'hosts.agentSettings', 'hosts.fleet'],
   'hosts.updateAgentSettings': ['hosts.agentSettings', 'hosts.serverSettings'],

@@ -53,9 +53,12 @@ type Runtime struct {
 	Diagnostics Diagnostics
 	// Screen serves the screen stream (a Mac's screen); nil answers it with
 	// unsupported.
-	Screen  Screen
-	Version string
-	Log     *slog.Logger
+	Screen Screen
+	// DiskUsage serves the on-request disk usage stream; nil answers it with
+	// unsupported.
+	DiskUsage DiskUsage
+	Version   string
+	Log       *slog.Logger
 
 	// Tunables; NewRuntime sets the production values, tests shorten them.
 	ReportInterval time.Duration

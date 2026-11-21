@@ -42,6 +42,7 @@ import (
 	"rackoon/internal/agent/broker"
 	"rackoon/internal/agent/collect"
 	"rackoon/internal/agent/diagnose"
+	"rackoon/internal/agent/diskusage"
 	"rackoon/internal/agent/macos"
 )
 
@@ -238,6 +239,7 @@ func cmdRun(args []string) error {
 		br.OnPackageChange = rt.RefreshPackages
 		rt.Broker = br
 		rt.Diagnostics = diagnose.New(br.Inspect, log)
+		rt.DiskUsage = diskusage.New(rt.Inventory, log)
 	}
 	if exeErr == nil {
 		rt.Updater = agent.NewUpdater(exe, cfg, version, log)

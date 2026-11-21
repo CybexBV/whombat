@@ -1286,7 +1286,10 @@ Setup and operation: `docs/github.md`.
   sentence from Worth a look's own lines, at most four tiles in words, the busiest machines or apps, and one closed
   Technical details fold with its versions, address, Whombat's helper, storage and pools; temporary machines (Incus
   projects other than `default`, CI jobs, leased sandboxes, Whombat's own `whombat.service=1` containers) stay out of
-  its lists and counts until asked for. Every page's head is Ask {assistant}, the service's own page, then ⋯ with the
+  its lists and counts until asked for. On a server's Storage tab, What uses the space shows each machine's and app's
+  disk and replaces “Everything else” with a recent on-request disk breakdown (`server_disk_usage` / `hosts.diskUsage`,
+  kept for 24 hours by the hosts service and measured at low priority without waking spun-down disks) together with when
+  it was measured. Every page's head is Ask {assistant}, the service's own page, then ⋯ with the
   rest. [server-pages.md](docs/decisions/server-pages.md) A Mac's page has a Screen tab (`macScreenView`): the screen
   live on the web (the host's `vnc` console), a picture of it on demand on the phone, Unlock, the Mac's password sent
   once to the Mac (sealed in the step's mutation, so no cache keeps it), and Whombat Helper with its Accessibility.

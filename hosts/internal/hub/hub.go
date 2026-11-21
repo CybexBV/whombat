@@ -115,12 +115,13 @@ type srvState struct {
 	skew          *float64
 	offline       bool // last announced status was offline
 	guestStates   map[string]string
-	dirty         bool               // report / last_seen not yet persisted
-	reportSavedAt time.Time          // last time the report was written to the database
-	guestSampleTS int64              // last guest history sample (report time)
-	memo          rules.Memo         // history of the stateful alert rules
-	forecast      map[string]float64 // volume entity -> days until full (forecast job)
-	macHelperOff  time.Time          // a Mac's helper missing from the screen's session since then
+	dirty         bool                               // report / last_seen not yet persisted
+	reportSavedAt time.Time                          // last time the report was written to the database
+	guestSampleTS int64                              // last guest history sample (report time)
+	memo          rules.Memo                         // history of the stateful alert rules
+	forecast      map[string]float64                 // volume entity -> days until full (forecast job)
+	macHelperOff  time.Time                          // a Mac's helper missing from the screen's session since then
+	diskUsage     map[string]proto.DiskUsageResponse // mount -> latest on-request breakdown
 }
 
 // New opens the data directory and prepares the hub. It prints the
@@ -241,8 +242,23 @@ func (h *Hub) load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	diskUsages, err := h.store.LoadAllDiskUsage(ctx)
+	if err != nil {
+		return err
+	}
+	duByServer := map[string]map[string]proto.DiskUsageResponse{}
+	for _, du := range diskUsages {
+		var resp proto.DiskUsageResponse
+		if err := wire.Unmarshal(du.Data, &resp); err != nil || resp.Mount == "" {
+			continue
+		}
+		if duByServer[du.ServerID] == nil {
+			duByServer[du.ServerID] = map[string]proto.DiskUsageResponse{}
+		}
+		duByServer[du.ServerID][du.Mount] = resp
+	}
 	for _, s := range servers {
-		ss := &srvState{meta: s, lastFrame: s.LastSeen, guestStates: map[string]string{}}
+		ss := &srvState{meta: s, lastFrame: s.LastSeen, guestStates: map[string]string{}, diskUsage: duByServer[s.ID]}
 		if rp, ok := reports[s.ID]; ok {
 			var r proto.Report
 			if err := wire.Unmarshal(rp.Report, &r); err == nil {
@@ -571,6 +587,12 @@ func (h *Hub) stateOf(s *srvState, parents map[string]string) *model.ServerState
 		HeartbeatTimeout: h.cfg.HeartbeatTimeout,
 		ParentSetting:    s.meta.Parent, DetectedParent: parents[s.meta.ID],
 		Forecast: s.forecast, MacHelperOffSince: s.macHelperOff,
+	}
+	if len(s.diskUsage) > 0 {
+		st.DiskUsage = make(map[string]proto.DiskUsageResponse, len(s.diskUsage))
+		for k, v := range s.diskUsage {
+			st.DiskUsage[k] = v
+		}
 	}
 	switch s.meta.Parent {
 	case "":

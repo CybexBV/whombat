@@ -53,6 +53,8 @@ type ServerState struct {
 	// MacHelperOffSince: a Mac's installed helper has not answered in the
 	// session at the screen since then (zero: it runs, or not a Mac).
 	MacHelperOffSince time.Time
+	// DiskUsage: latest on-request disk breakdown per mount point.
+	DiskUsage map[string]proto.DiskUsageResponse
 }
 
 // MaintInfo is an active maintenance window.
