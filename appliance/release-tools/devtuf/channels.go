@@ -225,29 +225,91 @@ func (r *Repo) ChannelKey(channel string) ed25519.PrivateKey {
 	return nil
 }
 
-// signChannel bumps, signs and writes a channel role (N.<channel>.json). Production's lifetime starts again with
-// every version; development's too (it is signed with every publish).
-func (r *Repo) signChannel(channel string, key ed25519.PrivateKey) error {
-	md := r.channels[channel]
+// resolveChannelKey checks that key (or the repository's own key when nil) is authorized for channel.
+func (r *Repo) resolveChannelKey(channel string, key ed25519.PrivateKey) (ed25519.PrivateKey, error) {
 	if key == nil {
 		key = r.ChannelKey(channel)
 	}
 	if key == nil {
-		return fmt.Errorf("devtuf: no %s key (it is offline: pass it with --key-file)", channel)
+		return nil, fmt.Errorf("devtuf: no %s key (it is offline: pass it with --key-file)", channel)
 	}
 	role, ok := r.delegatedRole(channel)
 	pk, _ := metadata.KeyFromPublicKey(key.Public())
 	id, _ := pk.ID()
 	if !ok || !containsString(role.KeyIDs, id) {
-		return fmt.Errorf("devtuf: this key does not hold the %s role", channel)
+		return nil, fmt.Errorf("devtuf: this key does not hold the %s role", channel)
+	}
+	return key, nil
+}
+
+// signChannel bumps, signs and writes a channel role (N.<channel>.json). Production's lifetime starts again with
+// every version; development's too (it is signed with every publish).
+func (r *Repo) signChannel(channel string, key ed25519.PrivateKey) error {
+	md := r.channels[channel]
+	k, err := r.resolveChannelKey(channel, key)
+	if err != nil {
+		return err
 	}
 	md.Signed.Version++
 	md.Signed.Expires = r.opts.Now().UTC().Add(ChannelExpiry(channel))
 	md.ClearSignatures()
-	if _, err := md.Sign(signer(key)); err != nil {
+	if _, err := md.Sign(signer(k)); err != nil {
 		return err
 	}
 	return writeJSON(filepath.Join(r.metaDir(), fmt.Sprintf("%d.%s.json", md.Signed.Version, channel)), md)
+}
+
+// ChannelPauseResult reports the channel role version written by PauseChannel or ResumeChannel.
+type ChannelPauseResult struct {
+	Channel string `json:"channel"`
+	Paused  bool   `json:"paused"`
+	Version int64  `json:"version"`
+	Already bool   `json:"already,omitempty"`
+}
+
+// ChannelPaused reports whether the channel role carries the pause marker.
+func (r *Repo) ChannelPaused(channel string) bool {
+	md, ok := r.channels[channel]
+	if !ok {
+		return false
+	}
+	paused, _ := trust.IsChannelPaused(md)
+	return paused
+}
+
+// PauseChannel signs the pause marker into channel's own role metadata so boxes stop taking new releases from it.
+// Listed releases stay in place so rollbacks keep working and boxes never downgrade.
+func (r *Repo) PauseChannel(channel string, key ed25519.PrivateKey) (*ChannelPauseResult, error) {
+	return r.setChannelPaused(channel, true, key)
+}
+
+// ResumeChannel clears the pause marker from channel's own role metadata so boxes resume taking releases from it.
+func (r *Repo) ResumeChannel(channel string, key ed25519.PrivateKey) (*ChannelPauseResult, error) {
+	return r.setChannelPaused(channel, false, key)
+}
+
+func (r *Repo) setChannelPaused(channel string, paused bool, key ed25519.PrivateKey) (*ChannelPauseResult, error) {
+	if !trust.ValidChannel(channel) {
+		return nil, fmt.Errorf("devtuf: unknown channel %q", channel)
+	}
+	md, ok := r.channels[channel]
+	if !ok {
+		return nil, fmt.Errorf("devtuf: no %s role (tufrepo add-channels)", channel)
+	}
+	k, err := r.resolveChannelKey(channel, key)
+	if err != nil {
+		return nil, err
+	}
+	cur, err := trust.IsChannelPaused(md)
+	if err == nil && cur == paused {
+		return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version, Already: true}, nil
+	}
+	trust.SetChannelPaused(md, paused)
+	if err := r.PublishChannelWith(channel, k); err != nil {
+		trust.SetChannelPaused(md, cur)
+		return nil, err
+	}
+	return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version}, nil
 }
 
 // publishChannel serves the channel's releases at their GitHub paths too, signs the role with keysOverride (an offline

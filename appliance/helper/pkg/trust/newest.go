@@ -11,6 +11,15 @@ import "strings"
 // newer. The manager offers what it returns and the update helper requires the same answer from its own verified view,
 // so a manager can't move a box anywhere else.
 func (r *Repo) NewestRelease(curID string, cur *Versions, curDigest string) (*Release, error) {
+	if r.ChannelPaused {
+		return nil, nil
+	}
+	return r.NewestListedRelease(curID, cur, curDigest)
+}
+
+// NewestListedRelease returns the newest approved release listed in the view without considering whether the channel is
+// paused, so status comparisons such as Beta-to-Production staysOn stay accurate during a pause.
+func (r *Repo) NewestListedRelease(curID string, cur *Versions, curDigest string) (*Release, error) {
 	var best *Release
 	for _, id := range r.ReleaseIDs() {
 		rel, err := r.Release(id)
