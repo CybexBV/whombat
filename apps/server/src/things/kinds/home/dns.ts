@@ -952,6 +952,59 @@ function headFacts(s: DnsSnapshot, timeZone: string): ThingLine[] {
   return facts.filter((f) => f.length);
 }
 
+/** Questions for the Blocking now card. */
+export function dnsBlockingQuestions(s: DnsSnapshot): string[] {
+  const name = NAMES[s.service];
+  const out: string[] = [];
+  if (s.blocking && !s.blocking.on) out.push(`Why is blocking off on ${name}?`);
+  out.push(
+    'What was blocked the most today?',
+    'Is a site I need being blocked?',
+    'Which device made the most lookups?',
+  );
+  return out.slice(0, 3);
+}
+
+/** Questions for the Lists and devices card. */
+export function dnsInventoryQuestions(s: DnsSnapshot): string[] {
+  const name = NAMES[s.service];
+  const out: string[] = [];
+  if ((s.lists ?? []).some((l) => l.enabled && l.failed))
+    out.push(`Why couldn’t ${name} update a block list?`);
+  out.push(`Which devices use ${name} the most?`, `Are ${name}’s block lists up to date?`);
+  return out.slice(0, 3);
+}
+
+/** Questions for the Most blocked card. */
+export function dnsTopBlockedQuestions(s: DnsSnapshot): string[] {
+  const out: string[] = [];
+  const top = s.topBlocked?.[0]?.domain;
+  if (top) out.push(clip(`What is ${top} and why is it blocked so often?`, 200));
+  out.push('Which device hits blocked domains the most?', 'Is anything safe being blocked?');
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while Pi-hole or AdGuard Home has no active problem. */
+export function dnsVerdict(s: DnsSnapshot, timeZone: string): string {
+  const name = NAMES[s.service];
+  if (s.blocking && !s.blocking.on) {
+    const off = blockingOffWords(s, timeZone) ?? 'Blocking is off';
+    return clip(`${off}.`, 200);
+  }
+  if (s.filteringOff) return `${name}’s block lists are switched off.`;
+  const period = s.period ?? 'last 24 hours';
+  if (s.blockedPct !== null && s.queries !== null) {
+    if (s.queries === 0) return clip(`${name} is blocking fine: no lookups in the ${period}.`, 200);
+    return clip(
+      `${name} is blocking fine: ${share(s.blockedPct)} of ${thousands(s.queries)} lookups blocked in the ${period}.`,
+      200,
+    );
+  }
+  if (s.blockedPct !== null)
+    return clip(`${name} is blocking fine: ${share(s.blockedPct)} blocked in the ${period}.`, 200);
+  return `${name} is blocking fine.`;
+}
+
 /** Live, “Blocking now”: whether it blocks with its Pause buttons (Resume while off), and how much it kept out. */
 export function dnsLive(s: DnsSnapshot, ctx: DnsCtx): LivePanel | null {
   const name = NAMES[s.service];
@@ -990,7 +1043,12 @@ export function dnsLive(s: DnsSnapshot, ctx: DnsCtx): LivePanel | null {
       }),
     );
   if (!items.length) return null;
-  return liveList({ id: 'blocking-now', title: 'Blocking now', items });
+  return liveList({
+    id: 'blocking-now',
+    title: 'Blocking now',
+    ask: { questions: dnsBlockingQuestions(s) },
+    items,
+  });
 }
 
 /** Inventory: the block lists with what changed (added this week, a failed download, how old) and Update lists, and the devices. */
@@ -1046,7 +1104,14 @@ export function dnsInventory(s: DnsSnapshot, ctx: DnsCtx): InventoryPanel | null
             : (s.period ?? 'last 24 hours'),
       }),
     );
-  return items.length ? inventory({ id: 'inventory', title: 'Lists and devices', items }) : null;
+  return items.length
+    ? inventory({
+        id: 'inventory',
+        title: 'Lists and devices',
+        ask: { questions: dnsInventoryQuestions(s) },
+        items,
+      })
+    : null;
 }
 
 /** People: the devices that look up the most, by the name the service has for them, the address beside a bare name. */
@@ -1093,7 +1158,17 @@ export function dnsView(
   ctx: DnsCtx,
 ): Pick<
   KindView,
-  'kpis' | 'charts' | 'notices' | 'panels' | 'slots' | 'tabs' | 'facts' | 'status' | 'machine' | 'buttons'
+  | 'kpis'
+  | 'charts'
+  | 'notices'
+  | 'panels'
+  | 'slots'
+  | 'tabs'
+  | 'facts'
+  | 'status'
+  | 'machine'
+  | 'buttons'
+  | 'verdict'
 > {
   const more: ThingPagePanel[] = [];
   if (s.topBlocked)
@@ -1103,6 +1178,7 @@ export function dnsView(
       place: 'main',
       title: 'Most blocked',
       meta: s.period ?? 'last 24 hours',
+      ask: { questions: dnsTopBlockedQuestions(s) },
       items: topBlockedBars(s),
       empty: 'Nothing blocked yet.',
     });
@@ -1146,6 +1222,7 @@ export function dnsView(
     }),
     tabs,
     facts: headFacts(s, ctx.timeZone),
+    verdict: dnsVerdict(s, ctx.timeZone),
     // Pause and Resume are in Blocking now, Update lists on its line.
     buttons: [],
   };
