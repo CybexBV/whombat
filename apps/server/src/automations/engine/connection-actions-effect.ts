@@ -221,6 +221,8 @@ export async function runConnectionActions(
       uploadAttachment,
     });
     if (res.kind === 'failed' || res.output.isError) {
+      const timedOut = res.kind === 'failed' && res.reason === 'timeout';
+      const earlierSucceeded = results.some((r) => r.ok);
       const reason =
         res.kind === 'failed'
           ? res.message
@@ -234,12 +236,23 @@ export async function runConnectionActions(
         ok: false,
         ...(res.kind === 'ok' && res.output.httpStatus ? { status: res.output.httpStatus } : {}),
       });
+      const succeededCount = results.filter((r) => r.ok).length;
+      // A timed-out call may have taken effect, and a batch that already ran earlier actions left partial state:
+      // settle as `uncertain` (needs_review) so the person can check instead of seeing a misleading “failed”.
+      const uncertain = timedOut || earlierSucceeded;
+      const error = timedOut
+        ? earlierSucceeded
+          ? `${succeededCount} earlier ${succeededCount === 1 ? 'action' : 'actions'} succeeded, and ${action.label} didn’t answer in time for “${shown}”, so it may or may not have happened. Check, then say what happened.`
+          : `${action.label} didn’t answer in time for “${shown}”, so it may or may not have happened. Check, then say what happened.`
+        : earlierSucceeded
+          ? `${succeededCount} earlier ${succeededCount === 1 ? 'action' : 'actions'} already succeeded before ${action.label} failed on “${shown}”: ${reason} Check what ran, then say what happened.`
+          : `${action.label} couldn’t complete “${shown}”: ${reason}`;
       await lease.commit({
         op: 'settle',
         idx: row.idx,
-        state: 'failed',
-        error: `${action.label} couldn’t complete “${shown}”: ${reason}`.slice(0, 1000),
-        output: { ran: results.some((r) => r.ok), count: results.filter((r) => r.ok).length, results },
+        state: uncertain ? 'uncertain' : 'failed',
+        error: error.slice(0, 1000),
+        output: { ran: earlierSucceeded, count: succeededCount, results },
         from: ['running'],
       });
       return;

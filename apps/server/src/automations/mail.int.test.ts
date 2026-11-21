@@ -1955,4 +1955,194 @@ describe('mail-arrives automations', () => {
       await pollAndSettle();
     }
   });
+
+  it('settles connection_actions as uncertain on timeout or partial-batch failure, and failed on clean first-call error', async () => {
+    const openResponses: ServerResponse[] = [];
+    let mode: 'timeout' | 'partial' | 'first_fail' = 'timeout';
+    let hitCount = 0;
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      req.resume();
+      req.on('end', () => {
+        hitCount++;
+        if (mode === 'timeout') {
+          openResponses.push(res);
+          return;
+        }
+        if (mode === 'partial' && hitCount === 1) {
+          res.writeHead(201, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ id: 'first-ok' }));
+          return;
+        }
+        res.writeHead(422, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unprocessable' }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const netId = newId('vaultNetwork');
+    let mbId = '';
+    let autoId = '';
+
+    const runWithActions = async (
+      msgId: string,
+      actions: Record<string, unknown>[],
+    ) => {
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: msgId,
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: `honest-outcome ${msgId}`,
+        body: 'Test outcome.',
+        messageId: `<${msgId}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const runs = await runsOf(autoId);
+      const latest = runs.at(-1);
+      const runId = latest?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      const proposed = await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        { actions },
+      );
+      expect(proposed.isError).not.toBe(true);
+      await w.fakeAgentReply(dispatchId, 'Proposed actions.');
+      await w.settle();
+      const waiting = await w.run(runId);
+      const [card] = await w.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.id, waiting.steps[1]?.approvalId as string));
+      await w.ok(IDS.mara, decideApproval, { number: card?.number as number, decision: 'approve' });
+      await w.settle();
+      return w.run(runId);
+    };
+
+    try {
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          if (host === 'moneybird-outcome.example.com') return [{ address: '10.100.92.22', family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address === '10.100.92.22' ? '127.0.0.1' : address),
+        deadlineMs: 250,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.92.0/24',
+        ports: [port],
+        note: 'Moneybird outcome test',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      mbId = await insertConnection(w.services, {
+        catalogId: 'moneybird',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { administration: '12345' },
+        auth: { type: 'bearer' },
+        secret: 'm'.repeat(64),
+        label: 'Moneybird',
+      });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ baseUrl: `http://moneybird-outcome.example.com:${port}/api/v2` })
+        .where(eq(catalogConnections.id, mbId));
+      await syncTools(w.services, mbId);
+      await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+      autoId = await createMailAutomation({
+        kind: 'mail',
+        connectionId,
+        from: 'example.com',
+        subjectContains: ['honest-outcome'],
+      });
+      await pollAndSettle();
+
+      // 1. Clean error on the very first call (HTTP 422, no timeout) settles as failed (and frees its run slot).
+      mode = 'first_fail';
+      hitCount = 0;
+      const cleanFailRun = await runWithActions('msg_outcome_fail', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft failing',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-FAIL' } },
+          },
+        },
+      ]);
+      expect(cleanFailRun.steps[1]?.state).toBe('failed');
+      expect(cleanFailRun.status).toBe('failed');
+
+      // 2. Timeout on a call settles as uncertain (needs_review), not failed.
+      mode = 'timeout';
+      hitCount = 0;
+      const timedOutRun = await runWithActions('msg_outcome_timeout', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft timeout invoice',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-TIMEOUT' } },
+          },
+        },
+      ]);
+      expect(timedOutRun.steps[1]?.state).toBe('uncertain');
+      expect(timedOutRun.status).toBe('needs_review');
+      expect(timedOutRun.steps[1]?.error).toContain('didn’t answer in time');
+
+      // 3. Partial batch (call 1 succeeds, call 2 returns HTTP 422) settles as uncertain (needs_review).
+      mode = 'partial';
+      hitCount = 0;
+      const partialRun = await runWithActions('msg_outcome_partial', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft first',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-P1' } },
+          },
+        },
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft second',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-P2' } },
+          },
+        },
+      ]);
+      expect(partialRun.steps[1]?.state).toBe('uncertain');
+      expect(partialRun.status).toBe('needs_review');
+      expect(partialRun.steps[1]?.output).toMatchObject({ ran: true, count: 1 });
+    } finally {
+      for (const r of openResponses) {
+        if (!r.writableEnded) r.destroy();
+      }
+      await new Promise<void>((r) => server.close(() => r()));
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (mbId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
 });
