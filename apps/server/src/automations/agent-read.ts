@@ -6,10 +6,12 @@
 import {
   type AgentAutomationDetail,
   type AgentAutomationSummary,
+  type AgentMailConnection,
   type AgentTrackerConnection,
   AUTOMATION_AUTHORING_GUIDE,
   AUTOMATION_PLAN_NOT_HERE,
   type Automation,
+  CONNECTOR_PROVIDER_LABELS,
   type JsonObject,
   type McpToolOutput,
 } from '@whombat/core';
@@ -17,6 +19,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { automationPlans, automations, catalogConnections } from '../db/schema/index';
 import { forbidden } from '../lib/errors';
+import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
 import { outsidersTurn } from '../runtime/person';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
@@ -64,6 +67,18 @@ async function trackerConnectionsOf(db: Db, burrowId: string): Promise<AgentTrac
   }));
 }
 
+/** The person's connected mailboxes, for a mail trigger's `connectionId`. */
+async function mailConnectionsOf(db: Db, burrowId: string): Promise<AgentMailConnection[]> {
+  const rows = await personMailConnections(db, burrowId);
+  return rows.map((r) => ({
+    connectionId: r.id,
+    provider: r.provider,
+    email: r.email,
+    label: `${CONNECTOR_PROVIDER_LABELS[r.provider]} (${r.email})`,
+    working: r.status === 'active',
+  }));
+}
+
 export async function automationsForAgent(
   ctx: ToolContext,
   input: { automationId?: string | undefined },
@@ -99,6 +114,7 @@ export async function automationsForAgent(
   return {
     automations: list,
     trackerConnections: await trackerConnectionsOf(db, ctx.burrowId),
+    mailConnections: await mailConnectionsOf(db, ctx.burrowId),
     guide: AUTOMATION_AUTHORING_GUIDE,
   };
 }

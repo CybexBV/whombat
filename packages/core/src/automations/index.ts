@@ -5,6 +5,7 @@ export * from './care.js';
 export * from './expr.js';
 export * from './glance.js';
 export * from './hash.js';
+export * from './mail.js';
 export * from './match.js';
 export * from './plan.js';
 export * from './recipes.js';

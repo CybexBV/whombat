@@ -33,6 +33,7 @@ export * from './guides';
 export * from './hermes';
 export * from './home';
 export * from './kept-sites';
+export * from './mail-triggers';
 export * from './managed';
 export * from './merges';
 export * from './principals';

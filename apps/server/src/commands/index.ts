@@ -25,6 +25,7 @@ import { GUIDE_COMMANDS } from '../guides/commands';
 import { ONE_WHOMBAT_COMMANDS } from '../home/commands';
 import { HOSTS_COMMANDS } from '../hosts/commands';
 import { FOLLOWED_TASK_COMMANDS } from '../hosts/followed';
+import { MAIL_TRIGGER_COMMANDS } from '../mail-triggers/index';
 import { setAgentNotes } from '../memory/notes';
 import { PROMPT_COMMANDS } from '../prompts/commands';
 import { authorizeGit } from '../runtime/git';
@@ -182,6 +183,8 @@ export const COMMANDS: CommandDef[] = [
   ...FEEDBACK_COMMANDS,
   // Tracker reports through automations — report-trackers.md.
   ...TRACKER_COMMANDS,
+  // Mail-triggered automations: high-water marks and mirrored matching messages.
+  ...MAIL_TRIGGER_COMMANDS,
   // Guided setup in the personal assistant's DM — assistant-guides.md.
   ...GUIDE_COMMANDS,
   // Setup cards a turn posts (connect, a Vault field) — connect-in-chat.md.

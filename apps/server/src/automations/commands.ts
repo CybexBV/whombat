@@ -61,6 +61,7 @@ import { postMessage } from '../domain/messages';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { checkOutboundUrl } from '../lib/outbound';
 import { newSecret } from '../lib/secrets';
+import { mailConnectionRow } from '../mail-triggers/index';
 import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
@@ -149,10 +150,13 @@ export async function referenceProblems(
 ): Promise<string[]> {
   const problems: string[] = [];
   if (hasWebhookTrigger(def)) problems.push(NO_WEBHOOK_TRIGGER_TEXT);
-  // A tracker trigger listens to one of the burrow's tracker connections (report-trackers.md TA-04).
-  for (const t of def.triggers)
+  // A tracker trigger listens to one of the burrow's tracker connections; a mail trigger to one of the person's mailboxes.
+  for (const t of def.triggers) {
     if (t.kind === 'tracker' && !(await trackerConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
       problems.push(`There is no tracker connection ${t.connectionId} on this Whombat.`);
+    if (t.kind === 'mail' && !(await mailConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
+      problems.push(`There is no connected mailbox ${t.connectionId} on this Whombat.`);
+  }
   for (const id of definitionConversations(def))
     if (!(await inBurrow(ctx.tx, ctx.burrow.id, id)))
       problems.push(`There is no conversation ${id} on this Whombat.`);
@@ -374,6 +378,13 @@ export async function recipeFile(
     connection = row.label;
     words = recipeWordsOf(driver);
   }
+  if (input.when.kind === 'mail') {
+    const row = await mailConnectionRow(tx, ctx.burrow.id, input.when.connectionId);
+    if (!row) throw badRequest('Connect a mail account in Settings → Connections first.');
+    if (row.status !== 'active')
+      throw badRequest(`${row.email} needs you to sign in again in Settings → Connections first.`);
+    connection = row.email;
+  }
   let recipe = input.when.kind === 'tracker' && words ? { ...input, when: { ...input.when, words } } : input;
   const named = input.when.kind === 'github' ? input.when.repo : input.repo;
   if (named) {
@@ -466,6 +477,17 @@ export async function publishVersion(
   enable: boolean,
 ): Promise<number> {
   const tx = ctx.tx;
+  const prevHadMail =
+    row.currentVersion !== null
+      ? ((
+          await tx
+            .select({ definition: automationVersions.definition })
+            .from(automationVersions)
+            .where(
+              and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)),
+            )
+        )[0]?.definition.triggers.some((t) => t.kind === 'mail') ?? false)
+      : false;
   const n = (row.currentVersion ?? 0) + 1;
   const hash = definitionHash(def);
   await tx.insert(automationVersions).values({
@@ -510,7 +532,11 @@ export async function publishVersion(
     },
   });
   const services = ctx.services;
-  ctx.after(async () => services.automations.nudge());
+  const touchesMail = prevHadMail || def.triggers.some((t) => t.kind === 'mail');
+  ctx.after(async () => {
+    services.automations.nudge();
+    if (touchesMail) services.mailTriggers.nudge();
+  });
   return n;
 }
 
@@ -882,7 +908,10 @@ export const setAutomationEnabled = defineCommand({
       });
       await publishAutomation(ctx, ctx.burrow.id, row.id);
       const services = ctx.services;
-      ctx.after(async () => services.automations.nudge());
+      ctx.after(async () => {
+        services.automations.nudge();
+        if (def.triggers.some((t) => t.kind === 'mail')) services.mailTriggers.nudge();
+      });
       return { automationId: row.id };
     }
     await tx
@@ -904,9 +933,13 @@ export const setAutomationEnabled = defineCommand({
     });
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
-    if (input.enabled) {
-      const services = ctx.services;
-      ctx.after(async () => services.automations.nudge());
+    const services = ctx.services;
+    const watchesMail = def.triggers.some((t) => t.kind === 'mail');
+    if (input.enabled || watchesMail) {
+      ctx.after(async () => {
+        if (input.enabled) services.automations.nudge();
+        if (watchesMail) services.mailTriggers.nudge();
+      });
     }
     return { automationId: row.id };
   },
@@ -1237,6 +1270,8 @@ export async function removeAutomation(
   });
   ctx.publish(topics.burrow(ctx.burrow.id), { type: 'automation.deleted', automationId: row.id });
   await republishPlanCards(ctx, row.id);
+  const services = ctx.services;
+  ctx.after(async () => services.mailTriggers.nudge());
   return active.length;
 }
 

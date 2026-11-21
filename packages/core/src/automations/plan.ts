@@ -27,6 +27,7 @@ import type {
   AutomationPlanState,
   AutomationPlanView,
 } from '../domain/automation-plan.js';
+import { mailTriggerDetail, mailWhenText } from './mail.js';
 import { RECIPE_FIX_IMPORTANCE, recipeOf, trackerItemNoun, UNKNOWN_TRACKER_CONNECTION } from './recipes.js';
 import { describeSchedule } from './schedule.js';
 
@@ -177,6 +178,10 @@ function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
       return t.event === 'reporter_replied'
         ? line(`A customer writes back in ${connection(t.connectionId)}`)
         : line(`A new ${trackerItemNoun(t.itemKinds)} in ${connection(t.connectionId)}`);
+    case 'mail': {
+      const mailbox = names.connectionLabel?.(t.connectionId);
+      return line(mailWhenText(t, mailbox), mailTriggerDetail(mailbox));
+    }
     case 'webhook':
       return line('Someone calls its webhook');
     case 'manual':
@@ -242,6 +247,7 @@ function threadLine(definition: AutomationDefinition, names: PlanNames): string 
     return `One thread per ${item} in ${room}`;
   }
   if (kinds.has('tracker') && kinds.size === 1) return `One thread per report in ${room}`;
+  if (kinds.has('mail') && kinds.size === 1) return `One thread per email in ${room}`;
   if ([...kinds].every((k) => k === 'message_posted' || k === 'reaction_added'))
     return 'In a thread under the message';
   return `A thread in ${room} each time it runs`;

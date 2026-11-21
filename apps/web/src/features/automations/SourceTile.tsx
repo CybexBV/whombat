@@ -8,7 +8,7 @@
 import type { AutomationTileView } from '@whombat/client';
 import { useGitHubAvatar } from '@whombat/client/react';
 import type { AutomationSource } from '@whombat/core';
-import { Clock, Inbox, type LucideIcon, MessageSquare, Play, SmilePlus, Webhook } from 'lucide-react';
+import { Clock, Inbox, type LucideIcon, Mail, MessageSquare, Play, SmilePlus, Webhook } from 'lucide-react';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { GitHubMark } from '../settings/GitHubMark';
@@ -19,6 +19,7 @@ const AVATAR_STALE_MS = 6 * 60 * 60 * 1000;
 
 const SOURCE_ICONS: Record<Exclude<AutomationSource, 'github'>, LucideIcon> = {
   tracker: Inbox,
+  mail: Mail,
   schedule: Clock,
   message: MessageSquare,
   reaction: SmilePlus,

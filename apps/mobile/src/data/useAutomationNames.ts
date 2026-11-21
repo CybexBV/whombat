@@ -4,7 +4,7 @@
  * core's stand-ins (“a room”, “a tracker connection”).
  */
 import { CHAT_WORDS, chatRoomsOf, roomOfConversation } from '@whombat/client';
-import { useCatalogConnections, useChats } from '@whombat/client/react';
+import { useCatalogConnections, useChats, useConnectors } from '@whombat/client/react';
 import type { PlanNames } from '@whombat/core';
 import { useMemo } from 'react';
 import { useBurrow } from './BurrowProvider';
@@ -15,6 +15,7 @@ export function useAutomationNames(): PlanNames {
   const agent = useAgentWords();
   const chats = useChats({ params: { burrow: slug } }, { retry: false });
   const connections = useCatalogConnections({ params: { burrow: slug } }, { retry: false });
+  const connectors = useConnectors({}, { retry: false });
   return useMemo(() => {
     const list = chats.data?.chats ?? [];
     const rooms = chatRoomsOf(list);
@@ -26,7 +27,9 @@ export function useAutomationNames(): PlanNames {
         return list.find((c) => c.id === id)?.title;
       },
       connectionLabel: (id: string) =>
-        connections.data?.connections.find((c) => c.id === id)?.label || undefined,
+        connections.data?.connections.find((c) => c.id === id)?.label ||
+        connectors.data?.connections.find((c) => c.id === id)?.email ||
+        undefined,
     };
-  }, [agent.Name, chats.data, connections.data]);
+  }, [agent.Name, chats.data, connections.data, connectors.data]);
 }

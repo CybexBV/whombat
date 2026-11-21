@@ -92,6 +92,7 @@ const shutdown = async (signal: string) => {
   stopWatchdog();
   await notify?.stopping();
   await managed?.close();
+  await services.mailTriggers.stop();
   await (await aiClients(services).catch(() => null))?.stop();
   await standIns.manager?.close();
   await app.close();
@@ -158,6 +159,8 @@ if (!readOnly) {
   services.feedback.start();
   // Report trackers through automations (docs/decisions/report-trackers.md TA-05): the connections automations read.
   services.tracker.start();
+  // Connected mailboxes watched by live mail-triggered automations.
+  services.mailTriggers.start();
   // The AI gateway (docs/decisions/ai-gateway.md AIG-11): each gateway connection read every minute, alerts to the
   // person.
   services.gateway.start();

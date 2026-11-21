@@ -63,6 +63,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Whombat Link (docs/decisions/whombat-link.md): a phone's own push token and the handle control gave the box for it on appliance_endpoints, and the Link stop the owner was pushed about on appliance_state, all nullable; the release before it reads and writes past them."
+    },
+    "0009_mail_triggers": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them."
     }
   }
 }

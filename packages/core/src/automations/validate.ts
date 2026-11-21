@@ -13,6 +13,7 @@ import {
   TRIGGER_KIND_LABELS,
 } from '../domain/automation.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
+import { mailTriggerProblems, mailWhenText } from './mail.js';
 import { checkSchedule, describeSchedule, ScheduleError } from './schedule.js';
 import { templatePaths } from './template.js';
 
@@ -73,6 +74,9 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
       problems.push(`triggers[${i}].branch: issues have no branch.`);
     if (t.kind === 'tracker' && t.itemKinds && new Set(t.itemKinds).size !== t.itemKinds.length)
       problems.push(`triggers[${i}].itemKinds: each kind of report only once.`);
+    if (t.kind === 'mail') {
+      for (const err of mailTriggerProblems(t)) problems.push(`triggers[${i}].${err}`);
+    }
     if (t.kind === 'schedule') {
       try {
         checkSchedule(t.schedule, t.timeZone, now);
@@ -252,6 +256,8 @@ export function triggerSummary(
         case 'tracker':
           // “Customer replies in Acme Desk dev” (0.75, TA-31).
           return `${t.event === 'reporter_replied' ? 'Customer replies' : trackerSummary(t.itemKinds)} in ${connectionLabel(t.connectionId) ?? 'a tracker connection'}`;
+        case 'mail':
+          return mailWhenText(t, connectionLabel(t.connectionId));
       }
       return '';
     })

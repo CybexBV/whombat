@@ -26,7 +26,7 @@ import { Canvas, CanvasCommentThread } from '../domain/canvas.js';
 import { PostableCard } from '../domain/cards.js';
 import { CareStepId } from '../domain/care-plan.js';
 import { DiffStat, FileChange, JsonObject } from '../domain/common.js';
-import type { ConnectorService } from '../domain/connectors.js';
+import { ConnectorProvider, type ConnectorService } from '../domain/connectors.js';
 import { ConversationKind } from '../domain/conversation.js';
 import {
   LOOK_FIX_LABEL_MAX,
@@ -168,6 +168,17 @@ export const AgentTrackerConnection = z.object({
   working: z.boolean(),
 });
 export type AgentTrackerConnection = z.infer<typeof AgentTrackerConnection>;
+
+/** A connected mailbox (Google, Microsoft 365 or Email/IMAP) a mail trigger can listen to. */
+export const AgentMailConnection = z.object({
+  connectionId: ConnectionId,
+  provider: ConnectorProvider,
+  email: z.string(),
+  label: z.string(),
+  /** False while it needs the person to sign in again: a recipe on it is refused until reconnected. */
+  working: z.boolean(),
+});
+export type AgentMailConnection = z.infer<typeof AgentMailConnection>;
 
 /**
  * `look_report`'s input (3.5; Whombat look-research.md LR-05…LR-07): strict, and a fixed look offers no step. Whombat
@@ -718,12 +729,13 @@ export const MCP_TOOLS = {
     name: 'automation_read',
     title: 'Read automations',
     description:
-      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
+      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
     input: z.object({ automationId: AutomationId.optional() }),
     output: z.object({
       automations: z.array(AgentAutomationSummary).optional(),
       automation: AgentAutomationDetail.optional(),
       trackerConnections: z.array(AgentTrackerConnection).optional(),
+      mailConnections: z.array(AgentMailConnection).optional(),
       guide: z.string().optional(),
     }),
     requiredKey: null,
