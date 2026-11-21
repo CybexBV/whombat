@@ -52,7 +52,9 @@ func TestClientsInstallAndPush(t *testing.T) {
 			now := time.Now()
 			built, err := clientchannel.Build(context.Background(), clientchannel.Input{Provider: "claude", Version: "2.1.290",
 				Arch: clients.ArchOf(runtime.GOARCH), PublishedAt: now.Add(-time.Hour), TestedAt: now, FixturesDigest: "sha256:" + strings.Repeat("a", 64),
-				Adapter: release.IntRange{Min: 1, Max: 1}, SourceURL: "https://downloads.claude.ai/claude-code-releases/2.1.290/linux-x64/claude",
+				// Not Anthropic's address: this test installs through the TUF target, with no network (the clients
+				// package tests the download from Anthropic's site).
+				Adapter: release.IntRange{Min: 1, Max: 1}, SourceURL: "https://example.invalid/claude-code-releases/2.1.290/linux-x64/claude",
 				SourceFile: src, SourceFormat: "binary"}, t.TempDir())
 			if err != nil {
 				t.Fatal(err)

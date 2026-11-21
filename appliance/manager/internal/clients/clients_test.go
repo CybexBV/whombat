@@ -66,12 +66,51 @@ func (f *fakeRuntime) last() *local.ClientsPushRequest {
 	return f.pushes[len(f.pushes)-1]
 }
 
-// gate blocks artifact downloads while closed (a slow install).
+// gate blocks artifact downloads, and downloads from a publisher's site, while closed (a slow install). It is also
+// the publishers' sites: files maps an address to the file it serves.
 type gate struct {
 	inner tufclient.Source
 	mu    sync.Mutex
 	hold  chan struct{}
 	opens int
+	files map[string]string
+	gets  []string
+}
+
+func (g *gate) Get(ctx context.Context, url string) (io.ReadCloser, error) {
+	g.mu.Lock()
+	h := g.hold
+	g.opens++
+	g.gets = append(g.gets, url)
+	path, ok := g.files[url]
+	g.mu.Unlock()
+	if h != nil {
+		select {
+		case <-h:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if !ok {
+		return nil, errors.New("HTTP 404")
+	}
+	return os.Open(path)
+}
+
+func (g *gate) serve(url, path string) { g.mu.Lock(); g.files[url] = path; g.mu.Unlock() }
+
+// fetched lists the addresses fetched from publishers' sites, in order.
+func (g *gate) fetched() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.gets...)
+}
+
+// targets counts the artifact downloads by TUF target.
+func (g *gate) targets() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.opens - len(g.gets)
 }
 
 func (g *gate) Open(ctx context.Context, rel string, off int64) (io.ReadCloser, bool, error) {
@@ -130,7 +169,7 @@ func newWorld(t *testing.T) *world {
 	must(t, os.WriteFile(w.keys, b, 0o644))
 	w.sources = filepath.Join(dir, "sources")
 	must(t, os.MkdirAll(w.sources, 0o755))
-	w.src = &gate{inner: tufclient.DirSource{Dir: w.repo.TargetsDir()}}
+	w.src = &gate{inner: tufclient.DirSource{Dir: w.repo.TargetsDir()}, files: map[string]string{}}
 	w.tuf = &tufclient.Client{PinnedRootPath: filepath.Join(w.repo.MetadataDir(), "1.root.json"), CacheDir: filepath.Join(dir, "tuf-cache"),
 		MirrorDir: filepath.Join(dir, "tuf-mirror"), MetadataURL: "mirror://m",
 		Fetcher: trust.DirFetcher{BaseURL: "mirror://m", Dir: w.repo.MetadataDir()}, Now: w.clk.Now, ResolveClients: true}
@@ -166,6 +205,7 @@ func (w *world) start() {
 	}
 	m, err := clients.New(cfg, repo, w.src, w.rt, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	must(w.t, err)
+	m.Upstream = w.src
 	w.m = m
 	// The tidying after an install writes the state file: it is over before the test's folder is removed (this
 	// clean-up runs before t.TempDir's).
@@ -179,16 +219,21 @@ func must(t *testing.T, err error) {
 	}
 }
 
-// claude builds a Claude Code-like bundle (a bare executable) for version v.
+// claude builds a Claude Code-like bundle (a bare executable) for version v, served at Anthropic's address for it.
 func (w *world) claude(v string, adapter int64) clientchannel.Built {
+	return w.claudeAt(v, adapter, "https://downloads.claude.ai/claude-code-releases/"+v+"/linux-x64/claude")
+}
+
+func (w *world) claudeAt(v string, adapter int64, url string) clientchannel.Built {
 	src := filepath.Join(w.sources, "claude-"+v)
 	must(w.t, os.WriteFile(src, []byte("#!/bin/sh\necho '"+v+" (Claude Code)'\n"), 0o755))
 	b, err := clientchannel.Build(context.Background(), clientchannel.Input{Provider: release.ClientProviderClaude, Version: v,
 		Arch: release.ClientArchX8664, PublishedAt: t0.Add(-24 * time.Hour), TestedAt: t0.Add(-time.Hour),
 		FixturesDigest: "sha256:" + fmt.Sprintf("%064x", 1), Adapter: release.IntRange{Min: adapter, Max: adapter},
-		SourceURL: "https://downloads.claude.ai/claude-code-releases/" + v + "/linux-x64/claude", SourceFile: src, SourceFormat: "binary"},
+		SourceURL: url, SourceFile: src, SourceFormat: "binary"},
 		filepath.Join(w.dir, "work"))
 	must(w.t, err)
+	w.src.serve(url, src)
 	return *b
 }
 
@@ -395,11 +440,10 @@ func TestDigestMismatch(t *testing.T) {
 	must(t, err)
 	w.wait(release.ClientProviderClaude, local.LocalClientStateInstalled)
 
-	// A corrupted artifact on the server (same length): refused, nothing unpacked, 2.1.290 keeps running.
+	// A corrupted file on Anthropic's site (same length): refused, nothing installed, 2.1.290 keeps running.
 	bad := w.claude("2.1.291", 1)
 	w.publish([]clientchannel.Built{bad})
-	p, err := w.repo.TargetFilePathClients(bad.Bundle.Artifact.Target)
-	must(t, err)
+	p := filepath.Join(w.sources, "claude-2.1.291")
 	data, err := os.ReadFile(p)
 	must(t, err)
 	data[len(data)/2] ^= 0xff
@@ -421,7 +465,7 @@ func TestDigestMismatch(t *testing.T) {
 		t.Fatalf("retried at once: %+v", c)
 	}
 
-	// A channel whose executable digest is wrong: the artifact verifies, the executable does not.
+	// A channel whose executable digest is wrong: it no longer matches the source's, so nothing is downloaded.
 	lie := w.claude("2.1.292", 1)
 	lie.Bundle.Executable.SHA256 = fmt.Sprintf("%064x", 7)
 	w.publish([]clientchannel.Built{lie}, "claude/2.1.291")
@@ -584,4 +628,78 @@ func TestInstallsOutliveTheirCaller(t *testing.T) {
 	cancel() // the request that ran the check is over
 	w.src.open()
 	w.waitVersion(release.ClientProviderClaude, "2.1.291")
+}
+
+func TestClaudeComesFromAnthropic(t *testing.T) {
+	defer syscall.Umask(syscall.Umask(0o077))
+	w := newWorld(t)
+	ctx := context.Background()
+	w.publish([]clientchannel.Built{w.claude("2.1.290", 1)})
+
+	_, err := w.m.Install(ctx, release.ClientProviderClaude)
+	must(t, err)
+	c := w.wait(release.ClientProviderClaude, local.LocalClientStateInstalled)
+	want := "https://downloads.claude.ai/claude-code-releases/2.1.290/linux-x64/claude"
+	if got := w.src.fetched(); len(got) != 1 || got[0] != want {
+		t.Fatalf("fetched from publishers: %v, want only %s", got, want)
+	}
+	if n := w.src.targets(); n != 0 {
+		t.Fatalf("Claude Code came from a TUF target too (%d downloads)", n)
+	}
+	exe := w.root("claude", "2.1.290", "claude")
+	if c.Installed == nil || c.Installed.Executable.Path != exe {
+		t.Fatalf("installed %+v", c.Installed)
+	}
+	got, err := os.ReadFile(exe)
+	must(t, err)
+	src, err := os.ReadFile(filepath.Join(w.sources, "claude-2.1.290"))
+	must(t, err)
+	if string(got) != string(src) {
+		t.Fatal("the installed executable is not the publisher's file")
+	}
+	if st, err := os.Stat(exe); err != nil || st.Mode().Perm() != 0o555 {
+		t.Fatalf("executable mode %v %v", st.Mode(), err)
+	}
+	if l, _ := os.Readlink(w.root("claude", "current")); l != "2.1.290" {
+		t.Fatalf("current -> %q", l)
+	}
+
+}
+
+func TestClaudeElsewhereComesFromItsTarget(t *testing.T) {
+	for _, url := range []string{
+		"https://example.com/claude-code-releases/2.1.290/linux-x64/claude",
+		"https://downloads.claude.ai/other/2.1.290/claude",
+		"https://downloads.claude.ai:8443/claude-code-releases/2.1.290/linux-x64/claude",
+	} {
+		t.Run(url, func(t *testing.T) {
+			w := newWorld(t)
+			w.publish([]clientchannel.Built{w.claudeAt("2.1.290", 1, url)})
+			_, err := w.m.Install(context.Background(), release.ClientProviderClaude)
+			must(t, err)
+			w.wait(release.ClientProviderClaude, local.LocalClientStateInstalled)
+			if got := w.src.fetched(); len(got) != 0 || w.src.targets() != 1 {
+				t.Fatalf("fetched %v from publishers, %d target downloads", got, w.src.targets())
+			}
+		})
+	}
+}
+
+func TestClaudeSiteDown(t *testing.T) {
+	w := newWorld(t)
+	b := w.claude("2.1.290", 1)
+	w.src.serve("https://downloads.claude.ai/claude-code-releases/2.1.290/linux-x64/claude", filepath.Join(w.dir, "missing"))
+	w.publish([]clientchannel.Built{b})
+	_, err := w.m.Install(context.Background(), release.ClientProviderClaude)
+	must(t, err)
+	c := w.wait(release.ClientProviderClaude, local.LocalClientStateFailed)
+	if c.Error == nil || c.Error.Code != clients.CodeInstallFailed || c.Installed != nil {
+		t.Fatalf("site down: %+v %+v", c.Error, c.Installed)
+	}
+	if n := w.src.targets(); n != 0 {
+		t.Fatalf("fell back to the TUF target (%d downloads)", n)
+	}
+	if entries, _ := os.ReadDir(w.root("claude")); len(entries) != 0 {
+		t.Fatalf("leftovers: %v", entries)
+	}
 }

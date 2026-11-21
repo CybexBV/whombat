@@ -19,8 +19,9 @@ software by others under their own licences. Every image carries this file and `
 | The voice service's engines and models (whisper.cpp, Kokoro, sherpa-onnx, eSpeak NG and what they carry; Supertonic 3 is not in the image) | MIT, Apache-2.0, GPL-3.0 and others | `share/whombat-voice/NOTICES.md` (`voice/NOTICES.md`) |
 | The presence service's model and libraries (YuNet, ONNX Runtime, libjpeg-turbo) | MIT, IJG/BSD-3-Clause and others | `share/whombat-presence/NOTICES.md` (`presence/NOTICES.md`) |
 
-Not in the image: Claude Code and Codex. On an owner's request the manager installs them, unmodified, from the signed
-client channel (`nix/modules/providers.nix`); they come under Anthropic's and OpenAI's own terms.
+Not in the image: Claude Code and Codex. On an owner's request the manager installs them unmodified, at the versions
+the signed client channel names (`nix/modules/providers.nix`): Claude Code from Anthropic's own download site, Codex
+from the client channel. They come under Anthropic's and OpenAI's own terms.
 
 ## Hermes Agent
 

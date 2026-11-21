@@ -4,6 +4,10 @@
 // for this machine and the runtime's adapter level, downloads the artifact by its TUF target, checks the artifact's
 // and the executable's sha256, unpacks it unmodified into <root>/<provider>/<version>/ (read-only), switches
 // <root>/<provider>/current and pushes the status to the runtime (`POST /clients`). It never runs a client.
+//
+// Claude Code comes from Anthropic's own download site instead of the TUF target: Whombat installs it but doesn't
+// pass on a copy of its own. The signed channel names the upstream address and the executable's size and sha256, so
+// the box checks Anthropic's file against what Whombat tested (upstream.go).
 package clients
 
 import (
@@ -84,12 +88,14 @@ type Config struct {
 
 // Manager is the clients manager.
 type Manager struct {
-	Cfg     Config
-	Repo    RepoFunc
-	Source  tufclient.Source
-	Runtime Runtime
-	Now     func() time.Time
-	Log     *slog.Logger
+	Cfg    Config
+	Repo   RepoFunc
+	Source tufclient.Source
+	// Upstream fetches an executable from its publisher's own download site (Claude Code from Anthropic's).
+	Upstream Upstream
+	Runtime  Runtime
+	Now      func() time.Time
+	Log      *slog.Logger
 
 	mu       sync.Mutex
 	st       *fileState
@@ -155,7 +161,8 @@ func New(cfg Config, repo RepoFunc, src tufclient.Source, rt Runtime, log *slog.
 	if err != nil {
 		return nil, fmt.Errorf("clients state: %w", err)
 	}
-	m := &Manager{Cfg: cfg, Repo: repo, Source: src, Runtime: rt, Log: log, st: st, jobs: map[Provider]*job{},
+	m := &Manager{Cfg: cfg, Repo: repo, Source: src, Upstream: NewHTTPUpstream(), Runtime: rt, Log: log,
+		st: st, jobs: map[Provider]*job{},
 		removing: map[Provider]bool{}, progress: map[Provider]int64{}, wake: make(chan struct{}, 1), pushReq: make(chan struct{}, 1),
 		adapters: st.Adapters, Now: cfg.Now}
 	for _, p := range Providers {
@@ -705,10 +712,11 @@ func (m *Manager) install(ctx context.Context, p Provider, b release.ClientBundl
 		return nil, err
 	}
 	final := filepath.Join(provDir, b.Version)
-	v := &Version{Version: b.Version, PublishedAt: b.PublishedAt, ExecPath: filepath.Join(final, filepath.FromSlash(b.Artifact.Path)),
+	exe := executableName(p, b)
+	v := &Version{Version: b.Version, PublishedAt: b.PublishedAt, ExecPath: filepath.Join(final, filepath.FromSlash(exe)),
 		SHA256: b.Executable.SHA256, Size: b.Executable.Size, FixturesDigest: b.FixturesDigest}
 	if st, err := os.Lstat(final); err == nil && st.IsDir() {
-		if clientbundle.CheckExecutable(final, b.Artifact.Path, b.Executable.Size, b.Executable.SHA256) == nil {
+		if clientbundle.CheckExecutable(final, exe, b.Executable.Size, b.Executable.SHA256) == nil {
 			v.InstalledAt = m.now()
 			m.setProgress(p, 100)
 			return v, nil
@@ -716,6 +724,11 @@ func (m *Manager) install(ctx context.Context, p Provider, b release.ClientBundl
 	}
 	if err := clientbundle.ForceRemove(final); err != nil {
 		return nil, err
+	}
+	if url, ok, err := upstreamSource(p, b); err != nil {
+		return nil, err
+	} else if ok {
+		return m.installUpstream(ctx, p, b, url, provDir, final, v)
 	}
 	repo, err := m.Repo(ctx, false)
 	if err != nil {
