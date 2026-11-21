@@ -108,7 +108,6 @@ export async function executeConnectionActions({
         actionsApprovalId: asked,
         actionsHash: plan.actionsHash,
         actions: prepared,
-        mustAsk: true,
       },
     },
     ctx.now,

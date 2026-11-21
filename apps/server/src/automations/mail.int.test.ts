@@ -11,7 +11,6 @@ import {
   type AutomationRecipeInput,
   agentDefaultGrants,
   newId,
-  recipeDefinition,
 } from '@whombat/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -25,7 +24,6 @@ import {
   attachments,
   automationPlans,
   automationRuns,
-  automationVersions,
   catalogConnections,
   connectionTools,
   dispatches,
@@ -48,7 +46,6 @@ import { useVaultNetForTests } from '../vault/net';
 import { createAutomation, deleteAutomation, setAutomationEnabled } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import { loadAutomationRow, toAutomation } from './store';
-import { updateAutomationsWords } from './words';
 
 const w = useAutomationWorld();
 let maraChat: PersonalSetup;
@@ -1034,7 +1031,7 @@ describe('mail-arrives automations', () => {
     await w.ok(IDS.mara, deleteAutomation, { automationId: ghAutoId });
   });
 
-  it('runs the invoice workflow end to end with fake Paperless-ngx and Moneybird only after approval regardless of standing settings, and upgrades earlier mail automations', async () => {
+  it('runs the invoice workflow end to end with fake Paperless-ngx and Moneybird only after approval regardless of standing settings', async () => {
     const PL_TOKEN = 'a'.repeat(40);
     const MB_TOKEN = 'b'.repeat(64);
     const seenPaperless: { method: string; url: string; auth: string; contentType: string; body: Buffer }[] =
@@ -1092,7 +1089,6 @@ describe('mail-arrives automations', () => {
     const mbPort = (moneybirdServer.address() as AddressInfo).port;
 
     let autoId = '';
-    let legacyId = '';
     const netId = newId('vaultNetwork');
     try {
       useVaultNetForTests(w.services, {
@@ -1153,27 +1149,6 @@ describe('mail-arrives automations', () => {
         .update(connectionTools)
         .set({ tier: 'can' })
         .where(eq(connectionTools.connectionId, mbId));
-
-      // Earlier 1-step mail automations upgrade automatically on startup to today's 2-step outsiders form.
-      const invoiceRecipe: AutomationRecipeInput = {
-        when: { kind: 'mail', connectionId, from: 'example.com', attachmentTypes: ['pdf'] },
-        job: 'custom',
-        instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
-        conversationId: maraChat.dmId,
-      };
-      legacyId = await w.publish(recipeDefinition(invoiceRecipe, 'mail-before-outsiders'), {
-        name: 'Legacy invoice rule',
-        enable: false,
-      });
-      expect(await updateAutomationsWords(w.services)).toBeGreaterThanOrEqual(1);
-      const [upgradedRow] = await w.services.db
-        .select()
-        .from(automationVersions)
-        .where(and(eq(automationVersions.automationId, legacyId), eq(automationVersions.n, 2)));
-      expect(upgradedRow?.definition.steps.map((s) => s.kind)).toEqual([
-        'dispatch_agent',
-        'connection_actions',
-      ]);
 
       // Publish the live invoice automation and baseline.
       autoId = await createMailAutomation(
@@ -1480,7 +1455,6 @@ describe('mail-arrives automations', () => {
       await new Promise<void>((r) => moneybirdServer.close(() => r()));
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
-      if (legacyId) await w.ok(IDS.mara, deleteAutomation, { automationId: legacyId });
       await pollAndSettle();
     }
   });

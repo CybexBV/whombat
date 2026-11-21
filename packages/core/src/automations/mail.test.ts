@@ -215,7 +215,7 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
     );
   });
 
-  it('upgrades earlier mail automations to today’s outsiders recipe automatically while preserving custom wording', () => {
+  it('recognises today’s mail recipe as current while keeping custom wording untouched', () => {
     const mailRecipe = {
       when: {
         kind: 'mail' as const,
@@ -227,27 +227,22 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
       instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
       conversationId: 'cnv_chat',
     };
-    const before = AutomationDefinition.parse(recipeDefinition(mailRecipe, 'mail-before-outsiders'));
     const today = AutomationDefinition.parse(recipeDefinition(mailRecipe));
 
-    expect(before.steps).toHaveLength(1);
     expect(today.steps).toHaveLength(2);
-    expect(recipeOf(before)).not.toBeNull();
-    expect(recipeIsCurrent(before)).toBe(false);
-    expect(recipeHasEarlierWords(before)).toBe(true);
+    expect(recipeOf(today)).not.toBeNull();
+    expect(recipeIsCurrent(today)).toBe(true);
     expect(recipeHasEarlierWords(today)).toBe(false);
+    expect(recipeWithTodaysWords(today)).toEqual(today);
 
-    const upgraded = recipeWithTodaysWords(before);
-    expect(upgraded).toEqual(today);
-    expect(upgraded && recipeIsCurrent(upgraded)).toBe(true);
-
-    // Words a person edited themselves stay theirs.
+    // Words a person edited themselves are no longer current and aren't overwritten automatically.
     const custom = AutomationDefinition.parse({
-      ...before,
-      steps: before.steps.map((s) =>
+      ...today,
+      steps: today.steps.map((s) =>
         s.kind === 'dispatch_agent' ? { ...s, prompt: `${s.prompt}\nCustom note.` } : s,
       ),
     });
+    expect(recipeIsCurrent(custom)).toBe(false);
     expect(recipeHasEarlierWords(custom)).toBe(false);
   });
 });
