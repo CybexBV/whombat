@@ -453,6 +453,10 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request) {
 func UpdateFactsOf(st *update.State, lastChecked time.Time) *local.UpdateFacts {
 	askFirst := st.AskFirst
 	f := &local.UpdateFacts{State: st.Phase, Failure: st.Record.Failure, AskFirst: &askFirst}
+	if st.ChannelPaused {
+		paused := true
+		f.Paused = &paused
+	}
 	if st.Current != nil {
 		f.Current = st.Current.ReleaseID
 		if r := st.Current.Release; r != nil && r.ClientFloor != nil {
@@ -498,6 +502,10 @@ func UpdateFactsOf(st *update.State, lastChecked time.Time) *local.UpdateFacts {
 // StatusOf summarizes the journal for local callers (local.UpdateStatusResponse, CT-37).
 func StatusOf(st *update.State) local.UpdateStatusResponse {
 	out := local.UpdateStatusResponse{State: st.Phase, Hold: st.Hold, Failure: st.Record.Failure}
+	if st.ChannelPaused {
+		paused := true
+		out.Paused = &paused
+	}
 	if st.Current != nil {
 		out.Current = st.Current.ReleaseID
 	}
@@ -517,6 +525,9 @@ func StatusOf(st *update.State) local.UpdateStatusResponse {
 		}
 	} else if st.LastFailure != nil && st.Phase != update.Healthy {
 		explanation = st.LastFailure.Message
+	}
+	if explanation == "" && st.ChannelPaused {
+		explanation = "Updates are paused for now."
 	}
 	if explanation != "" {
 		e := runtimeapi.ASCII(explanation, 500)

@@ -135,4 +135,21 @@ func TestStatusWaitsForTheChannel(t *testing.T) {
 	if err != nil || res.StaysOn == nil || *res.StaysOn != two.ID() || string(res.Channel) != trust.ChannelProduction {
 		t.Fatalf("response %+v %v", res, err)
 	}
+	// Pausing production keeps staysOn accurate: a box on production's own release does not look ahead of it,
+	// while a box ahead on development still shows staysOn.
+	if _, err := r.PauseChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	pausedProd := view(trust.ChannelProduction)
+	if !pausedProd.ChannelPaused {
+		t.Fatal("expected paused production view")
+	}
+	one, _ := pausedProd.Release("whombat-dev-20261118.1")
+	v1 := one.VersionsOf()
+	if st := StatusOf(pausedProd, one.ID(), &v1); st.Waiting || st.Newest != one.ID() {
+		t.Fatalf("paused production on current release: %+v", st)
+	}
+	if st := StatusOf(pausedProd, two.ID(), &v); !st.Waiting || st.Newest != one.ID() {
+		t.Fatalf("paused production behind development release: %+v", st)
+	}
 }

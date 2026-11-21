@@ -14,6 +14,9 @@ import (
 // only grows (TUF refuses an older one), so the same repository state is offered once and a new publication is a new
 // offer. Nil, nil: nothing newer. Hold, rollouts and not-before don't exist without control.
 func LatestOffer(repo *trust.Repo, st *State, deviceID, env string) (*Offered, error) {
+	if repo.ChannelPaused {
+		return nil, nil
+	}
 	var curID, curDigest string
 	var cur *trust.Versions
 	if c := st.Current; c != nil {
@@ -58,6 +61,9 @@ func (e *Engine) OfferLatestNow(ctx context.Context, repo *trust.Repo, deviceID,
 }
 
 func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, env string, again bool) (dec Decision, why string, offered *Offered, err error) {
+	if repo.ChannelPaused {
+		return DecisionNoop, "channel paused", nil, nil
+	}
 	st, err := e.Load()
 	if err != nil {
 		return "", "", nil, err

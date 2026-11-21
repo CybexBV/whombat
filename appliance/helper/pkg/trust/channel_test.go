@@ -433,4 +433,20 @@ func TestChannelPauseResumeExpiryAndWrongKey(t *testing.T) {
 	if _, err := trust.Refresh(expCfg); !errors.Is(err, trust.ErrExpired) {
 		t.Fatalf("expired pause metadata: want ErrExpired, got %v", err)
 	}
+
+	// Rollback protection: once a box verified a paused channel version, replaying an older unpaused snapshot/role fails.
+	unpausedMeta := copyFlatDir(t, r.MetadataDir())
+	if _, err := r.PauseChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	if paused, err := trust.Refresh(channelCfg(r, prodCache, c, trust.ChannelProduction)); err != nil || !paused.ChannelPaused {
+		t.Fatalf("refresh paused before rollback test: paused=%v err=%v", paused != nil && paused.ChannelPaused, err)
+	}
+	replayCfg := trust.Config{
+		PinnedRoot: r.InitialRoot(), MetadataDir: copyFlatDir(t, prodCache), MetadataURL: "m://x",
+		Fetcher: trust.DirFetcher{BaseURL: "m://x", Dir: unpausedMeta}, Now: c.t, Channel: trust.ChannelProduction,
+	}
+	if _, err := trust.Refresh(replayCfg); !errors.Is(err, trust.ErrRollback) {
+		t.Fatalf("replaying older unpaused metadata: want ErrRollback, got %v", err)
+	}
 }
