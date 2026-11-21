@@ -52,7 +52,16 @@ const MailProviderCursorSchema: z.ZodType<MailProviderCursor> = z.discriminatedU
       })
       .optional(),
   }),
-  z.object({ kind: z.literal('microsoft'), deltaLink: z.string().min(1).max(4096) }),
+  z.object({
+    kind: z.literal('microsoft'),
+    deltaLink: z.string().min(1).max(8192),
+    paging: z
+      .object({
+        sinceMs: z.number().int().nonnegative().optional(),
+        dropHeaders: z.boolean().optional(),
+      })
+      .optional(),
+  }),
   z.object({
     kind: z.literal('imap'),
     mailbox: z.string().min(1).max(255),

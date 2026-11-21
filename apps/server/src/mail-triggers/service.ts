@@ -123,7 +123,13 @@ function sameCursor(a: MailProviderCursor | null | undefined, b: MailProviderCur
         a.backfill?.sinceMs === b.backfill?.sinceMs
       );
     case 'microsoft':
-      return b.kind === 'microsoft' && a.deltaLink === b.deltaLink;
+      return (
+        b.kind === 'microsoft' &&
+        a.deltaLink === b.deltaLink &&
+        Boolean(a.paging) === Boolean(b.paging) &&
+        a.paging?.sinceMs === b.paging?.sinceMs &&
+        a.paging?.dropHeaders === b.paging?.dropHeaders
+      );
     case 'imap':
       return (
         b.kind === 'imap' &&
@@ -184,9 +190,22 @@ export class MailTriggerService {
     await this.clearUnwatched(listened);
     await this.pruneExpiredItems();
     this.reconcileIdleStop(listened);
+    const results = await Promise.allSettled(
+      [...listened.entries()].map(async ([connectionId, entry]) => {
+        try {
+          return await this.syncConnection(connectionId, entry);
+        } catch (err) {
+          this.services.log.warn(
+            { connectionId, err: err instanceof Error ? err.message : String(err) },
+            'mail trigger sync failed for mailbox',
+          );
+          return 0;
+        }
+      }),
+    );
     let triggered = 0;
-    for (const [connectionId, entry] of listened) {
-      triggered += await this.syncConnection(connectionId, entry);
+    for (const r of results) {
+      if (r.status === 'fulfilled') triggered += r.value;
     }
     return triggered;
   }

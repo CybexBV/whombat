@@ -248,7 +248,12 @@ export type MailProviderCursor =
       /** Resumable `messages.list` backfill position until every eligible page since activation/resync is processed. */
       backfill?: { pageToken: string; afterSeconds: number; sinceMs: number };
     }
-  | { kind: 'microsoft'; deltaLink: string }
+  | {
+      kind: 'microsoft';
+      deltaLink: string;
+      /** Resumable `@odata.nextLink` paging state when an initial or resync delta spans more than one poll's page cap. */
+      paging?: { sinceMs?: number; dropHeaders?: boolean };
+    }
   | {
       kind: 'imap';
       mailbox: string;
