@@ -95,7 +95,9 @@ func (f *Fetcher) Start(ctx context.Context) error {
 			e.state, e.received = local.VoiceModelStateReady, m.TotalSize()
 		} else {
 			e.received = models.PartialSize(f.Dir, m)
-			if slices.Contains(wanted, m.ID) {
+			// Opt-in Dutch voice (supertonic) is never auto-resumed from .wanted.json
+			// at startup; the server asks again only while the saved setting is on.
+			if m.ID != local.VoiceModelSupertonic && slices.Contains(wanted, m.ID) {
 				e.state, e.wanted, e.asked = local.VoiceModelStateWaiting, true, now
 			}
 		}
@@ -527,9 +529,13 @@ func (f *Fetcher) readWanted() []string {
 }
 
 // saveWanted keeps the ids that are asked for and not there (f.mu held).
+// Opt-in supertonic is omitted so a restart never resumes it without the server asking again.
 func (f *Fetcher) saveWanted() {
 	ids := []string{}
 	for _, m := range f.Manifest.Models {
+		if m.ID == local.VoiceModelSupertonic {
+			continue
+		}
 		if f.entries[m.ID].wanted {
 			ids = append(ids, m.ID)
 		}

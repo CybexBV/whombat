@@ -6787,8 +6787,9 @@ looked at and none skipped or loosened.
   (`appliance/voice/internal/fetch`) downloads a multi-file model into staging directory `.<dir>.part` (`0o750`,
   inheriting group `whombat-voice` from `/persist/voice-models`'s `2750`), resuming mid-file with HTTP `Range` and
   skipping files already verified by SHA-256 across restarts, checks free space before starting, publishes atomically
-  by renaming `.<dir>.part` to `<dir>` only after every file passes size and SHA-256 verification, and removes both
-  paths on `remove`.
+  by renaming `.<dir>.part` to `<dir>` only after every file passes size and SHA-256 verification, removes both
+  paths on `remove`, and never resumes `supertonic` from `.wanted.json` at startup (the server asks again while the
+  saved setting is on).
 - **Pinned manifest**: `voice-models.json` (`nix/packages/voice-models/default.nix`) lists `parakeet`, `whisper`, and
   `supertonic` (`dir: "supertonic-3-int8"`): the seven sherpa-onnx int8 files from
   `csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11` (`cca5a0e6`) plus `LICENSE` from

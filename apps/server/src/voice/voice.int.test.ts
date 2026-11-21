@@ -16,7 +16,7 @@ import {
   VoiceTyping,
 } from '@whombat/core/domain';
 import { and, asc, eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { events, voiceTyping } from '../db/schema/index';
 import { setDeskScreen } from '../desk/store';
 import { loadAgentRow } from '../read/principals';
@@ -341,6 +341,69 @@ describe('voice typing’s settings and models', () => {
     await until(c, (v) => v.dutchVoice?.state === 'ready');
     // Clean up back to off for subsequent tests.
     await c.request('voice.setDutchVoice', { on: false });
+  });
+
+  it('retries removing Dutch voice until it succeeds, including partial files on an absent state', async () => {
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+
+    // Turn Dutch voice off while remove fails twice: setting turns off immediately, and removal retries until it succeeds.
+    fetcher.failNextRemove.supertonic = 2;
+    const offRes = await c.request('voice.setDutchVoice', { on: false });
+    expect(offRes).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice?.on).toBe(false);
+
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+
+    // Leftover partial files (state 'absent' with received > 0) while Dutch voice is off are also removed and retried.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setPartial('supertonic', 65_536);
+    fetcher.failNextRemove.supertonic = 1;
+    typing.start();
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(2);
+
+    // Fetcher completely unreachable when turning Dutch voice off, then comes back online: removal still runs.
+    fresh({ ready: ['parakeet'] });
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    fetcher.unreachable = true;
+    const offWhileDown = await c.request('voice.setDutchVoice', { on: false });
+    expect(offWhileDown).toMatchObject({ t: 'result' });
+    fetcher.unreachable = false;
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
   });
 });
 
