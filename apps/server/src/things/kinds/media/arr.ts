@@ -43,6 +43,7 @@ import {
 } from '../read';
 import type { KindAction, KindModule, KindSeen } from '../registry';
 import { seenFromView } from '../registry';
+import { declaredSettings } from '../settings';
 import {
   addedNote,
   countByDay,
@@ -56,6 +57,7 @@ import {
   weekChange,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { arrSettings } from './arr-settings';
 import {
   badgeOf,
   clockMs,
@@ -940,6 +942,61 @@ export function queueMeta(q: ArrQueue): string | undefined {
     .join(' · ');
 }
 
+/** Questions for the Downloading now card. */
+export function arrQueueQuestions(s: ArrSnapshot): string[] {
+  const name = NAME[s.app];
+  const bad = (s.queue?.items ?? []).find(stuck);
+  const out: string[] = [];
+  if (bad) out.push(clip(`Why is ${bad.forWhat ?? bad.title} stuck in ${name}?`, 200));
+  if ((s.queue?.total ?? 0) > 0) out.push(`When will ${name}’s downloads finish?`);
+  out.push(
+    s.app === 'sonarr' ? 'What episodes came in this week?' : 'What movies came in this week?',
+    `Are ${name}’s indexers and downloader working?`,
+  );
+  return out.slice(0, 3);
+}
+
+/** Questions for the Your library card. */
+export function arrLibraryQuestions(s: ArrSnapshot): string[] {
+  const out: string[] = [];
+  if ((s.rest?.missingTotal ?? 0) > 0)
+    out.push(
+      s.app === 'sonarr' ? 'Why are some episodes still missing?' : 'Why are some movies still missing?',
+    );
+  out.push(
+    s.app === 'sonarr' ? 'What new episodes air this week?' : 'What movies come out soon?',
+    s.app === 'sonarr' ? 'Which series take the most space?' : 'Which movies take the most space?',
+  );
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while Sonarr or Radarr has no active problem. */
+export function arrVerdict(s: ArrSnapshot): string {
+  const name = NAME[s.app];
+  const q = s.queue;
+  const stuckCount = (q?.items ?? []).filter(stuck).length;
+  if (stuckCount > 0)
+    return clip(
+      `${plural(stuckCount, 'download')} ${stuckCount === 1 ? 'is' : 'are'} stuck in ${name}.`,
+      200,
+    );
+  const active = (q?.items ?? []).filter((i) => i.status === 'downloading').length;
+  const missing = s.rest?.missingTotal ?? null;
+  const parts: string[] = [];
+  if (active > 0) parts.push(`${plural(active, 'download')} running`);
+  else if (q && q.total > 0) parts.push(`${plural(q.total, 'download')} waiting`);
+  else if (q) parts.push('nothing is downloading');
+  if (missing !== null) {
+    const unit = s.app === 'sonarr' ? (['episode', 'episodes'] as const) : (['movie', 'movies'] as const);
+    parts.push(
+      missing === 0
+        ? `no ${unit[1]} missing`
+        : `${thousands(missing)} ${missing === 1 ? unit[0] : unit[1]} missing`,
+    );
+  }
+  return clip(parts.length ? `${name} is fine: ${parts.join(' and ')}.` : `${name} is running fine.`, 200);
+}
+
 /**
  * Downloading now (Live): a row per download with its poster, what it is for, its quality and size, how far it is and
  * how long is left; one that can't be imported or failed says so as its tag. Rows link SABnzbd's page (SD-10).
@@ -954,6 +1011,7 @@ export function arrLive(input: ArrInput) {
     id: 'queue',
     title: 'Downloading now',
     ...(meta ? { meta } : {}),
+    ask: { questions: arrQueueQuestions(s) },
     link: input.sabnzbd
       ? { kind: 'href', label: clip(`Open ${input.sabnzbd.name}`, 30), href: input.sabnzbd.href }
       : { kind: 'url', label: `Open ${name}`, url: `${input.url}/activity/queue` },
@@ -1083,7 +1141,12 @@ export function arrInventory(input: ArrInput) {
   if (lib?.sizeBytes)
     lines.push(countLine({ id: 'size', title: 'Space used', icon: 'disk', value: bytes(lib.sizeBytes) }));
   if (!lines.length) return null;
-  return inventory({ id: 'library', title: 'Your library', items: lines });
+  return inventory({
+    id: 'library',
+    title: 'Your library',
+    ask: { questions: arrLibraryQuestions(s) },
+    items: lines,
+  });
 }
 
 /**
@@ -1253,6 +1316,7 @@ export function arrView(input: ArrInput): KindView {
     open: { label: `Open ${name}`, url: input.url },
     actions: [],
     readAt: s.readAt,
+    verdict: arrVerdict(s),
     ...(downloading(s.queue) ? { refreshS: 5 } : {}),
     suggestions:
       s.app === 'sonarr'
@@ -1423,6 +1487,7 @@ function arrKind(app: ArrApp): KindModule {
     seen: arrSeen(app),
     asksFirst: 'deleting and settings ask first',
     actions: { search_missing: searchMissing(app) },
+    settings: declaredSettings(arrSettings(app)),
     liveS: ARR_LIVE_S,
     checks: arrChecks(app),
     activityLine: 'What’s downloading',

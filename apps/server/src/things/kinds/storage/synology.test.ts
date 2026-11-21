@@ -25,6 +25,7 @@ import {
   type SynologySnapshot,
   synoData,
   synologySkipped,
+  synologyVerdict,
   synologyView,
   synoTime,
 } from './synology';
@@ -373,5 +374,27 @@ describe('Synology’s page (SD-52)', () => {
     expect(seen?.glance.facts?.[1]).toMatchObject({ value: 'Failed' });
     expect(seen?.points.nas_used_gb).toBe(8610);
     expect(SYNOLOGY_KIND.checks).toBe(SYNOLOGY_CHECKS);
+  });
+
+  it('gives a calm verdict and Ask chips on Storage, Hyper Backup and Disks', async () => {
+    const s = await snapshot();
+    const v = view(s);
+    expect(v.verdict).toMatch(/degraded/i);
+    expect(panel(v, 'storage', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'backups', 'gallery')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'disks', 'table')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+
+    const healthy: SynologySnapshot = {
+      ...s,
+      storage: s.storage
+        ? {
+            ...s.storage,
+            pools: s.storage.pools.map((p) => ({ ...p, status: 'normal' })),
+            volumes: s.storage.volumes.map((vol) => ({ ...vol, status: 'normal' })),
+          }
+        : null,
+      backups: (s.backups ?? []).map((b) => ({ ...b, result: 'ok', last: now, next: null })),
+    };
+    expect(synologyVerdict(healthy, now)).toMatch(/volumes are healthy.*free/);
   });
 });

@@ -13,6 +13,7 @@ import {
   dnsNotices,
   dnsSkipped,
   dnsTrend,
+  dnsVerdict,
   dnsView,
   hourly,
   hourWords,
@@ -445,5 +446,30 @@ describe('versions', () => {
     expect(newer('v6.5', 'v6.5')).toBe(false);
     expect(newer('2026.10.0', '2026.9.1')).toBe(false);
     expect(newer(null, 'v1')).toBe(false);
+  });
+});
+
+describe('DNS verdicts and Ask chips', () => {
+  it('gives a verdict and Ask chips for both Pi-hole and AdGuard Home', () => {
+    const pv = dnsView(pihole(), ctx());
+    expect(pv.verdict).toMatch(/Pi-hole is blocking fine.*46\.9 %/);
+    expect(pv.panels.find((p) => p.id === 'blocking-now')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(pv.panels.find((p) => p.id === 'inventory')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(pv.panels.find((p) => p.id === 'top-blocked')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    for (const p of pv.panels) ThingPagePanel.parse(p);
+
+    const av = dnsView(adguard(), ctx());
+    expect(av.verdict).toMatch(/AdGuard Home is blocking fine/);
+    expect(av.panels.find((p) => p.id === 'blocking-now')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(av.panels.find((p) => p.id === 'inventory')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(av.panels.find((p) => p.id === 'top-blocked')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    for (const p of av.panels) ThingPagePanel.parse(p);
+
+    expect(dnsVerdict(pihole({ blocking: PIHOLE_blockingPaused }), 'Europe/Amsterdam')).toContain(
+      'Blocking is off until',
+    );
+    expect(dnsVerdict(adguard({ status: ADGUARD_statusOff }), 'Europe/Amsterdam')).toContain(
+      'Protection is off',
+    );
   });
 });

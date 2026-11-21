@@ -5,28 +5,34 @@
  * service reads back the new value (SST-02). The change it leaves can be put back (SST-03): the same action with the old
  * value, while the setting still has the value Whombat set.
  */
-import type { ThingPagePanel, ThingSetting, ThingSettingChanged } from '@whombat/core';
+import type { ThingPagePanel, ThingPageTab, ThingSetting, ThingSettingChanged } from '@whombat/core';
 import { and, desc, eq, gt, like } from 'drizzle-orm';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { changes } from '../../db/schema/index';
+import { assistantCalled } from '../../home/assistant-name';
 import { hasUndoer } from '../../home/registry';
 import { ApiError, badRequest, conflict } from '../../lib/errors';
+import { loadAgentRow } from '../../read/principals';
 import type { Services } from '../../services';
-import { clip, dayMonth } from '../words';
+import { clip, dayMonth, str } from '../words';
 import { type ActCall, actAs } from './act';
 import { pageButton } from './buttons';
-import { forgetConnectionReads } from './read';
-import type { KindAction, KindActionCtx, KindActionInput, KindActionWords } from './registry';
+import { cachedRead, forgetConnectionReads, KIND_DEADLINE_MS, withDeadline } from './read';
+import type { KindAction, KindActionCtx, KindActionInput, KindActionWords, KindSettings } from './registry';
 import type { KindCtx } from './types';
 
 export type SettingValue = string | number | boolean;
 
 /** The action every declared setting is changed with. */
 export const SETTING_ACTION = 'setting';
+/** The tab key every service's declared settings use. */
+export const SERVICE_SETTINGS_TAB_KEY = 'service-settings';
 /** The change kind's start: `thing.setting.<setting>`. */
 export const SETTING_CHANGE_PREFIX = 'thing.setting.';
-/** How long a declared change can be put back (SST-03). */
+/** How long a declared change can be put back. */
 export const SETTING_UNDO_MS = 7 * 86_400_000;
+/** How long a service's settings read stays warm; a change forgets it at once. */
+const SETTINGS_KEEP_MS = 60_000;
 
 export interface SettingChoice {
   value: SettingValue;
@@ -78,6 +84,20 @@ export interface DeclaredSettings<S> {
   specs: readonly SettingSpec<S>[];
   /** Reads the service's settings now (never a kept read): before and after a change. */
   read: (services: Services, row: CatalogConnectionRow) => Promise<S>;
+  /** Where the service's own settings live, from its base address; absent: the base address itself. */
+  url?: (base: string) => string;
+  /** Plain words when reading failed (such as a non-admin key); absent: the generic sentence. */
+  unread?: (err: unknown) => string | undefined;
+}
+
+/** Choices with the current value added when it is none of them (changed in the service itself). */
+export function withCurrent(
+  choices: SettingChoice[],
+  current: SettingValue | undefined,
+  label: (v: SettingValue) => string,
+): SettingChoice[] {
+  if (current === undefined || choices.some((c) => sameValue(c.value, current))) return choices;
+  return [...choices, { value: current, label: label(current) }];
 }
 
 /** Two values are the same setting value whatever their type (Plex says `20000` or `"20000"`). */
@@ -301,13 +321,15 @@ export interface SettingsTabInput<S> {
   who: Pick<KindCtx, 'row'>;
   /** The service's own settings page (“All settings in Plex”, “In Plex”). */
   url: string;
+  /** The service's base address, passed to per-row `elsewhere` builders when set. */
+  baseUrl?: string;
   changed: Map<string, SettingChange>;
   assistant: string;
   now: Date;
   timeZone: string;
 }
 
-/** One setting's row (SST-01, SST-05). */
+/** One setting's row. */
 export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>): ThingSetting | null {
   const { declared: d, settings: s, who } = input;
   const v = spec.read(s);
@@ -325,7 +347,7 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
       ...base,
       elsewhere: {
         label: `In ${d.name}`.slice(0, 30),
-        ...(spec.elsewhere ? { url: spec.elsewhere(input.url) } : {}),
+        url: spec.elsewhere ? spec.elsewhere(input.baseUrl ?? input.url) : input.url,
       },
     };
   if (spec.kind === 'switch')
@@ -399,4 +421,78 @@ export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] 
     },
   });
   return panels;
+}
+
+/** A connection's base address without trailing slashes. */
+function serviceBaseUrl(row: Pick<CatalogConnectionRow, 'fields' | 'baseUrl'>): string {
+  return (str(row.fields.url) ?? row.baseUrl).replace(/\/+$/, '');
+}
+
+/** The service's settings tab: its cards, or why it couldn't be read with a link to the service. */
+export async function settingsTab<S>(ctx: KindCtx, declared: DeclaredSettings<S>): Promise<ThingPageTab> {
+  const { services, row, now } = ctx;
+  const base = serviceBaseUrl(row);
+  const url = declared.url ? declared.url(base) : base;
+  let readError: unknown = null;
+  const [current, changed, agent] = await Promise.all([
+    cachedRead<S>(
+      services,
+      `settings:${row.catalogId}:${row.id}`,
+      row,
+      () =>
+        withDeadline(
+          declared.read(services, row),
+          KIND_DEADLINE_MS,
+          `${declared.name} didn’t answer in time.`,
+        ),
+      SETTINGS_KEEP_MS,
+    ).catch((err: unknown) => {
+      readError = err;
+      return null;
+    }),
+    settingChanges(services, ctx.burrowId, row.id, now).catch(() => new Map<string, SettingChange>()),
+    loadAgentRow(services.db, ctx.burrowId).catch(() => undefined),
+  ]);
+  const tab = { key: SERVICE_SETTINGS_TAB_KEY, label: clip(`${declared.name} settings`, 30) };
+  if (!current) {
+    const body =
+      declared.unread?.(readError) ??
+      `Whombat couldn’t read ${declared.name}’s settings just now. Try again in a moment, or change them in ${declared.name}.`;
+    return {
+      ...tab,
+      panels: [
+        {
+          kind: 'text',
+          id: 'settings-unread',
+          title: clip(`${declared.name} settings`, 60),
+          body: clip(body, 280),
+          link: { kind: 'url', label: clip(`Open ${declared.name}`, 30), url },
+        },
+      ],
+    };
+  }
+  return {
+    ...tab,
+    panels: settingsPanels({
+      declared,
+      settings: current,
+      who: { row },
+      url,
+      baseUrl: base,
+      changed,
+      assistant: assistantCalled(agent?.name),
+      now,
+      timeZone: ctx.timeZone,
+    }),
+  };
+}
+
+/** Bundles a service's declared settings for `KindModule.settings`. */
+export function declaredSettings<S>(declared: DeclaredSettings<S>): KindSettings {
+  return {
+    name: declared.name,
+    tab: (ctx) => settingsTab(ctx, declared),
+    action: settingAction(declared),
+    describe: (ctx, input) => describeSetting(declared, ctx, input),
+  };
 }

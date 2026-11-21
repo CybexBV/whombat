@@ -32,6 +32,7 @@ import {
   tnDate,
   truenasFigures,
   truenasSkipped,
+  truenasVerdict,
   truenasView,
 } from './truenas';
 
@@ -520,5 +521,24 @@ describe('TrueNAS’s buttons (SD-07)', () => {
     expect(out.everyday).toBe(true);
     await expect(dismissAlert(ctx, { target: 'd4e5f6' })).rejects.toThrow(/critical/);
     expect(sock.truenasAct).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TrueNAS verdict and Ask chips', () => {
+  it('summarises pool health and adds Ask chips on Storage, Apps and Disks', async () => {
+    const s = await snapshot();
+    const v = view(s);
+    expect(v.verdict).toBeTruthy();
+    expect(panel(v, 'pools', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'apps', 'gallery')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'disks', 'table')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+
+    const healthy = {
+      ...s,
+      pools: s.pools.map((p) => ({ ...p, healthy: true, status: 'ONLINE' })),
+      apps: (s.apps ?? []).map((a) => ({ ...a, state: 'RUNNING' })),
+    };
+    expect(truenasVerdict(healthy)).toMatch(/pools are healthy.*free/);
+    expect(truenasVerdict(s)).toMatch(/degraded/i);
   });
 });

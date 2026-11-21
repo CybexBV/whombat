@@ -45,6 +45,7 @@ import type { Services } from '../services';
 import { devicePage, learningPage } from './devices';
 import { genericSlots } from './generic';
 import { kindFor } from './kinds/index';
+import { SERVICE_SETTINGS_TAB_KEY } from './kinds/settings';
 import { slotProblems } from './kinds/slots';
 import type { KindCtx, KindView } from './kinds/types';
 import { diskNotice, itselfCard, type MachineNow, machineCard, machineCharts, machineKpis } from './machine';
@@ -334,15 +335,20 @@ export async function connectionPage(
       suggestions: view?.suggestions ?? GENERIC_SUGGESTIONS,
     }),
   );
+  const settingsTab =
+    kind?.settings && view && !bareView(view) && !view.tabs.some((t) => t.key === SERVICE_SETTINGS_TAB_KEY)
+      ? await kind.settings.tab(ctx)
+      : null;
+  const extraTabs = [...(settingsTab ? [settingsTab] : []), ...(view?.tabs ?? [])].slice(0, 7);
   const tabs: ThingPageTab[] = [
     {
       ...SUMMARY_TAB,
       panels: layout(
         summary,
-        (view?.tabs ?? []).map((t) => t.key),
+        extraTabs.map((t) => t.key),
       ).slice(0, 24),
     },
-    ...(view?.tabs ?? []).slice(0, 7),
+    ...extraTabs,
   ];
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];

@@ -19,6 +19,7 @@ import {
   type ImmichQueue,
   type ImmichSnapshot,
   immichSkipped,
+  immichVerdict,
   immichView,
   parseFavourites,
   parseIntegrity,
@@ -499,5 +500,26 @@ describe('Immich’s button (SD-07, SD-08)', () => {
       path: '/api/jobs/smartSearch',
       body: { command: 'resume', force: false },
     });
+  });
+
+  it('gives a calm verdict and Ask chips on key cards', async () => {
+    const s = await snapshot();
+    const v = view(s);
+    expect(v.verdict).toBeTruthy();
+    expect(panel(v, 'jobs', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'library', 'list')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(panel(v, 'people', 'bars')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+
+    const calm: ImmichSnapshot = {
+      ...s,
+      integrity: { missing: 0, untracked: 0, mismatched: 0 },
+      queues: (s.queues ?? []).map((q) => ({ ...q, paused: false, active: 0, waiting: 0, failed: 0 })),
+    };
+    expect(immichVerdict(calm)).toMatch(/photos and videos.*caught up/);
+    const failedOnly = {
+      ...calm,
+      queues: [{ name: 'metadataExtraction', paused: false, active: 0, waiting: 0, failed: 3 }],
+    };
+    expect(immichVerdict(failedOnly)).toContain('3 failed jobs');
   });
 });
