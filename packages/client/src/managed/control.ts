@@ -222,7 +222,7 @@ export type ControlErrorCode =
   | 'checkout_busy'
   /** `link.checkout` without a linked Whombat (409): Link is paid for each Whombat linked. */
   | 'link_no_boxes'
-  /** Stripe refused the change for good (502, 4.9). */
+  /** Stripe refused the change for good (503, 4.9). */
   | 'billing_provider_refused'
   /** `link.checkout` for a country Link isn't sold in (403, 4.10). */
   | 'link_country'

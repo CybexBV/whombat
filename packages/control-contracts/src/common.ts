@@ -196,8 +196,8 @@ export const CONTROL_REASONS = {
   plan_not_found: 'No such plan (operator; 404).',
   whombats_below_claimed:
     '`billing.whombats` below the number of claimed Whombats (409): release or retire one first.',
-  billing_provider_error: 'Stripe refused or didn’t answer (502); retry.',
-  billing_provider_refused: 'Stripe refused the change for good (502, 4.9): trying again won’t help.',
+  billing_provider_error: 'Stripe refused or didn’t answer (503); retry.',
+  billing_provider_refused: 'Stripe refused the change for good (503, 4.9): trying again won’t help.',
   signup_code_required: '`orgs.create` in `waitlist` or `invite` mode without a code (403, BL-21).',
   signup_code_invalid:
     '`orgs.create` with an unknown, used, expired or revoked code (403; one answer for all, BL-21).',
