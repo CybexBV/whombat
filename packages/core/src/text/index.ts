@@ -3,6 +3,7 @@ export * from './activity-redaction.js';
 export * from './chat-runtime.js';
 export * from './copy.js';
 export * from './emoji.js';
+export * from './fence.js';
 export * from './format.js';
 export * from './gateway.js';
 export * from './host.js';
