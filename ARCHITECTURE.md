@@ -955,12 +955,13 @@ Setup and operation: `docs/github.md`.
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per
   pass, and Home hears of a change only when what a connection's glance shows changed. A kind may declare the settings
-  of its service that matter (`things/kinds/settings.ts`, Plex's in `kinds/media/plex-settings.ts`): they are a tab of
-  their own, and a switch, a sheet's choice and the assistant's approved card all run the kind's `setting` action, which
-  reads the setting back from the service before it says done and records the change with how to put it back (undo kind
-  `thing.action`). The settings tools give that card Whombat's words through the kind's `describe`, and the dispatcher
-  marks an op run for the assistant (`managed/acting-assistant.ts`) so the change names it
-  ([service-settings.md](docs/decisions/service-settings.md)). A kind that sets `slots` (Plex, Seerr, SABnzbd, Home Assistant, Pi-hole…) lays its Summary out
+  of its service that matter through `KindModule.settings` (`declaredSettings` in `things/kinds/settings.ts` — Plex,
+  AdGuard Home, Pi-hole, Sonarr, Radarr and Immich): `connectionPage` adds their `service-settings` tab right after
+  Summary, and a switch, a sheet's choice and the assistant's approved card all run the kind's `setting` action through
+  `actions.ts`, which reads the setting back from the service before it says done and records the change with how to
+  put it back (undo kind `thing.action`). The settings tools give that card Whombat's words through
+  `kind.settings.describe`, and the dispatcher marks an op run for the assistant (`managed/acting-assistant.ts`) so the
+  change names it ([service-settings.md](docs/decisions/service-settings.md)). A kind that sets `slots` (Plex, Seerr, SABnzbd, Home Assistant, Pi-hole…) lays its Summary out
   in the slots every screen shares: Worth a look as a strip on top, then rows of three columns by `span` (Live rows,
   Inventory counts, a Shelf, Trend, People) and the machine as one card after them (`things/machine.ts` `machineCard`;
   without a known machine the service's own figures, else its lines alone as “<name> itself”), with no row of figures,
