@@ -513,3 +513,52 @@ func TestBackupJobChangeRefreshesCoverage(t *testing.T) {
 		t.Fatalf("job changes refreshed %d times, want 3", n)
 	}
 }
+
+type fakeDiskUsage struct {
+	calls atomic.Int32
+}
+
+func (f *fakeDiskUsage) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) proto.DiskUsageResponse {
+	f.calls.Add(1)
+	return proto.DiskUsageResponse{
+		Mount:      req.Mount,
+		FSType:     "ext4",
+		MeasuredAt: time.Now().UTC(),
+		TotalBytes: 100 << 30,
+		UsedBytes:  60 << 30,
+		Categories: []proto.DiskUsageCategory{{Key: proto.DiskCatJournal, Label: "System journal", Bytes: 2 << 30}},
+	}
+}
+
+func TestDiskUsagePolicy(t *testing.T) {
+	h := newFakeHub(t)
+	cfg := enrollAgent(t, h)
+	tr := startRuntime(t, cfg, nil)
+	side := h.waitSide(t)
+
+	ask := func(mount string) proto.DiskUsageResponse {
+		return rpc[proto.DiskUsageRequest, proto.DiskUsageResponse](t, side, proto.StreamDiskUsage,
+			proto.DiskUsageRequest{Mount: mount})
+	}
+
+	// Without a DiskUsage runner wired, unsupported.
+	if r := ask("/"); r.Code != CodeUnsupported {
+		t.Fatalf("without runner: %+v", r)
+	}
+
+	du := &fakeDiskUsage{}
+	tr.rt.DiskUsage = du
+
+	// Defaults: diagnose is on, so disk usage runs.
+	r := ask("/")
+	if r.Code != "" || r.Mount != "/" || len(r.Categories) != 1 || du.calls.Load() != 1 {
+		t.Fatalf("with default diagnose: %+v calls=%d", r, du.calls.Load())
+	}
+
+	// Turning diagnose off blocks disk usage before reaching the runner.
+	setTOML(t, tr.rt, map[string]string{"diagnose": "false"})
+	r = ask("/")
+	if r.Code != CodeRemoteControlDisabled || !strings.Contains(r.Message, "diagnose") || du.calls.Load() != 1 {
+		t.Fatalf("with diagnose=false: %+v calls=%d", r, du.calls.Load())
+	}
+}

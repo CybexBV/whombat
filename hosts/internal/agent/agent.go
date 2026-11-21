@@ -66,6 +66,13 @@ type Screen interface {
 	Screen(ctx context.Context, req proto.ScreenRequest) proto.ScreenResponse
 }
 
+// DiskUsage measures what fills one mounted filesystem on request
+// (proto.StreamDiskUsage). Implemented by package diskusage; the runtime
+// enforces Policy.Diagnose before calling it.
+type DiskUsage interface {
+	DiskUsage(ctx context.Context, req proto.DiskUsageRequest) proto.DiskUsageResponse
+}
+
 // ConsoleSession is an open console. Run pumps frames until ctx is
 // cancelled, in is closed, or the local endpoint closes; it must release all
 // local resources before returning.

@@ -8,6 +8,7 @@ import (
 	"rackoon/internal/agent"
 	"rackoon/internal/agent/broker"
 	"rackoon/internal/agent/diagnose"
+	"rackoon/internal/agent/diskusage"
 	"rackoon/internal/agent/macos"
 )
 
@@ -21,6 +22,7 @@ func wireMac(rt *agent.Runtime, cfg *agent.Config, log *slog.Logger) {
 	br := broker.NewMacBroker(cfg, log, rt.RefreshPackages)
 	rt.Broker = br
 	rt.Diagnostics = diagnose.NewMac(br.Inspect, log)
+	rt.DiskUsage = diskusage.New(rt.Inventory, log)
 }
 
 // restartByExit: on a Mac launchd started, the agent restarts by exiting
