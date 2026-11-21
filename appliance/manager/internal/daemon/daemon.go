@@ -124,6 +124,10 @@ type Daemon struct {
 	factsMu sync.Mutex
 	// backupSent is the backupKey of the backup status the runtime was last handed (guarded by factsMu).
 	backupSent string
+	// pauseMu serializes applying verified channel pause state so a stale periodic or manual refresh (an older role
+	// version, or a channel the box no longer follows) never overwrites a newer pause.
+	pauseMu      sync.Mutex
+	pauseVersion map[string]int64
 	// lease is the claim-code lookup lease (MG-28, claimlease.go).
 	lease claimLease
 	// lic is the licence loop's state (MG-34, licence.go); nil without licence.keysFile.
@@ -675,8 +679,26 @@ func (d *Daemon) refreshTUF(ctx context.Context) (*trust.Repo, error) {
 	return repo, nil
 }
 
+func (d *Daemon) currentChannel() string {
+	if d.Channel == nil {
+		return ""
+	}
+	return d.Channel.Current()
+}
+
 func (d *Daemon) syncChannelPause(repo *trust.Repo) {
 	if repo == nil || repo.Channel == "" || d.Engine == nil {
+		return
+	}
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	if cur := d.currentChannel(); cur == "" || repo.Channel != cur {
+		return
+	}
+	if d.pauseVersion == nil {
+		d.pauseVersion = map[string]int64{}
+	}
+	if prev, ok := d.pauseVersion[repo.Channel]; ok && repo.ChannelVersion < prev {
 		return
 	}
 	wasPaused := false
@@ -687,6 +709,7 @@ func (d *Daemon) syncChannelPause(repo *trust.Repo) {
 		d.warnOnce("channel pause state not recorded", err)
 		return
 	}
+	d.pauseVersion[repo.Channel] = repo.ChannelVersion
 	if wasPaused != repo.ChannelPaused {
 		d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", repo.ChannelPaused)
 		d.wakeEngine()
