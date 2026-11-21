@@ -2,7 +2,8 @@
  * Reading mail connections, listened mail triggers and mirrored mail items for automations.
  */
 import type { AutomationDefinition, ConnectorProvider, MailTrigger } from '@whombat/core';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { normalizeRfcMessageId } from '../connectors/types';
 import type { Db, Tx } from '../db/client';
 import { automations, automationVersions, connections, mailTriggerItems } from '../db/schema/index';
 import { thePersonAccountId } from '../domain/the-person';
@@ -42,9 +43,19 @@ export async function personMailConnections(db: Db | Tx, burrowId: string): Prom
   return rows.filter((r) => r.services.includes('mail'));
 }
 
+export interface ListenedMailEntry {
+  automationId: string;
+  automationName: string;
+  trigger: MailTrigger;
+  activeAt: Date;
+}
+
 export interface ListenedMailbox {
   burrowId: string;
+  /** Earliest activation time among live automations watching this mailbox. */
+  since: Date;
   triggers: MailTrigger[];
+  entries: ListenedMailEntry[];
 }
 
 /**
@@ -53,7 +64,14 @@ export interface ListenedMailbox {
  */
 export async function listenedMailConnections(db: Db): Promise<Map<string, ListenedMailbox>> {
   const rows = await db
-    .select({ burrowId: automations.burrowId, definition: automationVersions.definition })
+    .select({
+      automationId: automations.id,
+      automationName: automations.name,
+      burrowId: automations.burrowId,
+      mailActiveAt: automations.mailActiveAt,
+      publishedAt: automationVersions.publishedAt,
+      definition: automationVersions.definition,
+    })
     .from(automations)
     .innerJoin(
       automationVersions,
@@ -71,26 +89,42 @@ export async function listenedMailConnections(db: Db): Promise<Map<string, Liste
       ),
     );
   const out = new Map<string, ListenedMailbox>();
-  for (const { burrowId, definition } of rows) {
+  for (const { automationId, automationName, burrowId, mailActiveAt, publishedAt, definition } of rows) {
+    const activeAt = mailActiveAt ?? publishedAt;
     for (const trigger of mailTriggersOf(definition)) {
+      const entry: ListenedMailEntry = { automationId, automationName, trigger, activeAt };
       const existing = out.get(trigger.connectionId);
-      if (existing) existing.triggers.push(trigger);
-      else out.set(trigger.connectionId, { burrowId, triggers: [trigger] });
+      if (existing) {
+        existing.triggers.push(trigger);
+        existing.entries.push(entry);
+        if (activeAt < existing.since) existing.since = activeAt;
+      } else {
+        out.set(trigger.connectionId, { burrowId, since: activeAt, triggers: [trigger], entries: [entry] });
+      }
     }
   }
   return out;
 }
 
-/** Checks whether an incoming email has already been mirrored for this mailbox (avoids duplicate full reads). */
+/**
+ * Checks whether an incoming email has already been mirrored for this mailbox by provider id or RFC 5322 Message-ID
+ * (avoids duplicate full reads when a message moves folders or IMAP reassigns its UID).
+ */
 export async function hasMirroredMailItem(
   db: Db | Tx,
   connectionId: string,
   externalId: string,
+  rfcMessageId?: string | null,
 ): Promise<boolean> {
+  const normalized = normalizeRfcMessageId(rfcMessageId);
+  const match = normalized
+    ? or(eq(mailTriggerItems.externalId, externalId), eq(mailTriggerItems.messageId, normalized))
+    : eq(mailTriggerItems.externalId, externalId);
   const [row] = await db
     .select({ id: mailTriggerItems.id })
     .from(mailTriggerItems)
-    .where(and(eq(mailTriggerItems.connectionId, connectionId), eq(mailTriggerItems.externalId, externalId)));
+    .where(and(eq(mailTriggerItems.connectionId, connectionId), match))
+    .limit(1);
   return Boolean(row);
 }
 

@@ -20,12 +20,13 @@ import {
   type MailChangesResult,
   type MailHeader,
   type MailProviderCursor,
+  receivedAtOrAfter,
 } from '../connectors/types';
 import { connections, mailCursors } from '../db/schema/index';
 import type { Services } from '../services';
 import { recordMailReceived, setMailCursor } from './commands';
 import { mailPrincipal } from './principal';
-import { hasMirroredMailItem, listenedMailConnections } from './store';
+import { hasMirroredMailItem, type ListenedMailbox, listenedMailConnections } from './store';
 
 const DEFAULT_POLL_MS = 60_000;
 const IDLE_BACKOFF_MIN_MS = 5_000;
@@ -127,17 +128,13 @@ export class MailTriggerService {
     this.reconcileIdleStop(listened);
     let triggered = 0;
     for (const [connectionId, entry] of listened) {
-      triggered += await this.syncConnection(connectionId, entry.burrowId, entry.triggers);
+      triggered += await this.syncConnection(connectionId, entry);
     }
     return triggered;
   }
 
   /** Syncs a single mailbox (serialized per connection so IDLE wakes and periodic polls never overlap). */
-  async syncConnection(
-    connectionId: string,
-    burrowId?: string,
-    triggers?: readonly MailTrigger[],
-  ): Promise<number> {
+  async syncConnection(connectionId: string, watched?: ListenedMailbox): Promise<number> {
     if (this.inFlight.has(connectionId)) {
       this.pendingNudge.add(connectionId);
       return 0;
@@ -145,12 +142,9 @@ export class MailTriggerService {
     this.inFlight.add(connectionId);
     let triggered = 0;
     try {
-      const target =
-        burrowId && triggers
-          ? { burrowId, triggers }
-          : (await listenedMailConnections(this.services.db)).get(connectionId);
+      const target = watched ?? (await listenedMailConnections(this.services.db)).get(connectionId);
       if (!target || target.triggers.length === 0) return 0;
-      triggered = await this.syncOne(connectionId, target.burrowId, target.triggers);
+      triggered = await this.syncOne(connectionId, target);
     } finally {
       this.inFlight.delete(connectionId);
       if (this.pendingNudge.delete(connectionId) && this.started) {
@@ -160,11 +154,8 @@ export class MailTriggerService {
     return triggered;
   }
 
-  private async syncOne(
-    connectionId: string,
-    burrowId: string,
-    triggers: readonly MailTrigger[],
-  ): Promise<number> {
+  private async syncOne(connectionId: string, watched: ListenedMailbox): Promise<number> {
+    const { burrowId, triggers, since: activationSince } = watched;
     const [conn] = await this.services.db.select().from(connections).where(eq(connections.id, connectionId));
     if (!conn?.services.includes('mail')) return 0;
 
@@ -201,51 +192,55 @@ export class MailTriggerService {
     }
 
     const workspace = providerWorkspace(this.services, conn.provider);
-
-    // First time watching this mailbox (or after it was cleared): record baseline high-water mark, emit nothing.
-    if (!existing?.cursor || !existing.since) {
+    const needAttachmentTypes = triggers.some((t) => Boolean(t.attachmentTypes?.length));
+    const isInitial = !existing?.cursor || !existing.since;
+    let changes: MailChangesResult;
+    if (isInitial) {
+      // First poll after activation: backfill from the earliest active trigger's activation time (with 5 s skew
+      // margin) so mail delivered between publishing and the first poll fires, while older mail is dropped.
       try {
-        const baseline = await workspace.mailBaseline(token);
-        await this.commitCursor(burrowId, actorId, {
-          connectionId,
-          cursor: baseline.cursor,
-          since: now.toISOString(),
-          succeeded: true,
+        changes = await workspace.mailBaseline(token, {
+          needAttachmentTypes,
+          since: activationSince,
         });
-        if (this.started && conn.provider === 'imap') this.ensureIdle(connectionId);
       } catch (err) {
         this.services.log.warn(
           { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
           'mail trigger baseline failed',
         );
         await recordProblem('baseline_failed', 'Could not read this mailbox right now.');
+        return 0;
       }
-      return 0;
+    } else {
+      const resyncSince =
+        existing.succeededAt && existing.succeededAt > activationSince
+          ? existing.succeededAt
+          : activationSince;
+      try {
+        changes = await workspace.mailChanges(token, existing.cursor as MailProviderCursor, {
+          needAttachmentTypes,
+          since: activationSince,
+          resyncSince,
+        });
+      } catch (err) {
+        this.services.log.warn(
+          { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
+          'mail trigger poll failed',
+        );
+        await recordProblem('poll_failed', 'Could not check this mailbox for new mail right now.');
+        return 0;
+      }
     }
 
     if (this.started && conn.provider === 'imap') this.ensureIdle(connectionId);
 
-    const needAttachmentTypes = triggers.some((t) => Boolean(t.attachmentTypes?.length));
-    let changes: MailChangesResult;
-    try {
-      changes = await workspace.mailChanges(token, existing.cursor, {
-        needAttachmentTypes,
-        since: existing.since,
-      });
-    } catch (err) {
-      this.services.log.warn(
-        { connectionId, provider: conn.provider, err: err instanceof Error ? err.message : String(err) },
-        'mail trigger poll failed',
-      );
-      await recordProblem('poll_failed', 'Could not check this mailbox for new mail right now.');
-      return 0;
-    }
-
     let createdCount = 0;
     for (const header of changes.headers) {
+      // Drop pre-activation mail defensively even if a provider returned an old moved message.
+      if (!receivedAtOrAfter(header.date, activationSince)) continue;
       // Only fetch full message body when headers/attachment metadata match a live trigger.
       if (!headerMatchesAny(connectionId, header, triggers)) continue;
-      if (await hasMirroredMailItem(this.services.db, connectionId, header.id)) continue;
+      if (await hasMirroredMailItem(this.services.db, connectionId, header.id, header.messageId)) continue;
       let full: MailMessage | undefined;
       try {
         const list = await workspace.mailRead(token, { messageId: header.id });
@@ -269,6 +264,7 @@ export class MailTriggerService {
           provider: conn.provider,
           mailbox: conn.email,
           externalId: full.id,
+          messageId: header.messageId ?? null,
           threadId: full.threadId,
           fromHeader: fromHeader.slice(0, 500),
           fromAddress: fromAddress.slice(0, 320),
@@ -284,13 +280,19 @@ export class MailTriggerService {
       if (res.status === 'ok' && res.result.created) createdCount++;
     }
 
-    // Advance the durable high-water mark through the commit pipeline only when the cursor or problem state changed,
-    // so quiet polls never bloat the signed event log.
-    if (!sameCursor(existing.cursor, changes.cursor) || changes.reset || existing.problemCode !== null) {
+    // Advance the durable high-water mark through the commit pipeline only when the cursor, baseline or problem state
+    // changed, so quiet polls never bloat the signed event log.
+    if (
+      isInitial ||
+      !sameCursor(existing?.cursor, changes.cursor) ||
+      changes.reset ||
+      existing?.problemCode !== null ||
+      existing?.since?.getTime() !== activationSince.getTime()
+    ) {
       await this.commitCursor(burrowId, actorId, {
         connectionId,
         cursor: changes.cursor,
-        ...(changes.reset ? { since: now.toISOString() } : {}),
+        since: activationSince.toISOString(),
         succeeded: true,
       });
     }

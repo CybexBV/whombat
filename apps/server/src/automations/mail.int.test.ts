@@ -26,7 +26,7 @@ import { loadMessageRow, loadMessages } from '../read/messages';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
-import { createAutomation, deleteAutomation } from './commands';
+import { createAutomation, deleteAutomation, setAutomationEnabled } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import { loadAutomationRow, toAutomation } from './store';
 
@@ -551,6 +551,125 @@ describe('mail-arrives automations', () => {
     expect(await pollAndSettle()).toBe(0);
     expect(stateAfter.calls).not.toContain('mailRead');
     expect(await runsOf(autoId)).toHaveLength(1);
+
+    await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+    await pollAndSettle();
+  });
+
+  it('backfills mail delivered before the first poll, drops old moved mail, deduplicates by Message-ID, respects re-enable time, and resyncs expired cursors', async () => {
+    // 1. Pre-existing old mail delivered before the automation exists must never fire.
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_pre',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice pre-existing',
+      body: 'Too old',
+      messageId: '<preexisting-4@example.com>',
+      date: new Date(w.now().getTime() - 60_000),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['invoice'],
+    });
+
+    // 2. Mail delivered AFTER publishing and BEFORE the first poll MUST fire on the first poll (backfill).
+    w.advance(2_000);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_backfill',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice delivered before first poll',
+      body: 'Backfilled invoice',
+      messageId: '<backfill-4@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+
+    const state = fake.stateFor(FAKE_ACCESS_TOKEN);
+    state.calls.length = 0;
+    expect(await pollAndSettle()).toBe(1);
+    expect(state.calls).toContain('mailBaseline');
+    expect(await runsOf(autoId)).toHaveLength(1);
+
+    // 3. Old mail moved back into INBOX (new mailSeq/id, old received date) is dropped by activation time.
+    w.advance(10_000);
+    state.calls.length = 0;
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_old_moved',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice moved back from Archive',
+      body: 'Old date moved back',
+      messageId: '<old-moved-4@example.com>',
+      date: new Date(w.now().getTime() - 120_000),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    expect(await pollAndSettle()).toBe(0);
+    expect(state.calls).not.toContain('mailRead');
+    expect(await runsOf(autoId)).toHaveLength(1);
+
+    // 4. Message moved out and back (new provider externalId, same RFC Message-ID) fires only once.
+    w.advance(10_000);
+    state.calls.length = 0;
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_refiled_new_uid',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice delivered before first poll',
+      body: 'Backfilled invoice',
+      messageId: ' <BACKFILL-4@Example.com> ',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    expect(await pollAndSettle()).toBe(0);
+    expect(state.calls).not.toContain('mailRead');
+    expect(await runsOf(autoId)).toHaveLength(1);
+
+    // 5. Expired cursor resyncs from last successful poll time, catching missed mail without replaying seen mail.
+    w.advance(10_000);
+    const missed = fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_expired',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice during cursor expiry',
+      body: 'Recovered on resync',
+      messageId: '<expired-4@example.com>',
+      date: w.now(),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    state.expireNextCursor = true;
+    state.calls.length = 0;
+    expect(await pollAndSettle()).toBe(1);
+    expect(await runsOf(autoId)).toHaveLength(2);
+    expect(missed.id).toBeTruthy();
+
+    // 6. Disabling and re-enabling records a fresh activation time so mail from while disabled does not fire.
+    await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: false });
+    await pollAndSettle();
+    w.advance(30_000);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id: 'msg_f4_while_off',
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject: 'Invoice while disabled',
+      body: 'Should never run',
+      messageId: '<while-off-4@example.com>',
+      date: new Date(w.now().getTime() - 15_000),
+      labelIds: ['INBOX'],
+      attachments: [],
+    });
+    await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: true });
+    expect(await pollAndSettle()).toBe(0);
+    expect(await runsOf(autoId)).toHaveLength(2);
 
     await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
     await pollAndSettle();

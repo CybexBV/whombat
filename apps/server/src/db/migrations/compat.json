@@ -75,6 +75,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Opt-in Dutch voice (docs/decisions/desk-display-talk.md): a defaulted boolean switch and three nullable agreement columns (who, when, licence version) on voice_typing; the release before it reads and writes past them."
+    },
+    "0011_mail_trigger_sync": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Mail trigger activation time on automations and Message-ID deduplication on mail_trigger_items: nullable columns and a partial unique index; the release before it reads and writes past them."
     }
   }
 }

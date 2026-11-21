@@ -57,6 +57,7 @@ import {
   type GoogleWorkspace,
   type InboxUnread,
   isGoogleUrl,
+  MAIL_SINCE_SKEW_MS,
   type MailChangesOptions,
   type MailChangesResult,
   type MailDraftView,
@@ -64,6 +65,8 @@ import {
   type MailOrganizeInput,
   type MailProviderCursor,
   type MailSearchInput,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
 } from './types';
 
 export const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -457,24 +460,93 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     return { count, newest };
   }
 
-  async mailBaseline(accessToken: string, _options: MailChangesOptions = {}): Promise<MailChangesResult> {
-    // users.getProfile returns the current historyId in one cheap metadata call without reading any message.
+  private async fetchGmailHeaders(
+    accessToken: string,
+    ids: readonly string[],
+    since?: Date | null,
+  ): Promise<MailHeader[]> {
+    if (ids.length === 0) return [];
+    // Partial response omits body.data so Gmail sends only headers, snippet and attachment metadata.
+    const partFields = 'partId,mimeType,filename,body/size,body/attachmentId';
+    const fields = `id,threadId,internalDate,labelIds,snippet,payload(headers,${partFields},parts(${partFields},parts(${partFields},parts(${partFields}))))`;
+    const fetched = await mapLimit(ids, FETCH_CONCURRENCY, async (id) => {
+      try {
+        return await this.json<GmailMessage>(accessToken, 'GET', `${GMAIL_API}/messages/${enc(id)}`, {
+          query: { format: 'full', fields },
+        });
+      } catch (err) {
+        if (err instanceof GoogleApiError && err.status === 404) return null;
+        throw err;
+      }
+    });
+    const headers: MailHeader[] = [];
+    for (const m of fetched) {
+      if (!m) continue;
+      const ids = m.labelIds ?? [];
+      if (!ids.includes('INBOX') || ids.includes('DRAFT') || ids.includes('TRASH') || ids.includes('SPAM'))
+        continue;
+      const dateIso = isoFromMs(m.internalDate);
+      if (!receivedAtOrAfter(dateIso, since)) continue;
+      const attachments = extractBody(m.payload).attachments.map((a) => ({
+        ...(a.id !== undefined ? { id: a.id } : {}),
+        name: clip(a.name, 500),
+        mimeType: clip(a.mimeType, 200),
+        size: a.size,
+      }));
+      headers.push({
+        id: m.id,
+        threadId: m.threadId,
+        messageId: normalizeRfcMessageId(headerOf(m.payload, 'Message-ID')),
+        from: clip(headerOf(m.payload, 'From') ?? '', 500),
+        to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
+        subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
+        snippet: clip(decodeEntities(m.snippet ?? ''), 500),
+        date: dateIso,
+        hasAttachments: attachments.length > 0,
+        attachments,
+      });
+    }
+    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return headers;
+  }
+
+  async mailBaseline(accessToken: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    // Capture the current historyId first so mail arriving during backfill is still caught by the next history poll.
     const profile = await this.json<{ historyId?: string | number }>(
       accessToken,
       'GET',
       `${GMAIL_API}/profile`,
       { query: { fields: 'historyId' } },
     );
-    return { cursor: { kind: 'gmail', historyId: String(profile.historyId ?? '0') }, headers: [] };
+    const cursor: MailProviderCursor = { kind: 'gmail', historyId: String(profile.historyId ?? '0') };
+    if (!options.since) return { cursor, headers: [] };
+    // Pad Gmail's whole-second `after:` search slightly and enforce the exact 5 s skew margin on `internalDate`.
+    const afterSeconds = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) - 60);
+    const list = await this.json<{ messages?: { id: string }[] }>(
+      accessToken,
+      'GET',
+      `${GMAIL_API}/messages`,
+      {
+        query: {
+          labelIds: 'INBOX',
+          q: `after:${afterSeconds}`,
+          maxResults: 50,
+        },
+      },
+    );
+    const ids = (list.messages ?? []).map((m) => m.id).slice(0, 50);
+    const headers = await this.fetchGmailHeaders(accessToken, ids, options.since);
+    return { cursor, headers };
   }
 
   async mailChanges(
     accessToken: string,
     cursor: MailProviderCursor,
-    _options: MailChangesOptions = {},
+    options: MailChangesOptions = {},
   ): Promise<MailChangesResult> {
+    const resyncSince = options.resyncSince ?? options.since ?? null;
     if (cursor.kind !== 'gmail') {
-      return { ...(await this.mailBaseline(accessToken)), reset: true };
+      return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
     }
     const addedIds: string[] = [];
     const seen = new Set<string>();
@@ -525,54 +597,14 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
         pageToken = res.nextPageToken;
       }
     } catch (err) {
-      // History IDs expire after Gmail's retention window (HTTP 404): re-baseline without replaying old mail.
+      // History IDs expire after Gmail's retention window (HTTP 404): resync from last successful poll time.
       if (err instanceof GoogleApiError && err.status === 404) {
-        return { ...(await this.mailBaseline(accessToken)), reset: true };
+        return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
       }
       throw err;
     }
     const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
-    if (addedIds.length === 0) {
-      return { cursor: { kind: 'gmail', historyId: finalHistoryId }, headers: [] };
-    }
-    // Partial response omits body.data so Gmail sends only headers, snippet and attachment metadata.
-    const partFields = 'partId,mimeType,filename,body/size,body/attachmentId';
-    const fields = `id,threadId,internalDate,labelIds,snippet,payload(headers,${partFields},parts(${partFields},parts(${partFields},parts(${partFields}))))`;
-    const fetched = await mapLimit(addedIds, FETCH_CONCURRENCY, async (id) => {
-      try {
-        return await this.json<GmailMessage>(accessToken, 'GET', `${GMAIL_API}/messages/${enc(id)}`, {
-          query: { format: 'full', fields },
-        });
-      } catch (err) {
-        if (err instanceof GoogleApiError && err.status === 404) return null;
-        throw err;
-      }
-    });
-    const headers: MailHeader[] = [];
-    for (const m of fetched) {
-      if (!m) continue;
-      const ids = m.labelIds ?? [];
-      if (!ids.includes('INBOX') || ids.includes('DRAFT') || ids.includes('TRASH') || ids.includes('SPAM'))
-        continue;
-      const attachments = extractBody(m.payload).attachments.map((a) => ({
-        ...(a.id !== undefined ? { id: a.id } : {}),
-        name: clip(a.name, 500),
-        mimeType: clip(a.mimeType, 200),
-        size: a.size,
-      }));
-      headers.push({
-        id: m.id,
-        threadId: m.threadId,
-        from: clip(headerOf(m.payload, 'From') ?? '', 500),
-        to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
-        subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
-        snippet: clip(decodeEntities(m.snippet ?? ''), 500),
-        date: isoFromMs(m.internalDate),
-        hasAttachments: attachments.length > 0,
-        attachments,
-      });
-    }
-    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    const headers = await this.fetchGmailHeaders(accessToken, addedIds, options.since);
     return { cursor: { kind: 'gmail', historyId: finalHistoryId }, headers };
   }
 

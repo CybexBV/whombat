@@ -7,7 +7,7 @@ import { ConnectionId, ConnectorProvider, MAIL_BODY_CAP, MailAttachment, newId }
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
-import type { MailProviderCursor } from '../connectors/types';
+import { type MailProviderCursor, normalizeRfcMessageId } from '../connectors/types';
 import { mailCursors, mailTriggerItems } from '../db/schema/index';
 import { forbidden } from '../lib/errors';
 import { loadPrincipalRow } from '../read/principals';
@@ -136,6 +136,7 @@ export const recordMailReceived = defineCommand({
     provider: ConnectorProvider,
     mailbox: z.string().min(1).max(320),
     externalId: z.string().min(1).max(200),
+    messageId: z.string().max(500).nullable().optional(),
     threadId: z.string().min(1).max(200),
     fromHeader: z.string().max(500),
     fromAddress: z.string().max(320),
@@ -150,6 +151,7 @@ export const recordMailReceived = defineCommand({
   async apply(tx, ctx, input) {
     await requireMailSigner(tx, ctx.actor.id);
     const id = newId('mailTriggerItem');
+    const messageId = normalizeRfcMessageId(input.messageId);
     const inserted = await tx
       .insert(mailTriggerItems)
       .values({
@@ -159,6 +161,7 @@ export const recordMailReceived = defineCommand({
         provider: input.provider,
         mailbox: input.mailbox,
         externalId: input.externalId,
+        messageId,
         threadId: input.threadId,
         fromHeader: input.fromHeader,
         fromAddress: input.fromAddress,
@@ -170,9 +173,7 @@ export const recordMailReceived = defineCommand({
         receivedAt: new Date(input.receivedAt),
         mirroredAt: ctx.now,
       })
-      .onConflictDoNothing({
-        target: [mailTriggerItems.connectionId, mailTriggerItems.externalId],
-      })
+      .onConflictDoNothing()
       .returning({ id: mailTriggerItems.id });
 
     if (input.cursor) {

@@ -1,4 +1,5 @@
 import type { MailAttachment } from '@whombat/core';
+import { sql } from 'drizzle-orm';
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import type { MailProviderCursor } from '../../connectors/types';
 import { connections } from './connectors';
@@ -43,6 +44,8 @@ export const mailTriggerItems = pgTable(
     provider: text('provider').notNull(),
     mailbox: text('mailbox').notNull(),
     externalId: text('external_id').notNull(),
+    /** Normalized RFC 5322 Message-ID when the provider reports one (deduplicates moves across folders/UIDs). */
+    messageId: text('message_id'),
     threadId: text('thread_id').notNull(),
     fromHeader: text('from_header').notNull(),
     fromAddress: text('from_address').notNull(),
@@ -56,6 +59,9 @@ export const mailTriggerItems = pgTable(
   },
   (t) => [
     uniqueIndex('mail_trigger_items_connection_external_idx').on(t.connectionId, t.externalId),
+    uniqueIndex('mail_trigger_items_connection_message_id_idx')
+      .on(t.connectionId, t.messageId)
+      .where(sql`${t.messageId} is not null`),
     index('mail_trigger_items_burrow_idx').on(t.burrowId, t.mirroredAt),
   ],
 );

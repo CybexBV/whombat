@@ -48,6 +48,8 @@ import {
   type MailOrganizeInput,
   type MailProviderCursor,
   type MailSearchInput,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
 } from './types';
 
 export const FAKE_GOOGLE_EMAIL = 'you@example.com';
@@ -67,6 +69,8 @@ export interface FakeMail {
   /** Label ids: system (`INBOX`, `UNREAD`, `SENT`) and user labels (`Label_1`). */
   labelIds: string[];
   attachments: { id?: string; name: string; mimeType: string; size: number; contentBase64?: string }[];
+  /** Optional RFC 5322 Message-ID header for deduplication tests. */
+  messageId?: string | null;
   /** `In-Reply-To` of a reply. */
   inReplyTo?: string | null;
   /** Monotonic arrival sequence assigned for fake change-feed polling. */
@@ -120,6 +124,8 @@ export interface FakeGoogleState {
   nextId: number;
   /** Monotonic counter for fake mailbox change-feed cursors. */
   mailSeq: number;
+  /** Tests only: when set, the next `mailChanges` call behaves as if the provider cursor expired and resyncs. */
+  expireNextCursor?: boolean;
 }
 
 const HOUR = 3_600_000;
@@ -560,37 +566,13 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
     }
   }
 
-  async mailBaseline(accessToken: string, _options?: MailChangesOptions): Promise<MailChangesResult> {
-    const state = this.use(accessToken, 'mailBaseline');
-    this.assignMailSeqs(state);
-    return { cursor: { kind: 'fake', seq: state.mailSeq }, headers: [] };
-  }
-
-  async mailChanges(
-    accessToken: string,
-    cursor: MailProviderCursor,
-    _options?: MailChangesOptions,
-  ): Promise<MailChangesResult> {
-    const state = this.use(accessToken, 'mailChanges');
-    this.assignMailSeqs(state);
-    if (cursor.kind !== 'fake') {
-      return { cursor: { kind: 'fake', seq: state.mailSeq }, headers: [], reset: true };
-    }
-    const fresh = state.messages
-      .filter(
-        (m) =>
-          (m.mailSeq ?? 0) > cursor.seq &&
-          m.labelIds.includes('INBOX') &&
-          !m.labelIds.includes('DRAFT') &&
-          !m.labelIds.includes('TRASH') &&
-          !m.labelIds.includes('SPAM'),
-      )
-      .sort((a, b) => (a.mailSeq ?? 0) - (b.mailSeq ?? 0));
-    const headers: MailHeader[] = fresh.map((m) => {
+  private fakeMailHeaders(messages: readonly FakeMail[]): MailHeader[] {
+    return messages.map((m) => {
       const text = m.html ? htmlToText(m.body) : m.body;
       return {
         id: m.id,
         threadId: m.threadId,
+        messageId: normalizeRfcMessageId(m.messageId),
         from: m.from,
         to: m.to,
         subject: m.subject,
@@ -605,6 +587,44 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
         })),
       };
     });
+  }
+
+  private inboxMessages(state: FakeGoogleState, since?: Date | null, afterSeq = -1): FakeMail[] {
+    return state.messages
+      .filter(
+        (m) =>
+          (m.mailSeq ?? 0) > afterSeq &&
+          m.labelIds.includes('INBOX') &&
+          !m.labelIds.includes('DRAFT') &&
+          !m.labelIds.includes('TRASH') &&
+          !m.labelIds.includes('SPAM') &&
+          receivedAtOrAfter(m.date, since),
+      )
+      .sort((a, b) => a.date.getTime() - b.date.getTime() || (a.mailSeq ?? 0) - (b.mailSeq ?? 0));
+  }
+
+  async mailBaseline(accessToken: string, options?: MailChangesOptions): Promise<MailChangesResult> {
+    const state = this.use(accessToken, 'mailBaseline');
+    this.assignMailSeqs(state);
+    const headers = options?.since ? this.fakeMailHeaders(this.inboxMessages(state, options.since)) : [];
+    return { cursor: { kind: 'fake', seq: state.mailSeq }, headers };
+  }
+
+  async mailChanges(
+    accessToken: string,
+    cursor: MailProviderCursor,
+    options?: MailChangesOptions,
+  ): Promise<MailChangesResult> {
+    const state = this.use(accessToken, 'mailChanges');
+    this.assignMailSeqs(state);
+    const resyncSince = options?.resyncSince ?? options?.since ?? null;
+    if (cursor.kind !== 'fake' || state.expireNextCursor) {
+      state.expireNextCursor = false;
+      const headers = resyncSince ? this.fakeMailHeaders(this.inboxMessages(state, resyncSince)) : [];
+      return { cursor: { kind: 'fake', seq: state.mailSeq }, headers, reset: true };
+    }
+    const fresh = this.inboxMessages(state, options?.since, cursor.seq);
+    const headers = this.fakeMailHeaders(fresh);
     const maxSeq = fresh.reduce((n, m) => Math.max(n, m.mailSeq ?? 0), cursor.seq);
     return { cursor: { kind: 'fake', seq: Math.max(maxSeq, state.mailSeq) }, headers };
   }

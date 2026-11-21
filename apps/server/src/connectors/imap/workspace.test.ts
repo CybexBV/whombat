@@ -452,6 +452,7 @@ describe('Email (IMAP) behind the mail tools', () => {
     const delta = await ws.mailChanges(TOKEN, baseline.cursor, { needAttachmentTypes: true });
     expect(delta.headers).toHaveLength(1);
     expect(delta.headers[0]).toMatchObject({
+      messageId: '<inv-oct@example.com>',
       from: 'Billing <billing@example.com>',
       subject: 'October Invoice',
       hasAttachments: true,
@@ -464,11 +465,45 @@ describe('Email (IMAP) behind the mail tools', () => {
     const again = await ws.mailChanges(TOKEN, delta.cursor);
     expect(again.headers).toEqual([]);
 
-    // UIDVALIDITY renumbering re-baselines cleanly without replaying old messages.
+    // Old message moved back into INBOX (gets a brand-new UID) is dropped by `since` (5 s skew margin).
+    const activation = new Date('2026-10-19T09:50:00Z');
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Old <old@example.com>',
+        subject: 'Moved back from Archive',
+        body: 'Ancient email',
+        id: '<ancient@example.com>',
+      }),
+      { date: new Date('2026-10-18T12:00:00Z') },
+    );
+    const moved = await ws.mailChanges(TOKEN, delta.cursor, { since: activation });
+    expect(moved.headers).toEqual([]);
+
+    // First poll with `since` backfills post-activation mail and drops older mail without reading bodies.
+    const backfilled = await ws.mailBaseline(TOKEN, { since: activation });
+    expect(backfilled.headers.map((h) => h.messageId)).toEqual(['<inv-oct@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // UIDVALIDITY renumbering resyncs from resyncSince (last successful poll time) instead of losing mail.
     server.renumber('INBOX');
-    const reset = await ws.mailChanges(TOKEN, delta.cursor);
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Arrived during renumber',
+        body: 'Fresh after renumber',
+        id: '<after-renum@example.com>',
+      }),
+      { date: new Date('2026-10-19T10:30:00Z') },
+    );
+    const reset = await ws.mailChanges(TOKEN, moved.cursor, {
+      since: activation,
+      resyncSince: new Date('2026-10-19T10:15:00Z'),
+    });
     expect(reset.reset).toBe(true);
-    expect(reset.headers).toEqual([]);
+    expect(reset.headers.map((h) => h.messageId)).toEqual(['<after-renum@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
   });
 
   it('wakes on IMAP IDLE when new mail arrives, uses a multi-minute socket timeout, and reports unsupported when IDLE is absent', async () => {
