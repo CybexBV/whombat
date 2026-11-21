@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -206,11 +207,20 @@ class WhombatUpdaterModule : Module() {
     // A signer Android can't read counts as a failed check, never as a pass.
     val unread = "Android couldn't read who signed the download."
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      val signers = info.signingInfo?.apkContentsSigners
-      if (signers.isNullOrEmpty()) throw fail("verify", unread)
-      if (signers.none { pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509) }) {
-        throw fail("signature", "The download isn't signed like this app.")
+      val ours = { s: Signature ->
+        pm.hasSigningCertificate(context.packageName, s.toByteArray(), PackageManager.CERT_INPUT_RAW_X509)
       }
+      val signing = info.signingInfo
+      val multiple = signing?.hasMultipleSigners() == true
+      // One signer: its rotation history counts, so an update signed with a newer key that came from ours passes.
+      // Several: each must be one of ours, as Android requires.
+      val read = (if (multiple) signing?.apkContentsSigners else signing?.signingCertificateHistory).orEmpty()
+      // Some phones leave `signingInfo` empty for an archive; the older field (asked for too) still has the signer.
+      @Suppress("DEPRECATION")
+      val signers = read.ifEmpty { info.signatures.orEmpty() }
+      if (signers.isEmpty()) throw fail("verify", unread)
+      val matches = if (multiple) signers.all(ours) else signers.any(ours)
+      if (!matches) throw fail("signature", "The download isn't signed like this app.")
     } else {
       @Suppress("DEPRECATION")
       val signers = info.signatures
