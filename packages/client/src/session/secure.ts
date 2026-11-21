@@ -383,10 +383,14 @@ interface Conn {
   pongN: number;
   /** The next stall check, armed while something is sent. */
   watch: ReturnType<typeof setTimeout> | null;
-  /** The `probe()` waiting for its `pong`: its timer, its ping's number, when it is due (`now()`), and whether it
-   * already had its one more wait after firing late. */
+  /**
+   * The `probe()` waiting for its `pong`: its timer, its ping's number, when the check began, when its current wait
+   * began and is due (`now()`), and whether it already had its one more wait after firing late.
+   */
   check: ReturnType<typeof setTimeout> | null;
   checkN: number;
+  checkSince: number;
+  checkFrom: number;
   checkDue: number;
   checkLate: boolean;
   /**
@@ -647,6 +651,8 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
           watch: null,
           check: null,
           checkN: 0,
+          checkSince: 0,
+          checkFrom: 0,
           checkDue: 0,
           checkLate: false,
           liveUntil: 0,
@@ -863,6 +869,7 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
     if (c.check) clearTimeout(c.check);
     c.check = null;
     c.checkLate = false;
+    c.checkSince = now();
     checkPing(c);
   }
 
@@ -872,19 +879,32 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
       checkFailed(c);
       return;
     }
+    checkWait(c);
+  }
+
+  function checkWait(c: Conn) {
     const wait = stallWait() || DEFAULT_CHECK_MS;
-    c.checkDue = now() + wait;
+    c.checkFrom = now();
+    c.checkDue = c.checkFrom + wait;
     c.check = setTimeout(() => checkEnded(c, wait), wait);
   }
 
   function checkEnded(c: Conn, wait: number) {
     c.check = null;
     if (c.closed || conn !== c || c.pongN >= c.checkN) return;
+    const at = now();
     // Fired far later than it was set for: the app's JavaScript was frozen (in the background), and the answer may be
     // waiting behind the timer. One more short wait, on a fresh ping, before giving up on it.
-    if (!c.checkLate && now() - c.checkDue > wait) {
+    if (!c.checkLate && at - c.checkDue > wait) {
       c.checkLate = true;
+      c.checkSince = at;
       checkPing(c);
+      return;
+    }
+    // Something came during this wait: a slow link working through what piled up while the phone was away, with the
+    // pong behind it. Wait again, as long as the stall check would at most; silence, or no pong by then, is lost.
+    if (c.lastInbound >= c.checkFrom && at - c.checkSince < MAX_STALL_MS) {
+      checkWait(c);
       return;
     }
     checkFailed(c);

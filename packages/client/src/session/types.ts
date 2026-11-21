@@ -369,7 +369,8 @@ export interface ApplianceSession {
    * from the background or on another network may hold a socket that died silently while the session still says it is
    * open. A check already out is replaced by a fresh ping; `onlyIfChecking`: only then (coming back to the foreground
    * with a check begun before). A check whose wait ends far later than set (the app's JavaScript was frozen) gets one
-   * more short wait. Nothing while not open. The secure transport only.
+   * more short wait; one over a connection still bringing something in waits again, up to the stall check's longest
+   * wait (a slow link working through a backlog). Nothing while not open. The secure transport only.
    */
   probe?(options?: { onlyIfChecking?: boolean }): void;
   /**
