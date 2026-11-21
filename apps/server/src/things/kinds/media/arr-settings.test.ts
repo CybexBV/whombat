@@ -94,6 +94,11 @@ describe('Sonarr and Radarr declared settings', () => {
       value: '100 MB',
       choose: { current: 100 },
     });
+    expect(sRows.find((r) => r.id === 'propers_and_repacks')).toMatchObject({
+      value: 'Prefer and upgrade',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
+    });
+    expect(sRows.find((r) => r.id === 'propers_and_repacks')?.choose).toBeUndefined();
     expect(sRows.find((r) => r.id === 'unmonitor_deleted')).toMatchObject({
       label: 'Stop watching deleted episodes',
       value: 'Off',
@@ -123,8 +128,9 @@ describe('Sonarr and Radarr declared settings', () => {
     });
     expect(rRows.find((r) => r.id === 'propers_and_repacks')).toMatchObject({
       value: 'Don’t upgrade automatically',
-      choose: { current: 'doNotUpgrade' },
+      elsewhere: { label: 'In Radarr', url: 'http://192.0.2.21:7878/settings/mediamanagement' },
     });
+    expect(rRows.find((r) => r.id === 'propers_and_repacks')?.choose).toBeUndefined();
     expect(rRows.find((r) => r.id === 'general_and_updates')?.elsewhere).toEqual({
       label: 'In Radarr',
       url: 'http://192.0.2.21:7878/settings/general',
@@ -194,6 +200,7 @@ describe('Sonarr and Radarr declared settings', () => {
       timeZone: 'Europe/Amsterdam',
     };
     await expect(act(sCtx, { target: 'general_and_updates', value: true })).rejects.toThrow();
+    await expect(act(sCtx, { target: 'propers_and_repacks', value: 'doNotUpgrade' })).rejects.toThrow();
     await expect(act(sCtx, { target: 'rss_sync_interval', value: 7 })).rejects.toThrow();
     expect((await act(sCtx, { target: 'hardlinks', value: true })).unchanged).toBe(true);
 
@@ -213,5 +220,8 @@ describe('Sonarr and Radarr declared settings', () => {
     const words = await describeSetting(declared, sCtx, { target: 'rss_sync_interval', value: 60 });
     expect(words?.title).toContain('Sonarr');
     expect(words?.lines[0]).toContain('every 15 minutes → every hour');
+    expect(
+      await describeSetting(declared, sCtx, { target: 'propers_and_repacks', value: 'doNotUpgrade' }),
+    ).toBeNull();
   });
 });

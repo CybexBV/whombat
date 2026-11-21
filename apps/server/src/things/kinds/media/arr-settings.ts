@@ -114,11 +114,13 @@ function spaceWords(v: SettingValue): string {
   return `${mb.toLocaleString('en-GB')} MB`;
 }
 
-const PROPERS: SettingChoice[] = [
-  { value: 'preferAndUpgrade', label: 'Prefer and upgrade', note: 'replace with fixed releases' },
-  { value: 'doNotUpgrade', label: 'Don’t upgrade automatically' },
-  { value: 'doNotPrefer', label: 'Don’t prefer', note: 'follow quality profile only' },
-];
+const PROPERS_LABEL: Record<string, string> = {
+  preferAndUpgrade: 'Prefer and upgrade',
+  doNotUpgrade: 'Don’t upgrade automatically',
+  doNotPrefer: 'Don’t prefer',
+};
+
+const propersWords = (v: SettingValue): string => PROPERS_LABEL[String(v)] ?? String(v);
 
 const RSS_INTERVALS: SettingChoice[] = [
   { value: 10, label: 'Every 10 minutes' },
@@ -211,19 +213,11 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       id: 'propers_and_repacks',
       group: 'files',
       label: 'Fixed releases (Propers & Repacks)',
-      help: 'Whether to replace a file when a fixed version comes out.',
-      kind: 'choice',
+      help: `Whether ${name} replaces an existing file when a fixed release comes out. Replacing can delete the old file, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => strField(s.mediamanagement, 'downloadPropersAndRepacks'),
-      choices: (s) =>
-        withCurrent(PROPERS, strField(s.mediamanagement, 'downloadPropersAndRepacks'), (v) => String(v)),
-      write: (v, s) =>
-        putSection('mediamanagement', s.mediamanagement as ConfigSection, {
-          downloadPropersAndRepacks: String(v),
-        }),
-      sentence: (v) => {
-        const label = PROPERS.find((c) => c.value === String(v))?.label ?? String(v);
-        return `${name} now handles fixed releases as “${label}”.`;
-      },
+      words: propersWords,
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'completed_download_handling',
