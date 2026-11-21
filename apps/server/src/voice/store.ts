@@ -1,5 +1,5 @@
 /**
- * Voice typing and opt-in Dutch voice settings in the database (`voice_typing`, migrations 0000 and 0009): read
+ * Voice typing and opt-in Dutch voice settings in the database (`voice_typing`, migrations 0000 and 0010): read
  * here, written only through the commit pipeline. Changes and licence agreements are signed without words.
  */
 import { VoiceTypingPatch } from '@whombat/core/domain';

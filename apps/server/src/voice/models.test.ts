@@ -3,7 +3,15 @@
  * unix socket (both ways validated, its refusals as codes), the fake's downloads one at a time with progress, a failure,
  * a removal, and which fetcher the config gives.
  */
+import { VOICE_MODEL_MAX_BYTES, VOICE_MODELS_PATHS, VoiceModelState } from '@whombat/control-contracts/local';
+import {
+  VoiceModelProblem,
+  VoiceModelState as VoiceModelStateName,
+  VoiceSttModel,
+} from '@whombat/core/domain';
+import { requestUnixHttp } from '@whombat/node-io/http';
 import { afterEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { Config } from '../config';
 import { VoiceModelsCallError, VoiceModelsSocketClient, voiceModelsFor } from './models';
 import { FakeVoiceModels, type FakeVoiceModelsServer, startFakeVoiceModels } from './testing/fake-models';
@@ -112,6 +120,58 @@ describe('the socket client', () => {
     );
     expect(err).toBeInstanceOf(VoiceModelsCallError);
     expect((err as VoiceModelsCallError).status).toBe(0);
+  });
+
+  it('keeps plain v1 responses parseable by a previous runtime that only accepts speech-recognition models', async () => {
+    // Previous runtime's strict schema before supertonic was added to VoiceDownloadModel.
+    const PrevVoiceModelsState = z.object({
+      v: z.literal(1),
+      models: z
+        .array(
+          VoiceModelState.extend({
+            id: VoiceSttModel,
+            state: VoiceModelStateName,
+            size: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
+            received: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
+            problem: VoiceModelProblem.optional(),
+          }),
+        )
+        .max(8),
+      free: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    });
+
+    server = await startFakeVoiceModels({ models: quick() });
+    const rawGet = await requestUnixHttp({
+      socketPath: server.socketPath,
+      path: VOICE_MODELS_PATHS.state,
+      method: 'GET',
+      deadlineMs: 5_000,
+      maxResponseBytes: 64 * 1024,
+    });
+    expect(rawGet.status).toBe(200);
+    const prevState = PrevVoiceModelsState.parse(JSON.parse(rawGet.body.toString('utf8')));
+    expect(prevState.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
+
+    const fetchPayload = JSON.stringify({ v: 1, model: 'parakeet' });
+    const rawFetch = await requestUnixHttp({
+      socketPath: server.socketPath,
+      path: VOICE_MODELS_PATHS.fetch,
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(fetchPayload) },
+      body: fetchPayload,
+      deadlineMs: 5_000,
+      maxResponseBytes: 64 * 1024,
+    });
+    expect(rawFetch.status).toBe(200);
+    expect(
+      PrevVoiceModelsState.parse(JSON.parse(rawFetch.body.toString('utf8'))).models.map((m) => m.id),
+    ).toEqual(['parakeet', 'whisper']);
+
+    // The new runtime's client explicitly requests supertonic and gets all three models.
+    const client = new VoiceModelsSocketClient(server.socketPath);
+    const fullState = await client.state();
+    expect(fullState.models.map((m) => m.id)).toEqual(['parakeet', 'whisper', 'supertonic']);
+    expect(() => PrevVoiceModelsState.parse(fullState)).toThrow();
   });
 });
 

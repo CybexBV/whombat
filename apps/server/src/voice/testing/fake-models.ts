@@ -14,12 +14,18 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  VOICE_MODELS_INCLUDE_PARAM,
   VOICE_MODELS_PATHS,
   VoiceModelRequest,
   type VoiceModelState,
   type VoiceModelsState,
 } from '@whombat/control-contracts/local';
-import { VOICE_DOWNLOAD_MODELS, type VoiceDownloadModel, type VoiceModelProblem } from '@whombat/core/domain';
+import {
+  VOICE_DOWNLOAD_MODELS,
+  VOICE_STT_MODELS,
+  type VoiceDownloadModel,
+  type VoiceModelProblem,
+} from '@whombat/core/domain';
 import { VoiceModelsCallError, type VoiceModelsPort } from '../models';
 
 /** The downloads' sizes, as the release pins them (Parakeet, Whisper, Supertonic 3). */
@@ -236,11 +242,32 @@ function fail(res: ServerResponse, status: number, code: string, message: string
   if (!res.headersSent) send(res, status, { error: { code, message } });
 }
 
+function filterModelsState(state: VoiceModelsState, include: ReadonlySet<string>): VoiceModelsState {
+  const defaultModels: readonly string[] = VOICE_STT_MODELS;
+  return {
+    ...state,
+    models: state.models.filter((m) => defaultModels.includes(m.id) || include.has(m.id)),
+  };
+}
+
+function requestedIncludes(url: URL, extra?: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of url.searchParams.getAll(VOICE_MODELS_INCLUDE_PARAM)) {
+    for (const part of raw.split(',')) {
+      const id = part.trim();
+      if (id) out.add(id);
+    }
+  }
+  if (extra) out.add(extra);
+  return out;
+}
+
 async function serve(models: FakeVoiceModels, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (req.method === 'GET' && req.url === VOICE_MODELS_PATHS.state)
-    return send(res, 200, await models.state());
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  if (req.method === 'GET' && url.pathname === VOICE_MODELS_PATHS.state)
+    return send(res, 200, filterModelsState(await models.state(), requestedIncludes(url)));
   const post = req.method === 'POST';
-  if (!post || (req.url !== VOICE_MODELS_PATHS.fetch && req.url !== VOICE_MODELS_PATHS.remove))
+  if (!post || (url.pathname !== VOICE_MODELS_PATHS.fetch && url.pathname !== VOICE_MODELS_PATHS.remove))
     return fail(res, 400, 'bad_request', 'no such route');
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -251,6 +278,8 @@ async function serve(models: FakeVoiceModels, req: IncomingMessage, res: ServerR
     return fail(res, 400, 'bad_request', 'bad request');
   }
   const answer =
-    req.url === VOICE_MODELS_PATHS.fetch ? await models.fetch(body.model) : await models.remove(body.model);
-  send(res, 200, answer);
+    url.pathname === VOICE_MODELS_PATHS.fetch
+      ? await models.fetch(body.model)
+      : await models.remove(body.model);
+  send(res, 200, filterModelsState(answer, requestedIncludes(url, body.model)));
 }
