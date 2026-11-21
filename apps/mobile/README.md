@@ -205,7 +205,8 @@ The published APK is for `arm64-v8a`, the phones' architecture, so nobody downlo
 
 Each published APK's bundle source map and R8 mapping stay beside it, in `<dir>/sourcemaps/<versionCode>-<rev>.map` and
 `.mapping.txt` (the newest 30 builds; control serves only the APK `latest.json` names): they turn an error note's
-frames back into the code's. Only what that run's build wrote is kept, so `--skip-build` keeps none.
+frames back into the code's. Only a bundle map that run's build wrote is kept (`--skip-build` keeps none and says so);
+R8's mapping whenever it is there.
 
 `--env dev` is still accepted until the move to production is done; it goes with DEV.
 
