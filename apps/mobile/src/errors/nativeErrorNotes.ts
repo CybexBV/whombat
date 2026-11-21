@@ -121,10 +121,26 @@ export function startErrorNotes(): void {
   try {
     watchOpen();
   } catch {}
-  try {
-    noteDiagnostics();
-    onDiagnostics(noteDiagnostics);
-  } catch {}
+  // Android's endings are read once the first screen is drawn (`noteEndingsAfterFirstFrame`): reading a trace costs
+  // time the start shouldn't wait for. iOS's payloads are small files already on the phone.
+  if (Platform.OS === 'ios') {
+    try {
+      noteDiagnostics();
+      onDiagnostics(noteDiagnostics);
+    } catch {}
+  }
+}
+
+let endingsAsked = false;
+/**
+ * On Android, how the earlier runs ended (`androidExits.ts`), noted after the next frame, once a run; the app's root
+ * calls it as it mounts. The last run's own JavaScript error is still waiting to be sent then: a crash it explains
+ * isn't noted twice.
+ */
+export function noteEndingsAfterFirstFrame(): void {
+  if (Platform.OS !== 'android' || endingsAsked) return;
+  endingsAsked = true;
+  requestAnimationFrame(() => setTimeout(noteDiagnostics, 0));
 }
 
 function noteQuiet(error: unknown, name: string, where?: string): void {

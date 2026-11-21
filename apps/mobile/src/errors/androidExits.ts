@@ -5,8 +5,11 @@
  * write anything about the last three, so this is the only place they are named.
  *
  * Each ending is read at the next start, which may be a newer build after an update: the note carries the build that
- * ended (Android keeps the label the run gave itself) and the moment it ended. Only the frames of the thread that
- * mattered are kept, a file as its name only, never what was on screen or in the app's memory.
+ * ended (Android keeps the label the run gave itself) and the moment it ended. Only structured facts are kept: the
+ * reason, the signal and its code, the thread's name and frames (a file as its name only), the memory used, the build.
+ * Android's free text (an ending's description, a native abort message, the causes it names) can carry whatever a
+ * library put in it, an address, a link or a token, and the note goes to the box's log and the phone's sync log: it is
+ * never kept, except an ANR's kind, matched against Android's own fixed words and said in ours.
  *
  * Read tolerantly: an ending shaped another way gives a shorter note, never an error.
  */
@@ -30,6 +33,7 @@ interface AndroidExit {
   /** kB. */
   pss: number | null;
   rss: number | null;
+  /** Android's own words about it: read only to tell which kind of ANR it was (`anrKind`), never kept. */
   description: string | null;
   /** `3.140.0 (3140000)`, the label that run gave itself. */
   build: string | null;
@@ -108,7 +112,10 @@ export function mainThreadOf(trace: string): {
   for (const raw of lines.slice(start + 1)) {
     const line = raw.trim();
     if (!line) break;
-    if (!waiting && /^- waiting (to lock|on)/.test(line)) waiting = cut(line.slice(2), 200);
+    // Rebuilt from its parts: the lock's class and the thread holding it, nothing else of the line.
+    const lock = /^- waiting (to lock|on) <0x[0-9a-f]+> \(a ([\w.$]+)\)(?: held by thread (\d+))?/.exec(line);
+    if (!waiting && lock)
+      waiting = cut(`waiting ${lock[1]} a ${lock[2]}${lock[3] ? ` held by thread ${lock[3]}` : ''}`, 200);
     const native = line.startsWith('native: ');
     if (!native && !line.startsWith('at ')) continue;
     if (native && !java && ++nativeOnTop > NATIVE_ON_TOP) continue;
@@ -121,19 +128,28 @@ export function mainThreadOf(trace: string): {
 
 // ── A native crash's tombstone (Android's tombstone.proto) ────────────────────────────────────────────────────────
 
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+/** Said when the crashed thread comes after the part of the tombstone that was read. */
+export const CRASHED_THREAD_NOT_READ = 'crashed thread not in the part read';
 
-/** Base64 to bytes; anything not base64 ends it. */
+/** Each character code's base64 value, 255 for one that isn't base64: a tombstone is up to 1.3 MB of it. */
+const B64 = (() => {
+  const table = new Uint8Array(128).fill(255);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < chars.length; i += 1) table[chars.charCodeAt(i)] = i;
+  return table;
+})();
+
+/** Base64 to bytes; anything not base64 (the padding included) ends it. */
 export function base64Bytes(text: string): Uint8Array {
-  const clean = text.replace(/=+$/, '');
-  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  const out = new Uint8Array(Math.floor((text.length * 3) / 4));
   let bits = 0;
   let value = 0;
   let n = 0;
-  for (const ch of clean) {
-    const v = B64.indexOf(ch);
-    if (v === -1) break;
-    value = (value << 6) | v;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    const v = c < 128 ? (B64[c] ?? 255) : 255;
+    if (v === 255) break;
+    value = ((value << 6) | v) & 0xffffff;
     bits += 6;
     if (bits >= 8) {
       bits -= 8;
@@ -273,8 +289,9 @@ function frameLine(frame: Field[], index: number): string {
 }
 
 /**
- * What a tombstone says about the crash: the signal, the abort message, the causes Android names, and the crashed
- * thread's name and frames (innermost first). Fields are the tombstone's own numbers; anything missing is left out.
+ * What a tombstone says about the crash: the signal and its code, and the crashed thread's name and frames (innermost
+ * first). Fields are the tombstone's own numbers; anything missing is left out. The abort message and the causes are
+ * free text and are never read.
  */
 export function tombstoneOf(bytes: Uint8Array): { words: string[]; frames: string[] } {
   const top = fieldsOf(bytes);
@@ -291,12 +308,6 @@ export function tombstoneOf(bytes: Uint8Array): { words: string[]; frames: strin
     ].filter(Boolean);
     if (parts.length) words.push(parts.join(', '));
   }
-  const abort = textOf(top, 14);
-  if (abort) words.push(`abort: ${cut(abort, 300)}`);
-  for (const cause of top.filter((f) => f.no === 15 && 'bytes' in f)) {
-    const said = 'bytes' in cause ? textOf(fieldsOf(cause.bytes), 1) : null;
-    if (said) words.push(cut(said, 200));
-  }
   const tid = intOf(top, 6);
   const threads = top.flatMap((f) => {
     if (f.no !== 16 || !('bytes' in f)) return [];
@@ -304,8 +315,13 @@ export function tombstoneOf(bytes: Uint8Array): { words: string[]; frames: strin
     const thread = bytesOf(entry, 2);
     return thread ? [{ key: intOf(entry, 1), fields: fieldsOf(thread) }] : [];
   });
-  const crashed = threads.find((t) => sameInt(t.key, tid) || sameInt(intOf(t.fields, 1), tid)) ?? threads[0];
-  if (!crashed) return { words, frames: [] };
+  // Without the crashed thread's id the first thread is the best guess; with it, never another thread's frames.
+  const crashed =
+    tid === null ? threads[0] : threads.find((t) => sameInt(t.key, tid) || sameInt(intOf(t.fields, 1), tid));
+  if (!crashed) {
+    if (tid !== null) words.push(CRASHED_THREAD_NOT_READ);
+    return { words, frames: [] };
+  }
   const name = textOf(crashed.fields, 2);
   if (name) words.push(`thread ${cut(name, 60)}`);
   const frames = crashed.fields
@@ -313,6 +329,26 @@ export function tombstoneOf(bytes: Uint8Array): { words: string[]; frames: strin
     .slice(0, FRAMES)
     .map((f, i) => frameLine(fieldsOf(f.bytes), i));
   return { words, frames };
+}
+
+/**
+ * Which kind of ANR it was, in our words, from the start of Android's own fixed wording; null for anything else, whose
+ * words are then left out.
+ */
+export function anrKind(description: string | null): string | null {
+  if (!description) return null;
+  const kinds: [RegExp, string][] = [
+    [/^Input dispatching timed out/, 'input not handled in time'],
+    [/^Broadcast of Intent/, 'a broadcast not handled in time'],
+    [/^executing service/, 'a service not started in time'],
+    [
+      /^Context\.startForegroundService\(\) did not then call Service\.startForeground\(\)/,
+      'a foreground service not started in time',
+    ],
+    [/^ContentProvider not responding/, 'a content provider not answering'],
+    [/^App requested: /, 'reported by the app'],
+  ];
+  return kinds.find(([form]) => form.test(description))?.[1] ?? null;
 }
 
 // ── Notes ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -375,6 +411,8 @@ export function notesOfExit(json: string, input: ExitInput): AppErrorNote[] | nu
     case 'anr': {
       what = 'Android closed the app: it stopped answering';
       name = ANDROID_EXIT_NAMES.anr;
+      const kind = anrKind(exit.description);
+      if (kind) extra.push(kind);
       if (exit.trace) {
         const main = mainThreadOf(exit.trace);
         if (main.state) extra.push(`main thread ${main.state}`);
@@ -393,7 +431,6 @@ export function notesOfExit(json: string, input: ExitInput): AppErrorNote[] | nu
     .join(', ');
   const parts = [
     what,
-    exit.description ? cut(exit.description, 300) : null,
     ...extra,
     exit.importance === null ? null : onScreen ? 'on screen' : 'in the background',
     memory || null,
