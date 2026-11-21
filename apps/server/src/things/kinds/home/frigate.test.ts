@@ -95,12 +95,9 @@ describe('Frigate page in slots', () => {
     ]);
   });
 
-  it('starts only offline cameras and full storage on, and reports slow detectors and dropped frames when on', () => {
+  it('starts only offline cameras on, and reports full storage, slow detectors and dropped frames when on', () => {
     expect(FRIGATE_KIND.checks).toBe(FRIGATE_CHECKS);
-    expect(FRIGATE_CHECKS.filter((c) => c.startsOn).map((c) => c.check)).toEqual([
-      'frigate.camera_offline',
-      'frigate.storage_full',
-    ]);
+    expect(FRIGATE_CHECKS.filter((c) => c.startsOn).map((c) => c.check)).toEqual(['frigate.camera_offline']);
 
     const s = snap({
       detectors: [{ name: 'cpu1', inferenceMs: 145 }],

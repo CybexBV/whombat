@@ -108,10 +108,7 @@ describe('qBittorrent page and checks', () => {
 
   it('raises only real breakage checks on by default and reports all optional checks cleanly', () => {
     expect(QBITTORRENT_KIND.checks).toBe(QBT_CHECKS);
-    expect(QBT_CHECKS.filter((c) => c.startsOn).map((c) => c.check)).toEqual([
-      'qbittorrent.disk_low',
-      'qbittorrent.disconnected',
-    ]);
+    expect(QBT_CHECKS.filter((c) => c.startsOn).map((c) => c.check)).toEqual(['qbittorrent.disconnected']);
     const s = snap();
     const first = s.torrents[0];
     if (!first) throw new Error('missing torrent');
