@@ -257,7 +257,7 @@ furthermore I would like to have the ability to hide a discovered device.” Con
   “make a key by hand”). Never the service's text, so the person can retry or take the other sign-in (CS-09). A key
   Whombat made in the same call and couldn't finish (a refused ACL, a check with the token that fails, an answer
   without the secret) is deleted again: Whombat knows it is its own (CS-06). Names: ids take `-2` (`whombat-2`),
-  display names a space (`Whombat 2`, `Whombat (Pals) 2`), up to 20, then a refusal saying to remove unused ones.
+  display names a space (`Whombat 2`, `Whombat (Lumio) 2`), up to 20, then a refusal saying to remove unused ones.
 - **CS-D31 Proxmox VE realms.** Typed with `@realm`: as typed. `root`: `root@pam` first, then the realm Proxmox marks
   default when that's another one. Anyone else: the default realm, or `pve` then `pam`. Never more than two tries.
   Proxmox Backup Server: `@pam` without asking (CS-21).

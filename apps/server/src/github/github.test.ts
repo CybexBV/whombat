@@ -78,14 +78,14 @@ describe('GhCliGitHub over a fake transport', () => {
   it('reads the account and its scopes as the gh token', async () => {
     const { calls, fetch } = transport(() => ({
       status: 200,
-      body: { login: 'acme', id: 7, name: 'Digital Pals' },
+      body: { login: 'acme', id: 7, name: 'Acme Labs' },
       headers: { 'x-oauth-scopes': 'gist, read:org, repo, workflow', 'x-ratelimit-remaining': '4990' },
     }));
     const { adapter } = gh(fetch);
     expect(await adapter.whoami()).toEqual({
       login: 'acme',
       id: 7,
-      name: 'Digital Pals',
+      name: 'Acme Labs',
       scopes: ['gist', 'read:org', 'repo', 'workflow'],
     });
     expect(calls[0]).toMatchObject({ path: '/user', auth: 'Bearer gho_1' });

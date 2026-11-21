@@ -454,7 +454,7 @@ td{white-space:nowrap}
   <aside class="pane">
     <header><h2>Ask about pve-02</h2><p>Dusty sees this server’s sensors, guests and history</p></header>
     <div class="msgs">
-      <div class="msg"><span class="av" style="background:var(--tone-4)">JP</span><div><div class="who">John<time>14:02</time></div><div class="tx">Why is pve-02 so warm?</div></div></div>
+      <div class="msg"><span class="av" style="background:var(--tone-4)">JD</span><div><div class="who">John<time>14:02</time></div><div class="tx">Why is pve-02 so warm?</div></div></div>
       <div class="msg"><span class="face"><img src="avatars/operator-head.svg" alt="Dusty"></span><div style="flex:1;min-width:0"><div class="who">Dusty<time>14:02</time></div>
         <div class="tx">The CPU has been above 72 °C since last night. Most of the load comes from <b>cli-proxy-api</b> and <b>arnica-prod-nest-01</b>. pve-01 has almost nothing running, so I can move one over.</div>
         <div class="inner">
@@ -477,7 +477,7 @@ td{white-space:nowrap}
       <div class="r"><span class="badge brand"><span class="dot new"></span>Learning a new device</span></div>
     </div>
     <div class="cbody"><div class="col">
-      <div class="msg"><span class="av" style="background:var(--tone-4)">JP</span><div><div class="who">John<time>13:20</time></div><div class="tx">We have a Daikin Altherma heat pump in the utility room. Can you add it, so I can see it and control it?</div></div></div>
+      <div class="msg"><span class="av" style="background:var(--tone-4)">JD</span><div><div class="who">John<time>13:20</time></div><div class="tx">We have a Daikin Altherma heat pump in the utility room. Can you add it, so I can see it and control it?</div></div></div>
       <div class="msg"><span class="face"><img src="avatars/operator-head.svg" alt="Dusty"></span><div style="flex:1;min-width:0"><div class="who">Dusty<time>13:41</time></div>
         <div class="tx">It works. I checked what already exists first, then wrote a skill that only reads. Before I change anything, choose what I’m allowed to do.</div>
         <div class="inner inv">
@@ -510,7 +510,7 @@ td{white-space:nowrap}
   <div class="phone" data-theme="dark">
     <div class="sbar"><span>14:05</span><span>●●● 5G</span></div>
     <div class="pbody">
-      <div style="display:flex;align-items:center;gap:10px;margin-top:6px"><img src="whombat-symbol-paper.svg" alt="" style="width:30px;height:24px"><span style="font:700 16px var(--font-sans)">Cybex</span><span class="av" style="background:var(--tone-4);width:30px;height:30px;margin-left:auto;font-size:11px">JP</span></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px"><img src="whombat-symbol-paper.svg" alt="" style="width:30px;height:24px"><span style="font:700 16px var(--font-sans)">Cybex</span><span class="av" style="background:var(--tone-4);width:30px;height:30px;margin-left:auto;font-size:11px">JD</span></div>
       <h1>Good afternoon</h1>
       <p class="sub">Everything is running. 3 things need you.</p>
       <div class="pcard">
@@ -566,9 +566,9 @@ td{white-space:nowrap}
       <span class="lbl">Profile</span>
       <div class="scard">
         <div class="srow" style="align-items:flex-end">
-          <span class="av" style="background:var(--tone-4);margin-bottom:8px">JP</span>
+          <span class="av" style="background:var(--tone-4);margin-bottom:8px">JD</span>
           <div style="flex:1;display:flex;gap:12px">
-            <div class="namef"><span class="flabel">NAME</span><span class="inp">John Pals</span></div>
+            <div class="namef"><span class="flabel">NAME</span><span class="inp">John Doe</span></div>
             <div class="namef"><span class="flabel">TITLE</span><span class="inp">Founder</span></div>
           </div>
           <span class="btn lg" style="color:var(--mut)">Save</span>
@@ -638,7 +638,7 @@ function sidebar(active){
   ${things.map(([i,n,s,host])=>`<div class="thing ${n===active?'on':''}">${ic(i,'i s')}<span class="nm ${host?'host':''}">${n}</span>${s==='new'?'<span class="tag">learning</span>':''}<span class="dot ${s}"></span></div>`).join('')}
   <div class="slabel">Conversations</div>
   ${convs.map(([id,t])=>`<div class="conv ${id===active?'on':''}">${t}</div>`).join('')}
-  <div class="me"><span class="av" style="background:var(--tone-4)">JP</span><div style="flex:1"><b>John Pals</b><small>Owner</small></div>${ic('gear','i')}</div>`;
+  <div class="me"><span class="av" style="background:var(--tone-4)">JD</span><div style="flex:1"><b>John Doe</b><small>Owner</small></div>${ic('gear','i')}</div>`;
 }
 document.querySelectorAll('.side').forEach(s => s.innerHTML = sidebar(s.dataset.active));
 

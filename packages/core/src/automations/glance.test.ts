@@ -190,6 +190,6 @@ describe('a GitHub owner’s picture', () => {
     expect(
       GitHubAvatar.safeParse({ owner: 'acme', image: 'data:image/svg+xml;base64,PHN2Zz4=' }).success,
     ).toBe(false);
-    expect(GitHubAvatar.safeParse({ owner: 'Digital/Pals', image: null }).success).toBe(false);
+    expect(GitHubAvatar.safeParse({ owner: 'Acme/Labs', image: null }).success).toBe(false);
   });
 });

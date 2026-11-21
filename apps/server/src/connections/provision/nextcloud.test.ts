@@ -92,7 +92,7 @@ describe('Nextcloud (CS-23)', () => {
     for (const access of ['read', 'manage'] as const) {
       const { stub, made } = await nextcloud();
       const result = await provisionNextcloud(
-        stubInput(stub, 'nextcloud', { access, account: ' mara ', name: 'Whombat (Pals)' }),
+        stubInput(stub, 'nextcloud', { access, account: ' mara ', name: 'Whombat (Lumio)' }),
       );
       expect(result).toEqual({
         fields: { username: 'mara' },
@@ -101,7 +101,7 @@ describe('Nextcloud (CS-23)', () => {
         externalName: null,
         note: null,
       });
-      expect(made).toEqual([{ userAgent: 'Whombat (Pals)' }]);
+      expect(made).toEqual([{ userAgent: 'Whombat (Lumio)' }]);
       const [request] = stub.calls('GET /ocs/v2.php/core/getapppassword');
       expect(request?.headers.accept).toBe('application/json');
       expect(request?.headers.cookie).toBeUndefined();

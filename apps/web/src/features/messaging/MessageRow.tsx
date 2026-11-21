@@ -92,7 +92,7 @@ export interface MessageRowProps {
   continued?: boolean;
   /**
    * A threaded room's row (Chat, Feedback; chat-channel.md AP-2404): people by their whole name (the mock's “John
-   * Pals”), as in a channel.
+   * Doe”), as in a channel.
    */
   threaded?: boolean;
   /** Its thread is open beside the room: the row is marked (the mock's `.msg.sel`). */

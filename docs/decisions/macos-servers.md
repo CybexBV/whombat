@@ -3,7 +3,7 @@
 John, 2026-11-17: “create a connector for [my Mac Studio] so I can manage my macOS server fully via Whombat … full
 access (root if needed) and it should be able to accept dialogs on screen.” After research and a council (GPT 6 Astra,
 Claude Fable 5.2, Muse Wonder Full 1.0, one round) he chose: customers too, the Mac's password in Whombat's keeping for
-the screen, never ask (full access), keychains not off limits, FileVault off and auto-login on for his Mac, the helper
+the screen, never ask (full access), keychains not off limits, the helper
 signed with the team's Apple developer account. The wire shapes are in `docs/implementation/macos/assignment.md`.
 
 | ID | Decision | Reason |

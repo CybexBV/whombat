@@ -140,7 +140,7 @@ describe('Nextcloud’s page in slots (SD-57, service-slots.md)', () => {
   it('reads every user with their space, quota and last sign-in', () => {
     expect(users.map((u) => [u.id, u.name, u.enabled, u.quota])).toEqual([
       ['admin', 'admin', true, null],
-      ['anna', 'Anna Pals', true, 1073741824],
+      ['anna', 'Anna de Vries', true, 1073741824],
       ['sam', 'Sam', false, null],
     ]);
     expect(users[0]?.used).toBe(65646129);
