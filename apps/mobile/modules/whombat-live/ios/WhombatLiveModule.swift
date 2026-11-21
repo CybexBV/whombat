@@ -1,6 +1,7 @@
 import ActivityKit
 import ExpoModulesCore
 import Foundation
+import WidgetKit
 
 /// `WhombatLive` (iOS): live activities as ActivityKit activities (`WhombatLiveAttributes`), started and
 /// updated by the app while it runs (`upsert` / `end`) and by APNs `liveactivity` pushes to the activity's
@@ -84,6 +85,50 @@ public class WhombatLiveModule: Module {
       }
       return nil
     }
+
+    AsyncFunction("setStatusWidget") { (snapshotJson: String) in
+      guard let group = Self.statusWidgetAppGroup,
+            let defaults = UserDefaults(suiteName: group),
+            let data = snapshotJson.data(using: .utf8),
+            (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+      else { return }
+      let changed = self.state.withLock { () -> Bool in
+        if defaults.string(forKey: Self.statusWidgetDefaultsKey) == snapshotJson {
+          return false
+        }
+        defaults.set(snapshotJson, forKey: Self.statusWidgetDefaultsKey)
+        return true
+      }
+      if changed {
+        WidgetCenter.shared.reloadTimelines(ofKind: Self.statusWidgetKind)
+      }
+    }
+
+    AsyncFunction("clearStatusWidget") { (applianceId: String?) in
+      guard let group = Self.statusWidgetAppGroup,
+            let defaults = UserDefaults(suiteName: group)
+      else { return }
+      let changed = self.state.withLock { () -> Bool in
+        guard let existing = defaults.string(forKey: Self.statusWidgetDefaultsKey) else {
+          return false
+        }
+        if let applianceId = applianceId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !applianceId.isEmpty,
+           let data = existing.data(using: .utf8),
+           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           let savedId = obj["applianceId"] as? String,
+           !savedId.isEmpty,
+           savedId != applianceId
+        {
+          return false
+        }
+        defaults.removeObject(forKey: Self.statusWidgetDefaultsKey)
+        return true
+      }
+      if changed {
+        WidgetCenter.shared.reloadTimelines(ofKind: Self.statusWidgetKind)
+      }
+    }
   }
 
   // MARK: - Tokens
@@ -149,6 +194,19 @@ public class WhombatLiveModule: Module {
   }
 
   // MARK: - Helpers
+
+  /// Info.plist key set by the Expo plugin only when the iOS App Group is enabled.
+  private static let statusWidgetAppGroupInfoKey = "WhombatStatusWidgetAppGroup"
+  private static let statusWidgetDefaultsKey = "com.whombat.live.widget.status"
+  private static let statusWidgetKind = "WhombatStatusWidget"
+
+  private static var statusWidgetAppGroup: String? {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: statusWidgetAppGroupInfoKey) as? String else {
+      return nil
+    }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
 
   private static func activity(for key: String) -> Activity<WhombatLiveAttributes>? {
     Activity<WhombatLiveAttributes>.activities.first { $0.attributes.key == key }

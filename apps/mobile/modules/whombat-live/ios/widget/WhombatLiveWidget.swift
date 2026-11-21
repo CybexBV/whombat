@@ -10,11 +10,14 @@ import WidgetKit
 struct WhombatLiveWidgetBundle: WidgetBundle {
   var body: some Widget {
     WhombatLiveActivityWidget()
+    #if WHOMBAT_STATUS_WIDGET
+    WhombatStatusWidget()
+    #endif
   }
 }
 
-/// Colors from `@whombat/tokens` (theme `bg` / `sf` / `ink` / `ink2` / `mut` / `line` / `btn` / `btnfg`,
-/// the tone colors and the fixed run-progress color); `live-colors.test.ts` checks them against the tokens.
+/// Colors from `@whombat/tokens` (theme `bg` / `sf` / `ink` / `ink2` / `mut` / `logo` / `btn` / `btnfg`,
+/// the tone colors and the fixed run-progress color); `statusWidget.test.ts` checks them against the tokens.
 enum Palette {
   static let bg = Color(light: 0xFBF9F5, dark: 0x1C1815)
   static let sf = Color(light: 0xFFFDF9, dark: 0x24201C)
@@ -22,6 +25,7 @@ enum Palette {
   static let ink = Color(light: 0x221D18, dark: 0xF1EBE3)
   static let ink2 = Color(light: 0x3D352E, dark: 0xD8CFC4)
   static let mut = Color(light: 0x6E655C, dark: 0xA0958A)
+  static let logo = Color(light: 0x2B221D, dark: 0xF5F2ED)
   static let btn = Color(light: 0x221D18, dark: 0xF1EBE3)
   static let btnfg = Color(light: 0xF5F2ED, dark: 0x1C1815)
   static let ok = Color(light: 0x3E7B58, dark: 0x6FCF97)

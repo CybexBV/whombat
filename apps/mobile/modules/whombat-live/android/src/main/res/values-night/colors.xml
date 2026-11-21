@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark theme colors mirrored from @whombat/tokens (verified by statusWidget.test.ts). -->
+<resources>
+  <color name="whombat_widget_bg">#1c1815</color>
+  <color name="whombat_widget_border">#14ffffff</color>
+  <color name="whombat_widget_ink">#f1ebe3</color>
+  <color name="whombat_widget_mut">#a0958a</color>
+  <color name="whombat_widget_logo">#f5f2ed</color>
+  <color name="whombat_widget_ok">#6fcf97</color>
+  <color name="whombat_widget_warn">#e0b75e</color>
+  <color name="whombat_widget_bad">#e59a85</color>
+</resources>

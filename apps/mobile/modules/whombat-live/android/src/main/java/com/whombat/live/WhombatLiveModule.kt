@@ -53,6 +53,16 @@ class WhombatLiveModule : Module() {
       LiveNotifications.endAll(context)
     }
 
+    /** Save the latest calm status for the home-screen widget and refresh active widget instances. */
+    AsyncFunction("setStatusWidget") { snapshotJson: String ->
+      StatusWidgetStore.save(context, snapshotJson)
+    }
+
+    /** Clear the home-screen widget back to its signed-out state (optionally only for one box). */
+    AsyncFunction("clearStatusWidget") { applianceId: String? ->
+      StatusWidgetStore.clear(context, applianceId)
+    }
+
     /** Ongoing activities on screen (to end the ones that finished while the app was closed). */
     AsyncFunction("active") {
       LiveNotifications.active(context).map { (key, burrow) -> mapOf("key" to key, "burrow" to burrow) }
