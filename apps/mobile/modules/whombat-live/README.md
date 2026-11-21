@@ -16,19 +16,22 @@ index.ts                  WhombatLive: show / end / endAll / active / recent / s
 src/content.ts            pure: who sees which activity, reconcile, token colors (tested)
 app.plugin.cjs            iOS config plugin: Live Activities on, widget extension target
 android/
-  WhombatLiveModule.kt    the Expo module (upsert, end, endAll, active, recent, shade, cancel, configure,
-                          launchPushTap, lastGenericPushAt)
+  WhombatLiveModule.kt    the Expo module (upsert, end, endAll, setStatusWidget, clearStatusWidget, active,
+                          recent, shade, cancel, configure, launchPushTap, lastGenericPushAt)
   LiveDisplay.kt          `LiveActivityDisplay` read from its JSON, and the screen it opens
   LiveColors.kt           tone colors from the tokens, kept for pushes while the app is closed
   LiveNotifications.kt    rendering: Android 16 ProgressStyle / NotificationCompat, channels, actions
+  StatusWidgetStore.kt    saved calm status for the home-screen widget (SharedPreferences, day rollover)
+  WhombatStatusWidgetProvider.kt  RemoteViews home-screen widget (opens the app on tap)
   WhombatPush.kt          a Whombat data push → live activity or inbox notification
   WhombatMessagingService FCM data messages (app open, backgrounded or killed)
   WhombatLivePackage.kt   keeps a deep link that arrives while the activity is recreated
   src/debug/…             DebugPushReceiver: inject a payload with adb (debug builds only)
 ios/
   WhombatLiveAttributes.swift  ActivityKit attributes (ContentState = the display); app + widget
-  WhombatLiveModule.swift      the Expo module; activity / push-to-start token events
-  widget/                      the Live Activity UI (Lock Screen, Dynamic Island), Info.plist
+  WhombatLiveModule.swift      the Expo module; activity / push-to-start token events; App Group status widget sync
+  widget/                      the Live Activity UI (Lock Screen, Dynamic Island), the gated home-screen status
+                               widget (`WhombatStatusWidget.swift`), `PrivacyInfo.xcprivacy` and Info.plist
 ```
 
 ## Android

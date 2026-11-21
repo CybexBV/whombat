@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="whombat_widget_label">Whombat</string>
+  <string name="whombat_widget_description">Shows your Whombat’s last status and opens the app.</string>
+  <string name="whombat_widget_empty_box">Whombat</string>
+  <string name="whombat_widget_empty_status">Open Whombat</string>
+  <string name="whombat_widget_empty_as_of">Tap to see status</string>
+  <string name="whombat_widget_preview_box">Home</string>
+  <string name="whombat_widget_preview_status">All good</string>
+  <string name="whombat_widget_preview_as_of">as of 14:05</string>
+</resources>

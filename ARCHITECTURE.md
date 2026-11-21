@@ -354,7 +354,7 @@ release's commit carries the release's id as a tag.
 | `apps/agent-net` | `@whombat/agent-net` | The commands' network proxy and its control socket. |
 | `apps/cli` | `@whombat/cli` | The bundle's `whombat` binary (`schema-check`, `migrate`, `version`) and the release library (`@whombat/cli/release`). |
 | `apps/web` | `@whombat/web` | The web app: the box's own page, the hosted UI (app/dev.whombat.com), the visual harness's journeys. Its `package.json` carries the app's version (the APK's too). |
-| `apps/mobile` | `@whombat/mobile` | The Android (and iOS) app: Expo/React Native with a native module for live activities. |
+| `apps/mobile` | `@whombat/mobile` | The Android (and iOS) app: Expo/React Native with a native module for live activities and the home-screen status widget. |
 | `apps/widget` | `@whombat/widget` | The embeddable feedback widget and its embed tree. |
 | `packages/core` | `@whombat/core` | The contracts: domain types, Zod schemas for every operation and frame, the keys engine, approvals and automations logic, message parsing, formatters. Pure: no I/O. |
 | `packages/protocol`, `packages/secure-channel` | | The session protocol (frames, claim, tickets, licence) and the Noise XX channel it runs over. |
@@ -1525,9 +1525,8 @@ compact menu (`modules/whombat-menu`, `ui/nativeMenu.tsx`), a message's words ar
 ([ios-message-menu.md](docs/app/decisions/ios-message-menu.md), [ios-native.md](docs/app/decisions/ios-native.md)).
 Both phones open the hosted UI's links and use its passkeys: Android through App Links and Credential Manager
 (`apps/web/public/.well-known/assetlinks.json`), the iPhone through Universal Links and AuthenticationServices
-(`apple-app-site-association` beside it). Android takes shares from other apps; the iPhone's share extension, which
-hands a share over through the app group, is built once Apple has that group
-([ios-parity.md](docs/app/decisions/ios-parity.md)).
+(`apple-app-site-association` beside it). Android takes shares from other apps and offers a small home-screen status widget (`modules/whombat-live`, RemoteViews) showing the box's name, its last calm status (`homeWidgetStatus` in `packages/client/src/home/greeting.ts`, never naming threads or services) and “as of HH:MM”, updated by the app (`StatusWidgetBridge`) and cleared on sign-out or box removal; the iPhone's share extension and matching WidgetKit home-screen widget both use the app group `group.com.whombat.mobile` and stay gated behind one flag in `apps/mobile/app.config.cjs` until Apple has that group
+([ios-parity.md](docs/app/decisions/ios-parity.md), [mobile-live.md](docs/decisions/mobile-live.md)).
 Connections' title is one status sentence true to the worst state (`homeStatus` in
 `packages/client/src/home/greeting.ts`, with what the assistant fixed from Home's `doneToday`). What needs the person is
 the Inbox's (the phone's Inbox tab) alone: Chat carries no status line of its own, and its head has Files

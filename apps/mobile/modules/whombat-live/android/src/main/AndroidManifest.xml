@@ -15,5 +15,18 @@
         <action android:name="com.google.firebase.MESSAGING_EVENT" />
       </intent-filter>
     </service>
+
+    <!-- Home-screen status widget: displays the last status saved by the app and opens the app on tap. -->
+    <receiver
+      android:name="com.whombat.live.WhombatStatusWidgetProvider"
+      android:label="@string/whombat_widget_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/whombat_status_widget_info" />
+    </receiver>
   </application>
 </manifest>

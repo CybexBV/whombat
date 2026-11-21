@@ -7,11 +7,18 @@
  *
  * Without the native module (tests, web, an old build) every call is a no-op and `supported()` is false.
  */
+import type { HomeWidgetStatus } from '@whombat/client';
 import type { LiveActivityAttributes, LiveActivityDisplay, PushPayload } from '@whombat/core';
 import { requireOptionalNativeModule } from 'expo';
 import type { ActiveActivity, LiveColors, ShadeNotification } from './src/content';
 
 export * from './src/content';
+
+/** Saved calm status pushed to the Android and iOS home-screen widgets. */
+export interface StatusWidgetPayload extends HomeWidgetStatus {
+  /** Appliance id on this phone, so forgetting one box only clears its own widget status. */
+  applianceId: string;
+}
 
 /** The native module's surface (`WhombatLiveModule` on Android and iOS). */
 interface NativeWhombatLive {
@@ -22,6 +29,10 @@ interface NativeWhombatLive {
   /** End; with a last display the activity keeps showing it (dismissible), without it it goes. */
   end(key: string, lastJson: string | null, burrow: string): Promise<void>;
   endAll(): Promise<void>;
+  /** Save the latest calm status for the home-screen widget and refresh it. */
+  setStatusWidget?(snapshotJson: string): Promise<void>;
+  /** Clear the home-screen widget back to its signed-out state (optionally only when showing `applianceId`). */
+  clearStatusWidget?(applianceId: string | null): Promise<void>;
   active(): Promise<ActiveActivity[]>;
   /** Android: keys of the activities shown in the last 24 hours, on screen or not (MN-02). */
   recent?(): Promise<string[]>;
@@ -79,6 +90,16 @@ export const WhombatLive = {
   /** Dismiss every Whombat activity and notification (sign-out). */
   async endAll(): Promise<void> {
     await native?.endAll();
+  },
+
+  /** Save the latest calm status for the home-screen widget (never gated on Live Activities permission). */
+  async setStatusWidget(payload: StatusWidgetPayload): Promise<void> {
+    await native?.setStatusWidget?.(JSON.stringify(payload));
+  },
+
+  /** Forget the saved home-screen widget status (on sign-out, revocation or box removal). */
+  async clearStatusWidget(applianceId?: string): Promise<void> {
+    await native?.clearStatusWidget?.(applianceId ?? null);
   },
 
   /** Ongoing activities on screen. */

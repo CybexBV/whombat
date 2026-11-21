@@ -386,9 +386,15 @@ export function ManagedApp() {
   }, [start, askCloud]);
   // The session for the next start: kept while signed in, forgotten on a definite signed-out (AP-921).
   useEffect(() => {
-    if (cloud === null) void start.kept.clear();
-    else if (typeof cloud === 'object') void start.kept.set(cloud);
-  }, [cloud, start]);
+    if (cloud === null) {
+      void start.kept.clear();
+      if (!community && knownCommunityBoxes(communityRegistry).length === 0) {
+        void WhombatLive.clearStatusWidget().catch(() => {});
+      }
+    } else if (typeof cloud === 'object') {
+      void start.kept.set(cloud);
+    }
+  }, [cloud, start, community, communityRegistry]);
   // Opened with the kept session and control didn't answer: asked again on coming back to the app.
   const signedInNow = cloud !== null && typeof cloud === 'object';
   useEffect(() => {
@@ -495,6 +501,7 @@ export function ManagedApp() {
     // Also from the appliance list (no session at hand): control forgets this install's push handle.
     await capped(clearPush(env.control, pushStore));
     await capped(phoneNotifications.endAll());
+    await capped(WhombatLive.clearStatusWidget());
     await capped(env.control.signOut());
     setCloud(null);
   }, [env, start]);
@@ -845,6 +852,7 @@ function SignedIn({
   const leave = useCallback(
     (device: string, reason: GoneReason, name: string | null) => {
       if (registry.lastUsed() === device) registry.setLastUsed(null);
+      void WhombatLive.clearStatusWidget(device).catch(() => {});
       setGone({ device, reason, name });
       setRoute({ name: 'appliances' });
     },
@@ -883,12 +891,13 @@ function SignedIn({
     if (known?.enrolled) setRoute({ name: 'open' });
   }, [tapped, route.name, registry]);
 
-  /** This phone forgets a Whombat: its record and push handle. */
+  /** This phone forgets a Whombat: its record, push handle and any home-screen widget status. */
   const forgetHere = useCallback(
     (device: string) => {
       registry.remove(device);
       // Only tidying the local list: a keystore that refuses changes nothing (AP-594).
       void forgetAppliance(pushStore, device).catch(() => {});
+      void WhombatLive.clearStatusWidget(device).catch(() => {});
     },
     [registry],
   );
@@ -1338,6 +1347,7 @@ function SignedIn({
         // recovery kit's, AP-41).
         forgetEnrollments(registry);
         for (const a of registry.list()) await forgetAppliance(pushStore, a.device).catch(() => {});
+        await WhombatLive.clearStatusWidget().catch(() => {});
         registry.setLastUsed(active.device);
         pendingRoute.set(then === 'recover' ? { name: 'recover', device: active.device } : null);
         await rekey();
