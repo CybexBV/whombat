@@ -60,13 +60,20 @@ export const PREVIEW_WEBVIEW_PROPS = {
 };
 
 /**
- * How many times a preview whose browser Android stopped (to free memory, or after a crash) starts again by itself
- * before it waits for the person's “Try again”: a page that keeps killing its browser shouldn't loop.
+ * How many times a preview whose browser crashed starts again by itself before it waits for the person's “Try again”:
+ * a page that keeps crashing its browser shouldn't loop.
  */
 export const PREVIEW_AUTO_RESTARTS = 2;
 
-/** After a preview's browser stopped: start it again, or offer “Try again”. */
-export function afterPreviewGone(restarts: number): 'restart' | 'offer' {
+/** How long a page must stay up after it loaded before its earlier crashes are forgotten. */
+export const PREVIEW_STEADY_MS = 10_000;
+
+/**
+ * After a preview's browser went: `remount` when Android let it go for memory (nothing wrong with the page; it comes
+ * back once the app is in front), `restart` after a crash while restarts are left, else `offer` “Try again”.
+ */
+export function afterPreviewGone(restarts: number, crashed: boolean): 'remount' | 'restart' | 'offer' {
+  if (!crashed) return 'remount';
   return restarts < PREVIEW_AUTO_RESTARTS ? 'restart' : 'offer';
 }
 

@@ -101,6 +101,7 @@ class WhombatFoldModule : Module() {
       )
     if (state == last) return
     last = state
-    sendEvent("onChange", state)
+    // The JavaScript runtime may be going away while the window still reports.
+    runCatching { sendEvent("onChange", state) }
   }
 }

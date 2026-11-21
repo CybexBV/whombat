@@ -66,7 +66,7 @@ import { haptic } from '../ui/haptics';
 import { LookSays } from '../ui/LookSays';
 import { OneCardBody, type OneCardContent, OneCardPage, OneSheet } from '../ui/oneSheet';
 import { ErrorState, QuietText, SkeletonRows } from '../ui/primitives';
-import { whenSheetDown } from '../ui/sheet';
+import { useAfterSheet } from '../ui/sheet';
 import { showFailure, showLookFix, showNotice, useDecisionFeedback } from './feedback';
 
 /** Takes an item out of the list at once; the function it returns puts Home back as it was (a refusal). */
@@ -369,21 +369,16 @@ export function useNeedsYouPress(
  */
 export function NeedsYouSheet({ item, onClose }: { item: NeedsYouItem | null; onClose: () => void }) {
   const navigation = useAppNavigation();
-  const next = useRef<Route | null>(null);
-  const go = () => {
-    const route = next.current;
-    next.current = null;
-    if (route) navigateTo(navigation, route);
-  };
+  const after = useAfterSheet();
   const card = useNeedsYouCard(
     item,
     (route) => {
-      next.current = route;
       onClose();
-      whenSheetDown(go);
+      after.later(() => navigateTo(navigation, route));
     },
     onClose,
   );
+  const go = after.onDismissed;
   if (!card) return <OneSheet visible={false} onClose={onClose} onDismissed={go} title="" buttons={[]} />;
   return <OneSheet visible onClose={card.busy ? () => {} : onClose} onDismissed={go} {...card} />;
 }

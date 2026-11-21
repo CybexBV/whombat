@@ -99,7 +99,17 @@ describe('HTML previews on mobile (AP-328)', () => {
 });
 
 describe('a preview whose browser stopped', () => {
-  it('starts again twice by itself, then waits for “Try again”', () => {
-    expect([0, 1, 2, 3].map(afterPreviewGone)).toEqual(['restart', 'restart', 'offer', 'offer']);
+  it('starts again twice by itself after a crash, then waits for “Try again”', () => {
+    expect([0, 1, 2, 3].map((n) => afterPreviewGone(n, true))).toEqual([
+      'restart',
+      'restart',
+      'offer',
+      'offer',
+    ]);
+  });
+
+  it('comes back without counting when Android let it go for memory', () => {
+    expect(afterPreviewGone(0, false)).toBe('remount');
+    expect(afterPreviewGone(5, false)).toBe('remount');
   });
 });
