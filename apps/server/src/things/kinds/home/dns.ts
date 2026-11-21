@@ -40,6 +40,7 @@ import {
   withDeadline,
 } from '../read';
 import { type KindAction, type KindModule, type KindSeen, seenFromView } from '../registry';
+import { declaredSettings } from '../settings';
 import {
   countLine,
   type InventoryPanel,
@@ -53,7 +54,9 @@ import {
   trend,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { ADGUARD_SETTINGS } from './adguard-settings';
 import { itemLines, lineId, subjectName } from './lines';
+import { PIHOLE_SETTINGS } from './pihole-settings';
 import { type ButtonCtx, button, type ThingPageButton } from './shapes';
 
 export type DnsService = 'pihole' | 'adguard';
@@ -1371,13 +1374,15 @@ export const PIHOLE_KIND: KindModule = {
   page: dnsPage,
   prefetch: (services, row, now) => dnsLatest(services, row, now),
   seen: dnsSeen,
-  asksFirst: 'turning blocking off asks first',
+  asksFirst: 'turning blocking off and settings ask first',
   actions: DNS_ACTIONS,
+  settings: declaredSettings(PIHOLE_SETTINGS),
   checks: PIHOLE_CHECKS,
 };
 
 export const ADGUARD_KIND: KindModule = {
   ...PIHOLE_KIND,
-  asksFirst: 'turning protection off asks first',
+  asksFirst: 'turning protection off and settings ask first',
+  settings: declaredSettings(ADGUARD_SETTINGS),
   checks: ADGUARD_CHECKS,
 };
