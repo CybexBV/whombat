@@ -804,14 +804,21 @@ published automation details read their definition and publisher from one versio
   the first poll and resyncs expired cursors from the last successful poll time. It fetches full bodies and hands over
   matched email attachments only when a message matches a live trigger (`from` address or domain, `subjectContains`,
   `hasAttachment`, `attachmentTypes`), skipping gone messages immediately and unreadable messages after three failed
-  reads with a plain-English problem so a mailbox never stalls. High-water marks (`mail_cursors`) and deduplicated
-  matched items (`mail_trigger_items`, whose cached body and snippet are cleared once the run starts and whose rows are
-  pruned after 30 days) commit through the pipeline with content-free signed `mail.received` events. Mail-triggered
-  runs execute as outsiders' turns (queued for nobody, never reading the person's mailbox or connections directly):
-  sender-controlled fields reach the agent only inside defused `[[mail …]] … [[/mail]]` outsider fences
-  (`packages/core/src/text/fence.ts`, never cut mid-fence) with the email's files attached to the prompt message
-  (`read_attachment`), and any proposed writes (`propose_connection_actions`) always ask the person on an approval card
-  regardless of standing settings before a `connection_actions` step executes them.
+  reads with a plain-English problem so a mailbox never stalls; attachments that cannot be handed over (too large,
+  unknown type, download failed, too many) are marked on the run scope so both the prompt and the run page say they
+  didn't come along. High-water marks (`mail_cursors`) and deduplicated matched items (`mail_trigger_items`, whose
+  cached body and snippet are cleared once the run starts and whose rows are pruned after 30 days) commit through the
+  pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
+  nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
+  runs stamped `outsiders_run` so message and reaction triggers skip them): mail definitions may not use repository
+  workspaces or external steps other than `connection_actions`, sender-controlled fields reach the agent only inside
+  defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
+  email's files attached to the prompt message (`read_attachment`), and once the agent prompt is rendered, `body`,
+  `snippet` and `text` are stripped from `automation_runs.scope` while sender, subject and attachment metadata stay.
+  Proposed writes (`propose_connection_actions`, narrowed to writable non-built-in services excluding `whombat_servers`,
+  `t3code`, `DELETE` and read-only calls, with prompts listing handles/tools only) always ask the person on a
+  server-described approval card bound to the exact `actionsHash` regardless of standing settings before
+  `connection_actions` runs them, settling as `uncertain` on timeout or partial-batch failure.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
