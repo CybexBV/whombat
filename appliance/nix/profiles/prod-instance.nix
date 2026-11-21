@@ -3,19 +3,14 @@
 # the box's channel, Production unless its owner chose Beta (wire name `development`, ONE-03), and self-registration
 # (every box makes its identity itself, LNK-01; allowed in production on self-installed only, PI-04).
 #
-# Its public trust documents, in manifest/prod/:
-#   tuf-root.json              the GitHub repository's root after the key ceremony (ONE-05: three root keys, two of them
-#                              needed, all offline). Until the cutover commits it the image pins the start of that same
-#                              chain, manifest/dev-instance/tuf-root.json (the DEV repository's root version 2, which
-#                              the GitHub repository continues; one online key). manager.nix refuses a production image
-#                              that pins a root of one key unless it is that interim root (whombat.helper.interimRoot).
-#   client-channel-keys.json   the AI client channel's key document for env prod (`tufrepo clients-keys` on the
-#                              publisher's clone once its channel is env prod, ONE-05). Until then the GitHub
-#                              repository's channel is env local, the image pins manifest/dev-instance's, and a box whose
-#                              identity is env prod installs no AI clients.
-#   licence-keys.json          production control's licence key set (inert since LNK-04; kept for a rollback).
-#   support-ca.pub             the production support CA (ONE-17), made on the Hetzner host (`deploy.sh support-ca`);
-#                              until it is committed no remote help in production (environments.nix).
+# The image pins production's public trust documents, in manifest/prod/:
+#   tuf-root.json              the GitHub repository's root: three offline root keys, two of them needed.
+#   client-channel-keys.json   the AI client channel's key document for env prod.
+#   licence-keys.json          production control's licence key set (the licence is inert; kept for a rollback).
+#   support-ca.pub             the production support CA, for remote help.
+# manifest/dev-instance/tuf-root.json, the same repository's earlier root of one online key, is passed only as
+# whombat.helper.interimRoot, for manager.nix's check of the pinned root. pinnedOr would fall back to
+# manifest/dev-instance only if a production document were missing.
 #
 # What the DEV image gave Home is the product (NX-523): the servers' hub on every box, its agents signed with the Whombat
 # agent-signing key; the Incus agent, only inside an Incus VM; the merge re-run setting in production's environment. Not

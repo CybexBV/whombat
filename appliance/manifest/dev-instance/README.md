@@ -1,49 +1,24 @@
-# The development stack's public documents (NX-60; since ONE-02 the interim ones of the Whombat image)
+# The development environment's public documents
 
-There is no DEV image any more (nixos.md NX-522). These files stay for two reasons until the cleanup release after
-Home's move (docs/runbooks/updates.md, “One environment”):
+These are the public trust documents of the development environment. The Whombat image carries them for two reasons,
+until the cleanup release removes this folder (docs/runbooks/updates.md, “One environment”):
 
-- The Whombat image (`nix/profiles/prod-instance.nix`) pins `tuf-root.json` and `client-channel-keys.json` from here
-  until the key ceremony's root and the env prod client keys are committed in `manifest/prod/` (ONE-05): the GitHub
-  repository continues this root's chain, and its client channel is env local until it is switched.
-- The image's development environment (`nix/profiles/environments.nix`, a box whose environment file says `dev`: Home)
-  takes its support CA, licence and client keys from here.
+- **The development environment.** A box whose environment file says `dev` (`nix/profiles/environments.nix`) takes its
+  support CA, licence keys and AI client channel keys from here. Nothing writes `dev` any more.
+- **The interim root.** `tuf-root.json` is an earlier root of the update repository's chain (version 2, one online
+  key), which the GitHub repository at releases.whombat.com continues. The image pins `manifest/prod/tuf-root.json`
+  (three offline root keys, two of them needed). `nix/profiles/prod-instance.nix` passes this file only as
+  `whombat.helper.interimRoot`, the one root of a single key that `nix/modules/manager.nix` lets a production image pin.
+  A box installed from an image that pinned it walks the chain from here to the current root;
+  `tufrepo check-newer --root manifest/dev-instance/tuf-root.json` checks that walk (docs/runbooks/updates.md).
 
-They were copied from the dev instance so the image builds from the repository alone:
-
-| File | What | Source on the dev instance |
+| File | What | Read as |
 |---|---|---|
-| `tuf-root.json` | the dev TUF repository's current root, version 2 (`whombat.helper.tufRoot`) | `https://updates-dev.whombat.com/metadata/root.json` = `~/.whombat-stack-dev/env/manager/tuf/metadata/2.root.json` |
-| `licence-keys.json` | control's licence key set, env `local` (`whombat.licence.keys`) | `https://api-dev.whombat.com/v1/licence/keys` = `~/.whombat-stack-dev/env/appliance/licence-keys.json` |
-| `client-channel-keys.json` | the AI client channel key document (`whombat.clients.channelKeys`) | `~/.whombat-stack-dev/env/manager/client-channel-keys.json` |
-| `support-ca.pub` | the DEV support CA's public key, remote help's certificates (`whombat.support.caKeys`, NX-416); a placeholder without a key until the lead installs DEV control's | `support-ca.pub` beside DEV control's `SUPPORT_CA_KEY_FILE` (`dev-init`) |
+| `tuf-root.json` | the development TUF repository's root, version 2: one key per role | `whombat.helper.interimRoot` |
+| `licence-keys.json` | the development control's licence key set, env `local` (the licence is inert) | the `dev` environment's `licenceKeys` |
+| `client-channel-keys.json` | the AI client channel's key document, env `local` | the `dev` environment's `clientChannelKeys` |
+| `support-ca.pub` | the development support CA's public key, for remote help on a `dev` box | the `dev` environment's `supportCaKeys` |
 
-All three are public keys only. They were copied on 2026-09-27 (licence kid `lic-local-2026-09-27`; clients kid
-`clients-local-b09ae3ae447a`). The root was refreshed the same day after John rotated the instance's top-level TUF keys
-(PI-13): version 2, root key `cd090e03…`, targets `4e124f9b…`, snapshot `4e5ed3fd…`, timestamp `5573531f…`, expires
-2027-09-27, signed by the old and the new root key. An image pins the **current** root, not version 1: a box that
-trusted version 1 would still walk to version 2, but version 1's keys were public, so nothing new should start there.
-
-The instance generates all of them itself (`dev/up`: `tufrepo init --env local` with random keys, control's
-`dev-init`) and keeps them until it is reset (`dev/up --reset`, `dev/down --purge`). **After a reset, refresh these
-files and rebuild the ISO** (an installed box keeps trusting the old root and can't update any more; reinstall it):
-
-```sh
-curl -sf https://updates-dev.whombat.com/metadata/root.json -o manifest/dev-instance/tuf-root.json
-curl -sf https://api-dev.whombat.com/v1/licence/keys -o manifest/dev-instance/licence-keys.json
-cp ~/.whombat-stack-dev/env/manager/client-channel-keys.json manifest/dev-instance/
-```
-
-The dev instance's control runs `CONTROL_ENV=local` and its TUF repository and licence set are `local` too, so the
-image's `whombat.environment` is `local` (a `dev` registration is refused with `wrong_environment`). Self-registration
-must be switched on there: `WB_MGD_SELF_REGISTRATION=1` in `~/.config/whombat/stack-dev.env`, then restart
-`whombat-stack-dev`.
-
-These are development keys: nothing here may ever reach a prod image (the prod assertions refuse `local` licence
-kids; the prod image reads `manifest/prod/` instead, PI-10).
-
-**Fixed problem (2026-09-27, PI-13):** the dev instance's static server used to serve the whole `env/manager/tuf/`
-directory, including `keys/` with the private keys. It now serves only metadata, targets and clients
-(`https://updates-dev.whombat.com/keys/root-0.json` answers 404), and John rotated the top-level keys (root version 2
-above). An image built before this pins root version 1 and should be reinstalled. These remain development keys:
-use this image for development boxes only.
+All four hold public keys only. They are development keys: the production checks refuse the development licence keys
+and support CA (`nix/modules/licence.nix`, `nix/modules/support.nix`, `nix/modules/environment.nix`), and nothing new
+should trust them.
