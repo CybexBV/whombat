@@ -51,6 +51,7 @@ export const CONNECT_MANAGE_FIRST: readonly string[] = [
   'radarr',
   'overseerr',
   'sabnzbd',
+  'qbittorrent',
   'nzbhydra',
   'todoist',
   't3code',

@@ -267,6 +267,28 @@ const media = {
     // Downloading now's count: the page in slots has no row of figures.
     figure: 'queue',
   },
+  qbittorrent: {
+    panels: [
+      {
+        panel: 'queue',
+        name: 'Download queue',
+        line: 'What’s downloading and how long it takes',
+        head: queueHead,
+        view: 'list',
+        title: releaseTitle,
+      },
+      { panel: 'done', title: releaseTitle },
+      {
+        panel: 'errored',
+        name: 'Torrents with errors',
+        line: 'Torrents that need a look',
+        always: 'list',
+        empty: 'No torrent errors.',
+        title: releaseTitle,
+      },
+    ],
+    figure: 'queue',
+  },
   nzbhydra: {
     panels: [
       {

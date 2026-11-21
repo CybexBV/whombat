@@ -614,8 +614,10 @@ export interface ArrInput {
   timeZone: string;
   who: ButtonCtx;
   url: string;
-  /** SABnzbd's page, when the viewer sees one (SD-10). */
+  /** SABnzbd's page, when the viewer sees one. */
   sabnzbd: { href: string; name: string } | null;
+  /** qBittorrent's page, when the viewer sees one. */
+  qbittorrent?: { href: string; name: string } | null;
   /** The picture of a series or movie, or none (pure tests). */
   poster: (id: number | null, title: string) => GalleryItem['image'];
 }
@@ -920,6 +922,21 @@ function stateOf(q: ArrQueueItem): { text: string; dot: 'ok' | 'warn' | 'bad' | 
 /** Whether a queue row's download client is SABnzbd's (its name, or Usenet when the viewer has one SABnzbd). */
 const isSab = (q: ArrQueueItem) => /sab/i.test(q.client ?? '') || (!q.client && q.protocol === 'usenet');
 
+/** Whether a queue row's download client is qBittorrent's (its name, or torrent when the viewer has qBittorrent). */
+const isQbt = (q: ArrQueueItem) => /qbit|qbt/i.test(q.client ?? '') || (!q.client && q.protocol === 'torrent');
+
+function clientFor(input: ArrInput, item: ArrQueueItem): { href: string; name: string } | null {
+  if (input.qbittorrent && isQbt(item)) return input.qbittorrent;
+  if (input.sabnzbd && isSab(item)) return input.sabnzbd;
+  return null;
+}
+
+function panelClient(input: ArrInput, items: readonly ArrQueueItem[]): { href: string; name: string } | null {
+  if (input.qbittorrent && items.some(isQbt)) return input.qbittorrent;
+  if (input.sabnzbd && items.some(isSab)) return input.sabnzbd;
+  return input.sabnzbd ?? input.qbittorrent ?? null;
+}
+
 const doneOf = (q: ArrQueueItem) =>
   q.sizeBytes && q.leftBytes !== null ? Math.max(0, Math.min(1, 1 - q.leftBytes / q.sizeBytes)) : 0;
 
@@ -950,12 +967,13 @@ export function arrLive(input: ArrInput) {
   if (!q) return null;
   const name = NAME[s.app];
   const meta = queueMeta(q);
+  const client = panelClient(input, q.items);
   return liveRows({
     id: 'queue',
     title: 'Downloading now',
     ...(meta ? { meta } : {}),
-    link: input.sabnzbd
-      ? { kind: 'href', label: clip(`Open ${input.sabnzbd.name}`, 30), href: input.sabnzbd.href }
+    link: client
+      ? { kind: 'href', label: clip(`Open ${client.name}`, 30), href: client.href }
       : { kind: 'url', label: `Open ${name}`, url: `${input.url}/activity/queue` },
     ...(q.total > q.items.length ? { total: q.total } : {}),
     items: q.items.map((i): GalleryItem => {
@@ -966,7 +984,7 @@ export function arrLive(input: ArrInput) {
       const paused = i.status === 'paused';
       const have = i.sizeBytes && i.leftBytes !== null ? Math.max(0, i.sizeBytes - i.leftBytes) : 0;
       const sub = [i.quality, i.sizeBytes ? bytes(i.sizeBytes) : null].filter(Boolean).join(' · ');
-      const sab = input.sabnzbd && isSab(i) ? input.sabnzbd : null;
+      const rowClient = clientFor(input, i);
       return {
         id: i.id.slice(0, 200),
         title: clip(what, 120),
@@ -988,7 +1006,7 @@ export function arrLive(input: ArrInput) {
                 ? { noteEnd: leftWords(i.leftMs) }
                 : {}
               : { noteEnd: clip(state.text, 60) }),
-        ...(sab ? { href: sab.href } : {}),
+        ...(rowClient ? { href: rowClient.href } : {}),
       };
     }),
     empty: 'Nothing downloading.',
@@ -1271,7 +1289,7 @@ function arrPage(app: ArrApp) {
   return async (ctx: KindCtx): Promise<KindView> => {
     const { services, row, now } = ctx;
     const url = arrUrl(row);
-    const [rest, queue, sab] = await Promise.all([
+    const [rest, queue, sab, qbt] = await Promise.all([
       latestRead(
         services,
         restKey(app, row),
@@ -1286,6 +1304,7 @@ function arrPage(app: ArrApp) {
         { liveS: ARR_LIVE_S },
       ),
       siblingRow(ctx, ['sabnzbd']).catch(() => null),
+      siblingRow(ctx, ['qbittorrent']).catch(() => null),
     ]);
     if (!rest.ok && !queue.ok)
       return {
@@ -1318,6 +1337,7 @@ function arrPage(app: ArrApp) {
       who: { row },
       url,
       sabnzbd: sab ? { href: sab.href, name: sab.name } : null,
+      qbittorrent: qbt ? { href: qbt.href, name: qbt.name } : null,
       poster: (id, title) =>
         posters && id !== null && budget-- > 0
           ? picture(ctx, `/api/v3/mediacover/${id}/poster-250.jpg`, title)

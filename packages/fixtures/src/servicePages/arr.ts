@@ -28,6 +28,7 @@ const SONARR = 'connection:con_sonarr';
 const RADARR = 'connection:con_radarr';
 const HYDRA = 'connection:con_nzbhydra';
 const JELLYFIN = 'connection:con_jellyfin';
+const QBITTORRENT = 'connection:con_qbittorrent';
 const SAB_HREF = thingHref('connection', 'con_sabnzbd');
 
 /** The parts every page of this group shares: its head, its buttons on Look only, Worth a look, the week, the machine. */
@@ -909,6 +910,131 @@ function jellyfin(ctx: FixtureServiceCtx) {
   };
 }
 
+/* qBittorrent -------------------------------------------------------------------------------------------------------- */
+
+function qbittorrent(ctx: FixtureServiceCtx) {
+  const k = kit(ctx);
+  let paused = false;
+  let altSpeed = false;
+  const page = (): ThingPage => ({
+    ...k.head(
+      QBITTORRENT,
+      'qbittorrent',
+      'qBittorrent',
+      'ok',
+      paused ? 'Paused' : 'Downloading · 18 MB/s',
+      [
+        [{ text: 'qBittorrent ' }, { text: '5.0.3', strong: true }],
+        [{ text: 'Ratio ' }, { text: '1.85', strong: true }],
+      ],
+      '10.100.0.20:8080',
+    ),
+    verdict: paused
+      ? 'qBittorrent is fine: nothing downloading, seeding 14 torrents.'
+      : 'qBittorrent is fine: downloading 1 torrent at 18 MB/s and seeding 14.',
+    suggestions: ['Slowest or stalled downloads', 'Biggest torrents on disk', 'Upload ratio this month'],
+    ...(paused ? {} : { refreshS: 5 }),
+    tabs: k.summary(
+      [],
+      [
+        {
+          kind: 'gallery',
+          id: 'queue',
+          place: 'chart',
+          span: 2,
+          look: 'rows',
+          title: 'Downloading now',
+          meta: paused ? 'Paused · 1 download · 1.8 GB left' : '18 MB/s · 1 download · 1.8 GB left · about 2 min',
+          buttons: [
+            paused
+              ? k.button({ action: 'resume', label: 'Resume all', icon: 'play', tone: 'primary' })
+              : k.button({ action: 'pause', label: 'Pause all', icon: 'pause' }),
+            k.button({
+              action: 'toggle_alt_speed',
+              label: altSpeed ? 'Full speed' : 'Slow down',
+              icon: 'speed',
+            }),
+          ],
+          shape: 'square',
+          items: [
+            {
+              id: 'a1b2c3d4',
+              title: 'Slow.Horses.S05E03.1080p.WEB-DL.DDP5.1-GRP',
+              sub: 'tv-sonarr · 3.1 GB · 18 MB/s',
+              progress: 0.42,
+              ...(paused ? { paused: true, noteEnd: 'Paused' } : { noteEnd: '2 min left' }),
+              note: '1.3 GB of 3.1 GB',
+            },
+          ] satisfies ThingGalleryItem[],
+          empty: 'Nothing downloading.',
+        },
+        {
+          kind: 'list',
+          id: 'torrents',
+          place: 'chart',
+          span: 1,
+          look: 'counts',
+          title: 'Torrents',
+          meta: '15 torrents',
+          items: [
+            count('downloading', 'Downloading', 'download', '1', { detail: paused ? 'Paused' : '18 MB/s' }),
+            count('seeding', 'Seeding', 'network', '14', { detail: '2.1 MB/s up' }),
+            count('transfer', 'All-time transfer', 'disk', '4.8 TB', { detail: '8.9 TB uploaded · ratio 1.85' }),
+          ],
+        },
+        k.machine(
+          [
+            { id: 'qbt-version', label: 'qBittorrent', value: '5.0.3', pct: null },
+            {
+              id: 'qbt-connection',
+              label: 'Connection',
+              value: 'Connected',
+              pct: null,
+              sub: 'Incoming peers ok',
+              subTone: 'ok',
+            },
+            { id: 'download-disk', label: 'Download disk', value: '480 GB free', pct: null },
+          ],
+          5,
+        ),
+      ],
+    ),
+  });
+  return {
+    page,
+    row: () => ({
+      line: paused ? 'Paused' : '1 download',
+      facts: [
+        { label: 'Speed', value: paused ? '0 B/s' : '18 MB/s' },
+        { label: 'Disk free', value: '480 GB' },
+      ],
+    }),
+    action: ({ action }: { action: string }) => {
+      if (action === 'pause') {
+        paused = true;
+        return { message: 'Torrents paused.' };
+      }
+      if (action === 'resume') {
+        paused = false;
+        return { message: 'Torrents resumed.' };
+      }
+      if (action === 'toggle_alt_speed') {
+        altSpeed = !altSpeed;
+        return { message: 'Switched qBittorrent’s speed limit mode.' };
+      }
+      return null;
+    },
+    checks: [
+      { check: 'qbittorrent.disk_low', name: 'Download disk low on space', nature: 'problem' as const, perItem: false },
+      { check: 'qbittorrent.disconnected', name: 'No network connection', nature: 'problem' as const, perItem: false },
+      { check: 'qbittorrent.errored', name: 'Torrents with errors', nature: 'problem' as const, perItem: true },
+      { check: 'qbittorrent.firewalled', name: 'Incoming connections firewalled', nature: 'fyi' as const, perItem: false },
+      { check: 'qbittorrent.stalled', name: 'Stalled downloads', nature: 'fyi' as const, perItem: true },
+      { check: 'qbittorrent.alt_speed', name: 'Slow speed limits left on', nature: 'fyi' as const, perItem: false },
+    ],
+  };
+}
+
 export const ARR_PAGES: FixtureServicePage[] = [
   {
     thing: SONARR,
@@ -937,5 +1063,12 @@ export const ARR_PAGES: FixtureServicePage[] = [
     name: 'Jellyfin',
     fields: { url: 'http://10.100.0.20:8096' },
     make: jellyfin,
+  },
+  {
+    thing: QBITTORRENT,
+    catalogId: 'qbittorrent',
+    name: 'qBittorrent',
+    fields: { url: 'http://10.100.0.20:8080' },
+    make: qbittorrent,
   },
 ];

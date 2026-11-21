@@ -36,6 +36,19 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
       },
     },
   },
+  qbittorrent: {
+    port: 8080,
+    answers: {
+      '/': {
+        status: 200,
+        body: '<!DOCTYPE html><html><head><title>qBittorrent Web UI</title></head><body></body></html>',
+      },
+      '/api/v2/app/version': {
+        status: 403,
+        body: 'Forbidden',
+      },
+    },
+  },
   nzbhydra: {
     port: 5076,
     answers: {

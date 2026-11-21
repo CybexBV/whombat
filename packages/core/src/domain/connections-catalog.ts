@@ -175,6 +175,7 @@ import { entry as proxmoxEntry } from './connections-catalog/proxmox.js';
 import { entry as proxmoxBackupEntry } from './connections-catalog/proxmox_backup.js';
 import { entry as ps5Entry } from './connections-catalog/ps5.js';
 import { entry as pterodactylEntry } from './connections-catalog/pterodactyl.js';
+import { entry as qbittorrentEntry } from './connections-catalog/qbittorrent.js';
 import { entry as qnapEntry } from './connections-catalog/qnap.js';
 import { entry as radarrEntry } from './connections-catalog/radarr.js';
 import { entry as sabnzbdEntry } from './connections-catalog/sabnzbd.js';
@@ -214,6 +215,7 @@ const ENTRIES = [
   jellyfinEntry,
   overseerrEntry,
   sabnzbdEntry,
+  qbittorrentEntry,
   nzbhydraEntry,
   sonarrEntry,
   radarrEntry,
@@ -294,6 +296,7 @@ export const CATALOG_IDS = [
   'jellyfin',
   'overseerr',
   'sabnzbd',
+  'qbittorrent',
   'nzbhydra',
   'sonarr',
   'radarr',
