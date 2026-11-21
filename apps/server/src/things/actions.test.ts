@@ -9,6 +9,8 @@ import type { PrincipalRow } from '../read/principals';
 import { actionChangeKind, actionFor } from './actions';
 import { pageButton } from './kinds/buttons';
 import { HOME_ASSISTANT_KIND } from './kinds/first';
+import { PLEX_KIND } from './kinds/media/plex';
+import { SETTING_ACTION } from './kinds/settings';
 import { refreshOf } from './page';
 
 const row = {
@@ -31,8 +33,9 @@ function refused(run: () => unknown): { code: string; message: string } {
 }
 
 describe('actionFor (SD-S04)', () => {
-  it('gives the person the kind’s own action', () => {
+  it('gives the person the kind’s own action and its declared settings action', () => {
     expect(actionFor(row, viewer, 'restart')).toBe(HOME_ASSISTANT_KIND.actions?.restart);
+    expect(actionFor({ ...row, catalogId: 'plex' }, viewer, SETTING_ACTION)).toBe(PLEX_KIND.settings?.action);
   });
 
   it('refuses an action the kind doesn’t offer, a name an object has anyway, and a kind without buttons', () => {

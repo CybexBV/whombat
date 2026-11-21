@@ -14,7 +14,7 @@ import {
   type SettingChoice,
   type SettingSpec,
   type SettingValue,
-  sameValue,
+  withCurrent,
 } from '../settings';
 
 /** Plex's prefs by id, as Plex types them (booleans, numbers, words). */
@@ -58,16 +58,6 @@ const bit = (v: SettingValue) => (asBool(v) ? '1' : '0');
 export function mbps(kbps: number): string {
   const m = kbps / 1000;
   return `${Number.isInteger(m) ? m : Math.round(m * 10) / 10} Mbps`;
-}
-
-/** Choices with the current value added when it is none of them (set in Plex itself). */
-function withCurrent(
-  choices: SettingChoice[],
-  current: SettingValue | undefined,
-  label: (v: SettingValue) => string,
-) {
-  if (current === undefined || choices.some((c) => sameValue(c.value, current))) return choices;
-  return [...choices, { value: current, label: label(current) }];
 }
 
 const QUALITY: SettingChoice[] = [
@@ -278,7 +268,6 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     help: 'Removed files leave Plex at once. It stays in Plex: a drive away for a moment could empty a library.',
     kind: 'elsewhere',
     read: (p) => prefBool(p, 'autoEmptyTrash'),
-    elsewhere: (base) => `${base}/web/index.html#!/settings/server`,
   },
   {
     id: 'quiet_hours',
@@ -312,12 +301,12 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     // Plex's own “update my server automatically”, else only that Plex tells you.
     read: (p) => prefBool(p, 'ButlerTaskUpdateVersion') ?? 'tells',
     words: (v) => (v === 'tells' ? 'Plex tells you' : asBool(v) ? 'Automatic' : 'Ask me'),
-    elsewhere: (base) => `${base}/web/index.html#!/settings/server`,
   },
 ];
 
 export const PLEX_SETTINGS: DeclaredSettings<PlexPrefs> = {
   name: 'Plex',
+  url: (base) => `${base}/web/index.html#!/settings/server`,
   groups: [
     {
       id: 'away',

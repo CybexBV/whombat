@@ -30,7 +30,7 @@ import { buttonRefusal } from './kinds/buttons';
 import { kindOf } from './kinds/index';
 import { forgetConnectionReads } from './kinds/read';
 import type { KindAction, KindActionInput, KindActionWords } from './kinds/registry';
-import { SETTING_UNDO_MS } from './kinds/settings';
+import { SETTING_ACTION, SETTING_UNDO_MS } from './kinds/settings';
 import { findThing } from './page';
 import { displayName } from './part-of';
 
@@ -131,8 +131,14 @@ export function actionFor(
   viewer: Pick<ConnectionViewer, 'principal'>,
   action: string,
 ): KindAction {
-  const actions = kindOf(row.catalogId)?.actions;
-  const run = actions && Object.hasOwn(actions, action) ? actions[action] : undefined;
+  const kind = kindOf(row.catalogId);
+  const actions = kind?.actions;
+  const run =
+    action === SETTING_ACTION && kind?.settings
+      ? kind.settings.action
+      : actions && Object.hasOwn(actions, action)
+        ? actions[action]
+        : undefined;
   if (!run) throw badRequest('This has no such action.');
   if (viewer.principal.kind !== 'person') throw forbidden('Only you can use a page’s actions.');
   // The words a disabled button shows (`kinds/buttons.ts`).
@@ -227,15 +233,18 @@ export async function describeThingAction(
     const row = (await visibleConnections(services.db, { burrowId })).find(
       (r) => r.id === id.slice('connection:'.length),
     );
-    const describe = row ? kindOf(row.catalogId)?.describe : undefined;
-    if (!row || !describe) return null;
+    const kind = row ? kindOf(row.catalogId) : undefined;
+    if (!row || !kind) return null;
     const value = b.value;
-    return await describe({ services, row, now: services.clock(), timeZone }, b.action, {
+    const input: KindActionInput = {
       ...(typeof b.target === 'string' ? { target: b.target } : {}),
       ...(typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
         ? { value }
         : {}),
-    });
+    };
+    const ctx = { services, row, now: services.clock(), timeZone };
+    if (b.action === SETTING_ACTION && kind.settings) return await kind.settings.describe(ctx, input);
+    return kind.describe ? await kind.describe(ctx, b.action, input) : null;
   } catch {
     return null;
   }

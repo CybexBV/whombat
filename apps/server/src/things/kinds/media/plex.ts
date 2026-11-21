@@ -8,19 +8,10 @@
  * (only checks). Never installs an update, empties a trash or stops someone's stream (SD-02). Viewers and requesters by
  * name.
  */
-import type {
-  ThingLine,
-  ThingPageBar,
-  ThingPageButton,
-  ThingPageItem,
-  ThingPageKpi,
-  ThingPageTab,
-} from '@whombat/core';
+import type { ThingLine, ThingPageBar, ThingPageButton, ThingPageItem, ThingPageKpi } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
-import { assistantCalled } from '../../../home/assistant-name';
 import type { ConnectionActivity } from '../../../home/types';
 import { ApiError, badRequest, conflict } from '../../../lib/errors';
-import { loadAgentRow } from '../../../read/principals';
 import type { Services } from '../../../services';
 import { readPoints } from '../../points';
 import type { KindCheck, KindNotice } from '../../quiet/types';
@@ -38,7 +29,7 @@ import {
 } from '../read';
 import type { KindAction, KindModule, KindSeen } from '../registry';
 import { seenFromView } from '../registry';
-import { describeSetting, SETTING_ACTION, settingAction, settingChanges, settingsPanels } from '../settings';
+import { declaredSettings, SETTING_ACTION } from '../settings';
 import {
   addedNote,
   askedBy,
@@ -71,7 +62,7 @@ import {
   statusFrom,
   uniqueById,
 } from './common';
-import { PLEX_SETTINGS, type PlexPrefs } from './plex-settings';
+import { PLEX_SETTINGS } from './plex-settings';
 import { parseRequests, type SeerrRequest } from './seerr';
 import { asNotices, type ButtonCtx, button, type GalleryItem } from './ui';
 
@@ -665,8 +656,6 @@ export interface PlexInput {
   streams: (number | null)[];
   /** A picture of a Plex thumb, or none (pure tests). */
   poster: (thumb: string | null, title: string) => GalleryItem['image'];
-  /** The Plex settings tab (service-settings.md SST-07), when the page reads it. */
-  settingsTab?: ThingPageTab;
   /** The last two weeks' plays, or null when the history couldn't be read. */
   history?: PlexPlay[] | null;
 }
@@ -1164,7 +1153,7 @@ export function plexView(input: PlexInput): KindView {
     notices: asNotices(notices),
     ...statusFrom(live?.sessions.length ? `${plural(live.sessions.length, 'stream')} playing` : null),
     ...plexSlots(input),
-    tabs: input.settingsTab ? [input.settingsTab] : [],
+    tabs: [],
     facts,
     open: { label: 'Open Plex', url: `${input.url}/web/index.html` },
     actions: [],
@@ -1236,9 +1225,8 @@ export async function plexPage(ctx: KindCtx): Promise<KindView> {
       problem: problemOf(rest.error, NAME).message,
       refreshing: rest.refreshing,
     };
-  const [asked, settingsTab, history] = await Promise.all([
+  const [asked, history] = await Promise.all([
     seerr ? readAsked(services, seerr.row, now).catch(() => null) : null,
-    plexSettingsTab(ctx, url),
     cachedRead(
       services,
       `plex-history:${row.id}`,
@@ -1260,59 +1248,12 @@ export async function plexPage(ctx: KindCtx): Promise<KindView> {
     since: live.ok ? noteActivities(services, row.id, live.value.activities, now) : new Map(),
     streams,
     poster: (thumb, title) => (thumb ? picture(ctx, thumbPath(thumb, transcoder), title) : undefined),
-    settingsTab,
     history,
   });
   return {
     ...view,
     ...(live.ok ? {} : { problem: problemOf(live.error, NAME).message }),
     refreshing: rest.refreshing || live.refreshing,
-  };
-}
-
-/** Plex's prefs are kept a minute; a change forgets them (SST-02). */
-const PREFS_KEEP_MS = 60_000;
-
-/** The Plex settings tab (SST-06, SST-07): its cards, or why it couldn't be read with Open Plex. */
-export async function plexSettingsTab(ctx: KindCtx, url: string): Promise<ThingPageTab> {
-  const { services, row, now } = ctx;
-  const [prefs, changed, agent] = await Promise.all([
-    cachedRead<PlexPrefs>(
-      services,
-      `plex-prefs:${row.id}`,
-      row,
-      deadline(() => PLEX_SETTINGS.read(services, row)),
-      PREFS_KEEP_MS,
-    ).catch(() => null),
-    settingChanges(services, ctx.burrowId, row.id, now).catch(() => new Map()),
-    loadAgentRow(services.db, ctx.burrowId).catch(() => undefined),
-  ]);
-  const tab = { key: 'service-settings', label: 'Plex settings' };
-  if (!prefs)
-    return {
-      ...tab,
-      panels: [
-        {
-          kind: 'text',
-          id: 'settings-unread',
-          title: 'Plex settings',
-          body: 'Whombat couldn’t read Plex’s settings just now. Try again in a moment, or change them in Plex.',
-          link: { kind: 'url', label: 'Open Plex', url: `${url}/web/index.html#!/settings/server` },
-        },
-      ],
-    };
-  return {
-    ...tab,
-    panels: settingsPanels({
-      declared: PLEX_SETTINGS,
-      settings: prefs,
-      who: { row },
-      url: `${url}/web/index.html#!/settings/server`,
-      changed,
-      assistant: assistantCalled(agent?.name),
-      now,
-      timeZone: ctx.timeZone,
-    }),
   };
 }
 
@@ -1397,10 +1338,12 @@ const checkUpdates: KindAction = async (ctx) => {
   };
 };
 
+const PLEX_DECLARED_SETTINGS = declaredSettings(PLEX_SETTINGS);
+
 export const PLEX_ACTIONS: Record<string, KindAction> = {
   scan,
   check_updates: checkUpdates,
-  [SETTING_ACTION]: settingAction(PLEX_SETTINGS),
+  [SETTING_ACTION]: PLEX_DECLARED_SETTINGS.action,
 };
 
 export const PLEX_KIND: KindModule = {
@@ -1410,8 +1353,7 @@ export const PLEX_KIND: KindModule = {
   seen: plexSeen,
   asksFirst: 'deleting media and settings ask first',
   actions: PLEX_ACTIONS,
-  describe: (ctx, action, input) =>
-    action === SETTING_ACTION ? describeSetting(PLEX_SETTINGS, ctx, input) : Promise.resolve(null),
+  settings: PLEX_DECLARED_SETTINGS,
   liveS: PLEX_LIVE_S,
   checks: PLEX_CHECKS,
 };

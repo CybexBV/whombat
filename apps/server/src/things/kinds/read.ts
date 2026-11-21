@@ -80,7 +80,7 @@ export async function getJson(
     throw problemOf(err, name);
   }
   if (res.status === 401 || res.status === 403)
-    throw new ReadProblem(`${name} refused Whombat’s sign-in.`, res.status === 401);
+    throw new ReadProblem(`${name} refused Whombat’s sign-in.`, res.status === 401, res.status);
   if (res.status >= 400) throw new ReadProblem(`${name} answered with an error.`, false, res.status);
   try {
     return JSON.parse(res.body.toString('utf8'));
