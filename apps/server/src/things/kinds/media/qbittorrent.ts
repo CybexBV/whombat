@@ -409,7 +409,7 @@ export function qbtNotices(input: QbtInput): KindNotice[] {
     out.push({
       id: 'alt-speed',
       tone: 'info',
-      icon: 'speed',
+      icon: 'clock',
       title: 'qBittorrent is using slow speed limits',
       detail: 'Alternative speed limits are turned on. Switch back to full speed when you’re ready.',
       action: button(who, { action: 'toggle_alt_speed', label: 'Full speed', icon: 'speed' }),
@@ -555,14 +555,14 @@ function torrentsInventory(input: QbtInput) {
     countLine({
       id: 'seeding',
       title: 'Seeding',
-      icon: 'up',
+      icon: 'network',
       value: thousands(seeding.length),
       ...(s.state.upSpeedBps > 0 ? { detail: `${speedWords(s.state.upSpeedBps)} up` } : {}),
     }),
     countLine({
       id: 'completed',
       title: 'Completed',
-      icon: 'check',
+      icon: 'download',
       value: thousands(completed.length),
       ...(completed.length > 0 ? { detail: 'Paused after finishing' } : {}),
     }),

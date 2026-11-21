@@ -1,7 +1,7 @@
 /**
  * Jellyfin's page, card, checks, Seerr "Asked by" linking, and Scan buttons from documented API fixtures.
  */
-import type { ThingPagePanel } from '@whombat/core';
+import { ThingPageNotice, ThingPagePanel } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { Services } from '../../../services';
 import { slotProblems } from '../slots';
@@ -104,7 +104,7 @@ const input = (r: JellyfinRest, more: Partial<JellyfinInput> = {}): JellyfinInpu
   asked: null,
   since: new Map(),
   streams: [],
-  poster: (id, title) => (id ? { ref: `${id}.sig`, alt: title, shape: 'poster' } : undefined),
+  poster: (id, title) => (id ? { ref: `jellyfin_${id}.signature12345678`, alt: title, shape: 'poster' } : undefined),
   ...more,
 });
 
@@ -177,6 +177,8 @@ describe('Jellyfin page in slots', () => {
     ];
     const view = jellyfinView(input(rest(), { history }));
     expect(slotProblems(view)).toEqual([]);
+    for (const p of view.panels) ThingPagePanel.parse(p);
+    for (const n of view.notices) ThingPageNotice.parse(n);
     expect(view.refreshS).toBe(5);
     expect(view.verdict).toBe('Jellyfin is fine: 1 person is watching and every library is up to date.');
     expect(view.suggestions).toEqual(['Most watched this month', 'Who watches most', 'Biggest movies']);

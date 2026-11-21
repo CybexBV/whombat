@@ -1,7 +1,7 @@
 /**
  * qBittorrent's page, checks, actions (v5 + v4 fallback) and activity from documented WebUI API v2 fixtures.
  */
-import type { ThingPagePanel } from '@whombat/core';
+import { ThingPageNotice, ThingPagePanel } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { Services } from '../../../services';
 import { slotProblems } from '../slots';
@@ -71,6 +71,8 @@ describe('qBittorrent page and checks', () => {
     const s = snap();
     const view = qbtView(input(s));
     expect(slotProblems(view)).toEqual([]);
+    for (const p of view.panels) ThingPagePanel.parse(p);
+    for (const n of view.notices) ThingPageNotice.parse(n);
     expect(view.refreshS).toBe(5);
     expect(view.verdict).toBe('qBittorrent is fine: downloading 1 torrent at 18 MB/s and seeding 1.');
     expect(view.slots?.machine.map((b) => [b.label, b.value])).toEqual([
@@ -130,6 +132,7 @@ describe('qBittorrent page and checks', () => {
       ],
     });
     const notices = qbtNotices(input(bad));
+    for (const n of notices) ThingPageNotice.parse(n);
     expect(notices.map((n) => [n.check, n.tone, n.nature])).toEqual([
       ['qbittorrent.disk_low', 'bad', 'problem'],
       ['qbittorrent.disconnected', 'bad', 'problem'],
