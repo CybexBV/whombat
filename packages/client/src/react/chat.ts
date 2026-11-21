@@ -4,7 +4,13 @@
  * the room's conversation topic (a new message moves its thread in every cached list, `query/apply.ts`). Web and phone
  * share them.
  */
-import { type InfiniteData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  type UseInfiniteQueryResult,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   type Bootstrap,
   type ChatPreferences,
@@ -78,7 +84,25 @@ export interface ChatThreadsView {
   refetch: () => void;
   /** How many of the room's threads are settled (the first page's `settledCount`); undefined from an older Whombat. */
   settledCount: number | undefined;
+  /**
+   * The list's read itself: for a line that says it is being updated or couldn't be, and a pull to refresh that waits
+   * for its answer (`refetch` returns once it came).
+   */
+  read: ChatThreadsRead;
 }
+
+/** The parts of the threads' read a screen shows its state with. */
+export type ChatThreadsRead = Pick<
+  UseInfiniteQueryResult<InfiniteData<ChatThreadsResponse, string | undefined>, Error>,
+  | 'data'
+  | 'status'
+  | 'isFetching'
+  | 'isPaused'
+  | 'dataUpdatedAt'
+  | 'isFetchingNextPage'
+  | 'isFetchNextPageError'
+  | 'refetch'
+>;
 
 const NO_THREADS: ChatThread[] = [];
 
@@ -136,6 +160,7 @@ export function useChatThreads(
     loadMore: () => void q.fetchNextPage(),
     refetch: () => void q.refetch(),
     settledCount: pages?.[0]?.settledCount,
+    read: q,
   };
 }
 
