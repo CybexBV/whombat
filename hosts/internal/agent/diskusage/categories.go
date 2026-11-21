@@ -289,9 +289,13 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 	seen := map[inodeKey]struct{}{}
 
 	containersDir := filepath.Join(dockerRoot, "containers")
-	if r.pathInScope(scope, containersDir, rootDev, rootMntID) {
+	if ok, scopePartial := r.checkPathInScope(scope, containersDir, rootDev, rootMntID); ok {
 		ents, err := r.readDirInScope(scope, containersDir, rootDev, rootMntID)
-		if err == nil {
+		if err != nil {
+			if !isSkipDirErr(err) {
+				partial = true
+			}
+		} else {
 			for _, e := range ents {
 				if ctx.Err() != nil {
 					partial = true
@@ -306,6 +310,9 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 				}
 				files, err := r.readDirInScope(scope, sub, rootDev, rootMntID)
 				if err != nil {
+					if !isSkipDirErr(err) {
+						partial = true
+					}
 					continue
 				}
 				for _, f := range files {
@@ -346,6 +353,8 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 				}
 			}
 		}
+	} else if scopePartial {
+		partial = true
 	}
 
 	// Kubernetes / CRI container logs if present on this mount.

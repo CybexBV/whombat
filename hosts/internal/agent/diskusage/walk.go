@@ -54,13 +54,18 @@ func (r *Runner) mountIDAt(logicalPath string, fdMntID uint64, fdHasMntID bool) 
 	return hostStatMountID(r.hostPath(logicalPath))
 }
 
-// pathInScope checks that logicalPath lies inside scope (using mountinfo mount
-// IDs before any stat) and walks every component from the mount root down to
-// logicalPath without following symlinks, verifying st_dev and mount ID match.
-func (r *Runner) pathInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) bool {
+func isSkipDirErr(err error) bool {
+	return errors.Is(err, errWrongMount) || isSymlinkLoopErr(err) || errors.Is(err, fs.ErrNotExist)
+}
+
+// checkPathInScope checks that logicalPath lies inside scope (using mountinfo
+// mount IDs before any stat) and walks every component from the mount root down
+// to logicalPath without following symlinks, verifying st_dev and mount ID match.
+// Returns partial=true when an in-scope component is unreadable (permission error).
+func (r *Runner) checkPathInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) (ok bool, partial bool) {
 	p := filepath.Clean(logicalPath)
 	if !scope.containsPath(p) {
-		return false
+		return false, false
 	}
 	target := scope.target.MountPoint
 	steps := []string{target}
@@ -78,32 +83,46 @@ func (r *Runner) pathInScope(scope mountScope, logicalPath string, rootDev, root
 	}
 	for i, cur := range steps {
 		if i > 0 && scope.isOtherMount(cur) {
-			return false
+			return false, false
 		}
 		fi, err := r.doLstat(r.hostPath(cur))
-		if err != nil || fi.Mode()&fs.ModeSymlink != 0 {
-			return false
+		if err != nil {
+			if errors.Is(err, fs.ErrPermission) {
+				return false, true
+			}
+			return false, false
 		}
-		dev, ok := statDev(fi)
-		if !ok || dev != rootDev {
-			return false
+		if fi.Mode()&fs.ModeSymlink != 0 {
+			return false, false
+		}
+		dev, hasDev := statDev(fi)
+		if !hasDev || dev != rootDev {
+			return false, false
 		}
 		if rootMntID != 0 {
 			if id, ok := r.mountIDAt(cur, 0, false); ok && id != rootMntID {
-				return false
+				return false, false
 			}
 		}
 		if i < len(steps)-1 && !fi.IsDir() {
-			return false
+			return false, false
 		}
 	}
-	return true
+	return true, false
+}
+
+func (r *Runner) pathInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) bool {
+	ok, _ := r.checkPathInScope(scope, logicalPath, rootDev, rootMntID)
+	return ok
 }
 
 func (r *Runner) readDirInScope(scope mountScope, logicalPath string, rootDev, rootMntID uint64) ([]fs.DirEntry, error) {
 	p := filepath.Clean(logicalPath)
 	if !scope.containsPath(p) {
 		return nil, errWrongMount
+	}
+	if r.readDir != nil {
+		return r.readDir(p)
 	}
 	f, dev, fdMntID, fdHasMntID, err := openDirNoFollow(r.hostPath(p))
 	if err != nil {
@@ -141,6 +160,10 @@ func (r *Runner) walkMount(ctx context.Context, scope mountScope, rootDev, rootM
 		}
 		ents, err := r.readDirInScope(scope, logicalPath, rootDev, rootMntID)
 		if err != nil {
+			if !isSkipDirErr(err) {
+				partial = true
+				node.partial = true
+			}
 			return node
 		}
 		for _, e := range ents {
@@ -176,6 +199,10 @@ func (r *Runner) walkMount(ctx context.Context, scope mountScope, rootDev, rootM
 
 			info, err := e.Info()
 			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					partial = true
+					node.partial = true
+				}
 				continue
 			}
 			mode := info.Mode()
@@ -326,11 +353,18 @@ func pickLargestFolders(root *dirNode, maxDepth, limit int) []proto.DiskUsageFol
 // never touched.
 func (r *Runner) walkDirBytes(ctx context.Context, scope mountScope, logicalDir string, rootDev, rootMntID uint64, maxDepth int, seen map[inodeKey]struct{}) (bytes uint64, partial bool) {
 	cleanDir := filepath.Clean(logicalDir)
-	if !r.pathInScope(scope, cleanDir, rootDev, rootMntID) {
-		return 0, false
+	ok, scopePartial := r.checkPathInScope(scope, cleanDir, rootDev, rootMntID)
+	if !ok {
+		return 0, scopePartial
 	}
 	info, err := r.doLstat(r.hostPath(cleanDir))
-	if err != nil || !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
+	if err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			return 0, true
+		}
+		return 0, false
+	}
+	if !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
 		return 0, false
 	}
 
@@ -344,6 +378,9 @@ func (r *Runner) walkDirBytes(ctx context.Context, scope mountScope, logicalDir 
 		}
 		ents, err := r.readDirInScope(scope, p, rootDev, rootMntID)
 		if err != nil {
+			if !isSkipDirErr(err) {
+				partial = true
+			}
 			return
 		}
 		for _, e := range ents {
@@ -364,7 +401,13 @@ func (r *Runner) walkDirBytes(ctx context.Context, scope mountScope, logicalDir 
 				continue
 			}
 			ci, err := e.Info()
-			if err != nil || ci.Mode()&fs.ModeSymlink != 0 {
+			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					partial = true
+				}
+				continue
+			}
+			if ci.Mode()&fs.ModeSymlink != 0 {
 				continue
 			}
 			cdev, ok := statDev(ci)

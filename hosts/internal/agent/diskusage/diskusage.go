@@ -84,11 +84,13 @@ type Runner struct {
 	listMounts     func() ([]mountInfo, error)
 	statfs         func(path string) (fsStat, error)
 	lstat          func(path string) (fs.FileInfo, error)
+	readDir        func(logicalPath string) ([]fs.DirEntry, error)
 	statMountID    func(logicalPath string) (uint64, bool)
 	checkStandby   func(ctx context.Context, dev string) standbyState
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
 	maxEntries     int
+	hangGrace      time.Duration
 	setLowPriority func()
 	isUnraid       func() bool
 }
@@ -210,44 +212,17 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 	}
 
 	hostPath := r.hostPath(mount)
-	rootInfo, err := r.doLstat(hostPath)
-	if err != nil {
-		return proto.DiskUsageResponse{
-			Code:       CodeFailed,
-			Message:    fmt.Sprintf("Could not read %s.", mount),
-			Mount:      mount,
-			FSType:     target.FSType,
-			Device:     target.Source,
-			MeasuredAt: start,
-			DurationMs: r.now().UTC().Sub(start).Milliseconds(),
-		}
-	}
-	rootDev, ok := statDev(rootInfo)
-	if !ok {
-		return proto.DiskUsageResponse{
-			Code:       CodeFailed,
-			Message:    fmt.Sprintf("Could not identify the filesystem device for %s.", mount),
-			Mount:      mount,
-			FSType:     target.FSType,
-			Device:     target.Source,
-			MeasuredAt: start,
-			DurationMs: r.now().UTC().Sub(start).Milliseconds(),
-		}
-	}
-	var rootMntID uint64
-	if id, ok := r.mountIDAt(mount, 0, false); ok {
-		rootMntID = id
-	}
 
-	var totalBytes, usedBytes uint64
-	if st, err := r.statfs(hostPath); err == nil {
-		totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
-	}
-
-	// Run the scan on a dedicated OS thread at lowest CPU and I/O priority.
+	// Run the entire mount probe and scan on a dedicated OS thread at lowest CPU
+	// and I/O priority, and select on wctx.Done() so a hung filesystem read
+	// never wedges this request or leaves r.busy stuck.
 	// Keeping the goroutine locked when it exits tells the Go runtime to
 	// retire the lowered-priority thread instead of reusing it for normal work.
 	type scanOut struct {
+		errCode    string
+		errMsg     string
+		totalBytes uint64
+		usedBytes  uint64
 		walk       walkResult
 		categories []proto.DiskUsageCategory
 		catPartial bool
@@ -258,6 +233,26 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		if r.setLowPriority != nil {
 			r.setLowPriority()
 		}
+		rootInfo, err := r.doLstat(hostPath)
+		if err != nil {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
+			return
+		}
+		rootDev, ok := statDev(rootInfo)
+		if !ok {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not identify the filesystem device for %s.", mount)}
+			return
+		}
+		var rootMntID uint64
+		if id, ok := r.mountIDAt(mount, 0, false); ok {
+			rootMntID = id
+		}
+
+		var totalBytes, usedBytes uint64
+		if st, err := r.statfs(hostPath); err == nil {
+			totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
+		}
+
 		// Give specialised category probes up to 40% of the budget (at least 4s)
 		// so container/ZFS queries finish even on huge filesystems, then spend the
 		// rest walking folders.
@@ -270,14 +265,63 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		ccancel()
 
 		w := r.walkMount(wctx, scope, rootDev, rootMntID, maxDepth)
-		done <- scanOut{walk: w, categories: cats, catPartial: catPartial}
+		done <- scanOut{
+			totalBytes: totalBytes,
+			usedBytes:  usedBytes,
+			walk:       w,
+			categories: cats,
+			catPartial: catPartial,
+		}
 	}()
 
-	res := <-done
+	var res scanOut
+	timedOut := false
+	select {
+	case res = <-done:
+	case <-wctx.Done():
+		// Give the worker a short grace window to unwind and return partial
+		// results already collected, while refusing to wedge if a syscall hangs.
+		grace := r.hangGrace
+		if grace <= 0 {
+			grace = 500 * time.Millisecond
+		}
+		timer := time.NewTimer(grace)
+		select {
+		case res = <-done:
+			timer.Stop()
+		case <-timer.C:
+			timedOut = true
+		}
+	}
+
 	finished := r.now().UTC()
 	durMs := finished.Sub(start).Milliseconds()
 	if durMs < 0 {
 		durMs = 0
+	}
+
+	if timedOut {
+		return proto.DiskUsageResponse{
+			Code:       CodeFailed,
+			Message:    fmt.Sprintf("Timed out while reading %s.", mount),
+			Mount:      mount,
+			FSType:     target.FSType,
+			Device:     target.Source,
+			MeasuredAt: finished,
+			DurationMs: durMs,
+			Partial:    true,
+		}
+	}
+	if res.errCode != "" {
+		return proto.DiskUsageResponse{
+			Code:       res.errCode,
+			Message:    res.errMsg,
+			Mount:      mount,
+			FSType:     target.FSType,
+			Device:     target.Source,
+			MeasuredAt: finished,
+			DurationMs: durMs,
+		}
 	}
 
 	return proto.DiskUsageResponse{
@@ -286,8 +330,8 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		Device:     target.Source,
 		MeasuredAt: finished,
 		DurationMs: durMs,
-		TotalBytes: totalBytes,
-		UsedBytes:  usedBytes,
+		TotalBytes: res.totalBytes,
+		UsedBytes:  res.usedBytes,
 		Partial:    res.walk.partial || res.catPartial,
 		Categories: res.categories,
 		Folders:    res.walk.folders,

@@ -898,3 +898,93 @@ func TestFallbackBackingDisksPartitionLVMMdraidAndUnknownStandby(t *testing.T) {
 		t.Fatalf("/srv/ssd: %+v", resp)
 	}
 }
+
+func TestHungReadRespectsDeadlineAndFreesBusyFlag(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "data/file.bin"), 16*1024)
+	mounts := []mountInfo{{ID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.hangGrace = 15 * time.Millisecond
+
+	unblock := make(chan struct{})
+	t.Cleanup(func() { close(unblock) })
+	var calls atomic.Int32
+	r.readDir = func(logicalPath string) ([]fs.DirEntry, error) {
+		if calls.Add(1) == 1 {
+			<-unblock
+		}
+		return os.ReadDir(r.hostPath(logicalPath))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	resp := r.DiskUsage(ctx, proto.DiskUsageRequest{Mount: "/"})
+	elapsed := time.Since(start)
+	if resp.Code != CodeFailed || !resp.Partial {
+		t.Fatalf("hung scan = %+v, want CodeFailed with Partial=true", resp)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("hung scan took %v, expected prompt deadline exit", elapsed)
+	}
+
+	// Busy flag must be freed immediately so the next measurement runs instead of returning CodeBusy.
+	next := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if next.Code != "" || len(next.Folders) == 0 {
+		t.Fatalf("subsequent scan after hung read = %+v, want normal completion", next)
+	}
+}
+
+func TestUnreadableDirectoryMarksPartial(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "secret"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeBytes(t, filepath.Join(root, "var/log/journal/locked/system.journal"), 16*1024)
+	mounts := []mountInfo{{ID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+
+	// 1. Unreadable directory during mount walk marks Partial even when nothing else is readable.
+	r := newTestRunner(t, root, mounts, nil)
+	r.readDir = func(logicalPath string) ([]fs.DirEntry, error) {
+		if logicalPath == "/secret" {
+			return nil, fs.ErrPermission
+		}
+		return os.ReadDir(r.hostPath(logicalPath))
+	}
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" || !resp.Partial {
+		t.Fatalf("unreadable /secret: resp = %+v, want Code='' and Partial=true", resp)
+	}
+
+	// 2. Unreadable directory inside a category probe marks Partial.
+	r2 := newTestRunner(t, root, mounts, nil)
+	r2.readDir = func(logicalPath string) ([]fs.DirEntry, error) {
+		if logicalPath == "/var/log/journal/locked" {
+			return nil, fs.ErrPermission
+		}
+		return os.ReadDir(r2.hostPath(logicalPath))
+	}
+	resp2 := r2.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp2.Code != "" || !resp2.Partial {
+		t.Fatalf("unreadable journal dir: resp = %+v, want Code='' and Partial=true", resp2)
+	}
+
+	// 3. Real filesystem permission denial when not running as root.
+	if os.Geteuid() != 0 {
+		locked := filepath.Join(t.TempDir(), "noperm")
+		if err := os.MkdirAll(locked, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(locked, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+		r3 := newTestRunner(t, filepath.Dir(locked), mounts, nil)
+		resp3 := r3.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp3.Code != "" || !resp3.Partial {
+			t.Fatalf("chmod 0000 dir: resp = %+v, want Code='' and Partial=true", resp3)
+		}
+	}
+}
