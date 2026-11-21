@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,9 +17,11 @@ import (
 	"github.com/CybexBV/whombat/appliance/manager/internal/broker"
 	"github.com/CybexBV/whombat/appliance/manager/internal/config"
 	"github.com/CybexBV/whombat/appliance/manager/internal/controlapi/fakecontrol"
+	"github.com/CybexBV/whombat/appliance/manager/internal/daemon"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
 	"github.com/CybexBV/whombat/appliance/manager/internal/update"
 	"github.com/CybexBV/whombat/appliance/release-tools/devtuf"
+	"github.com/CybexBV/whombat/contracts/go/local"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
@@ -189,5 +192,120 @@ func TestDaemonChannelPauseAndResume(t *testing.T) {
 	}
 	if w.State().ChannelPaused {
 		t.Fatal("expired pause changed ChannelPaused state")
+	}
+}
+
+// Resuming a channel after publishing a fix must offer the newer release before clearing ChannelPaused and waking the
+// engine, so a held bad candidate is never unpaused or driven into drain/activation first (both CheckNow and tufLoop).
+func TestDaemonChannelResumeReplacesHeldBadReleaseBeforeUnpausing(t *testing.T) {
+	t.Parallel()
+	for _, via := range []string{"check_now", "tuf_loop"} {
+		t.Run(via, func(t *testing.T) {
+			t.Parallel()
+			type snap struct {
+				phase     update.Phase
+				candidate string
+				paused    bool
+			}
+			var (
+				mu     sync.Mutex
+				events []snap
+			)
+			extra := map[string]any{"refreshSec": 1}
+			if via == "check_now" {
+				// Keep tufLoop quiet so CheckNow drives the resume directly.
+				extra["refreshSec"] = 3600
+			}
+			h := startDaemonWith(t, extra, func(d *daemon.Daemon) {
+				orig := d.Engine.OnTransition
+				d.Engine.OnTransition = func(st update.State) {
+					cand := ""
+					if st.Candidate != nil && st.Candidate.Tuple != nil {
+						cand = st.Candidate.Tuple.ReleaseID
+					}
+					mu.Lock()
+					events = append(events, snap{phase: st.Phase, candidate: cand, paused: st.ChannelPaused})
+					mu.Unlock()
+					if orig != nil {
+						orig(st)
+					}
+				}
+			}, func(w *testworld.World, _ *fakecontrol.Control, _ *config.Config) {
+				w.SetChannel(trust.ChannelProduction)
+				publishChannelRelease(t, w.Repo, "whombat-20261121.1", "26.05.1", "1.1.0", true)
+			})
+			w := h.w
+			h.waitFor("whombat-20261121.1 healthy", func(st *update.State) bool {
+				return st.Phase == update.Healthy && st.Current.ReleaseID == "whombat-20261121.1"
+			})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			// Block safe boundary so bad release .2 reaches WaitingForSafeBoundary without activating.
+			w.Runtime.SetBlockers([]local.DrainBlocker{{Kind: "turn", ID: "t1", Description: "long turn", Since: "2026-11-21T12:00:00Z"}}, -1)
+			publishChannelRelease(t, w.Repo, "whombat-20261121.2", "26.05.1", "1.2.0", true)
+			if via == "check_now" {
+				if _, err := h.d.CheckNow(ctx); err != nil {
+					t.Fatalf("offer .2: %v", err)
+				}
+			}
+			h.waitFor("whombat-20261121.2 waiting at safe boundary", func(st *update.State) bool {
+				return st.Phase == update.WaitingForSafeBoundary && st.Candidate != nil && st.Candidate.Tuple.ReleaseID == "whombat-20261121.2"
+			})
+
+			// Pause production while .2 is held pre-activation.
+			if _, err := w.Repo.PauseChannel(trust.ChannelProduction, nil); err != nil {
+				t.Fatal(err)
+			}
+			if via == "check_now" {
+				if _, err := h.d.CheckNow(ctx); err != nil {
+					t.Fatalf("pause CheckNow: %v", err)
+				}
+			}
+			h.waitFor("whombat-20261121.2 held by channel pause", func(st *update.State) bool {
+				return st.ChannelPaused && st.Candidate != nil && st.Candidate.Tuple.ReleaseID == "whombat-20261121.2" &&
+					st.Candidate.Deferral != nil && st.Candidate.Deferral.Waiting == "hold" && !st.Candidate.Deferral.Draining
+			})
+
+			// Record the event index once .2 is paused, then remove blockers so an unpaused .2 would immediately drain/activate.
+			mu.Lock()
+			pausedIdx := len(events)
+			mu.Unlock()
+			w.Runtime.SetBlockers(nil, 0)
+
+			// Publish fixed release .3 and resume production.
+			publishChannelRelease(t, w.Repo, "whombat-20261121.3", "26.05.1", "1.3.0", true)
+			if _, err := w.Repo.ResumeChannel(trust.ChannelProduction, nil); err != nil {
+				t.Fatal(err)
+			}
+			if via == "check_now" {
+				if _, err := h.d.CheckNow(ctx); err != nil {
+					t.Fatalf("resume CheckNow: %v", err)
+				}
+			}
+			h.waitFor("whombat-20261121.3 healthy", func(st *update.State) bool {
+				return st.Phase == update.Healthy && st.Current.ReleaseID == "whombat-20261121.3" && !st.ChannelPaused
+			})
+
+			mu.Lock()
+			after := append([]snap(nil), events[pausedIdx:]...)
+			mu.Unlock()
+			sawFixWhilePaused := false
+			for _, ev := range after {
+				if ev.candidate == "whombat-20261121.2" && !ev.paused {
+					t.Fatalf("bad release .2 was unpaused before replacement: %+v", after)
+				}
+				if ev.candidate == "whombat-20261121.2" && (ev.phase == update.Activating || ev.phase == update.Verifying) {
+					t.Fatalf("bad release .2 reached activation: %+v", after)
+				}
+				if ev.candidate == "whombat-20261121.3" && ev.paused {
+					sawFixWhilePaused = true
+				}
+			}
+			if !sawFixWhilePaused {
+				t.Fatalf("expected .3 to be offered before clearing ChannelPaused: %+v", after)
+			}
+		})
 	}
 }

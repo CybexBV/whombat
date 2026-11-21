@@ -259,12 +259,16 @@ func (r *Repo) signChannel(channel string, key ed25519.PrivateKey) error {
 	return writeJSON(filepath.Join(r.metaDir(), fmt.Sprintf("%d.%s.json", md.Signed.Version, channel)), md)
 }
 
+// ChannelPauseScopeNote states which boxes a channel pause holds.
+const ChannelPauseScopeNote = "This pause only holds boxes already running a pause-aware release; older boxes keep updating."
+
 // ChannelPauseResult reports the channel role version written by PauseChannel or ResumeChannel.
 type ChannelPauseResult struct {
 	Channel string `json:"channel"`
 	Paused  bool   `json:"paused"`
 	Version int64  `json:"version"`
 	Already bool   `json:"already,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 // ChannelPaused reports whether the channel role carries the pause marker.
@@ -300,16 +304,20 @@ func (r *Repo) setChannelPaused(channel string, paused bool, key ed25519.Private
 	if err != nil {
 		return nil, err
 	}
+	note := ""
+	if paused {
+		note = ChannelPauseScopeNote
+	}
 	cur, err := trust.IsChannelPaused(md)
 	if err == nil && cur == paused {
-		return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version, Already: true}, nil
+		return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version, Already: true, Note: note}, nil
 	}
 	trust.SetChannelPaused(md, paused)
 	if err := r.PublishChannelWith(channel, k); err != nil {
 		trust.SetChannelPaused(md, cur)
 		return nil, err
 	}
-	return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version}, nil
+	return &ChannelPauseResult{Channel: channel, Paused: paused, Version: md.Signed.Version, Note: note}, nil
 }
 
 // publishChannel serves the channel's releases at their GitHub paths too, signs the role with keysOverride (an offline
