@@ -516,6 +516,7 @@ noVNC's encodings with ZRLE.
 | `hosts.inspect` | `GET /servers/{id}/inspect/{processes\|ports\|services\|updates}` | operator, console switch; `updates` the diagnose or the console switch (SWU-11; REST-API "Inspect") |
 | `server_diagnose` (catalog) | `GET /servers/{id}/diagnose` | operator, diagnose switch (on by default, both sides) |
 | `server_diagnose` (run) | `POST /servers/{id}/diagnose {check, args?}` | operator, diagnose switch |
+| `server_disk_usage`, `hosts.diskUsage` | `POST /servers/{id}/disk-usage {mount?, max_depth?, timeout_s?}` | operator, diagnose switch (cached recent list: `GET /servers/{id}/disk-usage`, viewer) |
 | `server_command` | `POST /servers/{id}/exec {command, timeout_s?}` | admin, host shell switches (hub `host_shell` and `[remote_control] host_shell = true`) |
 | `mac_screen`, `mac_ui`, the Mac's page | `POST /servers/{id}/screen {op, …}` (a Mac only) | host shell switches; operator for `status` only, admin and a recent sign-in for every other step; `status` also with the diagnose switches |
 
@@ -536,6 +537,18 @@ agent. Errors: 400 `invalid_value` (check name, argument shape), 400
 `unknown_check`, 403 `diagnose_disabled`, 409 `agent_offline`, 502
 `agent_error`. Output is UTF-8 text, at most 256 KiB, secrets redacted.
 Each run is audited as `diagnose.ran` (check and arguments).
+
+`POST /servers/{id}/disk-usage {"mount": "/"}` →
+`{"server", "ok": true, "mount", "fs_type", "device", "measured_at", "duration_ms", "total_bytes", "used_bytes", "partial", "categories": [{"key", "label", "bytes", "reclaimable_bytes"?, "detail"?}], "folders": [{"path", "bytes", "partial"?}]}`.
+An omitted `mount` chooses the fullest writable local filesystem (or `/`). When
+a backing disk is spun down, the agent skips it without touching the mount and
+the route answers 200 with `"ok": false, "code": "spun_down", "message",
+"skipped_spun_down"` without overwriting any previously stored measurement.
+Successful runs are stored per `(server, mount)` in SQLite, broadcast as
+`server.disk_usage`, and included on `GET /servers/{id}` (`disk_usage`) while
+measured within 24 hours. Errors: 400 `invalid_value` / `invalid_request`, 403
+`diagnose_disabled`, 409 `agent_offline` / `busy`, 501 `unsupported`, 502
+`agent_error`. Each run is audited as `disk_usage.ran`.
 
 `POST /servers/{id}/exec {"command": "systemctl restart pveproxy", "timeout_s": 120}` →
 `{"server", "exit_code": 0, "timed_out": false, "output": "…", "truncated": false, "duration_ms": 412, "audit_id": "au_…"}`.

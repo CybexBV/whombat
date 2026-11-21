@@ -503,6 +503,24 @@ regular expression and the lines' timestamps (syslog files have no
 priority; the answer says so). `smart` uses `smartctl -x -n standby`: a
 disk in standby is not woken up.
 
+**Disk usage** (`disk_usage` stream, hub → agent): `DiskUsageRequest{mount,
+max_depth, timeout_s}` → `DiskUsageResponse`, controlled by `Policy.Diagnose`
+(same read-only switch as `diagnose`). Runs only on request (never scheduled),
+one scan at a time (`busy` otherwise). Validates that `mount` is a local
+mounted filesystem (rejecting remote and virtual mounts, except Unraid's
+`/var/log` tmpfs). Before touching the mount, checks Unraid's
+`/var/local/emhttp/disks.ini`, cached standby state and `smartctl -i -n standby`
+/ `hdparm -C` for rotational backing disks; if any backing disk is spun down it
+returns `code: "spun_down"` with `skipped_spun_down` without doing I/O on the
+mount. Walks on a low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`;
+macOS `PRIO_DARWIN_BG`), stays strictly on the target filesystem (`st_dev` check
+plus skipping child mount points from mountinfo before `lstat`), never follows
+symlinks, deduplicates hardlinks, and bounds depth (default 6, max 12), entries
+(250,000) and time (default 20 s, max 45 s; sets `partial: true` when cut
+short). Reports recognised categories on that mount (container images, build
+cache, volumes and logs, systemd journal, package caches, VM disks and
+snapshots where known) and up to 15 largest non-overlapping folders.
+
 **Exec** (`exec` stream, hub → agent): `ExecRequest{cmd, timeout}` →
 `ExecResponse`, needs `Policy.HostShell`. The command (at most 16 KiB, no
 NUL) runs with `/bin/sh -c` as root, stdin `/dev/null`, a clean environment
