@@ -439,7 +439,7 @@ describe('voice typing’s settings and models', () => {
       input: Parameters<typeof origCommit>[1],
       ctx: Parameters<typeof origCommit>[2],
     ) => {
-      if (!gatedOnce && cmd.name === 'set_dutch_voice') {
+      if (!gatedOnce && (typeof cmd === 'string' ? cmd : cmd.name) === 'set_dutch_voice') {
         gatedOnce = true;
         commitEntered();
         await commitGate;
@@ -563,7 +563,7 @@ describe('voice typing’s settings and models', () => {
       input: Parameters<typeof origCommit>[1],
       ctx: Parameters<typeof origCommit>[2],
     ) => {
-      if (!gatedOnOnce && cmd.name === 'set_dutch_voice') {
+      if (!gatedOnOnce && (typeof cmd === 'string' ? cmd : cmd.name) === 'set_dutch_voice') {
         gatedOnOnce = true;
         onCommitEntered();
         await onCommitGate;

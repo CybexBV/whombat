@@ -335,11 +335,19 @@ describe('settingAction read-back verification', () => {
       mockHttp.handler = (req) => {
         if (req.method === 'PUT') {
           if (req.headers?.['If-Match'] !== etag)
-            return { status: 412, headers: {}, body: Buffer.from('{"error":"precondition_failed"}') };
+            return {
+              status: 412,
+              headers: {} as Record<string, string>,
+              body: Buffer.from('{"error":"precondition_failed"}'),
+            };
           condState = JSON.parse(req.body ?? '{}') as typeof condState;
           etag = '"v2"';
         }
-        return { status: 200, headers: { etag }, body: Buffer.from(JSON.stringify(condState)) };
+        return {
+          status: 200,
+          headers: { etag } as Record<string, string>,
+          body: Buffer.from(JSON.stringify(condState)),
+        };
       };
       const condAct = settingAction<{ etag: string; raw: typeof condState }>({
         ...makeDeclared(),
