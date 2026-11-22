@@ -1,32 +1,32 @@
 {
-  "version": "0.0.0-20261121150118.c310c5f",
+  "version": "0.0.0-20261122110501.d7114d7",
   "key": "40f47772ee26385e",
   "files": {
     "whombat-agent-darwin-amd64": {
       "os": "darwin",
       "arch": "amd64",
-      "size": 15378272,
-      "sha256": "b97038dc5fb220a50330d02fa9dc68defcd99ff8daf93ecb0a9140d2b46731fe",
-      "sig": "wOtDyQJucnxQCF2rNIJelZESOKZ/wkfmtqeCWR6U2jbnuNWv/OnmtfPepGGMm4IWcgSACFn9OJyMpc+yONwBCQ=="
+      "size": 15660816,
+      "sha256": "4ed9ed5fb3b33b73784e8d58676343cdf443fa1cea678ad190b48c57e03f6478",
+      "sig": "N6/UVWGhbl6vjksqsT06J2EWAKiEzB6sy4Wsl+ANxXWn2pJFeAr/agLBDfWedEPMKrAnGEenhL4cUWBx7pUkBw=="
     },
     "whombat-agent-darwin-arm64": {
       "os": "darwin",
       "arch": "arm64",
-      "size": 14219010,
-      "sha256": "06ec092ef197867533c2fb8dc27b99d869b8e0bc3f75122a0e8e01ee45673598",
-      "sig": "BK1xXSZ0yNeIjacgVZAYUf9uyb4v7ZwA/ty/G4YRg1pxocx5Qav7xhxz7hCditLk8DyKsipnqtG4GEaeVtCuDw=="
+      "size": 14470738,
+      "sha256": "5b2843fcfffa70aa1cf7013929bc90af5ff0cd1b6d7f3423864d6b8d75b110bb",
+      "sig": "lb6fSWiLThVBquucyal7myEcrBQaf01QswvfWzQ2lK/cGZUU3/H+SQEiOMA9R3WUtDnzLIBhvBLILE8F39zvBg=="
     },
     "whombat-agent-linux-amd64": {
       "arch": "amd64",
-      "size": 17150076,
-      "sha256": "398bb7027b931997796bbcbf0f5c5611ea844fbfffb9378db0394049af0b6665",
-      "sig": "PM4Tm4rFTlW5yHWywordC3R6vHaQq5ZNHZ8jnZ07t54QoysE57bJG+K5qEptwWuaqcdRC26huQplz9Cng0xWAA=="
+      "size": 17424508,
+      "sha256": "42c74f6f0bb4b02787516227756f0fdf89f7e40f9c6951da8d7162076965435a",
+      "sig": "xJiNycuzUvAgyxbV6WMSHcEmezLAl7lDbsobxvMP9zSr9FuKStP9K114kHnSEwnvXiZzox2NKhVMPreItT6BCQ=="
     },
     "whombat-agent-linux-arm64": {
       "arch": "arm64",
-      "size": 15794300,
-      "sha256": "7143c2f8d29ceac8ee4fcef0b602b88157c4e88ae5b4e6784104e811e180adaa",
-      "sig": "gAAiYexsejIhVsyVLhKSekHz3n1pFCrUYCMUzLqUNF/UmwgyfE2W3CYREiKVt6o28iOkS/oF+mMLzj6FIVaXBQ=="
+      "size": 15990908,
+      "sha256": "17c13abd5d9eedfb7d9a1aa7fac8adf3ac83b6f0ba9186da763e21ff63c0a844",
+      "sig": "40fDvi5Eloa1YIrtfLwxkUlBmjGaqTx3YfzIzdd818/qmh2OZvu94dUD0yhvQ3KWm2TDnBh6kRTRc8By8uKuBA=="
     },
     "whombat-helper-macos.zip": {
       "os": "darwin",
