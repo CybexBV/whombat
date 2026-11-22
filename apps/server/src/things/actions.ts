@@ -18,7 +18,14 @@
 import { thingHref } from '@whombat/core';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
-import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
+import { boundTarget, signingOnlyAs } from '../connections/bound-targets';
+import {
+  ConnectionChangedError,
+  callTarget,
+  changedJustNowText,
+  changedSinceChangeText,
+  undoGoesWhereChangeWent,
+} from '../connections/call-target';
 import { type ConnectionViewer, visibleConnections } from '../connections/store';
 import type { CatalogConnectionRow } from '../connections/types';
 import { EVERYDAY_CHANGE_PREFIX } from '../home/changes';
@@ -168,17 +175,31 @@ async function executeThingAction(
   const row = target.row;
   // Repointed at another service or account since: the old value would land there, not where it was changed.
   if (!undoGoesWhereChangeWent(row, destination)) throw conflict(changedSinceChangeText(row.label));
+  // Where it goes and as whom: the connection as it was checked here, or where a yes the assistant asked for was bound
+  // to (the settings change that runs it binds that first). Every request the action signs is signed only there.
+  const checked = callTarget(row);
+  const bound = boundTarget(row.id);
+  const changedText = () =>
+    destination !== undefined ? changedSinceChangeText(row.label) : changedJustNowText(row.label);
+  if (bound !== undefined && bound !== checked) throw conflict(changedText());
   const run = actionFor(row, viewer, input.action);
   let done: Awaited<ReturnType<typeof run>>;
   try {
-    done = await run(
-      { services, row, now: services.clock(), timeZone },
-      {
-        ...(input.target !== undefined ? { target: input.target } : {}),
-        ...(input.value !== undefined ? { value: input.value } : {}),
-        ...(undoes && input.expect !== undefined ? { expect: input.expect } : {}),
-      },
-    );
+    ({ value: done } = await signingOnlyAs({ [row.id]: checked }, () =>
+      run(
+        { services, row, now: services.clock(), timeZone },
+        {
+          ...(input.target !== undefined ? { target: input.target } : {}),
+          ...(input.value !== undefined ? { value: input.value } : {}),
+          ...(undoes && input.expect !== undefined ? { expect: input.expect } : {}),
+        },
+      ),
+    ));
+  } catch (err) {
+    // The connection changed between the check and a request it would have signed, whatever words the kind made of
+    // it: nothing was signed as it is now.
+    if (err instanceof ConnectionChangedError) throw conflict(changedText());
+    throw err;
   } finally {
     // Whatever it changed there, the page read right after shows it (SD-S10): its kept reads go.
     forgetConnectionReads(services, row.id);
@@ -206,7 +227,7 @@ async function executeThingAction(
               ...(done.undo.target !== undefined ? { target: done.undo.target } : {}),
               value: done.undo.value,
               ...(done.undo.expect !== undefined ? { expect: done.undo.expect } : {}),
-              destination: callTarget(row),
+              destination: checked,
             },
           }
         : {}),
@@ -274,6 +295,36 @@ export async function describeThingAction(
     return kind.describe ? await kind.describe(ctx, b.action, input) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Where a page action the assistant asks for (`settings_change` of `things.action`) goes and as whom, by connection id
+ * (`callTarget`): its yes is bound to it, and it runs only while the connection still goes there. Empty for any other
+ * op, or a thing that isn't a connection of the burrow.
+ */
+export async function thingActionTargets(
+  services: Services,
+  burrowId: string,
+  op: string,
+  input: unknown,
+): Promise<Record<string, string>> {
+  if (op !== 'things.action') return {};
+  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
+  // A session may pass the thingId still encoded (`connection%3Acon_…`).
+  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
+  if (!id.startsWith('connection:')) return {};
+  const row = (await visibleConnections(services.db, { burrowId })).find(
+    (r) => r.id === id.slice('connection:'.length),
+  );
+  return row ? { [row.id]: callTarget(row) } : {};
+}
+
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return '';
   }
 }
 

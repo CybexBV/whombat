@@ -10,7 +10,7 @@
  * the refusal into words of its own (“Couldn’t reach it”).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { catalogConnections } from '../db/schema/index';
 import type { Services } from '../services';
 import { type CallTargetRow, ConnectionChangedError, callTarget } from './call-target';
@@ -73,4 +73,18 @@ export async function keepBoundTarget(services: Pick<Services, 'db'>, row: CallT
   }
   for (let b: Binding | null = binding; b; b = b.parent) b.refused ??= row.id;
   throw new ConnectionChangedError(row.id);
+}
+
+/**
+ * The name of the first connection in `targets` that goes elsewhere, or as someone else, now than its target says;
+ * null when none does (one that is gone isn't: what would sign as it refuses by itself).
+ */
+export async function changedSince(
+  services: Pick<Services, 'db'>,
+  targets: Readonly<Record<string, string>>,
+): Promise<string | null> {
+  const ids = Object.keys(targets);
+  if (!ids.length) return null;
+  const rows = await services.db.select().from(catalogConnections).where(inArray(catalogConnections.id, ids));
+  return rows.find((r) => callTarget(r) !== targets[r.id])?.label ?? null;
 }

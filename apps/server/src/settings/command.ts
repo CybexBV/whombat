@@ -18,9 +18,12 @@ import { z } from 'zod';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { defineCommand, type KeyRequirement } from '../commit/types';
+import { changedSince, signingOnlyAs } from '../connections/bound-targets';
+import { ConnectionChangedError, changedSinceYesText } from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, approvals, principals } from '../db/schema/index';
 import { conflict } from '../lib/errors';
+import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import { loadConversationRow } from '../read/conversations';
 import { loadGrants } from '../read/principals';
@@ -88,6 +91,14 @@ const Input = z.object({
   lines: z.array(z.string().max(120)).max(PREVIEW_LINES).optional(),
   /** The card's title in Whombat's words for this change (“Change a Plex setting”), in place of the map's. */
   title: z.string().min(1).max(160).optional(),
+  /**
+   * Where each connection the change signs as goes and as whom when it was asked for, by id (`callTarget`; a page
+   * action's, `thingActionTargets`): the yes is bound to it, and the change runs only while each still goes there.
+   */
+  targets: z
+    .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
+    .refine((t) => Object.keys(t).length <= 8)
+    .optional(),
 });
 
 export const changeSetting = defineCommand({
@@ -146,6 +157,7 @@ export const changeSetting = defineCommand({
         op: input.op,
         input: input.input,
         conversationId: input.conversationId,
+        ...(input.targets ? { targets: input.targets } : {}),
       };
       ctx.after(() => runApprovedChange(services, call));
     }
@@ -173,13 +185,17 @@ export async function runApprovedChange(
     op: string;
     input: Record<string, unknown>;
     conversationId: string | null;
+    /** Where each connection it signs as went when it was asked for (`changeSetting`'s `targets`). */
+    targets?: Readonly<Record<string, string>>;
   },
 ): Promise<void> {
   const account = await approverAccount(services.db, call.approvalId);
   const dispatcher = sessionDispatcherOf(services);
   const answer =
     account && dispatcher
-      ? await dispatcher.runForAssistant(account, call.agentId, call.op, call.input)
+      ? await runBound(services, call.targets ?? {}, changedSinceYesText, () =>
+          dispatcher.runForAssistant(account, call.agentId, call.op, call.input),
+        )
       : ({ type: 'error', message: 'This Whombat can’t run its settings now.' } as const);
   const result =
     answer.type === 'result'
@@ -204,6 +220,34 @@ export async function runApprovedChange(
       'could not answer an approved settings change',
     ),
   );
+}
+
+/**
+ * Runs a settings op signing as each connection in `targets` only where, and as whom, it went when the change was asked
+ * for: a connection given another address, account or token since answers `changed(label)` and nothing runs; one that
+ * changes while the op runs sends nothing (`bound-targets.ts`).
+ */
+export async function runBound(
+  services: Services,
+  targets: Readonly<Record<string, string>>,
+  changed: (label: string) => string,
+  run: () => Promise<RequestAnswer>,
+): Promise<RequestAnswer> {
+  const refused = (message: string): RequestAnswer => ({
+    type: 'error',
+    code: 'conflict',
+    message,
+    retryable: false,
+    replayed: false,
+  });
+  const label = await changedSince(services, targets);
+  if (label) return refused(changed(label));
+  try {
+    return (await signingOnlyAs(targets, run)).value;
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) return refused(err.message);
+    throw err;
+  }
 }
 
 export const SETTINGS_COMMANDS = [changeSetting];

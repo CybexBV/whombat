@@ -30,6 +30,7 @@ import {
 } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { changedWhileAskedText } from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, burrows } from '../db/schema/index';
 import { postAskCard } from '../guides/ask';
@@ -38,9 +39,9 @@ import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import type { ToolContext } from '../mcp/tools';
 import { shortName } from '../read/principals';
-import { describeThingAction } from '../things/actions';
+import { describeThingAction, thingActionTargets } from '../things/actions';
 import { ownTurn } from '../vault/self-serve';
-import { changeSetting } from './command';
+import { changeSetting, runBound } from './command';
 
 type FindIn = z.output<typeof SettingsFindInput>;
 type ReadIn = z.output<typeof SettingsReadInput>;
@@ -299,6 +300,8 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
           (full as { body?: unknown }).body,
         )
       : null;
+  // Where a page action goes and as whom now: a yes is bound to it, and the change runs only while it still goes there.
+  const targets = await thingActionTargets(ctx.services, ctx.burrowId, input.op, full);
   const res = await ctx.services.pipeline.commit(
     changeSetting,
     {
@@ -306,6 +309,7 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
       input: full as Record<string, unknown>,
       conversationId: ctx.dispatch.conversationId,
       ...(said ? { title: said.title, lines: said.lines.slice(0, 6) } : {}),
+      ...(Object.keys(targets).length ? { targets } : {}),
     },
     { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
   );
@@ -313,7 +317,9 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
     return { status: 'pending_approval', approvalId: res.approvalId, message: res.message };
   if (res.status === 'blocked')
     return { status: 'blocked', message: SETTINGS_TOOL_TEXT.blocked(place.where), where: place.where };
-  const answer = await dispatcher.runForAssistant(who.account, ctx.agentId, input.op, full);
+  const answer = await runBound(ctx.services, targets, changedWhileAskedText, () =>
+    dispatcher.runForAssistant(who.account, ctx.agentId, input.op, full),
+  );
   if (answer.type === 'error') return refusalOf(answer);
   if (answer.type === 'redacted') return { status: 'done', op: input.op, value: null, truncated: false };
   return { status: 'done', op: input.op, ...clipValue(answer.output) };

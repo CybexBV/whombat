@@ -71,6 +71,14 @@ export function undoGoesWhereChangeWent(row: CallTargetRow, destination: unknown
   return typeof destination !== 'string' || callTarget(row) === destination;
 }
 
+/**
+ * What a page's button says when its connection went elsewhere or as someone else between the press and the moment it
+ * would have signed (a key, account or address replaced in between): nothing was sent.
+ */
+export function changedJustNowText(label: string): string {
+  return `${label} changed just now (its address, account or sign-in), so nothing was sent. Try again.`;
+}
+
 /** What an agent hears when the connection changed in the moment its call started: nothing was sent. */
 export function changedWhileAskedText(label: string): string {
   return `${label} changed while this call started (its address, account or sign-in), so nothing was sent. Call it again.`;
