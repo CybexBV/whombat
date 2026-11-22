@@ -32,11 +32,11 @@ export interface ManagedTest {
   enroll(principalId: string): Promise<TestIdentity & { accountId: string; endpointId: string }>;
   /**
    * A connected session client that already said hello. `doorPeer`: at the box's own address, the visitor's address;
-   * `claimLink`: the claim link's secret its hello shows.
+   * `claimLink`: the claim link's secret its hello shows; `minor`: the session minor it speaks (an older app's is lower).
    */
   client(
     identity?: TestIdentity,
-    options?: { transport?: SessionTransport; doorPeer?: string; claimLink?: string },
+    options?: { transport?: SessionTransport; doorPeer?: string; claimLink?: string; minor?: number },
   ): Promise<TestSessionClient>;
   /**
    * The console letters, after giving the runtime a lookup lease as the manager would (`POST /claim-lookup`).
@@ -151,10 +151,10 @@ export function useManagedRuntime(
         oldest.close();
         await oldest.closed;
       }
-      const { claimLink, ...connection } = options ?? {};
+      const { claimLink, minor, ...connection } = options ?? {};
       const c = new TestSessionClient(get(), identity ?? testIdentity(), connection);
       clients.push(c);
-      const welcome = await c.hello(claimLink ? { claimLink } : {});
+      const welcome = await c.hello(claimLink ? { claimLink } : {}, minor);
       if (welcome.t !== 'welcome') throw new Error(`no welcome: ${JSON.stringify(welcome)}`);
       return c;
     },

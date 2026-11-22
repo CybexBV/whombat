@@ -822,7 +822,9 @@ published automation details read their definition and publisher from one versio
   Proposed writes (`propose_connection_actions`, narrowed to writable non-built-in services excluding `whombat_servers`,
   `t3code`, `DELETE` and read-only calls, with prompts listing handles/tools only) always ask the person on a
   server-described approval card bound to the exact `actionsHash` regardless of standing settings before
-  `connection_actions` runs them, settling as `uncertain` on timeout or partial-batch failure.
+  `connection_actions` runs them, settling as `uncertain` on timeout or partial-batch failure. A session below protocol
+  minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
+  an automation without its definition (`automations/older-apps.ts`).
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An

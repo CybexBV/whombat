@@ -56,9 +56,11 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * local claim's proof round (`enroll.claim.local.prove`): an app names the person only to a box that proved it knows
  * the letters on its screen, and a box refuses an app below it (`claim_update_app`; Whombat whombat-link.md); minor 2 is
  * the claim link in a page's `hello` at the box's own address (`hello.claimLink`), for the places an unclaimed box keeps
- * for the visitor who has it (Whombat own-address.md).
+ * for the visitor who has it (Whombat own-address.md); minor 3 is automations started by incoming mail: the `mail` trigger,
+ * run trigger and list source, the `connection_actions` step and an agent step's `proposeActions`, which a box sends as
+ * they are only to a session at minor 3 or later (Whombat automation-recipes.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 2 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 3 };
 
 /** `stream.download`, `events`, … */
 export const Capability = z
