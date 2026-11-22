@@ -9,6 +9,7 @@ package diskusage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -30,6 +31,7 @@ const (
 	CodeSpunDown       = "spun_down"
 	CodeStandbyUnknown = "standby_unknown"
 	CodeBusy           = "busy"
+	CodeUnsupported    = "unsupported"
 	CodeFailed         = "failed"
 )
 
@@ -50,6 +52,8 @@ type mountInfo struct {
 	ID         int
 	ParentID   int
 	MajMin     string
+	FSID       [2]int32
+	HasFSID    bool
 	MountPoint string
 	FSType     string
 	Source     string
@@ -94,6 +98,7 @@ type Runner struct {
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
 	maxEntries     int
+	catMaxEntries  int
 	hangGrace      time.Duration
 	setLowPriority func()
 	isUnraid       func() bool
@@ -243,8 +248,17 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		if sfs == nil {
 			sfs = newDefaultScanFS(r)
 		}
-		rootDir, err := sfs.OpenRoot(hostPath, mount)
+		rootDir, err := sfs.OpenRoot(hostPath, mount, scope.target)
 		if err != nil {
+			var unsup *scanUnsupportedError
+			if errors.As(err, &unsup) {
+				done <- scanOut{errCode: CodeUnsupported, errMsg: unsup.msg}
+				return
+			}
+			if errors.Is(err, errRootChanged) {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
+				return
+			}
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
 			return
 		}
@@ -267,6 +281,18 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			// reading mountinfo and opening the root descriptor, before fstatfs or
 			// any directory read.
 			if scope.target.ID > 0 && rootMntID != uint64(scope.target.ID) {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
+				return
+			}
+		} else if r.isLinux() && r.root == "" && r.scanFS == nil && scope.target.ID > 0 {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not confirm the mounted filesystem at %s.", mount)}
+			return
+		}
+		if scope.target.HasFSID {
+			// Refuse if another volume was mounted over the mount point between
+			// reading the mount table / checking standby and opening the root
+			// descriptor (macOS getfsstat f_fsid vs opened root f_fsid).
+			if !rootMeta.HasFSID || rootMeta.FSID != scope.target.FSID {
 				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
 				return
 			}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -2380,9 +2382,9 @@ type recordingScanFS struct {
 	onOp  func(logicalPath string)
 }
 
-func (f *recordingScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
+func (f *recordingScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
 	f.onOp(logicalMount)
-	d, err := f.inner.OpenRoot(hostPath, logicalMount)
+	d, err := f.inner.OpenRoot(hostPath, logicalMount, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -2407,14 +2409,14 @@ func (d *recordingScanDir) OpenSelf() (scanDir, error) {
 	return &recordingScanDir{inner: sub, logicalPath: d.logicalPath, onOp: d.onOp}, nil
 }
 
-func (d *recordingScanDir) ReadDir() ([]dirEntryInfo, error) {
+func (d *recordingScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 	d.onOp(d.logicalPath)
-	return d.inner.ReadDir()
+	return d.inner.ReadDirBatch(maxEntries)
 }
 
-func (d *recordingScanDir) OpenDir(name, logicalPath string, searchOnly bool) (scanDir, error) {
+func (d *recordingScanDir) OpenDir(name, logicalPath string, searchOnly, prechecked bool) (scanDir, error) {
 	d.onOp(logicalPath)
-	sub, err := d.inner.OpenDir(name, logicalPath, searchOnly)
+	sub, err := d.inner.OpenDir(name, logicalPath, searchOnly, prechecked)
 	if err != nil {
 		return nil, err
 	}
@@ -2431,8 +2433,8 @@ func (d *recordingScanDir) StatEntry(name, logicalPath string) (entryStat, error
 type fakeFSMode int
 
 const (
-	fakeModeOpenat2  fakeFSMode = iota // Linux openat2(RESOLVE_NO_XDEV): refuses mount crossings before touching the mounted fs
-	fakeModeFallback                   // Linux ENOSYS fallback / macOS: checks st_dev and mount ID before ReadDir
+	fakeModeOpenat2    fakeFSMode = iota // Linux openat2(RESOLVE_NO_XDEV): refuses mount crossings before touching the mounted fs
+	fakeModeDarwinBulk                   // macOS getattrlistbulk(NOCROSSMOUNT): skips mount points/triggers/firmlinks before openat and returns file stats inline
 )
 
 type fakeMountTracker struct {
@@ -2447,6 +2449,10 @@ type fakeNode struct {
 	allocBytes uint64
 	dev        uint64
 	mntID      uint64
+	fsid       [2]int32
+	hasFSID    bool
+	firmlink   bool
+	automount  bool
 	ino        uint64
 	nlink      uint64
 	children   map[string]*fakeNode
@@ -2613,7 +2619,7 @@ func (f *fakeScanFS) ensureDirLocked(base *fakeNode, logicalPath string, dev, mn
 	return cur
 }
 
-func (f *fakeScanFS) OpenRoot(_ string, logicalMount string) (scanDir, error) {
+func (f *fakeScanFS) OpenRoot(_ string, logicalMount string, _ mountInfo) (scanDir, error) {
 	if f.onOpenRoot != nil {
 		f.onOpenRoot(logicalMount, f)
 	}
@@ -2629,6 +2635,9 @@ type fakeScanDir struct {
 	fs          *fakeScanFS
 	node        *fakeNode
 	logicalPath string
+	entries     []dirEntryInfo
+	loaded      bool
+	off         int
 }
 
 func (d *fakeScanDir) Stat() (entryStat, error) {
@@ -2646,6 +2655,8 @@ func (d *fakeScanDir) Stat() (entryStat, error) {
 		HasInode:   true,
 		MntID:      n.mntID,
 		HasMntID:   true,
+		FSID:       n.fsid,
+		HasFSID:    n.hasFSID,
 	}, nil
 }
 
@@ -2660,50 +2671,110 @@ func (d *fakeScanDir) OpenSelf() (scanDir, error) {
 	return &fakeScanDir{fs: d.fs, node: d.node, logicalPath: d.logicalPath}, nil
 }
 
-func (d *fakeScanDir) ReadDir() ([]dirEntryInfo, error) {
-	if d.node.tracker != nil {
-		d.node.tracker.touched.Add(1)
-		d.node.tracker.dataReads.Add(1)
-	}
-	if d.fs.onReadDir != nil {
-		d.fs.onReadDir(d.logicalPath, d.fs)
-	}
-	d.fs.mu.Lock()
-	defer d.fs.mu.Unlock()
-	names := make([]string, 0, len(d.node.children))
-	for name := range d.node.children {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	out := make([]dirEntryInfo, 0, len(names))
-	for _, name := range names {
-		ch := d.node.children[name]
-		kind := entryUnknown
-		if !d.fs.noDType {
-			switch {
-			case ch.mode&fs.ModeSymlink != 0:
-				kind = entrySymlink
-			case ch.mode.IsDir():
-				kind = entryDir
-			case ch.mode.IsRegular():
-				kind = entryRegular
-			default:
-				kind = entryOther
-			}
+func (d *fakeScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	limit := clampBatchSize(maxEntries)
+	if !d.loaded {
+		if d.node.tracker != nil {
+			d.node.tracker.touched.Add(1)
+			d.node.tracker.dataReads.Add(1)
 		}
-		out = append(out, dirEntryInfo{Name: name, Kind: kind})
+		if d.fs.onReadDir != nil {
+			d.fs.onReadDir(d.logicalPath, d.fs)
+		}
+		d.fs.mu.Lock()
+		names := make([]string, 0, len(d.node.children))
+		for name := range d.node.children {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		out := make([]dirEntryInfo, 0, len(names))
+		for _, name := range names {
+			ch := d.node.children[name]
+			if d.fs.mode == fakeModeDarwinBulk {
+				// macOS getattrlistbulk(NOCROSSMOUNT) identifies mount points,
+				// automount triggers and APFS firmlinks from the parent volume
+				// without touching the mounted filesystem, and supplies regular
+				// file metadata inline without fstatat.
+				if ch.dev != d.node.dev || ch.mntID != d.node.mntID || ch.firmlink || ch.automount {
+					continue
+				}
+				switch {
+				case ch.mode&fs.ModeSymlink != 0:
+					out = append(out, dirEntryInfo{Name: name, Kind: entrySymlink})
+				case ch.mode.IsDir():
+					out = append(out, dirEntryInfo{
+						Name:    name,
+						Kind:    entryDir,
+						HasStat: true,
+						Stat: entryStat{
+							Mode:     ch.mode,
+							Dev:      ch.dev,
+							HasDev:   true,
+							Ino:      ch.ino,
+							Nlink:    ch.nlink,
+							HasInode: true,
+							MntID:    ch.mntID,
+							HasMntID: true,
+						},
+					})
+				case ch.mode.IsRegular():
+					out = append(out, dirEntryInfo{
+						Name:    name,
+						Kind:    entryRegular,
+						HasStat: true,
+						Stat: entryStat{
+							Mode:       ch.mode,
+							Size:       int64(ch.allocBytes),
+							AllocBytes: ch.allocBytes,
+							Dev:        ch.dev,
+							HasDev:     true,
+							Ino:        ch.ino,
+							Nlink:      ch.nlink,
+							HasInode:   true,
+							MntID:      ch.mntID,
+							HasMntID:   true,
+						},
+					})
+				default:
+					out = append(out, dirEntryInfo{Name: name, Kind: entryOther})
+				}
+				continue
+			}
+			kind := entryUnknown
+			if !d.fs.noDType {
+				switch {
+				case ch.mode&fs.ModeSymlink != 0:
+					kind = entrySymlink
+				case ch.mode.IsDir():
+					kind = entryDir
+				case ch.mode.IsRegular():
+					kind = entryRegular
+				default:
+					kind = entryOther
+				}
+			}
+			out = append(out, dirEntryInfo{Name: name, Kind: kind})
+		}
+		d.fs.mu.Unlock()
+		d.entries = out
+		d.loaded = true
 	}
-	return out, nil
+	if d.off >= len(d.entries) {
+		return nil, io.EOF
+	}
+	end := min(d.off+limit, len(d.entries))
+	batch := d.entries[d.off:end]
+	d.off = end
+	return batch, nil
 }
 
-func (d *fakeScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error) {
+func (d *fakeScanDir) OpenDir(name, logicalPath string, _, prechecked bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}
 	d.fs.mu.Lock()
 	ch, ok := d.node.children[name]
 	parentDev, parentMnt := d.node.dev, d.node.mntID
-	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
 	d.fs.mu.Unlock()
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -2715,19 +2786,23 @@ func (d *fakeScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error)
 		return nil, errNotDir
 	}
 	if d.fs.mode == fakeModeOpenat2 {
-		// Linux openat2(RESOLVE_NO_XDEV) refuses the mount crossing in VFS
-		// BEFORE touching the mounted filesystem's root inode.
-		if ch.dev != parentDev || ch.mntID != parentMnt {
+		// Linux openat2(O_PATH, RESOLVE_NO_XDEV) refuses mount crossings in VFS
+		// and rejects automount triggers before touching the mounted filesystem.
+		if ch.dev != parentDev || ch.mntID != parentMnt || ch.automount {
 			return nil, errWrongMount
 		}
 		return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
 	}
-	// Fallback (Linux ENOSYS / macOS): openat binds the mounted root inode
-	// (no data/directory read), then checks st_dev and mount ID before returning.
-	if ch.tracker != nil {
-		ch.tracker.touched.Add(1)
+	// macOS getattrlistbulk(NOCROSSMOUNT): when called from openRelDir
+	// (prechecked=false), lookupChildBulk inspects the parent directory first
+	// and rejects mount points, triggers and firmlinks without touching them.
+	if !prechecked && (ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount) {
+		return nil, errWrongMount
 	}
-	if ch.dev != rootDev || ch.mntID != rootMnt {
+	if ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount {
+		if ch.tracker != nil {
+			ch.tracker.touched.Add(1)
+		}
 		return nil, errWrongMount
 	}
 	return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
@@ -2740,27 +2815,17 @@ func (d *fakeScanDir) StatEntry(name, _ string) (entryStat, error) {
 	d.fs.mu.Lock()
 	ch, ok := d.node.children[name]
 	parentDev, parentMnt := d.node.dev, d.node.mntID
-	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
 	d.fs.mu.Unlock()
 	if !ok {
 		return entryStat{}, fs.ErrNotExist
 	}
-	if d.fs.mode == fakeModeOpenat2 {
-		// Linux openat2(O_PATH, RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS) rejects
-		// symlinks and mount crossings before calling getattr on the mounted fs.
-		if ch.mode&fs.ModeSymlink != 0 {
-			return entryStat{}, errWrongMount
-		}
-		if ch.dev != parentDev || ch.mntID != parentMnt {
-			return entryStat{}, errWrongMount
-		}
-	} else {
-		if ch.tracker != nil {
-			ch.tracker.touched.Add(1)
-		}
-		if ch.mode&fs.ModeSymlink == 0 && (ch.dev != rootDev || ch.mntID != rootMnt) {
-			return entryStat{}, errWrongMount
-		}
+	if ch.mode&fs.ModeSymlink != 0 {
+		return entryStat{}, errWrongMount
+	}
+	// Both Linux openat2(O_PATH, RESOLVE_NO_XDEV) and macOS getattrlistbulk
+	// refuse mount crossings without sending metadata requests to the mounted fs.
+	if ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount {
+		return entryStat{}, errWrongMount
 	}
 	return entryStat{
 		Mode:       ch.mode,
@@ -2786,8 +2851,7 @@ func TestMidWalkMountNeverTouchedOrReadFakeFS(t *testing.T) {
 	}{
 		{"openat2_with_dtype", fakeModeOpenat2, false},
 		{"openat2_without_dtype", fakeModeOpenat2, true},
-		{"fallback_with_dtype", fakeModeFallback, false},
-		{"fallback_without_dtype", fakeModeFallback, true},
+		{"darwin_getattrlistbulk", fakeModeDarwinBulk, false},
 	}
 
 	for _, tc := range cases {
@@ -2882,8 +2946,8 @@ func TestMidWalkMountNeverTouchedOrReadFakeFS(t *testing.T) {
 				if tr.dataReads.Load() != 0 {
 					t.Errorf("%s: newly mounted filesystem had %d data/readdir reads, want 0", tr.name, tr.dataReads.Load())
 				}
-				if tc.mode == fakeModeOpenat2 && tr.touched.Load() != 0 {
-					t.Errorf("%s: openat2 mode touched newly mounted filesystem %d times, want 0", tr.name, tr.touched.Load())
+				if tr.touched.Load() != 0 {
+					t.Errorf("%s: mode %s touched newly mounted filesystem %d times, want 0", tr.name, tc.name, tr.touched.Load())
 				}
 			}
 
@@ -3000,5 +3064,397 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	}
 	if errors.Is(errWrongMount, fs.ErrPermission) {
 		t.Fatal("errWrongMount must not match fs.ErrPermission")
+	}
+}
+
+func TestDarwinDataVolumeCategoryRoots(t *testing.T) {
+	root := t.TempDir()
+	// Modern macOS: "/" is the sealed system volume and mutable data sits under /System/Volumes/Data.
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/Library/Caches/Homebrew/downloads/foo.tar.gz"), 24*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/opt/homebrew/Caches/bar.bottle.tar.gz"), 16*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/private/var/lib/docker/volumes/pg/data.bin"), 20*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/private/var/lib/docker/containers/c1/c1-json.log"), 12*1024)
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s3s1"},
+		{ID: 2, MountPoint: "/System/Volumes/Data", FSType: "apfs", Source: "/dev/disk3s1"},
+	}
+	inv := &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/", Device: "/dev/disk3", FSType: "apfs", Disks: []string{"disk0"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk0", Type: "nvme", Model: "APPLE SSD AP1024Z"},
+		},
+	}
+
+	r := newTestRunner(t, root, mounts, inv)
+	r.goos = "darwin"
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/System/Volumes/Data"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error scanning /System/Volumes/Data: %+v", resp)
+	}
+	byKey := map[string]proto.DiskUsageCategory{}
+	for _, c := range resp.Categories {
+		byKey[c.Key] = c
+	}
+	pkg := byKey[proto.DiskCatPackageCache]
+	if pkg.Bytes < 40*1024 || pkg.Bytes >= 128*1024 {
+		t.Errorf("package_cache on /System/Volumes/Data = %+v, want ~40 KiB (both Homebrew roots)", pkg)
+	}
+	if pkg.Detail != "Homebrew" {
+		t.Errorf("package_cache detail = %q, want %q", pkg.Detail, "Homebrew")
+	}
+	if vol := byKey[proto.DiskCatContainerVolumes]; vol.Bytes < 20*1024 {
+		t.Errorf("container_volumes on /System/Volumes/Data = %+v, want >= 20 KiB", vol)
+	}
+	if logs := byKey[proto.DiskCatContainerLogs]; logs.Bytes < 12*1024 {
+		t.Errorf("container_logs on /System/Volumes/Data = %+v, want >= 12 KiB", logs)
+	}
+
+	// Pre-Catalina single-volume Mac (or direct "/" mount) still finds /Library/Caches/Homebrew and /opt/homebrew/Caches.
+	rootSingle := t.TempDir()
+	writeBytes(t, filepath.Join(rootSingle, "Library/Caches/Homebrew/legacy.tar.gz"), 20*1024)
+	writeBytes(t, filepath.Join(rootSingle, "opt/homebrew/Caches/opt.tar.gz"), 12*1024)
+	rSingle := newTestRunner(t, rootSingle, []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s1"},
+	}, inv)
+	rSingle.goos = "darwin"
+	respSingle := rSingle.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if respSingle.Code != "" {
+		t.Fatalf("unexpected error scanning single-volume /: %+v", respSingle)
+	}
+	var pkgSingle proto.DiskUsageCategory
+	for _, c := range respSingle.Categories {
+		if c.Key == proto.DiskCatPackageCache {
+			pkgSingle = c
+		}
+	}
+	if pkgSingle.Bytes < 32*1024 || pkgSingle.Detail != "Homebrew" {
+		t.Errorf("package_cache on single-volume / = %+v, want >= 32 KiB Homebrew", pkgSingle)
+	}
+}
+
+// hugeBatchScanFS simulates a directory with millions of virtual entries
+// generated lazily per ReadDirBatch call so tests can verify that walkMount,
+// walkDirBytes and collectContainerLogs bound memory, apply entry caps and
+// check cancellation between batches without reading an entire huge directory.
+type hugeBatchScanFS struct {
+	rootDev       uint64
+	rootMntID     uint64
+	hugeDirPath   string // logical path of the directory containing totalVirtual regular files
+	fileSuffix    string // suffix appended to generated filenames (e.g. ".bin" or "-json.log")
+	totalVirtual  int
+	onBatch       func(path string, batchIndex int)
+	batchesRead   atomic.Int64
+	entriesRead   atomic.Int64
+	maxBatchAsked atomic.Int64
+}
+
+func (f *hugeBatchScanFS) OpenRoot(_ string, logicalMount string, _ mountInfo) (scanDir, error) {
+	return &hugeBatchDir{fs: f, logicalPath: logicalMount}, nil
+}
+
+type hugeBatchDir struct {
+	fs          *hugeBatchScanFS
+	logicalPath string
+	offset      int
+	batchCount  int
+	sentChild   bool
+}
+
+func (d *hugeBatchDir) Stat() (entryStat, error) {
+	return entryStat{
+		Mode:     fs.ModeDir | 0o755,
+		Dev:      d.fs.rootDev,
+		HasDev:   true,
+		Ino:      1,
+		Nlink:    2,
+		HasInode: true,
+		MntID:    d.fs.rootMntID,
+		HasMntID: true,
+	}, nil
+}
+
+func (d *hugeBatchDir) Statfs() (fsStat, error) {
+	return fsStat{TotalBytes: 200 << 30, UsedBytes: 10 << 30}, nil
+}
+
+func (d *hugeBatchDir) OpenSelf() (scanDir, error) {
+	return &hugeBatchDir{fs: d.fs, logicalPath: d.logicalPath}, nil
+}
+
+func (d *hugeBatchDir) nextSegmentTowardHuge() (string, bool) {
+	if d.logicalPath == d.fs.hugeDirPath {
+		return "", false
+	}
+	if !hasPathPrefix(d.fs.hugeDirPath, d.logicalPath) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(d.fs.hugeDirPath, d.logicalPath)
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
+		return "", false
+	}
+	seg, _, _ := strings.Cut(rel, "/")
+	return seg, seg != ""
+}
+
+func (d *hugeBatchDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	if d.logicalPath != d.fs.hugeDirPath {
+		if d.sentChild {
+			return nil, io.EOF
+		}
+		d.sentChild = true
+		if seg, ok := d.nextSegmentTowardHuge(); ok {
+			return []dirEntryInfo{{Name: seg, Kind: entryDir}}, nil
+		}
+		return nil, io.EOF
+	}
+	limit := clampBatchSize(maxEntries)
+	for {
+		cur := d.fs.maxBatchAsked.Load()
+		if int64(maxEntries) <= cur || d.fs.maxBatchAsked.CompareAndSwap(cur, int64(maxEntries)) {
+			break
+		}
+	}
+	if d.offset >= d.fs.totalVirtual {
+		return nil, io.EOF
+	}
+	n := min(limit, d.fs.totalVirtual-d.offset)
+	out := make([]dirEntryInfo, n)
+	for i := 0; i < n; i++ {
+		out[i] = dirEntryInfo{
+			Name: fmt.Sprintf("f-%07d%s", d.offset+i, d.fs.fileSuffix),
+			Kind: entryRegular,
+		}
+	}
+	d.offset += n
+	d.batchCount++
+	d.fs.batchesRead.Add(1)
+	d.fs.entriesRead.Add(int64(n))
+	if d.fs.onBatch != nil {
+		d.fs.onBatch(d.logicalPath, d.batchCount)
+	}
+	return out, nil
+}
+
+func (d *hugeBatchDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
+	seg, ok := d.nextSegmentTowardHuge()
+	if !ok || name != seg {
+		return nil, fs.ErrNotExist
+	}
+	return &hugeBatchDir{fs: d.fs, logicalPath: logicalPath}, nil
+}
+
+func (d *hugeBatchDir) StatEntry(_ string, _ string) (entryStat, error) {
+	return entryStat{
+		Mode:       0o644,
+		Size:       4096,
+		AllocBytes: 4096,
+		Dev:        d.fs.rootDev,
+		HasDev:     true,
+		Ino:        2,
+		Nlink:      1,
+		HasInode:   true,
+		MntID:      d.fs.rootMntID,
+		HasMntID:   true,
+	}, nil
+}
+
+func (d *hugeBatchDir) Close() error { return nil }
+
+func TestBatchedReadDirCapsAndCancelsLargeDirectories(t *testing.T) {
+	const virtualCount = 5_000_000
+	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+
+	t.Run("walkMount_entry_cap", func(t *testing.T) {
+		hfs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/srv/huge",
+			fileSuffix:   ".bin",
+			totalVirtual: virtualCount,
+		}
+		r := newTestRunner(t, t.TempDir(), mounts, nil)
+		r.scanFS = hfs
+		r.maxEntries = 1200
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if !resp.Partial {
+			t.Fatalf("expected Partial=true when hitting entry cap on 5M dir")
+		}
+		if got := hfs.maxBatchAsked.Load(); got > dirBatchSize {
+			t.Errorf("ReadDirBatch asked for %d entries at once, want <= %d", got, dirBatchSize)
+		}
+		// Total entries emitted from /srv/huge must be bounded by maxEntries (never 5M).
+		if got := hfs.entriesRead.Load(); got > int64(r.maxEntries+1) {
+			t.Errorf("huge dir read %d entries, want <= %d", got, r.maxEntries+1)
+		}
+		if got := hfs.batchesRead.Load(); got < 2 || got > 4 {
+			t.Errorf("huge dir batches read = %d, want 2..4", got)
+		}
+	})
+
+	t.Run("walkMount_cancel_between_batches", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hfs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/srv/huge",
+			fileSuffix:   ".bin",
+			totalVirtual: virtualCount,
+			onBatch: func(_ string, batchIndex int) {
+				if batchIndex == 2 {
+					cancel()
+				}
+			},
+		}
+		r := newTestRunner(t, t.TempDir(), mounts, nil)
+		r.scanFS = hfs
+		r.maxEntries = 100_000
+
+		resp := r.DiskUsage(ctx, proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if !resp.Partial {
+			t.Fatalf("expected Partial=true when cancelled between batches")
+		}
+		if got := hfs.batchesRead.Load(); got != 2 {
+			t.Errorf("expected stop immediately after batch 2 on cancel, read %d batches", got)
+		}
+	})
+
+	t.Run("walkDirBytes_and_container_logs_caps", func(t *testing.T) {
+		// 1. walkDirBytes (/var/log/journal with 5M files) stops at catMaxEntries.
+		hfsJournal := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/var/log/journal",
+			fileSuffix:   ".journal",
+			totalVirtual: virtualCount,
+		}
+		r1 := newTestRunner(t, t.TempDir(), mounts, nil)
+		r1.scanFS = hfsJournal
+		r1.catMaxEntries = 900
+		r1.maxEntries = 10 // keep general walk tiny so only journal reads many batches
+		resp1 := r1.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp1.Code != "" || !resp1.Partial {
+			t.Fatalf("journal huge dir: resp = %+v, want Partial=true", resp1)
+		}
+		if got := hfsJournal.entriesRead.Load(); got > int64(r1.catMaxEntries+r1.maxEntries+2) {
+			t.Errorf("journal huge dir read %d entries, want <= %d", got, r1.catMaxEntries+r1.maxEntries+2)
+		}
+
+		// 2. collectContainerLogs (/var/lib/docker/containers/c1 with 5M log files) stops at catMaxEntries.
+		hfsLogs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/var/lib/docker/containers/c1",
+			fileSuffix:   "-json.log",
+			totalVirtual: virtualCount,
+		}
+		r2 := newTestRunner(t, t.TempDir(), mounts, nil)
+		r2.scanFS = hfsLogs
+		r2.catMaxEntries = 900
+		r2.maxEntries = 10
+		resp2 := r2.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp2.Code != "" || !resp2.Partial {
+			t.Fatalf("container logs huge dir: resp = %+v, want Partial=true", resp2)
+		}
+		if got := hfsLogs.entriesRead.Load(); got > int64(r2.catMaxEntries+r2.maxEntries+2) {
+			t.Errorf("container logs huge dir read %d entries, want <= %d", got, r2.catMaxEntries+r2.maxEntries+2)
+		}
+	})
+}
+
+type stubUnsupportedScanFS struct {
+	msg string
+}
+
+func (s stubUnsupportedScanFS) OpenRoot(string, string, mountInfo) (scanDir, error) {
+	return nil, &scanUnsupportedError{msg: s.msg}
+}
+
+func TestDarwinRootFSIDMismatchRefusedBeforeStatfsOrReadDir(t *testing.T) {
+	checkedFSID := [2]int32{0x01000004, 0x1a}
+	swappedFSID := [2]int32{0x01000009, 0x1a}
+
+	inv := &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/Volumes/FastSSD", Device: "/dev/disk5", FSType: "apfs", Disks: []string{"disk4"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk4", Type: "ssd"},
+		},
+	}
+
+	for _, tc := range []struct {
+		name       string
+		rootFSID   [2]int32
+		hasFSID    bool
+		wantFailed bool
+	}{
+		{"matching_fsid", checkedFSID, true, false},
+		{"swapped_volume_fsid", swappedFSID, true, true},
+		{"missing_root_fsid", [2]int32{}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ffs := newFakeScanFS(fakeModeDarwinBulk, false, 100, 1)
+			ffs.addFile("/srv/keep.bin", 16*1024)
+			overTracker := &fakeMountTracker{name: tc.name}
+			ffs.onOpenRoot = func(_ string, fs *fakeScanFS) {
+				fs.mu.Lock()
+				fs.root.fsid = tc.rootFSID
+				fs.root.hasFSID = tc.hasFSID
+				if tc.wantFailed {
+					fs.root.tracker = overTracker
+				}
+				fs.mu.Unlock()
+			}
+
+			mounts := []mountInfo{
+				{ID: 1, MountPoint: "/Volumes/FastSSD", FSType: "apfs", Source: "/dev/disk5s1", FSID: checkedFSID, HasFSID: true},
+			}
+			r := newTestRunner(t, t.TempDir(), mounts, inv)
+			r.goos = "darwin"
+			r.scanFS = ffs
+			r.statfs = nil
+
+			resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/FastSSD"})
+			if tc.wantFailed {
+				if resp.Code != CodeFailed || !strings.Contains(resp.Message, "changed before the scan started") {
+					t.Fatalf("resp = %+v, want CodeFailed about changed filesystem", resp)
+				}
+				if overTracker.statfsCalls.Load() != 0 {
+					t.Errorf("Statfs called %d times on mismatched macOS volume, want 0", overTracker.statfsCalls.Load())
+				}
+				if overTracker.dataReads.Load() != 0 {
+					t.Errorf("ReadDir called %d times on mismatched macOS volume, want 0", overTracker.dataReads.Load())
+				}
+			} else if resp.Code != "" {
+				t.Fatalf("unexpected error on matching f_fsid: %+v", resp)
+			}
+		})
+	}
+}
+
+func TestUnsupportedPlatformRefusesScanCleanly(t *testing.T) {
+	mounts := []mountInfo{{ID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+	r := newTestRunner(t, t.TempDir(), mounts, nil)
+	r.scanFS = stubUnsupportedScanFS{msg: "This server's system does not support safe disk scans."}
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != CodeUnsupported {
+		t.Fatalf("resp.Code = %q, want %q (resp=%+v)", resp.Code, CodeUnsupported, resp)
+	}
+	if !strings.Contains(resp.Message, "does not support safe disk scans") {
+		t.Errorf("resp.Message = %q, want plain unsupported reason", resp.Message)
 	}
 }

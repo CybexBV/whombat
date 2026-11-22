@@ -3,6 +3,7 @@ package diskusage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -85,7 +86,7 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 				partial = true
 				break
 			}
-			b, p := r.walkDirBytes(ctx, rootDir, scope, pd.path, rootDev, rootMntID, 5, seen)
+			b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, pd.path), rootDev, rootMntID, 5, seen)
 			if p {
 				partial = true
 			}
@@ -149,7 +150,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 	var out []proto.DiskUsageCategory
 	partial := false
 
-	dockerRoot := "/var/lib/docker"
+	dockerRoot := categoryPathForScope(scope, "/var/lib/docker")
 	sock := r.findDockerSocket()
 	var df *dockerSystemDF
 	var rootOnMount bool
@@ -158,7 +159,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 		client := unixHTTPClient(sock, 10*time.Second)
 		var info dockerInfo
 		if err := dockerGet(ctx, client, "/info", &info); err == nil && info.DockerRootDir != "" {
-			dockerRoot = filepath.Clean(info.DockerRootDir)
+			dockerRoot = categoryPathForScope(scope, info.DockerRootDir)
 		}
 		// Resolve dockerRoot strictly relative to rootDir without crossing mounts
 		// or following symlinks before querying dockerd. Request only images and
@@ -290,22 +291,40 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 	seen := map[inodeKey]struct{}{}
 
 	containersDir := filepath.Join(dockerRoot, "containers")
+	capEntries := r.catMaxEntries
+	if capEntries <= 0 {
+		capEntries = 100_000
+	}
+	entries := 0
 	cDir, err := openRelDir(rootDir, scope, containersDir, false)
 	if err != nil {
 		if !isSkipDirErr(err) {
 			partial = true
 		}
 	} else {
-		ents, rerr := cDir.ReadDir()
-		if rerr != nil {
-			if !isSkipDirErr(rerr) {
+	outerLoop:
+		for {
+			if ctx.Err() != nil {
 				partial = true
+				break
 			}
-		} else {
+			rem := capEntries - entries
+			if rem < 0 {
+				partial = true
+				break
+			}
+			ents, rerr := cDir.ReadDirBatch(min(dirBatchSize, rem+1))
 			for _, e := range ents {
-				if ctx.Err() != nil {
+				entries++
+				if entries > capEntries || ctx.Err() != nil {
 					partial = true
-					break
+					break outerLoop
+				}
+				if e.Err != nil {
+					if !isSkipEntryErr(e.Err) {
+						partial = true
+					}
+					continue
 				}
 				if !isSafeChildName(e.Name) {
 					continue
@@ -319,7 +338,7 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 				if scope.isOtherMount(sub) {
 					continue
 				}
-				subDir, oerr := cDir.OpenDir(e.Name, sub, false)
+				subDir, oerr := cDir.OpenDir(e.Name, sub, false, true)
 				if oerr != nil {
 					// Plain files and symlinks inside containers/ return ENOTDIR/ELOOP,
 					// and newly mounted filesystems return errWrongMount; all skip cleanly.
@@ -328,61 +347,99 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 					}
 					continue
 				}
-				files, ferr := subDir.ReadDir()
-				if ferr != nil {
-					if !isSkipDirErr(ferr) {
+				for {
+					if ctx.Err() != nil {
 						partial = true
+						_ = subDir.Close()
+						break outerLoop
 					}
-					_ = subDir.Close()
-					continue
-				}
-				for i, f := range files {
-					if i&255 == 0 && ctx.Err() != nil {
+					subRem := capEntries - entries
+					if subRem < 0 {
 						partial = true
-						break
+						_ = subDir.Close()
+						break outerLoop
 					}
-					name := f.Name
-					if !isSafeChildName(name) {
-						continue
-					}
-					if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
-						continue
-					}
-					if f.Kind != entryRegular && f.Kind != entryUnknown {
-						continue
-					}
-					child := joinLogical(sub, name)
-					if scope.isOtherMount(child) {
-						continue
-					}
-					st, serr := subDir.StatEntry(name, child)
-					if serr != nil {
-						if !isSkipEntryErr(serr) {
+					files, ferr := subDir.ReadDirBatch(min(dirBatchSize, subRem+1))
+					for _, f := range files {
+						entries++
+						if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
 							partial = true
+							_ = subDir.Close()
+							break outerLoop
 						}
-						continue
-					}
-					if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
-						continue
-					}
-					if !st.HasDev || st.Dev != rootDev {
-						continue
-					}
-					if rootMntID != 0 && st.HasMntID && st.MntID != rootMntID {
-						continue
-					}
-					if st.HasInode && st.Nlink > 1 {
-						k := inodeKey{dev: st.Dev, ino: st.Ino}
-						if _, dup := seen[k]; dup {
+						if f.Err != nil {
+							if !isSkipEntryErr(f.Err) {
+								partial = true
+							}
 							continue
 						}
-						if len(seen) < MaxSeenInodes {
-							seen[k] = struct{}{}
+						name := f.Name
+						if !isSafeChildName(name) {
+							continue
 						}
+						if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
+							continue
+						}
+						if f.Kind != entryRegular && f.Kind != entryUnknown {
+							continue
+						}
+						child := joinLogical(sub, name)
+						if scope.isOtherMount(child) {
+							continue
+						}
+						var st entryStat
+						if f.HasStat {
+							st = f.Stat
+						} else {
+							var serr error
+							st, serr = subDir.StatEntry(name, child)
+							if serr != nil {
+								if !isSkipEntryErr(serr) {
+									partial = true
+								}
+								continue
+							}
+						}
+						if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
+							continue
+						}
+						if !st.HasDev || st.Dev != rootDev {
+							continue
+						}
+						if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
+							continue
+						}
+						if st.HasInode && st.Nlink > 1 {
+							k := inodeKey{dev: st.Dev, ino: st.Ino}
+							if _, dup := seen[k]; dup {
+								continue
+							}
+							if len(seen) < MaxSeenInodes {
+								seen[k] = struct{}{}
+							}
+						}
+						total += st.AllocBytes
 					}
-					total += st.AllocBytes
+					if ferr != nil {
+						if !errors.Is(ferr, io.EOF) && !isSkipDirErr(ferr) {
+							partial = true
+						}
+						break
+					}
+					if len(files) == 0 {
+						break
+					}
 				}
 				_ = subDir.Close()
+			}
+			if rerr != nil {
+				if !errors.Is(rerr, io.EOF) && !isSkipDirErr(rerr) {
+					partial = true
+				}
+				break
+			}
+			if len(ents) == 0 {
+				break
 			}
 		}
 		_ = cDir.Close()
@@ -390,7 +447,7 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 
 	// Kubernetes / CRI container logs if present on this mount.
 	if ctx.Err() == nil {
-		b, p := r.walkDirBytes(ctx, rootDir, scope, "/var/log/pods", rootDev, rootMntID, 4, seen)
+		b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, seen)
 		total += b
 		if p {
 			partial = true
@@ -457,7 +514,7 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 	// File-backed VM disk directories on this mount.
 	vmDirSet := map[string]bool{}
 	addVMDir := func(p string) {
-		p = filepath.Clean(p)
+		p = categoryPathForScope(scope, p)
 		if p != "" && strings.HasPrefix(p, "/") {
 			vmDirSet[p] = true
 		}
@@ -600,6 +657,42 @@ func runLowPriorityCmd(ctx context.Context, name string, args ...string) ([]byte
 		"LC_ALL=C",
 	}
 	return cmd.Output()
+}
+
+const darwinDataVolumeMount = "/System/Volumes/Data"
+
+// darwinDataPrefixes are root paths on macOS whose storage lives on the
+// mutable Data volume (/System/Volumes/Data) via APFS firmlinks rather than on
+// the sealed read-only system volume (/).
+var darwinDataPrefixes = []string{
+	"/Applications",
+	"/Library",
+	"/Users",
+	"/opt",
+	"/private",
+	"/usr/local",
+}
+
+// categoryPathForScope resolves a logical category root onto the target mount
+// when scanning macOS's /System/Volumes/Data volume.
+func categoryPathForScope(scope mountScope, p string) string {
+	clean := filepath.Clean(p)
+	if scope.target.MountPoint != darwinDataVolumeMount {
+		return clean
+	}
+	if hasPathPrefix(clean, darwinDataVolumeMount) {
+		return clean
+	}
+	for _, pref := range darwinDataPrefixes {
+		if hasPathPrefix(clean, pref) {
+			return darwinDataVolumeMount + clean
+		}
+	}
+	// On macOS, /var is a symlink to private/var on the Data volume.
+	if hasPathPrefix(clean, "/var") {
+		return darwinDataVolumeMount + "/private" + clean
+	}
+	return clean
 }
 
 func plural(n int, one, many string) string {
