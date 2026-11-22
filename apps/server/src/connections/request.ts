@@ -121,59 +121,78 @@ export function canonicalPath(path: string): string {
   });
 }
 
-/** A multipart file upload referencing an authorized Whombat attachment (e.g. Paperless-ngx document upload). */
+/**
+ * A file upload referencing an authorized Whombat attachment: sent as one field of a multipart form (`field`, with
+ * `fields` beside it; a list is the field repeated: Paperless-ngx's tags), or without `field` as the request's whole
+ * body (a WebDAV PUT, Dropbox's upload).
+ */
 export interface RequestUploadSpec {
-  field: string;
+  field?: string;
   attachmentId: string;
-  fields?: Record<string, string>;
+  fields?: Record<string, string | string[]>;
 }
 
-/** Resolved attachment bytes for a `request` multipart upload. */
+/** Resolved attachment bytes for a `request` upload. */
 export type ResolveRequestUpload = (
   attachmentId: string,
 ) => Promise<{ name: string; contentType: string; bytes: Buffer } | null>;
 
 const FORM_FIELD_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+const FORM_VALUE_MAX = 2000;
 
 /** Validates `args.upload` for `request`; returns null when omitted, or throws `ConnectionArgumentError`. */
 export function parseRequestUpload(raw: unknown): RequestUploadSpec | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw))
-    throw new ConnectionArgumentError('upload: give { field, attachmentId, fields? }.');
+    throw new ConnectionArgumentError('upload: give { attachmentId, field?, fields? }.');
   const rec = raw as Record<string, unknown>;
-  if (typeof rec.field !== 'string' || !FORM_FIELD_NAME.test(rec.field))
+  for (const key of Object.keys(rec)) {
+    if (key !== 'field' && key !== 'attachmentId' && key !== 'fields')
+      throw new ConnectionArgumentError(`upload.${key}: not part of an upload.`);
+  }
+  if (rec.field !== undefined && (typeof rec.field !== 'string' || !FORM_FIELD_NAME.test(rec.field)))
     throw new ConnectionArgumentError('upload.field: give a form field name such as “document”.');
   const att = AttachmentId.safeParse(rec.attachmentId);
   if (!att.success) throw new ConnectionArgumentError('upload.attachmentId: give a valid attachment id.');
-  let fields: Record<string, string> | undefined;
+  let fields: Record<string, string | string[]> | undefined;
   if (rec.fields !== undefined && rec.fields !== null) {
+    if (rec.field === undefined)
+      throw new ConnectionArgumentError('upload.fields: only with a form field (upload.field).');
     if (typeof rec.fields !== 'object' || Array.isArray(rec.fields))
       throw new ConnectionArgumentError('upload.fields: an object of form field names and text values.');
     const entries = Object.entries(rec.fields as Record<string, unknown>);
     if (entries.length > 32) throw new ConnectionArgumentError('upload.fields: at most 32 form fields.');
     fields = {};
+    const short = (v: unknown): v is string => typeof v === 'string' && v.length <= FORM_VALUE_MAX;
     for (const [k, v] of entries) {
-      if (!FORM_FIELD_NAME.test(k) || typeof v !== 'string' || v.length > 2000)
-        throw new ConnectionArgumentError(`upload.fields.${k}: must be a short string value.`);
-      fields[k] = v;
+      if (!FORM_FIELD_NAME.test(k) || !(short(v) || (Array.isArray(v) && v.length <= 32 && v.every(short))))
+        throw new ConnectionArgumentError(
+          `upload.fields.${k}: must be a short string value, or a list of them.`,
+        );
+      fields[k] = Array.isArray(v) ? [...v] : v;
     }
   }
-  return { field: rec.field, attachmentId: att.data, ...(fields ? { fields } : {}) };
+  return {
+    ...(typeof rec.field === 'string' ? { field: rec.field } : {}),
+    attachmentId: att.data,
+    ...(fields ? { fields } : {}),
+  };
 }
 
 function buildMultipartBody(
-  spec: RequestUploadSpec,
+  spec: RequestUploadSpec & { field: string },
   file: { name: string; contentType: string; bytes: Buffer },
 ): { boundary: string; body: Buffer } {
   const boundary = `----WhombatForm${randomUUID().replace(/-/g, '')}`;
   const chunks: Buffer[] = [];
-  for (const [k, v] of Object.entries(spec.fields ?? {})) {
-    chunks.push(
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`, 'utf8'),
-    );
+  for (const [k, value] of Object.entries(spec.fields ?? {})) {
+    for (const v of Array.isArray(value) ? value : [value])
+      chunks.push(
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`, 'utf8'),
+      );
   }
   const safeName = (file.name || 'attachment').replace(/["\r\n\\]/g, '_').slice(0, 200);
-  const safeType = (file.contentType || 'application/octet-stream').replace(/[\r\n]/g, '').slice(0, 120);
+  const safeType = safeContentType(file.contentType);
   chunks.push(
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="${spec.field}"; filename="${safeName}"\r\nContent-Type: ${safeType}\r\n\r\n`,
@@ -183,6 +202,21 @@ function buildMultipartBody(
   chunks.push(file.bytes);
   chunks.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'));
   return { boundary, body: Buffer.concat(chunks) };
+}
+
+const safeContentType = (type: string) =>
+  (type || 'application/octet-stream').replace(/[\r\n]/g, '').slice(0, 120);
+
+/** A header name given twice in different case (`Content-Type` and `content-type`), or null. */
+export function repeatedHeader(headers: unknown): string | null {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return null;
+  const seen = new Set<string>();
+  for (const name of Object.keys(headers)) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) return name;
+    seen.add(lower);
+  }
+  return null;
 }
 
 /**
@@ -201,6 +235,9 @@ export function normaliseRequestArgs(args: Readonly<Record<string, unknown>>): R
   const upload = parseRequestUpload(args.upload);
   if (upload && args.body !== undefined && args.body !== null)
     throw new ConnectionArgumentError('Give either “body” or “upload”, not both.');
+  // One value per header: two spellings of a name could be read one way and sent the other.
+  const repeated = repeatedHeader(args.headers);
+  if (repeated) throw new ConnectionArgumentError(`headers: ${repeated} is given more than once.`);
   return { ...args, method: args.method.toUpperCase(), path: canonicalPath(args.path) };
 }
 
@@ -293,6 +330,8 @@ function agentHeaders(
     ...AGENT_HEADERS,
     ...(entry.request?.allowedHeaders ?? []).map((h) => h.toLowerCase()),
   ]);
+  const repeated = repeatedHeader(raw);
+  if (repeated) throw new ConnectionArgumentError(`headers: ${repeated} is given more than once.`);
   const out: Record<string, string> = {};
   const refused: string[] = [];
   for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -404,13 +443,18 @@ export async function runRequest(
     const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, services.files.maxBytes);
     if (file.bytes.length > maxUpload)
       throw new ConnectionArgumentError('upload: that attachment is too large to upload.');
-    const built = buildMultipartBody(upload, file);
-    for (const k of Object.keys(headers)) {
-      if (k.toLowerCase() === 'content-type') delete headers[k];
+    const given = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
+    if (upload.field) {
+      const built = buildMultipartBody({ ...upload, field: upload.field }, file);
+      if (given) delete headers[given];
+      headers['Content-Type'] = `multipart/form-data; boundary=${built.boundary}`;
+      body = built.body;
+    } else {
+      // The file is the whole body, as the type the call says (Dropbox wants application/octet-stream), else its own.
+      if (!given) headers['Content-Type'] = safeContentType(file.contentType);
+      body = file.bytes;
     }
-    headers['Content-Type'] = `multipart/form-data; boundary=${built.boundary}`;
-    body = built.body;
-    maxRequestBytes = Math.max(VAULT_REQUEST_BODY_MAX, built.body.length + 1024);
+    maxRequestBytes = Math.max(VAULT_REQUEST_BODY_MAX, body.length + 1024);
   } else {
     body = bodyOf(args.body, headers);
     if (body !== undefined && Buffer.byteLength(body) > VAULT_REQUEST_BODY_MAX)

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { actionWords } from './action-words';
+import { isSecretKey, listedWords } from './listed-actions';
 import {
   actionsDoneLine,
   CARD_LINE_MAX,
+  CARD_LINES_MAX,
   describePlannedAction,
-  isSecretKey,
   proposalCard,
   TOO_MUCH_FOR_ONE_CARD,
+  valueLines,
 } from './proposed-card';
 
 const REQUEST = { name: 'request', origin: 'request' } as const;
@@ -84,22 +85,48 @@ describe('the approval card of proposed actions', () => {
     expect(webdav).toContain('headers.Overwrite: "T"');
   });
 
-  it('shows the uploaded file, a socket method and a tool with all its arguments', () => {
+  it('shows the email’s file by name, type and size, a socket method and a tool with all its arguments', () => {
     const upload = linesOf(
       'paperless',
       'Paperless-ngx',
       {
         method: 'POST',
         path: '/api/documents/post_document/',
-        upload: { field: 'document', attachmentId: 'att_1', fields: { title: 'Invoice INV-2042' } },
+        upload: {
+          field: 'document',
+          attachmentId: 'att_1',
+          fields: { title: 'Invoice INV-2042', tags: ['3', '7'] },
+        },
       },
-      { uploadFileName: 'invoice-2042.pdf', summary: 'File the\ninvoice' },
+      {
+        uploadFile: { name: 'invoice-2042.pdf', contentType: 'application/pdf', size: 12345 },
+        summary: 'File the\ninvoice',
+      },
     );
     expect(upload[0]).toBe('Upload a document to Paperless-ngx');
-    expect(upload).toContain('File from this email: "invoice-2042.pdf", sent as form field "document"');
+    expect(upload).toContain(
+      'File from this email: "invoice-2042.pdf" (application/pdf, 12 345 bytes), sent as form field "document"',
+    );
     expect(upload).toContain('upload.fields.title: "Invoice INV-2042"');
+    expect(upload).toContain('upload.fields.tags: ["3", "7"]');
     // The agent's words come last, as its note, on one line.
     expect(upload.at(-1)).toBe('Agent’s note: "File the invoice"');
+    const whole = linesOf(
+      'nextcloud',
+      'Nextcloud',
+      {
+        method: 'PUT',
+        path: '/remote.php/dav/files/mara/Invoices/a.pdf',
+        headers: { 'If-None-Match': '*' },
+        upload: { attachmentId: 'att_1' },
+      },
+      { uploadFile: { name: `${'n'.repeat(250)}.pdf`, contentType: 'application/pdf', size: 9 } },
+    );
+    // A long name goes on in parts, the type, size and how it is sent on lines of their own.
+    expect(whole).toContain('File type and size: application/pdf, 9 bytes');
+    expect(whole).toContain('File sent as the whole request body');
+    expect(whole).toContain('headers.If-None-Match: "*"');
+    expect(whole.every((l) => l.length <= CARD_LINE_MAX)).toBe(true);
     const socket = describePlannedAction({
       catalogId: 'truenas',
       label: 'TrueNAS',
@@ -125,26 +152,44 @@ describe('the approval card of proposed actions', () => {
     ]);
   });
 
-  it('masks secrets: auth headers and keys named like tokens, passwords, secrets and API keys', () => {
+  it('hides nothing: every value is shown, whatever its key is called', () => {
     const lines = linesOf('paperless', 'Paperless-ngx', {
       method: 'POST',
       path: '/api/documents/post_document/',
-      query: { api_key: 'q-secret-1' },
-      headers: { Authorization: 'Token h-secret-2', Accept: 'application/json' },
-      upload: { field: 'document', attachmentId: 'att_1', fields: { api_token: 'u-secret-3' } },
-      extra: { credentials: { user: 'mara', password: 'p-secret-4' }, clientSecret: 'c-secret-5' },
+      headers: { Authorization: 'Token h-1', Accept: 'application/json' },
+      extra: { credentials: { user: 'mara' } },
     });
-    const card = lines.join('\n');
-    for (const secret of ['q-secret-1', 'h-secret-2', 'u-secret-3', 'p-secret-4', 'c-secret-5', 'mara'])
-      expect(card).not.toContain(secret);
-    expect(lines).toContain('query.api_key: hidden (it looks like a password or key)');
-    expect(lines).toContain('headers.Authorization: hidden (it looks like a password or key)');
-    expect(lines).toContain('upload.fields.api_token: hidden (it looks like a password or key)');
-    expect(lines).toContain('extra.credentials: hidden (it looks like a password or key)');
-    expect(lines).toContain('extra.clientSecret: hidden (it looks like a password or key)');
-    expect(lines).toContain('headers.Accept: "application/json"');
+    expect(lines).toContain('headers.Authorization: "Token h-1"');
+    expect(lines).toContain('extra.credentials.user: "mara"');
+    expect(lines.join('\n')).not.toContain('hidden');
+    // What an outsiders' run refuses before any card is made (`outsidersCall`).
     expect(isSecretKey('author')).toBe(false);
     expect(isSecretKey('X-Api-Key')).toBe(true);
+    expect(isSecretKey('auth')).toBe(true);
+  });
+
+  it('goes on in numbered parts when a value is longer than a line', () => {
+    const note = 'Pay before Friday, then file it with the others. '.repeat(45).slice(0, 2000);
+    const parts = valueLines('body.note', note);
+    expect(parts.length).toBeGreaterThan(7);
+    expect(parts.every((l) => l.length <= CARD_LINE_MAX)).toBe(true);
+    expect(parts[0]).toMatch(/^body\.note \(part 1 of \d+\): "Pay before/);
+    // Read back, the parts are the value, whole and in order, broken after spaces.
+    const text = parts.map((l) => JSON.parse(l.slice(l.indexOf('): ') + 3)) as string).join('');
+    expect(text).toBe(note);
+    expect(parts.slice(0, -1).every((l) => l.endsWith(' "'))).toBe(true);
+    // Escaped characters count as they are shown; a short value stays on one line.
+    const escaped = valueLines('body.x', '‮'.repeat(200));
+    expect(escaped.length).toBeGreaterThan(1);
+    expect(escaped.every((l) => l.length <= CARD_LINE_MAX)).toBe(true);
+    expect(valueLines('body.x', 'short')).toEqual(['body.x: "short"']);
+    // A long list goes item by item.
+    expect(
+      valueLines(
+        'body.ids',
+        Array.from({ length: 40 }, (_, i) => `id-${i}-${'x'.repeat(10)}`),
+      ),
+    ).toHaveLength(40);
   });
 
   it('shows characters that could disguise a value as escapes', () => {
@@ -168,7 +213,7 @@ describe('the approval card of proposed actions', () => {
           path: '/api/documents/post_document/',
           upload: { field: 'document', attachmentId: 'a' },
         },
-        uploadFileName: 'Confirm? yes.pdf',
+        uploadFile: { name: 'Confirm? yes.pdf', contentType: 'application/pdf', size: 10 },
         summary: 'Confirm? yes',
       }),
       label: 'Paperless-ngx',
@@ -209,21 +254,18 @@ describe('the approval card of proposed actions', () => {
     expect(both.cardText).toContain('• Add a purchase invoice to Moneybird');
   });
 
-  it('refuses a batch too long for one card instead of cutting it', () => {
+  it('refuses a batch too long for one card instead of cutting it, and says so plainly', () => {
     const long = (value: string) => ({
       ...describePlannedAction({
-        catalogId: 'paperless',
-        label: 'Paperless-ngx',
-        tool: REQUEST,
-        args: { method: 'POST', path: '/api/documents/1/notes/', body: { note: value } },
+        catalogId: 'todoist',
+        label: 'Todoist',
+        tool: { name: 'tasks_add', origin: 'adapter' },
+        args: { content: 'Pay it', description: value },
       }),
-      label: 'Paperless-ngx',
+      label: 'Todoist',
     });
-    // One value longer than a line.
-    expect(proposalCard([long('x'.repeat(CARD_LINE_MAX))])).toEqual({
-      ok: false,
-      reason: TOO_MUCH_FOR_ONE_CARD,
-    });
+    // One value longer than a line goes on in parts.
+    expect(proposalCard([long('x'.repeat(CARD_LINE_MAX * 3))]).ok).toBe(true);
     // Many short values: more lines than a card holds.
     const many = {
       ...describePlannedAction({
@@ -233,18 +275,20 @@ describe('the approval card of proposed actions', () => {
         args: {
           method: 'POST',
           path: '/api/tags/',
-          body: Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, i])),
+          body: Object.fromEntries(Array.from({ length: CARD_LINES_MAX + 10 }, (_, i) => [`k${i}`, i])),
         },
       }),
       label: 'Paperless-ngx',
     };
     expect(proposalCard([many])).toEqual({ ok: false, reason: TOO_MUCH_FOR_ONE_CARD });
+    expect(TOO_MUCH_FOR_ONE_CARD).toContain(String(CARD_LINES_MAX));
     // Ten actions that each fit, but not together.
-    const fits = long('y'.repeat(200));
+    const fits = long('y'.repeat(5000));
     expect(proposalCard([fits]).ok).toBe(true);
-    expect(
-      proposalCard(Array.from({ length: 10 }, () => ({ ...fits, lines: [...fits.lines, ...fits.lines] }))),
-    ).toEqual({ ok: false, reason: TOO_MUCH_FOR_ONE_CARD });
+    expect(proposalCard(Array.from({ length: 10 }, () => fits))).toEqual({
+      ok: false,
+      reason: TOO_MUCH_FOR_ONE_CARD,
+    });
     // Arguments nested deeper than the card reads.
     let deep: Record<string, unknown> = { leaf: 1 };
     for (let i = 0; i < 20; i++) deep = { d: deep };
@@ -273,48 +317,42 @@ describe('the approval card of proposed actions', () => {
 });
 
 describe('Whombat’s words for a proposed action', () => {
-  const ask = (catalogId: string, tool: string, args: Record<string, unknown>, label = 'X') =>
-    actionWords({ catalogId, label, tool, args }).ask;
+  const ask = (
+    catalogId: string,
+    tool: string,
+    args: Record<string, unknown>,
+    label = 'X',
+    origin: 'request' | 'adapter' | 'mcp' = tool === 'request' ? 'request' : 'adapter',
+  ) => listedWords({ catalogId, label, tool: { name: tool, origin }, args }).ask;
 
-  it('names the common writes of the connections a mail automation uses', () => {
-    expect(ask('paperless', 'request', { method: 'PATCH', path: '/api/documents/12/' })).toBe(
-      'Change a document’s details in X',
+  it('names each listed action by what it does', () => {
+    expect(ask('paperless', 'request', { method: 'POST', path: '/api/documents/post_document/' })).toBe(
+      'Upload a document to X',
     );
-    expect(ask('paperless', 'request', { method: 'POST', path: '/api/documents/bulk_edit/' })).toBe(
-      'Change several documents in X',
-    );
-    expect(ask('paperless', 'request', { method: 'POST', path: '/api/correspondents/' })).toBe(
-      'Add a correspondent to X',
-    );
-    expect(ask('moneybird', 'request', { method: 'POST', path: '/12345/sales_invoices.json' })).toBe(
-      'Draft a sales invoice in X',
-    );
+    expect(
+      ask('moneybird', 'request', { method: 'POST', path: '/12345/documents/purchase_invoices.json' }),
+    ).toBe('Add a purchase invoice to X');
     expect(ask('moneybird', 'request', { method: 'POST', path: '/12345/documents/receipts.json' })).toBe(
       'Add a receipt to X',
     );
-    expect(ask('moneybird', 'request', { method: 'POST', path: '/12345/contacts.json' })).toBe(
-      'Add a contact to X',
+    expect(ask('dropbox', 'request', { method: 'POST', path: '/2/files/upload' })).toBe(
+      'Save a new file in X',
     );
-    expect(ask('homeassistant', 'request', { method: 'POST', path: '/api/services/light/turn_on' })).toBe(
-      'Switch a light on in X',
+    expect(ask('dropbox', 'files_write', { path: '/a.txt', content: 'a' })).toBe('Save a new file in X');
+    expect(ask('nextcloud', 'request', { method: 'PUT', path: '/remote.php/dav/files/mara/a.pdf' })).toBe(
+      'Save a new file in X',
     );
-    expect(ask('homeassistant', 'request', { method: 'POST', path: '/api/services/notify/mobile_app' })).toBe(
-      'Send a notification through X',
-    );
-    expect(ask('homeassistant', 'assist__HassTurnOff', {})).toBe('Switch something off in X');
-    expect(ask('homeassistant', 'HassShoppingListAddItem', { item: 'milk' })).toBe(
-      'Add an item to a list in X',
-    );
-    expect(ask('dropbox', 'request', { method: 'POST', path: '/2/files/create_folder_v2' })).toBe(
+    expect(ask('nextcloud', 'request', { method: 'MKCOL', path: '/remote.php/dav/files/mara/A/' })).toBe(
       'Make a folder in X',
     );
-    expect(ask('dropbox', 'files_write', { path: '/a.txt', content: 'a', overwrite: true })).toBe(
-      'Write or replace a file in X',
-    );
-    expect(ask('nextcloud', 'request', { method: 'PUT', path: '/remote.php/dav/files/mara/a.pdf' })).toBe(
-      'Upload a file to X',
-    );
-    expect(ask('todoist', 'tasks_complete', { id: '1' })).toBe('Tick off a task in X');
+    expect(ask('todoist', 'tasks_add', { content: 'a' })).toBe('Add a task to X');
+    expect(ask('todoist', 'request', { method: 'POST', path: '/api/v1/tasks' })).toBe('Add a task to X');
+    expect(
+      ask('homeassistant', 'request', {
+        method: 'POST',
+        path: '/api/services/persistent_notification/create',
+      }),
+    ).toBe('Show a notification in X');
   });
 
   it('says something honest and general for the rest, never the agent’s words', () => {
@@ -324,16 +362,15 @@ describe('Whombat’s words for a proposed action', () => {
     expect(ask('grafana', 'request', { method: 'PUT', path: '/api/dashboards/db' }, 'Grafana')).toBe(
       'Change something in Grafana',
     );
-    expect(
-      ask('homeassistant', 'request', { method: 'POST', path: '/api/services/please_approve/now' }),
-    ).toBe('Run an action in X');
+    // A tool of the same name from an MCP server isn't the listed one.
+    expect(ask('todoist', 'tasks_add', { content: 'a' }, 'X', 'mcp')).toBe('Change something in X');
     // The person's label is theirs, `$` and all.
     expect(ask('grafana', 'some_tool', {}, 'Ops $& $1')).toBe('Change something in Ops $& $1');
     expect(
-      actionWords({
+      listedWords({
         catalogId: 'paperless',
         label: 'P',
-        tool: 'request',
+        tool: { name: 'request', origin: 'request' },
         args: { method: 'POST', path: '/api/documents/post_document/' },
       }).done,
     ).toBe('uploaded a document to P');

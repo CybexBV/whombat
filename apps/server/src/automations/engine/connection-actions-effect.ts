@@ -3,35 +3,28 @@
  * any DB transaction, re-verifies the approval and every connection's current settings/limits, and executes each call
  * through `executeConnectionCall`.
  */
-import {
-  type AutomationStep,
-  CONNECTOR_BINARY_MAX_BYTES,
-  catalogEntry,
-  lookOnlyText,
-  requestAllowed,
-} from '@whombat/core';
+import { type AutomationStep, CONNECTOR_BINARY_MAX_BYTES, catalogEntry, lookOnlyText } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { callArgsAad, callTier, executeConnectionCall, needsReauthText } from '../../connections/call';
 import { isCallableEntry } from '../../connections/callable';
 import { keyTierOf } from '../../connections/context';
 import { limitsProblem } from '../../connections/limits';
-import { ConnectionArgumentError, parseRequestUpload } from '../../connections/request';
-import { normaliseSocketArgs } from '../../connections/socket/call';
+import { parseRequestUpload } from '../../connections/request';
 import { catalogConnections, connectionTools } from '../../db/schema/index';
 import { limitWordsFor } from '../../devices/store';
 import { thePerson } from '../../domain/the-person';
 import { readAll } from '../../files/previews';
 import { callServerOf } from '../../hosts/asks';
 import { loadGrants } from '../../read/principals';
-import { actionWords } from '../action-words';
 import { automationAgent, publisherCheck } from '../authority';
+import { listedWords } from '../listed-actions';
 import {
   approvedActionsRequest,
+  emailFile,
   hashPlannedActions,
   isProposableEntry,
-  proposeCallRefusal,
-  proposedRequestArgs,
-  threadAttachment,
+  notThisEmailsFile,
+  outsidersCall,
 } from '../proposed-actions';
 import { actionsDoneLine } from '../proposed-card';
 import { stepRoomsCheck } from '../steps';
@@ -128,33 +121,16 @@ export async function runConnectionActions(
     } catch {
       return void (await refuse('The approved action details could not be opened.'));
     }
-    if (tool.origin === 'request') {
-      const settled = proposedRequestArgs(entry, args, conn.label);
-      if (!settled.ok) return void (await refuse(settled.reason));
-      args = settled.args;
-      const refused = proposeCallRefusal(entry, tool, args, conn.label);
-      if (refused) return void (await refuse(refused));
-      if (!requestAllowed(entry, conn.fields, String(args.method), String(args.path)))
-        return void (await refuse(`${conn.label} no longer allows that request.`));
-      const upload = parseRequestUpload(args.upload);
-      if (upload) {
-        const att = await threadAttachment(db, run, upload.attachmentId);
-        if (!att?.blobKey || att.size > maxUpload)
-          return void (await refuse(`The attachment to upload to ${conn.label} isn’t available any more.`));
-      }
-    } else if (tool.origin === 'socket') {
-      try {
-        args = normaliseSocketArgs(entry, args, conn.label);
-      } catch (err) {
-        return void (await refuse(
-          `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
-        ));
-      }
-      const refused = proposeCallRefusal(entry, tool, args, conn.label);
-      if (refused) return void (await refuse(refused));
-    } else {
-      const refused = proposeCallRefusal(entry, tool, args, conn.label);
-      if (refused) return void (await refuse(refused));
+    // The same check as when it was proposed and shown: a listed action, as Whombat sends it.
+    const call = outsidersCall(entry, conn, tool, args, conn.label);
+    if (!call.ok) return void (await refuse(call.reason));
+    args = call.args;
+    const upload = tool.origin === 'request' ? parseRequestUpload(args.upload) : null;
+    if (upload) {
+      const att = await emailFile(db, run, upload.attachmentId);
+      if (!att?.blobKey) return void (await refuse(notThisEmailsFile(conn.label)));
+      if (att.size > maxUpload)
+        return void (await refuse(`The attachment to upload to ${conn.label} isn’t available any more.`));
     }
     const server = await callServerOf(db, services, conn.burrowId, conn.catalogId, args);
     const decided = callTier(
@@ -173,7 +149,7 @@ export async function runConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, conn, tool));
     if (outside) return void (await refuse(outside));
     // What the thread says once it ran, in Whombat's words for the call as it runs.
-    const { done } = actionWords({ catalogId: conn.catalogId, label: conn.label, tool: tool.name, args });
+    const { done } = listedWords({ catalogId: conn.catalogId, label: conn.label, tool, args });
     ready.push({ action, args, done, label: conn.label });
   }
 
@@ -192,9 +168,9 @@ export async function runConnectionActions(
     return void (await refuse('These actions changed since you approved them, so they need a new approval.'));
   }
 
-  // Resolver scoped strictly to ready attachments on THIS run's thread.
+  // Resolver scoped strictly to the files the server handed over from THIS run's email.
   const uploadAttachment = async (attachmentId: string) => {
-    const att = await threadAttachment(db, run, attachmentId);
+    const att = await emailFile(db, run, attachmentId);
     if (!att?.blobKey || att.size > maxUpload) return null;
     const bytes = await readAll(services.files.store, att.blobKey);
     if (!bytes) return null;

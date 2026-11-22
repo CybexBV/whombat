@@ -1340,7 +1340,7 @@ describe('mail-arrives automations', () => {
         expect.arrayContaining([
           'Action 1 of 2: Upload a document to Paperless-ngx',
           'Request: POST /api/documents/post_document/',
-          'File from this email: "invoice-2042.pdf", sent as form field "document"',
+          `File from this email: "invoice-2042.pdf" (application/pdf, ${pdfBytes.length} bytes), sent as form field "document"`,
           'upload.fields.title: "Invoice INV-2042"',
           'Action 2 of 2: Add a purchase invoice to Moneybird',
           'Request: POST /12345/documents/purchase_invoices.json',
@@ -1550,7 +1550,209 @@ describe('mail-arrives automations', () => {
     }
   });
 
-  it('narrows proposable connections and calls, omitting labels, built-ins, T3 Code, DELETE and read-only calls', async () => {
+  it('hands the email’s files to the first agent turn after a posted message, uploads only those, and never over a file', async () => {
+    const seen: { method: string; url: string; ifNoneMatch: string; contentType: string; body: Buffer }[] =
+      [];
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        seen.push({
+          method: req.method ?? '',
+          url: req.url ?? '',
+          ifNoneMatch: String(req.headers['if-none-match'] ?? ''),
+          contentType: String(req.headers['content-type'] ?? ''),
+          body: Buffer.concat(chunks),
+        });
+        res.writeHead(201);
+        res.end();
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const netId = newId('vaultNetwork');
+    let ncId = '';
+    let autoId = '';
+    try {
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          if (host === 'cloud.example.com') return [{ address: '10.100.93.10', family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address === '10.100.93.10' ? '127.0.0.1' : address),
+        deadlineMs: 3000,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.93.0/24',
+        ports: [port],
+        note: 'Files',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      ncId = await insertConnection(w.services, {
+        catalogId: 'nextcloud',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { url: `http://cloud.example.com:${port}`, username: 'mara', userId: 'mara' },
+        auth: { type: 'basic', usernameField: 'username' },
+        secret: 'abcde-fghij-klmno-pqrst-uvwxy',
+        label: 'Nextcloud',
+      });
+      await syncTools(w.services, ncId);
+
+      // A valid mail definition whose first step posts a message, which starts the run's thread.
+      autoId = await w.publish(
+        {
+          version: 1,
+          conversationId: maraChat.dmId,
+          triggers: [{ kind: 'mail', connectionId, subjectContains: ['posted-first'] }],
+          steps: [
+            { id: 'note', kind: 'post_message', text: 'Invoice received' },
+            {
+              id: 'ask',
+              kind: 'dispatch_agent',
+              prompt: 'Save the PDF in Nextcloud: {{trigger.subject}}',
+              proposeActions: true,
+            },
+            { id: 'act', kind: 'connection_actions', from: 'ask', otherwise: 'skip' },
+          ],
+          limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
+        },
+        { name: 'Posted first' },
+      );
+      await pollAndSettle();
+
+      w.advance(10_000);
+      const pdf = Buffer.from('%PDF-1.4\nInvoice 77 from Acme\n%%EOF');
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_posted_first',
+        from: 'Acme Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'posted-first invoice 77',
+        body: 'Invoice attached.',
+        messageId: '<posted-first@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [
+          {
+            id: 'att_posted_first',
+            name: 'invoice-77.pdf',
+            mimeType: 'application/pdf',
+            size: pdf.length,
+            contentBase64: pdf.toString('base64'),
+          },
+        ],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      expect(run.steps[0]?.state).toBe('succeeded');
+      const dispatchId = run.steps[1]?.dispatchId as string;
+      const [dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      // The agent's turn carries the email's file although a posted message started the thread.
+      expect(ctx.attachments.map((a) => a.name)).toEqual(['invoice-77.pdf']);
+      const emailFileId = ctx.attachments[0]?.id as string;
+      expect(run.steps[1]?.output).toMatchObject({ triggerFileIds: [emailFileId] });
+      expect(ctx.trigger?.text).toContain('PUT /remote.php/dav/files/<user id>/');
+
+      // The person adds a file of the same name to the run's thread.
+      const [loaded] = await w.services.db.select().from(automationRuns).where(eq(automationRuns.id, run.id));
+      const ownId = newId('attachment');
+      const staged = await w.services.files.store.stage([Buffer.from('MARA_PRIVATE')], {
+        maxBytes: 1024 * 1024,
+      });
+      const key = blobKey(staged.sha256);
+      await w.services.files.store.commit(staged, key);
+      await w.services.db.insert(attachments).values({
+        id: ownId,
+        burrowId: w.burrowId,
+        conversationId: maraChat.dmId,
+        name: 'invoice-77.pdf',
+        declaredType: 'application/pdf',
+        contentType: 'application/pdf',
+        kind: 'file',
+        size: staged.size,
+        sha256: staged.sha256,
+        blobKey: key,
+        state: 'ready',
+        url: `/api/v1/burrows/burrow-hq/attachments/${ownId}`,
+        uploadedById: IDS.mara,
+        createdAt: w.now(),
+        uploadedAt: w.now(),
+      });
+      await w.ok(IDS.mara, sendMessage, {
+        conversationId: maraChat.dmId,
+        threadRootId: loaded?.threadRootId as string,
+        text: 'Here is my copy',
+        attachmentIds: [ownId],
+      });
+
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+      const put = (attachmentId: string) => ({
+        actions: [
+          {
+            connection: 'nextcloud',
+            tool: 'request',
+            summary: 'Save the invoice',
+            arguments: {
+              method: 'PUT',
+              path: '/remote.php/dav/files/mara/Invoices/invoice-77.pdf',
+              upload: { attachmentId },
+            },
+          },
+        ],
+      });
+      const theirs = await callTool(w.services, auth, 'propose_connection_actions', put(ownId));
+      expect(theirs.isError).toBe(true);
+      expect(JSON.stringify(theirs.content)).toContain('didn’t come with this email');
+      const ours = await callTool(w.services, auth, 'propose_connection_actions', put(emailFileId));
+      expect(ours.isError, JSON.stringify(ours.content)).not.toBe(true);
+      await w.fakeAgentReply(dispatchId, 'Proposed saving the invoice.');
+      await w.settle();
+
+      const waiting = await w.run(run.id);
+      const [card] = await w.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.id, waiting.steps[2]?.approvalId as string));
+      expect(card?.title).toBe('Save a new file in Nextcloud');
+      expect(card?.whatHappens).toEqual(
+        expect.arrayContaining([
+          'Request: PUT /remote.php/dav/files/mara/Invoices/invoice-77.pdf',
+          `File from this email: "invoice-77.pdf" (application/pdf, ${pdf.length} bytes), sent as the whole request body`,
+          'headers.If-None-Match: "*"',
+        ]),
+      );
+      expect(seen).toHaveLength(0);
+      await w.ok(IDS.mara, decideApproval, { number: card?.number as number, decision: 'approve' });
+      await w.settle();
+
+      // On the wire: a create-only PUT of exactly the email's bytes.
+      expect((await w.run(run.id)).steps[2]?.state).toBe('succeeded');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({
+        method: 'PUT',
+        url: '/remote.php/dav/files/mara/Invoices/invoice-77.pdf',
+        ifNoneMatch: '*',
+        contentType: 'application/pdf',
+      });
+      expect(seen[0]?.body.equals(pdf)).toBe(true);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (ncId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, ncId));
+      await pollAndSettle();
+    }
+  });
+
+  it('lists only the actions a mail automation can propose, omitting labels, and refuses everything else', async () => {
     const privateLabel = 'Secret Family Archive Label';
     const plId = await insertConnection(w.services, {
       catalogId: 'paperless',
@@ -1643,7 +1845,9 @@ describe('mail-arrives automations', () => {
 
       // Prompt names handles and writable tools, never the person's own labels, read-only tools, delete tools,
       // whombat_servers, or t3code.
-      expect(prompt).toContain('- paperless: tools [request]');
+      expect(prompt).toContain('- paperless: upload a file from the email to Paperless-ngx');
+      expect(prompt).toContain('POST /api/documents/post_document/');
+      expect(prompt).toContain('- dropbox: save a new file in Dropbox');
       expect(prompt).not.toContain(privateLabel);
       expect(prompt).not.toContain('Personal Dropbox Secret Label');
       expect(prompt).not.toContain('files_list');
@@ -1705,7 +1909,7 @@ describe('mail-arrives automations', () => {
             summary: 'Upload invoice.pdf',
             arguments: { method: 'DELETE', path: '/api/documents/1/' },
           },
-          expectedText: 'DELETE',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'HTTP GET',
@@ -1715,7 +1919,7 @@ describe('mail-arrives automations', () => {
             summary: 'List docs',
             arguments: { method: 'GET', path: '/api/documents/' },
           },
-          expectedText: 'read-only GET',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'HTTP HEAD',
@@ -1725,7 +1929,7 @@ describe('mail-arrives automations', () => {
             summary: 'Check docs',
             arguments: { method: 'HEAD', path: '/api/documents/' },
           },
-          expectedText: 'read-only HEAD',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'read-only adapter tool',
@@ -1735,7 +1939,7 @@ describe('mail-arrives automations', () => {
             summary: 'List files',
             arguments: { path: '/' },
           },
-          expectedText: 'read-only',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'delete adapter tool',
@@ -1745,7 +1949,7 @@ describe('mail-arrives automations', () => {
             summary: 'Delete file',
             arguments: { path: '/old.pdf' },
           },
-          expectedText: '“delete”',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'bulk edit that deletes',
@@ -1759,7 +1963,7 @@ describe('mail-arrives automations', () => {
               body: { documents: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], method: 'delete', parameters: {} },
             },
           },
-          expectedText: '“delete”',
+          expectedText: 'can’t propose this',
         },
         {
           name: 'raw JSON text body that deletes',
@@ -1774,17 +1978,39 @@ describe('mail-arrives automations', () => {
               body: '{"documents":[1],"method":"delete","parameters":{}}',
             },
           },
-          expectedText: '“delete”',
+          expectedText: 'can’t propose this',
         },
         {
-          name: 'more than one card shows',
+          name: 'a title longer than Paperless-ngx takes',
           action: {
             connection: plConn?.handle ?? 'paperless',
             tool: 'request',
-            summary: 'Add a note',
-            arguments: { method: 'POST', path: '/api/documents/1/notes/', body: { note: 'x'.repeat(400) } },
+            summary: 'Upload it',
+            arguments: {
+              method: 'POST',
+              path: '/api/documents/post_document/',
+              upload: {
+                field: 'document',
+                attachmentId: 'att_0123456789abcdefghij',
+                fields: { title: 'x'.repeat(200) },
+              },
+            },
           },
-          expectedText: 'Too much to show on one card',
+          expectedText: 'at most 128 characters',
+        },
+        {
+          name: 'a file that didn’t come with this email',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Upload it',
+            arguments: {
+              method: 'POST',
+              path: '/api/documents/post_document/',
+              upload: { field: 'document', attachmentId: 'att_0123456789abcdefghij' },
+            },
+          },
+          expectedText: 'didn’t come with this email',
         },
       ];
 
@@ -1865,7 +2091,7 @@ describe('mail-arrives automations', () => {
         ],
       });
       expect(send.isError).toBe(true);
-      expect(JSON.stringify(send.content)).toContain('sends invoices');
+      expect(JSON.stringify(send.content)).toContain('can’t propose this');
 
       // The steered agent lies in `summary` ("Upload invoice.pdf to Paperless-ngx?") and hides a question in a value,
       // while actually drafting an invoice for a stranger's contact with an amount.
@@ -1877,9 +2103,9 @@ describe('mail-arrives automations', () => {
             summary: 'Upload invoice.pdf to Paperless-ngx?',
             arguments: {
               method: 'POST',
-              path: '/12345/sales_invoices.json',
+              path: '/12345/documents/purchase_invoices.json',
               body: {
-                sales_invoice: {
+                purchase_invoice: {
                   contact_id: '666',
                   reference: 'Confirm? yes',
                   details_attributes: [{ description: 'Consulting', price: '9500.00' }],
@@ -1899,21 +2125,22 @@ describe('mail-arrives automations', () => {
       const cardMsg = card?.messageId ? await loadMessageRow(w.services.db, card.messageId) : undefined;
 
       // Title, question and message are Whombat's words for the real call; nothing the agent or the email wrote.
-      expect(card?.title).toBe('Draft a sales invoice in Moneybird Accounting');
-      expect(card?.question).toBe('Draft a sales invoice in Moneybird Accounting?');
-      expect(cardMsg?.text).toBe('I need your yes before I draft a sales invoice in Moneybird Accounting.');
+      expect(card?.title).toBe('Add a purchase invoice to Moneybird Accounting');
+      expect(card?.question).toBe('Add a purchase invoice to Moneybird Accounting?');
+      expect(cardMsg?.text).toBe('I need your yes before I add a purchase invoice to Moneybird Accounting.');
       // WHAT HAPPENS shows the real call whole (its arguments in the order they were kept), the agent's words last as
       // its note.
       const lines = card?.whatHappens ?? [];
       expect(lines.slice(0, 2)).toEqual([
-        'Draft a sales invoice in Moneybird Accounting',
-        'Request: POST /12345/sales_invoices.json',
+        'Add a purchase invoice to Moneybird Accounting',
+        'Request: POST /12345/documents/purchase_invoices.json',
       ]);
       expect(lines.slice(2, -1).sort()).toEqual([
-        'body.sales_invoice.contact_id: "666"',
-        'body.sales_invoice.details_attributes[0].description: "Consulting"',
-        'body.sales_invoice.details_attributes[0].price: "9500.00"',
-        'body.sales_invoice.reference: "Confirm? yes"',
+        'body.purchase_invoice.contact_id: "666"',
+        'body.purchase_invoice.details_attributes[0].description: "Consulting"',
+        'body.purchase_invoice.details_attributes[0].price: "9500.00"',
+        'body.purchase_invoice.reference: "Confirm? yes"',
+        'headers.Content-Type: "application/json"',
       ]);
       expect(lines.at(-1)).toBe('Agent’s note: "Upload invoice.pdf to Paperless-ngx?"');
     } finally {
@@ -2013,7 +2240,12 @@ describe('mail-arrives automations', () => {
               arguments: {
                 method: 'POST',
                 path: '/12345/documents/purchase_invoices.json',
-                body: { purchase_invoice: { reference: 'INV-A', amount: '10.00' } },
+                body: {
+                  purchase_invoice: {
+                    reference: 'INV-A',
+                    details_attributes: [{ description: 'A', price: '10.00' }],
+                  },
+                },
               },
             },
           ],
@@ -2049,7 +2281,12 @@ describe('mail-arrives automations', () => {
                 arguments: {
                   method: 'POST',
                   path: '/12345/documents/purchase_invoices.json',
-                  body: { purchase_invoice: { reference: 'INV-B', amount: '9999.00' } },
+                  body: {
+                    purchase_invoice: {
+                      reference: 'INV-B',
+                      details_attributes: [{ description: 'B', price: '9999.00' }],
+                    },
+                  },
                 },
               },
             ],
@@ -2069,7 +2306,7 @@ describe('mail-arrives automations', () => {
 
       const [card2] = await w.services.db.select().from(approvals).where(eq(approvals.id, secondApprovalId));
       expect(card2?.state).toBe('pending');
-      expect(card2?.whatHappens).toContain('body.purchase_invoice.amount: "9999.00"');
+      expect(card2?.whatHappens).toContain('body.purchase_invoice.details_attributes[0].price: "9999.00"');
       expect(card2?.whatHappens).toContain('body.purchase_invoice.reference: "INV-B"');
 
       // Approving card #2 runs INV-B.
