@@ -1040,8 +1040,12 @@ Setup and operation: `docs/github.md`.
   acts through goes (a Servers backup place on a TrueNAS). Every request is signed only as the connection it was
   checked on: a call, a page's button or setting, its Put it back and a page change the assistant asked for run bound to
   their connections' call targets (`connections/bound-targets.ts`), and every credential opened for a bound connection
-  is checked against the stored connection once it is in hand and before anything is signed; each transport checks its
-  call's own target too, and pooled MCP sessions are kept per call target (`connections/pool.ts`). A write that worked
+  is checked against the stored connection before it is opened and again once it is in hand, before anything is
+  signed; a refresh, a client secret exchange or a session sign-in checks the row it reads again before it asks the
+  service, so a connection changed before it gets none. Each transport checks its call's own target too
+  (datagrams and lines included), and pooled MCP sessions are kept per call target (`connections/pool.ts`). A card's
+  words and the target its yes is bound to come from one read of the connection, and the card is saved only while the
+  connection is still stored so (`heldChanged`, held until the card commits). A write that worked
   is recorded for Done recently with its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per
