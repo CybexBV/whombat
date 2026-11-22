@@ -70,8 +70,10 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 	unknown := map[string]bool{}
 	unknownRotational := map[string]bool{}
 	var backing []string
+	var invRawBacking []string
 	var rotational map[string]bool
 	var diskModels map[string]string
+	var rep *proto.Report
 
 	// 1. Unraid's emhttp state in RAM (/var/local/emhttp/disks.ini) knows every
 	// array and pool disk's spin state without touching any drive.
@@ -82,10 +84,10 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 		backing = append(backing, unraidDevs...)
 	}
 
-	// 2. Check the latest inventory report for backing disks and Standby flags.
-	invBacking := 0
+	// 2. Read the latest inventory report for disk types, models and ZFS/mount
+	// backing disks.
 	if r.inventory != nil {
-		if rep := r.inventory(); rep != nil {
+		if rep = r.inventory(); rep != nil {
 			rotational = make(map[string]bool, len(rep.Disks))
 			diskModels = make(map[string]string, len(rep.Disks))
 			for _, d := range rep.Disks {
@@ -101,45 +103,58 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			}
 			for _, fs := range rep.Filesystems {
 				if filepath.Clean(fs.Mount) == mount {
-					backing = append(backing, fs.Disks...)
-					invBacking += len(fs.Disks)
+					invRawBacking = append(invRawBacking, fs.Disks...)
 				}
 			}
 			if target.FSType == "zfs" {
-				pool, _, _ := strings.Cut(target.Source, "/")
+				pool := zfsPoolName(target.Source)
 				for _, p := range rep.Pools {
 					if p.Name == pool {
-						backing = append(backing, p.Disks...)
-						invBacking += len(p.Disks)
+						invRawBacking = append(invRawBacking, p.Disks...)
 					}
 				}
-			}
-			// Mark any backing disk that the SMART collector already saw in standby.
-			backingSet := map[string]bool{}
-			for _, b := range backing {
-				backingSet[b] = true
-			}
-			for _, d := range rep.Disks {
-				if backingSet[d.Device] && d.Standby {
-					spun[d.Device] = true
-				}
-			}
-			// Also cross-check Unraid report state in case disks.ini wasn't present
-			// (for example in unit tests with a synthetic inventory).
-			if rep.Unraid != nil {
-				uDevs := r.checkUnraidReportSpunDown(mount, backingSet, rep.Unraid, spun, spunDevs, rotational)
-				backing = append(backing, uDevs...)
-				invBacking += len(uDevs)
 			}
 		}
 	}
 
-	// 3. Fallback: derive backing physical disks from the mount's source (and
-	// major:minor) via sysfs so partitions, LVM, dm-crypt and mdraid mounts are
-	// checked even without a prior inventory report.
+	// 3. Derive complete backing physical disks from the mount's source and
+	// kernel sysfs metadata (Btrfs /sys/fs/btrfs/<fsid>/devices, bcachefs
+	// /sys/fs/bcachefs/<uuid>/dev-*, LVM/dm/md slaves, partitions). Also expand
+	// any stacked, partition or virtual entries reported by inventory.
 	srcDevs, srcUnresolved := r.backingDisksFromSource(target)
-	for _, dev := range srcDevs {
-		backing = append(backing, dev)
+	backing = append(backing, srcDevs...)
+
+	invUnresolved := false
+	if len(invRawBacking) > 0 {
+		if unraidFound {
+			backing = append(backing, invRawBacking...)
+		} else {
+			expanded, unres := r.resolveBlockDevices(invRawBacking)
+			backing = append(backing, expanded...)
+			invUnresolved = unres
+		}
+	}
+
+	// Cross-check inventory Standby flags and Unraid report state against all
+	// resolved backing disks, including disks discovered via sysfs.
+	if rep != nil {
+		backingSet := map[string]bool{}
+		for _, b := range backing {
+			if b != "" {
+				backingSet[b] = true
+			}
+		}
+		for _, d := range rep.Disks {
+			if backingSet[d.Device] && d.Standby {
+				spun[d.Device] = true
+			}
+		}
+		// Also cross-check Unraid report state in case disks.ini wasn't present
+		// (for example in unit tests with a synthetic inventory).
+		if rep.Unraid != nil {
+			uDevs := r.checkUnraidReportSpunDown(mount, backingSet, rep.Unraid, spun, spunDevs, rotational)
+			backing = append(backing, uDevs...)
+		}
 	}
 
 	hasBacking := unraidFound
@@ -149,7 +164,7 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			break
 		}
 	}
-	unresolvedBacking := srcUnresolved && !unraidFound && invBacking == 0
+	unresolvedBacking := (srcUnresolved && !unraidFound) || invUnresolved
 
 	// 4. Live non-waking standby check for rotational backing disks not already
 	// marked spun down (smartctl -n standby / hdparm -C). If a backing disk's
@@ -626,12 +641,40 @@ func isHypervisorDiskIdentity(vendor, model string) bool {
 	return false
 }
 
+// zfsPoolName extracts the pool name from a ZFS dataset or snapshot mount
+// source ("tank/media", "tank/media@snap", "tank@snap", "tank").
+func zfsPoolName(source string) string {
+	pool, _, _ := strings.Cut(source, "/")
+	pool, _, _ = strings.Cut(pool, "@")
+	return pool
+}
+
+// isUnresolvablePooledFS reports filesystems that merge multiple arbitrary
+// paths or branches whose complete set of underlying block devices cannot be
+// established reliably from mountinfo/sysfs without touching the mount.
+func isUnresolvablePooledFS(fsType string) bool {
+	switch fsType {
+	case "fuse.mergerfs", "mergerfs",
+		"fuse.unionfs", "fuse.unionfs-fuse", "unionfs",
+		"fuse.mhddfs", "mhddfs",
+		"aufs", "overlay":
+		return true
+	}
+	return strings.HasPrefix(fsType, "fuse.") && fsType != "fuse.shfs"
+}
+
 // backingDisksFromSource derives underlying physical block devices from a
-// mount's source path and major:minor via sysfs (partition -> disk; LVM/dm/md
-// -> member disks recursively). Reads only /dev symlinks and /sys metadata.
-// unresolved is true if any stacked or virtual device could not be resolved to
-// physical backing disks.
+// mount's filesystem type, source path and major:minor via sysfs (Btrfs
+// /sys/fs/btrfs/<fsid>/devices, bcachefs /sys/fs/bcachefs/<uuid>/dev-*,
+// partition -> disk, and LVM/dm/md -> member disks recursively). Reads only
+// /dev symlinks and /sys metadata. unresolved is true if the complete backing
+// device list cannot be confirmed or any stacked/virtual device cannot be
+// resolved to physical disks.
 func (r *Runner) backingDisksFromSource(target mountInfo) ([]string, bool) {
+	if isUnresolvablePooledFS(target.FSType) {
+		return nil, true
+	}
+
 	var seeds []string
 	seenSeed := map[string]bool{}
 	unresolved := false
@@ -643,49 +686,280 @@ func (r *Runner) backingDisksFromSource(target mountInfo) ([]string, bool) {
 		seeds = append(seeds, name)
 	}
 
-	if strings.HasPrefix(target.Source, "/dev/") {
-		resolved := r.resolveDevPath(target.Source)
-		base := filepath.Base(resolved)
-		if strings.HasPrefix(resolved, "/dev/mapper/") {
-			if dm := r.findDMByName(base); dm != "" {
-				addSeed(dm)
-			} else {
+	switch target.FSType {
+	case "btrfs":
+		// Btrfs mounts carry an anonymous major:minor (0:N) and mountinfo names
+		// only one member device, so checking target.Source alone can miss
+		// sleeping members of a multi-device filesystem. Always read the full
+		// member list from /sys/fs/btrfs/<fsid>/devices/.
+		devs, ok := r.btrfsBackingDevices(target)
+		if !ok || len(devs) == 0 {
+			return nil, true
+		}
+		for _, d := range devs {
+			addSeed(d)
+		}
+	case "bcachefs":
+		// bcachefs can span multiple devices (or add devices after mount) with
+		// an anonymous major:minor; read the full member list from sysfs.
+		devs, ok := r.bcachefsBackingDevices(target)
+		if !ok || len(devs) == 0 {
+			return nil, true
+		}
+		for _, d := range devs {
+			addSeed(d)
+		}
+	default:
+		var majMinDev string
+		if target.MajMin != "" && !strings.HasPrefix(target.MajMin, "0:") {
+			if link, err := os.Readlink(r.hostPath(filepath.Join("/sys/dev/block", target.MajMin))); err == nil {
+				if base := filepath.Base(filepath.Clean(link)); base != "" && base != "." && base != "/" {
+					majMinDev = base
+				}
+			}
+		}
+		if strings.HasPrefix(target.Source, "/dev/") {
+			if dev, ok := r.resolveSourceBlockDev(target.Source); ok {
+				addSeed(dev)
+			} else if majMinDev == "" {
 				unresolved = true
 			}
-		} else {
-			// Also handle /dev/<vg>/<lv> -> dm/name when /dev symlink isn't present.
-			if rel := strings.TrimPrefix(resolved, "/dev/"); strings.Count(rel, "/") == 1 {
-				vg, lv, _ := strings.Cut(rel, "/")
-				dmName := strings.ReplaceAll(vg, "-", "--") + "-" + strings.ReplaceAll(lv, "-", "--")
-				if dm := r.findDMByName(dmName); dm != "" {
-					addSeed(dm)
-				} else {
-					unresolved = true
+		}
+		if majMinDev != "" {
+			addSeed(majMinDev)
+		}
+	}
+
+	out, walkUnresolved := r.resolveBlockDevices(seeds)
+	return out, unresolved || walkUnresolved
+}
+
+// resolveSourceBlockDev resolves a /dev/... mount source (including symlinks,
+// /dev/mapper/<name>, and /dev/<vg>/<lv>) to its kernel block device name.
+func (r *Runner) resolveSourceBlockDev(src string) (string, bool) {
+	if !strings.HasPrefix(src, "/dev/") {
+		return "", false
+	}
+	resolved := r.resolveDevPath(src)
+	if strings.HasPrefix(resolved, "/dev/mapper/") {
+		if dm := r.findDMByName(filepath.Base(resolved)); dm != "" {
+			return dm, true
+		}
+		return "", false
+	}
+	rel := strings.TrimPrefix(resolved, "/dev/")
+	if rel == "" || rel == "." || rel == "root" {
+		return "", false
+	}
+	if strings.Count(rel, "/") == 1 {
+		vg, lv, _ := strings.Cut(rel, "/")
+		dmName := strings.ReplaceAll(vg, "-", "--") + "-" + strings.ReplaceAll(lv, "-", "--")
+		if dm := r.findDMByName(dmName); dm != "" {
+			return dm, true
+		}
+		return "", false
+	}
+	if strings.Contains(rel, "/") {
+		return "", false
+	}
+	return rel, true
+}
+
+// btrfsBackingDevices returns every block device backing a mounted Btrfs
+// filesystem by matching its mount source against /sys/fs/btrfs/<fsid>/devices/.
+func (r *Runner) btrfsBackingDevices(target mountInfo) ([]string, bool) {
+	sourceDev, ok := r.resolveSourceBlockDev(target.Source)
+	if !ok {
+		return nil, false
+	}
+	ents, err := os.ReadDir(r.hostPath("/sys/fs/btrfs"))
+	if err != nil {
+		return nil, false
+	}
+	var matched []string
+	matches := 0
+	for _, ent := range ents {
+		fsid := ent.Name()
+		if fsid == "" || fsid == "features" || strings.HasPrefix(fsid, ".") {
+			continue
+		}
+		devDir := filepath.Join("/sys/fs/btrfs", fsid, "devices")
+		devEnts, err := os.ReadDir(r.hostPath(devDir))
+		if err != nil || len(devEnts) == 0 {
+			continue
+		}
+		members := make([]string, 0, len(devEnts))
+		foundSource := false
+		for _, de := range devEnts {
+			name := de.Name()
+			if name == "" || strings.HasPrefix(name, ".") {
+				continue
+			}
+			targetName := name
+			if link, err := os.Readlink(r.hostPath(filepath.Join(devDir, name))); err == nil {
+				if base := filepath.Base(filepath.Clean(link)); base != "" && base != "." && base != "/" {
+					targetName = base
 				}
-			} else {
-				addSeed(base)
+			}
+			if name == sourceDev || targetName == sourceDev {
+				foundSource = true
+			}
+			members = append(members, targetName)
+		}
+		if foundSource {
+			matches++
+			matched = members
+		}
+	}
+	if matches != 1 || len(matched) == 0 {
+		return nil, false
+	}
+	return matched, true
+}
+
+// bcachefsBackingDevices returns every block device backing a mounted bcachefs
+// filesystem via /sys/fs/bcachefs/<uuid>/dev-*/block.
+func (r *Runner) bcachefsBackingDevices(target mountInfo) ([]string, bool) {
+	src := strings.TrimSpace(target.Source)
+	if src == "" {
+		return nil, false
+	}
+	if uuid, ok := cutPrefixFold(src, "UUID="); ok {
+		if uuid == "" || strings.ContainsAny(uuid, "/\\") || uuid == "." || uuid == ".." {
+			return nil, false
+		}
+		members, complete := r.readBcachefsDir(filepath.Join("/sys/fs/bcachefs", uuid))
+		if !complete || len(members) == 0 {
+			return nil, false
+		}
+		return members, true
+	}
+
+	parts := strings.Split(src, ":")
+	wanted := make([]string, 0, len(parts))
+	for _, p := range parts {
+		dev, ok := r.resolveSourceBlockDev(p)
+		if !ok {
+			return nil, false
+		}
+		wanted = append(wanted, dev)
+	}
+	if len(wanted) == 0 {
+		return nil, false
+	}
+
+	ents, err := os.ReadDir(r.hostPath("/sys/fs/bcachefs"))
+	if err != nil {
+		return nil, false
+	}
+	var matched []string
+	matchedComplete := false
+	matches := 0
+	for _, ent := range ents {
+		id := ent.Name()
+		if id == "" || strings.HasPrefix(id, ".") {
+			continue
+		}
+		members, complete := r.readBcachefsDir(filepath.Join("/sys/fs/bcachefs", id))
+		if len(members) == 0 {
+			continue
+		}
+		memberSet := make(map[string]bool, len(members))
+		for _, m := range members {
+			memberSet[m] = true
+		}
+		allPresent := true
+		for _, w := range wanted {
+			if !memberSet[w] {
+				allPresent = false
+				break
 			}
 		}
-	}
-
-	if target.MajMin != "" && !strings.HasPrefix(target.MajMin, "0:") {
-		if link, err := os.Readlink(r.hostPath(filepath.Join("/sys/dev/block", target.MajMin))); err == nil {
-			addSeed(filepath.Base(link))
+		if allPresent {
+			matches++
+			matched = members
+			matchedComplete = complete
 		}
 	}
+	if matches != 1 || !matchedComplete || len(matched) == 0 {
+		return nil, false
+	}
+	return matched, true
+}
 
+func (r *Runner) readBcachefsDir(dir string) ([]string, bool) {
+	ents, err := os.ReadDir(r.hostPath(dir))
+	if err != nil {
+		return nil, false
+	}
+	var out []string
+	complete := true
+	seenDev := false
+	for _, ent := range ents {
+		n := ent.Name()
+		rest, ok := strings.CutPrefix(n, "dev-")
+		if !ok || !allDigits(rest) {
+			continue
+		}
+		seenDev = true
+		link, err := os.Readlink(r.hostPath(filepath.Join(dir, n, "block")))
+		if err != nil {
+			complete = false
+			continue
+		}
+		base := filepath.Base(filepath.Clean(link))
+		if base == "" || base == "." || base == "/" {
+			complete = false
+			continue
+		}
+		out = append(out, base)
+	}
+	if !seenDev {
+		return nil, false
+	}
+	return out, complete
+}
+
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
+}
+
+// resolveBlockDevices walks one or more block device names through sysfs
+// slaves and partitions down to whole physical block devices. Returns
+// unresolved=true if any device is a stacked/virtual leaf whose backing
+// physical disks cannot be determined.
+func (r *Runner) resolveBlockDevices(seeds []string) ([]string, bool) {
 	visited := map[string]bool{}
 	found := map[string]bool{}
 	var out []string
+	unresolved := false
+
 	var walk func(name string)
 	walk = func(name string) {
 		if name == "" || visited[name] {
 			return
 		}
+		if strings.HasPrefix(name, "/dev/") {
+			dev, ok := r.resolveSourceBlockDev(name)
+			if !ok {
+				unresolved = true
+				return
+			}
+			name = dev
+			if visited[name] {
+				return
+			}
+		} else if strings.Contains(name, "/") {
+			unresolved = true
+			return
+		}
 		visited[name] = true
 
-		// 1. Stacked devices (LVM/dm-*, dm-crypt, mdraid, multipath, bcache)
-		// expose their underlying members in /sys/class/block/<dev>/slaves.
+		// 1. Stacked devices (LVM/dm-*, dm-crypt, mdraid, multipath, bcache,
+		// DRBD) expose their underlying members in /sys/class/block/<dev>/slaves.
 		if slaves := r.sysfsSlaves(name); len(slaves) > 0 {
 			for _, s := range slaves {
 				walk(s)
@@ -769,7 +1043,34 @@ func (r *Runner) sysfsSlaves(name string) []string {
 		}
 		return out
 	}
+	if strings.HasPrefix(name, "md") {
+		return r.sysfsMDMembers(name)
+	}
 	return nil
+}
+
+func (r *Runner) sysfsMDMembers(name string) []string {
+	mdDir := filepath.Join("/sys/block", name, "md")
+	ents, err := os.ReadDir(r.hostPath(mdDir))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range ents {
+		en := e.Name()
+		rest, ok := strings.CutPrefix(en, "dev-")
+		if !ok || rest == "" {
+			continue
+		}
+		member := rest
+		if link, err := os.Readlink(r.hostPath(filepath.Join(mdDir, en, "block"))); err == nil {
+			if base := filepath.Base(filepath.Clean(link)); base != "" && base != "." && base != "/" {
+				member = base
+			}
+		}
+		out = append(out, member)
+	}
+	return out
 }
 
 func (r *Runner) sysfsPartitionParent(name string) string {
@@ -803,7 +1104,7 @@ func (r *Runner) sysfsPartitionParent(name string) string {
 }
 
 func partitionParentName(name string) string {
-	for _, prefix := range []string{"nvme", "mmcblk", "md", "loop", "nbd"} {
+	for _, prefix := range []string{"nvme", "mmcblk", "md", "loop", "nbd", "zd", "rbd", "ublkb"} {
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
@@ -862,7 +1163,7 @@ func allLowerLetters(s string) bool {
 }
 
 func isVirtualLeafBlock(name string) bool {
-	for _, prefix := range []string{"loop", "ram", "zram", "nbd", "sr", "fd", "nullb", "dm-", "md", "bcache"} {
+	for _, prefix := range []string{"loop", "ram", "zram", "nbd", "rbd", "drbd", "ublkb", "zd", "sr", "fd", "nullb", "dm-", "md", "bcache"} {
 		if strings.HasPrefix(name, prefix) {
 			return true
 		}
