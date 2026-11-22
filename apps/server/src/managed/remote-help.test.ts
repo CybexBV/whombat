@@ -279,6 +279,41 @@ describe('turning it on (RH-03, RH-04, RH-S04)', () => {
     );
   });
 
+  it('on the box’s own page: someone without a passkey confirms in the dialog, someone with one is sent to the app', async () => {
+    const { service } = setup();
+    const page = (): SessionScope => ({
+      claimBegin: null,
+      transport: {
+        via: 'direct',
+        network: 'door',
+        tls: true,
+        page: { origin: 'https://box-label.box.whombat.test', secureContext: true },
+      },
+    });
+    const trust = {
+      relyingParty: () => ({ rpId: 'app.whombat.test', origins: ['https://app.whombat.test'] }),
+      community: false,
+    };
+    const begin = REMOTE_HELP_SESSION_HANDLERS['remoteHelp.confirmBegin'];
+    const choice = { level: 'look', duration: 'hour' };
+    const joris = { principal: person('acc_joris'), session: page(), remoteHelp: service, trust };
+    expect(await begin?.(joris, choice)).toEqual({ nonce: null, options: null });
+    const on = await REMOTE_HELP_SESSION_HANDLERS['remoteHelp.start']?.(joris, choice);
+    expect(on).toMatchObject({ grant: { level: 'look' } });
+
+    const mara = { principal: person('acc_mara'), session: page(), remoteHelp: service, trust };
+    const refused = await begin?.(mara, choice).catch((e: unknown) => e);
+    expect(refused).toMatchObject({
+      code: 'forbidden',
+      extra: { details: { code: 'passkeys_unavailable_here' } },
+    });
+    // The hosted app, through the relay, asks for her passkey as before.
+    const relayed = { ...mara, session: { claimBegin: null, transport: { via: 'relay' as const } } };
+    expect(await begin?.(relayed, choice)).toMatchObject({
+      options: { allowCredentials: [{ id: 'cred_mara' }] },
+    });
+  });
+
   it('leaves Forever to the service: allowed on a test Whombat, refused on a customer’s, the help code shown there', async () => {
     const test = setup();
     const joris = person('acc_joris');

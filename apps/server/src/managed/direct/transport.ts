@@ -61,12 +61,25 @@ export function passkeysUnavailable(
   return unavailableOnPage(transport.page, passkeyOrigins).includes('passkeys');
 }
 
-/** Session ops that need a WebAuthn ceremony in the page (DC-11). */
+/**
+ * Whether a passkey ceremony can run in this session: the box has a relying party, and the session isn't a page whose
+ * origin isn't the passkeys' own.
+ */
+export function passkeysWorkHere(
+  transport: SessionTransport | undefined,
+  relyingParty: { origins: readonly string[] } | null,
+): boolean {
+  return relyingParty !== null && !passkeysUnavailable(transport, relyingParty.origins);
+}
+
+/**
+ * Session ops that always need a WebAuthn ceremony in the page (DC-11). `remoteHelp.confirmBegin` needs one only for
+ * someone with a passkey, so remote help refuses it itself, after looking (DC-22).
+ */
 export const PAGE_PASSKEY_OPS: ReadonlySet<string> = new Set([
   'passkey.register.begin',
   'passkey.link',
   'passkey.register',
-  'remoteHelp.confirmBegin',
 ]);
 
 /** `details.code` of the refusal of a passkey op from a page that can't run one (`forbidden`). */

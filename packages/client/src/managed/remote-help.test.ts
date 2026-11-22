@@ -6,6 +6,7 @@ import { OperationError } from '../session/managed-ops';
 import { PasskeyCancelled, type PasskeyPlatform, type PasskeyRequestOptionsJSON } from './passkeys';
 import {
   cleanTranscript,
+  REMOTE_HELP_TEXT,
   type RemoteHelpApi,
   RemoteHelpError,
   type RemoteHelpState,
@@ -226,6 +227,8 @@ describe('refusals in words', () => {
     );
     expect(remoteHelpErrorText(op('remote_help_unavailable'))).toBe(REMOTE_HELP_WORDS.notAvailable);
     expect(remoteHelpErrorText(op('passkey_required'))).toBe(REMOTE_HELP_WORDS.refusals.passkey_failed);
+    // The box's own page can't run the passkey's ceremony: it says where to turn it on instead.
+    expect(remoteHelpErrorText(op('passkeys_unavailable_here'))).toBe(REMOTE_HELP_TEXT.passkeyPage);
     expect(remoteHelpErrorText(new RemoteHelpError('challenge_mismatch'))).toBe(
       REMOTE_HELP_WORDS.refusals.passkey_failed,
     );
