@@ -1487,10 +1487,11 @@ Setup and operation: `docs/github.md`.
   `WHOMBAT_VOICE_MODELS_SOCKET`) downloads both single-file speech-to-text models and the multi-file Supertonic 3 Dutch
   voice (pinned URLs, per-file SHA-256, resumable, with its `LICENSE`) into `/persist/voice-models`. The server asks
   the fetcher for what the settings and the desk's Talk want at start and after every change — fetching `supertonic`
-  only after the person agrees in Settings, removing it when Dutch voice is off, retrying removal across restarts while
-  the fetcher reports leftover files (`removing`, with bytes left), and never removing speech-to-text models by itself
-  unless leftover files remain from an earlier removal — and while a model downloads reads it every 2 s and tells the
-  person with `voice.changed`. A
+  only after the person agrees in Settings, returning the saved state and retrying with backoff if the fetcher is
+  restarting or refuses a fetch, removing `supertonic` when Dutch voice is off, retrying removal across restarts while
+  the fetcher reports leftover files (`removing`, with bytes left, even if a wanted model is fetched again while
+  removal trash stays on disk), and never removing speech-to-text models by itself unless leftover files remain from
+  an earlier removal — and while a model downloads reads it every 2 s and tells the person with `voice.changed`. A
   recording is a `dictation` upload: kept in memory, checked like any upload, sent to the speech service with the
   model, the language and (for Whisper) the names the person may say, and answered in `stream_done` as text; the audio
   and the text are never stored or logged. The desk's Talk mic is voice typing too: the desk socket's `hear` turns its

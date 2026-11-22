@@ -19,13 +19,37 @@ type statxFunc func(dirfd int, path string, flags int, mask int, stat *unix.Stat
 type fdinfoMountIDFunc func(fd int) (uint64, bool)
 
 // linuxScanFS requires Linux openat2(RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS|
-// RESOLVE_NO_MAGICLINKS) and statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
+// RESOLVE_NO_MAGICLINKS), /proc/self/fdinfo/<fd> mnt_id verification, and
+// statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
+//
+// Why no call in this file can send a request to an unchecked filesystem:
+//  1. open(hostPath, O_PATH|O_NOFOLLOW|O_CLOEXEC) pins the mount root dentry
+//     from the kernel VFS mount table without O_DIRECTORY or O_RDONLY, so VFS
+//     installs empty_fops without calling i_fop->open(), i_op->getattr(), or
+//     d_automount().
+//  2. /proc/self/fdinfo/<fd> (fs/proc/fd.c: seq_show) reads
+//     real_mount(file->f_path.mnt)->mnt_id purely from kernel VFS memory in
+//     procfs, issuing zero operations on the target filesystem. We compare that
+//     mount ID against the standby-checked mount BEFORE any openat2, statx,
+//     fstatfs, or readable open on both the root and every child descriptor.
+//  3. openat2(parentFD, child, O_PATH|O_CLOEXEC, RESOLVE_NO_XDEV|
+//     RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS) resolves a single child name
+//     strictly on parentFD's already-verified mount: VFS rejects already-mounted
+//     filesystems/bind mounts with EXDEV before calling into the child mount,
+//     rejects symlinks with ELOOP, and without O_DIRECTORY/O_RDONLY never
+//     triggers d_automount() on uncovered automount triggers.
+//  4. statx(fd, "", AT_EMPTY_PATH|AT_NO_AUTOMOUNT) runs only AFTER step 2 has
+//     proved fd's mount ID matches the checked awake mount; AT_NO_AUTOMOUNT
+//     prevents triggering an uncovered automount dentry on the checked mount,
+//     and STATX_ATTR_AUTOMOUNT / child STATX_ATTR_MOUNT_ROOT / mismatched
+//     st_dev or STATX_MNT_ID are rejected before any readable open.
+//  5. openat2(pathFD, ".", O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NONBLOCK,
+//     RESOLVE_NO_XDEV|...) reopens the already-pinned, mount-verified dentry
+//     without crossing an overmount, and step 2+4 re-verify the new fd before
+//     getdents64 or fstatfs reads from it.
 //
 // Kernels before 5.6 (ENOSYS) and seccomp profiles blocking openat2/statx
-// (EPERM) are refused cleanly instead of falling back to openat/fstatat:
-// without RESOLVE_NO_XDEV, any path lookup can cross into a filesystem mounted
-// mid-walk and send metadata requests (such as NFS GETATTR/OPEN or waking a
-// sleeping drive) before user space can inspect st_dev or mount ID.
+// (EPERM/EACCES) are refused cleanly instead of falling back to openat/fstatat.
 type linuxScanFS struct {
 	r             *Runner
 	openat2       openat2Func
@@ -37,18 +61,6 @@ func newDefaultScanFS(r *Runner) scanFS {
 	return &linuxScanFS{
 		r:             r,
 		openat2:       unix.Openat2,
-		statx:         unix.Statx,
-		fdinfoMountID: fdinfoMountID,
-	}
-}
-
-func newLinuxScanFSWithOpenat2(r *Runner, fn openat2Func) scanFS {
-	if fn == nil {
-		fn = unix.Openat2
-	}
-	return &linuxScanFS{
-		r:             r,
-		openat2:       fn,
 		statx:         unix.Statx,
 		fdinfoMountID: fdinfoMountID,
 	}
@@ -66,12 +78,41 @@ type linuxFSState struct {
 	isTestRoot    bool
 }
 
-// inspectFD reads metadata for an already-pinned descriptor (O_PATH or open
-// directory) via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT). It rejects automount
-// trigger dentries (STATX_ATTR_AUTOMOUNT) and, for child entries, mount roots
-// (STATX_ATTR_MOUNT_ROOT). On Linux 5.6-5.7 where STATX_MNT_ID is absent, it
-// falls back to /proc/self/fdinfo/<fd>.
+func (s *linuxFSState) readFDInfoMountID(fd int, logicalPath string) (uint64, bool) {
+	if s.statMountID != nil {
+		return s.statMountID(logicalPath)
+	}
+	if s.isTestRoot {
+		return 0, false
+	}
+	if s.fdinfoMountID != nil {
+		return s.fdinfoMountID(fd)
+	}
+	return 0, false
+}
+
+// verifyFDInfoMountID reads fd's mount ID from /proc/self/fdinfo/<fd> (pure
+// kernel VFS memory, no filesystem request) and confirms it matches the checked
+// root mount before any statx, fstatfs, or readable open touches fd.
+func (s *linuxFSState) verifyFDInfoMountID(fd int, logicalPath string) (uint64, bool, error) {
+	mntID, hasMntID := s.readFDInfoMountID(fd, logicalPath)
+	if s.hasRootMntID && s.rootMntID != 0 {
+		if !hasMntID || mntID != s.rootMntID {
+			return 0, false, errWrongMount
+		}
+	}
+	return mntID, hasMntID, nil
+}
+
+// inspectFD first verifies fd's mount ID via /proc/self/fdinfo/<fd> (no
+// filesystem request) and only then calls statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
+// It rejects automount trigger dentries (STATX_ATTR_AUTOMOUNT), child mount
+// roots (STATX_ATTR_MOUNT_ROOT), and any STATX_MNT_ID disagreeing with fdinfo.
 func (s *linuxFSState) inspectFD(fd int, logicalPath string, rejectMountRoot bool) (entryStat, error) {
+	mntID, hasMntID, err := s.verifyFDInfoMountID(fd, logicalPath)
+	if err != nil {
+		return entryStat{}, err
+	}
 	var stx unix.Statx_t
 	if err := statxNoEINTR(s.statx, fd, "", unix.AT_EMPTY_PATH|unix.AT_NO_AUTOMOUNT, unix.STATX_BASIC_STATS|unix.STATX_MNT_ID, &stx); err != nil {
 		return entryStat{}, err
@@ -84,11 +125,16 @@ func (s *linuxFSState) inspectFD(fd int, logicalPath string, rejectMountRoot boo
 	}
 	es := entryStatFromStatx(&stx)
 	if s.statMountID != nil {
-		es.MntID, es.HasMntID = s.statMountID(logicalPath)
+		es.MntID, es.HasMntID = mntID, hasMntID
 	} else if s.isTestRoot {
 		es.MntID, es.HasMntID = 0, false
-	} else if !es.HasMntID && s.fdinfoMountID != nil {
-		es.MntID, es.HasMntID = s.fdinfoMountID(fd)
+	} else {
+		if es.HasMntID && hasMntID && es.MntID != mntID {
+			return entryStat{}, errWrongMount
+		}
+		if hasMntID {
+			es.MntID, es.HasMntID = mntID, true
+		}
 	}
 	return es, nil
 }
@@ -113,9 +159,9 @@ func (s *linuxFSState) verifyDirFD(fd int, logicalPath string, rejectMountRoot b
 }
 
 func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
-	// Pin hostPath with O_PATH and no O_DIRECTORY so opening the root never
-	// triggers an automount or calls the filesystem's open() before we check
-	// that openat2 works and the mount ID still matches what standby checked.
+	// Step 1: pin hostPath with O_PATH and no O_DIRECTORY so opening the root
+	// uses VFS's cached mount root dentry without invoking i_fop->open(),
+	// i_op->getattr(), or d_automount().
 	pathFD, err := openNoEINTR(hostPath, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, err
@@ -134,8 +180,38 @@ func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo
 		fdinfoFn = fdinfoMountID
 	}
 
-	// Probe openat2 once on the pinned descriptor. Refuse cleanly on kernels
-	// before 5.6 (ENOSYS) or seccomp policies blocking openat2 (EPERM/EACCES).
+	state := &linuxFSState{
+		openat2:       openat2Fn,
+		statx:         statxFn,
+		fdinfoMountID: fdinfoFn,
+		readDirHook:   f.r.readDir,
+		statMountID:   f.r.statMountID,
+		isTestRoot:    f.r.root != "",
+	}
+
+	// Step 2: check pathFD's mount ID via /proc/self/fdinfo/<pathFD> BEFORE any
+	// openat2, statx, fstatfs, or readable open. If another filesystem was
+	// mounted over hostPath after the standby check, we detect the mismatch in
+	// kernel VFS memory and close pathFD without touching the overmount.
+	mntID, hasMntID := state.readFDInfoMountID(pathFD, logicalMount)
+	if expected.ID > 0 {
+		if !state.isTestRoot && !hasMntID {
+			_ = unix.Close(pathFD)
+			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+		}
+		if hasMntID && mntID != uint64(expected.ID) {
+			_ = unix.Close(pathFD)
+			return nil, errRootChanged
+		}
+	}
+	if hasMntID {
+		state.rootMntID = mntID
+		state.hasRootMntID = true
+	}
+
+	// Step 3: probe openat2 once on the already mount-verified O_PATH descriptor.
+	// Refuse cleanly on kernels before 5.6 (ENOSYS) or seccomp policies blocking
+	// openat2 (EPERM/EACCES).
 	probeFD, perr := openat2NoEINTR(openat2Fn, pathFD, ".", &unix.OpenHow{
 		Flags:   unix.O_PATH | unix.O_CLOEXEC,
 		Resolve: linuxOpenat2Resolve,
@@ -152,15 +228,8 @@ func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo
 	}
 	_ = unix.Close(probeFD)
 
-	state := &linuxFSState{
-		openat2:       openat2Fn,
-		statx:         statxFn,
-		fdinfoMountID: fdinfoFn,
-		readDirHook:   f.r.readDir,
-		statMountID:   f.r.statMountID,
-		isTestRoot:    f.r.root != "",
-	}
-
+	// Step 4: now that Step 2 proved pathFD belongs to the checked awake mount,
+	// inspect its mode, device, and automount flag via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
 	rootMeta, serr := state.inspectFD(pathFD, logicalMount, false)
 	if serr != nil {
 		_ = unix.Close(pathFD)
@@ -180,22 +249,13 @@ func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo
 		return nil, errNotDir
 	}
 	state.rootDev = rootMeta.Dev
-	state.rootMntID = rootMeta.MntID
-	state.hasRootMntID = rootMeta.HasMntID
-
-	if expected.ID > 0 {
-		if !state.isTestRoot && !state.hasRootMntID {
-			_ = unix.Close(pathFD)
-			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
-		}
-		if state.hasRootMntID && state.rootMntID != uint64(expected.ID) {
-			_ = unix.Close(pathFD)
-			return nil, errRootChanged
-		}
+	if !state.hasRootMntID && rootMeta.HasMntID {
+		state.rootMntID = rootMeta.MntID
+		state.hasRootMntID = true
 	}
 
-	// Now that the pinned descriptor is confirmed to be the expected mount and
-	// not an automount trigger, open "." from it for directory reading.
+	// Step 5: open "." from the verified O_PATH descriptor for directory reading,
+	// then re-verify fdinfo mount ID before statx on the readable descriptor.
 	fd, err := openat2NoEINTR(openat2Fn, pathFD, ".", &unix.OpenHow{
 		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NONBLOCK,
 		Resolve: linuxOpenat2Resolve,
@@ -238,6 +298,9 @@ func (d *linuxScanDir) Stat() (entryStat, error) {
 }
 
 func (d *linuxScanDir) Statfs() (fsStat, error) {
+	if _, _, err := d.state.verifyFDInfoMountID(d.fd, d.logicalPath); err != nil {
+		return fsStat{}, err
+	}
 	return fdStatfs(d.fd)
 }
 
@@ -307,9 +370,11 @@ func (d *linuxScanDir) OpenDir(name, logicalPath string, searchOnly, _ bool) (sc
 		return nil, err
 	}
 
-	// Step 2: verify the pinned descriptor via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT)
-	// (rejecting STATX_ATTR_AUTOMOUNT, STATX_ATTR_MOUNT_ROOT, non-directories,
-	// different st_dev, and missing or mismatched mount IDs) BEFORE opening it.
+	// Step 2: verify the pinned descriptor's mount ID from /proc/self/fdinfo/<fd>
+	// first (no filesystem request), and only then inspect it via
+	// statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT) (rejecting STATX_ATTR_AUTOMOUNT,
+	// STATX_ATTR_MOUNT_ROOT, non-directories, different st_dev, and mismatched
+	// mount IDs) BEFORE opening it.
 	if _, verr := d.state.verifyDirFD(pathFD, logicalPath, true); verr != nil {
 		_ = unix.Close(pathFD)
 		return nil, verr
@@ -347,11 +412,12 @@ func (d *linuxScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 	}
 
 	// Pin the child entry with O_PATH (no O_DIRECTORY) and RESOLVE_NO_XDEV |
-	// RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS, then stat that exact
-	// descriptor via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT). A filesystem or bind
-	// mount at name fails with EXDEV in VFS before any getattr touches it, and
-	// an automount trigger is pinned without triggering and rejected via
-	// STATX_ATTR_AUTOMOUNT.
+	// RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS. inspectFD then checks
+	// /proc/self/fdinfo/<entryFD> mount ID BEFORE calling
+	// statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT). A filesystem or bind mount at name
+	// fails with EXDEV in VFS before any getattr touches it, any descriptor on
+	// another mount is rejected via fdinfo before statx, and an automount
+	// trigger is pinned without triggering and rejected via STATX_ATTR_AUTOMOUNT.
 	entryFD, err := openat2NoEINTR(d.state.openat2, d.fd, name, &unix.OpenHow{
 		Flags:   unix.O_PATH | unix.O_CLOEXEC,
 		Resolve: linuxOpenat2Resolve,

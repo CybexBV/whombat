@@ -20,6 +20,18 @@ import (
 	"rackoon/internal/proto"
 )
 
+func newLinuxScanFSWithOpenat2(r *Runner, fn openat2Func) scanFS {
+	if fn == nil {
+		fn = unix.Openat2
+	}
+	return &linuxScanFS{
+		r:             r,
+		openat2:       fn,
+		statx:         unix.Statx,
+		fdinfoMountID: fdinfoMountID,
+	}
+}
+
 // findDirectChildMountOnRoot locates a real mounted filesystem directly beneath
 // "/" (such as /proc, /sys, or /dev) from /proc/self/mountinfo so Linux tests
 // can exercise real kernel mount-crossing refusal without root or mount(2).
@@ -436,25 +448,31 @@ func TestLinuxOpenRootRejectsOvermountAndAutomountBeforeReadableOpen(t *testing.
 	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
 
 	for _, tc := range []struct {
-		name      string
-		automount bool
-		mntID     uint64
+		name           string
+		automount      bool
+		mntID          uint64
+		wantZeroStatx  bool
+		wantZeroOpenAt bool
 	}{
-		{"overmounted_root", false, 99},
-		{"automount_root", true, 10},
+		{"overmounted_root", false, 99, true, true},
+		{"automount_root", true, 10, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			var openat2Calls atomic.Int32
 			var readableOpenCalls atomic.Int32
+			var statxCalls atomic.Int32
 			r := newTestRunner(t, root, mounts, nil)
 			r.scanFS = &linuxScanFS{
 				r: r,
 				openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+					openat2Calls.Add(1)
 					if how.Flags&unix.O_DIRECTORY != 0 {
 						readableOpenCalls.Add(1)
 					}
 					return unix.Openat2(dirfd, path, how)
 				},
 				statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
+					statxCalls.Add(1)
 					if err := unix.Statx(dirfd, path, flags, mask, stx); err != nil {
 						return err
 					}
@@ -475,8 +493,294 @@ func TestLinuxOpenRootRejectsOvermountAndAutomountBeforeReadableOpen(t *testing.
 			if readableOpenCalls.Load() != 0 {
 				t.Fatalf("openat2(O_DIRECTORY) called %d times on %s, want 0", readableOpenCalls.Load(), tc.name)
 			}
+			if tc.wantZeroStatx && statxCalls.Load() != 0 {
+				t.Fatalf("statx called %d times on %s, want 0 (fdinfo mount ID must reject before statx)", statxCalls.Load(), tc.name)
+			}
+			if tc.wantZeroOpenAt && openat2Calls.Load() != 0 {
+				t.Fatalf("openat2 called %d times on %s, want 0 (fdinfo mount ID must reject before openat2)", openat2Calls.Load(), tc.name)
+			}
 		})
 	}
+}
+
+func TestLinuxChecksFDInfoMountIDBeforeStatxAndOpen(t *testing.T) {
+	t.Run("parseFDInfoMountID", func(t *testing.T) {
+		if id, ok := parseFDInfoMountID([]byte("pos:\t0\nflags:\t0100002\nmnt_id:\t42\nino:\t7\n")); !ok || id != 42 {
+			t.Fatalf("parseFDInfoMountID valid = (%d, %v), want (42, true)", id, ok)
+		}
+		if id, ok := parseFDInfoMountID([]byte("pos:\t0\nflags:\t0100002\n")); ok || id != 0 {
+			t.Fatalf("parseFDInfoMountID missing = (%d, %v), want (0, false)", id, ok)
+		}
+		if id, ok := parseFDInfoMountID([]byte("mnt_id:\tnotanumber\n")); ok || id != 0 {
+			t.Fatalf("parseFDInfoMountID bad = (%d, %v), want (0, false)", id, ok)
+		}
+	})
+
+	t.Run("root_overmount_and_unreadable_fdinfo_never_call_statx_or_openat2", func(t *testing.T) {
+		root := t.TempDir()
+		for _, tc := range []struct {
+			name     string
+			fdinfoFn fdinfoMountIDFunc
+			wantErr  error
+			wantCode string
+		}{
+			{
+				name:     "overmount_mismatch",
+				fdinfoFn: func(int) (uint64, bool) { return 99, true },
+				wantErr:  errRootChanged,
+				wantCode: CodeFailed,
+			},
+			{
+				name:     "unreadable_fdinfo",
+				fdinfoFn: func(int) (uint64, bool) { return 0, false },
+				wantCode: CodeUnsupported,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				var openat2Calls, statxCalls, statfsCalls atomic.Int32
+				mounts := []mountInfo{{ID: 42, ParentID: 1, MountPoint: root, FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+				r := newTestRunner(t, root, mounts, nil)
+				r.root = "" // exercise real-host fdinfo path (not synthetic test root)
+				r.statfs = func(string) (fsStat, error) {
+					statfsCalls.Add(1)
+					return fsStat{}, nil
+				}
+				sfs := &linuxScanFS{
+					r: r,
+					openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+						openat2Calls.Add(1)
+						return unix.Openat2(dirfd, path, how)
+					},
+					statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
+						statxCalls.Add(1)
+						return unix.Statx(dirfd, path, flags, mask, stx)
+					},
+					fdinfoMountID: tc.fdinfoFn,
+				}
+				r.scanFS = sfs
+
+				if d, err := sfs.OpenRoot(root, root, mountInfo{ID: 42, MountPoint: root}); err == nil {
+					_ = d.Close()
+					t.Fatal("OpenRoot unexpectedly succeeded")
+				} else if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+					t.Fatalf("OpenRoot err = %v, want %v", err, tc.wantErr)
+				} else if tc.wantErr == nil && asUnsupportedErr(err) == nil {
+					t.Fatalf("OpenRoot err = %v, want *scanUnsupportedError", err)
+				}
+				if statxCalls.Load() != 0 {
+					t.Fatalf("statx called %d times, want 0", statxCalls.Load())
+				}
+				if openat2Calls.Load() != 0 {
+					t.Fatalf("openat2 called %d times, want 0", openat2Calls.Load())
+				}
+
+				resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: root})
+				if resp.Code != tc.wantCode {
+					t.Fatalf("DiskUsage code = %q, want %q (%+v)", resp.Code, tc.wantCode, resp)
+				}
+				if statxCalls.Load() != 0 || openat2Calls.Load() != 0 || statfsCalls.Load() != 0 {
+					t.Fatalf("syscalls after fdinfo reject: statx=%d openat2=%d statfs=%d, want all 0",
+						statxCalls.Load(), openat2Calls.Load(), statfsCalls.Load())
+				}
+			})
+		}
+	})
+
+	t.Run("root_readable_reopen_mismatch_rejects_before_second_statx", func(t *testing.T) {
+		root := t.TempDir()
+		r := newTestRunner(t, root, []mountInfo{{ID: 42, ParentID: 1, MountPoint: root, FSType: "ext4", Source: "/dev/nvme0n1p2"}}, nil)
+		r.root = ""
+
+		var readableFD atomic.Int32
+		readableFD.Store(-1)
+		var statxOnReadable atomic.Int32
+
+		sfs := &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				fd, err := unix.Openat2(dirfd, path, how)
+				if err == nil && how.Flags&unix.O_DIRECTORY != 0 {
+					readableFD.Store(int32(fd))
+				}
+				return fd, err
+			},
+			statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
+				if int32(dirfd) == readableFD.Load() {
+					statxOnReadable.Add(1)
+				}
+				return unix.Statx(dirfd, path, flags, mask, stx)
+			},
+			fdinfoMountID: func(fd int) (uint64, bool) {
+				if int32(fd) == readableFD.Load() {
+					return 99, true
+				}
+				return 42, true
+			},
+		}
+		if d, err := sfs.OpenRoot(root, root, mountInfo{ID: 42, MountPoint: root}); err == nil {
+			_ = d.Close()
+			t.Fatal("OpenRoot accepted mismatched readable root fd")
+		} else if !errors.Is(err, errRootChanged) {
+			t.Fatalf("OpenRoot err = %v, want errRootChanged", err)
+		}
+		if statxOnReadable.Load() != 0 {
+			t.Fatalf("statx called %d times on mismatched readable root fd, want 0", statxOnReadable.Load())
+		}
+	})
+
+	t.Run("child_steps_and_openself_check_fdinfo_before_statx_and_open", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "okdir/file.bin"), 4096)
+		writeBytes(t, filepath.Join(root, "foreign-dir/secret.bin"), 4096)
+		writeBytes(t, filepath.Join(root, "foreign-file.bin"), 4096)
+		writeBytes(t, filepath.Join(root, "disagree-file.bin"), 4096)
+
+		var foreignDirSt, foreignFileSt, disagreeFileSt unix.Stat_t
+		if err := unix.Stat(filepath.Join(root, "foreign-dir"), &foreignDirSt); err != nil {
+			t.Fatal(err)
+		}
+		if err := unix.Stat(filepath.Join(root, "foreign-file.bin"), &foreignFileSt); err != nil {
+			t.Fatal(err)
+		}
+		if err := unix.Stat(filepath.Join(root, "disagree-file.bin"), &disagreeFileSt); err != nil {
+			t.Fatal(err)
+		}
+
+		var mu sync.Mutex
+		foreignFDs := map[int]bool{}
+		var statxOnForeign atomic.Int32
+		var openDotOnForeign atomic.Int32
+		var failOpenSelf atomic.Bool
+		var openSelfFD atomic.Int32
+		openSelfFD.Store(-1)
+		var failStatfs atomic.Bool
+
+		r := newTestRunner(t, root, []mountInfo{{ID: 42, ParentID: 1, MountPoint: root, FSType: "ext4", Source: "/dev/nvme0n1p2"}}, nil)
+		r.root = ""
+		sfs := &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				if path == "." && how.Flags&unix.O_DIRECTORY != 0 {
+					mu.Lock()
+					isForeign := foreignFDs[dirfd]
+					mu.Unlock()
+					if isForeign {
+						openDotOnForeign.Add(1)
+					}
+				}
+				fd, err := unix.Openat2(dirfd, path, how)
+				if err == nil {
+					mu.Lock()
+					if path == "foreign-dir" || path == "foreign-file.bin" {
+						foreignFDs[fd] = true
+					} else {
+						delete(foreignFDs, fd)
+					}
+					mu.Unlock()
+					if failOpenSelf.Load() && path == "." && how.Flags&unix.O_DIRECTORY != 0 {
+						openSelfFD.Store(int32(fd))
+					}
+				}
+				return fd, err
+			},
+			statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
+				mu.Lock()
+				isForeign := foreignFDs[dirfd]
+				mu.Unlock()
+				if isForeign || int32(dirfd) == openSelfFD.Load() {
+					statxOnForeign.Add(1)
+				}
+				if err := unix.Statx(dirfd, path, flags, mask, stx); err != nil {
+					return err
+				}
+				// Make statx's STATX_MNT_ID agree with fdinfo (42), except for disagree-file.bin.
+				stx.Mask |= unix.STATX_MNT_ID
+				if stx.Ino == disagreeFileSt.Ino && unix.Mkdev(stx.Dev_major, stx.Dev_minor) == uint64(disagreeFileSt.Dev) {
+					stx.Mnt_id = 77
+				} else {
+					stx.Mnt_id = 42
+				}
+				return nil
+			},
+			fdinfoMountID: func(fd int) (uint64, bool) {
+				if failStatfs.Load() {
+					return 99, true
+				}
+				if int32(fd) == openSelfFD.Load() {
+					return 99, true
+				}
+				mu.Lock()
+				isForeign := foreignFDs[fd]
+				mu.Unlock()
+				if isForeign {
+					return 99, true
+				}
+				return 42, true
+			},
+		}
+
+		rootDir, err := sfs.OpenRoot(root, root, mountInfo{ID: 42, MountPoint: root})
+		if err != nil {
+			t.Fatalf("OpenRoot: %v", err)
+		}
+		defer rootDir.Close()
+
+		// OpenDir (readable and searchOnly) rejects foreign mount via fdinfo BEFORE statx or opening ".".
+		for _, searchOnly := range []bool{false, true} {
+			if sub, err := rootDir.OpenDir("foreign-dir", filepath.Join(root, "foreign-dir"), searchOnly, false); err == nil {
+				_ = sub.Close()
+				t.Fatalf("OpenDir(foreign-dir, searchOnly=%v) succeeded", searchOnly)
+			} else if !errors.Is(err, errWrongMount) {
+				t.Fatalf("OpenDir(foreign-dir, searchOnly=%v) err = %v, want errWrongMount", searchOnly, err)
+			}
+		}
+
+		// StatEntry rejects foreign mount via fdinfo BEFORE statx.
+		if _, err := rootDir.StatEntry("foreign-file.bin", filepath.Join(root, "foreign-file.bin")); err == nil {
+			t.Fatal("StatEntry(foreign-file.bin) succeeded")
+		} else if !errors.Is(err, errWrongMount) {
+			t.Fatalf("StatEntry(foreign-file.bin) err = %v, want errWrongMount", err)
+		}
+
+		// OpenSelf rejects mismatched reopened fd via fdinfo BEFORE statx.
+		failOpenSelf.Store(true)
+		if self, err := rootDir.OpenSelf(); err == nil {
+			_ = self.Close()
+			t.Fatal("OpenSelf succeeded with mismatched fdinfo mount ID")
+		} else if !errors.Is(err, errWrongMount) {
+			t.Fatalf("OpenSelf err = %v, want errWrongMount", err)
+		}
+		failOpenSelf.Store(false)
+		openSelfFD.Store(-1)
+
+		if statxOnForeign.Load() != 0 {
+			t.Fatalf("statx called %d times on foreign/mismatched fds, want 0", statxOnForeign.Load())
+		}
+		if openDotOnForeign.Load() != 0 {
+			t.Fatalf("openat2('.', O_DIRECTORY) called %d times on foreign dir fd, want 0", openDotOnForeign.Load())
+		}
+
+		// Defense in depth: statx reporting a STATX_MNT_ID disagreeing with fdinfo is rejected.
+		if _, err := rootDir.StatEntry("disagree-file.bin", filepath.Join(root, "disagree-file.bin")); err == nil {
+			t.Fatal("StatEntry(disagree-file.bin) succeeded when STATX_MNT_ID disagreed with fdinfo")
+		} else if !errors.Is(err, errWrongMount) {
+			t.Fatalf("StatEntry(disagree-file.bin) err = %v, want errWrongMount", err)
+		}
+
+		// Statfs rejects a descriptor whose fdinfo mount ID no longer matches.
+		failStatfs.Store(true)
+		if _, err := rootDir.Statfs(); !errors.Is(err, errWrongMount) {
+			t.Fatalf("Statfs with mismatched fdinfo = %v, want errWrongMount", err)
+		}
+		failStatfs.Store(false)
+
+		// Normal same-mount child still succeeds.
+		okDir, err := rootDir.OpenDir("okdir", filepath.Join(root, "okdir"), false, false)
+		if err != nil {
+			t.Fatalf("OpenDir(okdir): %v", err)
+		}
+		_ = okDir.Close()
+	})
 }
 
 func TestLinuxSparseFileCountsZeroAllocatedBytes(t *testing.T) {

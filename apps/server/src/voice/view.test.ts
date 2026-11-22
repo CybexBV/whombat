@@ -261,5 +261,74 @@ describe('the view', () => {
       agreedAt: agreedAt.toISOString(),
       licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
     });
+
+    // Agreed while the fetcher hasn't accepted the download yet ('absent') or is restarting (fetched: null):
+    // reports 'waiting' with the saved agreement instead of 'absent' or null.
+    const onBeforeAccepted = voiceTypingView(facts({ settings: on, fetched: fetchedClean }));
+    expect(onBeforeAccepted.dutchVoice).toEqual({
+      on: true,
+      state: 'waiting',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onWhileFetcherDown = voiceTypingView(
+      facts({ settings: on, fetched: null, knownDutchSize: 145_310_775 }),
+    );
+    expect(onWhileFetcherDown.dutchVoice).toEqual({
+      on: true,
+      state: 'waiting',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onReadyWhileFetcherDown = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: 145_310_775,
+      }),
+    );
+    expect(onReadyWhileFetcherDown.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      size: 145_310_775,
+      received: 145_310_775,
+    });
+    // Agreed while old removal trash is still on disk: keeps reporting 'removing' and bytes left.
+    const onWhileRemoving = voiceTypingView(
+      facts({
+        settings: on,
+        fetched: [
+          model('parakeet', 'ready'),
+          model('whisper', 'absent'),
+          model('supertonic', 'removing', { size: 145_310_775, received: 150_000_000 }),
+        ],
+      }),
+    );
+    expect(onWhileRemoving.dutchVoice).toMatchObject({
+      on: true,
+      state: 'removing',
+      received: 150_000_000,
+    });
+    // Turned off while fetcher is restarting with pending removal: reports off + removing rather than null.
+    const offWhileFetcherDown = voiceTypingView(
+      facts({
+        settings: DEFAULT_VOICE_TYPING,
+        fetched: null,
+        knownDutchSize: 145_310_775,
+        dutchRemovePending: true,
+      }),
+    );
+    expect(offWhileFetcherDown.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      size: 145_310_775,
+      agreedAt: null,
+      licenceVersion: null,
+    });
   });
 });

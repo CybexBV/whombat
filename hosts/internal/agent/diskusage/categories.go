@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -773,7 +771,9 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 	snaps = proto.DiskUsageCategory{Key: proto.DiskCatVMSnapshots, Label: "Snapshots"}
 
 	target := scope.target
-	// ZFS pools report zvols (VM disks) and snapshots accurately without walking files.
+	// Query only the selected ZFS dataset itself (-d 0) for its own snapshots
+	// (and dataset bytes if the selected dataset itself is a VM/container dataset),
+	// never recursively summing child datasets or volumes.
 	if target.FSType == "zfs" && target.Source != "" && r.runCmd != nil {
 		if zDisks, zSnaps, ok := r.collectZFS(ctx, target.Source); ok {
 			disks.Bytes += zDisks
@@ -862,30 +862,35 @@ func (r *Runner) collectZFS(ctx context.Context, dataset string) (vmDisks, snaps
 	if !isSafeZFSDataset(dataset) {
 		return 0, 0, false
 	}
-	out, err := r.runCmd(ctx, "zfs", "list", "-Hp", "-t", "filesystem,volume", "-o", "name,type,usedbydataset,usedbysnapshots", "-r", dataset)
+	// Pass -d 0 (not -r) so only the selected dataset itself is queried, never
+	// separately mounted child datasets or child zvols.
+	out, err := r.runCmd(ctx, "zfs", "list", "-Hp", "-d", "0", "-t", "filesystem,volume", "-o", "name,type,usedbydataset,usedbysnapshots", dataset)
 	if err != nil {
 		return 0, 0, false
 	}
-	return parseZFSUsage(out)
+	return parseZFSUsage(out, dataset)
 }
 
-func parseZFSUsage(b []byte) (vmDisks, snapshots uint64, ok bool) {
+func parseZFSUsage(b []byte, dataset string) (vmDisks, snapshots uint64, ok bool) {
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	for _, line := range lines {
 		f := strings.Split(line, "\t")
 		if len(f) < 4 {
 			continue
 		}
-		ok = true
 		name, typ := f[0], f[1]
+		if name != dataset {
+			continue
+		}
 		usedDS, _ := strconv.ParseUint(strings.TrimSpace(f[2]), 10, 64)
 		usedSnap, _ := strconv.ParseUint(strings.TrimSpace(f[3]), 10, 64)
-		snapshots += usedSnap
+		snapshots = usedSnap
 		if typ == "volume" || isZFSGuestDataset(name) {
-			vmDisks += usedDS
+			vmDisks = usedDS
 		}
+		return vmDisks, snapshots, true
 	}
-	return vmDisks, snapshots, ok
+	return 0, 0, false
 }
 
 func isZFSGuestDataset(name string) bool {
@@ -924,30 +929,6 @@ func pruneNestedPaths(set map[string]bool) []string {
 		}
 	}
 	return out
-}
-
-func lookTool(name string) (string, error) {
-	for _, dir := range []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"} {
-		p := filepath.Join(dir, name)
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-			return p, nil
-		}
-	}
-	return exec.LookPath(name)
-}
-
-func runLowPriorityCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
-	path, err := lookTool(name)
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Dir = "/"
-	cmd.Env = []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LC_ALL=C",
-	}
-	return cmd.Output()
 }
 
 const darwinDataVolumeMount = "/System/Volumes/Data"

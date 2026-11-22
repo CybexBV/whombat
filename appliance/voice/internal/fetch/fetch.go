@@ -60,6 +60,10 @@ type Fetcher struct {
 	deleting map[string]*pendingDelete
 	// removeAll deletes a renamed-aside path after unlocking f.mu (defaults to os.RemoveAll; tests may hook it).
 	removeAll func(string) error
+	// beforeCreate runs right before acquiring f.mu to create a staging folder or part file (tests only).
+	beforeCreate func(id, path string)
+	// onRunDone fires after a run() attempt finishes unwinding (tests only).
+	onRunDone func(id string)
 }
 
 type pendingDelete struct {
@@ -115,6 +119,10 @@ func (f *Fetcher) Start(ctx context.Context) error {
 		e := &entry{model: m, state: local.VoiceModelStateAbsent}
 		if models.Present(f.Dir, m) {
 			e.state, e.received = local.VoiceModelStateReady, m.TotalSize()
+		} else if leftBytes, hasTrash, err := f.trashLeftovers(m); err != nil || hasTrash {
+			// Undeletable .removing-* trash takes priority over auto-resuming from .wanted.json
+			// so leftover bytes on disk never vanish from status.
+			e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
 		} else if m.ID != local.VoiceModelSupertonic && slices.Contains(wanted, m.ID) {
 			// Opt-in Dutch voice (supertonic) is never auto-resumed from .wanted.json
 			// at startup; the server asks again only while the saved setting is on.
@@ -178,15 +186,55 @@ func (f *Fetcher) state(include []string, all bool) local.VoiceModelsState {
 var ErrUnknown = errors.New("no such model in this release")
 
 // Fetch asks for model id: a model that is there or on its way stays as it is; a failed one starts again.
+// If renamed-aside .removing-* trash still remains on disk for id, Fetch tries to delete it first; if any trash
+// cannot be deleted yet, Fetch keeps reporting "removing" with the remaining bytes on disk and returns an error
+// instead of hiding those bytes behind PartialSize.
 func (f *Fetcher) Fetch(id string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	e, ok := f.entries[id]
 	if !ok {
+		f.mu.Unlock()
 		return ErrUnknown
 	}
 	if e.state == local.VoiceModelStateReady || e.wanted {
+		f.mu.Unlock()
 		return nil
+	}
+	gen := e.gen
+	model := e.model
+	f.mu.Unlock()
+
+	trash, scanErr := f.modelTrash(id)
+	var removeErr error
+	for _, t := range trash {
+		if err := f.deletePath(t); err != nil && removeErr == nil {
+			removeErr = err
+		}
+	}
+
+	leftBytes, hasTrash, checkErr := f.trashLeftovers(model)
+	blocked := hasTrash || scanErr != nil || removeErr != nil || checkErr != nil
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if e.state == local.VoiceModelStateReady || e.wanted {
+		return nil
+	}
+	if e.gen != gen {
+		return fmt.Errorf("%s: removal in progress", id)
+	}
+	if blocked {
+		e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
+		switch {
+		case removeErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, removeErr)
+		case scanErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, scanErr)
+		case checkErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, checkErr)
+		default:
+			return fmt.Errorf("%s: previous files not removed yet (%d bytes remain)", id, leftBytes)
+		}
 	}
 	if e.state == local.VoiceModelStateRemoving {
 		e.received = models.PartialSize(f.Dir, e.model)
@@ -345,6 +393,9 @@ func (f *Fetcher) next() (*entry, time.Duration) {
 
 // run downloads e and decides what follows: ready, wait and try again, or failed until asked again.
 func (f *Fetcher) run(ctx context.Context, e *entry) {
+	if f.onRunDone != nil {
+		defer f.onRunDone(e.model.ID)
+	}
 	dctx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
 	if !e.wanted {
@@ -464,11 +515,8 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry, gen uint64) error
 	if free, err := f.Free(f.Dir); err == nil && free < total-already+Margin {
 		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (total-already+Margin)>>20)
 	}
-	if err := ctx.Err(); err != nil {
+	if err := f.ensureStageDir(ctx, e, gen, stage); err != nil {
 		return err
-	}
-	if err := os.MkdirAll(stage, 0o750); err != nil {
-		return fmt.Errorf("%w: %v", errNoRoom, err)
 	}
 	want := make(map[string]bool, len(m.Files))
 	var done int64
@@ -508,12 +556,9 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry, gen uint64) error
 // fetchFile downloads one file from url into part (resuming where it stopped), verifies its size and sha256, and
 // renames it to dest.
 func (f *Fetcher) fetchFile(ctx context.Context, e *entry, gen uint64, url, part, dest string, size int64, wantSHA string, progressBase, total int64) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
+	fh, err := f.openPartFile(ctx, e, gen, part)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errNoRoom, err)
+		return err
 	}
 	defer fh.Close()
 	have, err := fh.Seek(0, io.SeekEnd)
@@ -685,6 +730,59 @@ func (f *Fetcher) progress(e *entry, gen uint64, n int64) {
 	f.mu.Unlock()
 }
 
+// ensureStageDir checks the attempt's generation and creates stage under f.mu, the same lock Remove takes before
+// bumping gen and sweeping paths aside, so a cancelled download can never recreate the staging folder after Remove
+// has already reported absent.
+func (f *Fetcher) ensureStageDir(ctx context.Context, e *entry, gen uint64, stage string) error {
+	if f.beforeCreate != nil {
+		f.beforeCreate(e.model.ID, stage)
+	}
+	f.mu.Lock()
+	if e.gen != gen || !e.wanted {
+		f.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	err := os.MkdirAll(stage, 0o750)
+	f.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("%w: %v", errNoRoom, err)
+	}
+	return nil
+}
+
+// openPartFile checks the attempt's generation and opens/creates part under f.mu, the same lock Remove takes, so a
+// cancelled download can never recreate a part file after Remove has already swept f.Dir.
+func (f *Fetcher) openPartFile(ctx context.Context, e *entry, gen uint64, part string) (*os.File, error) {
+	if f.beforeCreate != nil {
+		f.beforeCreate(e.model.ID, part)
+	}
+	f.mu.Lock()
+	if e.gen != gen || !e.wanted {
+		f.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return nil, context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		f.mu.Unlock()
+		return nil, err
+	}
+	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
+	f.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errNoRoom, err)
+	}
+	return fh, nil
+}
+
 // commitRename atomically renames src to dst only while gen is still current and wanted, so a download attempt
 // superseded by Remove never exposes a removed model on disk. Any existing dst directory is renamed aside under f.mu
 // and deleted after unlocking.
@@ -768,6 +866,20 @@ func (f *Fetcher) modelLeftovers(m models.Model) (int64, bool, error) {
 		}
 	}
 	return total, has, nil
+}
+
+// trashLeftovers reports whether any renamed-aside .removing-* trash still remains on disk for m. When any trash
+// remains, total includes all remaining bytes on disk for m so reported bytes left never drop.
+func (f *Fetcher) trashLeftovers(m models.Model) (int64, bool, error) {
+	paths, err := f.modelTrash(m.ID)
+	if err != nil {
+		return 0, true, err
+	}
+	if len(paths) == 0 {
+		return 0, false, nil
+	}
+	total, _, leftErr := f.modelLeftovers(m)
+	return total, true, leftErr
 }
 
 // startupLeftovers checks whether model m (already known not to be Present or auto-resumed) still has leftover removal

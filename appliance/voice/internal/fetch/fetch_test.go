@@ -1482,3 +1482,255 @@ func TestRemoveLeftoversReportRemovingAndSurviveRestart(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoveBeforeStageCreateCannotLeaveOrphanedFiles(t *testing.T) {
+	t.Run("supertonic multi-file staging dir", func(t *testing.T) {
+		files := map[string]*source{
+			"a.onnx": {body: body(32 << 10)},
+			"b.onnx": {body: body(32 << 10)},
+		}
+		f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+		defer stop()
+
+		atStage := make(chan struct{})
+		releaseStage := make(chan struct{})
+		var once sync.Once
+		f.beforeCreate = func(id, p string) {
+			if id == local.VoiceModelSupertonic && p == models.PartPath(f.Dir, m) {
+				once.Do(func() {
+					close(atStage)
+					<-releaseStage
+				})
+			}
+		}
+		// Simulate worker cleanup failure if it were ever to recreate stage after Remove returned absent.
+		var failDelete atomic.Bool
+		f.removeAll = func(p string) error {
+			if failDelete.Load() {
+				return fmt.Errorf("simulated cleanup failure on %s", filepath.Base(p))
+			}
+			return os.RemoveAll(p)
+		}
+		runDone := make(chan struct{}, 1)
+		f.onRunDone = func(id string) {
+			if id == local.VoiceModelSupertonic {
+				select {
+				case runDone <- struct{}{}:
+				default:
+				}
+			}
+		}
+		start(t, f)
+
+		if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+			t.Fatal(err)
+		}
+		<-atStage
+
+		// Remove runs right before ensureStageDir acquires f.mu: nothing is on disk yet, so Remove succeeds cleanly.
+		if err := f.Remove(local.VoiceModelSupertonic); err != nil {
+			t.Fatalf("Remove: %v", err)
+		}
+		if s := f.State().Models[0]; s.State != local.VoiceModelStateAbsent || s.Received != 0 {
+			t.Fatalf("state right after Remove = %+v, want absent/0", s)
+		}
+		// Even if any subsequent cleanup would fail, releasing the cancelled worker must never create stage.
+		failDelete.Store(true)
+		close(releaseStage)
+
+		select {
+		case <-runDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("worker did not finish unwinding")
+		}
+		if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+			t.Fatalf("cancelled download recreated staging folder: %v", err)
+		}
+		if _, err := os.Stat(models.Path(f.Dir, m)); !os.IsNotExist(err) {
+			t.Fatalf("cancelled download created final folder: %v", err)
+		}
+		if trash, err := f.modelTrash(local.VoiceModelSupertonic); err != nil || len(trash) != 0 {
+			t.Fatalf("unexpected trash left behind: %v (err=%v)", trash, err)
+		}
+		if s := f.State().Models[0]; s.State != local.VoiceModelStateAbsent || s.Received != 0 {
+			t.Fatalf("final state = %+v, want absent/0", s)
+		}
+	})
+
+	t.Run("parakeet single-file part", func(t *testing.T) {
+		src := &source{body: body(32 << 10)}
+		f, m, stop := newFetcher(t, src, 1<<40)
+		defer stop()
+
+		atPart := make(chan struct{})
+		releasePart := make(chan struct{})
+		var once sync.Once
+		f.beforeCreate = func(id, p string) {
+			if id == local.VoiceModelParakeet && p == models.PartPath(f.Dir, m) {
+				once.Do(func() {
+					close(atPart)
+					<-releasePart
+				})
+			}
+		}
+		var failDelete atomic.Bool
+		f.removeAll = func(p string) error {
+			if failDelete.Load() {
+				return fmt.Errorf("simulated cleanup failure on %s", filepath.Base(p))
+			}
+			return os.RemoveAll(p)
+		}
+		runDone := make(chan struct{}, 1)
+		f.onRunDone = func(id string) {
+			if id == local.VoiceModelParakeet {
+				select {
+				case runDone <- struct{}{}:
+				default:
+				}
+			}
+		}
+		start(t, f)
+
+		if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+			t.Fatal(err)
+		}
+		<-atPart
+
+		if err := f.Remove(local.VoiceModelParakeet); err != nil {
+			t.Fatalf("Remove: %v", err)
+		}
+		failDelete.Store(true)
+		close(releasePart)
+
+		select {
+		case <-runDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("worker did not finish unwinding")
+		}
+		if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+			t.Fatalf("cancelled download recreated part file: %v", err)
+		}
+		if trash, err := f.modelTrash(local.VoiceModelParakeet); err != nil || len(trash) != 0 {
+			t.Fatalf("unexpected trash left behind: %v (err=%v)", trash, err)
+		}
+		if s := f.State().Models[0]; s.State != local.VoiceModelStateAbsent || s.Received != 0 {
+			t.Fatalf("final state = %+v, want absent/0", s)
+		}
+	})
+}
+
+func TestFetchKeepsReportingRemovingBytesWhileTrashRemains(t *testing.T) {
+	t.Run("supertonic multi-file", func(t *testing.T) {
+		files := map[string]*source{
+			"a.onnx":  {body: body(64 << 10)},
+			"b.onnx":  {body: body(32 << 10)},
+			"LICENSE": {body: []byte("BigScience Open RAIL-M")},
+		}
+		f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx", "LICENSE"}, 1<<40)
+		defer stop()
+
+		var failDelete atomic.Bool
+		failDelete.Store(true)
+		f.removeAll = func(p string) error {
+			if failDelete.Load() {
+				return fmt.Errorf("simulated delete failure on %s", filepath.Base(p))
+			}
+			return os.RemoveAll(p)
+		}
+		start(t, f)
+
+		if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+			t.Fatal(err)
+		}
+		until(t, f, local.VoiceModelStateReady)
+
+		if err := f.Remove(local.VoiceModelSupertonic); err == nil {
+			t.Fatal("expected remove failure while delete fails")
+		}
+		if s := f.State().Models[0]; s.State != local.VoiceModelStateRemoving || s.Received != m.TotalSize() {
+			t.Fatalf("after failed remove = %+v, want removing/%d", s, m.TotalSize())
+		}
+
+		// Re-fetching while .removing-* trash still cannot be deleted must keep reporting removing + bytes left.
+		if err := f.Fetch(local.VoiceModelSupertonic); err == nil || !strings.Contains(err.Error(), "not removed yet") {
+			t.Fatalf("Fetch while trash remains: err = %v, want not removed yet", err)
+		}
+		if s := f.State().Models[0]; s.State != local.VoiceModelStateRemoving || s.Received != m.TotalSize() {
+			t.Fatalf("after blocked Fetch = %+v, want removing/%d (bytes left must not vanish)", s, m.TotalSize())
+		}
+
+		// Once deletion can succeed, the next Fetch clears the trash and downloads the model cleanly.
+		failDelete.Store(false)
+		if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+			t.Fatalf("Fetch after delete unblocked: %v", err)
+		}
+		s := until(t, f, local.VoiceModelStateReady)
+		if s.Received != m.TotalSize() || !models.Present(f.Dir, m) {
+			t.Fatalf("after recovery Fetch = %+v", s)
+		}
+		if trash, err := f.modelTrash(local.VoiceModelSupertonic); err != nil || len(trash) != 0 {
+			t.Fatalf("trash left behind after recovery Fetch: %v (err=%v)", trash, err)
+		}
+	})
+
+	t.Run("parakeet wanted at startup with leftover trash keeps reporting removing", func(t *testing.T) {
+		src := &source{body: body(48 << 10)}
+		f, m, stop := newFetcher(t, src, 1<<40)
+		defer stop()
+
+		var failDelete atomic.Bool
+		failDelete.Store(true)
+		deleteFn := func(p string) error {
+			if failDelete.Load() {
+				return fmt.Errorf("simulated delete failure on %s", filepath.Base(p))
+			}
+			return os.RemoveAll(p)
+		}
+		f.removeAll = deleteFn
+		cancel1 := start(t, f)
+		if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+			t.Fatal(err)
+		}
+		until(t, f, local.VoiceModelStateReady)
+		if err := f.Remove(local.VoiceModelParakeet); err == nil {
+			t.Fatal("expected remove failure")
+		}
+		// Simulate .wanted.json also naming parakeet at restart while its .removing-* trash is undeletable.
+		if err := os.WriteFile(filepath.Join(f.Dir, wantedFile), []byte(`["parakeet"]`), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		cancel1()
+
+		g := &Fetcher{
+			Manifest:  f.Manifest,
+			Dir:       f.Dir,
+			Client:    f.Client,
+			Free:      f.Free,
+			Backoff:   f.Backoff,
+			Idle:      f.Idle,
+			removeAll: deleteFn,
+		}
+		start(t, g)
+		if s := g.State().Models[0]; s.State != local.VoiceModelStateRemoving || s.Received != m.Size {
+			t.Fatalf("startup with wanted + leftover trash = %+v, want removing/%d", s, m.Size)
+		}
+		if err := g.Fetch(local.VoiceModelParakeet); err == nil {
+			t.Fatal("expected Fetch to stay blocked while trash remains")
+		}
+		if s := g.State().Models[0]; s.State != local.VoiceModelStateRemoving || s.Received != m.Size {
+			t.Fatalf("after blocked Fetch = %+v, want removing/%d", s, m.Size)
+		}
+
+		failDelete.Store(false)
+		if err := g.Fetch(local.VoiceModelParakeet); err != nil {
+			t.Fatalf("Fetch after delete unblocked: %v", err)
+		}
+		s := until(t, g, local.VoiceModelStateReady)
+		if s.Received != m.Size || !models.Present(g.Dir, m) {
+			t.Fatalf("after recovery Fetch = %+v", s)
+		}
+		if trash, err := g.modelTrash(local.VoiceModelParakeet); err != nil || len(trash) != 0 {
+			t.Fatalf("trash remains after recovery Fetch: %v (err=%v)", trash, err)
+		}
+	})
+}

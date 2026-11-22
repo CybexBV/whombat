@@ -55,6 +55,10 @@ export interface VoiceFacts {
   fetched: readonly VoiceModelState[] | null;
   /** The box has a model fetcher (`WHOMBAT_VOICE_MODELS_SOCKET`): its speech service is one that takes recordings. */
   hasFetcher: boolean;
+  /** Last known total size of the Dutch voice model when the fetcher is temporarily unreachable. */
+  knownDutchSize?: number | null;
+  /** True while turning Dutch voice off has not yet completed at the fetcher. */
+  dutchRemovePending?: boolean;
 }
 
 /**
@@ -124,21 +128,54 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
       ...(m.problem && (m.state === 'waiting' || m.state === 'failed') ? { problem: m.problem } : {}),
       inUse: needed.has(m.id),
     }));
-  const dutchEntry = available ? (facts.fetched?.find((m) => m.id === 'supertonic') ?? null) : null;
+  const dutchOn = wantsDutchVoice(settings);
+  const fetchedDutch = available ? (facts.fetched?.find((m) => m.id === 'supertonic') ?? null) : null;
+  // When the box has a fetcher configured that is temporarily unreachable (e.g. restarting), keep reporting
+  // the saved Dutch voice state instead of hiding the row so turning it on or off shows its saved state.
+  const dutchEntry: VoiceModelState | null =
+    fetchedDutch ??
+    (available &&
+    facts.hasFetcher &&
+    facts.fetched === null &&
+    (dutchOn ||
+      facts.dutchRemovePending === true ||
+      health?.languages?.includes('nl') === true ||
+      (facts.knownDutchSize ?? null) !== null)
+      ? {
+          id: 'supertonic',
+          state: dutchOn
+            ? health?.languages?.includes('nl')
+              ? 'ready'
+              : 'waiting'
+            : facts.dutchRemovePending || health?.languages?.includes('nl')
+              ? 'removing'
+              : 'absent',
+          size: facts.knownDutchSize ?? 0,
+          received: dutchOn && health?.languages?.includes('nl') ? (facts.knownDutchSize ?? 0) : 0,
+        }
+      : null);
   let dutchVoice: VoiceDutchVoice | null = null;
   if (dutchEntry) {
-    const dutchOn = wantsDutchVoice(settings);
     const dutchFilesLeft = !dutchOn && (dutchEntry.state !== 'absent' || dutchEntry.received > 0);
-    const dutchState = dutchOn ? dutchEntry.state : dutchFilesLeft ? 'removing' : 'absent';
+    // While Dutch voice is on and the fetcher hasn't accepted the download yet ('absent'), show 'waiting'
+    // so the app reflects that the setting is saved and the server is retrying the download.
+    const dutchState = dutchOn
+      ? dutchEntry.state === 'absent'
+        ? 'waiting'
+        : dutchEntry.state
+      : dutchFilesLeft
+        ? 'removing'
+        : 'absent';
     dutchVoice = {
       on: dutchOn,
       state: dutchState,
       size: dutchEntry.size,
-      received: dutchOn
-        ? Math.min(dutchEntry.received, dutchEntry.size)
-        : dutchFilesLeft
+      received:
+        dutchState === 'removing'
           ? dutchEntry.received
-          : 0,
+          : dutchOn
+            ? Math.min(dutchEntry.received, dutchEntry.size)
+            : 0,
       ...(dutchOn && dutchEntry.problem && (dutchState === 'waiting' || dutchState === 'failed')
         ? { problem: dutchEntry.problem }
         : {}),

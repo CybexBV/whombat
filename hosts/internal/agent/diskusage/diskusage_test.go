@@ -1,10 +1,14 @@
 package diskusage
 
 import (
+	"bytes"
+	"compress/flate"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"net"
@@ -21,18 +25,70 @@ import (
 	"rackoon/internal/proto"
 )
 
+// writeBytes writes size deterministic, incompressible bytes (SplitMix64) so
+// allocated block counts match logical sizes even on transparently compressed
+// filesystems (such as ZFS lz4/zstd or Btrfs compress).
 func writeBytes(t *testing.T, path string, size int) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(path))
+	state := h.Sum64() ^ uint64(size)*0x9e3779b97f4a7c15
+	if state == 0 {
+		state = 0x243f6a8885a308d3
+	}
 	buf := make([]byte, size)
-	for i := range buf {
-		buf[i] = byte(i%251 + 1)
+	var i int
+	for ; i+8 <= size; i += 8 {
+		state += 0x9e3779b97f4a7c15
+		z := state
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		binary.LittleEndian.PutUint64(buf[i:], z)
+	}
+	if i < size {
+		state += 0x9e3779b97f4a7c15
+		z := state
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		var tail [8]byte
+		binary.LittleEndian.PutUint64(tail[:], z)
+		copy(buf[i:], tail[:size-i])
 	}
 	if err := os.WriteFile(path, buf, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// listenShortUnixSocket binds a Unix domain socket at a path safely below the
+// 104-byte (macOS) / 108-byte (Linux) sun_path limit, even when TMPDIR is long.
+func listenShortUnixSocket(t *testing.T, name string) (net.Listener, string) {
+	t.Helper()
+	const maxUnixSockPath = 96
+	dir, err := os.MkdirTemp("", "du")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sockPath := filepath.Join(dir, name)
+	if len(sockPath) >= maxUnixSockPath {
+		_ = os.RemoveAll(dir)
+		dir, err = os.MkdirTemp("/tmp", "du")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sockPath = filepath.Join(dir, name)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln, sockPath
 }
 
 func newTestRunner(t *testing.T, root string, mounts []mountInfo, inv *proto.Report) *Runner {
@@ -336,11 +392,7 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 
 	// Place a live mock Docker HTTP server behind a symlink at /var/run/docker.sock:
 	// the scan must NEVER stat, follow, or dial any container daemon socket.
-	sockPath := filepath.Join(t.TempDir(), "docker.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -349,10 +401,7 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -368,13 +417,17 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	}
 	r := newTestRunner(t, root, mounts, inv)
 
-	// Stub zfs list for VM zvols and snapshots.
+	// Stub zfs list: verify it queries only the selected dataset (-d 0, no -r)
+	// and ignores any child dataset rows even if present in output.
+	var zfsArgs []string
 	r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "zfs" {
 			return nil, os.ErrNotExist
 		}
+		zfsArgs = append([]string(nil), args...)
 		return []byte(strings.Join([]string{
 			"rpool/ROOT/pve-1\tfilesystem\t1000000\t50000000",
+			"rpool/ROOT/pve-1/child\tfilesystem\t2000000\t30000000",
 			"rpool/ROOT/pve-1/vm-101-disk-0\tvolume\t400000000\t25000000",
 		}, "\n")), nil
 	}
@@ -382,6 +435,12 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
 	if resp.Code != "" {
 		t.Fatalf("unexpected error: %+v", resp)
+	}
+	if slices.Contains(zfsArgs, "-r") {
+		t.Fatalf("zfs list unexpectedly used recursive -r: %v", zfsArgs)
+	}
+	if dIdx := slices.Index(zfsArgs, "-d"); dIdx < 0 || dIdx+1 >= len(zfsArgs) || zfsArgs[dIdx+1] != "0" {
+		t.Fatalf("zfs list missing -d 0: %v", zfsArgs)
 	}
 
 	byKey := map[string]proto.DiskUsageCategory{}
@@ -411,12 +470,108 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	if c := byKey[proto.DiskCatPackageCache]; c.Bytes < 32*1024 || !strings.Contains(c.Detail, "apt") || !strings.Contains(c.Detail, "dnf") {
 		t.Errorf("package_cache = %+v", c)
 	}
-	if c := byKey[proto.DiskCatVMDisks]; c.Bytes < 400_000_000+64*1024 {
-		t.Errorf("vm_disks = %+v", c)
+	// Only file-backed VM disk (64 KiB) is on rpool/ROOT/pve-1; child zvol must NOT be summed.
+	if c := byKey[proto.DiskCatVMDisks]; c.Bytes < 64*1024 || c.Bytes >= 400_000_000 {
+		t.Errorf("vm_disks = %+v, want ~64 KiB without child zvol", c)
 	}
-	if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes < 75_000_000+16*1024 {
-		t.Errorf("vm_snapshots = %+v", c)
+	// Only rpool/ROOT/pve-1's own snapshots (50 MB) + file-backed save (16 KiB); child datasets' snapshots must NOT be summed.
+	if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes < 50_000_000+16*1024 || c.Bytes >= 75_000_000 {
+		t.Errorf("vm_snapshots = %+v, want ~50 MB + 16 KiB without child dataset snapshots", c)
 	}
+}
+
+func TestZFSCountsOnlySelectedDatasetNotChildren(t *testing.T) {
+	t.Run("parent_excludes_separately_mounted_child_snapshots", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "tank/keep.bin"), 16*1024)
+		writeBytes(t, filepath.Join(root, "tank/media/movie.bin"), 256*1024)
+
+		mounts := []mountInfo{
+			{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 2, ParentID: 1, MountPoint: "/tank", FSType: "zfs", Source: "tank"},
+			{ID: 3, ParentID: 2, MountPoint: "/tank/media", FSType: "zfs", Source: "tank/media"},
+		}
+		inv := &proto.Report{
+			Pools: []proto.Pool{{Name: "tank", Disks: []string{"nvme0n1"}}},
+			Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
+		}
+		r := newTestRunner(t, root, mounts, inv)
+		var gotArgs []string
+		r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+			if name != "zfs" {
+				return nil, os.ErrNotExist
+			}
+			gotArgs = append([]string(nil), args...)
+			// Even if the output contains child datasets, only "tank" may be counted.
+			return []byte(strings.Join([]string{
+				"tank\tfilesystem\t12000000\t10000000",
+				"tank/media\tfilesystem\t900000000\t80000000",
+				"tank/vm-100-disk-0\tvolume\t500000000\t40000000",
+			}, "\n")), nil
+		}
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if slices.Contains(gotArgs, "-r") {
+			t.Fatalf("zfs list used -r: %v", gotArgs)
+		}
+		if dIdx := slices.Index(gotArgs, "-d"); dIdx < 0 || dIdx+1 >= len(gotArgs) || gotArgs[dIdx+1] != "0" {
+			t.Fatalf("zfs list missing -d 0: %v", gotArgs)
+		}
+		if gotArgs[len(gotArgs)-1] != "tank" {
+			t.Fatalf("zfs list target = %q, want %q", gotArgs[len(gotArgs)-1], "tank")
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes != 10_000_000 {
+			t.Errorf("vm_snapshots = %d, want 10000000 (selected dataset only)", c.Bytes)
+		}
+		if c, ok := byKey[proto.DiskCatVMDisks]; ok {
+			t.Errorf("vm_disks unexpectedly present on parent dataset: %+v", c)
+		}
+	})
+
+	t.Run("selected_guest_dataset_counts_only_itself", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/ct/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 2, ParentID: 1, MountPoint: "/srv/ct", FSType: "zfs", Source: "rpool/data/subvol-200-disk-0"},
+		}
+		inv := &proto.Report{
+			Pools: []proto.Pool{{Name: "rpool", Disks: []string{"nvme0n1"}}},
+			Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
+		}
+		r := newTestRunner(t, root, mounts, inv)
+		r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+			if name != "zfs" {
+				return nil, os.ErrNotExist
+			}
+			return []byte(strings.Join([]string{
+				"rpool/data/subvol-200-disk-0\tfilesystem\t300000000\t15000000",
+				"rpool/data/subvol-200-disk-0/nested\tfilesystem\t100000000\t90000000",
+			}, "\n")), nil
+		}
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/ct"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatVMDisks]; c.Bytes != 300_000_000 {
+			t.Errorf("vm_disks = %d, want 300000000 (selected guest dataset only)", c.Bytes)
+		}
+		if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes != 15_000_000 {
+			t.Errorf("vm_snapshots = %d, want 15000000 (selected dataset only)", c.Bytes)
+		}
+	})
 }
 
 func TestConcurrencyGuardReturnsBusy(t *testing.T) {
@@ -812,16 +967,7 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/app/data.bin"), 28*1024)
 	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/mounted-vol/huge.bin"), 256*1024)
 
-	sockDir, err := os.MkdirTemp("", "du-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "d.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -830,10 +976,7 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -2972,16 +3115,7 @@ func TestOvermountedRootRefusedBeforeStatfsOrReadDir(t *testing.T) {
 
 func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	root := t.TempDir()
-	sockDir, err := os.MkdirTemp("", "du-race-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "d.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -2990,10 +3124,7 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -3681,4 +3812,74 @@ func TestContainerStorageMeasuredStrictlyThroughCheckedWalk(t *testing.T) {
 			t.Errorf("container_volumes = %+v, want 16 KiB", c)
 		}
 	})
+}
+
+func TestAllowedToolLookupRefusesDisallowedNamesAndIgnoresPATH(t *testing.T) {
+	// Put an executable decoy named "hdparm" and "zfs" in a temp directory on PATH
+	// and verify neither helper consults inherited PATH or allows arbitrary names.
+	fakeBin := t.TempDir()
+	for _, name := range []string{"hdparm", "zfs", "sh", "docker"} {
+		p := filepath.Join(fakeBin, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\necho pwned\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", fakeBin)
+
+	for _, bad := range []string{"", "sh", "/bin/sh", "docker", "zfs", "diskutil", "../hdparm"} {
+		if got, err := lookStandbyProbeTool(bad); err == nil {
+			t.Errorf("lookStandbyProbeTool(%q) = %q, want error", bad, got)
+		}
+	}
+	for _, bad := range []string{"", "sh", "/bin/sh", "docker", "hdparm", "smartctl", "../zfs"} {
+		if out, err := runAllowedCmd(context.Background(), bad); err == nil {
+			t.Errorf("runAllowedCmd(%q) succeeded with %q, want error", bad, out)
+		}
+	}
+
+	// If hdparm/zfs happen to be installed in a fixed system dir, the returned path
+	// must never come from the injected fakeBin PATH entry.
+	for _, allowed := range []string{"hdparm", "smartctl"} {
+		if got, err := lookStandbyProbeTool(allowed); err == nil && strings.HasPrefix(got, fakeBin) {
+			t.Errorf("lookStandbyProbeTool(%q) resolved from PATH (%q), want fixed system dirs only", allowed, got)
+		}
+	}
+}
+
+func TestTestHelpersIncompressibleBytesAndLongTMPDIRSocket(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "incompressible.bin")
+	const wantSize = 32 * 1024
+	writeBytes(t, p, wantSize)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compressed bytes.Buffer
+	w, err := flate.NewWriter(&compressed, flate.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if compressed.Len() < wantSize*95/100 {
+		t.Fatalf("writeBytes compressed from %d to %d bytes; must be incompressible for compressed filesystems", wantSize, compressed.Len())
+	}
+
+	// Simulate a long TMPDIR (> 100 bytes) that would exceed Unix sun_path limits.
+	longTmp := filepath.Join(t.TempDir(), strings.Repeat("long-tmpdir-segment-", 5))
+	if err := os.MkdirAll(longTmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", longTmp)
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
+	if len(sockPath) >= 100 {
+		t.Fatalf("socket path too long under long TMPDIR: %d bytes (%q)", len(sockPath), sockPath)
+	}
+	if ln.Addr().String() != sockPath {
+		t.Fatalf("listener addr = %q, want %q", ln.Addr().String(), sockPath)
+	}
 }

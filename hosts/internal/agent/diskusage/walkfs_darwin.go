@@ -161,6 +161,24 @@ func (s *darwinFSState) fdIdentity(fd int) (dev uint64, hasDev bool, fsid [2]int
 }
 
 func (s *darwinFSState) verifyDirFD(fd int, logicalPath string) error {
+	// Check mount identity via fgetattrlist(ATTR_CMN_DEVID|ATTR_CMN_FSID)
+	// (in-kernel v_mount metadata) BEFORE calling fstat(2), so a directory
+	// descriptor that landed on a different volume never receives a VNOP_GETATTR.
+	dev, hasDev, fsid, hasFSID, err := s.fdIdentity(fd)
+	if err != nil {
+		return errWrongMount
+	}
+	if hasDev && dev != s.rootDev {
+		return errWrongMount
+	}
+	if s.hasRootFSID && (!hasFSID || fsid != s.rootFSID) {
+		return errWrongMount
+	}
+	if s.hasRootMntID && s.rootMntID != 0 && s.statMountID != nil {
+		if mntID, ok := s.statMountID(logicalPath); !ok || mntID != s.rootMntID {
+			return errWrongMount
+		}
+	}
 	var st unix.Stat_t
 	if err := fstatNoEINTR(fd, &st); err != nil {
 		return err
@@ -170,17 +188,6 @@ func (s *darwinFSState) verifyDirFD(fd int, logicalPath string) error {
 	}
 	if uint64(st.Dev) != s.rootDev {
 		return errWrongMount
-	}
-	if s.hasRootFSID {
-		_, _, fsid, hasFSID, err := s.fdIdentity(fd)
-		if err != nil || !hasFSID || fsid != s.rootFSID {
-			return errWrongMount
-		}
-	}
-	if s.hasRootMntID && s.rootMntID != 0 && s.statMountID != nil {
-		if mntID, ok := s.statMountID(logicalPath); !ok || mntID != s.rootMntID {
-			return errWrongMount
-		}
 	}
 	return nil
 }
@@ -204,24 +211,16 @@ func (f *darwinScanFS) OpenRoot(hostPath, logicalMount string, expected mountInf
 	if err != nil {
 		return nil, err
 	}
-	var st unix.Stat_t
-	if err := fstatNoEINTR(fd, &st); err != nil {
-		_ = unix.Close(fd)
-		return nil, err
-	}
-	if uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR {
-		_ = unix.Close(fd)
-		return nil, errNotDir
-	}
 
 	state := &darwinFSState{
 		bulkFn:      bulkFn,
 		fgetFn:      fgetFn,
-		rootDev:     uint64(st.Dev),
 		readDirHook: f.r.readDir,
 		statMountID: f.r.statMountID,
 	}
 
+	// Verify the opened root's f_fsid via fgetattrlist(ATTR_CMN_FSID) from
+	// kernel v_mount memory BEFORE calling fstat(2) or fstatfs(2).
 	_, _, fsid, hasFSID, ferr := state.fdIdentity(fd)
 	if errors.Is(ferr, unix.ENOTSUP) || errors.Is(ferr, unix.EOPNOTSUPP) || errors.Is(ferr, unix.ENOSYS) {
 		_ = unix.Close(fd)
@@ -237,6 +236,18 @@ func (f *darwinScanFS) OpenRoot(hostPath, logicalMount string, expected mountInf
 			return nil, errRootChanged
 		}
 	}
+
+	var st unix.Stat_t
+	if err := fstatNoEINTR(fd, &st); err != nil {
+		_ = unix.Close(fd)
+		return nil, err
+	}
+	if uint32(st.Mode)&unix.S_IFMT != unix.S_IFDIR {
+		_ = unix.Close(fd)
+		return nil, errNotDir
+	}
+	state.rootDev = uint64(st.Dev)
+
 	if state.statMountID != nil {
 		state.rootMntID, state.hasRootMntID = state.statMountID(logicalMount)
 	}

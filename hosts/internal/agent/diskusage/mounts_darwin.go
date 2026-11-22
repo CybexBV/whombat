@@ -57,14 +57,6 @@ func cstrBytes(b []byte) string {
 	return string(b)
 }
 
-func hostStatfs(path string) (fsStat, error) {
-	var st unix.Statfs_t
-	if err := unix.Statfs(path, &st); err != nil {
-		return fsStat{}, err
-	}
-	return statfsFromUnix(&st), nil
-}
-
 func fdStatfs(fd int) (fsStat, error) {
 	var st unix.Statfs_t
 	for {
