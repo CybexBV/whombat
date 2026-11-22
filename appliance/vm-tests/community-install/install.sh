@@ -61,7 +61,7 @@ wait_text 4-installed 1800 "Whombat is installed|went wrong|failed"
 grep -qi "Whombat is installed" "$shots/4-installed.txt"
 q keys ret
 say "restarting into the installed system"
-# The installed screen says “…a code to claim your Whombat” too: the claim screen is the one without it.
+# The claim screen, not the installed one (which says “Whombat is installed”).
 wait_text 5-claim 1800 "Claim this Whombat|Claim your Whombat|went wrong" "Whombat is installed"
 # The four letters on the sign: tesseract's sparse-text mode reads the big letters (the default page mode misses them;
 # it sometimes puts a space in a double letter). A box without a secure address shows them too, for the Whombat app on
