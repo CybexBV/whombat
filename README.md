@@ -60,7 +60,8 @@ Your data lives on the box, and it works with the Claude or ChatGPT you already 
    `sha256sum -c whombat-installer.iso.sha256`. That file comes from the same site as the ISO, so it isn't proof the
    ISO is ours; a signed checksum will be.
 2. **Write it or attach it.** For a PC: write it to a USB stick of 8 GB or more with a raw (“DD”) copy. For a virtual
-   machine on Proxmox VE, Incus or libvirt: attach it as the CD drive.
+   machine on Proxmox VE, Incus or libvirt: attach it as the CD drive, and put the disk before the CD drive in the
+   boot order, so the VM starts Whombat after the installer's restart.
 3. **Start it** with Secure Boot off and follow the screen. The installer puts Whombat on the disk.
 4. **Choose Easy or Expert.** The installer asks how you'll reach this Whombat. You can change it later in Settings,
    and both can be on at once.

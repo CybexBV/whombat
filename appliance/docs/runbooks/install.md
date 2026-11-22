@@ -158,6 +158,7 @@ Any KVM/QEMU hypervisor works with these settings (PI-09, PI-21); the names diff
 | Watchdog | `i6300esb`, action reset (optional) | the system pets it and the VM resets by itself if it hangs (NX-05); without one, a q35 VM's own chipset watchdog does it (NX-189) |
 | QEMU guest agent | optional | clean shutdown and fs-freeze for backups; only an allow-list of commands answers (NX-52) |
 | Start at boot | on | |
+| Boot order | the disk **before** the CD drive | an empty disk has nothing to start, so the VM falls through to the installer; after the restart it starts Whombat, even with the ISO still attached |
 
 ### Proxmox VE
 
@@ -186,12 +187,14 @@ qm create 9100 --name whombat --ostype l26 \
   memory 8192 MiB without ballooning; *QEMU Guest Agent* ticked; Hardware → Add → *Watchdog* `i6300esb`, action
   `reset`.
 - Display: *Default* (std VGA), seen in noVNC; *VirtIO-GPU* works too, *SPICE* is untested (NX-83).
+- Boot order: `order=scsi0;ide2` puts the disk first. In the GUI: Options → *Boot Order*, the disk (`scsi0`) above
+  the CD drive (`ide2`). Otherwise the installer starts again after the restart.
 - Start it with `qm start 9100` and open the console (noVNC).
 
 ### Incus
 
 As the DEV box is created (`dev/devbox`, IN-94). Import the ISO as a volume in a storage pool (here `default`), create
-an empty VM and attach the ISO:
+an empty VM whose disk boots first and attach the ISO after it:
 
 ```sh
 incus storage volume import default whombat-installer.iso whombat-installer --type=iso
@@ -200,7 +203,7 @@ incus init whombat --empty --vm \
   -c security.secureboot=false \
   -c raw.qemu='-device i6300esb -action watchdog=reset' \
   -c boot.autostart=true \
-  -d root,size=128GiB
+  -d root,size=128GiB -d root,boot.priority=20
 incus config device add whombat installer disk pool=default source=whombat-installer boot.priority=10
 incus start whombat
 incus console whombat --type=vga        # the screen, through a SPICE viewer (e.g. remote-viewer)
@@ -220,8 +223,12 @@ incus console whombat --type=vga        # the screen, through a SPICE viewer (e.
   `incus file` don't reach it, and shutdown goes through ACPI (`incus stop whombat`).
 - **The graphical console** works in an Incus VM (NX-88: John's first install of the production ISO). The viewer's
   *Send key* menu sends Ctrl+Alt+F2 (§6).
-- The ISO boots before the disk until it is removed. After the installation:
-  `incus config device remove whombat installer`, then
+- **Boot order:** the higher `boot.priority` starts first. The empty disk (20) has nothing to start, so the first
+  start falls through to the ISO (10); after the installation the VM starts Whombat. Each `-d` sets one key, so the
+  disk's size and priority are two flags. For a VM made without it, stop it first and then
+  `incus config device set whombat root boot.priority=20` (`override` in place of `set` while the root disk still
+  comes from the profile): changing a running VM's disk unplugs it.
+- Remove the ISO when you like: `incus config device remove whombat installer`, then
   `incus storage volume delete default custom/whombat-installer`.
 
 ### Other hypervisors (libvirt, …)
@@ -252,9 +259,10 @@ The installer is graphical (CG-11…CG-14): Hazel, the Assistant, walks you thro
 5. **Erase and install:** type the disk's name (e.g. `sda`, `nvme0n1`) to enable the button. **Installing** shows the
    steps and a progress bar; **Show details** shows the log. It creates a 2 GiB FAT32 boot partition, a 40 GiB ext4
    system partition and btrfs `/persist` using the remaining space, without LUKS. Updates keep existing partitions.
-6. **Whombat is installed:** press **Restart**. If the installer starts again, remove the USB stick or detach the ISO
-   and restart. On Proxmox VE `qm set 9100 --delete ide2` (with the boot order `scsi0;ide2` the VM boots its disk
-   first anyway); on Incus `incus config device remove whombat installer`.
+6. **Whombat is installed:** press **Restart**. The screen then shows what to do next: the Whombat Link code (Easy) or
+   Tailscale's sign-in (Expert), then the claim. If the installer starts again, the VM's boot order puts the CD before
+   the disk (§5: the disk first), or the USB stick still comes first: remove the USB stick or detach the ISO and
+   restart. On Proxmox VE `qm set 9100 --delete ide2`; on Incus `incus config device remove whombat installer`.
 
 If the installation fails, the screen shows the error and the log; **Try again** runs the checks again and returns to
 the wizard (the failed attempt leaves nothing mounted).
