@@ -26,7 +26,10 @@ export const INBOX_WORDS = {
   /** A row's status while the assistant works on it. */
   working: 'Working',
   you: 'You',
+  /** A row's second line under the person's own question before any reply; never a title. */
   noReply: 'No reply yet',
+  /** A thread's title when its first message has nothing to call it by (a server older than its card titles). */
+  yourMessage: 'Your message',
   markUnread: 'Mark as unread',
   markRead: 'Mark as read',
   markedUnread: 'Marked as unread.',
@@ -47,6 +50,11 @@ export const INBOX_WORDS = {
 /** “From Dusty”: the second line of a thread someone else started, before any reply. */
 export function fromLine(name: string): string {
   return `From ${name}`;
+}
+
+/** “Message from Dusty”: a thread's title when its first message has nothing to call it by. */
+export function messageFromTitle(name: string): string {
+  return `Message from ${name}`;
 }
 
 /** “New replies, 2”: a row's count of new messages for screen readers. */
@@ -221,7 +229,11 @@ export function inboxRows(
       who = null;
       line = fromLine(whoOf(t.authorId, o));
     }
-    const title = plainLinks(threadTitle(t.text)) || INBOX_WORDS.noReply;
+    // A title names the thread, never its state: a thread that starts with a card is called by the card (the server
+    // and `threadOfMessage` put its title in `text`), and only an older server sends nothing at all.
+    const title =
+      plainLinks(threadTitle(t.text)) ||
+      (t.authorId === o.me ? INBOX_WORDS.yourMessage : messageFromTitle(whoOf(t.authorId, o)));
     const split = splitRepoTitle(title, t.repo?.name);
     return {
       rootId: t.rootId,

@@ -8,6 +8,7 @@ import {
   type ChatRoom,
   type ChatSubject,
   type ChatThread,
+  cardTitle,
   chatThreadHref,
   formatReplies,
   type Message,
@@ -54,6 +55,23 @@ export function threadTitle(text: string): string {
   return line;
 }
 
+/**
+ * What a thread is called from its first message, as the server's `chats.threads` says it: its words, else how many files
+ * it has, else what its card is called (a guide's “Your email”), so a thread that starts with a card has a real title.
+ */
+export function rootText(m: Pick<Message, 'text' | 'attachments' | 'card'>): string {
+  const text = m.text.slice(0, CHAT_THREAD_TEXT_MAX);
+  if (text.trim()) return text;
+  const files = m.attachments?.length ?? 0;
+  if (files) return files === 1 ? 'A file' : `${files} files`;
+  return m.card ? cardTitle(m.card).slice(0, CHAT_THREAD_TEXT_MAX) : '';
+}
+
+/** The title of an open thread's head: its first message's first line, or what `rootText` calls it. */
+export function rootTitle(m: Pick<Message, 'text' | 'attachments' | 'card'>): string {
+  return threadTitle(m.text) || threadTitle(rootText(m));
+}
+
 /** The Threads list's rows, newest activity first as the server sends them (CHT-07). */
 export function threadRows(
   threads: readonly ChatThread[],
@@ -82,7 +100,7 @@ export function threadOfMessage(m: Message, room: ChatRoom): ChatThread {
     room,
     rootId: m.id,
     authorId: m.authorId,
-    text: m.text.slice(0, CHAT_THREAD_TEXT_MAX),
+    text: rootText(m),
     subject: m.subject ?? null,
     createdAt: m.createdAt,
     replyCount: m.replyCount,
@@ -139,7 +157,7 @@ export function threadPagesWithMessage(
   }
   if (!m.threadRootId) {
     if (found) {
-      const text = m.text.slice(0, CHAT_THREAD_TEXT_MAX);
+      const text = rootText(m);
       if (found.text === text) return pages as ChatThread[][];
       return pages.map((page) =>
         page.some((t) => t.rootId === rootId)

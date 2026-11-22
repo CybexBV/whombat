@@ -324,3 +324,64 @@ export type PostableCard = z.infer<typeof PostableCard>;
 export function diffLinePrefix(kind: DiffLineKind): string {
   return kind === 'add' ? '+ ' : kind === 'del' ? '- ' : '  ';
 }
+
+/** What each card is called when nothing on it names it better: plain words, never a status like “No reply yet”. */
+const CARD_KIND_NAMES: Readonly<Record<(typeof CARD_KINDS)[number], string>> = {
+  plan: 'A plan',
+  research: 'Research',
+  run: 'A run',
+  review: 'A review',
+  approval: 'Something to approve',
+  commits: 'Commits',
+  pill: 'A note',
+  answer: 'An answer',
+  digest: 'A summary',
+  report: 'A report',
+  guide: 'Set up',
+  turn_failed: 'Something went wrong',
+  assessment: 'An assessment',
+  schedule: 'A scheduled turn',
+  deploy: 'A deploy',
+  device_skill: 'A device skill',
+  task: 'A server task',
+  automation_plan: 'An automation',
+  look_plan: 'A plan',
+  feature_request: 'A feature request',
+  council: 'A council',
+  delegation: 'Tasks to hand over',
+};
+
+/** The first non-empty line of a string field, or null. */
+function firstLine(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  return (
+    v
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? null
+  );
+}
+
+/**
+ * What a thread whose first message is only a card is called, in its row and its head: the card's own title (a guide's
+ * “Your email”, a council's, a task's), else the words it leads with (a note's text, a device skill's name, research's
+ * topic, a report's summary), else a plain name for its kind. Takes a card as stored or as sent, so the server and the
+ * apps call it the same.
+ */
+export function cardTitle(card: Pick<MessageCard | StoredCard, 'kind'>): string {
+  const c = card as {
+    kind: string;
+    title?: unknown;
+    text?: unknown;
+    name?: unknown;
+    topic?: unknown;
+    summary?: unknown;
+  };
+  const named =
+    firstLine(c.title) ??
+    firstLine(c.text) ??
+    firstLine(c.name) ??
+    firstLine(c.topic) ??
+    firstLine(c.summary);
+  return named ?? CARD_KIND_NAMES[c.kind as (typeof CARD_KINDS)[number]] ?? 'A message';
+}

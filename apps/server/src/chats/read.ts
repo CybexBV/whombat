@@ -10,6 +10,8 @@ import {
   type ChatSummary,
   type ChatSummaryRoom,
   type ChatThread,
+  cardTitle,
+  type StoredCard,
   threadPreview,
 } from '@whombat/core';
 import { and, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
@@ -216,12 +218,15 @@ export interface ThreadListOptions {
   iconsDue?: (repos: string[]) => void;
 }
 
-/** The plain start of a thread's first message (Markdown marks dropped), or how many files it has, or nothing. */
-function threadText(text: string, files: number): string {
+/**
+ * The plain start of a thread's first message (Markdown marks dropped), or how many files it has, or what its card is
+ * called when it is only a card (a guide's “Your email”): a row's title never falls back to a status like “No reply yet”.
+ */
+function threadText(text: string, files: number, card: StoredCard | null): string {
   const line = previewOf(text.replace(/[*_`#>]/g, ''), CHAT_THREAD_TEXT_MAX);
   if (line) return line;
   if (files) return files === 1 ? 'A file' : `${files} files`;
-  return '';
+  return card ? cardTitle(card).slice(0, CHAT_THREAD_TEXT_MAX) : '';
 }
 
 /**
@@ -291,6 +296,7 @@ const threadColumns = {
   authorId: messages.authorId,
   text: messages.text,
   attachmentIds: messages.attachmentIds,
+  card: messages.card,
   subjectKind: messages.subjectKind,
   subjectId: messages.subjectId,
   subjectName: messages.subjectName,
@@ -342,7 +348,7 @@ async function threadsOf(
       room: room.room,
       rootId: r.id,
       authorId: r.authorId,
-      text: threadText(r.text, r.attachmentIds.length),
+      text: threadText(r.text, r.attachmentIds.length, r.card),
       ...(subject ? { subject } : {}),
       createdAt: iso(r.createdAt),
       replyCount: r.replyCount,
