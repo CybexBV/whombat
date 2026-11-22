@@ -93,6 +93,12 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
+      methods: ['GET', 'HEAD'],
+      path: '^/control/tls/status/?$',
+      reason: 'Reads AdGuard Home’s TLS settings, which may include the private key on older versions',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
       methods: ['POST'],
       path: '^/control/(access/set|tls/configure)$',
       reason: 'Changes who may use AdGuard Home, or its certificate',

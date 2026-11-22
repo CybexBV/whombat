@@ -1,4 +1,4 @@
-import { type CatalogEntryInput, DELETES_ASK, urlField } from './shared.js';
+import { type CatalogEntryInput, DELETES_ASK, REQUEST_TOOL_NAME, urlField } from './shared.js';
 
 export const entry = {
   id: 'immich',
@@ -54,8 +54,26 @@ export const entry = {
     readPaths: [{ method: 'POST', path: '^/api/search/(metadata|smart|random|statistics|large-assets)$' }],
   },
   guide:
-    'Immich’s API under /api/. POST /api/search/smart {"query": "dog on the beach"} searches by meaning, POST /api/search/metadata {originalFileName, takenAfter, takenBefore, city, …} by details (both are reads). GET /api/albums lists albums and GET /api/albums/<id> one with its assets; POST /api/albums makes one, PUT /api/albums/<id>/assets {ids} adds assets. GET /api/assets/<id> reads an asset’s details; /api/assets/<id>/original downloads it (binary: answered as a note). GET /api/people lists recognised people, GET /api/timeline/buckets the timeline. The key may be limited to some permissions: a 403 means it lacks one.',
-  sensitive: [DELETES_ASK],
+    'Immich’s API under /api/. POST /api/search/smart {"query": "dog on the beach"} searches by meaning, POST /api/search/metadata {originalFileName, takenAfter, takenBefore, city, …} by details (both are reads). GET /api/albums lists albums and GET /api/albums/<id> one with its assets; POST /api/albums makes one, PUT /api/albums/<id>/assets {ids} adds assets. GET /api/assets/<id> reads an asset’s details; /api/assets/<id>/original downloads it (binary: answered as a note). GET /api/people lists recognised people, GET /api/timeline/buckets the timeline. The key may be limited to some permissions: a 403 means it lacks one. Reading or changing server settings, database backups, API keys and deleting always ask a person.',
+  sensitive: [
+    DELETES_ASK,
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/(system-config|admin/config)(/|$)',
+      reason: 'Reads or changes Immich’s server settings, which may contain OAuth or SMTP passwords',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/admin/database-backups/[^/]+(/|$)',
+      reason: 'Downloads, uploads or restores an Immich database backup',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/api-keys/?$',
+      reason: 'Creates a new Immich API key',
+    },
+  ],
   docsUrl: 'https://immich.app/docs/api/',
   tokenUrl: '{url}/user-settings?isOpen=api-keys',
   handle: 'immich',

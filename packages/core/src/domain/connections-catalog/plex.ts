@@ -62,7 +62,7 @@ export const entry = {
     allowedHeaders: ['X-Plex-Container-Start', 'X-Plex-Container-Size'],
   },
   guide:
-    'Plex Media Server’s API (JSON, Whombat asks for it; answers are {MediaContainer: …}). Libraries: GET /library/sections (each has a key, its id); GET /library/sections/<id>/all (?type=1 movies, 2 shows, 4 episodes; ?unwatched=1; sort=addedAt:desc) pages with X-Plex-Container-Start and X-Plex-Container-Size (as query parameters too; the answer has totalSize). Items: GET /library/metadata/<ratingKey> and …/children (seasons, episodes); GET /library/recentlyAdded, /library/onDeck; a poster smaller: GET /photo/:/transcode?url=<its thumb>&width=240&height=360. Search: GET /hubs/search?query=<words>&limit=10. Playing now: GET /status/sessions; history: GET /status/sessions/history/all?sort=viewedAt:desc. Scan a library: POST /library/sections/<id>/refresh. Watched: PUT /:/scrobble?identifier=com.plexapp.plugins.library&key=<ratingKey> (/:/unscrobble undoes it). Stop someone’s stream: POST /status/sessions/terminate?sessionId=<id>&reason=… Also /playlists, /activities, /butler, GET /:/prefs and /updater/status. Deleting media deletes its files; that, emptying a library’s trash, changing the server’s settings and installing an update always ask a person.',
+    'Plex Media Server’s API (JSON, Whombat asks for it; answers are {MediaContainer: …}). Libraries: GET /library/sections (each has a key, its id); GET /library/sections/<id>/all (?type=1 movies, 2 shows, 4 episodes; ?unwatched=1; sort=addedAt:desc) pages with X-Plex-Container-Start and X-Plex-Container-Size (as query parameters too; the answer has totalSize). Items: GET /library/metadata/<ratingKey> and …/children (seasons, episodes); GET /library/recentlyAdded, /library/onDeck; a poster smaller: GET /photo/:/transcode?url=<its thumb>&width=240&height=360. Search: GET /hubs/search?query=<words>&limit=10. Playing now: GET /status/sessions; history: GET /status/sessions/history/all?sort=viewedAt:desc. Scan a library: POST /library/sections/<id>/refresh. Watched: PUT /:/scrobble?identifier=com.plexapp.plugins.library&key=<ratingKey> (/:/unscrobble undoes it). Stop someone’s stream: POST /status/sessions/terminate?sessionId=<id>&reason=… Also /playlists, /activities, /butler and /updater/status. Deleting media deletes its files; that, emptying a library’s trash, reading or changing the server’s settings (/:/prefs) and installing an update always ask a person.',
   sensitive: [
     DELETES_ASK,
     {
@@ -73,9 +73,8 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
-      methods: ['PUT', 'POST'],
-      path: '^/:/prefs/?$',
-      reason: 'Changes the server’s settings',
+      path: '^/:/prefs(/|$)',
+      reason: 'Reads or changes Plex’s server settings, which may contain certificate passwords or tokens',
     },
     {
       tools: [REQUEST_TOOL_NAME],

@@ -493,6 +493,91 @@ describe('sensitive calls (CX-31)', () => {
     expect(toolAlwaysAsks(entry('dropbox'), 'files_list')).toBe(false);
     expect(toolAlwaysAsks(ha, 'HassTurnOn')).toBe(false);
   });
+
+  it('asks before service reads that return passwords, private keys or tokens, while keeping normal reads automatic', () => {
+    const readReason = (id: string, path: string, method: 'GET' | 'HEAD' | 'POST' = 'GET') => {
+      const e = entry(id);
+      return sensitiveReason(
+        e,
+        REQUEST_TOOL_NAME,
+        { method, path },
+        { access: callAccess(e, REQUEST_TOOL_NAME, { method, path }) },
+      );
+    };
+    const secretReads: [string, string, ('GET' | 'HEAD' | 'POST')?][] = [
+      ['qbittorrent', '/api/v2/app/preferences'],
+      ['qbittorrent', '/api/v2/app/preferences/', 'HEAD'],
+      ['qbittorrent', '/api/v2/app/cookies'],
+      ['qbittorrent', '/api/v2/app/setCookies', 'POST'],
+      ['qbittorrent', '/api/v2/app/rotateAPIKey', 'POST'],
+      ['qbittorrent', '/api/v2/app/deleteAPIKey', 'POST'],
+      ['jellyfin', '/System/Configuration'],
+      ['jellyfin', '/System/Configuration/Network'],
+      ['jellyfin', '/Plugins/abc123/Configuration'],
+      ['frigate', '/api/config'],
+      ['frigate', '/api/config/raw', 'HEAD'],
+      ['frigate', '/api/ffprobe'],
+      ['immich', '/api/system-config'],
+      ['immich', '/api/admin/config'],
+      ['immich', '/api/admin/database-backups/immich-db-backup.sql.gz'],
+      ['immich', '/api/api-keys', 'POST'],
+      ['pihole', '/api/teleporter'],
+      ['pihole', '/api/config'],
+      ['pihole', '/api/config/webserver'],
+      ['pihole', '/api/config/webserver/api/pwhash'],
+      ['pihole', '/api/auth/app'],
+      ['pihole', '/api/auth/totp'],
+      ['adguard', '/control/tls/status'],
+      ['plex', '/:/prefs'],
+      ['nginx_proxy_manager', '/api/nginx/certificates/3/download'],
+      ['opnsense', '/api/core/backup/download/this'],
+      ['opnsense', '/api/trust/cert/get/uuid-1'],
+      ['opnsense', '/api/trust/ca/raw_dump/uuid-1'],
+      ['opnsense', '/api/auth/user/get/uuid-1'],
+      ['opnsense', '/api/auth/user/newOtpSeed'],
+      ['opnsense', '/api/wireguard/server/getServer/uuid-1'],
+      ['opnsense', '/api/wireguard/server/keyPair'],
+      ['opnsense', '/api/wireguard/client/psk'],
+      ['opnsense', '/api/openvpn/instances/get/uuid-1'],
+      ['opnsense', '/api/ipsec/pre_shared_keys/getItem/uuid-1'],
+      ['cloudflare', '/client/v4/accounts/a1/cfd_tunnel/t1/token'],
+      ['sonarr', '/api/v3/config/host'],
+      ['radarr', '/api/v3/config/host'],
+    ];
+    for (const [id, path, method] of secretReads) {
+      expect(readReason(id, path, method ?? 'GET'), `${id} ${method ?? 'GET'} ${path}`).not.toBeNull();
+      // Guarding individual paths never marks the whole `request` tool as "Always asks".
+      expect(toolAlwaysAsks(entry(id), REQUEST_TOOL_NAME), id).toBe(false);
+    }
+
+    const safeReads: [string, string][] = [
+      ['qbittorrent', '/api/v2/sync/maindata'],
+      ['qbittorrent', '/api/v2/torrents/info'],
+      ['qbittorrent', '/api/v2/app/version'],
+      ['jellyfin', '/System/Info'],
+      ['jellyfin', '/Plugins'],
+      ['jellyfin', '/Users'],
+      ['frigate', '/api/stats'],
+      ['frigate', '/api/events'],
+      ['immich', '/api/albums'],
+      ['immich', '/api/admin/database-backups'],
+      ['pihole', '/api/config/dns'],
+      ['pihole', '/api/stats/summary'],
+      ['adguard', '/control/status'],
+      ['adguard', '/control/filtering/status'],
+      ['plex', '/library/sections'],
+      ['nginx_proxy_manager', '/api/nginx/certificates'],
+      ['nginx_proxy_manager', '/api/nginx/proxy-hosts'],
+      ['opnsense', '/api/core/system/status'],
+      ['opnsense', '/api/wireguard/service/show'],
+      ['opnsense', '/api/openvpn/service/searchSessions'],
+      ['cloudflare', '/client/v4/zones'],
+      ['cloudflare', '/client/v4/accounts/a1/cfd_tunnel'],
+    ];
+    for (const [id, path] of safeReads) {
+      expect(readReason(id, path), `${id} GET ${path}`).toBeNull();
+    }
+  });
 });
 describe('changes that can cut the person off', () => {
   const call = (id: string, method: string, path: string, body?: unknown) =>

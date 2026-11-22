@@ -54,7 +54,7 @@ export const entry = {
     headers: { Accept: 'application/json' },
   },
   guide:
-    'Jellyfin’s REST API (JSON; Whombat adds X-Emby-Token). Server info: GET /System/Info (ServerName, Version, HasPendingRestart). Libraries: GET /Library/VirtualFolders (ItemId, Name, CollectionType, RefreshStatus); counts: GET /Items/Counts. Browse items: GET /Items?Recursive=true&IncludeItemTypes=Movie,Series,Episode&SortBy=DateCreated&SortOrder=Descending&Limit=20&Fields=DateCreated,ProviderIds (filter by ParentId=<library ItemId> or SearchTerm=<words>); item images: GET /Items/<id>/Images/Primary?maxWidth=240&quality=90. Playing now: GET /Sessions (active streams have NowPlayingItem, UserName, DeviceName, PlayState and TranscodingInfo). Watch activity: GET /System/ActivityLog/Entries?MinDate=<ISO>&Limit=100 and GET /Users. Scheduled tasks: GET /ScheduledTasks. Scan all libraries: POST /Library/Refresh; scan one: POST /Items/<id>/Refresh?Recursive=true. Deleting media, changing server settings or user accounts, and restarting or shutting down Jellyfin always ask a person.',
+    'Jellyfin’s REST API (JSON; Whombat adds X-Emby-Token). Server info: GET /System/Info (ServerName, Version, HasPendingRestart). Libraries: GET /Library/VirtualFolders (ItemId, Name, CollectionType, RefreshStatus); counts: GET /Items/Counts. Browse items: GET /Items?Recursive=true&IncludeItemTypes=Movie,Series,Episode&SortBy=DateCreated&SortOrder=Descending&Limit=20&Fields=DateCreated,ProviderIds (filter by ParentId=<library ItemId> or SearchTerm=<words>); item images: GET /Items/<id>/Images/Primary?maxWidth=240&quality=90. Playing now: GET /Sessions (active streams have NowPlayingItem, UserName, DeviceName, PlayState and TranscodingInfo). Watch activity: GET /System/ActivityLog/Entries?MinDate=<ISO>&Limit=100 and GET /Users. Scheduled tasks: GET /ScheduledTasks. Scan all libraries: POST /Library/Refresh; scan one: POST /Items/<id>/Refresh?Recursive=true. Deleting media, reading or changing server or plugin settings, changing user accounts, and restarting or shutting down Jellyfin always ask a person.',
   sensitive: [
     DELETES_ASK,
     {
@@ -65,9 +65,13 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
-      methods: ['POST', 'PUT'],
       path: '^/System/Configuration(/|$)',
-      reason: 'Changes Jellyfin’s server settings',
+      reason: 'Reads or changes Jellyfin’s server settings, which may contain a certificate password',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/Plugins/[^/]+/Configuration(/|$)',
+      reason: 'Reads or changes a Jellyfin plugin’s settings, which may contain passwords or API keys',
     },
     {
       tools: [REQUEST_TOOL_NAME],

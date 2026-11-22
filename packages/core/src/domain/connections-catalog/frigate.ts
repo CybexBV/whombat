@@ -72,9 +72,13 @@ export const entry = {
     DELETES_ASK,
     {
       tools: [REQUEST_TOOL_NAME],
-      methods: ['GET', 'POST', 'PUT'],
       path: '^/api/config(/|$)',
       reason: 'Reads or changes Frigate’s configuration, which may contain camera stream passwords',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/ffprobe(/|$)',
+      reason: 'Probes a camera stream, which may return stream URLs with passwords',
     },
     {
       tools: [REQUEST_TOOL_NAME],
