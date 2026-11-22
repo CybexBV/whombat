@@ -1,10 +1,14 @@
 package diskusage
 
 import (
+	"bytes"
+	"compress/flate"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"net"
@@ -21,18 +25,70 @@ import (
 	"rackoon/internal/proto"
 )
 
+// writeBytes writes size deterministic, incompressible bytes (SplitMix64) so
+// allocated block counts match logical sizes even on transparently compressed
+// filesystems (such as ZFS lz4/zstd or Btrfs compress).
 func writeBytes(t *testing.T, path string, size int) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(path))
+	state := h.Sum64() ^ uint64(size)*0x9e3779b97f4a7c15
+	if state == 0 {
+		state = 0x243f6a8885a308d3
+	}
 	buf := make([]byte, size)
-	for i := range buf {
-		buf[i] = byte(i%251 + 1)
+	var i int
+	for ; i+8 <= size; i += 8 {
+		state += 0x9e3779b97f4a7c15
+		z := state
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		binary.LittleEndian.PutUint64(buf[i:], z)
+	}
+	if i < size {
+		state += 0x9e3779b97f4a7c15
+		z := state
+		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+		z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+		z ^= z >> 31
+		var tail [8]byte
+		binary.LittleEndian.PutUint64(tail[:], z)
+		copy(buf[i:], tail[:size-i])
 	}
 	if err := os.WriteFile(path, buf, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// listenShortUnixSocket binds a Unix domain socket at a path safely below the
+// 104-byte (macOS) / 108-byte (Linux) sun_path limit, even when TMPDIR is long.
+func listenShortUnixSocket(t *testing.T, name string) (net.Listener, string) {
+	t.Helper()
+	const maxUnixSockPath = 96
+	dir, err := os.MkdirTemp("", "du")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sockPath := filepath.Join(dir, name)
+	if len(sockPath) >= maxUnixSockPath {
+		_ = os.RemoveAll(dir)
+		dir, err = os.MkdirTemp("/tmp", "du")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sockPath = filepath.Join(dir, name)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln, sockPath
 }
 
 func newTestRunner(t *testing.T, root string, mounts []mountInfo, inv *proto.Report) *Runner {
@@ -336,11 +392,7 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 
 	// Place a live mock Docker HTTP server behind a symlink at /var/run/docker.sock:
 	// the scan must NEVER stat, follow, or dial any container daemon socket.
-	sockPath := filepath.Join(t.TempDir(), "docker.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -349,10 +401,7 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -918,16 +967,7 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/app/data.bin"), 28*1024)
 	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/mounted-vol/huge.bin"), 256*1024)
 
-	sockDir, err := os.MkdirTemp("", "du-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "d.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -936,10 +976,7 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -3078,16 +3115,7 @@ func TestOvermountedRootRefusedBeforeStatfsOrReadDir(t *testing.T) {
 
 func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	root := t.TempDir()
-	sockDir, err := os.MkdirTemp("", "du-race-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "d.sock")
-	ln, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
 	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -3096,10 +3124,7 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
-	t.Cleanup(func() {
-		srv.Close()
-		ln.Close()
-	})
+	t.Cleanup(func() { srv.Close() })
 	inRootSock := filepath.Join(root, "var/run/docker.sock")
 	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
 		t.Fatal(err)
@@ -3818,5 +3843,43 @@ func TestAllowedToolLookupRefusesDisallowedNamesAndIgnoresPATH(t *testing.T) {
 		if got, err := lookStandbyProbeTool(allowed); err == nil && strings.HasPrefix(got, fakeBin) {
 			t.Errorf("lookStandbyProbeTool(%q) resolved from PATH (%q), want fixed system dirs only", allowed, got)
 		}
+	}
+}
+
+func TestTestHelpersIncompressibleBytesAndLongTMPDIRSocket(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "incompressible.bin")
+	const wantSize = 32 * 1024
+	writeBytes(t, p, wantSize)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var compressed bytes.Buffer
+	w, err := flate.NewWriter(&compressed, flate.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if compressed.Len() < wantSize*95/100 {
+		t.Fatalf("writeBytes compressed from %d to %d bytes; must be incompressible for compressed filesystems", wantSize, compressed.Len())
+	}
+
+	// Simulate a long TMPDIR (> 100 bytes) that would exceed Unix sun_path limits.
+	longTmp := filepath.Join(t.TempDir(), strings.Repeat("long-tmpdir-segment-", 5))
+	if err := os.MkdirAll(longTmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", longTmp)
+	ln, sockPath := listenShortUnixSocket(t, "d.sock")
+	if len(sockPath) >= 100 {
+		t.Fatalf("socket path too long under long TMPDIR: %d bytes (%q)", len(sockPath), sockPath)
+	}
+	if ln.Addr().String() != sockPath {
+		t.Fatalf("listener addr = %q, want %q", ln.Addr().String(), sockPath)
 	}
 }
