@@ -112,7 +112,7 @@ export const REACH_TEXT = {
     startingPlainMeta: 'Finish it where you turned it on.',
     gettingCode: 'Getting a code…',
     waitingAddress: 'Waiting for an address',
-    waitingAddressMeta: 'Whombat gives out a few new addresses each day. Yours comes by itself, soon.',
+    waitingAddressMeta: 'Your address usually comes within a few minutes. It arrives by itself.',
     on: 'Whombat Link is on',
     onMeta: 'Open this Whombat from anywhere, with notifications on your phones.',
     trial: (date: string) => `Free month until ${date}.`,

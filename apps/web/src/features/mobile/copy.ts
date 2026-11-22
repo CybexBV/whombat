@@ -41,8 +41,7 @@ export const MOBILE_TEXT = {
       },
     ],
     /** Step 1's line when no Android app is published here: the camera would open a page without a download. */
-    installNone:
-      'The Android app isn’t published here yet. On an iPhone, ask for an invite under Get the app.',
+    installNone: 'The Android app isn’t published here yet. On an iPhone, join the test under Get the app.',
     qrLabel: 'QR code that signs your phone in to Whombat',
     onThisPhone: 'Have the app on this phone already?',
     into: (whombat: string) => `It signs your phone in as you and asks ${whombat} to let it in.`,
@@ -114,10 +113,9 @@ export const MOBILE_TEXT = {
     hint: 'The first time, Android asks to allow installs from your browser. Allow it, then open the file.',
     iphoneName: 'Whombat for iPhone',
     iphoneMeta: 'In testing on Apple’s TestFlight',
-    iphoneAsk: 'Ask for an invite',
-    /** Whombat's contact address, with what to send already written. */
-    iphoneMail:
-      'mailto:info@whombat.com?subject=Invite%20me%20to%20Whombat%20for%20iPhone&body=Please%20invite%20me%20to%20Whombat%20for%20iPhone%20on%20TestFlight.%20My%20Apple%20ID%20email%20is%3A%20',
+    iphoneJoin: 'Join on TestFlight',
+    /** The public TestFlight link: anyone with it can install the app, no invite needed. */
+    iphoneLink: 'https://testflight.apple.com/join/YM62X9Kw',
     none: 'The Android app isn’t published here yet. Check back soon.',
     loading: 'Looking for the latest version…',
     failed: 'Couldn’t check for the app just now.',

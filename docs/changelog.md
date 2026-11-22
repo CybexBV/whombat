@@ -14,6 +14,10 @@ them once they have been tried on Beta.
 - If an update turns out to be bad, Whombat can stop it from reaching any more boxes at once.
 - Turning off the Dutch voice removes it from your Whombat completely.
 - You can choose a separate AI model for background work.
+- The Appliance Terms and the Subscription Terms have a new version: they name the seller, say Claude Code comes from
+  Anthropic, list only the keys a self-installed Whombat has and carry the Dutch voice's use restrictions. An app that
+  hasn't updated yet keeps working.
+- The iPhone app has a public TestFlight link: tap Join on TestFlight under Get the app, no invite needed.
 
 ## 21 November 2026
 
