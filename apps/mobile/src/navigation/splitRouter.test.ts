@@ -1,6 +1,6 @@
 import { StackRouter } from '@react-navigation/routers';
 import { describe, expect, it } from 'vitest';
-import { besideBase, splitRouter } from './splitRouter';
+import { besideBase, besideOptions, splitRouter } from './splitRouter';
 
 const routeNames = ['Tabs', 'Thread', 'Approval', 'Thing'];
 const options = {
@@ -99,5 +99,13 @@ describe('the stack with two pages', () => {
       options,
     );
     expect(names(next as never)).toEqual(['Tabs', 'Thread', 'Approval']);
+  });
+});
+
+describe('screens on the right page', () => {
+  it('swaps its first screen without a slide and keeps the slide above it', () => {
+    const options = { animation: 'slide_from_right', headerShown: false };
+    expect(besideOptions(options, 0)).toEqual({ animation: 'none', headerShown: false });
+    expect(besideOptions(options, 1)).toBe(options);
   });
 });
