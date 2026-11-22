@@ -533,7 +533,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     const ids = (list.messages ?? []).map((m) => m.id);
     const headers = await this.fetchGmailHeaders(accessToken, ids, new Date(sinceMs));
     const nextToken = list.nextPageToken?.trim() || undefined;
-    if (nextToken) {
+    if (nextToken && nextToken !== pageToken) {
       return {
         cursor: {
           kind: 'gmail',
@@ -576,7 +576,12 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
       try {
         return await this.gmailBackfillPage(accessToken, cursor.historyId, afterSeconds, sinceMs, pageToken);
       } catch (err) {
-        if (err instanceof GoogleApiError && err.status === 404) {
+        // Stale or invalid backfill pageTokens return HTTP 400 (and 404/410 on expired state): restart backfill
+        // from `sinceMs`; message deduplication makes re-scanning safe. Other statuses propagate without looping.
+        if (
+          err instanceof GoogleApiError &&
+          (err.status === 400 || err.status === 404 || err.status === 410)
+        ) {
           return {
             ...(await this.mailBaseline(accessToken, { ...options, since: new Date(sinceMs) })),
             reset: true,
@@ -626,7 +631,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
           if (h.id !== undefined) lastIncludedHistoryId = String(h.id);
         }
         if (truncated) break;
-        if (!res.nextPageToken) break;
+        if (!res.nextPageToken || res.nextPageToken === pageToken) break;
         if (page === 4) {
           truncated = true;
           break;
@@ -634,8 +639,8 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
         pageToken = res.nextPageToken;
       }
     } catch (err) {
-      // History IDs expire after Gmail's retention window (HTTP 404): resync from last successful poll time.
-      if (err instanceof GoogleApiError && err.status === 404) {
+      // History IDs or pageTokens expire/become invalid (HTTP 404/400/410): resync from last successful poll time.
+      if (err instanceof GoogleApiError && (err.status === 404 || err.status === 400 || err.status === 410)) {
         return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
       }
       throw err;
@@ -645,7 +650,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
     return {
       cursor: { kind: 'gmail', historyId: finalHistoryId },
       headers,
-      ...(truncated ? { more: true } : {}),
+      ...(truncated && finalHistoryId !== cursor.historyId ? { more: true } : {}),
     };
   }
 

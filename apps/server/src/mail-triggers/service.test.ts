@@ -1,8 +1,10 @@
 /**
- * MailTriggerService poll-loop isolation tests: a failing or stalled mailbox must never block other mailboxes.
+ * MailTriggerService poll-loop isolation and recovery-boundary tests.
  */
 import { describe, expect, it, vi } from 'vitest';
+import type { MailProviderCursor } from '../connectors/types';
 import type { Services } from '../services';
+import { setMailCursor } from './commands';
 import { MailTriggerService } from './service';
 import type { ListenedMailbox } from './store';
 
@@ -11,9 +13,22 @@ vi.mock('./store', async (importOriginal) => {
   return {
     ...actual,
     listenedMailConnections: vi.fn(),
+    hasMirroredMailItem: vi.fn(async () => false),
   };
 });
 
+vi.mock('./principal', () => ({
+  mailPrincipal: {
+    ensure: vi.fn(async () => 'prn_mail'),
+    is: () => true,
+  },
+}));
+
+vi.mock('../connectors/providers', () => ({
+  providerWorkspace: vi.fn(),
+}));
+
+import { providerWorkspace } from '../connectors/providers';
 import { listenedMailConnections } from './store';
 
 function makeMailbox(connectionId: string): ListenedMailbox {
@@ -99,5 +114,218 @@ describe('MailTriggerService.pollOnce', () => {
       expect.objectContaining({ connectionId: 'conn_broken', err: 'unexpected mailbox failure' }),
       'mail trigger sync failed for mailbox',
     );
+  });
+
+  it('records succeededAt from before the provider read rather than after slow body/attachment processing', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const beforeRead = new Date('2026-10-28T10:05:00.000Z');
+    const afterBodies = new Date('2026-10-28T10:07:30.000Z');
+    let now = beforeRead;
+
+    const connRow = {
+      id: 'con_gmail',
+      accountId: 'acc_1',
+      provider: 'google',
+      status: 'active',
+      services: ['mail'],
+      email: 'you@example.com',
+    };
+    const existingCursorRow = {
+      connectionId: 'con_gmail',
+      cursor: { kind: 'gmail', historyId: '500' } satisfies MailProviderCursor,
+      since: activation,
+      succeededAt: new Date('2026-10-28T10:04:00.000Z'),
+      problemCode: null,
+      problem: null,
+      readFailures: null,
+    };
+
+    let selectCall = 0;
+    const committed: { name: string; input: Record<string, unknown> }[] = [];
+    const services = {
+      schemaAccess: 'read-write',
+      clock: () => now,
+      db: {
+        select: () => ({
+          from: () => ({
+            where: async () => {
+              selectCall += 1;
+              return selectCall === 1 ? [connRow] : [existingCursorRow];
+            },
+          }),
+        }),
+      },
+      google: { tokens: { accessFor: vi.fn(async () => 'tok') } },
+      files: { maxBytes: 10 * 1024 * 1024, store: { stage: vi.fn(), discard: vi.fn() } },
+      pipeline: {
+        commit: vi.fn(async (cmd: { name: string }, input: Record<string, unknown>) => {
+          committed.push({ name: cmd.name, input });
+          return { status: 'ok', result: { created: true, rowId: 'mti_1' } };
+        }),
+      },
+      log: { warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      background: { run: vi.fn() },
+      housekeeping: { add: vi.fn() },
+      automations: { nudge: vi.fn() },
+    } as unknown as Services;
+
+    vi.mocked(providerWorkspace).mockReturnValue({
+      mailChanges: vi.fn(async () => {
+        // Clock advances slightly during provider read; recovery boundary was captured before it.
+        now = new Date('2026-10-28T10:05:02.000Z');
+        return {
+          cursor: { kind: 'gmail', historyId: '505' },
+          headers: [
+            {
+              id: 'm_1',
+              threadId: 't_1',
+              messageId: '<m1@example.com>',
+              from: 'billing@example.com',
+              to: ['you@example.com'],
+              subject: 'Invoice',
+              snippet: 'Attached',
+              date: '2026-10-28T10:04:55.000Z',
+              hasAttachments: false,
+              attachments: [],
+            },
+          ],
+        };
+      }),
+      mailRead: vi.fn(async () => {
+        // Downloading full body and attachments takes 2.5 minutes.
+        now = afterBodies;
+        return [
+          {
+            id: 'm_1',
+            threadId: 't_1',
+            from: 'billing@example.com',
+            to: ['you@example.com'],
+            cc: [],
+            subject: 'Invoice',
+            snippet: 'Attached',
+            body: 'Body text',
+            bodyTruncated: false,
+            date: '2026-10-28T10:04:55.000Z',
+            unread: true,
+            labels: ['INBOX'],
+            attachments: [],
+          },
+        ];
+      }),
+      mailAttachment: vi.fn(),
+    } as unknown as ReturnType<typeof providerWorkspace>);
+
+    const svc = new MailTriggerService(services);
+    const created = await svc.syncConnection('con_gmail', makeMailbox('con_gmail'));
+    expect(created).toBe(1);
+
+    const cursorCommit = committed.find((c) => c.name === setMailCursor.name);
+    expect(cursorCommit?.input).toMatchObject({
+      connectionId: 'con_gmail',
+      succeeded: true,
+      succeededAt: beforeRead.toISOString(),
+    });
+    expect(cursorCommit?.input.succeededAt).not.toBe(afterBodies.toISOString());
+
+    // Verify setMailCursor.apply stores the supplied pre-read succeededAt instead of the later commit ctx.now.
+    let savedValues: Record<string, unknown> | null = null;
+    const tx = {
+      select: () => ({
+        from: () => ({
+          where: async () => [existingCursorRow],
+        }),
+      }),
+      insert: () => ({
+        values: (vals: Record<string, unknown>) => {
+          savedValues = vals;
+          return { onConflictDoUpdate: async () => undefined };
+        },
+      }),
+    };
+    await setMailCursor.apply(
+      tx as unknown as Parameters<typeof setMailCursor.apply>[0],
+      {
+        actor: { id: 'prn_mail' },
+        burrow: { id: 'bur_test' },
+        now: afterBodies,
+        emit: vi.fn(async () => undefined),
+      } as unknown as Parameters<typeof setMailCursor.apply>[1],
+      setMailCursor.schema.parse(cursorCommit?.input),
+    );
+    expect((savedValues as unknown as { succeededAt: Date })?.succeededAt).toEqual(beforeRead);
+  });
+
+  it('keeps the pre-backfill recovery boundary when finishing a multi-page Gmail backfill', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const priorSucceededAt = new Date('2026-10-28T10:01:00.000Z');
+    const page2ReadTime = new Date('2026-10-28T10:06:00.000Z');
+
+    const connRow = {
+      id: 'con_gmail',
+      accountId: 'acc_1',
+      provider: 'google',
+      status: 'active',
+      services: ['mail'],
+      email: 'you@example.com',
+    };
+    const backfillCursorRow = {
+      connectionId: 'con_gmail',
+      cursor: {
+        kind: 'gmail',
+        historyId: '500',
+        backfill: { pageToken: 'page_2', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+      } satisfies MailProviderCursor,
+      since: activation,
+      succeededAt: priorSucceededAt,
+      problemCode: null,
+      problem: null,
+      readFailures: null,
+    };
+
+    let selectCall = 0;
+    const committed: { name: string; input: Record<string, unknown> }[] = [];
+    const services = {
+      schemaAccess: 'read-write',
+      clock: () => page2ReadTime,
+      db: {
+        select: () => ({
+          from: () => ({
+            where: async () => {
+              selectCall += 1;
+              return selectCall === 1 ? [connRow] : [backfillCursorRow];
+            },
+          }),
+        }),
+      },
+      google: { tokens: { accessFor: vi.fn(async () => 'tok') } },
+      files: { maxBytes: 10 * 1024 * 1024, store: { stage: vi.fn(), discard: vi.fn() } },
+      pipeline: {
+        commit: vi.fn(async (cmd: { name: string }, input: Record<string, unknown>) => {
+          committed.push({ name: cmd.name, input });
+          return { status: 'ok', result: { created: false, rowId: null } };
+        }),
+      },
+      log: { warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      background: { run: vi.fn() },
+      housekeeping: { add: vi.fn() },
+      automations: { nudge: vi.fn() },
+    } as unknown as Services;
+
+    vi.mocked(providerWorkspace).mockReturnValue({
+      mailChanges: vi.fn(async () => ({
+        cursor: { kind: 'gmail', historyId: '500' },
+        headers: [],
+      })),
+    } as unknown as ReturnType<typeof providerWorkspace>);
+
+    const svc = new MailTriggerService(services);
+    await svc.syncConnection('con_gmail', makeMailbox('con_gmail'));
+
+    const cursorCommit = committed.find((c) => c.name === setMailCursor.name);
+    expect(cursorCommit?.input).toMatchObject({
+      connectionId: 'con_gmail',
+      succeeded: true,
+      succeededAt: priorSucceededAt.toISOString(),
+    });
   });
 });

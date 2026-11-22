@@ -348,14 +348,18 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
     return headers;
   }
-  async mailBaseline(token: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+  private async fetchMailBaselinePages(
+    token: string,
+    options: MailChangesOptions,
+    useFilter: boolean,
+  ): Promise<{ cursor: MailProviderCursor; kept: Obj[]; more?: boolean }> {
     // Documented Graph message-delta flow: limit the initial delta to messages received since `options.since`
-    // (minus the 5-second skew margin) via `$filter=receivedDateTime ge ...`, and keep the `@odata.nextLink`
-    // paging position across polls if a very large delta exceeds one poll's page cap.
+    // (minus the 5-second skew margin) via `$filter=receivedDateTime ge ...` when supported, and keep the
+    // `@odata.nextLink` paging position across polls if a very large delta exceeds one poll's page cap.
     const select =
       'id,conversationId,internetMessageId,from,toRecipients,subject,bodyPreview,receivedDateTime,hasAttachments,isDraft';
     const params: Record<string, string> = { $select: select };
-    if (options.since) {
+    if (options.since && useFilter) {
       const cutoffMs = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) * 1000);
       const cutoffIso = new Date(cutoffMs).toISOString().replace(/\.000Z$/, 'Z');
       params.$filter = `receivedDateTime ge ${cutoffIso}`;
@@ -364,6 +368,8 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     let lastNext: string | null = null;
     const kept: Obj[] = [];
     for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
+      const currentUrl = `${GRAPH}${path}`;
+      lastNext = null;
       const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
       if (options.since) {
         for (const item of arr(res.value)) {
@@ -375,11 +381,10 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       }
       const delta = res['@odata.deltaLink'];
       if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
-        const headers = kept.length ? await this.toMailHeaders(token, kept, options) : [];
-        return { cursor: { kind: 'microsoft', deltaLink: delta }, headers };
+        return { cursor: { kind: 'microsoft', deltaLink: delta }, kept };
       }
       const next = res['@odata.nextLink'];
-      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && next !== currentUrl) {
         lastNext = next;
         path = next.slice(GRAPH.length);
         continue;
@@ -387,18 +392,41 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       break;
     }
     if (lastNext) {
-      const headers = kept.length ? await this.toMailHeaders(token, kept, options) : [];
       return {
         cursor: {
           kind: 'microsoft',
           deltaLink: lastNext,
           paging: options.since ? { sinceMs: options.since.getTime() } : { dropHeaders: true },
         },
-        headers,
+        kept,
         more: true,
       };
     }
     throw badRequest('Microsoft did not return a delta link for the inbox.');
+  }
+  async mailBaseline(token: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    let result: { cursor: MailProviderCursor; kept: Obj[]; more?: boolean };
+    if (!options.since) {
+      result = await this.fetchMailBaselinePages(token, options, false);
+    } else {
+      try {
+        result = await this.fetchMailBaselinePages(token, options, true);
+      } catch (err) {
+        // Some Graph mailboxes reject `$filter=receivedDateTime ge ...` on message delta with HTTP 400: retry once
+        // without the filter and rely on the client-side `receivedAtOrAfter` check to drop older mail.
+        if (err instanceof GoogleApiError && err.status === 400) {
+          result = await this.fetchMailBaselinePages(token, options, false);
+        } else {
+          throw err;
+        }
+      }
+    }
+    const headers = result.kept.length ? await this.toMailHeaders(token, result.kept, options) : [];
+    return {
+      cursor: result.cursor,
+      headers,
+      ...(result.more ? { more: true } : {}),
+    };
   }
   async mailChanges(
     token: string,
@@ -414,12 +442,14 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     const effectiveSince =
       cursor.paging?.sinceMs !== undefined ? new Date(cursor.paging.sinceMs) : options.since;
     let path = cursor.deltaLink.slice(GRAPH.length);
-    let nextDelta = cursor.deltaLink;
+    let nextDelta: string | null = null;
     let reachedDelta = false;
     let hasMore = false;
     const rawItems: Obj[] = [];
     try {
       for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
+        const currentUrl = `${GRAPH}${path}`;
+        nextDelta = null;
         const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
         if (!dropHeaders) rawItems.push(...arr(res.value));
         const delta = res['@odata.deltaLink'];
@@ -429,7 +459,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
           break;
         }
         const next = res['@odata.nextLink'];
-        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`)) {
+        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && next !== currentUrl) {
           nextDelta = next;
           path = next.slice(GRAPH.length);
           if (page === MICROSOFT_DELTA_MAX_PAGES - 1) hasMore = true;
@@ -438,12 +468,15 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
         break;
       }
     } catch (err) {
-      // Sync state expired (410 Gone) or invalid (404): resync via documented inbox delta from last successful poll.
-      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404)) {
+      // Sync state expired (410 Gone) or invalid (400/404): resync via documented inbox delta from last successful poll.
+      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404 || err.status === 400)) {
         const resynced = await this.mailBaseline(token, { ...options, since: resyncSince });
         return { ...resynced, reset: true };
       }
       throw err;
+    }
+    if (!nextDelta) {
+      throw badRequest('Microsoft did not return a delta link for the inbox.');
     }
     const headers = dropHeaders
       ? []
