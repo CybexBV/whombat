@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -931,30 +929,6 @@ func pruneNestedPaths(set map[string]bool) []string {
 		}
 	}
 	return out
-}
-
-func lookTool(name string) (string, error) {
-	for _, dir := range []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"} {
-		p := filepath.Join(dir, name)
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
-			return p, nil
-		}
-	}
-	return exec.LookPath(name)
-}
-
-func runLowPriorityCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
-	path, err := lookTool(name)
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Dir = "/"
-	cmd.Env = []string{
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LC_ALL=C",
-	}
-	return cmd.Output()
 }
 
 const darwinDataVolumeMount = "/System/Volumes/Data"

@@ -33,14 +33,10 @@ const (
 
 	darwinSFFirmlink = 0x00800000
 
-	// enum vtype in XNU <sys/vnode.h>.
-	darwinVReg  = 1
-	darwinVDir  = 2
-	darwinVBlk  = 3
-	darwinVChr  = 4
-	darwinVLnk  = 5
-	darwinVSock = 6
-	darwinVFIFO = 7
+	// enum vtype in XNU <sys/vnode.h> (only types handled explicitly).
+	darwinVReg = 1
+	darwinVDir = 2
+	darwinVLnk = 5
 
 	// Darwin ENOENT errno value for ATTR_CMN_ERROR entries.
 	darwinENOENT = 2

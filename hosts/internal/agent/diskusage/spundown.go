@@ -1349,6 +1349,60 @@ const (
 	smartctlUnsupportedExit = 5
 )
 
+var fixedSystemToolDirs = []string{
+	"/usr/local/sbin",
+	"/usr/local/bin",
+	"/usr/sbin",
+	"/usr/bin",
+	"/sbin",
+	"/bin",
+	"/run/current-system/sw/bin",
+}
+
+func lookFixedSystemTool(name string) (string, error) {
+	for _, dir := range fixedSystemToolDirs {
+		p := filepath.Join(dir, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", os.ErrNotExist
+}
+
+// lookStandbyProbeTool resolves only the two verified Linux ATA standby probe
+// binaries from fixed system directories without consulting inherited PATH.
+func lookStandbyProbeTool(name string) (string, error) {
+	switch name {
+	case "hdparm", "smartctl":
+		return lookFixedSystemTool(name)
+	default:
+		return "", os.ErrPermission
+	}
+}
+
+// runAllowedCmd runs only the two read-only storage metadata tools diskusage
+// invokes ("zfs" for the selected ZFS dataset's own properties, "diskutil" for
+// macOS APFS physical-store resolution), resolved strictly from fixed system
+// directories without consulting inherited PATH.
+func runAllowedCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
+	switch name {
+	case "zfs", "diskutil":
+	default:
+		return nil, os.ErrPermission
+	}
+	path, err := lookFixedSystemTool(name)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Dir = "/"
+	cmd.Env = []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LC_ALL=C",
+	}
+	return cmd.Output()
+}
+
 func runStandbyProbeCmd(ctx context.Context, path string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Dir = "/"
@@ -1423,7 +1477,7 @@ func (r *Runner) hostDiskStandby(ctx context.Context, dev string) standbyState {
 
 	look := r.lookProbeTool
 	if look == nil {
-		look = lookTool
+		look = lookStandbyProbeTool
 	}
 	run := r.probeCmd
 	if run == nil {

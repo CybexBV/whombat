@@ -3788,3 +3788,35 @@ func TestContainerStorageMeasuredStrictlyThroughCheckedWalk(t *testing.T) {
 		}
 	})
 }
+
+func TestAllowedToolLookupRefusesDisallowedNamesAndIgnoresPATH(t *testing.T) {
+	// Put an executable decoy named "hdparm" and "zfs" in a temp directory on PATH
+	// and verify neither helper consults inherited PATH or allows arbitrary names.
+	fakeBin := t.TempDir()
+	for _, name := range []string{"hdparm", "zfs", "sh", "docker"} {
+		p := filepath.Join(fakeBin, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\necho pwned\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", fakeBin)
+
+	for _, bad := range []string{"", "sh", "/bin/sh", "docker", "zfs", "diskutil", "../hdparm"} {
+		if got, err := lookStandbyProbeTool(bad); err == nil {
+			t.Errorf("lookStandbyProbeTool(%q) = %q, want error", bad, got)
+		}
+	}
+	for _, bad := range []string{"", "sh", "/bin/sh", "docker", "hdparm", "smartctl", "../zfs"} {
+		if out, err := runAllowedCmd(context.Background(), bad); err == nil {
+			t.Errorf("runAllowedCmd(%q) succeeded with %q, want error", bad, out)
+		}
+	}
+
+	// If hdparm/zfs happen to be installed in a fixed system dir, the returned path
+	// must never come from the injected fakeBin PATH entry.
+	for _, allowed := range []string{"hdparm", "smartctl"} {
+		if got, err := lookStandbyProbeTool(allowed); err == nil && strings.HasPrefix(got, fakeBin) {
+			t.Errorf("lookStandbyProbeTool(%q) resolved from PATH (%q), want fixed system dirs only", allowed, got)
+		}
+	}
+}
