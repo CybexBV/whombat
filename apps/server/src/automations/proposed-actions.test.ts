@@ -367,9 +367,16 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
         upload: { field: 'document', attachmentId: ATT },
       }),
     ).toContain('query');
-    expect(refusal('todoist', { content: 'x', allow_empty: true }, adapter('tasks_add'))).toContain(
-      '“allow_empty”',
+    expect(refusal('todoist', { content: 'x', allow_empty: true }, adapter('tasks_add'))).toBe(
+      'todoist: “allow_empty” isn’t part of this action.',
     );
+    expect(
+      refusal('moneybird', {
+        method: 'POST',
+        path: '/12345/documents/receipts.json',
+        body: { receipt: { contact_id: 'acme' } },
+      }),
+    ).toContain('body.receipt.contact_id: an id');
     expect(refusal('todoist', { content: 'x', assignee_id: '9' }, adapter('tasks_add'))).toContain(
       '“assignee_id”',
     );

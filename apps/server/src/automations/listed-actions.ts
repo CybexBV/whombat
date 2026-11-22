@@ -81,23 +81,27 @@ const filePath = z
 /** The words of a schema's first problem, with where it is: “body.purchase_invoice.reference: at most 255 characters”. */
 function problemOf(error: z.ZodError, at: string): string {
   const issue = error.issues[0];
-  if (!issue) return `${at}: not what this action takes.`;
+  if (!issue) return `${at || 'This action'}: not what this action takes.`;
   const where = [at, ...issue.path.map(String)].filter(Boolean).join('.');
+  const of = where ? `${where}: ` : '';
   switch (issue.code) {
     case 'unrecognized_keys':
-      return `${where}: ${issue.keys.map((k) => `“${k}”`).join(', ')} isn’t part of this action.`;
+      return `${of}${issue.keys.map((k) => `“${k}”`).join(', ')} isn’t part of this action.`;
     case 'too_big':
-      return issue.origin === 'array'
-        ? `${where}: at most ${issue.maximum}.`
-        : issue.origin === 'string'
-          ? `${where}: at most ${issue.maximum} characters.`
-          : `${where}: at most ${issue.maximum}.`;
+      return issue.origin === 'string'
+        ? `${of}at most ${issue.maximum} characters.`
+        : `${of}at most ${issue.maximum}.`;
     case 'too_small':
-      return issue.origin === 'string' ? `${where}: give some text.` : `${where}: at least ${issue.minimum}.`;
+      return issue.origin === 'string' ? `${of}give some text.` : `${of}at least ${issue.minimum}.`;
     case 'invalid_type':
-      return issue.input === undefined ? `${where}: required.` : `${where}: not the right kind of value.`;
+      return issue.input === undefined ? `${of}required.` : `${of}not the right kind of value.`;
+    case 'invalid_union': {
+      // Say what the first kind it may be wants (“an id: digits only”), not that no kind matched.
+      const inner = issue.errors.flat().find((e) => e.code !== 'invalid_type')?.message;
+      return `${of}${(inner ?? 'not the right kind of value').replace(/\.$/, '')}.`;
+    }
     default:
-      return `${where}: ${issue.message.replace(/\.$/, '')}.`;
+      return `${of}${issue.message.replace(/\.$/, '')}.`;
   }
 }
 
@@ -170,7 +174,12 @@ function requestParts(
   for (const key of Object.keys(args)) {
     if (!REQUEST_KEYS.has(key)) throw new ListedArgumentError(`“${key}” isn’t part of this action.`);
   }
-  if (args.query !== undefined && args.query !== null)
+  const query = args.query;
+  if (
+    query !== undefined &&
+    query !== null &&
+    !(typeof query === 'object' && !Array.isArray(query) && Object.keys(query).length === 0)
+  )
     throw new ListedArgumentError('query: this action takes no query.');
   const base = args.base === undefined || args.base === null || args.base === '' ? undefined : args.base;
   if (base !== take.base && !(take.base && base === undefined))
