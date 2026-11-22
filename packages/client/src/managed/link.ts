@@ -101,6 +101,16 @@ export const WHOMBAT_LINK_TEXT = {
   doneTitle: (name: string) => `${name} is linked`,
   doneNext: 'It gets its own address in a moment. Its screen then shows where to open it.',
   doneNeedsPlan: 'It turns on once you subscribe to Whombat Link.',
+  /**
+   * After linking, the page waits for the Whombat's own address, then opens its page (`pollLinkAddress`): the person
+   * types only the letters its screen shows there.
+   */
+  addressWaiting: 'Getting your Whombat’s web address… this usually takes a minute or two.',
+  addressReady: 'Its web address is ready. Claim it there with the letters on its screen.',
+  addressOpen: 'Its web address is ready.',
+  addressSlow: 'This is taking longer than usual. Its screen shows where to open it once it’s ready.',
+  addressNotYet: 'If its page doesn’t open yet, give it a minute and try again.',
+  claimNow: 'Claim it now',
   toAccount: 'Your Whombats',
 
   /* Your Whombats */
@@ -525,6 +535,38 @@ export async function pollLinkCheckout(input: {
     if (account && linkSubscribed(account.plan)) return 'done';
     if (now() - started + LINK_CHECKOUT_POLL_EVERY_MS > LINK_CHECKOUT_POLL_FOR_MS) return 'timeout';
     await sleep(LINK_CHECKOUT_POLL_EVERY_MS);
+    if (!live()) return 'stopped';
+  }
+}
+
+/**
+ * After `link.confirm`: ask every 5 s, for up to 5 minutes, until the Whombat has its own address. Control knows the
+ * address once the box registered it; its certificate follows within a minute or two.
+ */
+export const LINK_ADDRESS_POLL_EVERY_MS = 5_000;
+export const LINK_ADDRESS_POLL_FOR_MS = 5 * 60_000;
+
+/** The linked Whombat's page (`https://<host>/`) once it has one, or why the wait ended. */
+export async function pollLinkAddress(input: {
+  device: string;
+  load: () => Promise<LinkAccount>;
+  live?: () => boolean;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}): Promise<{ url: string; box: LinkedBox } | 'timeout' | 'stopped'> {
+  const now = input.now ?? Date.now;
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const live = input.live ?? (() => true);
+  const started = now();
+  for (;;) {
+    // A failed load is one more wait: control or the network may be back by the next.
+    const account = await input.load().catch(() => null);
+    if (!live()) return 'stopped';
+    const box = account?.boxes.find((b) => b.device === input.device);
+    const url = box ? linkBoxOpenUrl(box) : null;
+    if (box && url) return { url, box };
+    if (now() - started + LINK_ADDRESS_POLL_EVERY_MS > LINK_ADDRESS_POLL_FOR_MS) return 'timeout';
+    await sleep(LINK_ADDRESS_POLL_EVERY_MS);
     if (!live()) return 'stopped';
   }
 }

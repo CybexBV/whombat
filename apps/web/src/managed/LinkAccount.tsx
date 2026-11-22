@@ -43,6 +43,8 @@ import {
   linkPriceLine,
   linkSubscribed,
   linkYearly,
+  ownClaimPrefillHash,
+  pollLinkAddress,
   pollLinkCheckout,
   SUBSCRIPTION_TERMS_VERSION,
   signInErrorText,
@@ -165,8 +167,21 @@ export type LinkStep =
   | { kind: 'found'; lookup: LinkLookup; plan: LinkAccount['plan'] | null }
   | { kind: 'done'; box: LinkedBox; trial: boolean };
 
+/**
+ * After linking, the Whombat's own page: still waiting for its address, waited long enough to say so, or ready to open
+ * (`claim`: nobody has set it up yet, so its page opens on the claim with the name and email from here).
+ */
+export type LinkAddress =
+  | { kind: 'waiting' }
+  | { kind: 'slow' }
+  | { kind: 'ready'; url: string; claim: boolean };
+
 export interface LinkCodeScreenProps {
   step: LinkStep;
+  /** Where the linked Whombat's address stands (only once it is linked and its Link runs). */
+  address?: LinkAddress | null;
+  /** Waited long enough: ask control again. */
+  onCheckAgain?: () => void;
   code: string;
   busy: boolean;
   error: string | null;
@@ -212,20 +227,44 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
   );
   if (step.kind === 'done') {
     const name = step.box.name ?? T.yourWhombatTitle;
-    const runs = step.box.state !== 'ended' && step.box.state !== 'off';
+    const runs = linkedBoxRuns(step.box);
+    const { address = null, onCheckAgain } = props;
+    const ready = address?.kind === 'ready' ? address : null;
+    const sub = !runs
+      ? T.doneNeedsPlan
+      : !address
+        ? T.doneNext
+        : address.kind === 'waiting'
+          ? T.addressWaiting
+          : address.kind === 'slow'
+            ? T.addressSlow
+            : address.claim
+              ? T.addressReady
+              : T.addressOpen;
     return (
       <AuthLayout
         kicker={T.kicker}
         title={T.doneTitle(name)}
-        sub={runs ? T.doneNext : T.doneNeedsPlan}
+        sub={<span role="status">{sub}</span>}
         tip={T.tip}
       >
         {step.trial && <p className={styles.status}>{T.trial}</p>}
         <div className={styles.actions}>
-          <Button variant="primary" size="lg" onClick={onAccount}>
+          {ready && (
+            <ButtonLink variant="primary" size="lg" href={ready.url} data-testid="link-claim-now">
+              {ready.claim ? T.claimNow : T.openName(name)}
+            </ButtonLink>
+          )}
+          {address?.kind === 'slow' && onCheckAgain && (
+            <Button variant="secondary" size="lg" onClick={onCheckAgain}>
+              {T.checkAgain}
+            </Button>
+          )}
+          <Button variant={ready || address ? 'link' : 'primary'} size="lg" onClick={onAccount}>
             {T.toAccount}
           </Button>
         </div>
+        {ready && <p className={styles.hint}>{T.addressNotYet}</p>}
       </AuthLayout>
     );
   }
@@ -339,19 +378,65 @@ async function toCheckout(
   }
 }
 
+/** A linked Whombat whose Link runs gets its own address; an ended or switched-off one doesn't. */
+function linkedBoxRuns(box: Pick<LinkedBox, 'state'>): boolean {
+  return box.state !== 'ended' && box.state !== 'off';
+}
+
+/**
+ * Once a Whombat is linked: waits for its own address (`pollLinkAddress`), and stops when the page closes or the step
+ * changes. A Whombat without a name is one nobody set up yet (an Easy box links before its setup asks for one): its
+ * page opens on the claim with the account's name and email in the fragment, which never reaches a server.
+ */
+function useLinkAddress(
+  control: ControlApi,
+  step: LinkStep,
+  session: ControlSession | undefined,
+): { address: LinkAddress | null; checkAgain: () => void } {
+  const [address, setAddress] = useState<LinkAddress | null>(null);
+  const [run, setRun] = useState(0);
+  const device = step.kind === 'done' && linkedBoxRuns(step.box) ? step.box.device : null;
+  const name = session?.account.name ?? '';
+  const email = session?.account.email ?? '';
+  useEffect(() => {
+    const load = control.linkAccount;
+    if (!device || !load || run < 0) return setAddress(null);
+    let live = true;
+    setAddress({ kind: 'waiting' });
+    void pollLinkAddress({ device, load: () => load(), live: () => live }).then((out) => {
+      if (!live || out === 'stopped') return;
+      if (out === 'timeout') return setAddress({ kind: 'slow' });
+      const claim = out.box.name === null;
+      setAddress({
+        kind: 'ready',
+        url: claim ? `${out.url}${ownClaimPrefillHash({ name, email })}` : out.url,
+        claim,
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [control, device, run, name, email]);
+  return { address, checkAgain: () => setRun((n) => n + 1) };
+}
+
 export function LinkCodeFlow({
   control,
+  session,
   initialCode,
   billingRedirectOrigins,
   onAccount,
 }: {
   control: ControlApi;
+  /** Who is signed in: their name and email go along to the claim on the Whombat's own page. */
+  session?: ControlSession;
   initialCode: string | null;
   billingRedirectOrigins?: readonly string[];
   onAccount: () => void;
 }) {
   const [code, setCode] = useState(initialCode ?? '');
   const [step, setStep] = useState<LinkStep>({ kind: 'enter' });
+  const { address, checkAgain } = useLinkAddress(control, step, session);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsCard, setNeedsCard] = useState<string | null>(null);
@@ -404,6 +489,8 @@ export function LinkCodeFlow({
   return (
     <LinkCodeScreen
       step={step}
+      address={address}
+      onCheckAgain={checkAgain}
       code={code}
       busy={busy}
       error={error}
