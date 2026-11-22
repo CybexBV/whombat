@@ -4,7 +4,7 @@
  * own shape: words joined by a middle dot between no-break spaces, a chosen row with its street; the People tab is
  * an `AXRadioButton`, the map the window's largest `AXImage`, the pins `AXGenericElement`s. Made-up people only.
  */
-import type { HostsRequest } from '../client';
+import { type HostsRequest, HostsUnavailable } from '../client';
 
 type Json = Record<string, unknown>;
 
@@ -55,6 +55,8 @@ export class FakeFindMyMac {
   noApp = false;
   /** The agent cuts the cropped look (an older one sends the whole screen). */
   crops = true;
+  /** `unlock` unlocks but its answer never comes (the hosts service gives up waiting). */
+  unlockTimesOut = false;
   /** `map.geocode` answers `unsupported` (an older helper). */
   geocodeUnsupported = false;
   people: FakePerson[] = FAKE_PEOPLE.map((p) => ({ ...p }));
@@ -154,6 +156,7 @@ export class FakeFindMyMac {
       });
     if (op === 'unlock') {
       this.locked = false;
+      if (this.unlockTimesOut) throw new HostsUnavailable('timeout', 'No answer in time.');
       return ok({ status: { locked: false } });
     }
     if (op === 'keys') {

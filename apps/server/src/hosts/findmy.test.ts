@@ -269,6 +269,15 @@ describe('a read', () => {
     expect(mac.locked).toBe(true);
   });
 
+  it('locks the Mac again when the unlock may have happened though it didn’t answer', async () => {
+    const { mac, read } = setup();
+    mac.locked = true;
+    mac.unlockTimesOut = true;
+    expect((await read()).problem?.code).toBe('timeout');
+    expect(mac.ops()).toEqual(['status', 'unlock', 'keys']);
+    expect(mac.locked).toBe(true);
+  });
+
   it('says no_find_my when the Mac has no Find My', async () => {
     const { mac, read } = setup();
     mac.noApp = true;
@@ -380,6 +389,28 @@ describe('the exact picture', () => {
     await store.idle('studio');
     expect(store.view('studio').exact).toMatchObject({ state: 'failed', problem: { code: 'helper_old' } });
     expect(() => store.picture('studio', mara, 'Studio')).toThrow();
+  });
+
+  it('fails, not waits, when a read in between no longer has the person', async () => {
+    const { mac, store, read, later } = setup();
+    await read();
+    later(3 * MIN);
+    const noor = findMyPersonId('Noor Visser');
+    let open = () => {};
+    mac.gate = new Promise((resolve) => {
+      open = resolve;
+    });
+    store.refresh(mac, 'studio', ACTOR, 'Studio');
+    store.exact(mac, 'studio', noor, ACTOR, 'Studio');
+    mac.people = mac.people.filter((p) => p.name !== 'Noor Visser');
+    open();
+    mac.gate = null;
+    await store.idle('studio');
+    expect(store.view('studio').exact).toMatchObject({
+      person: noor,
+      state: 'failed',
+      problem: { code: 'not_found' },
+    });
   });
 
   it('is only for someone Whombat read', async () => {

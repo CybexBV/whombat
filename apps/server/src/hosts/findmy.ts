@@ -271,8 +271,9 @@ async function withFindMy<T>(s: Steps, work: (screen: ScreenSize) => Promise<T>)
   if (!locked && helper.idleS !== null && helper.idleS < FIND_MY_IN_USE_S)
     throw new FindMyFailed({ code: 'in_use' });
   const screen = { w: st.status?.w ?? null, h: st.status?.h ?? null };
-  if (locked) await s.must({ op: 'unlock' });
   try {
+    // Inside the try: an unlock that timed out may still have unlocked the Mac, so it is locked again either way.
+    if (locked) await s.must({ op: 'unlock' });
     const apps = await s.must({ op: 'ui.apps' });
     const wasOpen = (apps.apps ?? []).some((a) => a.bundleId?.toLowerCase() === FIND_MY_APP);
     try {
@@ -558,9 +559,13 @@ export class FindMyStore {
   /** Puts a job in line behind the Mac's others. */
   #queue(e: Entry, job: () => Promise<void>): void {
     e.jobs++;
-    e.tail = e.tail.then(job).finally(() => {
-      e.jobs--;
-    });
+    // A job words its own failures; the line never breaks for the jobs behind it.
+    e.tail = e.tail
+      .then(job)
+      .catch(() => {})
+      .finally(() => {
+        e.jobs--;
+      });
   }
 
   /** Waits until the Mac's jobs in line are done (tests). */
@@ -620,11 +625,16 @@ export class FindMyStore {
   async #exact(e: Entry, s: Steps, label: string): Promise<void> {
     e.exactWaiting = false;
     const id = e.exact?.state === 'taking' ? e.exact.person : null;
-    const person = id ? e.people.find((p) => p.id === id) : undefined;
-    if (!id || !person) return;
+    if (!id) return;
     const settle = (exact: HostFindMyExact) => {
       if (e.exact?.person === id) e.exact = exact;
     };
+    // A read in between may no longer have the person: then there is nobody to take.
+    const person = e.people.find((p) => p.id === id);
+    if (!person) {
+      settle({ person: id, state: 'failed', takenAt: null, problem: { code: 'not_found' } });
+      return;
+    }
     try {
       const pic = await withFindMy(s, (screen) => exactPicture(s, this.timing, this.#sleep, person, screen));
       const at = this.#now();
