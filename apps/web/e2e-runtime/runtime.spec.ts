@@ -13,11 +13,18 @@ test('a browser signs in, sends a real turn, receives it over the encrypted sess
   const composer = page.getByRole('textbox').first();
   await composer.fill('Please check invoice 8812 in this runtime smoke test.');
   await composer.press('Enter');
+  // The question and its reply as messages in the open thread: the chat list's line and the thread's title show the
+  // same words.
+  const thread = page.getByRole('complementary', { name: 'Thread' });
   await expect(
-    page.getByText('Please check invoice 8812 in this runtime smoke test.', { exact: true }),
+    thread
+      .getByRole('article', { name: /^Your message/ })
+      .getByText('Please check invoice 8812 in this runtime smoke test.', { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('On it.', { exact: false })).toBeVisible({ timeout: 30_000 });
+  const reply = thread.getByRole('article').filter({ hasText: 'On it.' });
+  await expect(reply).toBeVisible({ timeout: 30_000 });
+  await expect(reply).not.toHaveAccessibleName(/^Your message/);
   await page.reload();
-  await expect(page.getByText('On it.', { exact: false })).toBeVisible();
+  await expect(reply).toBeVisible();
   expect(failures).toEqual([]);
 });

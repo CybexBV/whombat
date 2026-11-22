@@ -24,7 +24,10 @@ async function setup(page: Page) {
   await fake(page, 'reset');
   await page.reload();
   await signIn(page);
-  return claimAndSaveKit(page);
+  const c = await claimAndSaveKit(page);
+  // Remote help is a Whombat Link feature: the card shows while Link is on.
+  await fake(page, 'linkState', 'on', {}, c.device);
+  return c;
 }
 
 async function authenticator(page: Page): Promise<CDPSession> {
