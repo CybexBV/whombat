@@ -30,7 +30,7 @@ import {
 } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { changedWhileAskedText } from '../connections/call-target';
+import { ChangedWhileAskedError, changedWhileAskedText } from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, burrows } from '../db/schema/index';
 import { postAskCard } from '../guides/ask';
@@ -39,7 +39,7 @@ import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import type { ToolContext } from '../mcp/tools';
 import { shortName } from '../read/principals';
-import { describeThingAction, thingActionTargets } from '../things/actions';
+import { askThingAction } from '../things/actions';
 import { ownTurn } from '../vault/self-serve';
 import { changeSetting, runBound } from './command';
 
@@ -290,29 +290,28 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
         .map((i) => `${i.path.join('.') || 'input'}: ${i.message}`)
         .join('; '),
     );
-  // A service's declared setting or a page action: the card says what changes in Whombat's words (SST-04).
-  const said =
-    input.op === 'things.action'
-      ? await describeThingAction(
-          ctx.services,
-          ctx.burrowId,
-          (full as { params?: { thing?: unknown } }).params?.thing,
-          (full as { body?: unknown }).body,
-        )
-      : null;
-  // Where a page action goes and as whom now: a yes is bound to it, and the change runs only while it still goes there.
-  const targets = await thingActionTargets(ctx.services, ctx.burrowId, input.op, full);
-  const res = await ctx.services.pipeline.commit(
-    changeSetting,
-    {
-      op: input.op,
-      input: full as Record<string, unknown>,
-      conversationId: ctx.dispatch.conversationId,
-      ...(said ? { title: said.title, lines: said.lines.slice(0, 6) } : {}),
-      ...(Object.keys(targets).length ? { targets } : {}),
-    },
-    { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
-  );
+  // A service's declared setting or a page action, from one read of its connection: the card says what changes in
+  // Whombat's words (SST-04), read from where its yes is bound to; the change runs only while it still goes there.
+  const { targets, said, changed } = await askThingAction(ctx.services, ctx.burrowId, input.op, full);
+  if (changed) return failed('refused', changedWhileAskedText(changed));
+  let res: Awaited<ReturnType<typeof ctx.services.pipeline.commit<typeof changeSetting.schema, unknown>>>;
+  try {
+    res = await ctx.services.pipeline.commit(
+      changeSetting,
+      {
+        op: input.op,
+        input: full as Record<string, unknown>,
+        conversationId: ctx.dispatch.conversationId,
+        ...(said ? { title: said.title, lines: said.lines.slice(0, 6) } : {}),
+        ...(Object.keys(targets).length ? { targets } : {}),
+      },
+      { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
+    );
+  } catch (err) {
+    // Its connection went elsewhere after the card's words were read: no card, nothing changed.
+    if (err instanceof ChangedWhileAskedError) return failed('refused', err.message);
+    throw err;
+  }
   if (res.status === 'pending_approval')
     return { status: 'pending_approval', approvalId: res.approvalId, message: res.message };
   if (res.status === 'blocked')

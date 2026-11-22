@@ -26,7 +26,8 @@ import { OutboundLineError, outboundLine } from '../lib/outbound-line';
 import type { Services } from '../services';
 import { summarise, VaultCallError, VaultEchoError, type VaultFetchOptions } from '../vault/net';
 import { bytesHoldSecret, type SecretForms } from '../vault/scrub';
-import { keepTarget } from './call-target';
+import { keepBoundTarget } from './bound-targets';
+import { type CallTargetRow, keepTarget } from './call-target';
 import { resolveCredential } from './credentials';
 import { connectionPolicy } from './destination';
 import { ConnectionOutcomeUnknownError } from './request';
@@ -96,16 +97,36 @@ export async function connectionCertificate(services: Services, url: string): Pr
 }
 
 /**
+ * Before anything without a credential goes out to `row`'s host (a datagram, a line): only while work bound to where
+ * the connection went (`bound-targets.ts`) still finds it there, and the stored connection still has `target` when one
+ * is given (a connection call's). Throws `ConnectionChangedError` otherwise: nothing is sent.
+ */
+async function keepSendingTo(
+  services: Services,
+  row: CallTargetRow,
+  target: string | undefined,
+): Promise<void> {
+  await keepBoundTarget(services, row);
+  if (target === undefined) return;
+  keepTarget(row, target);
+  await keepStoredTarget(services, row.id, target);
+}
+
+/**
  * One UDP datagram to `port` on the connection's host under its destination policy, and the first answer (a console's
- * discovery, `outboundDatagram`), or null when none came in time. A refused destination throws `OutboundError`.
+ * discovery, `outboundDatagram`), or null when none came in time. A refused destination throws `OutboundError`; a
+ * connection changed since the work under way was checked on it (`target`, or the work's binding) sends nothing and
+ * throws `ConnectionChangedError`.
  */
 export async function connectionDatagram(
   services: Services,
-  row: Pick<CatalogConnectionRow, 'baseUrl'>,
+  row: CallTargetRow,
   port: number,
   payload: Buffer,
-  timeoutMs = 1_500,
+  options: { timeoutMs?: number; target?: string } = {},
 ): Promise<Buffer | null> {
+  const timeoutMs = options.timeoutMs ?? 1_500;
+  await keepSendingTo(services, row, options.target);
   const url = new URL(row.baseUrl);
   url.protocol = url.protocol === 'https:' ? 'https:' : 'http:';
   url.port = String(port);
@@ -122,16 +143,21 @@ export async function connectionDatagram(
   );
 }
 
-/** One TCP line, always to the connection's own host and an explicitly allowed port. */
+/**
+ * One TCP line, always to the connection's own host and an explicitly allowed port, and only while the connection is
+ * where the work under way was checked on it (as a datagram is).
+ */
 export async function connectionLine(
   services: Services,
-  row: Pick<CatalogConnectionRow, 'baseUrl'>,
+  row: CallTargetRow,
   port: number,
   command: string,
   idempotent: boolean,
+  target?: string,
 ): Promise<string> {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new OutboundError('bad_url', 'A TCP command needs a port.');
+  await keepSendingTo(services, row, target);
   const url = new URL(row.baseUrl);
   url.protocol = 'http:';
   url.port = String(port);

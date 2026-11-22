@@ -182,6 +182,10 @@ async function executeThingAction(
   const changedText = () =>
     destination !== undefined ? changedSinceChangeText(row.label) : changedJustNowText(row.label);
   if (bound !== undefined && bound !== checked) throw conflict(changedText());
+  // The assistant's page action runs only bound to where its ask or its yes went (`runBound` around the dispatcher):
+  // one that reached here without it refuses rather than run on the connection as it is now.
+  if (bound === undefined && destination === undefined && actingAgentId() !== null)
+    throw conflict(changedText());
   const run = actionFor(row, viewer, input.action);
   let done: Awaited<ReturnType<typeof run>>;
   try {
@@ -261,41 +265,23 @@ export async function runThingAction(
   return (await executeThingAction(services, viewer, value, input, timeZone, undoes)).outcome;
 }
 
-/**
- * A page action in Whombat's words for the assistant's approval card (SST-04): the kind's own (“Change a Plex
- * setting”, “Quality outside your home: 8 Mbps → 20 Mbps”), or null for the generic words. Never throws.
- */
-export async function describeThingAction(
+/** The connection of the burrow a page action the assistant asks for (`things.action`) runs on, or null. */
+async function thingActionRow(
   services: Services,
   burrowId: string,
-  thing: unknown,
-  body: unknown,
-  timeZone = 'UTC',
-): Promise<KindActionWords | null> {
-  try {
-    // A session may pass the thingId still encoded (`connection%3Acon_…`).
-    const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? decodeURIComponent(thing) : thing) : '';
-    if (!id.startsWith('connection:')) return null;
-    const b = (body ?? {}) as Record<string, unknown>;
-    if (typeof b.action !== 'string') return null;
-    const row = (await visibleConnections(services.db, { burrowId })).find(
+  op: string,
+  input: unknown,
+): Promise<CatalogConnectionRow | null> {
+  if (op !== 'things.action') return null;
+  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
+  // A session may pass the thingId still encoded (`connection%3Acon_…`).
+  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
+  if (!id.startsWith('connection:')) return null;
+  return (
+    (await visibleConnections(services.db, { burrowId })).find(
       (r) => r.id === id.slice('connection:'.length),
-    );
-    const kind = row ? kindOf(row.catalogId) : undefined;
-    if (!row || !kind) return null;
-    const value = b.value;
-    const input: KindActionInput = {
-      ...(typeof b.target === 'string' ? { target: b.target } : {}),
-      ...(typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-        ? { value }
-        : {}),
-    };
-    const ctx = { services, row, now: services.clock(), timeZone };
-    if (b.action === SETTING_ACTION && kind.settings) return await kind.settings.describe(ctx, input);
-    return kind.describe ? await kind.describe(ctx, b.action, input) : null;
-  } catch {
-    return null;
-  }
+    ) ?? null
+  );
 }
 
 /**
@@ -309,15 +295,71 @@ export async function thingActionTargets(
   op: string,
   input: unknown,
 ): Promise<Record<string, string>> {
-  if (op !== 'things.action') return {};
-  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
-  // A session may pass the thingId still encoded (`connection%3Acon_…`).
-  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
-  if (!id.startsWith('connection:')) return {};
-  const row = (await visibleConnections(services.db, { burrowId })).find(
-    (r) => r.id === id.slice('connection:'.length),
-  );
+  const row = await thingActionRow(services, burrowId, op, input);
   return row ? { [row.id]: callTarget(row) } : {};
+}
+
+/** What the assistant's approval card for a page action says, and what its yes is bound to (`askThingAction`). */
+export interface ThingActionAsk {
+  /** Where the action goes and as whom, by connection id (`callTarget`); empty when it isn't a connection's. */
+  targets: Record<string, string>;
+  /** The card's words in Whombat's terms, or null for the generic words. */
+  said: KindActionWords | null;
+  /** The connection's name when it went elsewhere, or as someone else, while the words were read: no card then. */
+  changed: string | null;
+}
+
+/**
+ * A page action the assistant asks for, from one read of its connection (SST-04): the target its yes is bound to and the
+ * card's words (“Change a Plex setting”, “Quality outside your home: 8 Mbps → 20 Mbps”), the kind's own, read from that
+ * same connection only while it still goes there. A card never describes one server and binds its yes to another.
+ */
+export async function askThingAction(
+  services: Services,
+  burrowId: string,
+  op: string,
+  input: unknown,
+  timeZone = 'UTC',
+): Promise<ThingActionAsk> {
+  const row = await thingActionRow(services, burrowId, op, input);
+  if (!row) return { targets: {}, said: null, changed: null };
+  const targets = { [row.id]: callTarget(row) };
+  try {
+    const { value, refused } = await signingOnlyAs(targets, () =>
+      describeOn(services, row, (input as { body?: unknown } | null)?.body, timeZone),
+    );
+    return refused ? { targets, said: null, changed: row.label } : { targets, said: value, changed: null };
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) return { targets, said: null, changed: row.label };
+    throw err;
+  }
+}
+
+/** A page action on `row` in the kind's words, or null for the generic words. Never throws but for a changed connection. */
+async function describeOn(
+  services: Services,
+  row: CatalogConnectionRow,
+  body: unknown,
+  timeZone: string,
+): Promise<KindActionWords | null> {
+  try {
+    const kind = kindOf(row.catalogId);
+    const b = (body ?? {}) as Record<string, unknown>;
+    if (!kind || typeof b.action !== 'string') return null;
+    const value = b.value;
+    const input: KindActionInput = {
+      ...(typeof b.target === 'string' ? { target: b.target } : {}),
+      ...(typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? { value }
+        : {}),
+    };
+    const ctx = { services, row, now: services.clock(), timeZone };
+    if (b.action === SETTING_ACTION && kind.settings) return await kind.settings.describe(ctx, input);
+    return kind.describe ? await kind.describe(ctx, b.action, input) : null;
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) throw err;
+    return null;
+  }
 }
 
 function safeDecode(text: string): string {

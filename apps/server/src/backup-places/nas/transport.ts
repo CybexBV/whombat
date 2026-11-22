@@ -313,9 +313,13 @@ function qnapAccess(services: Services, row: CatalogConnectionRow) {
     async send(req: NasRequest): Promise<NasAnswer> {
       for (let attempt = 0; ; attempt++) {
         let sid: string;
+        // Signed in and sent only as the connection the work under way was checked on (`bound-targets.ts`): checked
+        // before the sign-in, which reads the connection again, and before the request.
+        await keepBoundTarget(services, row);
         try {
           sid = (await sessionAccess(services, row, { force: attempt > 0 })).token;
         } catch (err) {
+          if (err instanceof ConnectionChangedError) throw err;
           if (err instanceof ConnectionAuthError)
             throw new NasPlaceError(
               'refused',
@@ -323,7 +327,6 @@ function qnapAccess(services: Services, row: CatalogConnectionRow) {
             );
           throw new NasPlaceError('unreachable', `${row.label} didn’t answer.`);
         }
-        // Sent only as the connection the work under way was checked on (`bound-targets.ts`).
         await keepBoundTarget(services, row);
         const res = await rawSend(services, row, {
           ...req,

@@ -59,9 +59,10 @@ import { loadGrants, loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
 import { VaultCallError, VaultEchoError } from '../vault/net';
 import { adapterFor, callReaches, callWordsFor } from './adapters/index';
-import { NOWHERE, signingOnlyAs } from './bound-targets';
+import { heldChanged, NOWHERE, signingOnlyAs } from './bound-targets';
 import { connectionCallAccess, coversReads } from './call-access';
 import {
+  ChangedWhileAskedError,
   ConnectionChangedError,
   callTarget,
   changedSinceYesText,
@@ -283,7 +284,14 @@ export const callConnectionTool = defineCommand({
       .refine((o) => Object.keys(o).length <= 8)
       .optional(),
   }),
-  async requiredKey(input, { db, services, actor }): Promise<KeyRequirement | null> {
+  async requiredKey(input, { db, services, actor, approvalId }): Promise<KeyRequirement | null> {
+    // Saved, and asked on a card, only while the connection and every other one the call acts through are the ones its
+    // yes is bound to (held until this commits): the card's words are read from them below. An approved call is
+    // checked again when it runs (`executeConnectionCall`).
+    if (input.target !== undefined && !approvalId) {
+      const changed = await heldChanged(db, { ...input.others, [input.connectionId]: input.target });
+      if (changed) throw new ChangedWhileAskedError(changed.id, changed.label);
+    }
     const plan = await planCall(db, services, actor.id, input);
     // Gone or not this agent's to use: `apply` refuses with the reason.
     if (!plan) return null;
@@ -625,10 +633,10 @@ export async function executeConnectionCall(
       result = { kind: 'ok', output };
       outcome = output.isError ? 'error' : 'done';
       bytes = output.bytes;
-      if (output.httpStatus === 401) refused(services, row.id);
+      if (output.httpStatus === 401) refused(services, row.id, bound[row.id]);
     } catch (err) {
       if (err instanceof VaultCallError && err.status === 401 && err.message !== 'needs_reauth')
-        refused(services, row.id);
+        refused(services, row.id, bound[row.id]);
       // The service wants the person to allow more for this (step-up): asked on a card, or said to the agent.
       const needs = err instanceof ScopeNeededError && row.signIn === 'mcp_oauth' ? err.scopes : null;
       const failure = needs
@@ -705,12 +713,21 @@ export async function executeConnectionCall(
 
 /**
  * The service refused the connection's credential (401): the connect side checks it with the entry's check and marks it
- * `needs_reauth` when the check is refused too (`confirmRefusedCredential`), in the background.
+ * `needs_reauth` when the check is refused too (`confirmRefusedCredential`), in the background. A call bound to where
+ * the connection went (`target`) has it checked only there: one given another address, account or token since is
+ * neither asked nor marked for what the old one answered.
  */
-function refused(services: Services, connectionId: string): void {
+function refused(services: Services, connectionId: string, target: string | undefined): void {
   // Not part of the call's session command (CS-07): it signs its own change, if any.
   services.guides.track('connection refused', () =>
-    outsideCommandScope(() => confirmRefusedCredential(services, connectionId)),
+    outsideCommandScope(() =>
+      signingOnlyAs(target !== undefined ? { [connectionId]: target } : {}, () =>
+        confirmRefusedCredential(services, connectionId),
+      ).catch((err: unknown) => {
+        if (err instanceof ConnectionChangedError) return null;
+        throw err;
+      }),
+    ),
   );
 }
 
@@ -795,8 +812,8 @@ async function runTool(
             target,
             ...(options?.truncateAt !== undefined ? { truncateAt: options.truncateAt } : {}),
           }),
-        datagram: (port, payload) => connectionDatagram(services, row, port, payload),
-        line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent),
+        datagram: (port, payload) => connectionDatagram(services, row, port, payload, { target }),
+        line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent, target),
         // A callable builtin acts as the agent (the Servers tools, one-whombat-servers.md ONE-DH14).
         ...(call
           ? {

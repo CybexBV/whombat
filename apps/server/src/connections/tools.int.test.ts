@@ -35,11 +35,15 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, type TestDispatchOptions } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { signingOnlyAs } from './bound-targets';
+import { callConnectionTool } from './call';
 import { ConnectionChangedError, callTarget } from './call-target';
 import { visibleConnections } from './context';
+import { credentialFor } from './credentials';
 import { sealConnectionSecret } from './crypto';
 import { currentRow, signedConnectionFetch } from './http';
 import { connectionsFor } from './pool';
+import { refreshConnectionAccess } from './refresh';
 import { syncTools } from './sync';
 import {
   type DavStub,
@@ -59,6 +63,8 @@ const HOSTS: Record<string, string> = {
   'ha2.home.test': '192.168.90.11',
   'oauth.home.test': '192.168.90.12',
   'cloud.home.test': '192.168.90.13',
+  // Another address for the same stub: where a connection is repointed while a call bound to the first one waits.
+  'oauth-other.home.test': '192.168.90.14',
 };
 
 let home: HomeStub;
@@ -541,6 +547,35 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
       }
     });
 
+    it('asks nothing when the connection changes between the call’s read and its card', async () => {
+      const dusty = await turn(IDS.dusty, IDS.billing);
+      const count = async () =>
+        (await t.services.db.select({ n: sql<number>`count(*)::int` }).from(approvals))[0]?.n ?? 0;
+      const asked = await count();
+      const commit = t.services.pipeline.commit.bind(t.services.pipeline);
+      let restore: (() => Promise<void>) | null = null;
+      // The token is replaced after the call read the connection and just before its card is saved.
+      const race = vi.spyOn(t.services.pipeline, 'commit').mockImplementation(async (def, input, options) => {
+        if (def === callConnectionTool && !restore) restore = await replaceToken('ha-llat-Other7Account2Rp6');
+        return commit(def, input, options);
+      });
+      try {
+        const res = await call(dusty.mcp, 'connection_call', {
+          connection: 'homeassistant',
+          tool: 'HassTurnOn',
+          arguments: { name: 'loft-lamp' },
+        });
+        expect(res.body).toMatchObject({ status: 'failed', reason: 'destination_refused' });
+        expect(String(res.body.message)).toContain('changed while this call started');
+        expect(await count()).toBe(asked);
+        expect(seenFor('loft-lamp')).toBe(0);
+      } finally {
+        race.mockRestore();
+        await (restore as (() => Promise<void>) | null)?.();
+        await dusty.mcp.close();
+      }
+    });
+
     it('runs a call a crash stopped before it was recorded once on recovery', async () => {
       const row = await askToTurnOn('porch-lamp');
       // The yes and the start committed, then the process stopped before the call's own commit.
@@ -922,6 +957,68 @@ describe('OAuth connections (CX-12…CX-15, CX-32)', () => {
     });
     expect(found.body).toMatchObject({ status: 'ok', content: 'Found 2 pages.' });
     await dusty.mcp.close();
+  });
+});
+
+describe('a sign-in for a call bound to where its connection went', () => {
+  it('reaches nothing, and writes nothing, once the connection was given another address', async () => {
+    const id = await insertConnection(t.services, {
+      catalogId: 'custom_mcp',
+      burrowId: t.burrowId,
+      label: 'Notes',
+      handle: 'notes',
+      signIn: 'mcp_oauth',
+      auth: null,
+      fields: { url: `http://oauth.home.test:${oauth.port}/mcp` },
+      accessToken: 'stale-token',
+      // Due: the next credential asks the authorization server for a new token.
+      accessExpiresAt: new Date(t.services.clock().getTime() - 1000),
+      refreshToken: 'refresh-1',
+      issuer: `http://oauth.home.test:${oauth.port}`,
+      clientId: 'https://whombat.test/api/v1/connections/oauth/client.json',
+      resource: `http://oauth.home.test:${oauth.port}/mcp`,
+    });
+    const asked = await currentRow(t.services, id);
+    if (!asked) throw new Error('no connection');
+    const checked = callTarget(asked);
+    // Signed in again at another address while a call bound to the first waits.
+    const other = `http://oauth-other.home.test:${oauth.port}`;
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        baseUrl: `${other}/mcp`,
+        fields: { url: `${other}/mcp` },
+        issuer: other,
+        resource: `${other}/mcp`,
+        credentialVersion: asked.credentialVersion + 1,
+      })
+      .where(eq(catalogConnections.id, id));
+    const moved = await currentRow(t.services, id);
+    if (!moved) throw new Error('no connection');
+    const sent = oauth.seen.length;
+    const refreshes = oauth.refreshes;
+    // The row it was asked with or the row as it is now: neither refreshes, discovers or signs anything.
+    for (const row of [asked, moved])
+      await expect(
+        signingOnlyAs({ [id]: checked }, () => credentialFor(t.services, row)),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+    // The refresh itself reads the connection again and refuses before it asks.
+    await expect(
+      signingOnlyAs({ [id]: checked }, () => refreshConnectionAccess(t.services, asked, { force: true })),
+    ).rejects.toBeInstanceOf(ConnectionChangedError);
+    expect(oauth.seen.length).toBe(sent);
+    expect(oauth.refreshes).toBe(refreshes);
+    expect(await currentRow(t.services, id)).toMatchObject({
+      status: 'active',
+      accessTokenEnc: moved.accessTokenEnc,
+      refreshTokenEnc: moved.refreshTokenEnc,
+    });
+    // Not bound to the old address, the connection refreshes where it goes now.
+    await credentialFor(t.services, moved);
+    expect(oauth.refreshes).toBe(refreshes + 1);
+    expect(oauth.seen.slice(sent).every((s) => s.headers.host?.startsWith('oauth-other.home.test'))).toBe(
+      true,
+    );
   });
 });
 

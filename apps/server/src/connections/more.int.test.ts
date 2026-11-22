@@ -13,6 +13,7 @@
 import { type AnyEndpoint, api, buildPath } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { nasPlaceDriver } from '../backup-places/nas/transport';
 import { catalogConnections, connectionTools, vaultNetworks } from '../db/schema/index';
 import { IDS } from '../seed/test-world';
 import { setConnectionKeys } from '../test/connections';
@@ -20,8 +21,13 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { signingOnlyAs } from './bound-targets';
+import { ConnectionChangedError, callTarget } from './call-target';
+import { credentialFor } from './credentials';
 import { type Stub, type StubReply, type StubRequest, startStub } from './provision/testing-home';
+import { sessionAccess } from './session';
 import { FAKE_CERT_SHA256, type FakeSocketServer, fakeDeviceBuilder, fakeTrueNas } from './socket/testing';
+import type { CatalogConnectionRow } from './types';
 
 const t = useTestServer({ seed: true, listen: true });
 
@@ -37,6 +43,9 @@ const HOSTS: Record<string, string> = {
   'sab.more.test': `${NET}.40`,
   'syno.more.test': `${NET}.50`,
   'qnap.more.test': `${NET}.51`,
+  // Other addresses for the same fakes: where a connection is repointed while work bound to the first one waits.
+  'pihole-other.more.test': `${NET}.12`,
+  'qnap-other.more.test': `${NET}.52`,
 };
 
 const APP_PASSWORD = 'pihole-app-password-Qx7nV2pL';
@@ -250,6 +259,40 @@ afterAll(async () => {
 
 const at = (server: { url: string }, host: string) => server.url.replace('127.0.0.1', host);
 
+async function rowOf(id: string): Promise<CatalogConnectionRow> {
+  const [row] = await t.services.db.select().from(catalogConnections).where(eq(catalogConnections.id, id));
+  if (!row) throw new Error('no connection');
+  return row;
+}
+
+/**
+ * Points the connection at `url` as a new sign-in would (another address, its credential's version bumped) with its
+ * session due, so the next credential signs in; returns what puts it back.
+ */
+async function repoint(row: CatalogConnectionRow, url: string): Promise<() => Promise<void>> {
+  await t.services.db
+    .update(catalogConnections)
+    .set({
+      baseUrl: url,
+      fields: { ...row.fields, url },
+      credentialVersion: row.credentialVersion + 1,
+      accessExpiresAt: new Date(Date.now() - 1000),
+    })
+    .where(eq(catalogConnections.id, row.id));
+  return async () => {
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        baseUrl: row.baseUrl,
+        fields: row.fields,
+        credentialVersion: row.credentialVersion,
+        accessTokenEnc: row.accessTokenEnc,
+        accessExpiresAt: row.accessExpiresAt,
+      })
+      .where(eq(catalogConnections.id, row.id));
+  };
+}
+
 /* Pi-hole: a session (CM-10…CM-12) ------------------------------------------------------------------------------------ */
 
 describe('a session sign-in (CM-10…CM-12)', () => {
@@ -291,6 +334,34 @@ describe('a session sign-in (CM-10…CM-12)', () => {
     // The replaced session is signed out in the background (sid-1 had expired: the fake says 401, which is fine).
     await vi.waitFor(() => expect(pihole.calls('DELETE /api/auth').length).toBeGreaterThan(0));
     expect(JSON.stringify(again)).not.toContain('sid-2');
+  });
+
+  it('signs in nowhere, and writes nothing, for a call bound to it before it was given another address', async () => {
+    const asked = await rowOf(id);
+    const checked = callTarget(asked);
+    const other = at(pihole, 'pihole-other.more.test');
+    // The person points it at another Pi-hole while a call bound to the first waits, and its session is due.
+    const restore = await repoint(asked, other);
+    try {
+      const moved = await rowOf(id);
+      const sent = pihole.requests.length;
+      // The row it was asked with or the row as it is now: neither signs in anywhere.
+      for (const row of [asked, moved])
+        await expect(
+          signingOnlyAs({ [id]: checked }, () => credentialFor(t.services, row)),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+      // The sign-in itself reads the connection again and refuses before it asks.
+      await expect(
+        signingOnlyAs({ [id]: checked }, () => sessionAccess(t.services, asked, { force: true })),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+      expect(pihole.requests.length).toBe(sent);
+      expect(await rowOf(id)).toMatchObject({ status: 'active', accessTokenEnc: moved.accessTokenEnc });
+      // Not bound to the first, the connection signs in where it goes now.
+      await credentialFor(t.services, moved);
+      expect(pihole.calls('POST /api/auth').at(-1)?.headers.host).toContain('pihole-other.more.test');
+    } finally {
+      await restore();
+    }
   });
 
   it('marks the connection as needing a new password when Pi-hole refuses it', async () => {
@@ -391,6 +462,36 @@ describe('QNAP: a base64 password and an XML session (NS-01…NS-04)', () => {
     const login = qnap.calls('POST /cgi-bin/authLogin.cgi').at(-1);
     expect(login?.form().pwd).toBe(Buffer.from(APP_PASSWORD).toString('base64'));
     expect(qnap.calls('GET /cgi-bin/filemanager/utilRequest.cgi')[0]?.query.get('sid')).toBe('qsid1');
+  });
+
+  it('signs in nowhere for work bound to it before it was given another address', async () => {
+    const [found] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.catalogId, 'qnap'));
+    if (!found) throw new Error('no QNAP');
+    // Backups need it on Manage (the level isn't where its calls go), and its session is due: the work signs in first.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ access: 'manage', accessExpiresAt: new Date(Date.now() - 1000) })
+      .where(eq(catalogConnections.id, found.id));
+    const asked = await rowOf(found.id);
+    const checked = callTarget(asked);
+    const restore = await repoint(asked, at(qnap, 'qnap-other.more.test'));
+    try {
+      const sent = qnap.requests.length;
+      await expect(
+        signingOnlyAs({ [asked.id]: checked }, () => nasPlaceDriver(t.services, asked).look()),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+      expect(qnap.requests.length).toBe(sent);
+      expect((await rowOf(asked.id)).accessTokenEnc).toBe(asked.accessTokenEnc);
+    } finally {
+      await restore();
+      await t.services.db
+        .update(catalogConnections)
+        .set({ access: found.access, accessExpiresAt: found.accessExpiresAt })
+        .where(eq(catalogConnections.id, found.id));
+    }
   });
 
   it('signs in again once when QTS answers that the session ended', async () => {
