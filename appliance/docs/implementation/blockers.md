@@ -2,7 +2,7 @@
 
 | ID | Blocker | Blocks | Owner / action |
 |---|---|---|---|
-| X-01 | Anthropic Commercial Terms acceptance (subscription use of the unmodified hosted binary is settled as permitted, 2026-09-26, Whombat SUB-01) | preinstalling/running Claude Code in the product | Product owner |
+| X-01 | ~~Anthropic Commercial Terms acceptance~~ no longer a requirement (John, 2026-11-22, Whombat SUB-59); subscription use of the unmodified hosted binary is permitted (2026-09-26, Whombat SUB-01) | — | — |
 | X-02 | ~~OpenAI confirmation for ChatGPT sign-in in a third-party appliance~~ resolved 2026-09-26: permitted per OpenAI's Codex auth docs (Whombat SUB-01) | — | — |
 | X-03 | `write:packages` scope for GitHub Packages (vendored tarballs used meanwhile, MA-02) | registry publishing | John: `gh auth refresh -s write:packages` if a registry is wanted |
 | X-04 | Sold hardware for power-loss, watchdog, firmware, TPM, Secure Boot qualification | R-55, R-56, R-57 | Hardware selection |

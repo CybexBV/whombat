@@ -39,6 +39,7 @@ How the split was made: `docs.md`.
 - `shared-passkey.md` — one shared passkey across appliances, authenticated discovery, one default setup and shared status, finishing existing setup with one authorization, safe retirement and verified recovery.
 - `passkeys.md` — one-touch sign-in on a new device, verified by the Whombat itself.
 - `whombat-link.md` — Whombat Link, the one paid service: one image, the Link state, HTTPS only and the installer's choice, updates from GitHub Releases on two channels, control as the Link service, push through the box, the DEV move.
+- `legal-texts.md` — the legal texts: the seller's details, the Privacy Policy's third parties, when the accepted terms get a new version, the Dutch voice's restrictions, the What's new page.
 - `one-environment.md` — one environment, Link on production: one image, Production and Beta updates, release ids and keys, moving a box to production, the yearly price, promotion codes and free time, guarded admin, Easy/Expert words, the website, the installer download, shipping.
 - `own-address.md` — each Whombat's own page at `<label>.box.whombat.app`: the label, the door, the certificate and its watch, the claim and link there, box passkeys.
 - `../app/decisions/whombat-link-app.md` — Whombat Link in the apps: the one setup on the box's page, Reach and Updates in Settings, the Link-ended strip, joining a box on the phone without a cloud account, push through the box, nothing to buy on the iPhone.

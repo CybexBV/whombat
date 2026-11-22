@@ -84,7 +84,7 @@ hasn't been (or isn't built). “Done” never means “ready for commercial pro
 
 | # | Item | State | Evidence |
 |---|---|---|---|
-| 31 | Anthropic commercial terms / subscription use (Claude) | external-gate (X-01) | `provider-evidence.md` |
+| 31 | Anthropic commercial terms / subscription use (Claude) | done (no longer a requirement, John 2026-11-22, Whombat SUB-59) | `provider-evidence.md` |
 | 32 | OpenAI confirmation for ChatGPT sign-in (Codex) | external-gate (X-02) | `provider-evidence.md` |
 | 33 | Real provider login from a remote browser with authorized accounts, persistence across update | external-gate (authorized credentials) | synthetic provider only in V-30; §14.9 not run |
 | 34 | Qualified CRA / privacy / hardware compliance review, support period decision | external-gate (X-07) | `vulnerability-response.md` §8 |

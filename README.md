@@ -13,12 +13,13 @@ Your data lives on the box, and it works with the Claude or ChatGPT you already 
 [![Download](https://img.shields.io/badge/download-installer%20ISO-f5f2ed?style=flat-square&labelColor=1c1815)](https://whombat.com/download)
 [![Apps](https://img.shields.io/badge/apps-web%20%C2%B7%20Android%20%C2%B7%20iPhone-f5f2ed?style=flat-square&labelColor=1c1815)](#install)
 
-[Download](https://whombat.com/download) · [Website](https://whombat.com) · [Tour](#a-tour) · [FAQ](#questions) · [Docs](docs/development.md) · [Security](SECURITY.md)
+[Download](https://whombat.com/download) · [Website](https://whombat.com) · [Tour](#a-tour) · [What's new](docs/changelog.md) · [FAQ](#questions) · [Docs](docs/development.md) · [Security](SECURITY.md)
 
 </div>
 
-> **Whombat is in beta.** It runs every day on its makers' own boxes and new releases come often, but expect rough
-> edges. Tell us what you run into in the [issues](https://github.com/CybexBV/whombat/issues).
+> **Whombat is in beta.** It runs every day on its makers' own boxes and new releases come often ([what's
+> new](docs/changelog.md)), but expect rough edges. Tell us what you run into in the
+> [issues](https://github.com/CybexBV/whombat/issues).
 
 <br>
 
@@ -81,8 +82,8 @@ Your data lives on the box, and it works with the Claude or ChatGPT you already 
 disk, and it doesn't encrypt it: use a machine or VM storage that is encrypted underneath if that matters to you.
 
 **The apps:** the web app opens at your Whombat's own address or its Tailscale name. Android:
-[app.whombat.com/mobile](https://app.whombat.com/mobile) (it updates itself). iPhone: in testing on TestFlight, ask
-info@whombat.com for an invite.
+[app.whombat.com/mobile](https://app.whombat.com/mobile) (it updates itself). iPhone: in testing on TestFlight, join at
+[testflight.apple.com/join/YM62X9Kw](https://testflight.apple.com/join/YM62X9Kw).
 
 ## A tour
 
@@ -147,8 +148,10 @@ Whombat keeps working at home, and away from home with Tailscale. More on [whomb
   and the box records what support did. There is no SSH daemon.
 - Updates are signed and staged, and roll back by themselves when one fails. The apps have no analytics, crash
   reporting or session replay.
-- Mail from outsiders is read walled off from your files, Vault and memory. Secrets in the Vault can be used by the
-  assistant but never read back out.
+- Mail from outsiders is read walled off from your files, Vault and memory: those turns get no Vault secrets. The
+  assistant signs in to websites with your saved logins without the password reaching the AI, and a secret's value is
+  blanked out of what it writes in chats and run records, also when it's encoded in common ways. The commands you let
+  it run can use the keys you switched on for them, so those commands can read them.
 - What leaves the box: what you ask, and what the assistant reads to answer, goes to the AI you connect (Claude,
   ChatGPT or your custom OpenAI-compatible AI model). With Whombat Link, our service sees the box's status (version, health,
   disk use, never your content), and phone notifications carry a short preview through it and Apple's or Google's

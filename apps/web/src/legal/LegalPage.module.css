@@ -14,7 +14,7 @@
 .column {
   max-width: 720px;
   margin: 0 auto;
-  padding: 16px 32px 96px;
+  padding: 16px 32px 48px;
   font: var(--type-body);
 }
 
@@ -60,4 +60,17 @@
 
 .list li {
   margin-bottom: 8px;
+}
+
+.seller {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 32px 48px;
+  border-top: 1px solid var(--line2);
+  color: var(--mut);
+  font: var(--type-secondary);
+}
+
+.seller a {
+  color: var(--ink2);
 }

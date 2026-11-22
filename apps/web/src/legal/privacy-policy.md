@@ -1,4 +1,4 @@
-> Version `2026-11-19`.
+> Version `2026-11-22`.
 
 # Whombat Privacy Policy
 
@@ -28,8 +28,10 @@ described under Notifications below, which you can turn off.
 
 ## 2. Who we are
 
-Whombat is a product of **Cybex BV**, a company in the Netherlands (“we”, “us”). We are the controller for the
-personal data our cloud services process, as described in this policy.
+Whombat is a product of **Cybex B.V.**, James Cookstraat 12G, 7825 AN Emmen, the Netherlands, registered with the
+Dutch Chamber of Commerce (KvK) under number 77711815, VAT number NL861104432B01 (“we”, “us”). We are the controller
+for the personal data our cloud services process, as described in this policy. You can reach us at
+[privacy@whombat.com](mailto:privacy@whombat.com).
 
 For the data on your Whombat, **you decide** what goes on it (if you use it for a business, the business is the
 controller). We can't access that data, so we don't process it, except when you let Whombat support in with remote
@@ -187,6 +189,22 @@ We use a small number of service providers, under agreements that only let them 
   Messaging for the Android app, and the push service your browser uses (from Google, Mozilla or Apple, for example)
   on the web; they receive a notification’s preview while delivering it, unless you turned previews off.
 
+**Services your Whombat talks to itself.** These aren't our service providers: your Whombat contacts them directly,
+so they see its IP address and what it asks for, and their own privacy policies apply.
+
+- **GitHub** (Microsoft) hosts the signed update files and the list of releases your Whombat checks for updates.
+- **Anthropic** hosts Claude Code. Your Whombat downloads it from Anthropic's own site when you choose Claude.
+- **Let's Encrypt** (ISRG) issues the certificate for your Whombat's own address when you use Whombat Link. Every
+  certificate is published in public **Certificate Transparency logs**, so that address (a name under
+  `box.whombat.app`) becomes public there. Your Whombat reads those logs through **Cert Spotter** (SSLMate) to warn
+  you about any certificate for its address that it didn't ask for.
+- **Hugging Face** hosts the speech models. Your Whombat downloads its speech-to-text model while voice typing is on
+  (it is at first), and the Dutch voice only after you turn it on and agree to its licence.
+- **Time servers** keep its clock right: Cloudflare, Netnod, PTB and SIDN's TimeNL.
+
+Tailscale, the AI providers and the services you connect are yours to choose; section 3 says how your Whombat talks
+to them.
+
 We may disclose data if the law requires it, and only as much as it requires. We'd tell you unless we're legally
 not allowed to.
 
@@ -264,4 +282,5 @@ matters, we'll email you before it takes effect.
 
 ## 16. Contact
 
-Cybex BV, the Netherlands · [privacy@whombat.com](mailto:privacy@whombat.com)
+Cybex B.V. · James Cookstraat 12G · 7825 AN Emmen, the Netherlands · KvK 77711815 · VAT NL861104432B01 ·
+[privacy@whombat.com](mailto:privacy@whombat.com)

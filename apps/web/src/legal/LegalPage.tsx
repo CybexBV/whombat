@@ -95,6 +95,14 @@ function block(b: LegalBlock, i: number): ReactNode {
   }
 }
 
+/**
+ * Who sells the service, under every legal page: the seller's details the law asks a web shop to show. Kept out of the
+ * texts themselves so that adding them doesn't make an accepted version of the terms change.
+ */
+export const SELLER_LINE =
+  'Cybex B.V. · James Cookstraat 12G · 7825 AN Emmen, the Netherlands · KvK 77711815 · VAT NL861104432B01';
+export const SELLER_EMAIL = 'info@whombat.com';
+
 export function LegalPage({ text }: { text: string }) {
   const blocks = useMemo(() => parseLegal(text), [text]);
   return (
@@ -105,6 +113,9 @@ export function LegalPage({ text }: { text: string }) {
         </a>
       </header>
       <main className={styles.column}>{blocks.map(block)}</main>
+      <footer className={styles.seller}>
+        {SELLER_LINE} · <a href={`mailto:${SELLER_EMAIL}`}>{SELLER_EMAIL}</a>
+      </footer>
     </div>
   );
 }

@@ -73,7 +73,7 @@ only that repository's worker at `/srv/whombat-ci/artifacts`; on the host it is 
 this is ordinary build storage, not a release trust boundary: a repository's worker controls its own disk.
 Production signing must never treat an unsigned artifact manifest as authorization to publish a release.
 
-Artifacts are browsable at https://thetitan.tail5e6f7.ts.net:10444/ while connected to Tailscale. nginx has a
+Artifacts are browsable at https://thetitan.tail1a2b3.ts.net:10444/ while connected to Tailscale. nginx has a
 read-only mount, forbids symlinks and binds host loopback; Tailscale Serve exposes it to the tailnet only.
 Workflow summaries link to each artifact. There is no public tunnel or anonymous internet access.
 
