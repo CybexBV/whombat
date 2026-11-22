@@ -36,6 +36,7 @@ import {
   isIncusServer,
   isMacServer,
   isUnraidServer,
+  MAC_PHONE_TABS,
   SERVER_DASHBOARD_DEFAULT_RANGE,
   SERVER_DASHBOARD_PHONE_RANGES,
   type ServerDashboardHead,
@@ -90,6 +91,7 @@ import { AgentUpdatesCard } from './server/AgentUpdates';
 import { AsksFirstCard } from './server/AsksFirst';
 import { IncusServerBackups } from './server/IncusServer';
 import { LibvirtServerBackups } from './server/LibvirtServer';
+import { MacFindMyPart } from './server/MacFindMy';
 import { MacScreenPart } from './server/MacScreen';
 import { TechnicalDetailsCard } from './server/TechnicalDetails';
 import { UnraidArray, UnraidPlugins } from './server/UnraidParts';
@@ -161,7 +163,7 @@ export function ServerScreen({
   const incus = d && isIncusServer(d) ? (d.incus ?? null) : null;
   // A QEMU/KVM server (IU-13): libvirt without Proxmox VE, Unraid or Incus.
   const libvirt = d && isLibvirtServer(d) ? (d.libvirt ?? null) : null;
-  // A Mac (macos-servers.md): its Summary and its Screen, nothing running on it to list.
+  // A Mac (macos-servers.md): its Summary, its Screen and its Find My, nothing running on it to list.
   const mac = !!d && isMacServer(d);
   // The other segments name guests (Backups by its guest, Array's stop question by its containers).
   const guests = useHostGuests(
@@ -193,7 +195,7 @@ export function ServerScreen({
   const openUpdates = () => navigation.navigate('ServerUpdates', { serverId, title: shown, back: shown });
   const proxmox = !!d?.proxmox || d?.server.platform === 'proxmox';
   const tabs: ServerTab[] = mac
-    ? ['summary', 'screen']
+    ? [...MAC_PHONE_TABS]
     : unraid
       ? ['summary', 'array', 'guests', 'plugins']
       : proxmox || incus || libvirt
@@ -388,6 +390,8 @@ export function ServerScreen({
             </View>
             {shownTab === 'screen' && mac && d ? (
               <MacScreenPart serverId={serverId} serverName={shown} detail={d} now={now} />
+            ) : shownTab === 'findmy' && mac && d ? (
+              <MacFindMyPart serverId={serverId} serverName={shown} detail={d} now={now} />
             ) : shownTab === 'backups' && incus ? (
               <IncusServerBackups
                 slug={slug}

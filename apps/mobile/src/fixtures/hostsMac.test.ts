@@ -1,9 +1,12 @@
-/** studio, the demo world's Mac (macos-servers.md MAC-34…MAC-36): its page, a picture of its screen, its password. */
-import { macScreenView, serverDashboardSeries } from '@whombat/client/hosts';
+/**
+ * studio, the demo world's Mac (macos-servers.md MAC-34…MAC-36): its page, a picture of its screen, its password, and
+ * its Find My with made-up people.
+ */
+import { FIND_MY_WORDS, findMyView, macScreenView, serverDashboardSeries } from '@whombat/client/hosts';
 import { api } from '@whombat/core';
 import { at } from '@whombat/fixtures';
 import { createFixtureFetch } from '@whombat/fixtures/fetch';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { demoClient } from '../demo/session';
 import { createClock } from '../lib/time';
 import { createFixtureServer } from './fixture-server';
@@ -63,5 +66,49 @@ describe('studio, a Mac in the demo world', () => {
       body: { op: 'account.clear' },
     });
     expect(cleared.status === 'ok' && cleared.data.status?.account).toBeNull();
+  });
+});
+
+describe('studio’s Find My in the demo world', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reads for a moment on the demo clock, then shows made-up people, their map and an exact picture', async () => {
+    // Only the clock is fake: the demo world's runs on Date.now.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const client = setup();
+    const params = { burrow, serverId };
+    const later = () => vi.setSystemTime(Date.now() + 3000);
+
+    const started = await client.request(api.hosts.findMyRefresh, { params, body: {} });
+    if (started.status !== 'ok') throw new Error(started.status);
+    expect(started.data.reading).toBe(true);
+    later();
+    const read = await client.request(api.hosts.findMy, { params });
+    if (read.status !== 'ok') throw new Error(read.status);
+    expect(read.data.people.length).toBeGreaterThanOrEqual(3);
+    const view = findMyView(read.data, {
+      name: serverId,
+      now: Date.parse(read.data.readAt ?? ''),
+      screen: { can: true, why: null },
+    });
+    expect(view.people.some((p) => p.line === FIND_MY_WORDS.noPlace)).toBe(true);
+
+    const map = await client.request(api.hosts.findMyMap, {
+      params,
+      query: { w: 384, h: 256, dark: 'true' },
+    });
+    if (map.status !== 'ok') throw new Error(map.status);
+    expect(map.data.points.length).toBe(view.people.filter((p) => p.located).length);
+    expect(map.data.imageB64.length).toBeGreaterThan(100);
+
+    const person = view.people.find((p) => p.placed)?.id ?? '';
+    const exact = await client.request(api.hosts.findMyExact, { params, body: { person } });
+    expect(exact.status === 'ok' && exact.data.exact?.state).toBe('taking');
+    later();
+    const picture = await client.request(api.hosts.findMyPicture, { params, query: { person } });
+    if (picture.status !== 'ok') throw new Error(picture.status);
+    expect(picture.data).toMatchObject({ person, format: 'png' });
   });
 });
