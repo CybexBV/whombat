@@ -12,6 +12,7 @@ import {
   CONNECTOR_BINARY_MAX_BYTES,
   canonicalJson,
   catalogEntry,
+  cutsOffReason,
   type JsonObject,
   lookOnlyText,
   ProposeConnectionActionsInput,
@@ -19,11 +20,12 @@ import {
   REQUEST_TOOL_NAME,
   requestAllowed,
   resolveRequestPrefixes,
+  sensitiveReason,
+  toolAlwaysAsks,
 } from '@whombat/core';
 import { and, asc, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
-import { callWordsFor } from '../connections/adapters/index';
 import { callTier, needsReauthText } from '../connections/call';
 import { connectionCallAccess } from '../connections/call-access';
 import { isCallableEntry } from '../connections/callable';
@@ -50,13 +52,20 @@ import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
+import {
+  accessWord,
+  type DescribedAction,
+  deletingWord,
+  describePlannedAction,
+  type ProposalCard,
+  proposalCard,
+  settledRequestArgs,
+  TOO_MUCH_FOR_ONE_CARD,
+} from './proposed-card';
 import { type AutomationRunRow, type AutomationStepRow, publishRun } from './store';
 
 /** Built-in or powerful host-control catalog entries that outsiders' runs may never propose actions on. */
 const DISALLOWED_PROPOSE_CATALOG_IDS: ReadonlySet<string> = new Set(['whombat_servers', 't3code']);
-
-/** Tool or socket method names that delete resources (never proposable from an outsiders' run). */
-const DELETE_TOOL_NAME = /(?:^|[._-])delete(?:$|[._-])/i;
 
 /**
  * Whether an outsiders' run may propose actions on this catalog entry: never the box's own powerful connections
@@ -68,9 +77,19 @@ export function isProposableEntry(entry: CatalogEntry): boolean {
   );
 }
 
+/** “Deletes something” as the end of a sentence: “… because it deletes something.” */
+function becauseIt(reason: string): string {
+  if (reason === 'Always asks') return 'always needs your yes';
+  return reason.charAt(0).toLowerCase() + reason.slice(1).replace(/[.\s]+$/, '');
+}
+
 /**
- * Plain-English refusal when a proposed call falls outside the narrow surface allowed for outsiders' runs (no
- * disallowed connections, no DELETE, no read-only GET/HEAD or read-only tools whose results are thrown away).
+ * Plain-English refusal when a proposed call falls outside the narrow surface allowed for outsiders' runs: a disallowed
+ * connection; a read (`GET`/`HEAD`, or any call that only reads), whose results are thrown away; a `DELETE` request;
+ * anything that deletes, removes or empties (`deletingWord`: the tool's name, a path segment, what a `method`- or
+ * `action`-like value or a delete switch says, anywhere in the arguments); changing who can get in or what they may see
+ * (`accessWord`: users, permissions, sharing, passwords, keys); and anything the connection always asks the
+ * person about (its `sensitive` rules) or that can cut the person off (its `cutsOff` rules: DNS, DHCP, firewalls).
  */
 export function proposeCallRefusal(
   entry: CatalogEntry,
@@ -81,9 +100,6 @@ export function proposeCallRefusal(
   if (!isProposableEntry(entry)) {
     return `Actions on ${serviceName} can’t be proposed from an outsiders’ run.`;
   }
-  if (DELETE_TOOL_NAME.test(tool.name)) {
-    return `${serviceName}: ${tool.name} can’t be proposed from an outsiders’ run.`;
-  }
   if (tool.origin === 'request') {
     const method = String(args.method ?? '').toUpperCase();
     if (method === 'DELETE') {
@@ -93,11 +109,17 @@ export function proposeCallRefusal(
       return `${serviceName}: read-only ${method} requests can’t be proposed because their results aren’t returned.`;
     }
   }
-  if (tool.origin === 'socket') {
-    const method = String(args.method ?? '');
-    if (DELETE_TOOL_NAME.test(method)) {
-      return `${serviceName}: ${method} can’t be proposed from an outsiders’ run.`;
-    }
+  const deleting = deletingWord(tool, args);
+  if (deleting) {
+    return `${serviceName}: an outsiders’ run can’t propose deleting, removing or emptying anything, and this call says “${deleting}”.`;
+  }
+  const access = accessWord(tool, args);
+  if (access) {
+    return `${serviceName}: an outsiders’ run can’t propose changing who can get in or what they may see, and this call says “${access}”.`;
+  }
+  const reason = sensitiveReason(entry, tool.name, args) ?? cutsOffReason(entry, tool.name, args);
+  if (reason) {
+    return `${serviceName}: an outsiders’ run can’t propose this, because it ${becauseIt(reason)}.`;
   }
   if (connectionCallAccess(entry, tool, args) === 'read') {
     return `${serviceName}: read-only calls can’t be proposed because their results aren’t returned.`;
@@ -105,13 +127,33 @@ export function proposeCallRefusal(
   return null;
 }
 
-/** At most `max` characters, cut at a word boundary when possible. */
-export function clipTitle(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, max - 1);
-  const space = /\s/.test(text.charAt(max - 1)) ? cut.length : cut.search(/\s\S*$/);
-  const kept = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/, '');
-  return `${kept}…`;
+/**
+ * A proposed `request` call's arguments as Whombat decides on, shows and sends them (method and path canonical, a body
+ * written as JSON text read as that JSON, a `base` that is one of the connection's), or why they can't be used.
+ */
+export function proposedRequestArgs(
+  entry: CatalogEntry,
+  raw: Readonly<Record<string, unknown>>,
+  serviceName: string,
+): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
+  let args: Record<string, unknown>;
+  try {
+    args = settledRequestArgs(normaliseRequestArgs(raw));
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `${serviceName}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
+    };
+  }
+  const base = args.base;
+  if (
+    base !== undefined &&
+    base !== null &&
+    base !== '' &&
+    !(typeof base === 'string' && Object.hasOwn(entry.request?.bases ?? {}, base))
+  )
+    return { ok: false, reason: `${serviceName}: base: not one of this connection’s bases.` };
+  return { ok: true, args };
 }
 
 /** Collapses line breaks and repeated whitespace so untrusted text stays on one line. */
@@ -120,123 +162,6 @@ function singleLine(text: string): string {
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-const SECRET_ARG_KEY =
-  /(?:secret|password|passwd|token|api_?key|auth|cookie|credential|private_?key|bearer)/i;
-const NOTABLE_ARG_PRIORITY: readonly RegExp[] = [
-  // Destination, target, recipient, contact, folder, path.
-  /(?:^|_)(?:to|dest(?:ination)?|target|recipient|recipients|email|mail|payee|beneficiary|iban|account|contact|customer|client|folder|dir(?:ectory)?|path|file_?name|channel|room|project|board|list|calendar|album|bucket|repo(?:sitory)?|url)(?:$|_)/i,
-  // Amount, price, total, currency, quantity.
-  /(?:^|_)(?:amount|price|total|subtotal|sum|currency|cost|fee|payment|balance|qty|quantity|tax|vat)(?:$|_)/i,
-  // Reference, invoice, title, subject, name, date.
-  /(?:^|_)(?:reference|ref|invoice|title|subject|name|label|description|date|due|status|state|action|content)(?:$|_)/i,
-];
-
-interface CollectedArg {
-  priority: number;
-  key: string;
-  value: string;
-}
-
-function collectNotableArgs(value: unknown, out: CollectedArg[], seen: Set<string>, depth = 0): void {
-  if (depth > 4 || out.length >= 12 || value == null) return;
-  if (Array.isArray(value)) {
-    for (const item of value.slice(0, 3)) {
-      collectNotableArgs(item, out, seen, depth + 1);
-    }
-    return;
-  }
-  if (typeof value !== 'object') return;
-  for (const [rawKey, v] of Object.entries(value as Record<string, unknown>)) {
-    if (out.length >= 12) break;
-    if (SECRET_ARG_KEY.test(rawKey)) continue;
-    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
-      const text = singleLine(String(v));
-      if (!text) continue;
-      const priority = NOTABLE_ARG_PRIORITY.findIndex((re) => re.test(rawKey));
-      if (priority === -1) continue;
-      const key = rawKey.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ priority, key: rawKey, value: clipTitle(text, 48) });
-    } else if (v && typeof v === 'object') {
-      collectNotableArgs(v, out, seen, depth + 1);
-    }
-  }
-}
-
-/**
- * Extracts up to 4 notable argument values (destination, recipient, amount, reference/title), clipped and single-line,
- * so the approval card always reflects what the validated call actually sends.
- */
-function notableArgsSummary(
-  toolOrigin: ConnectionToolRow['origin'],
-  args: Readonly<Record<string, unknown>>,
-): string {
-  const collected: CollectedArg[] = [];
-  const seen = new Set<string>();
-  if (toolOrigin === 'request') {
-    const upload = args.upload;
-    if (upload && typeof upload === 'object' && !Array.isArray(upload)) {
-      collectNotableArgs((upload as Record<string, unknown>).fields, collected, seen);
-    }
-    collectNotableArgs(args.body, collected, seen);
-    collectNotableArgs(args.query, collected, seen);
-  } else if (toolOrigin === 'socket') {
-    collectNotableArgs(args.params, collected, seen);
-  } else {
-    collectNotableArgs(args, collected, seen);
-  }
-  collected.sort((a, b) => a.priority - b.priority);
-  const picked = collected.slice(0, 4);
-  if (!picked.length) return '';
-  return ` (${picked.map((p) => `${p.key}: ${p.value}`).join(', ')})`;
-}
-
-/**
- * Builds the server-side plain-English description of one validated connection action: connection name, server-defined
- * call words where available (`callWordsFor`), otherwise HTTP method & path (or socket method / tool name), uploaded
- * file name, and notable argument values. Never relies on the agent-written summary.
- */
-export function describePlannedAction(input: {
-  catalogId: string;
-  label: string;
-  tool: Pick<ConnectionToolRow, 'name' | 'origin'>;
-  args: Readonly<Record<string, unknown>>;
-  uploadFileName?: string | null;
-}): string {
-  const label = singleLine(input.label) || 'Service';
-  const serverWords = callWordsFor(input.catalogId)?.ask(input.tool.name, input.args);
-  if (serverWords) {
-    return clipTitle(`${label}: ${singleLine(serverWords)}`, 220);
-  }
-  const uploadPart = input.uploadFileName
-    ? ` uploading “${clipTitle(singleLine(input.uploadFileName), 80)}”`
-    : '';
-  const argPart = notableArgsSummary(input.tool.origin, input.args);
-  if (input.tool.origin === 'request') {
-    const method = singleLine(String(input.args.method ?? '')).toUpperCase() || 'POST';
-    const path = clipTitle(singleLine(String(input.args.path ?? '/')), 100);
-    return clipTitle(`${label}: ${method} ${path}${uploadPart}${argPart}`, 240);
-  }
-  if (input.tool.origin === 'socket') {
-    const method = clipTitle(singleLine(String(input.args.method ?? input.tool.name)), 100);
-    return clipTitle(`${label}: ${method}${argPart}`, 240);
-  }
-  return clipTitle(`${label}: ${input.tool.name}${uploadPart}${argPart}`, 240);
-}
-
-/** Formats one action line for an approval card detail block: Whombat's description first, agent summary as a secondary note. */
-export function actionDetailBlock(action: { description: string; summary: string }): string {
-  const note = singleLine(action.summary);
-  return note ? `${action.description}\nAgent note: ${clipTitle(note, 140)}` : action.description;
-}
-
-function joinList(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? '';
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
 /** What an agent hears when it calls `propose_connection_actions` outside a proposing turn. */
@@ -314,6 +239,7 @@ export const proposeConnectionActions = defineCommand({
         .from(catalogConnections)
         .where(eq(catalogConnections.burrowId, ctx.burrow.id));
       const byHandle = new Map(allConnections.map((c) => [c.handle.toLowerCase(), c]));
+      const described: (DescribedAction & { label: string })[] = [];
       for (const item of input.actions) {
         const handle = item.connection.trim().toLowerCase();
         const conn = byHandle.get(handle);
@@ -338,14 +264,11 @@ export const proposeConnectionActions = defineCommand({
           throw forbidden(`${tool.name} is turned off for ${item.connection}.`);
         }
         let args: Record<string, unknown> = { ...item.arguments };
+        let uploadFileName: string | null = null;
         if (tool.origin === 'request') {
-          try {
-            args = normaliseRequestArgs(args);
-          } catch (err) {
-            throw badRequest(
-              `${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
-            );
-          }
+          const settled = proposedRequestArgs(entry, args, item.connection);
+          if (!settled.ok) throw badRequest(settled.reason);
+          args = settled.args;
         } else if (tool.origin === 'socket') {
           try {
             args = normaliseSocketArgs(entry, args, item.connection);
@@ -357,7 +280,30 @@ export const proposeConnectionActions = defineCommand({
         }
         const refused = proposeCallRefusal(entry, tool, args, item.connection);
         if (refused) throw forbidden(refused);
+        const upload = tool.origin === 'request' ? parseRequestUpload(args.upload) : null;
+        if (upload) {
+          const att = await threadAttachment(tx, turn.run, upload.attachmentId);
+          if (!att?.blobKey)
+            throw forbidden(
+              `That attachment isn’t part of this email’s thread, so it can’t be uploaded to ${item.connection}.`,
+            );
+          uploadFileName = att.name;
+        }
+        described.push({
+          ...describePlannedAction({
+            catalogId: conn.catalogId,
+            label: conn.label,
+            tool,
+            args,
+            uploadFileName,
+            summary: item.summary,
+          }),
+          label: conn.label,
+        });
       }
+      // The agent hears now, while it can still propose less, when the card couldn't show it all.
+      const card = proposalCard(described);
+      if (!card.ok) throw badRequest(card.reason);
     }
     await tx
       .update(automationRunSteps)
@@ -415,7 +361,14 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
       .where(eq(connectionTools.connectionId, row.id))
       .orderBy(asc(connectionTools.name));
     const enabled = tools
-      .filter((t) => t.tier !== 'off' && t.access !== 'read' && !DELETE_TOOL_NAME.test(t.name))
+      .filter(
+        (t) =>
+          t.tier !== 'off' &&
+          t.access !== 'read' &&
+          !deletingWord({ name: t.name, origin: 'adapter' }, {}) &&
+          !accessWord({ name: t.name, origin: 'adapter' }, {}) &&
+          !toolAlwaysAsks(entry, t.name),
+      )
       .map((t) => t.name);
     if (!enabled.length) continue;
     const prefixes = entry.request ? resolveRequestPrefixes(entry, row.fields) : [];
@@ -424,7 +377,7 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
     lines.push(`- ${row.handle}: tools [${enabled.join(', ')}]${prefixPart}${guidePart}`);
   }
   if (!lines.length) return '';
-  return `Connections you can propose write actions for (no DELETE or read-only calls; each waits for the person’s approval card):\n${lines.join('\n')}`.slice(
+  return `Connections you can propose write actions for (nothing that deletes, removes or empties, nothing about users, permissions, sharing or passwords, nothing the person is always asked about first, no changes to DNS, DHCP, firewalls or networks, no read-only calls; each waits for the person’s approval card, which shows every argument, so keep them few and short):\n${lines.join('\n')}`.slice(
     0,
     2500,
   );
@@ -463,8 +416,12 @@ export interface PlannedConnectionAction {
   label: string;
   tool: string;
   toolHash: string;
-  /** Server-built plain-English description of the real validated call. */
+  /** Whombat's own words for the call (“Upload a document to Paperless-ngx”), never the agent's. */
   description: string;
+  /** What the thread says once it ran (“uploaded a document to Paperless-ngx”). */
+  done: string;
+  /** Every line the card shows for it: the words, the method and path or tool, every argument, the agent's note. */
+  lines: string[];
   /** Agent-written summary, shown only as a secondary note. */
   summary: string;
   args: Record<string, unknown>;
@@ -476,6 +433,8 @@ export type ConnectionActionsPlan =
       actions: PlannedConnectionAction[];
       actionsHash: string;
       proposal: { title: string; details: string };
+      /** The approval card: everything it shows (empty when nothing was proposed). */
+      card: Extract<ProposalCard, { ok: true }> | null;
     }
   | { ok: false; fatal: boolean; reason: string };
 
@@ -494,7 +453,7 @@ export async function planConnectionActions(
   const fromRow = steps.find((s) => s.stepId === step.from);
   const proposed = reportedProposedActions((fromRow?.output as JsonObject | undefined)?.proposedActions);
   if (proposed.length === 0) {
-    return { ok: true, actions: [], actionsHash: '', proposal: { title: '', details: '' } };
+    return { ok: true, actions: [], actionsHash: '', proposal: { title: '', details: '' }, card: null };
   }
   const agent = await automationAgent(db, run.burrowId);
   if (!agent) return { ok: false, fatal: true, reason: 'The burrow’s agent isn’t available.' };
@@ -534,15 +493,9 @@ export async function planConnectionActions(
     let args: Record<string, unknown> = { ...item.arguments };
     let uploadFileName: string | null = null;
     if (tool.origin === 'request') {
-      try {
-        args = normaliseRequestArgs(args);
-      } catch (err) {
-        return {
-          ok: false,
-          fatal: false,
-          reason: `${row.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
-        };
-      }
+      const settled = proposedRequestArgs(entry, args, row.label);
+      if (!settled.ok) return { ok: false, fatal: false, reason: settled.reason };
+      args = settled.args;
       const refused = proposeCallRefusal(entry, tool, args, row.label);
       if (refused) return { ok: false, fatal: false, reason: refused };
       const method = String(args.method);
@@ -606,12 +559,14 @@ export async function planConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, row, tool));
     if (outside) return { ok: false, fatal: false, reason: outside };
 
-    const description = describePlannedAction({
+    const summary = singleLine(item.summary);
+    const described = describePlannedAction({
       catalogId: row.catalogId,
       label: row.label,
       tool,
       args,
       uploadFileName,
+      summary,
     });
 
     planned.push({
@@ -620,40 +575,26 @@ export async function planConnectionActions(
       label: row.label,
       tool: tool.name,
       toolHash: tool.hash,
-      description,
-      summary: singleLine(item.summary),
+      description: described.ask,
+      done: described.done,
+      lines: described.lines,
+      summary,
       args,
     });
+    if (described.overflow) return { ok: false, fatal: false, reason: TOO_MUCH_FOR_ONE_CARD };
   }
 
+  // The card shows every action whole, or the batch is refused: the person never approves something partly shown.
+  const card = proposalCard(planned.map((a) => ({ ...a, ask: a.description, overflow: false })));
+  if (!card.ok) return { ok: false, fatal: false, reason: card.reason };
   const actionsHash = hashPlannedActions(planned);
-
-  const uniqueLabels = [...new Set(planned.map((a) => singleLine(a.label)).filter(Boolean))];
-  const proposal =
-    planned.length === 1 && planned[0]
-      ? {
-          title: clipTitle(planned[0].description, 160),
-          details: actionDetailBlock(planned[0]).slice(0, 2000),
-        }
-      : {
-          title: clipTitle(`Run ${planned.length} actions on ${joinList(uniqueLabels)}`, 160),
-          details: planned
-            .map((a) => actionDetailBlock(a))
-            .join('\n\n')
-            .slice(0, 2000),
-        };
-
-  return { ok: true, actions: planned, actionsHash, proposal };
-}
-
-/** Short plain-English confirmation posted in the run thread after approved actions finish. */
-export function actionsDoneLine(
-  actions: readonly { label: string; description?: string; summary: string }[],
-): string {
-  if (actions.length === 0) return 'Done.';
-  const textOf = (a: { description?: string; summary: string }) => a.description || a.summary;
-  if (actions.length === 1 && actions[0]) return `Done: ${textOf(actions[0])}.`;
-  return `Done: ${actions.map(textOf).join('; ')}.`.slice(0, 1000);
+  return {
+    ok: true,
+    actions: planned,
+    actionsHash,
+    proposal: { title: card.title, details: card.details },
+    card,
+  };
 }
 
 /** Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card. */

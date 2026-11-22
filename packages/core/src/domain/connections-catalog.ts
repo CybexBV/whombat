@@ -1627,6 +1627,18 @@ export function sensitiveReason(
   return rules.find((r) => ruleMatches(r, tool, args))?.reason ?? null;
 }
 
+/**
+ * Why a call can cut the person off (the entry's `cutsOff` rules: DNS, DHCP, firewalls, networks), or null. Only an
+ * outsiders' run is refused these; the person's own calls aren't asked about them.
+ */
+export function cutsOffReason(
+  entry: Pick<CatalogEntry, 'cutsOff'>,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  return entry.cutsOff.find((r) => ruleMatches(r, tool, args))?.reason ?? null;
+}
+
 /** Whether a call always asks a person (CX-31). */
 export function isSensitiveCall(
   entry: CatalogEntry,

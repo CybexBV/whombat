@@ -80,6 +80,7 @@ export {
   checkoutWords,
   clipWords,
   leadingQuestion,
+  ownQuestion,
   requestLine,
   stepInstructions,
   whatHappensOf,

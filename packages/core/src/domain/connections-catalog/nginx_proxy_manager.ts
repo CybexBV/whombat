@@ -82,6 +82,14 @@ export const entry = {
       reason: 'Adds a user, or changes users, passwords, permissions or two-step sign-in',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT'],
+      path: '^/api/nginx/(proxy-hosts|redirection-hosts|dead-hosts|streams|access-lists)(/|$)',
+      reason: 'Changes where a site points or who may reach it',
+    },
+  ],
   docsUrl: 'https://nginxproxymanager.com/',
   tokenUrl: '{url}/users',
   handle: 'npm',

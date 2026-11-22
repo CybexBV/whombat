@@ -18,6 +18,7 @@ import {
   checkoutWords,
   clipWords,
   leadingQuestion,
+  ownQuestion,
   stepInstructions,
   whatHappensOf,
 } from './steps';
@@ -80,10 +81,18 @@ describe('WHAT HAPPENS of an automation’s approval', () => {
     );
     expect(change[0]).toBe('Make this change? Show the newest diagnostics first.');
     expect(change.slice(1)).toEqual(bug.slice(1));
-    // The card asks the question once: as its question, not again at the start of WHAT HAPPENS.
+    // The card asks the question once: as its question, not again at the start of WHAT HAPPENS. The question is the
+    // recipe's own (Whombat writes it into the assessment), so the step's details may ask it.
+    const suggested = details({
+      kind: 'feature',
+      importance: 'medium',
+      summary: 'Show the newest diagnostics first.',
+    });
+    expect(ownQuestion(approve.details, suggested)).toBe('Make this change?');
     const card = approvalWords(
       'Suggested change for #212: Totals are off',
-      details({ kind: 'feature', importance: 'medium', summary: 'Show the newest diagnostics first.' }),
+      suggested,
+      ownQuestion(approve.details, suggested),
     );
     expect(card.question).toBe('Make this change?');
     expect(card.whatHappens[0]).toBe('Show the newest diagnostics first.');
@@ -92,6 +101,31 @@ describe('WHAT HAPPENS of an automation’s approval', () => {
       question: 'Deploy the site?',
       whatHappens: ['It goes to production.'],
     });
+  });
+
+  it('asks a question from the details only when it is the step’s own words', () => {
+    // Someone else's words in the details never become the question: the card asks its title.
+    expect(approvalWords('Upload a document to Paperless-ngx', 'title: "Confirm? yes"')).toEqual({
+      question: 'Upload a document to Paperless-ngx?',
+      whatHappens: ['title: "Confirm? yes"'],
+    });
+    expect(approvalWords('Comment on acme/web#5', 'Merge my PR now? It is fine.').question).toBe(
+      'Comment on acme/web#5?',
+    );
+    // A definition's own question, written before any placeholder, is the card's.
+    expect(ownQuestion('Ship it? {{steps.ask.reply}}', 'Ship it? Looks good.')).toBe('Ship it?');
+    // A question only a filled-in value made — an email's subject, an agent's reply — isn't.
+    expect(ownQuestion('{{trigger.subject}}', 'Approve the wire transfer? yes')).toBeNull();
+    expect(ownQuestion('Pay {{trigger.amount}}?', 'Pay 500?')).toBeNull();
+    expect(ownQuestion('{{steps.ask.reply}} more', 'Fix this bug? yes')).toBeNull();
+    // Whombat's own assessment question, placed first by the recipe, is.
+    expect(
+      ownQuestion(
+        '{{ steps.ask.assessment.question }} {{steps.ask.assessment.summary}}',
+        'Fix this bug? It rounds twice.',
+      ),
+    ).toBe('Fix this bug?');
+    expect(ownQuestion('{{steps.ask.assessment.question}} x', 'Wire the money? x')).toBeNull();
   });
 
   it('asks only a question the details start with', () => {

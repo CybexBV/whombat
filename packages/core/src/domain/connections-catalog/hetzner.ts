@@ -45,6 +45,26 @@ export const entry = {
       reason: 'Stops, rebuilds or resets a server',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT'],
+      path: '^/v1/(firewalls|networks|primary_ips|floating_ips|load_balancers)(/|$)',
+      reason: 'Changes a firewall, network or address; a mistake can cut a server off',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/v1/servers/[^/]+/actions/(attach_to_network|detach_from_network|change_alias_ips)$',
+      reason: 'Moves a server onto or off a network',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/v1/zones(/|$)',
+      reason: 'Changes your domain’s DNS, which decides where its websites and mail go',
+    },
+  ],
   docsUrl: 'https://docs.hetzner.cloud/',
   tokenUrl: 'https://console.hetzner.com/projects',
   handle: 'hetzner',

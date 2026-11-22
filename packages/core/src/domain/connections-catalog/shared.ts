@@ -1077,6 +1077,12 @@ export const CatalogEntry = z.object({
   /** Notes for agents (≤ 1 500 characters): what the API is and how to use it. */
   guide: z.string().max(CONNECTION_GUIDE_MAX),
   sensitive: z.array(SensitiveRule).max(20),
+  /**
+   * Changes where one wrong value can cut the person off — DNS, DHCP, firewalls, networks, where a site points — in the
+   * same shape as `sensitive`. An outsiders' run (an automation started by an email) can never propose them; the
+   * person's own calls run at the tool's setting as before.
+   */
+  cutsOff: z.array(SensitiveRule).max(20).default([]),
   docsUrl: z.string().url().nullable(),
   /** Where a person makes a token (a template over the fields for self-hosted services), or null. */
   tokenUrl: z.string().max(300).nullable(),

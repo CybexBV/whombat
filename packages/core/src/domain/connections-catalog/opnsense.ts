@@ -128,6 +128,26 @@ export const entry = {
       reason: 'Resets or restores the firewall’s configuration',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/(unbound|dnsmasq|kea|dhcrelay|dhcpv4|dhcpv6)/[^/]+/(add|set|toggle)[a-z_]*(/|$)',
+      reason: 'Changes DNS or DHCP, which every device on the network uses',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/interfaces/[^/]+/(add|set|toggle|reconfigure)[a-z_]*(/|$)',
+      reason: 'Changes a network interface; a mistake can cut the network off',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/(core/service/(stop|restart)|(unbound|dnsmasq|kea)/service/(stop|restart|reconfigure))(/|$)',
+      reason: 'Stops or restarts a service; DNS or DHCP going down cuts the network off',
+    },
+  ],
   docsUrl: 'https://docs.opnsense.org/development/api.html',
   tokenUrl: null,
   handle: 'opnsense',

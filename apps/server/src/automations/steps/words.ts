@@ -1,4 +1,4 @@
-import { type AutomationDefinition, renderTemplateWithin } from '@whombat/core';
+import { type AutomationDefinition, assessmentQuestion, renderTemplateWithin } from '@whombat/core';
 import { asQuestion } from '../../approvals/create';
 import { ownPullRequestLine, ownPullRequestStep, type RunWorkspace } from '../workspace';
 import { definitionStep } from './scope';
@@ -59,15 +59,41 @@ export function leadingQuestion(details: string): string | null {
   return asked || null;
 }
 
+/** The questions Whombat itself writes into an assessment (“Fix this bug?”, “Make this change?”). */
+const ASSESSMENT_QUESTIONS: ReadonlySet<string> = new Set(
+  (['bug', 'feature'] as const).map((kind) => assessmentQuestion({ kind })),
+);
+const ASSESSMENT_QUESTION_FIRST = /^\{\{\s*steps\.[A-Za-z0-9_]+\.assessment\.question\s*\}\}/;
+
 /**
- * The question and WHAT HAPPENS of an automation's approval card: the question the details start with (else its title
- * with a question mark), and the details' items without that question, so the card doesn't ask it twice.
+ * The question a `request_approval` step's rendered details start with when it is the step's own words: written in its
+ * details before any placeholder (“Ship it? {{…}}”), or the assessment's question Whombat writes, placed first
+ * (`{{steps.ask.assessment.question}} …`). A question that only a filled-in value made — an email's subject, an agent's
+ * reply, a customer's report — is never the card's question: null, and the card asks its title.
  */
-export function approvalWords(title: string, details: string): { question: string; whatHappens: string[] } {
-  const asked = leadingQuestion(details);
+export function ownQuestion(template: string, rendered: string): string | null {
+  const asked = leadingQuestion(rendered);
+  if (!asked) return null;
+  const written = template.trimStart();
+  const placeholder = written.indexOf('{{');
+  if ((placeholder === -1 ? written : written.slice(0, placeholder)).startsWith(asked)) return asked;
+  return ASSESSMENT_QUESTION_FIRST.test(written) && ASSESSMENT_QUESTIONS.has(asked) ? asked : null;
+}
+
+/**
+ * The question and WHAT HAPPENS of an automation's approval card. `asked` is the question its details start with when
+ * the caller knows it is the step's own words (`ownQuestion`); without one the card asks its title with a question
+ * mark, whatever the details start with. The question isn't repeated at the start of WHAT HAPPENS.
+ */
+export function approvalWords(
+  title: string,
+  details: string,
+  asked: string | null = null,
+): { question: string; whatHappens: string[] } {
+  const own = asked && details.trimStart().startsWith(asked) ? asked : null;
   return {
     question: asked ?? asQuestion(title.slice(0, 198)),
-    whatHappens: whatHappensOf(asked ? details.trimStart().slice(asked.length) : details),
+    whatHappens: whatHappensOf(own ? details.trimStart().slice(own.length) : details),
   };
 }
 

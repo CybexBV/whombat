@@ -15,7 +15,7 @@ import { callArgsAad, callTier, executeConnectionCall, needsReauthText } from '.
 import { isCallableEntry } from '../../connections/callable';
 import { keyTierOf } from '../../connections/context';
 import { limitsProblem } from '../../connections/limits';
-import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../../connections/request';
+import { ConnectionArgumentError, parseRequestUpload } from '../../connections/request';
 import { normaliseSocketArgs } from '../../connections/socket/call';
 import { catalogConnections, connectionTools } from '../../db/schema/index';
 import { limitWordsFor } from '../../devices/store';
@@ -23,15 +23,17 @@ import { thePerson } from '../../domain/the-person';
 import { readAll } from '../../files/previews';
 import { callServerOf } from '../../hosts/asks';
 import { loadGrants } from '../../read/principals';
+import { actionWords } from '../action-words';
 import { automationAgent, publisherCheck } from '../authority';
 import {
-  actionsDoneLine,
   approvedActionsRequest,
   hashPlannedActions,
   isProposableEntry,
   proposeCallRefusal,
+  proposedRequestArgs,
   threadAttachment,
 } from '../proposed-actions';
+import { actionsDoneLine } from '../proposed-card';
 import { stepRoomsCheck } from '../steps';
 import type { AutomationStepRow } from '../store';
 import type { LeasedRun } from './step-ops';
@@ -97,7 +99,7 @@ export async function runConnectionActions(
   const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, services.files.maxBytes);
 
   // Open and re-validate every action before sending any network request.
-  const ready: { action: PreparedAction; args: Record<string, unknown> }[] = [];
+  const ready: { action: PreparedAction; args: Record<string, unknown>; done: string; label: string }[] = [];
   for (const action of actions) {
     const [conn] = await db
       .select()
@@ -127,13 +129,9 @@ export async function runConnectionActions(
       return void (await refuse('The approved action details could not be opened.'));
     }
     if (tool.origin === 'request') {
-      try {
-        args = normaliseRequestArgs(args);
-      } catch (err) {
-        return void (await refuse(
-          `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
-        ));
-      }
+      const settled = proposedRequestArgs(entry, args, conn.label);
+      if (!settled.ok) return void (await refuse(settled.reason));
+      args = settled.args;
       const refused = proposeCallRefusal(entry, tool, args, conn.label);
       if (refused) return void (await refuse(refused));
       if (!requestAllowed(entry, conn.fields, String(args.method), String(args.path)))
@@ -174,7 +172,9 @@ export async function runConnectionActions(
       return void (await refuse(`${agent.name} isn’t allowed to use ${conn.label}.`));
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, conn, tool));
     if (outside) return void (await refuse(outside));
-    ready.push({ action, args });
+    // What the thread says once it ran, in Whombat's words for the call as it runs.
+    const { done } = actionWords({ catalogId: conn.catalogId, label: conn.label, tool: tool.name, args });
+    ready.push({ action, args, done, label: conn.label });
   }
 
   // Re-verify the exact batch hash against what was approved before sending any network call.
@@ -266,13 +266,7 @@ export async function runConnectionActions(
     });
   }
 
-  const doneLine = actionsDoneLine(
-    ready.map((r) => ({
-      label: r.action.label,
-      description: r.action.description,
-      summary: r.action.summary,
-    })),
-  );
+  const doneLine = actionsDoneLine(ready.map((r) => ({ done: r.done, label: r.label })));
   await lease.commit({
     op: 'settle',
     idx: row.idx,

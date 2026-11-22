@@ -87,6 +87,20 @@ export const entry = {
       reason: 'Changes tailnet settings such as device approval and key expiry',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/api/v2/tailnet/[^/]+/dns/',
+      reason: 'Changes the tailnet’s DNS, which every device on it uses',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/v2/device/[^/]+/(expire|ip)/?$',
+      reason: 'Signs a device out of the tailnet or changes its address',
+    },
+  ],
   docsUrl: 'https://tailscale.com/api',
   tokenUrl: 'https://console.tailscale.com/admin/settings/trust-credentials',
   handle: 'tailscale',
