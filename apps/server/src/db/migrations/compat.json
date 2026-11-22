@@ -98,7 +98,7 @@
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",
-      "note": "The outsiders' mark in a column of its own (docs/decisions/outsiders-turns.md): a defaulted boolean messages.outsiders_run, set on messages that a tracker or mail run posted in its thread (what no person wrote while the run went on) and on any a newer build marked in provenance, whose provenance goes back to null; the search documents of marked messages and of approvals on their cards are deleted, and a tracker or mail run's document loses its error. provenance keeps only the two Feedback kinds, so the release before it sends every message to apps and backs it up as it always did, and reads and writes past the column."
+      "note": "The outsiders' mark in a column of its own (docs/decisions/outsiders-turns.md): a defaulted boolean messages.outsiders_run, set on messages that a tracker or mail run posted in its thread (what its own steps posted there while it ran, and its own turns for nobody while they ran) and on any a newer build marked in provenance, whose provenance goes back to null; the search documents of marked messages and of approvals on their cards are deleted, and a tracker or mail run's document loses its error. provenance keeps only the two Feedback kinds, so the release before it sends every message to apps and backs it up as it always did, and reads and writes past the column."
     }
   }
 }

@@ -1232,16 +1232,34 @@ describe('a stuck intake tells the person', () => {
       expect(await w.runs(msgWatcherId)).toHaveLength(0);
       expect(await w.runs(reactWatcherId)).toHaveLength(0);
 
-      // The migration that brought the column marks what tracker runs posted before it (what no person wrote in the
-      // run's thread while it went on), and moves a mark a newer build kept in `provenance` to the column.
+      // The migration that brought the column marks what tracker runs posted before it (what the run's own steps and
+      // turns posted in its thread while they ran), and moves a mark a newer build kept in `provenance` to the column.
       const ids = threadMsgs.map((m) => m.id);
       const root = threadMsgs.find((m) => !m.threadRootId) ?? threadMsgs[0];
       if (!root) throw new Error('no thread root');
+      // The run is still open at the upgrade, and the person asks their agent in its thread: their own turn's answer
+      // there is theirs, not the run's.
+      await w.services.db
+        .update(automationRuns)
+        .set({ status: 'running', finishedAt: null })
+        .where(eq(automationRuns.id, run?.id as string));
+      w.advance(60_000);
       const own = await w.ok(IDS.mara, sendMessage, {
         conversationId: root.conversationId,
         text: 'Thanks',
         threadRootId: root.id,
       });
+      const [runTurn] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+      const personTurn = await w.turn(runTurn?.agentId as string, root.conversationId, {
+        trigger: 'mention',
+        threadRootId: root.id,
+      });
+      await w.fakeAgentReply(personTurn, 'Your own answer about it.');
+      const [agentAnswer] = await w.services.db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.threadRootId, root.id), eq(messages.text, 'Your own answer about it.')));
+      expect(agentAnswer?.outsidersRun).toBe(false);
       await w.services.db.update(messages).set({ outsidersRun: false }).where(inArray(messages.id, ids));
       await w.services.db.execute(
         sql`update messages set provenance = 'outsiders_run' where id = ${root.id}`,
@@ -1257,13 +1275,14 @@ describe('a stuck intake tells the person', () => {
       );
       for (const statement of migration.split('--> statement-breakpoint').map((x) => x.trim()))
         if (statement && !statement.startsWith('ALTER')) await w.services.db.execute(sql.raw(statement));
+      const theirs = [own.id, agentAnswer?.id as string];
       const after = await w.services.db
         .select()
         .from(messages)
-        .where(inArray(messages.id, [...ids, own.id]));
-      expect(after).toHaveLength(ids.length + 1);
+        .where(inArray(messages.id, [...ids, ...theirs]));
+      expect(after).toHaveLength(ids.length + 2);
       for (const m of after) {
-        expect(m.outsidersRun, m.text).toBe(m.id !== own.id);
+        expect(m.outsidersRun, m.text).toBe(!theirs.includes(m.id));
         expect(m.provenance, m.text).toBeNull();
       }
       expect(
