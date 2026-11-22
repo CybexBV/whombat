@@ -508,12 +508,22 @@ max_depth, timeout_s}` → `DiskUsageResponse`, controlled by `Policy.Diagnose`
 (same read-only switch as `diagnose`). Runs only on request (never scheduled),
 one scan at a time (`busy` otherwise). Validates that `mount` is a local
 mounted filesystem (rejecting remote and virtual mounts, except Unraid's
-`/var/log` tmpfs). Before touching the mount, checks Unraid's
-`/var/local/emhttp/disks.ini`, cached standby state and `smartctl -i -n standby`
-/ `hdparm -C` for rotational backing disks; if any backing disk is spun down it
-returns `code: "spun_down"` with `skipped_spun_down` without doing I/O on the
-mount. Walks on a low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`;
-macOS `PRIO_DARWIN_BG`), stays strictly on the target filesystem (`st_dev` check
+`/var/log` tmpfs). Before touching the mount, resolves every backing physical
+disk from RAM/metadata (Unraid's `/var/local/emhttp/disks.ini`, macOS
+inventory/`diskutil` plist for APFS containers and slices, Linux
+`/sys/fs/btrfs/<fsid>/devices/`, `/sys/fs/bcachefs/<uuid>/dev-*/block`,
+`dm-*`/`md*` `slaves/`, ZFS pool inventory) and checks spin state for
+rotational physical disks via cached `Standby` state and
+`smartctl -i -n standby` / `hdparm -C` (hypervisor virtual guest disks such as
+`vd*`, `xvd*` and QEMU/VMware/VBOX/Hyper-V disks cannot spin down, while
+passed-through physical HDDs in a VM are still checked). If any backing disk
+is confirmed asleep it returns `code: "spun_down"` with `skipped_spun_down`; if
+the backing disks, disk type or spin state cannot be confirmed (for example
+LXC `loop*` mounts, ZFS without visible pool disks, missing Btrfs/bcachefs
+sysfs, ZFS zvols or union/pooled FUSE mounts such as mergerfs) it returns
+`code: "standby_unknown"` without doing I/O on the mount. Walks on a
+low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`; macOS
+`PRIO_DARWIN_BG`), stays strictly on the target filesystem (`st_dev` check
 plus skipping child mount points from mountinfo before `lstat`), never follows
 symlinks, deduplicates hardlinks, and bounds depth (default 6, max 12), entries
 (250,000) and time (default 20 s, max 45 s; sets `partial: true` when cut

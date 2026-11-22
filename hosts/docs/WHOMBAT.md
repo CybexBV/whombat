@@ -543,7 +543,10 @@ Each run is audited as `diagnose.ran` (check and arguments).
 An omitted `mount` chooses the fullest writable local filesystem (or `/`). When
 a backing disk is spun down, the agent skips it without touching the mount and
 the route answers 200 with `"ok": false, "code": "spun_down", "message",
-"skipped_spun_down"` without overwriting any previously stored measurement.
+"skipped_spun_down"`; when Whombat cannot confirm which backing disks a mount
+uses or whether a drive is asleep, the route answers 200 with `"ok": false,
+"code": "standby_unknown", "message"`. Neither overwrites a previously stored
+measurement.
 Successful runs are stored per `(server, mount)` in SQLite, broadcast as
 `server.disk_usage`, and included on `GET /servers/{id}` (`disk_usage`) while
 measured within 24 hours. Errors: 400 `invalid_value` / `invalid_request`, 403
