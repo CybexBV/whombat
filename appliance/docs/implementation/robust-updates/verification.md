@@ -71,7 +71,7 @@ Before UP-A1 gate 2 reproduced the incident's ordering bug: `runtime 0.1.0-19542
 
 - Step 1 (05:55–05:58 UTC): snapshot `pre-robust-updates-hosted-20260929`, dump `control-20260929T055529Z.dump`;
   `deploy.sh updates` (tufrepo from appliance `f33369c`), `control.env` + `TUF_PUBLIC_URL`, `OPERATOR_PANEL_URL`,
-  `OPERATOR_ALERT_EMAILS=john@whombat.com`; `deploy.sh control` (`fd51016`, migrations 0010…0012); `web`, `embed`,
+  `OPERATOR_ALERT_EMAILS=operator@example.com`; `deploy.sh control` (`fd51016`, migrations 0010…0012); `web`, `embed`,
   `admin` `app-v0.12.0` (build 12000, API level 22). Fleet check ok. Not needed: snapshot, dump.
 - Step 2 (05:58–06:19 UTC): snapshot `pre-robust-updates-release-20260929`, dump `control-20260929T055824Z.dump`;
   `release/ship promote-prod pve-20260928.7 --yes`; rollout `ro_d47c2yg4sbyf9s6bdx1csgw8kx` (default waves; 1–4 empty);

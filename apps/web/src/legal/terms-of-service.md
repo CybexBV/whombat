@@ -1,8 +1,9 @@
-> Version `2026-11-19`.
+> Version `2026-11-22`.
 
 # Whombat Terms of Service
 
-These terms are the agreement between **Cybex BV**, a company in the Netherlands (“Whombat”, “we”, “us”), and you,
+These terms are the agreement between **Cybex BV** (Cybex B.V., James Cookstraat 12G, 7825 AN Emmen, the
+Netherlands; KvK 77711815; VAT NL861104432B01; “Whombat”, “we”, “us”) and you,
 whether you use Whombat for yourself or for a business. They cover Whombat's services: the web app at
 app.whombat.com, the phone apps, and the cloud services that sign you in, connect your devices to your Whombat
 (Whombat Link), deliver updates and notifications, and handle payments (together, “the service”).
@@ -165,4 +166,5 @@ go to the court where you live. We'd like to hear from you first: most problems 
 
 ## 15. Contact
 
-Cybex BV, the Netherlands · [legal@whombat.com](mailto:legal@whombat.com)
+Cybex B.V. · James Cookstraat 12G · 7825 AN Emmen, the Netherlands · KvK 77711815 · VAT NL861104432B01 ·
+[legal@whombat.com](mailto:legal@whombat.com)

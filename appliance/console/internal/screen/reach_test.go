@@ -121,13 +121,12 @@ func TestRenderLinkStarting(t *testing.T) {
 		t.Errorf("claimed with a code:\n%s", f)
 	}
 	f = frame(mustParse(t, reachFile(`"state":"claimed",`+claimedURL, `{"link":{"state":"starting","waitingForAddress":true}}`)))
-	if strings.Contains(f, "Waiting for an address") || !strings.Contains(f, "This Whombat is set up.") {
+	if strings.Contains(f, "web address…") || !strings.Contains(f, "This Whombat is set up.") {
 		t.Errorf("claimed, waiting:\n%s", f)
 	}
 	// Waiting for an address, and no code (yet, or no longer).
 	f = Render(mustParse(t, reachFile(claimableFile, `{"link":{"state":"starting","waitingForAddress":true}}`)), now, 200, 0, nil)
-	if !strings.Contains(f, "Waiting for an address…") || !strings.Contains(f,
-		"Whombat Link is on. This Whombat gets its web address soon; this screen changes by itself.") || strings.Contains(f, "KXQM") {
+	if !strings.Contains(f, "web address…") || !strings.Contains(f, "asks again every minute by itself") || strings.Contains(f, "KXQM") {
 		t.Errorf("waiting:\n%s", f)
 	}
 	for name, l := range map[string]string{

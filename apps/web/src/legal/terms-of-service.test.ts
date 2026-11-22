@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEGAL_PAGES } from './LegalPage';
+import { LEGAL_PAGES, SELLER_LINE } from './LegalPage';
 import { parseLegal } from './legal';
 import text from './terms-of-service.md?raw';
 
@@ -13,10 +13,18 @@ describe('the Whombat Terms of Service (AP-166)', () => {
   });
 
   it('says you decide on remote help, and there is no standing vendor login (RH-11, AP-5679)', () => {
-    expect(text).toContain('Version `2026-11-19`');
+    expect(text).toContain('Version `2026-11-22`');
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\bteam\b/i);
     expect(text).toContain('There is no standing vendor login.');
     expect(text).toContain('(remote help)');
+  });
+
+  it('name the seller: address, KvK and VAT number', () => {
+    for (const fact of ['James Cookstraat 12G', '7825 AN Emmen', 'KvK 77711815', 'NL861104432B01']) {
+      expect(text).toContain(fact);
+      // Every legal page shows the same line under its text, the terms people accepted too.
+      expect(SELLER_LINE).toContain(fact);
+    }
   });
 
   it('are for people and businesses, with Whombat Link the only thing to pay for (ENV-13)', () => {

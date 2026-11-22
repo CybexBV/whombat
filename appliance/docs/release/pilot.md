@@ -177,7 +177,7 @@ Each item links the release checklist (`README.md`):
 - Runtime and provider Nix closures built and in a signed release tuple (pins placeholders).
 - Hardware selected and at least the pilot units run through `hardware-qualification.md` (X-04), or the customer
   explicitly accepts VM-only qualification in writing.
-- Commercial terms for any provider mode offered (X-01, X-02: only API keys and access tokens until then).
+- Provider terms for any provider mode offered: settled (X-02 resolved 2026-09-26; X-01, Anthropic's Commercial Terms, no longer a requirement, John 2026-11-22).
 - Qualified privacy/CRA review of this document and the support process (X-07).
 - Support contacts and the security intake named (`vulnerability-response.md` §9).
 - A signed pilot agreement covering the known limits above.

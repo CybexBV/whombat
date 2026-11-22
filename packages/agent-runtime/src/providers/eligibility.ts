@@ -43,7 +43,7 @@ export const ELIGIBILITY_REGISTER: readonly RegisterRow[] = [
     person: { PI: 'permitted', NA: 'permitted' },
     evidence: ['E-C1', 'E-C2'],
     conditions: ['The key is the person’s own: it serves their requests and automations.'],
-    open: 'Whombat must accept Anthropic’s Commercial Terms (external gate X-01, product owner).',
+    open: null,
   },
   {
     provider: 'claude',
@@ -72,7 +72,7 @@ export const ELIGIBILITY_REGISTER: readonly RegisterRow[] = [
       'The person signs in through Claude Code’s own flow; Whombat never reads, copies or stores the login (SUB-03).',
       'A subscription serves only the person: their own requests and their automations (SUB-04).',
     ],
-    open: 'Whombat must accept Anthropic’s Commercial Terms (external gate X-01, SUB-07).',
+    open: null,
   },
   {
     provider: 'codex',

@@ -63,6 +63,7 @@ A change in `appliance/` or `hosts/` also runs that folder's own tests (`applian
   request, a maintainer tells you what to change.
 - **Fixed hashes:** a change to a lockfile, a `go.mod` or a `go.sum` needs the hash of the NixOS build's download
   refreshed (`appliance/nix/fixed-hashes.json`). That needs Nix: a maintainer adds it to your pull request.
+- **What's new:** a change people can notice adds one plain line to `docs/changelog.md`, under the day it lands.
 - We merge it into `main` here. A release is one commit of `main`.
 
 ## Finding your way
