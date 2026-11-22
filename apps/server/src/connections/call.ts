@@ -60,6 +60,7 @@ import type { Services } from '../services';
 import { VaultCallError, VaultEchoError } from '../vault/net';
 import { adapterFor, callWordsFor } from './adapters/index';
 import { connectionCallAccess, coversReads } from './call-access';
+import { callTarget, changedSinceYesText, changedWhileAskedText } from './call-target';
 import { isCallableEntry } from './callable';
 import { type PreparedChange, prepareConnectionChange } from './changes';
 import { keyTierOf } from './context';
@@ -113,7 +114,8 @@ export type CallFailure =
 
 export type CallResult =
   | { kind: 'ok'; output: CallOutput }
-  | { kind: 'failed'; reason: CallFailure; message: string };
+  /** `changed`: the connection's address, account or sign-in changed since the yes the call was bound to (`target`). */
+  | { kind: 'failed'; reason: CallFailure; message: string; changed?: true };
 
 /** “Home Assistant · home.lan needs to be connected again; you can do that in Settings → Connections.” */
 export function needsReauthText(row: Pick<CatalogConnectionRow, 'label'>): string {
@@ -258,6 +260,14 @@ export const callConnectionTool = defineCommand({
     conversationId: ConversationId.optional(),
     /** What the agent said the call changes (CT-401, home-redesign.md HR-02): a change's title when Whombat has none. */
     change: ConnectionChangeText.optional(),
+    /**
+     * Where the call goes and as whom when it was asked for (`callTarget`): a yes is bound to it, and the call runs only
+     * while the connection still has it. Absent on a call asked before calls carried it.
+     */
+    target: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
   }),
   async requiredKey(input, { db, services, actor }): Promise<KeyRequirement | null> {
     const plan = await planCall(db, services, actor.id, input);
@@ -371,6 +381,7 @@ export const callConnectionTool = defineCommand({
           personId,
           approvalId,
           ...(input.change ? { change: input.change } : {}),
+          ...(input.target ? { target: input.target } : {}),
         }),
       );
     }
@@ -453,6 +464,11 @@ export async function executeConnectionCall(
     approvalId?: string | null;
     /** Optional resolver for authorized multipart attachment uploads in `request` calls. */
     uploadAttachment?: ResolveRequestUpload;
+    /**
+     * Where the call may go and as whom (`callTarget`), as it was when it was asked for or said yes to: checked on the
+     * connection the request is made with, and nothing is sent when it differs.
+     */
+    target?: string;
   },
 ): Promise<CallResult> {
   const started = Date.now();
@@ -470,7 +486,17 @@ export async function executeConnectionCall(
   let outcome: CallOutcome;
   let bytes = 0;
   let prepared: PreparedChange | null = null;
-  if (!service.acquire(row.id)) {
+  if (call.target !== undefined && callTarget(row) !== call.target) {
+    // Asked for, or said yes to, while the connection went elsewhere or as someone else: checked on the very row the
+    // request would be made with, and nothing is sent (the agent that asked hears it and may ask again).
+    result = {
+      kind: 'failed',
+      reason: 'destination_refused',
+      message: call.approvalId ? changedSinceYesText(row.label) : changedWhileAskedText(row.label),
+      changed: true,
+    };
+    outcome = 'refused';
+  } else if (!service.acquire(row.id)) {
     result = {
       kind: 'failed',
       reason: 'too_many_calls',
@@ -722,6 +748,8 @@ interface DeferredCall {
   personId?: string | null;
   approvalId: string | null;
   change?: string;
+  /** Where the call may go and as whom (`callTarget`), as it was when it was asked for. */
+  target?: string;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { type JsonObject, trackerAccessAsked } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { ApplyContext } from '../../commit/types';
 import type { Tx } from '../../db/client';
 import { automationRunSteps, automationRuns, automations } from '../../db/schema/index';
@@ -42,7 +42,11 @@ export async function stopRun(
   run: AutomationRunRow,
   status: 'succeeded' | 'failed' | 'cancelled' | 'needs_review',
   error: string | null,
-  o: { quiet?: boolean } = {},
+  /**
+   * `noticeOn`: the step the run stopped at, whose messages the notice joins (a `connection_actions` step's: what an
+   * outsiders' turn reads of them is only a summary, `runtime/outsiders-view.ts`).
+   */
+  o: { quiet?: boolean; noticeOn?: number } = {},
 ) {
   const finished = status !== 'needs_review';
   await ctx.tx
@@ -77,7 +81,17 @@ export async function stopRun(
     where: null,
     payload: { automationId: run.automationId, runId: run.id, number: run.number, status },
   });
-  if (status !== 'succeeded' && !o.quiet) await postRunNotice(ctx, run, name, status, error);
+  if (status !== 'succeeded' && !o.quiet) {
+    const notice = await postRunNotice(ctx, run, name, status, error);
+    if (notice && o.noticeOn !== undefined)
+      await ctx.tx
+        .update(automationRunSteps)
+        .set({
+          messageIds: sql`array_append(${automationRunSteps.messageIds}, ${notice})`,
+          updatedAt: ctx.now,
+        })
+        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, o.noticeOn)));
+  }
   // A customer's bug it set out to fix and didn't: its thread says why and the person's Inbox has it (TA-61).
   // Once, when the run first ends: a run finished again says nothing more.
   if (finished && !run.finishedAt)
@@ -110,7 +124,12 @@ export async function block(ctx: ApplyContext, run: AutomationRunRow, idx: numbe
     where: null,
     payload: { runId: run.id, number: run.number, idx },
   });
-  await stopRun(ctx, run, 'failed', reason);
+  await stopRun(ctx, run, 'failed', reason, noticeOnStep(run, idx));
+}
+
+/** Where a run's notice is kept when it stops at step `idx`: on a `connection_actions` step, with its own messages. */
+export function noticeOnStep(run: Pick<AutomationRunRow, 'definition'>, idx: number): { noticeOn?: number } {
+  return run.definition.steps[idx]?.kind === 'connection_actions' ? { noticeOn: idx } : {};
 }
 
 /** A step that has nothing to do here: skipped, with why, and the run goes on. */

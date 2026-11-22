@@ -73,6 +73,7 @@ import { canvasDetail, readableCanvas } from '../read/work-views';
 import { checkoutBlocker, startRunRefusalText } from '../runtime/checkout-access';
 import { completionEvidence } from '../runtime/completion-evidence';
 import { type DispatchRow, dispatchCheckout } from '../runtime/context';
+import { forOutsiders } from '../runtime/outsiders-view';
 import { outsidersTurn } from '../runtime/person';
 import { scheduleTool } from '../schedules/tool';
 import type { Services } from '../services';
@@ -346,8 +347,10 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
         })
       ).messages;
     }
-    // An automation run's outsiders' turn is told only of the files handed over from what started its run.
+    // An automation run's outsiders' turn is told only of the files handed over from what started its run, and reads an
+    // approval card, and what a step told the person of the calls they approved, only as a line.
     const only = await outsidersFileIds(ctx.services.db, ctx.dispatch);
+    if (outsidersTurn(ctx.dispatch)) messages = await forOutsiders(ctx.services.db, messages);
     return {
       status: 'ok',
       conversation: {

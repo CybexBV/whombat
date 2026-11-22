@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { callTier, needsReauthText } from '../connections/call';
 import { connectionCallAccess } from '../connections/call-access';
+import { callTarget } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../connections/request';
@@ -47,6 +48,7 @@ import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
+import { handedOverFileIds } from './handed-files';
 import { isProposableEntry, listedHowTo, settleListed, whatMailCanDo } from './listed-actions';
 import {
   type CardFile,
@@ -351,31 +353,18 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
   return note;
 }
 
-/** The attachment ids a step's output says the server handed over from what started the run. */
-function handedOverIds(output: unknown): string[] | null {
-  const ids = (output as { triggerFileIds?: unknown } | null)?.triggerFileIds;
-  return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
-}
-
 /**
- * Loads an attachment ONLY when the server handed it over from what started THIS run (the email's files, copied onto
- * the run's first agent prompt and recorded there by id), so neither a prompt-injected email nor a file the person
- * added to the thread with the same name can be uploaded. A run started before the handover was recorded counts the
- * files on its first prompt when that prompt started the run's thread, as the server put them there.
+ * Loads an attachment ONLY when the server handed it over from what started THIS run (`handedOverFileIds`: the email's
+ * files, copied onto the run's first agent prompt and recorded there by id), so neither a prompt-injected email nor a
+ * file the person added to the thread with the same name can be uploaded. The same rule decides what the run's
+ * outsiders' turns are shown and may read (`files/access.ts`).
  */
 export async function emailFile(
   db: Db | Tx,
   run: Pick<AutomationRunRow, 'id' | 'burrowId' | 'threadRootId'>,
   attachmentId: string,
 ): Promise<AttachmentRow | null> {
-  const steps = await db
-    .select({ output: automationRunSteps.output, promptMessageId: automationRunSteps.promptMessageId })
-    .from(automationRunSteps)
-    .where(eq(automationRunSteps.runId, run.id));
-  const recorded = steps.map((s) => handedOverIds(s.output)).filter((ids): ids is string[] => ids !== null);
-  const fromRoot =
-    recorded.length === 0 && !!run.threadRootId && steps.some((s) => s.promptMessageId === run.threadRootId);
-  if (!fromRoot && !recorded.some((ids) => ids.includes(attachmentId))) return null;
+  if (!(await handedOverFileIds(db, run)).includes(attachmentId)) return null;
   const [found] = await db
     .select()
     .from(attachments)
@@ -384,7 +373,6 @@ export async function emailFile(
         eq(attachments.id, attachmentId),
         eq(attachments.burrowId, run.burrowId),
         eq(attachments.state, 'ready'),
-        ...(fromRoot ? [eq(attachments.messageId, run.threadRootId as string)] : []),
       ),
     )
     .limit(1);
@@ -393,6 +381,8 @@ export async function emailFile(
 
 export interface PlannedConnectionAction {
   connectionId: string;
+  /** Where the connection's calls go and as whom when the card was made (`callTarget`): the yes is bound to it. */
+  target: string;
   handle: string;
   label: string;
   tool: string;
@@ -425,7 +415,7 @@ export type ConnectionActionsPlan =
  * Validates every proposed connection action from step `from`, ensuring each is a listed action (`outsidersCall`) and
  * its connection, tool, limit, key (not `cannot`) and file (one the server handed over from this run's email) are
  * permitted, and that every id it names exists where the server could read it. Returns a deterministic `actionsHash`
- * and plain-English approval proposal. `names` are the ids' names the server just read (`card-names.ts`); without
+ * (bound to where each call goes, `callTarget`) and plain-English approval proposal. `names` are the ids' names the server just read (`card-names.ts`); without
  * them, the ones kept on the step when its card was made, so the card reads the same each time it is made.
  */
 export async function planConnectionActions(
@@ -502,7 +492,7 @@ export async function planConnectionActions(
     // An id the service says it doesn't have is refused; one it couldn't read shows as it is.
     const named: Record<string, string> = {};
     for (const ref of cardRefs(row.catalogId, tool, args)) {
-      const found = known[cardNameKey(row.id, ref.kind, ref.id)];
+      const found = known[cardNameKey(row, ref.kind, ref.id)];
       if (found && 'missing' in found)
         return { ok: false, fatal: false, reason: `${row.label} has no ${ref.what} ${ref.id}.` };
       if (found) named[`${ref.kind}:${ref.id}`] = found.name;
@@ -521,6 +511,7 @@ export async function planConnectionActions(
 
     planned.push({
       connectionId: row.id,
+      target: callTarget(row),
       handle: row.handle,
       label: row.label,
       tool: tool.name,
@@ -548,10 +539,14 @@ export async function planConnectionActions(
   };
 }
 
-/** Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card. */
+/**
+ * Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card: what runs, and where
+ * each call goes and as whom (`callTarget`), so a connection given another address or sign-in needs a new yes.
+ */
 export function hashPlannedActions(
   planned: readonly {
     connectionId: string;
+    target: string;
     tool: string;
     toolHash: string;
     description: string;
@@ -564,6 +559,7 @@ export function hashPlannedActions(
       canonicalJson(
         planned.map((a) => ({
           connectionId: a.connectionId,
+          target: a.target,
           tool: a.tool,
           toolHash: a.toolHash,
           description: a.description,

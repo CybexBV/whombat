@@ -37,16 +37,33 @@ export const retryBackoffMs = (attempt: number) => 30_000 * 4 ** Math.max(0, att
 
 /**
  * What templates and conditions read: `trigger.*`, `steps.<id>.*` (outputs + state: an agent step's `text` is all it
- * posted in its turn, `reply` its last message, an assessment step's `assessment`), `run.*` (`number`, `id`, `test`;
- * `today` comes from `stepScope`).
+ * posted in its turn, `reply` its last message, an assessment step's `assessment`; a `connection_actions` step's only
+ * `state`, `ran` and `count`), `run.*` (`number`, `id`, `test`; `today` comes from `stepScope`).
  */
 export function runScope(
   run: AutomationRunRow,
   steps: readonly AutomationStepRow[],
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const s of steps) out[s.stepId] = { ...(s.output as JsonObject), state: s.state };
+  for (const s of steps)
+    out[s.stepId] =
+      s.kind === 'connection_actions' ? actionsScope(s) : { ...(s.output as JsonObject), state: s.state };
   return { trigger: run.scope, steps: out, run: { number: run.number, id: run.id, test: run.test } };
+}
+
+/**
+ * A `connection_actions` step as templates and conditions read it: its state, whether its actions ran and how many.
+ * Never its card's names, the paths with the person's account ids, the connections' labels, why it was refused or what
+ * the services answered: those are what the server read from the person's services, and a template would carry them
+ * into a later outsiders' turn or a message it reads.
+ */
+function actionsScope(s: AutomationStepRow): JsonObject {
+  const o = (s.output ?? {}) as JsonObject;
+  return {
+    ...(typeof o.ran === 'boolean' ? { ran: o.ran } : {}),
+    ...(typeof o.count === 'number' ? { count: o.count } : {}),
+    state: s.state,
+  };
 }
 
 /**

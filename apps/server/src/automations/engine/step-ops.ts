@@ -11,6 +11,7 @@ import { approvals } from '../../db/schema/index';
 import { loadPrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import type { StepOp } from '../steps';
+import { changedSinceCard, freshCardOutput } from '../steps/connection-actions';
 import type { AutomationRunRow, AutomationStepRow } from '../store';
 
 /** A run this engine holds the lease on, as a step's effect uses it. */
@@ -66,7 +67,17 @@ export async function awaitingYes(
   if (a.state === 'declined') return declined(await deciderName(db, a));
   if (a.execution.state === 'failed') {
     if ((row.output as { refusal?: string }).refusal === 'stale')
-      return { op: 'settle', idx: row.idx, state: 'pending', reRequest: true, from: ['waiting'] };
+      // A card of proposed connection actions is asked again on the engine's next pass, which reads its names again from
+      // where the calls go now (a connection given another address or sign-in shows the new one's).
+      return step.kind === 'connection_actions'
+        ? {
+            op: 'settle',
+            idx: row.idx,
+            state: 'pending',
+            from: ['waiting'],
+            output: freshCardOutput(await changedSinceCard(db, row.output)),
+          }
+        : { op: 'settle', idx: row.idx, state: 'pending', reRequest: true, from: ['waiting'] };
     return {
       op: 'settle',
       idx: row.idx,
