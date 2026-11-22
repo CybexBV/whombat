@@ -169,8 +169,10 @@ describe('home-screen status widget tokens and copy', () => {
     expect(storeKt).toContain('updatedAt <= 0L');
     expect(storeKt).toContain('fun nextRolloverAtMs');
 
-    // Android redraws at midnight via AlarmManager, on clock/date/zone changes, and cleans up on disable.
-    expect(providerKt).toContain('AlarmManager');
+    // Android redraws at midnight via non-waking AlarmManager.RTC, on clock/date/zone changes, and cleans up on disable.
+    expect(providerKt).toContain('AlarmManager.RTC');
+    expect(providerKt).not.toContain('RTC_WAKEUP');
+    expect(providerKt).not.toContain('setAndAllowWhileIdle');
     expect(providerKt).toContain('scheduleNextRollover');
     expect(providerKt).toContain('onDisabled');
     expect(providerKt).toContain('Intent.ACTION_TIME_CHANGED');
