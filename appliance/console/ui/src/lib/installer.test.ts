@@ -5,6 +5,7 @@ import type { Check, Disk, InstallerState } from './api';
 import { parseState } from './api';
 import { INSTALLER } from './copy';
 import {
+  checksFolded,
   checksVerdict,
   chosenDisk,
   eraseConfirmed,
@@ -177,6 +178,16 @@ describe('checksVerdict', () => {
   });
 });
 
+describe('which checks fold behind Details', () => {
+  it('folds every check that passed and shows the ones that need reading', () => {
+    const checks: Check[] = [...ok, { id: 'memory', status: 'fail', value: '2 GiB' }];
+    expect(checksFolded(ok)).toEqual({ shown: [], folded: ok });
+    expect(checksFolded(checks)).toEqual({ shown: [checks[2]], folded: ok });
+    const warn: Check = { id: 'reach-relay', status: 'warn', value: 'relay.example.com' };
+    expect(checksFolded([warn]).shown).toEqual([warn]);
+  });
+});
+
 describe('disks', () => {
   it('takes the only eligible disk without asking', () => {
     expect(chosenDisk(state(), null)).toEqual(sda);
@@ -187,6 +198,14 @@ describe('disks', () => {
     expect(chosenDisk(two, null)).toBeNull();
     expect(chosenDisk(two, '/dev/sdb')).toEqual(sdb);
     expect(chosenDisk(two, '/dev/sdc')).toBeNull();
+  });
+
+  it('enables Erase at once on an empty disk, and sends its name as the confirmation', () => {
+    const empty: Disk = { ...sda, empty: true, parts: [] };
+    expect(eraseConfirmed('', empty)).toBe(true);
+    expect(installRequest(state(), START, empty, '')).toMatchObject({ disk: '/dev/sda', confirm: 'sda' });
+    // Not known to be empty (an older server): typed, as before.
+    expect(eraseConfirmed('', { ...sda, parts: [] })).toBe(false);
   });
 
   it('enables Erase only for the exact name', () => {

@@ -7,7 +7,7 @@
  * not the Whombat's agent, which is made at the claim and named in setup (CG-338).
  */
 import { LINK_OFFER_TEXT } from '../../vendor/whombat-contracts/link-price';
-import type { CheckId, CheckStatus, Disk, DiskReason, InstallStep } from './api';
+import type { CheckId, CheckStatus, Disk, DiskPart, DiskReason, InstallStep } from './api';
 import { formatSize } from './installer';
 
 /** The text console's words (render.go), unchanged. */
@@ -168,10 +168,16 @@ export const INSTALLER = {
 
   checksTitle: 'Checking this machine',
   checksSub:
-    'Whombat needs UEFI, enough memory and a big enough disk. It also looks for the internet it needs after the restart.',
+    'Whombat looks at this machine’s memory and disks, and at the internet it needs after the restart.',
   checkAgain: 'Check again',
   checksRunning: 'Checking…',
   checksOk: 'All good.',
+  /** Every check passed: one line, the rows behind Details. */
+  checksAllGood: 'All good. This machine is ready for Whombat.',
+  checksLooking: 'Looking at this machine and the internet…',
+  /** The rows that passed, folded under the line or under a problem. */
+  checksDetails: 'Details',
+  checksHideDetails: 'Hide details',
   checksWarn: 'Read the warnings, then continue.',
   checksFail: 'Fix the marked items first.',
   checksSay: {
@@ -189,8 +195,11 @@ export const INSTALLER = {
   eraseTitle: 'Erase and install',
   eraseSub: (name: string, what: string) =>
     `Everything on ${name} (${what}) is erased. This can’t be undone.`,
+  /** An empty disk: nothing to lose, so a button press confirms. */
+  eraseEmptySub: (name: string, what: string) => `${name} (${what}) is empty, so nothing on it is lost.`,
   eraseLabel: (name: string) => `Type ${name} to confirm`,
   erase: (name: string) => `Erase ${name} and install`,
+  eraseEmpty: 'Erase and install',
   erasing: 'Starting…',
   eraseSay: 'Last chance to change your mind. After this, I dig.',
   eraseRefused: 'That didn’t work. Check the disk and the checks, then try again.',
@@ -280,6 +289,51 @@ function diskWhy(d: Disk): string {
     default:
       return `${d.name} is connected by USB`;
   }
+}
+
+/** What a file system says to a person: what made it, in everyday words. */
+const FS_WORDS: Record<string, string> = {
+  ntfs: 'Windows files',
+  BitLocker: 'Windows files (locked with BitLocker)',
+  vfat: 'FAT files',
+  exfat: 'exFAT files',
+  ext2: 'Linux files',
+  ext3: 'Linux files',
+  ext4: 'Linux files',
+  btrfs: 'Linux files',
+  xfs: 'Linux files',
+  f2fs: 'Linux files',
+  apfs: 'Mac files',
+  hfsplus: 'Mac files',
+  crypto_LUKS: 'encrypted data',
+  LVM2_member: 'Linux volumes',
+  zfs_member: 'ZFS data',
+  linux_raid_member: 'RAID data',
+  swap: 'swap space',
+  iso9660: 'a disc image',
+};
+
+function partWords(p: DiskPart): string {
+  const what = FS_WORDS[p.fsType] ?? 'other data';
+  const size =
+    p.sizeBytes >= 1024 ** 3
+      ? formatSize(p.sizeBytes)
+      : `${Math.max(1, Math.round(p.sizeBytes / 1024 ** 2))} MiB`;
+  return p.label ? `${what} (“${p.label}”, ${size})` : `${what} (${size})`;
+}
+
+/**
+ * What is on a disk that isn't empty, in plain words, for the erase step: “It isn’t empty: it holds Windows files
+ * (“OS”, 475 GiB), FAT files (100 MiB) and 2 more parts.” Null when the page doesn't know (an older server).
+ */
+export function diskHolds(d: Disk): string | null {
+  const parts = d.parts ?? [];
+  if (d.empty || parts.length === 0) return null;
+  const named = parts.slice(0, 3).map(partWords);
+  const more = parts.length - named.length;
+  if (more > 0) named.push(more === 1 ? '1 more part' : `${more} more parts`);
+  const list = named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
+  return `It isn’t empty: it holds ${list}.`;
 }
 
 export const DISK_REASON: Record<Exclude<DiskReason, ''>, string> = {

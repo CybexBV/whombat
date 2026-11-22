@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Disk } from './api';
-import { CONSOLE, checkNote, diskNote, GUIDE, GUIDE_LABEL, INSTALLER, WORD } from './copy';
+import { CONSOLE, checkNote, diskHolds, diskNote, GUIDE, GUIDE_LABEL, INSTALLER, WORD } from './copy';
 
 // The console's words must stay those of the text console (CG-07): every WORD is a string literal in
 // console/internal/screen, with %s / %d where the page fills in a value.
@@ -73,6 +73,41 @@ describe('the disk check', () => {
     expect(checkNote('disk', 'fail', '', [])).toBe(diskNote([]));
     expect(checkNote('disk', 'fail', '', [disk('sda', 'usb')])).toContain('sda');
     expect(checkNote('disk', 'ok', 'sda', [disk('sda', '')])).toBeNull();
+  });
+});
+
+// What is on a disk that isn't empty, so the person knows what typing its name erases.
+describe('what a disk holds', () => {
+  const GiB = 1024 ** 3;
+  const base: Disk = {
+    path: '/dev/sda',
+    name: 'sda',
+    model: '',
+    sizeBytes: 128 * GiB,
+    eligible: true,
+    reason: '',
+  };
+  it('names what made each part, its label and size, and counts the rest', () => {
+    const held = diskHolds({
+      ...base,
+      parts: [
+        { label: 'OS', fsType: 'ntfs', sizeBytes: 100 * GiB },
+        { label: '', fsType: 'vfat', sizeBytes: 100 * 1024 ** 2 },
+        { label: '', fsType: '', sizeBytes: GiB },
+        { label: 'Data', fsType: 'ext4', sizeBytes: GiB },
+        { label: '', fsType: 'swap', sizeBytes: GiB },
+      ],
+    });
+    for (const w of ['Windows', '“OS”', '100 GiB', 'FAT', '100 MiB', '2 more']) expect(held).toContain(w);
+    expect(held).not.toContain('Data');
+  });
+  it('says nothing for an empty disk, or when the server didn’t say', () => {
+    expect(diskHolds({ ...base, empty: true, parts: [] })).toBeNull();
+    expect(diskHolds(base)).toBeNull();
+  });
+  it('confirms an empty disk with a button, not the name typed', () => {
+    expect(INSTALLER.eraseEmpty).not.toContain('sda');
+    expect(INSTALLER.erase('sda')).toContain('sda');
   });
 });
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs the community ISO in the test VM through its graphical installer, as a person at the screen would (IN-430):
-# Start, the checks (Continue once they are done, past any warnings), the disk's name to confirm, Erase and install,
-# Restart; then waits for the installed box's claim screen and prints the four letters it shows. The screen is read with tesseract; every
+# Start, the checks (Continue once they are done, past any warnings), Erase and install (the disk's name typed only when
+# it isn't blank), Restart; then waits for the installed box's claim screen and prints the four letters it shows. The screen is read with tesseract; every
 # screen it waited for is kept as a PNG in <shots dir>.
 #
 #   vm-tests/community-install/install.sh <workspace> <shots dir> [disk name, default vda]
@@ -55,8 +55,13 @@ fi
 # read it; Check again shows while the checks still run.
 wait_text 2-checks 180 "All ?good|Read the ?warnings"
 q keys ret
-wait_text 3-erase 60 "to confirm"
-q type "$disk\n"
+# A blank disk is erased with the focused button (Enter); one that holds something asks for its name typed.
+wait_text 3-erase 60 "to confirm|is empty"
+if grep -qi "to confirm" "$shots/3-erase.txt"; then
+  q type "$disk\n"
+else
+  q keys ret
+fi
 wait_text 4-installed 1800 "Whombat is installed|went wrong|failed"
 grep -qi "Whombat is installed" "$shots/4-installed.txt"
 q keys ret

@@ -70,6 +70,18 @@ func TestParseDisks(t *testing.T) {
 	if d := got["sda"]; d.Path != "/dev/sda" || d.SizeBytes != 128*gib || d.Model != "QEMU HARDDISK" {
 		t.Errorf("%+v", d)
 	}
+	// What is on each disk: sda and sdb are empty; the others hold something, said as the page needs it.
+	for name, empty := range map[string]bool{"sda": true, "sdb": true, "sdc": false, "nvme0n1": false, "sdd": false, "sde": true} {
+		if d := got[name]; d.Empty != empty || (len(d.Parts) == 0) != empty {
+			t.Errorf("%s: empty %v, parts %+v", name, d.Empty, d.Parts)
+		}
+	}
+	if p := got["nvme0n1"].Parts; len(p) != 1 || p[0].FSType != "vfat" || p[0].SizeBytes != gib {
+		t.Errorf("nvme0n1 parts %+v", p)
+	}
+	if p := got["sdd"].Parts; len(p) != 1 || p[0].FSType != "LVM2_member" || p[0].SizeBytes != 512*gib {
+		t.Errorf("sdd (LVM on the whole disk) parts %+v", p)
+	}
 	if got["sdc"].Model != "USB[2J Stick" {
 		t.Errorf("model not cleaned: %q", got["sdc"].Model)
 	}
@@ -95,6 +107,18 @@ func TestParseDisks(t *testing.T) {
 	one = `{"blockdevices":[{"name":"sda","path":"/dev/sda","type":"disk","size":118111600640,"mountpoints":[null]}]}`
 	if d, _ := ParseDisks([]byte(one), "X"); !d[0].Eligible {
 		t.Errorf("%+v", d)
+	}
+	// A disk that held Windows: its partitions, labels and file systems, cleaned, for the page to name.
+	win := `{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","type":"disk","size":512110190592,"mountpoints":[null],"children":[
+	 {"name":"nvme0n1p1","path":"/dev/nvme0n1p1","type":"part","size":104857600,"mountpoints":[null],"fstype":"vfat"},
+	 {"name":"nvme0n1p2","path":"/dev/nvme0n1p2","type":"part","size":16777216,"mountpoints":[null]},
+	 {"name":"nvme0n1p3","path":"/dev/nvme0n1p3","type":"part","size":510000000000,"mountpoints":[null],"label":"Win\u001b[2Jdows ","fstype":"ntfs"}]}]}`
+	d, err := ParseDisks([]byte(win), "X")
+	if err != nil || len(d) != 1 || !d[0].Eligible || d[0].Empty || len(d[0].Parts) != 3 {
+		t.Fatalf("%+v %v", d, err)
+	}
+	if p := d[0].Parts; p[1].FSType != "" || p[1].Label != "" || p[2].Label != "Win[2Jdows" || p[2].FSType != "ntfs" {
+		t.Errorf("%+v", p)
 	}
 	for _, bad := range []string{`nope`, `{"blockdevices":[{"name":"x","path":"/etc/passwd","type":"disk","size":1}]}`} {
 		d, err := ParseDisks([]byte(bad), "X")
