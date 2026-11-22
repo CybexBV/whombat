@@ -322,7 +322,10 @@ func TestDepthLimitAndEntryCapMarkPartial(t *testing.T) {
 func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	root := t.TempDir()
 
-	// Create on-disk files for container logs, journal, package caches and VM images.
+	// Create on-disk files for container images, build cache, volumes, logs, journal, package caches and VM images.
+	writeBytes(t, filepath.Join(root, "var/lib/docker/overlay2/layer1/diff/usr/bin/app.bin"), 48*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/image/overlay2/imagedb/meta.json"), 4*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/buildkit/cache.db"), 32*1024)
 	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/abc123/abc123-json.log"), 24*1024)
 	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/pgdata/base.dat"), 16*1024)
 	writeBytes(t, filepath.Join(root, "var/log/journal/mid/system.journal"), 40*1024)
@@ -331,36 +334,18 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	writeBytes(t, filepath.Join(root, "var/lib/libvirt/images/vm1.qcow2"), 64*1024)
 	writeBytes(t, filepath.Join(root, "var/lib/libvirt/qemu/save/vm1.save"), 16*1024)
 
-	// Start a mock Docker HTTP server over a unix socket.
+	// Place a live mock Docker HTTP server behind a symlink at /var/run/docker.sock:
+	// the scan must NEVER stat, follow, or dial any container daemon socket.
 	sockPath := filepath.Join(t.TempDir(), "docker.sock")
 	ln, err := net.Listen("unix", sockPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dfTypes []string
-	var dfCalls atomic.Int32
+	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		daemonCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
-	})
-	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
-		dfCalls.Add(1)
-		dfTypes = append([]string(nil), r.URL.Query()["type"]...)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"LayersSize": 500_000_000,
-			"Images": []map[string]any{
-				{"Size": 300_000_000, "SharedSize": 50_000_000, "Containers": 2},
-				{"Size": 250_000_000, "SharedSize": 50_000_000, "Containers": 0},
-			},
-			"Volumes": []map[string]any{
-				{"UsageData": map[string]any{"Size": 120_000_000, "RefCount": 1}},
-				{"UsageData": map[string]any{"Size": 30_000_000, "RefCount": 0}},
-			},
-			"BuildCache": []map[string]any{
-				{"Size": 80_000_000, "InUse": false, "Shared": false},
-				{"Size": 20_000_000, "InUse": true, "Shared": false},
-			},
-		})
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
@@ -368,6 +353,13 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 		srv.Close()
 		ln.Close()
 	})
+	inRootSock := filepath.Join(root, "var/run/docker.sock")
+	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sockPath, inRootSock); err != nil {
+		t.Fatal(err)
+	}
 
 	mounts := []mountInfo{{MountPoint: "/", FSType: "zfs", Source: "rpool/ROOT/pve-1"}}
 	inv := &proto.Report{
@@ -375,29 +367,6 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 		Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
 	}
 	r := newTestRunner(t, root, mounts, inv)
-	// Point directly to our temp unix socket (bypassing r.root prefix via abs seam check).
-	r.dockerSockets = nil
-	r.root = root
-	// Place socket under root so hostPath finds it cleanly.
-	inRootSock := filepath.Join(root, "var/run/docker.sock")
-	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ln2, err := net.Listen("unix", inRootSock)
-	if err != nil {
-		// Socket paths in deep temp dirs can exceed sun_path; skip socket creation inside root and link instead.
-		if err := os.Symlink(sockPath, inRootSock); err != nil {
-			t.Fatal(err)
-		}
-	} else {
-		srv2 := &http.Server{Handler: mux}
-		go srv2.Serve(ln2)
-		t.Cleanup(func() {
-			srv2.Close()
-			ln2.Close()
-		})
-	}
-	r.dockerSockets = []string{"/var/run/docker.sock"}
 
 	// Stub zfs list for VM zvols and snapshots.
 	r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -420,16 +389,16 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 		byKey[c.Key] = c
 	}
 
-	if dfCalls.Load() != 1 || !slices.Equal(dfTypes, []string{"image", "build-cache"}) {
-		t.Errorf("/system/df calls=%d types=%v, want 1 call with [image build-cache]", dfCalls.Load(), dfTypes)
+	if daemonCalls.Load() != 0 {
+		t.Errorf("Docker socket received %d requests, want 0 (must walk on-disk only)", daemonCalls.Load())
 	}
-	if c := byKey[proto.DiskCatContainerImages]; c.Bytes != 500_000_000 || c.ReclaimableBytes != 200_000_000 {
-		t.Errorf("container_images = %+v", c)
+	if c := byKey[proto.DiskCatContainerImages]; c.Bytes < 52*1024 || c.Bytes >= 200*1024 {
+		t.Errorf("container_images = %+v, want ~52 KiB from checked walk", c)
 	}
-	if c := byKey[proto.DiskCatContainerBuildCache]; c.Bytes != 100_000_000 || c.ReclaimableBytes != 80_000_000 {
-		t.Errorf("container_build_cache = %+v", c)
+	if c := byKey[proto.DiskCatContainerBuildCache]; c.Bytes < 32*1024 || c.Bytes >= 128*1024 {
+		t.Errorf("container_build_cache = %+v, want ~32 KiB from checked walk", c)
 	}
-	// Volumes are measured with the agent's own bounded walk (16 KiB on disk), not dockerd's /system/df.
+	// Volumes are measured with the agent's own bounded walk (16 KiB on disk).
 	if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 16*1024 || c.Bytes >= 100*1024 {
 		t.Errorf("container_volumes = %+v, want ~16 KiB from bounded local walk", c)
 	}
@@ -853,14 +822,11 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dfCalls atomic.Int32
+	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		daemonCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
-	})
-	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
-		dfCalls.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"LayersSize": 100_000})
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
@@ -883,16 +849,15 @@ func TestDockerVolumesMountScope(t *testing.T) {
 	}
 
 	r := newTestRunner(t, root, mounts, nil)
-	r.dockerSockets = []string{"/var/run/docker.sock"}
 
-	// Scanning /var/lib/docker/volumes: dockerRoot is on /, so /system/df must NOT be called;
+	// Scanning /var/lib/docker/volumes: the Docker daemon socket is never touched;
 	// volumes on this mount are measured locally while skipping the nested bind mount.
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/var/lib/docker/volumes"})
 	if resp.Code != "" {
 		t.Fatalf("unexpected error: %+v", resp)
 	}
-	if dfCalls.Load() != 0 {
-		t.Errorf("/system/df called %d times when dockerRoot is outside target mount", dfCalls.Load())
+	if daemonCalls.Load() != 0 {
+		t.Errorf("Docker socket called %d times when scanning /var/lib/docker/volumes, want 0", daemonCalls.Load())
 	}
 	var volBytes uint64
 	for _, c := range resp.Categories {
@@ -3017,14 +2982,11 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dfCalls atomic.Int32
+	var daemonCalls atomic.Int32
 	mux := http.NewServeMux()
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		daemonCalls.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
-	})
-	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
-		dfCalls.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"LayersSize": 500_000_000})
 	})
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
@@ -3042,25 +3004,31 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 
 	ffs := newFakeScanFS(fakeModeOpenat2, false, 100, 10)
 	dockerTracker := &fakeMountTracker{name: "/var/lib/docker"}
-	// /var/lib/docker is NOT in mounts (listMounts snapshot), but is mounted before collectDocker probes it.
+	// /var/lib/docker is NOT in mounts (listMounts snapshot), but is mounted before collectCategories probes it.
 	ffs.mountDirAt("/var/lib/docker", 205, 98, dockerTracker, map[string]uint64{
-		"volumes/v1/data.bin": 512 * 1024,
+		"overlay2/l1/diff/layer.bin": 1024 * 1024,
+		"buildkit/cache.db":          512 * 1024,
+		"volumes/v1/data.bin":        512 * 1024,
 	})
 
 	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
 	r := newTestRunner(t, root, mounts, nil)
-	r.dockerSockets = []string{"/var/run/docker.sock"}
 	r.scanFS = ffs
 
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
 	if resp.Code != "" {
 		t.Fatalf("unexpected error: %+v", resp)
 	}
-	if dfCalls.Load() != 0 {
-		t.Errorf("/system/df called %d times when /var/lib/docker was mounted mid-scan, want 0", dfCalls.Load())
+	if daemonCalls.Load() != 0 {
+		t.Errorf("Docker socket called %d times when /var/lib/docker was mounted mid-scan, want 0", daemonCalls.Load())
 	}
 	if dockerTracker.touched.Load() != 0 || dockerTracker.dataReads.Load() != 0 {
 		t.Errorf("mid-scan /var/lib/docker mount touched=%d dataReads=%d, want 0/0", dockerTracker.touched.Load(), dockerTracker.dataReads.Load())
+	}
+	for _, c := range resp.Categories {
+		if strings.HasPrefix(c.Key, "container_") {
+			t.Errorf("mid-scan /var/lib/docker mount leaked category: %+v", c)
+		}
 	}
 	if errors.Is(errWrongMount, fs.ErrPermission) {
 		t.Fatal("errWrongMount must not match fs.ErrPermission")
@@ -3543,4 +3511,174 @@ func TestUnsupportedVolumeMidScanRefusesCleanly(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContainerStorageMeasuredStrictlyThroughCheckedWalk(t *testing.T) {
+	t.Run("dedicated_custom_docker_mount_root_and_merged_overlay_skip", func(t *testing.T) {
+		root := t.TempDir()
+		// Dedicated mount at /mnt/docker whose mount root itself is the Docker data root.
+		writeBytes(t, filepath.Join(root, "mnt/docker/overlay2/layerA/diff/lib/app.so"), 40*1024)
+		// Running container overlayfs merged mount must be skipped (never double-counted).
+		writeBytes(t, filepath.Join(root, "mnt/docker/overlay2/layerA/merged/lib/app.so"), 512*1024)
+		writeBytes(t, filepath.Join(root, "mnt/docker/buildkit/cache.db"), 24*1024)
+		writeBytes(t, filepath.Join(root, "mnt/docker/volumes/app/db.sqlite"), 20*1024)
+		writeBytes(t, filepath.Join(root, "mnt/docker/containers/c1/c1-json.log"), 12*1024)
+
+		mounts := []mountInfo{
+			{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 2, ParentID: 1, MountPoint: "/mnt/docker", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+			{ID: 3, ParentID: 2, MountPoint: "/mnt/docker/overlay2/layerA/merged", FSType: "overlay", Source: "overlay", Virtual: true},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/docker"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatContainerImages]; c.Bytes < 40*1024 || c.Bytes >= 128*1024 {
+			t.Errorf("container_images = %+v, want ~40 KiB (skipping overlay merged mount)", c)
+		}
+		if c := byKey[proto.DiskCatContainerBuildCache]; c.Bytes < 24*1024 || c.Bytes >= 96*1024 {
+			t.Errorf("container_build_cache = %+v, want ~24 KiB", c)
+		}
+		if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 20*1024 || c.Bytes >= 96*1024 {
+			t.Errorf("container_volumes = %+v, want ~20 KiB", c)
+		}
+		if c := byKey[proto.DiskCatContainerLogs]; c.Bytes < 12*1024 || c.Bytes >= 64*1024 {
+			t.Errorf("container_logs = %+v, want ~12 KiB", c)
+		}
+	})
+
+	t.Run("custom_docker_root_discovered_by_walk_and_without_dtype", func(t *testing.T) {
+		for _, noDType := range []bool{false, true} {
+			name := "with_dtype"
+			if noDType {
+				name = "without_dtype"
+			}
+			t.Run(name, func(t *testing.T) {
+				root := t.TempDir()
+				// Custom Docker data-root nested under /mnt/data/services/docker (no daemon queried).
+				writeBytes(t, filepath.Join(root, "mnt/data/services/docker/overlay2/l1/diff/bin/srv"), 36*1024)
+				writeBytes(t, filepath.Join(root, "mnt/data/services/docker/buildkit/content/blob"), 20*1024)
+				writeBytes(t, filepath.Join(root, "mnt/data/services/docker/volumes/v1/data.bin"), 16*1024)
+				writeBytes(t, filepath.Join(root, "mnt/data/services/docker/containers/c1/c1-json.log"), 12*1024)
+				// Unrelated project dir with only one marker ("image") must not be treated as Docker root.
+				writeBytes(t, filepath.Join(root, "mnt/data/repo/image/logo.png"), 64*1024)
+
+				mounts := []mountInfo{
+					{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+					{ID: 2, ParentID: 1, MountPoint: "/mnt/data", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+				}
+				r := newTestRunner(t, root, mounts, nil)
+				if noDType {
+					r.readDir = func(logicalPath string) ([]fs.DirEntry, error) {
+						raw, err := os.ReadDir(r.hostPath(logicalPath))
+						if err != nil {
+							return nil, err
+						}
+						out := make([]fs.DirEntry, len(raw))
+						for i, e := range raw {
+							out[i] = unknownTypeDirEntry{inner: e}
+						}
+						return out, nil
+					}
+				}
+
+				resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/data"})
+				if resp.Code != "" {
+					t.Fatalf("unexpected error: %+v", resp)
+				}
+				byKey := map[string]proto.DiskUsageCategory{}
+				for _, c := range resp.Categories {
+					byKey[c.Key] = c
+				}
+				if c := byKey[proto.DiskCatContainerImages]; c.Bytes < 36*1024 || c.Bytes >= 96*1024 {
+					t.Errorf("container_images = %+v, want ~36 KiB (not counting repo/image)", c)
+				}
+				if c := byKey[proto.DiskCatContainerBuildCache]; c.Bytes < 20*1024 || c.Bytes >= 64*1024 {
+					t.Errorf("container_build_cache = %+v, want ~20 KiB", c)
+				}
+				if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 16*1024 || c.Bytes >= 64*1024 {
+					t.Errorf("container_volumes = %+v, want ~16 KiB", c)
+				}
+				if c := byKey[proto.DiskCatContainerLogs]; c.Bytes < 12*1024 || c.Bytes >= 64*1024 {
+					t.Errorf("container_logs = %+v, want ~12 KiB", c)
+				}
+			})
+		}
+	})
+
+	t.Run("podman_and_containerd_measured_on_disk_only", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "var/lib/containers/storage/overlay/l1/diff/app.bin"), 28*1024)
+		writeBytes(t, filepath.Join(root, "var/lib/containers/storage/overlay-images/images.json"), 4*1024)
+		writeBytes(t, filepath.Join(root, "var/lib/containers/storage/volumes/data/file.bin"), 16*1024)
+		writeBytes(t, filepath.Join(root, "var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/abc"), 20*1024)
+
+		mounts := []mountInfo{{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+		r := newTestRunner(t, root, mounts, nil)
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatContainerImages]; c.Bytes < 52*1024 || c.Bytes >= 160*1024 {
+			t.Errorf("container_images (podman+containerd) = %+v, want ~52 KiB", c)
+		}
+		if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 16*1024 || c.Bytes >= 64*1024 {
+			t.Errorf("container_volumes (podman) = %+v, want ~16 KiB", c)
+		}
+	})
+
+	t.Run("unsafe_zfs_dataset_rejected", func(t *testing.T) {
+		for _, bad := range []string{"", "-rpool", "/dev/sda", "rpool/ds@snap", "rpool ds"} {
+			if isSafeZFSDataset(bad) {
+				t.Errorf("isSafeZFSDataset(%q) = true, want false", bad)
+			}
+		}
+		for _, good := range []string{"rpool", "rpool/ROOT/pve-1", "tank/vm-disks"} {
+			if !isSafeZFSDataset(good) {
+				t.Errorf("isSafeZFSDataset(%q) = false, want true", good)
+			}
+		}
+	})
+
+	t.Run("mid_scan_mount_on_docker_overlay2_subpath_never_touched", func(t *testing.T) {
+		ffs := newFakeScanFS(fakeModeOpenat2, false, 100, 10)
+		ffs.addFile("/var/lib/docker/volumes/v1/data.bin", 16*1024)
+		overlayTracker := &fakeMountTracker{name: "/var/lib/docker/overlay2"}
+		ffs.mountDirAt("/var/lib/docker/overlay2", 206, 97, overlayTracker, map[string]uint64{
+			"layer1/diff/huge.bin": 1024 * 1024,
+		})
+
+		mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+		r := newTestRunner(t, t.TempDir(), mounts, nil)
+		r.scanFS = ffs
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if overlayTracker.touched.Load() != 0 || overlayTracker.dataReads.Load() != 0 {
+			t.Errorf("mid-scan /var/lib/docker/overlay2 mount touched=%d dataReads=%d, want 0/0", overlayTracker.touched.Load(), overlayTracker.dataReads.Load())
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if _, leaked := byKey[proto.DiskCatContainerImages]; leaked {
+			t.Errorf("mid-scan /var/lib/docker/overlay2 leaked container_images: %+v", byKey[proto.DiskCatContainerImages])
+		}
+		if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes != 16*1024 {
+			t.Errorf("container_volumes = %+v, want 16 KiB", c)
+		}
+	})
 }

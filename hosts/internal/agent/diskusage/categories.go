@@ -2,20 +2,15 @@ package diskusage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"rackoon/internal/proto"
 )
@@ -23,7 +18,7 @@ import (
 // collectCategories measures known storage consumers that live on the requested
 // mount (resolving every step relative to rootDir without crossing mounts or
 // following symlinks). Every category is optional and bounded by ctx.
-func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool, *scanUnsupportedError) {
+func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, *containerCollector, bool, *scanUnsupportedError) {
 	var cats []proto.DiskUsageCategory
 	partial := false
 
@@ -33,12 +28,15 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 		}
 	}
 
-	// 1. Container engine (Docker / Podman via unix socket HTTP API).
-	dockerCats, dockerPartial, unsup := r.collectDocker(ctx, rootDir, scope, rootDev, rootMntID)
+	// 1. Container engines (Docker, Podman, containerd and CRI pod logs),
+	// measured strictly through the checked descriptor walk of the selected
+	// mount without probing or dialing daemon sockets.
+	cc := newContainerCollector()
+	dockerPartial, unsup := cc.collectInitial(r, ctx, rootDir, scope, rootDev, rootMntID)
 	if unsup != nil {
-		return nil, false, unsup
+		return nil, nil, false, unsup
 	}
-	for _, c := range dockerCats {
+	for _, c := range cc.categories() {
 		add(c)
 	}
 	if dockerPartial {
@@ -50,9 +48,9 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 		seen := map[inodeKey]struct{}{}
 		var jBytes uint64
 		for _, dir := range []string{"/var/log/journal", "/run/log/journal"} {
-			b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, seen)
+			b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, dir), rootDev, rootMntID, 4, seen)
 			if unsup != nil {
-				return nil, false, unsup
+				return nil, nil, false, unsup
 			}
 			jBytes += b
 			if p {
@@ -94,7 +92,7 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 			}
 			b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, pd.path), rootDev, rootMntID, 5, seen)
 			if unsup != nil {
-				return nil, false, unsup
+				return nil, nil, false, unsup
 			}
 			if p {
 				partial = true
@@ -120,7 +118,7 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 	if ctx.Err() == nil {
 		vmDisks, vmSnaps, vmPartial, unsup := r.collectVMAndSnapshots(ctx, rootDir, scope, rootDev, rootMntID)
 		if unsup != nil {
-			return nil, false, unsup
+			return nil, nil, false, unsup
 		}
 		if vmPartial {
 			partial = true
@@ -129,190 +127,463 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 		add(vmSnaps)
 	}
 
+	sortCategories(cats)
+	return cats, cc, partial, nil
+}
+
+func sortCategories(cats []proto.DiskUsageCategory) {
 	sort.Slice(cats, func(i, j int) bool {
 		if cats[i].Bytes != cats[j].Bytes {
 			return cats[i].Bytes > cats[j].Bytes
 		}
 		return cats[i].Key < cats[j].Key
 	})
-	return cats, partial, nil
 }
 
-// ---- Docker / container engine ---------------------------------------------------------
-
-type dockerInfo struct {
-	DockerRootDir string `json:"DockerRootDir"`
+func mergeContainerCategories(existing []proto.DiskUsageCategory, containerCats []proto.DiskUsageCategory) []proto.DiskUsageCategory {
+	out := make([]proto.DiskUsageCategory, 0, len(existing)+len(containerCats))
+	for _, c := range existing {
+		switch c.Key {
+		case proto.DiskCatContainerImages, proto.DiskCatContainerBuildCache, proto.DiskCatContainerVolumes, proto.DiskCatContainerLogs:
+			continue
+		default:
+			out = append(out, c)
+		}
+	}
+	for _, c := range containerCats {
+		if c.Bytes > 0 {
+			out = append(out, c)
+		}
+	}
+	sortCategories(out)
+	return out
 }
 
-type dockerSystemDF struct {
-	LayersSize int64 `json:"LayersSize"`
-	Images     []struct {
-		Size       int64 `json:"Size"`
-		SharedSize int64 `json:"SharedSize"`
-		Containers int64 `json:"Containers"`
-	} `json:"Images"`
-	BuildCache []struct {
-		Size   int64 `json:"Size"`
-		InUse  bool  `json:"InUse"`
-		Shared bool  `json:"Shared"`
-	} `json:"BuildCache"`
+// ---- Docker / Podman / containerd (checked descriptor walk only) -----------------------
+
+var dockerRootMarkers = map[string]bool{
+	"overlay2":       true,
+	"buildkit":       true,
+	"containers":     true,
+	"volumes":        true,
+	"image":          true,
+	"overlay":        true,
+	"vfs":            true,
+	"aufs":           true,
+	"btrfs":          true,
+	"fuse-overlayfs": true,
+	"containerd":     true,
 }
 
-func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool, *scanUnsupportedError) {
+var podmanRootMarkers = map[string]bool{
+	"overlay-images": true,
+	"overlay-layers": true,
+	"vfs-images":     true,
+	"vfs-layers":     true,
+}
+
+func isContainerRootChild(name string) bool {
+	return dockerRootMarkers[name] || podmanRootMarkers[name]
+}
+
+// isDockerDataRoot reports whether a directory's direct subdirectories identify
+// it as a Docker data root (requiring at least two distinct Docker directories
+// and a strong signature pair so ordinary project folders are not misclassified).
+func isDockerDataRoot(dirs map[string]bool) bool {
+	if len(dirs) < 2 {
+		return false
+	}
+	count := 0
+	for name := range dockerRootMarkers {
+		if dirs[name] {
+			count++
+		}
+	}
+	if count < 2 {
+		return false
+	}
+	if dirs["overlay2"] || dirs["buildkit"] || dirs["fuse-overlayfs"] || dirs["aufs"] {
+		return true
+	}
+	if dirs["containers"] && (dirs["image"] || dirs["volumes"]) {
+		return true
+	}
+	if dirs["image"] && (dirs["volumes"] || dirs["overlay"] || dirs["vfs"] || dirs["btrfs"] || dirs["containerd"]) {
+		return true
+	}
+	return false
+}
+
+func isPodmanStorageRoot(dirs map[string]bool) bool {
+	return (dirs["overlay-images"] && dirs["overlay-layers"]) ||
+		(dirs["vfs-images"] && dirs["vfs-layers"])
+}
+
+type containerCollector struct {
+	imgSeen     map[inodeKey]struct{}
+	bcSeen      map[inodeKey]struct{}
+	volSeen     map[inodeKey]struct{}
+	logSeen     map[inodeKey]struct{}
+	imgBytes    uint64
+	bcBytes     uint64
+	volBytes    uint64
+	logBytes    uint64
+	dockerRoots map[string]bool
+	podmanRoots map[string]bool
+}
+
+func newContainerCollector() *containerCollector {
+	return &containerCollector{
+		imgSeen:     map[inodeKey]struct{}{},
+		bcSeen:      map[inodeKey]struct{}{},
+		volSeen:     map[inodeKey]struct{}{},
+		logSeen:     map[inodeKey]struct{}{},
+		dockerRoots: map[string]bool{},
+		podmanRoots: map[string]bool{},
+	}
+}
+
+func (c *containerCollector) categories() []proto.DiskUsageCategory {
 	var out []proto.DiskUsageCategory
+	if c.imgBytes > 0 {
+		out = append(out, proto.DiskUsageCategory{
+			Key:   proto.DiskCatContainerImages,
+			Label: "Container images",
+			Bytes: c.imgBytes,
+		})
+	}
+	if c.bcBytes > 0 {
+		out = append(out, proto.DiskUsageCategory{
+			Key:   proto.DiskCatContainerBuildCache,
+			Label: "Container build cache",
+			Bytes: c.bcBytes,
+		})
+	}
+	if c.volBytes > 0 {
+		out = append(out, proto.DiskUsageCategory{
+			Key:   proto.DiskCatContainerVolumes,
+			Label: "Container volumes",
+			Bytes: c.volBytes,
+		})
+	}
+	if c.logBytes > 0 {
+		out = append(out, proto.DiskUsageCategory{
+			Key:   proto.DiskCatContainerLogs,
+			Label: "Container logs",
+			Bytes: c.logBytes,
+		})
+	}
+	return out
+}
+
+func (c *containerCollector) alreadyCovered(path string) bool {
+	clean := filepath.Clean(path)
+	for existing := range c.dockerRoots {
+		if hasPathPrefix(clean, existing) {
+			return true
+		}
+	}
+	for existing := range c.podmanRoots {
+		if hasPathPrefix(clean, existing) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *containerCollector) collectInitial(r *Runner, ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) (bool, *scanUnsupportedError) {
 	partial := false
 
-	dockerRoot := categoryPathForScope(scope, "/var/lib/docker")
-	sock := r.findDockerSocket()
-	var df *dockerSystemDF
-	var rootOnMount bool
+	// Standard Docker data root (also covers dedicated submounts such as
+	// /var/lib/docker/volumes, /var/lib/docker/overlay2, /var/lib/docker/buildkit).
+	stdDocker := categoryPathForScope(scope, "/var/lib/docker")
+	p, unsup := c.measureDockerRoot(r, ctx, rootDir, scope, stdDocker, rootDev, rootMntID)
+	if unsup != nil {
+		return false, unsup
+	}
+	if p {
+		partial = true
+	}
 
-	if sock != "" && ctx.Err() == nil {
-		client := unixHTTPClient(sock, 10*time.Second)
-		var info dockerInfo
-		if err := dockerGet(ctx, client, "/info", &info); err == nil && info.DockerRootDir != "" {
-			dockerRoot = categoryPathForScope(scope, info.DockerRootDir)
-		}
-		// Resolve dockerRoot strictly relative to rootDir without crossing mounts
-		// or following symlinks before querying dockerd. Request only images and
-		// build cache so dockerd never runs an unbounded volume/container walk.
-		var unsup *scanUnsupportedError
-		rootOnMount, unsup = dirInScope(rootDir, scope, dockerRoot)
+	// Standard Podman storage root.
+	stdPodman := categoryPathForScope(scope, "/var/lib/containers/storage")
+	p, unsup = c.measurePodmanRoot(r, ctx, rootDir, scope, stdPodman, rootDev, rootMntID)
+	if unsup != nil {
+		return false, unsup
+	}
+	if p {
+		partial = true
+	}
+
+	// Dedicated custom mount whose root itself is a Docker or Podman data root
+	// (for example a disk mounted at /mnt/docker or /srv/containers). Inspect at
+	// most one batch of rootDir so non-Docker mounts avoid repeated lookups.
+	mp := scope.target.MountPoint
+	if ctx.Err() == nil && mp != "/" && mp != darwinDataVolumeMount && !c.alreadyCovered(mp) {
+		isDocker, isPodman, unsup := probeMountRootContainer(rootDir, scope, mp)
 		if unsup != nil {
-			return nil, false, unsup
+			return false, unsup
 		}
-		if rootOnMount {
-			var res dockerSystemDF
-			if err := dockerGet(ctx, client, "/system/df?type=image&type=build-cache", &res); err == nil {
-				df = &res
-			} else if ctx.Err() != nil {
+		if isDocker {
+			p, unsup = c.measureDockerRoot(r, ctx, rootDir, scope, mp, rootDev, rootMntID)
+			if unsup != nil {
+				return false, unsup
+			}
+			if p {
+				partial = true
+			}
+		} else if isPodman {
+			p, unsup = c.measurePodmanRoot(r, ctx, rootDir, scope, mp, rootDev, rootMntID)
+			if unsup != nil {
+				return false, unsup
+			}
+			if p {
 				partial = true
 			}
 		}
 	}
 
-	if df != nil && rootOnMount {
-		imgBytes, imgReclaim, imgUnused := summarizeDockerImages(df)
-		detail := ""
-		if len(df.Images) > 0 {
-			detail = fmt.Sprintf("%d %s", len(df.Images), plural(len(df.Images), "image", "images"))
-			if imgUnused > 0 {
-				detail += fmt.Sprintf(", %d unused", imgUnused)
+	// Standalone containerd content and snapshotter directories when on this mount.
+	if ctx.Err() == nil {
+		containerdRoot := categoryPathForScope(scope, "/var/lib/containerd")
+		for _, sub := range []string{
+			"io.containerd.content.v1.content",
+			"io.containerd.metadata.v1.bolt",
+			"io.containerd.snapshotter.v1.overlayfs",
+			"io.containerd.snapshotter.v1.native",
+			"io.containerd.snapshotter.v1.btrfs",
+			"io.containerd.snapshotter.v1.fuse-overlayfs",
+			"io.containerd.snapshotter.v1.zfs",
+		} {
+			if ctx.Err() != nil {
+				partial = true
+				break
 			}
-		}
-		if imgBytes > 0 {
-			out = append(out, proto.DiskUsageCategory{
-				Key:              proto.DiskCatContainerImages,
-				Label:            "Container images",
-				Bytes:            imgBytes,
-				ReclaimableBytes: imgReclaim,
-				Detail:           detail,
-			})
-		}
-
-		bcBytes, bcReclaim := summarizeDockerBuildCache(df)
-		if bcBytes > 0 {
-			out = append(out, proto.DiskUsageCategory{
-				Key:              proto.DiskCatContainerBuildCache,
-				Label:            "Container build cache",
-				Bytes:            bcBytes,
-				ReclaimableBytes: bcReclaim,
-			})
+			b, wp, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(containerdRoot, sub), rootDev, rootMntID, 12, c.imgSeen)
+			if unsup != nil {
+				return false, unsup
+			}
+			if wp {
+				partial = true
+			}
+			c.imgBytes += b
 		}
 	}
 
-	// Measure Docker volumes with our own low-priority bounded walk inside the
-	// mount scope, never delegating volume walks to dockerd.
+	// Kubernetes / CRI container logs if present on this mount.
 	if ctx.Err() == nil {
-		volDir := filepath.Join(dockerRoot, "volumes")
-		seen := map[inodeKey]struct{}{}
-		volBytes, volPartial, unsup := r.walkDirBytes(ctx, rootDir, scope, volDir, rootDev, rootMntID, 6, seen)
+		b, wp, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, c.logSeen)
 		if unsup != nil {
-			return nil, false, unsup
+			return false, unsup
 		}
-		if volPartial {
+		if wp {
 			partial = true
 		}
-		if volBytes > 0 {
-			out = append(out, proto.DiskUsageCategory{
-				Key:   proto.DiskCatContainerVolumes,
-				Label: "Container volumes",
-				Bytes: volBytes,
-			})
-		}
+		c.logBytes += b
 	}
 
-	// Container logs: <DockerRootDir>/containers/*/*-json.log* (and /var/log/pods
-	// if present on this mount). Always measure directly on disk because Docker
-	// /system/df does not separate container logs from writable layers.
-	if ctx.Err() == nil {
-		logBytes, logPartial, unsup := r.collectContainerLogs(ctx, rootDir, scope, dockerRoot, rootDev, rootMntID)
-		if unsup != nil {
-			return nil, false, unsup
-		}
-		if logPartial {
+	return partial, nil
+}
+
+// collectExtraRoots measures custom Docker and Podman data roots discovered on
+// the selected mount during walkMount, skipping roots already covered in the
+// initial pass and sharing inode deduplication maps so nothing is double-counted.
+func (c *containerCollector) collectExtraRoots(r *Runner, ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64, dockerRoots, podmanRoots []string) (bool, bool, *scanUnsupportedError) {
+	changed := false
+	partial := false
+
+	for _, dr := range dockerRoots {
+		if ctx.Err() != nil {
 			partial = true
+			break
 		}
-		if logBytes > 0 {
-			out = append(out, proto.DiskUsageCategory{
-				Key:   proto.DiskCatContainerLogs,
-				Label: "Container logs",
-				Bytes: logBytes,
-			})
-		}
-	}
-
-	return out, partial, nil
-}
-
-func summarizeDockerImages(df *dockerSystemDF) (total, reclaimable uint64, unused int) {
-	if df.LayersSize > 0 {
-		total = uint64(df.LayersSize)
-	}
-	var sumUnique uint64
-	for _, img := range df.Images {
-		unique := img.Size
-		if img.SharedSize > 0 && img.SharedSize <= img.Size {
-			unique = img.Size - img.SharedSize
-		}
-		if unique > 0 {
-			sumUnique += uint64(unique)
-		}
-		if img.Containers <= 0 {
-			unused++
-			if unique > 0 {
-				reclaimable += uint64(unique)
-			}
-		}
-	}
-	if total == 0 {
-		total = sumUnique
-	}
-	if reclaimable > total {
-		reclaimable = total
-	}
-	return total, reclaimable, unused
-}
-
-func summarizeDockerBuildCache(df *dockerSystemDF) (total, reclaimable uint64) {
-	for _, bc := range df.BuildCache {
-		if bc.Size <= 0 || bc.Shared {
+		if c.alreadyCovered(dr) {
 			continue
 		}
-		total += uint64(bc.Size)
-		if !bc.InUse {
-			reclaimable += uint64(bc.Size)
+		changed = true
+		p, unsup := c.measureDockerRoot(r, ctx, rootDir, scope, dr, rootDev, rootMntID)
+		if unsup != nil {
+			return false, false, unsup
+		}
+		if p {
+			partial = true
 		}
 	}
-	return total, reclaimable
+
+	for _, pr := range podmanRoots {
+		if ctx.Err() != nil {
+			partial = true
+			break
+		}
+		if c.alreadyCovered(pr) {
+			continue
+		}
+		changed = true
+		p, unsup := c.measurePodmanRoot(r, ctx, rootDir, scope, pr, rootDev, rootMntID)
+		if unsup != nil {
+			return false, false, unsup
+		}
+		if p {
+			partial = true
+		}
+	}
+
+	return changed, partial, nil
 }
 
-func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (uint64, bool, *scanUnsupportedError) {
+func (c *containerCollector) measureDockerRoot(r *Runner, ctx context.Context, rootDir scanDir, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (bool, *scanUnsupportedError) {
+	clean := filepath.Clean(dockerRoot)
+	c.dockerRoots[clean] = true
+	partial := false
+
+	// Image layers and metadata (running container merged overlayfs mounts are
+	// skipped automatically by openat2 RESOLVE_NO_XDEV / getattrlistbulk MNTPOINT).
+	for _, sub := range []string{"overlay2", "image", "overlay", "vfs", "aufs", "btrfs", "fuse-overlayfs", "containerd"} {
+		if ctx.Err() != nil {
+			partial = true
+			return partial, nil
+		}
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(clean, sub), rootDev, rootMntID, 12, c.imgSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.imgBytes += b
+	}
+
+	// BuildKit / legacy builder cache.
+	for _, sub := range []string{"buildkit", "builder"} {
+		if ctx.Err() != nil {
+			partial = true
+			return partial, nil
+		}
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(clean, sub), rootDev, rootMntID, 10, c.bcSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.bcBytes += b
+	}
+
+	// Docker volumes.
+	if ctx.Err() == nil {
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(clean, "volumes"), rootDev, rootMntID, 6, c.volSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.volBytes += b
+	} else {
+		partial = true
+	}
+
+	// Container logs: <dockerRoot>/containers/*/*-json.log* and *.log.
+	if ctx.Err() == nil {
+		b, p, unsup := r.collectContainerLogsDir(ctx, rootDir, scope, filepath.Join(clean, "containers"), rootDev, rootMntID, c.logSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.logBytes += b
+	} else {
+		partial = true
+	}
+
+	return partial, nil
+}
+
+func (c *containerCollector) measurePodmanRoot(r *Runner, ctx context.Context, rootDir scanDir, scope mountScope, podmanRoot string, rootDev, rootMntID uint64) (bool, *scanUnsupportedError) {
+	clean := filepath.Clean(podmanRoot)
+	c.podmanRoots[clean] = true
+	partial := false
+
+	for _, sub := range []string{"overlay", "overlay-images", "overlay-layers", "vfs", "vfs-images", "vfs-layers", "btrfs"} {
+		if ctx.Err() != nil {
+			partial = true
+			return partial, nil
+		}
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(clean, sub), rootDev, rootMntID, 12, c.imgSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.imgBytes += b
+	}
+
+	if ctx.Err() == nil {
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, filepath.Join(clean, "volumes"), rootDev, rootMntID, 6, c.volSeen)
+		if unsup != nil {
+			return false, unsup
+		}
+		if p {
+			partial = true
+		}
+		c.volBytes += b
+	} else {
+		partial = true
+	}
+
+	return partial, nil
+}
+
+func probeMountRootContainer(rootDir scanDir, scope mountScope, mount string) (isDocker, isPodman bool, unsup *scanUnsupportedError) {
+	self, err := rootDir.OpenSelf()
+	if err != nil {
+		return false, false, asUnsupportedErr(err)
+	}
+	defer self.Close()
+
+	ents, rerr := self.ReadDirBatch(dirBatchSize)
+	if rerr != nil && !errors.Is(rerr, io.EOF) {
+		if u := asUnsupportedErr(rerr); u != nil {
+			return false, false, u
+		}
+	}
+	found := make(map[string]bool, 4)
+	for _, e := range ents {
+		if e.Err != nil {
+			if u := asUnsupportedErr(e.Err); u != nil {
+				return false, false, u
+			}
+			continue
+		}
+		if !isSafeChildName(e.Name) || !isContainerRootChild(e.Name) {
+			continue
+		}
+		child := joinLogical(mount, e.Name)
+		if scope.isOtherMount(child) {
+			continue
+		}
+		switch e.Kind {
+		case entryDir:
+			found[e.Name] = true
+		case entryUnknown:
+			ok, u := dirInScope(rootDir, scope, child)
+			if u != nil {
+				return false, false, u
+			}
+			if ok {
+				found[e.Name] = true
+			}
+		}
+	}
+	return isDockerDataRoot(found), isPodmanStorageRoot(found), nil
+}
+
+func (r *Runner) collectContainerLogsDir(ctx context.Context, rootDir scanDir, scope mountScope, containersDir string, rootDev, rootMntID uint64, seen map[inodeKey]struct{}) (uint64, bool, *scanUnsupportedError) {
 	var total uint64
 	partial := false
-	seen := map[inodeKey]struct{}{}
 
-	containersDir := filepath.Join(dockerRoot, "containers")
 	capEntries := r.catMaxEntries
 	if capEntries <= 0 {
 		capEntries = 100_000
@@ -326,229 +597,173 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 		if !isSkipDirErr(err) {
 			partial = true
 		}
-	} else {
-	outerLoop:
-		for {
-			if ctx.Err() != nil {
+		return 0, partial, nil
+	}
+	defer cDir.Close()
+
+outerLoop:
+	for {
+		if ctx.Err() != nil {
+			partial = true
+			break
+		}
+		rem := capEntries - entries
+		if rem < 0 {
+			partial = true
+			break
+		}
+		ents, rerr := cDir.ReadDirBatch(min(dirBatchSize, rem+1))
+		for _, e := range ents {
+			entries++
+			if entries > capEntries || ctx.Err() != nil {
 				partial = true
-				break
+				break outerLoop
 			}
-			rem := capEntries - entries
-			if rem < 0 {
-				partial = true
-				break
-			}
-			ents, rerr := cDir.ReadDirBatch(min(dirBatchSize, rem+1))
-			for _, e := range ents {
-				entries++
-				if entries > capEntries || ctx.Err() != nil {
+			if e.Err != nil {
+				if unsup := asUnsupportedErr(e.Err); unsup != nil {
+					return 0, false, unsup
+				}
+				if !isSkipEntryErr(e.Err) {
 					partial = true
+				}
+				continue
+			}
+			if !isSafeChildName(e.Name) {
+				continue
+			}
+			// On filesystems without d_type (XFS without ftype=1, FUSE), entries
+			// arrive as entryUnknown; only skip entries known not to be directories.
+			if e.Kind != entryDir && e.Kind != entryUnknown {
+				continue
+			}
+			sub := joinLogical(containersDir, e.Name)
+			if scope.isOtherMount(sub) {
+				continue
+			}
+			subDir, oerr := cDir.OpenDir(e.Name, sub, false, true)
+			if oerr != nil {
+				if unsup := asUnsupportedErr(oerr); unsup != nil {
+					return 0, false, unsup
+				}
+				// Plain files and symlinks inside containers/ return ENOTDIR/ELOOP,
+				// and newly mounted filesystems return errWrongMount; all skip cleanly.
+				if !isSkipDirErr(oerr) {
+					partial = true
+				}
+				continue
+			}
+			for {
+				if ctx.Err() != nil {
+					partial = true
+					_ = subDir.Close()
 					break outerLoop
 				}
-				if e.Err != nil {
-					if unsup := asUnsupportedErr(e.Err); unsup != nil {
-						_ = cDir.Close()
-						return 0, false, unsup
-					}
-					if !isSkipEntryErr(e.Err) {
-						partial = true
-					}
-					continue
+				subRem := capEntries - entries
+				if subRem < 0 {
+					partial = true
+					_ = subDir.Close()
+					break outerLoop
 				}
-				if !isSafeChildName(e.Name) {
-					continue
-				}
-				// On filesystems without d_type (XFS without ftype=1, FUSE), entries
-				// arrive as entryUnknown; only skip entries known not to be directories.
-				if e.Kind != entryDir && e.Kind != entryUnknown {
-					continue
-				}
-				sub := joinLogical(containersDir, e.Name)
-				if scope.isOtherMount(sub) {
-					continue
-				}
-				subDir, oerr := cDir.OpenDir(e.Name, sub, false, true)
-				if oerr != nil {
-					if unsup := asUnsupportedErr(oerr); unsup != nil {
-						_ = cDir.Close()
-						return 0, false, unsup
-					}
-					// Plain files and symlinks inside containers/ return ENOTDIR/ELOOP,
-					// and newly mounted filesystems return errWrongMount; all skip cleanly.
-					if !isSkipDirErr(oerr) {
-						partial = true
-					}
-					continue
-				}
-				for {
-					if ctx.Err() != nil {
+				files, ferr := subDir.ReadDirBatch(min(dirBatchSize, subRem+1))
+				for _, f := range files {
+					entries++
+					if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
 						partial = true
 						_ = subDir.Close()
 						break outerLoop
 					}
-					subRem := capEntries - entries
-					if subRem < 0 {
-						partial = true
-						_ = subDir.Close()
-						break outerLoop
-					}
-					files, ferr := subDir.ReadDirBatch(min(dirBatchSize, subRem+1))
-					for _, f := range files {
-						entries++
-						if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
-							partial = true
+					if f.Err != nil {
+						if unsup := asUnsupportedErr(f.Err); unsup != nil {
 							_ = subDir.Close()
-							break outerLoop
+							return 0, false, unsup
 						}
-						if f.Err != nil {
-							if unsup := asUnsupportedErr(f.Err); unsup != nil {
+						if !isSkipEntryErr(f.Err) {
+							partial = true
+						}
+						continue
+					}
+					name := f.Name
+					if !isSafeChildName(name) {
+						continue
+					}
+					if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
+						continue
+					}
+					if f.Kind != entryRegular && f.Kind != entryUnknown {
+						continue
+					}
+					child := joinLogical(sub, name)
+					if scope.isOtherMount(child) {
+						continue
+					}
+					var st entryStat
+					if f.HasStat {
+						st = f.Stat
+					} else {
+						var serr error
+						st, serr = subDir.StatEntry(name, child)
+						if serr != nil {
+							if unsup := asUnsupportedErr(serr); unsup != nil {
 								_ = subDir.Close()
-								_ = cDir.Close()
 								return 0, false, unsup
 							}
-							if !isSkipEntryErr(f.Err) {
+							if !isSkipEntryErr(serr) {
 								partial = true
 							}
 							continue
 						}
-						name := f.Name
-						if !isSafeChildName(name) {
-							continue
-						}
-						if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
-							continue
-						}
-						if f.Kind != entryRegular && f.Kind != entryUnknown {
-							continue
-						}
-						child := joinLogical(sub, name)
-						if scope.isOtherMount(child) {
-							continue
-						}
-						var st entryStat
-						if f.HasStat {
-							st = f.Stat
-						} else {
-							var serr error
-							st, serr = subDir.StatEntry(name, child)
-							if serr != nil {
-								if unsup := asUnsupportedErr(serr); unsup != nil {
-									_ = subDir.Close()
-									_ = cDir.Close()
-									return 0, false, unsup
-								}
-								if !isSkipEntryErr(serr) {
-									partial = true
-								}
-								continue
-							}
-						}
-						if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
-							continue
-						}
-						if !st.HasDev || st.Dev != rootDev {
-							continue
-						}
-						if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
-							continue
-						}
-						if st.HasInode && st.Nlink > 1 {
-							k := inodeKey{dev: st.Dev, ino: st.Ino}
-							if _, dup := seen[k]; dup {
-								continue
-							}
-							if len(seen) < MaxSeenInodes {
-								seen[k] = struct{}{}
-							}
-						}
-						total += st.AllocBytes
 					}
-					if ferr != nil {
-						if unsup := asUnsupportedErr(ferr); unsup != nil {
-							_ = subDir.Close()
-							_ = cDir.Close()
-							return 0, false, unsup
-						}
-						if !errors.Is(ferr, io.EOF) && !isSkipDirErr(ferr) {
-							partial = true
-						}
-						break
+					if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
+						continue
 					}
-					if len(files) == 0 {
-						break
+					if !st.HasDev || st.Dev != rootDev {
+						continue
 					}
+					if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
+						continue
+					}
+					if st.HasInode && st.Nlink > 1 {
+						k := inodeKey{dev: st.Dev, ino: st.Ino}
+						if _, dup := seen[k]; dup {
+							continue
+						}
+						if len(seen) < MaxSeenInodes {
+							seen[k] = struct{}{}
+						}
+					}
+					total += st.AllocBytes
 				}
-				_ = subDir.Close()
-			}
-			if rerr != nil {
-				if unsup := asUnsupportedErr(rerr); unsup != nil {
-					_ = cDir.Close()
-					return 0, false, unsup
+				if ferr != nil {
+					if unsup := asUnsupportedErr(ferr); unsup != nil {
+						_ = subDir.Close()
+						return 0, false, unsup
+					}
+					if !errors.Is(ferr, io.EOF) && !isSkipDirErr(ferr) {
+						partial = true
+					}
+					break
 				}
-				if !errors.Is(rerr, io.EOF) && !isSkipDirErr(rerr) {
-					partial = true
+				if len(files) == 0 {
+					break
 				}
-				break
 			}
-			if len(ents) == 0 {
-				break
-			}
+			_ = subDir.Close()
 		}
-		_ = cDir.Close()
+		if rerr != nil {
+			if unsup := asUnsupportedErr(rerr); unsup != nil {
+				return 0, false, unsup
+			}
+			if !errors.Is(rerr, io.EOF) && !isSkipDirErr(rerr) {
+				partial = true
+			}
+			break
+		}
+		if len(ents) == 0 {
+			break
+		}
 	}
 
-	// Kubernetes / CRI container logs if present on this mount.
-	if ctx.Err() == nil {
-		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, seen)
-		if unsup != nil {
-			return 0, false, unsup
-		}
-		total += b
-		if p {
-			partial = true
-		}
-	}
 	return total, partial, nil
-}
-
-func (r *Runner) findDockerSocket() string {
-	for _, s := range r.dockerSockets {
-		p := r.hostPath(s)
-		fi, err := os.Stat(p)
-		if err == nil && fi.Mode()&os.ModeSocket != 0 {
-			return p
-		}
-	}
-	return ""
-}
-
-func unixHTTPClient(socketPath string, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", socketPath)
-			},
-		},
-	}
-}
-
-func dockerGet(ctx context.Context, client *http.Client, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %s", resp.Status)
-	}
-	// Cap response size to 16 MiB so a pathological daemon cannot exhaust memory.
-	return json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(out)
 }
 
 // ---- VM disks & snapshots --------------------------------------------------------------
@@ -618,7 +833,7 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 			partial = true
 			break
 		}
-		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, snapSeen)
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, dir), rootDev, rootMntID, 4, snapSeen)
 		if unsup != nil {
 			return proto.DiskUsageCategory{}, proto.DiskUsageCategory{}, false, unsup
 		}
@@ -631,7 +846,22 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 	return disks, snaps, partial, nil
 }
 
+func isSafeZFSDataset(dataset string) bool {
+	if dataset == "" || strings.HasPrefix(dataset, "-") || strings.HasPrefix(dataset, "/") {
+		return false
+	}
+	for _, c := range dataset {
+		if c <= 0x20 || c == '@' || c == '\\' {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *Runner) collectZFS(ctx context.Context, dataset string) (vmDisks, snapshots uint64, ok bool) {
+	if !isSafeZFSDataset(dataset) {
+		return 0, 0, false
+	}
 	out, err := r.runCmd(ctx, "zfs", "list", "-Hp", "-t", "filesystem,volume", "-o", "name,type,usedbydataset,usedbysnapshots", "-r", dataset)
 	if err != nil {
 		return 0, 0, false
@@ -754,11 +984,4 @@ func categoryPathForScope(scope mountScope, p string) string {
 		return darwinDataVolumeMount + "/private" + clean
 	}
 	return clean
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

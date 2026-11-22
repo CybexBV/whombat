@@ -29,6 +29,8 @@ type walkResult struct {
 	folders     []proto.DiskUsageFolder
 	partial     bool
 	unsupported *scanUnsupportedError
+	dockerRoots []string
+	podmanRoots []string
 }
 
 // virtualRoots are kernel/runtime filesystems never worth traversing even if
@@ -50,6 +52,8 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	entries := 0
 	partial := false
 	var unsupported *scanUnsupportedError
+	var dockerRoots []string
+	var podmanRoots []string
 
 	startDir, err := rootDir.OpenSelf()
 	if err != nil {
@@ -63,6 +67,26 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	var visit func(dir scanDir, logicalPath string, depth int) *dirNode
 	visit = func(dir scanDir, logicalPath string, depth int) *dirNode {
 		node := &dirNode{path: logicalPath, depth: depth}
+		var childMarkers map[string]bool
+		recordedDocker := false
+		recordedPodman := false
+		noteMarker := func(name string) {
+			if logicalPath == "/" || !isContainerRootChild(name) {
+				return
+			}
+			if childMarkers == nil {
+				childMarkers = make(map[string]bool, 4)
+			}
+			childMarkers[name] = true
+			if !recordedDocker && isDockerDataRoot(childMarkers) {
+				recordedDocker = true
+				dockerRoots = append(dockerRoots, logicalPath)
+			}
+			if !recordedPodman && isPodmanStorageRoot(childMarkers) {
+				recordedPodman = true
+				podmanRoots = append(podmanRoots, logicalPath)
+			}
+		}
 		for {
 			if unsupported != nil {
 				return node
@@ -80,6 +104,18 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 			}
 			batchCap := min(dirBatchSize, rem+1)
 			ents, err := dir.ReadDirBatch(batchCap)
+			// Pre-scan known subdirectory names in this batch before recursing so
+			// a Docker or Podman data root is recognized even if recursing into a
+			// large child (such as overlay2) later hits the entry cap.
+			if logicalPath != "/" {
+				for _, e := range ents {
+					if e.Err == nil && e.Kind == entryDir && isSafeChildName(e.Name) && isContainerRootChild(e.Name) {
+						if !scope.isOtherMount(joinLogical(logicalPath, e.Name)) {
+							noteMarker(e.Name)
+						}
+					}
+				}
+			}
 			for _, e := range ents {
 				entries++
 				if entries > maxEntries {
@@ -209,6 +245,7 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 				}
 
 				if st.Mode.IsDir() {
+					noteMarker(name)
 					if depth >= maxDepth {
 						partial = true
 						node.partial = true
@@ -287,7 +324,7 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 		return walkResult{unsupported: unsupported}
 	}
 	folders := pickLargestFolders(root, maxDepth, MaxFolders)
-	return walkResult{folders: folders, partial: partial}
+	return walkResult{folders: folders, partial: partial, dockerRoots: dockerRoots, podmanRoots: podmanRoots}
 }
 
 // pickLargestFolders selects up to limit non-overlapping large folders. It
