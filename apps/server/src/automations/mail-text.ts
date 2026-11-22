@@ -8,7 +8,7 @@
  * (`forgetLateMailSession`).
  */
 import { type JsonObject, type JsonValue, stepReads, withoutFencedMail } from '@whombat/core';
-import { and, desc, eq, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { TxSession } from '../commit/types';
 import { automationRunSteps, automationRuns, dispatches } from '../db/schema/index';
 import { homeOf } from '../hermes-home/housekeeping';
@@ -21,6 +21,15 @@ const ENDED: readonly string[] = ['succeeded', 'failed', 'cancelled', 'skipped']
 const SETTLED: readonly string[] = ['succeeded', 'skipped', 'failed', 'blocked', 'cancelled'];
 /** A step in these states may still use what it was given (its turn, its call). */
 const AT_WORK: readonly string[] = ['waiting', 'running'];
+
+/**
+ * The threads an agent step's turns ran in, its earlier attempts' included (kept on the step across attempts): where
+ * they left Hermes sessions.
+ */
+export function turnThreadsOf(output: unknown): string[] {
+  const kept = (output as { turnThreads?: unknown } | null)?.turnThreads;
+  return Array.isArray(kept) ? kept.filter((x): x is string => typeof x === 'string') : [];
+}
 
 /** A JSON value with every fenced email block replaced by a note; the same value when it holds none. */
 function withoutMail<T extends JsonValue>(value: T): T {
@@ -71,14 +80,37 @@ export async function forgetMailText(session: TxSession, run: AutomationRunRow):
       .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, row.idx)));
     changed = true;
   }
-  if (!needed && run.threadRootId) {
-    const sessions = await finishedAutomationSessions(tx, run.threadRootId);
+  if (!needed) {
+    const sessions = await finishedAutomationSessions(tx, await turnThreads(tx, run, steps));
     await dropSessions(
       { tx, services: session.services, background: session.background.bind(session), now },
       sessions,
     );
   }
   return changed;
+}
+
+/**
+ * Every thread the run's agent turns ran in: the run's own, and the ones its steps' turns answered in — a step placed
+ * at the top of a room, or in another room, asks in a thread of its own — for every attempt (`turnThreadsOf`) and the
+ * turn a step names now.
+ */
+async function turnThreads(
+  tx: TxSession['tx'],
+  run: AutomationRunRow,
+  steps: readonly { dispatchId: string | null; output: unknown }[],
+): Promise<string[]> {
+  const threads = new Set<string>(run.threadRootId ? [run.threadRootId] : []);
+  for (const step of steps) for (const t of turnThreadsOf(step.output)) threads.add(t);
+  const named = steps.flatMap((s) => (s.dispatchId ? [s.dispatchId] : []));
+  if (named.length) {
+    const turns = await tx
+      .select({ threadRootId: dispatches.threadRootId })
+      .from(dispatches)
+      .where(inArray(dispatches.id, named));
+    for (const t of turns) if (t.threadRootId) threads.add(t.threadRootId);
+  }
+  return [...threads];
 }
 
 /**
@@ -97,9 +129,14 @@ export async function forgetLateMailSession(
   const tx = session.tx;
   const [turn] = await tx.select().from(dispatches).where(eq(dispatches.id, dispatchId));
   if (turn?.trigger !== 'automation') return;
-  // The mail run whose step this turn is, or, for an earlier attempt of the step, the one whose thread it worked in.
+  // The mail run whose step this turn is, or, for an earlier attempt of a step, the one whose thread it worked in: the
+  // run's own, or one a step's turns answered in.
   const ownStep = sql`exists (select 1 from ${automationRunSteps} as s
-    where s.run_id = ${automationRuns.id} and s.dispatch_id = ${turn.id})`;
+    where s.run_id = ${automationRuns.id} and (s.dispatch_id = ${turn.id}${
+      turn.threadRootId && turn.onBehalfOfAccountId === null
+        ? sql` or s.output -> 'turnThreads' @> jsonb_build_array(${turn.threadRootId}::text)`
+        : sql``
+    }))`;
   const [found] = await tx
     .select({ id: automationRuns.id })
     .from(automationRuns)

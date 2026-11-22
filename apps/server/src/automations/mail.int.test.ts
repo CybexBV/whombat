@@ -3301,6 +3301,90 @@ describe('mail-arrives automations', () => {
     }
   });
 
+  it('forgets the sessions of every turn of the run, in a thread of their own and of earlier attempts too', async () => {
+    // It posts first (that starts the run's thread), then asks the agent at the top of the room: a thread of its own.
+    const autoId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'mail', connectionId, from: 'example.com', subjectContains: ['own-thread'] }],
+        steps: [
+          { id: 'note', kind: 'post_message', text: 'Invoice received' },
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}', thread: 'top', retries: 1 },
+        ],
+        limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Asks in its own thread' },
+    );
+    const dropped = async (session: string) =>
+      (await w.services.db.select().from(hermesSessionDrops).where(eq(hermesSessionDrops.sessionId, session)))
+        .length;
+    // The step's turn, claimed for the last time the runtime tries it (a failure then fails the step).
+    const turnOf = async (runId: string) => {
+      const id = (await w.run(runId)).steps[1]?.dispatchId as string;
+      const [row] = await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now(), attempts: w.services.runtime.options.maxAttempts })
+        .where(eq(dispatches.id, id))
+        .returning();
+      if (!row?.threadRootId) throw new Error('no turn');
+      return row;
+    };
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_own_thread',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'own-thread invoice',
+        body: 'BODY_IN_OWN_THREAD',
+        messageId: '<own-thread@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const runId = runRow?.id as string;
+      // The first attempt runs in a thread that isn't the run's, tells its session, and fails.
+      const first = await turnOf(runId);
+      expect(first.threadRootId).not.toBe((await loadRunRow(w.services.db, runId)).threadRootId);
+      await w.services.runtime.finalize(first.id, {
+        outcome: 'failed',
+        error: 'The model stopped.',
+        providerSessionId: 'hermes:own-thread-first',
+      });
+      await w.settle();
+      // Tried again after its pause, in a new thread of its own.
+      w.advance(10 * 60_000);
+      await w.settle();
+      const second = await turnOf(runId);
+      expect(second.id).not.toBe(first.id);
+      expect(second.threadRootId).not.toBe(first.threadRootId);
+      await w.services.db
+        .update(dispatches)
+        .set({ providerSessionId: 'hermes:own-thread-second' })
+        .where(eq(dispatches.id, second.id));
+      expect(await dropped('own-thread-first')).toBe(0);
+      await w.fakeAgentReply(second.id, 'Read it.');
+      await w.settle();
+      expect((await loadRunRow(w.services.db, runId)).status).toBe('succeeded');
+      // Both turns' sessions are forgotten with the email.
+      expect(await dropped('own-thread-first')).toBe(1);
+      expect(await dropped('own-thread-second')).toBe(1);
+      // The first turn's runner telling another session late, after the run ended, has it forgotten too.
+      await w.services.runtime.finalize(first.id, {
+        outcome: 'failed',
+        providerSessionId: 'hermes:own-thread-late',
+      });
+      expect(await dropped('own-thread-late')).toBe(1);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
+
   it('waits for the next update on a box whose previous release doesn’t know them, and goes on once it does', async () => {
     const OLD = 'whombat-20261121.4';
     const ME = 'whombat-20261122.1';

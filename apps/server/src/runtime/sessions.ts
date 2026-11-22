@@ -228,14 +228,15 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
 }
 
 /**
- * The sessions of the finished automation turns in a thread: what an automation run's agent steps ran in (its turns
- * answer in the run's thread), once none of them runs any more.
+ * The sessions of the finished automation turns in these threads: what an automation run's agent steps ran in (each turn
+ * answers in its prompt's thread), once none of them runs any more.
  */
-export function finishedAutomationSessions(db: Queryable, threadRootId: string) {
+export async function finishedAutomationSessions(db: Queryable, threadRootIds: readonly string[]) {
+  if (!threadRootIds.length) return [];
   return sessionsWhere(
     db,
     and(
-      eq(dispatches.threadRootId, threadRootId),
+      inArray(dispatches.threadRootId, [...threadRootIds]),
       eq(dispatches.trigger, 'automation'),
       inArray(dispatches.state, ['done', 'failed', 'cancelled']),
     ),
