@@ -462,13 +462,18 @@ describe('voice typing’s settings and models', () => {
     ).toBeGreaterThanOrEqual(3);
     await settings(c, { on: true, model: 'auto', language: 'auto' });
 
-    // Fetcher completely unreachable when turning Dutch voice off, then comes back online: removal still runs.
+    // Fetcher completely unreachable when turning Dutch voice off, then comes back online: returns saved off/removing
+    // state and retries removal until gone.
     fresh({ ready: ['parakeet'] });
     await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
     await until(c, (v) => v.dutchVoice?.state === 'ready');
     fetcher.unreachable = true;
     const offWhileDown = await c.request('voice.setDutchVoice', { on: false });
     expect(offWhileDown).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((offWhileDown as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+    });
     fetcher.unreachable = false;
     await vi.waitFor(
       async () => {
@@ -479,6 +484,94 @@ describe('voice typing’s settings and models', () => {
       { interval: 10, timeout: 3000 },
     );
     expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+  });
+
+  it('keeps saved state and retries automatically when the fetcher is restarting or fails a fetch', async () => {
+    // 1. Turning Dutch voice on while whombat-voice-models is restarting (unreachable):
+    // commits consent, returns saved on/waiting state (no error), and retries until the download finishes.
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+    // Read once while reachable so the service has seen supertonic's size (as Settings always does).
+    const before = await view(c);
+    expect(before.dutchVoice?.size).toBeGreaterThan(0);
+
+    fetcher.unreachable = true;
+    const agreedWhileDown = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedWhileDown).toMatchObject({ t: 'result' });
+    const savedWhileDown = VoiceTyping.parse((agreedWhileDown as { output: unknown }).output);
+    expect(savedWhileDown.dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+      size: before.dutchVoice?.size,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const [rowDown] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowDown).toMatchObject({
+      dutchVoice: true,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+
+    fetcher.unreachable = false;
+    const readyAfterRestart = await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(readyAfterRestart.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 2. Turning Dutch voice on when fetch() fails transiently while state() answers 'absent':
+    // returns saved on/waiting state and retries until accepted.
+    fresh({ ready: ['parakeet'] });
+    fetcher.failNextFetch.supertonic = 2;
+    const agreedTransient = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedTransient).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((agreedTransient as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+    });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 3. Turning Dutch voice on while leftover .removing-* trash is still undeletable:
+    // returns saved on/removing state with remaining bytes, retries until trash clears, then downloads.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('supertonic', 65_536);
+    fetcher.failNextRemove.supertonic = 2;
+    const agreedRemoving = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedRemoving).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((agreedRemoving as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: true,
+      state: 'removing',
+      received: 65_536,
+    });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 4. Changing speech model (voice.update) while fetcher is restarting also retries once fetcher answers.
+    fresh({ ready: ['parakeet'] });
+    fetcher.unreachable = true;
+    await settings(c, { on: true, model: 'whisper', language: 'auto' });
+    fetcher.unreachable = false;
+    await until(c, (v) => state(v, 'whisper')?.state === 'ready');
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
   });
 
   it('serialises Dutch voice consent checks, setting changes and fetcher calls across interleaved devices', async () => {

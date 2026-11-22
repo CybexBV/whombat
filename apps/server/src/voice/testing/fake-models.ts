@@ -48,6 +48,8 @@ export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceDownlo
 export class FakeVoiceModels implements VoiceModelsPort {
   /** The next download of that model fails with this problem (once). */
   readonly failNext: Partial<Record<VoiceDownloadModel, VoiceModelProblem>> = {};
+  /** Fail the next N `fetch(model)` calls as if the fetcher returned an error. */
+  readonly failNextFetch: Partial<Record<VoiceDownloadModel, number>> = {};
   /** Fail the next N `remove(model)` calls as if the fetcher were temporarily unreachable. */
   readonly failNextRemove: Partial<Record<VoiceDownloadModel, number>> = {};
   /** When true, `state()` throws as if the fetcher were temporarily unreachable. */
@@ -127,6 +129,11 @@ export class FakeVoiceModels implements VoiceModelsPort {
         this.failNextRemove[model] = failCount - 1;
         throw new VoiceModelsCallError(500, 'bad_request', `${model}: previous files not removed yet`);
       }
+    }
+    const failFetchCount = this.failNextFetch[model] ?? 0;
+    if (failFetchCount > 0) {
+      this.failNextFetch[model] = failFetchCount - 1;
+      throw new VoiceModelsCallError(500, 'bad_request', `${model}: fetch failed`);
     }
     if (m.state === 'absent' || m.state === 'failed' || m.state === 'removing') {
       this.#set(model, {
