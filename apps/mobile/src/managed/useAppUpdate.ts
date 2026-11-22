@@ -7,10 +7,11 @@
  * Asked while `open`: as a screen shows it, when the app comes back to the front, and every five minutes while it
  * stays there, each time only once the last answer is five minutes old (AP-2971).
  */
-import type { AndroidDownload, ControlApi } from '@whombat/client/managed';
+import type { AndroidDownload } from '@whombat/client/managed';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import {
+  type AppUpdateSource,
   type AppUpdateStatus,
   appUpdateStatus,
   newerAppPublished,
@@ -34,10 +35,13 @@ export interface AppUpdateCheck {
 }
 
 /**
- * The app's update check (AP-2972): null on the iPhone and without a control client (self-hosted, the demo world),
- * where there is no APK to look for.
+ * The app's update check (AP-2972): null on the iPhone and without a control client (the demo world), where there is
+ * no APK to look for. A box the phone reaches directly asks too (`updates` in the managed context).
  */
-export function useUpdateCheck(control: ControlApi | null | undefined, open = true): AppUpdateCheck | null {
+export function useUpdateCheck(
+  control: AppUpdateSource | null | undefined,
+  open = true,
+): AppUpdateCheck | null {
   const check: UpdateCheck | null = control && PHONE_PLATFORM === 'android' ? updateCheckFor(control) : null;
   const state = useSyncExternalStore(check ? check.subscribe : noSubscription, check ? check.state : unasked);
   useEffect(() => {
@@ -72,6 +76,9 @@ export function useUpdateCheck(control: ControlApi | null | undefined, open = tr
  * The published APK when it is newer than this build (SS-71), for “Update available”: null on the iPhone, without a
  * control client (self-hosted, the demo world) and while nothing newer is out.
  */
-export function useAppUpdate(control: ControlApi | null | undefined, open = true): AndroidDownload | null {
+export function useAppUpdate(
+  control: AppUpdateSource | null | undefined,
+  open = true,
+): AndroidDownload | null {
   return useUpdateCheck(control, open)?.update ?? null;
 }

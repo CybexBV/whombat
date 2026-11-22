@@ -82,7 +82,7 @@ function useAssistantFacts() {
 export function useSettingsTabDot(): 'ok' | 'warn' | 'bad' | null {
   const assistant = useAssistantFacts();
   const appliance = useApplianceLine();
-  const update = useAppUpdate(useManaged()?.control) !== null;
+  const update = useAppUpdate(useManaged()?.updates) !== null;
   return settingsTabDot({ agent: assistantLine(assistant), appliance: appliance ?? null, update });
 }
 

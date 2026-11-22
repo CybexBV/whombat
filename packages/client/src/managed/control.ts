@@ -652,9 +652,14 @@ export function createHttpControl(
 
   async function call<T>(
     ep: { method: string; path: string },
-    input: { params?: Record<string, string>; body?: unknown; signal?: AbortSignal } = {},
+    input: {
+      params?: Record<string, string>;
+      body?: unknown;
+      signal?: AbortSignal;
+      anonymous?: boolean;
+    } = {},
   ): Promise<T> {
-    const token = await tokens.get();
+    const token = input.anonymous ? null : await tokens.get();
     if (input.signal?.aborted) throw new ControlError('unavailable', 'Request cancelled.');
     let res: Response;
     try {
@@ -870,7 +875,9 @@ export function createHttpControl(
     },
     async androidDownload() {
       try {
-        const r = await call<{ android?: unknown }>(downloadsApi.android);
+        // No sign-in goes with it: a phone that reaches its Whombat directly asks this too, and it says nothing about
+        // the person or the box.
+        const r = await call<{ android?: unknown }>(downloadsApi.android, { anonymous: true });
         const a = AndroidDownload.safeParse(r?.android);
         return a.success ? a.data : null;
       } catch (error) {

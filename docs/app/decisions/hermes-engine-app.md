@@ -249,7 +249,7 @@ client AP-5400…AP-5419, web AP-5420…AP-5469, phone AP-5470…AP-5499.
 
 | ID | Decision | Why |
 |---|---|---|
-| AP-5470 | **On a community box the phone leaves out what needs control**: remote help, the plan, passkeys, the organization invite, Switch Whombat and Settings → AI's web link; it makes no control calls. | HE-58. |
+| AP-5470 | **On a community box the phone leaves out what needs control**: remote help, the plan, passkeys, the organization invite, Switch Whombat and Settings → AI's web link; it makes no control calls but one: the Android app's update check (control's public download list, asked with no sign-in), so the banner, Settings' update row and Check for updates work there too (John, 2026-11-22). | HE-58. Without the check a phone added at the box's own address never heard of a newer app; the check names neither the person nor the box. |
 | AP-5471 | **“Join with a link or QR code” on the first screen** (scan or paste; the sign-in scanner takes these links too) leads to an invite (asks your name), a device link (one tap) or a way back in (waits for an owner's fingerprint check). Community boxes are kept in their own registry and open at start without a cloud account. Scanning and pasting are the only ways in: Android can't verify app links for a home address or a tailnet name. | HE-60; CT-1304, CT-1305. |
 | AP-5472 | **A community box is reached on its direct ways only**, on every channel (all of the link's or welcome's routes on Android): never the relay or control; unreachable says so with Try again. | HE-50, HE-58. |
 | AP-5473 | **Invite and get-back-in links are the box's own**, with a QR code, Share, Copy and Cancel; without a link the invite is withdrawn and the phone says why. | CT-1304. |

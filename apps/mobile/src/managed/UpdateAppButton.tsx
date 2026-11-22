@@ -22,7 +22,7 @@ export function UpdateAppButton({
   size?: 'lg';
   withNote?: boolean;
 }) {
-  const update = useAppUpdate(useManaged()?.control);
+  const update = useAppUpdate(useManaged()?.updates);
   const install = useAppInstall();
   const view = update && install ? installView(install.state, update, COPY.update.label) : null;
   const button = (

@@ -117,7 +117,7 @@ export function SettingsScreen() {
   useEffect(() => {
     if (focused) void qc.invalidateQueries({ queryKey: ['settings'] });
   }, [focused, qc]);
-  const updateCheck = useUpdateCheck(managed?.control, focused);
+  const updateCheck = useUpdateCheck(managed?.updates, focused);
   // On an iPhone the list runs on under iOS's tab bar and ends above it.
   const bottomRoom = useBottomRoom();
   const [refreshing, setRefreshing] = useState(false);

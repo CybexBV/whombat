@@ -39,7 +39,7 @@ export function VersionCard({
   hermes?: { version: string } | null;
 }) {
   // Asked again as the card shows, once the last answer is five minutes old (AP-2971).
-  const check = useUpdateCheck(useManaged()?.control, useIsFocused());
+  const check = useUpdateCheck(useManaged()?.updates, useIsFocused());
   const [app, ...rest] = versionRows(ownVersion(), useWhombatVersion(runtime), check?.status ?? null, hermes);
   return (
     <Card label={VERSION_TEXT.label}>

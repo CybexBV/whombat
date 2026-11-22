@@ -12,7 +12,7 @@ import { UpdateAppButton } from './UpdateAppButton';
 import { useAppUpdate } from './useAppUpdate';
 
 export function NeedsNewerApp({ inline }: { inline?: boolean }) {
-  const newer = useAppUpdate(useManaged()?.control) !== null;
+  const newer = useAppUpdate(useManaged()?.updates) !== null;
   return (
     <View
       style={
