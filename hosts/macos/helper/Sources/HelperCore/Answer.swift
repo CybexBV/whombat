@@ -84,9 +84,12 @@ public struct StatusInfo: Encodable, Equatable, Sendable {
     public var frontApp: String?
     public var frontWindow: String?
     public var displays: [DisplayInfo]
+    /// Whole seconds since someone last used the Mac's own keyboard, mouse or trackpad; nil when macOS can't say.
+    /// Whombat leaves the screen alone while someone is at it.
+    public var idleS: Int?
 
     public init(version: String, ax: Bool, locked: Bool, user: String, frontApp: String?, frontWindow: String?,
-                displays: [DisplayInfo]) {
+                displays: [DisplayInfo], idleS: Int? = nil) {
         self.version = version
         self.ax = ax
         self.locked = locked
@@ -94,6 +97,57 @@ public struct StatusInfo: Encodable, Equatable, Sendable {
         self.frontApp = frontApp
         self.frontWindow = frontWindow
         self.displays = displays
+        self.idleS = idleS
+    }
+}
+
+/// A place `geocode` found: where it is, in degrees, and to within how many metres.
+public struct Place: Encodable, Equatable, Sendable {
+    public var lat: Double
+    public var lon: Double
+    public var accuracyM: Int
+
+    public init(lat: Double, lon: Double, accuracyM: Double) {
+        // A tenth of a metre is plenty, and keeps the numbers short.
+        self.lat = (lat * 1e6).rounded() / 1e6
+        self.lon = (lon * 1e6).rounded() / 1e6
+        self.accuracyM = accuracyM.isFinite && accuracyM > 0 ? Int(accuracyM.rounded()) : 100
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case lat, lon, accuracyM = "accuracy_m"
+    }
+}
+
+/// Where a pin is on a map picture, in its points from the top-left corner.
+public struct MapPoint: Encodable, Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = (x * 10).rounded() / 10
+        self.y = (y * 10).rounded() / 10
+    }
+}
+
+/// A map picture `map` drew, the pins' places on it and the region it shows.
+public struct MapImage: Equatable, Sendable {
+    public var image: Data
+    public var format: ImageFormat
+    /// The picture's size in pixels.
+    public var w: Int
+    public var h: Int
+    /// One per pin, in order; nil for a pin outside the picture.
+    public var points: [MapPoint?]
+    public var region: MapRegion
+
+    public init(image: Data, format: ImageFormat, w: Int, h: Int, points: [MapPoint?], region: MapRegion) {
+        self.image = image
+        self.format = format
+        self.w = w
+        self.h = h
+        self.points = points
+        self.region = region
     }
 }
 
@@ -108,6 +162,9 @@ public enum Answer: Equatable, Sendable {
     case windows([WindowInfo], truncated: Bool)
     /// The focused element and its process (`pid`, `bundle_id`; the element's role and place only).
     case focused(ElementInfo, pid: Int32, bundleID: String)
+    /// What `geocode` found, one per query in order; nil where nothing was found.
+    case places([Place?])
+    case map(MapImage)
     case failure(HelperError)
 
     /// The answer as one line, newline included, never longer than the agent reads: a list that would be is cut
@@ -149,7 +206,8 @@ private struct Wire: Encodable {
 
     enum Key: String, CodingKey {
         case ok, code, message, names, version, ax, locked, user, frontApp = "front_app", frontWindow = "front_window"
-        case displays, apps, elements, truncated, element, windows, pid, bundleID = "bundle_id"
+        case displays, apps, elements, truncated, element, windows, pid, bundleID = "bundle_id", idleS = "idle_s"
+        case places, image, format, w, h, points, lat, lon, spanM = "span_m"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -175,6 +233,11 @@ private struct Wire: Encodable {
             try c.encodeIfPresent(s.frontApp, forKey: .frontApp)
             try c.encodeIfPresent(s.frontWindow, forKey: .frontWindow)
             try c.encode(s.displays, forKey: .displays)
+            if let idle = s.idleS {
+                try c.encode(idle, forKey: .idleS)
+            } else {
+                try c.encodeNil(forKey: .idleS)
+            }
         case let .apps(apps):
             try c.encode(apps, forKey: .apps)
         case let .elements(list, truncated):
@@ -190,6 +253,18 @@ private struct Wire: Encodable {
             try c.encode(element, forKey: .element)
             try c.encode(pid, forKey: .pid)
             if !bundleID.isEmpty { try c.encode(bundleID, forKey: .bundleID) }
+        case let .places(places):
+            // An unkeyed list writes nil as null, so the answer keeps the queries' order.
+            try c.encode(places, forKey: .places)
+        case let .map(m):
+            try c.encode(m.image, forKey: .image)
+            try c.encode(m.format.rawValue, forKey: .format)
+            try c.encode(m.w, forKey: .w)
+            try c.encode(m.h, forKey: .h)
+            try c.encode(m.points, forKey: .points)
+            try c.encode((m.region.lat * 1e6).rounded() / 1e6, forKey: .lat)
+            try c.encode((m.region.lon * 1e6).rounded() / 1e6, forKey: .lon)
+            try c.encode(m.region.spanM.rounded(), forKey: .spanM)
         }
     }
 }

@@ -10,6 +10,7 @@
 import {
   HOST_CONTROL_LEVELS,
   HOST_SCREEN_CODES,
+  HOST_SCREEN_LIMITS,
   type HostAlert,
   type HostBackupJob,
   type HostBackupVolume,
@@ -36,6 +37,8 @@ import {
   type HostMacScreen,
   type HostMaintenance,
   type HostManageResult,
+  type HostMapPlace,
+  type HostMapPoint,
   type HostNetworkLease,
   type HostOsFamily,
   type HostPendingEnrollment,
@@ -1125,7 +1128,34 @@ export function toHostMacHelper(raw: unknown): HostMacHelper {
     running: bool(h.running),
     ax: known(h.ax),
     user: named(h.user),
+    // Helpers before 1.1.0 don't say how long the Mac has been left alone: unknown, not “just now”.
+    ...(h.idle_s === undefined ? {} : { idleS: idleSeconds(h.idle_s) }),
   };
+}
+
+/** Whole seconds since someone last used the Mac, or null when the helper couldn't tell. */
+const idleSeconds = (v: unknown): number | null => {
+  const n = num(v);
+  return n !== null && n >= 0 ? Math.floor(n) : null;
+};
+
+/** A place the Mac's geocoder found, or null (nothing found, or a part that can't be read). */
+function toHostMapPlace(raw: unknown): HostMapPlace | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = obj(raw);
+  const lat = num(p.lat);
+  const lon = num(p.lon);
+  if (lat === null || lon === null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon, accuracyM: Math.max(0, num(p.accuracy_m) ?? 0) };
+}
+
+/** Where a pin is in a map picture, or null where it falls outside (or can't be read). */
+function toHostMapPoint(raw: unknown): HostMapPoint | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = obj(raw);
+  const x = num(p.x);
+  const y = num(p.y);
+  return x === null || y === null ? null : { x, y };
 }
 
 /** The `macos` part of a Mac's detail: its facts, its screen and its helper. */
@@ -1223,6 +1253,15 @@ export function toHostScreenResult(raw: unknown, serverId: string, op: HostScree
     status: r.status && typeof r.status === 'object' ? toHostMacScreen(r.status) : undefined,
     helper: r.helper && typeof r.helper === 'object' ? toHostMacHelper(r.helper) : undefined,
     truncated: r.truncated === true ? true : undefined,
+    places: Array.isArray(r.places)
+      ? r.places.slice(0, HOST_SCREEN_LIMITS.queries).map(toHostMapPlace)
+      : undefined,
+    points: Array.isArray(r.points)
+      ? r.points.slice(0, HOST_SCREEN_LIMITS.pins).map(toHostMapPoint)
+      : undefined,
+    lat: num(r.lat) ?? undefined,
+    lon: num(r.lon) ?? undefined,
+    spanM: num(r.span_m) ?? undefined,
     auditId: str(r.audit_id)?.slice(0, 200) || undefined,
   }) as HostScreenResult;
 }

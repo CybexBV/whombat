@@ -465,6 +465,9 @@ export const EXPORT_OPS: readonly string[] = [];
 export const EXPORT_READ_OPS: readonly string[] = [
   // A Mac's screenshot (Whombat macos-servers.md): hundreds of kilobytes.
   'hosts.screenLook',
+  // Find My on a Mac's page: the Mac's map picture and Find My's own map of one person.
+  'hosts.findMyMap',
+  'hosts.findMyPicture',
   'skills.library',
   'skills.librarySkill',
   'skills.librarySkillFile',

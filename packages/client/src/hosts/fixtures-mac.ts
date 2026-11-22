@@ -3,11 +3,12 @@
  * with an Apple M2 Ultra, Screen Sharing on, the Mac's password set for `mara`, Whombat Helper running and — so the page
  * shows its one chore — without Accessibility until someone opens the setting and switches it on. `createMacFixture`
  * answers its screen (`hosts.screen`, `hosts.screenLook`) as the Mac's agent does: the password is checked (“wrong” is
- * refused) and never kept, the lock, the helper, a look with a small picture of a desktop. `withMac(handle, ctx)` puts
+ * refused) and never kept, the lock, the helper, a look with a small picture of a desktop; and its Find My
+ * (`hosts.findMy*`, `fixtures-findmy.ts`) with made-up people around a made-up town. `withMac(handle, ctx)` puts
  * its page in the web's fixture world (built from the-falcon's on every read); the phone's demo world uses the same
  * fixture. Listed in the fleet only when `localStorage['whombat.fixtures.mac']` is set, as kvm-lab is, so the mock's five
- * servers stay as drawn; its value picks a scenario (`setup`, `sharing-off`, `locked`, `failed`, `no-helper`, anything
- * else: as above). Not imported by production code.
+ * servers stay as drawn; its value picks a scenario (`setup`, `sharing-off`, `locked`, `failed`, `no-helper`, `in-use`
+ * and `nobody` for Find My, anything else: as above). Not imported by production code.
  */
 import {
   type HostMacosDetail,
@@ -18,6 +19,7 @@ import {
   type HostUiApp,
 } from '@whombat/core/domain';
 import type { HostsFixtureAnswer, HostsFixtureRequest, HostsFixtureWorld } from './fixtures';
+import { createFindMyFixture, type FindMyFixture } from './fixtures-findmy';
 
 export const MAC_SERVER = 'studio';
 
@@ -28,9 +30,28 @@ const USER = 'mara';
 export const MAC_LOOK_PNG_B64 =
   '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';
 
-export type MacScenario = 'ready' | 'setup' | 'sharing-off' | 'locked' | 'failed' | 'no-helper';
+export type MacScenario =
+  | 'ready'
+  | 'setup'
+  | 'sharing-off'
+  | 'locked'
+  | 'failed'
+  | 'no-helper'
+  /** Find My: someone is at the Mac, so the read waits. */
+  | 'in-use'
+  /** Find My: nobody shares their location. */
+  | 'nobody';
 
-const SCENARIOS: readonly MacScenario[] = ['ready', 'setup', 'sharing-off', 'locked', 'failed', 'no-helper'];
+const SCENARIOS: readonly MacScenario[] = [
+  'ready',
+  'setup',
+  'sharing-off',
+  'locked',
+  'failed',
+  'no-helper',
+  'in-use',
+  'nobody',
+];
 
 /** A scenario from the stored setting (`1` or anything unknown: `ready`). */
 export function macScenario(v: string | null | undefined): MacScenario {
@@ -93,6 +114,8 @@ export interface MacFixture {
   screen(body: Record<string, unknown>): HostsFixtureAnswer;
   /** `GET …/servers/studio/screen`: a look. */
   look(query: Record<string, string>): HostsFixtureAnswer;
+  /** `…/servers/studio/find-my…`: what Find My shows, its map and Find My's own map of one person. */
+  findMy: FindMyFixture;
 }
 
 const SCREEN_W = 3840;
@@ -119,7 +142,8 @@ export function createMacFixture(
   });
   const helper = () => ({
     installed: st.installed,
-    version: st.installed ? '1.0.0' : null,
+    // The helper that reads Find My.
+    version: st.installed ? '1.1.0' : null,
     running: st.running,
     ax: st.running ? ax() : null,
     user: st.running ? USER : null,
@@ -161,7 +185,26 @@ export function createMacFixture(
     { name: 'Finder', bundleId: 'com.apple.finder', pid: 401, active: false, windows: [] },
   ];
 
+  const findMy = createFindMyFixture({
+    server: MAC_SERVER,
+    clock,
+    // What stops a read on the Mac itself. Accessibility isn't asked for here, so the default world shows its people
+    // beside the Screen tab's one chore (opening that setting).
+    blocked: () =>
+      !st.installed || !st.running
+        ? 'no_helper'
+        : !st.sharing
+          ? 'no_screen'
+          : !st.account
+            ? 'no_account'
+            : st.signIn === 'failed'
+              ? 'sign_in_failed'
+              : null,
+    end: scenario === 'in-use' ? 'in_use' : scenario === 'nobody' ? 'nobody' : 'people',
+  });
+
   return {
+    findMy,
     macos: () => ({
       version: '27.2.1',
       build: '26B131',
@@ -438,6 +481,15 @@ export function withMac(next: Handle, ctx: MacFixtureContext): Handle {
     if (seg[0] !== 'servers' || seg[1] !== MAC_SERVER) return next(req);
     if (seg.length === 3 && seg[2] === 'screen')
       return req.method === 'POST' ? mac.screen(req.body) : mac.look(req.query);
+    if (seg[2] === 'find-my') {
+      const fm = mac.findMy;
+      const what = `${req.method} ${seg.slice(3).join('/')}`;
+      if (what === 'GET ') return fm.state();
+      if (what === 'POST refresh') return fm.refresh();
+      if (what === 'POST exact') return fm.exact(req.body);
+      if (what === 'GET map') return fm.map(req.query);
+      if (what === 'GET picture') return fm.picture(req.query);
+    }
     // Its page says how the screen is now (a step changed it, or Accessibility came on).
     world.details.set(MAC_SERVER, macDetail(template, mac, now));
     return next(req);

@@ -1,8 +1,10 @@
 # Whombat Helper
 
 A small Mac app that lets `whombat-agent` find things on the Mac's screen by name: list an app's buttons and fields,
-press one, type into one, pick a menu item, bring an app forward, open a setting. The agent runs as root and has no
-desktop session, so it can't do this itself; the helper runs inside the session of whoever is at the screen.
+press one, run one's own action (Find My's “Open Details”), type into one, pick a menu item, bring an app forward,
+quit it, open a setting. For Find My on a Mac's page it also finds places by address with Apple's geocoder and draws
+map pictures with MapKit, so no other map service learns where anyone is. The agent runs as root and has no desktop
+session, so it can't do this itself; the helper runs inside the session of whoever is at the screen.
 
 - Bundle id `com.whombat.helper`, name “Whombat Helper”, no Dock icon and no windows (`LSUIElement`).
 - macOS 13 or later, Apple silicon and Intel (one universal binary).
@@ -42,13 +44,14 @@ swift test
 open -n -a "$PWD/build/Whombat Helper.app" --args --socket /tmp/helper.sock
 printf '{"v":1,"op":"status"}\n' | sudo nc -U /tmp/helper.sock          # only root is answered
 printf '{"v":1,"op":"list","app":"TextEdit","limit":20}\n' | sudo nc -U /tmp/helper.sock
+printf '{"v":1,"op":"geocode","queries":["Dam, Amsterdam"]}\n' | sudo nc -U /tmp/helper.sock
 sudo "build/Whombat Helper.app/Contents/MacOS/WhombatHelper" --request '{"v":1,"op":"apps"}'
 pkill -f 'WhombatHelper --socket /tmp/helper.sock'
 ```
 
 Start it with `open` (or from its LaunchAgent), not from an SSH session: only a process of the desktop session sees
 the session's apps, and macOS checks Accessibility for the app responsible for it (Terminal, when started from Terminal). Without Accessibility, `status` says
-`"ax": false` and `list`, `press`, `set`, `type`, `menu`, `unlock` and `focused` answer `no_access`; `apps`, `focus`, `open` and
+`"ax": false` and `list`, `press`, `set`, `type`, `menu`, `unlock`, `focused` and `action` answer `no_access`; `apps`, `focus`, `open`, `quit`, `geocode`, `map` and
 `windows` (the on-screen windows front to back, their owners and places, never their titles) still work, which is how
 the agent answers macOS's password prompt that switches Accessibility on. An ad hoc signature changes with
 every build, so a permission given to one is gone after the next; the signed build keeps it. macOS then still lists

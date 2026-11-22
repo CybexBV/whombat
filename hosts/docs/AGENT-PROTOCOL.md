@@ -719,12 +719,27 @@ be one of those two), not whether something does. Ops:
   it. Each runs as one step: they wait for a running step (`busy` after
   10 s), never replacing its connection.
 - `ui.apps`, `ui.list`, `ui.press`, `ui.set`, `ui.menu`, `ui.focus`,
-  `ui.open`: through Whombat Helper (below).
+  `ui.open`, and from Whombat Helper 1.1.0 `ui.action` (`App`, `Name`,
+  `Role`, `Index`, `Action`), `ui.quit` (`App`), `map.geocode`
+  (`Queries` → `Places`) and `map.snapshot` (`W`, `H`, `Scale`, `Dark`,
+  `Format`, `Pins`, `Lat`, `Lon`, `SpanM` → `Image`, `Format`, `W`, `H`,
+  `Points`, `Lat`, `Lon`, `SpanM`): through Whombat Helper (below).
+  `ui.quit` and `map.*` run while the screen is locked and without
+  Accessibility; the agent gives the helper 22 s for `map.*` (12 s for the
+  rest). A helper that doesn't know a step answers "unknown op …", which
+  the agent answers `unsupported` ("Whombat Helper on this Mac is older
+  than this step; it updates itself."). The map's answer is checked before
+  it goes on: a JPEG or PNG of the size it says, under 7 MiB, a point or
+  nil per pin, a real region. The places looked up or drawn are never
+  logged. `look` takes `Crop` (framebuffer pixels, clamped to the screen,
+  cut before `MaxW`). `status`'s `Helper.IdleS` is the helper's `idle_s`
+  when it answered in the last 5 s; the report never carries it.
 
 Codes besides the runtime's: `invalid_request`, `no_screen`, `no_account`,
 `sign_in_failed`, `no_helper`, `no_access`, `not_admin` (`password`
 without Accessibility: the screen account isn't an administrator),
-`not_found`, `locked`, `no_prompt`, `busy`
+`not_found`, `locked`, `no_prompt`, `unsupported` (also a step the helper
+doesn't know yet), `busy`
 (another step held the screen for 10 s, or Whombat Helper takes no more
 requests now), `timeout`, `failed`. `Message`
 also comes with an answer that worked when there is something to say (the
@@ -810,7 +825,29 @@ lost while emptying the field, it waits for the field again; lost while
 typing, `failed` with nothing more typed and no Return. From 1.0.5
 `focused`'s element carries `token`, the element itself (Accessibility's
 hash of it: the same for that element while it exists, another for
-another), and its busy answer has the code `busy`.
+another), and its busy answer has the code `busy`. From 1.1.0 an app is
+also found by the name the Mac shows (`CFBundleDisplayName`,
+`CFBundleName`, the Finder's) and by its bundle id when `open` starts it,
+and app names match with case and white space ignored (exact, then the
+start, then a part; an ordinary app before an accessory or an extension
+matched alike); it takes `{"op": "action", "app", "name", "role",
+"index", "action"}` (Accessibility, unlocked: the element as `press`
+finds it, then the accessibility action named `action`: an app's own,
+listed as `Name:Play\nTarget:0x0\nSelector:(null)` and named by the words
+after `Name:`, or an `AX…` one; exact, then the only one that starts with
+it; `not_found` with the element's action names), `{"op": "quit", "app"}`
+(an ordinary app, `terminate()`, up to 3 s, `message` "It is still
+closing." when it hasn't ended), `{"op": "geocode", "queries"}` (1 to 8,
+each at most 300 characters; `places` in order, `{lat, lon, accuracy_m}`
+or null; one search at a time, answers kept an hour) and `{"op": "map",
+"w", "h", "scale", "dark", "format", "pins", "lat", "lon", "span_m"}`
+(MapKit; `image` base64, `format`, `w`, `h` in pixels, `points` in the
+requested points from the top-left or null, `lat`, `lon`, `span_m` the
+region drawn); `quit`, `geocode` and `map` work while locked and without
+Accessibility, and `geocode` and `map` get 20 s. `status` adds `idle_s`:
+whole seconds since the last keyboard or mouse input at the Mac
+(`CGEventSource` of the HID system state, so Screen Sharing's input
+counts too), null when unknown.
 
 ## Additions (2026-10-17): One Whombat
 

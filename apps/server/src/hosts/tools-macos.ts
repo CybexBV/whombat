@@ -1,8 +1,10 @@
 /**
  * The assistant's hands on a Mac (docs/decisions/macos-servers.md): `mac_screen` sees the screen and clicks,
  * drags, scrolls, types and presses keys by position, or unlocks it; `mac_ui` works with the Mac's apps by name through
- * Whombat Helper. Both are Servers tools (`connection_call`), so keys, tiers, the server's “Asks you first” and the
- * catalog's sensitive rules apply as to `server_command`; each runs one `hosts.screen` step (`screen.ts`).
+ * Whombat Helper, runs an element's own action by its name (“Play”) and quits an app. An action that removes, erases,
+ * signs out, stops sharing or marks something lost is never run: the person does that on the Mac's screen. Both are
+ * Servers tools (`connection_call`), so keys, tiers, the server's “Asks you first” and the catalog's sensitive rules
+ * apply as to `server_command`; each runs one `hosts.screen` step (`screen.ts`).
  *
  * A look, and every step by position, answers with the screen as a picture (MCP image content, at most 1280 px wide,
  * JPEG) beside a short text part with the screen's size and the scale, so the assistant clicks in the screen's own
@@ -20,7 +22,7 @@ import {
 } from '@whombat/core';
 import type { Adapter } from '../connections/adapters/types';
 import { type CallOutput, ConnectionArgumentError } from '../connections/request';
-import { screenChangeText, screenStep, screenStepIsEveryday } from './screen';
+import { destructiveActionText, screenChangeText, screenStep, screenStepIsEveryday } from './screen';
 import {
   type Args,
   type CallScope,
@@ -38,7 +40,20 @@ import {
 /** The arguments each Mac tool takes (`checkArgs`, PX-08). */
 export const MAC_TOOL_ARGS: Readonly<Record<string, readonly string[]>> = {
   mac_screen: ['server', 'action', 'x', 'y', 'to_x', 'to_y', 'dx', 'dy', 'text', 'keys'],
-  mac_ui: ['server', 'action', 'app', 'window', 'name', 'role', 'index', 'value', 'path', 'target', 'limit'],
+  mac_ui: [
+    'server',
+    'action',
+    'app',
+    'window',
+    'name',
+    'role',
+    'index',
+    'value',
+    'path',
+    'target',
+    'limit',
+    'perform',
+  ],
 };
 
 /** The arguments each action takes besides `server` and `action`; anything else is refused by name. */
@@ -62,6 +77,9 @@ const UI_ACTION_ARGS: Readonly<Record<string, readonly string[]>> = {
   menu: ['app', 'path'],
   focus: ['app'],
   open: ['target'],
+  // `action` is the tool's own word for the step, so the element's action goes by `perform`.
+  action: ['app', 'name', 'role', 'index', 'perform'],
+  quit: ['app'],
 };
 
 /** The picture the assistant gets: at most this wide, as JPEG (small enough for every turn). */
@@ -114,6 +132,7 @@ function checked(tool: string, action: string, body: Record<string, unknown>): H
   const field = String(issue?.path[0] ?? 'arguments')
     .replace('toX', 'to_x')
     .replace('toY', 'to_y')
+    .replace(/^action$/, 'perform')
     .replace(/^text$/, action === 'set' ? 'value' : 'text');
   if (issue?.code === 'too_big') {
     const unit = issue.origin === 'string' ? ' characters' : issue.origin === 'array' ? ' items' : '';
@@ -186,6 +205,7 @@ export function macUiBody(args: Args): HostScreenBody {
     path: args.path as string[] | undefined,
     target: opt(args, 'target') ?? undefined,
     limit: optInt(args, 'limit', 1, L.list) ?? undefined,
+    action: opt(args, 'perform') ?? undefined,
   });
 }
 
@@ -218,8 +238,28 @@ export function macSays(r: Pick<HostScreenResult, 'message'>): { message?: strin
   return said ? { message: said } : {};
 }
 
+/**
+ * An element's own actions by name (“Play”, “Directions · 0 min”): the Mac's agent passes them as those words (an
+ * agent before Find My passed Accessibility's raw `Name:Play\nTarget:0x0\nSelector:(null)`); the plain accessibility
+ * ones (`AXPress`, `AXShowMenu`) are what press does already.
+ */
+export function ownActionNames(actions: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const a of actions) {
+    const raw = /^Name:([^\n]*)/.exec(a);
+    const name = raw ? raw[1]?.trim() : /^AX[A-Z]/.test(a) ? undefined : a.trim();
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** What the assistant is told when it asks for an action that undoes something. */
+export const DESTRUCTIVE_NEXT =
+  'Don’t try it another way (press, menu or the screen): tell the person to do it on the Mac themselves.';
+
 /** An element as the assistant reads it: what names it and where it is, nothing empty. */
 function element(e: HostUiElement) {
+  const own = ownActionNames(e.actions);
   return {
     id: e.id,
     role: e.role.replace(/^AX/, ''),
@@ -231,6 +271,7 @@ function element(e: HostUiElement) {
     ...(e.enabled ? {} : { enabled: false }),
     ...(e.focused ? { focused: true } : {}),
     at: [e.x, e.y, e.w, e.h],
+    ...(own.length ? { actions: own } : {}),
     ...(e.window ? { window: e.window } : {}),
   };
 }
@@ -315,6 +356,10 @@ export const MAC_TOOLS: Adapter = {
     const out = await run({ server: String(args.server ?? ''), op: 'screen' }, async () => {
       const mac = await macOf(s, args);
       if (!('id' in mac)) return mac;
+      const destructive =
+        body.op === 'ui.action' ? destructiveActionText(body.action ?? '', mac.label) : null;
+      if (destructive)
+        return output({ error: destructive, code: 'destructive_action', next: DESTRUCTIVE_NEXT }, true);
       const r = await screenStep(s.hosts, mac.id, body, s.actor('admin'));
       if (!r.ok) return refusal(r, mac.label);
       if (body.op === 'ui.apps')
@@ -339,6 +384,7 @@ export const MAC_TOOLS: Adapter = {
       return output({
         server: mac.id,
         action: String(args.action),
+        ...(body.action ? { performed: body.action } : {}),
         done: true,
         ...macSays(r),
         ...(r.element ? { element: element(r.element) } : {}),

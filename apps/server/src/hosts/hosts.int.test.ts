@@ -1299,6 +1299,43 @@ describe('a Mac (macos-servers.md)', () => {
     expect(notMac.body).toMatchObject({ code: 'unsupported' });
   });
 
+  it('reads Find My for the owner in memory, and never runs an action that removes something', async () => {
+    const empty = await as('GET', '/servers/studio/find-my');
+    expect(empty).toMatchObject({
+      status: 200,
+      body: { server: 'studio', reading: false, readAt: null, people: [] },
+    });
+    // The fake hub's Mac runs an agent from before Find My: its status doesn't say how long the Mac was left alone.
+    expect((await as('POST', '/servers/studio/find-my/refresh', {})).status).toBe(200);
+    const seen = await waitFor(async () => {
+      const r = await as('GET', '/servers/studio/find-my');
+      return r.body.reading === false && r.body.problem ? r.body : null;
+    });
+    expect(seen.problem).toMatchObject({ code: 'helper_old' });
+    expect(fake.macos.steps.at(-1)).toMatchObject({ body: { op: 'status' }, role: 'operator' });
+    expect((await as('GET', '/servers/studio/find-my/map?w=600&h=400')).status).toBe(409);
+    expect((await as('GET', `/servers/studio/find-my/picture?person=${'0'.repeat(12)}`)).status).toBe(404);
+
+    const steps = fake.macos.steps.length;
+    const removed = await as('POST', '/servers/studio/screen', {
+      op: 'ui.action',
+      app: 'Find My',
+      name: 'Mara Visser',
+      action: 'Remove Friend',
+    });
+    expect(removed.status).toBe(403);
+    expect(removed.body.error?.message).toContain('“Remove Friend”');
+    const byAssistant = await callRaw('mac_ui', {
+      server: 'studio',
+      action: 'action',
+      name: 'Mara Visser',
+      perform: 'Remove Friend',
+    });
+    expect(byAssistant.out.isError).toBe(true);
+    expect(byAssistant.body).toMatchObject({ code: 'destructive_action' });
+    expect(fake.macos.steps).toHaveLength(steps);
+  });
+
   it('asks before a step on the screen where the Mac asks first, never before a look', async () => {
     expect((await as('PATCH', '/servers/studio', { asksFirst: 'risky' })).status).toBe(200);
     try {

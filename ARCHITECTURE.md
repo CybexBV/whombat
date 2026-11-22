@@ -1398,6 +1398,14 @@ Setup and operation: `docs/github.md`.
   live on the web (the host's `vnc` console), a picture of it on demand on the phone, Unlock, the Mac's password sent
   once to the Mac (sealed in the step's mutation, so no cache keeps it), and Whombat Helper with its Accessibility.
   The Mac's own words about a step (a reason it failed, a note on one that worked) reach the person and the assistant.
+  A Mac's page also shows Find My (`hosts.findMy*`, `hosts/findmy.ts`): Whombat reads the Find My app through Whombat
+  Helper as a person reads it, leaving a Mac someone used in the last minute alone and locking a locked one again
+  afterwards; it reads the People tab and each person's street, finds their places with the Mac's own geocoder
+  (`map.geocode`) and has the Mac draw the map (`map.snapshot`), and “Show exactly” cuts Find My's own map of one person
+  from the screen. What was read lives in the box's memory only and goes an hour after the last look; it is never
+  logged and none of its steps is signed. `mac_ui` also runs an element's own action by name (“Play”) and quits an
+  app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
+  ([macos-servers.md](docs/decisions/macos-servers.md)).
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly

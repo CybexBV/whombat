@@ -62,6 +62,7 @@ export {
   FIXTURE_AGENT_OLD,
   withAgentUpdatesFixtures,
 } from './fixtures-au';
+export { FIND_MY_FIXTURE_READ_MS, FIND_MY_PEOPLE, type FindMyFixture } from './fixtures-findmy';
 export {
   createMacFixture,
   MAC_LOOK_PNG_B64,

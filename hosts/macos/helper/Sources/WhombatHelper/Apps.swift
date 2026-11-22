@@ -59,29 +59,28 @@ enum Apps {
         return box.app
     }
 
-    /// The app a request names: its bundle id, its name, or a part of its name; nil is the focused one. Every running
-    /// app counts (a dialog may belong to a background agent), ordinary apps first.
+    /// The app a request names: its bundle id, its name (what the Mac shows or its file's), the start of it or a
+    /// part of it, white space ignored (AppMatch); nil is the focused one. Every running app counts (a dialog may
+    /// belong to a background agent), an ordinary app first between apps matched alike.
     static func resolve(_ name: String?) throws -> TargetApp {
         guard let name else {
             guard let app = focused() else { throw HelperError(.notFound, "No app is in front.") }
             return app
         }
         let running = withFocused(NSWorkspace.shared.runningApplications.filter { !$0.isTerminated })
-        let ordered = running.filter { $0.activationPolicy == .regular } + running.filter { $0.activationPolicy != .regular }
-        let wanted = NameMatch.normalize(name)
-        if let app = ordered.first(where: { ($0.bundleIdentifier ?? "").lowercased() == wanted }) {
-            return TargetApp(pid: app.processIdentifier, running: app)
-        }
-        let named = ordered.compactMap { app -> (NSRunningApplication, MatchKind)? in
-            guard let kind = NameMatch.match(normalizedQuery: wanted, fields: [app.localizedName ?? ""]) else { return nil }
-            return (app, kind)
-        }
-        if let best = named.min(by: { $0.1 < $1.1 }) {
-            return TargetApp(pid: best.0.processIdentifier, running: best.0)
+        if let i = AppMatch.best(name, among: running.map(candidate)) {
+            return TargetApp(pid: running[i].processIdentifier, running: running[i])
         }
         let names = running.filter { $0.activationPolicy == .regular }.compactMap(\.localizedName)
         let close = NameMatch.closest(to: name, among: names)
         throw HelperError(.notFound, "No open app is called “\(name)”." + suggestion(close), names: close)
+    }
+
+    /// A running app as a request may name it: what the Mac calls it and its bundle's file name (FindMy.app).
+    static func candidate(_ app: NSRunningApplication) -> AppCandidate {
+        var names = [app.localizedName ?? ""]
+        if let url = app.bundleURL { names.append(url.deletingPathExtension().lastPathComponent) }
+        return AppCandidate(names: names, bundleID: app.bundleIdentifier ?? "", regular: app.activationPolicy == .regular)
     }
 
     /// The running apps with the focused one added when NSWorkspace's list misses it. A helper started by its
@@ -143,28 +142,52 @@ enum Apps {
         ].map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
-    /// Where the app called `name` is: a running one's own place, a bundle id's, or an app of that name in the usual
-    /// folders.
+    /// Where the app called `name` is: a running one's own place, a bundle id's (the same in every language:
+    /// `com.apple.findmy`), or an app in the usual folders whose file is called that (FindMy) or that the Mac shows by
+    /// that name (Find My, “Wo ist?” in German), white space ignored. Only the whole name opens an app.
     static func location(of name: String) throws -> URL {
-        let wanted = NameMatch.normalize(name.hasSuffix(".app") ? String(name.dropLast(4)) : name)
-        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-            if NameMatch.normalize(app.localizedName ?? "") == wanted, let url = app.bundleURL { return url }
+        let id = name.lowercased()
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular && !app.isTerminated {
+            let c = candidate(app)
+            if c.bundleID.lowercased() == id || AppMatch.named(name, names: c.names), let url = app.bundleURL { return url }
         }
         if name.contains("."), !name.contains(" "),
            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: name) {
             return url
         }
-        var seen: [String] = []
+        var apps: [URL] = []
         for folder in folders {
             let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-            for item in items where item.pathExtension == "app" {
-                let appName = item.deletingPathExtension().lastPathComponent
-                if NameMatch.normalize(appName) == wanted { return item }
-                seen.append(appName)
-            }
+            apps += items.filter { $0.pathExtension == "app" }
+        }
+        // File names first: reading every app's Info.plist costs more.
+        if let item = apps.first(where: { AppMatch.named(name, names: [$0.deletingPathExtension().lastPathComponent]) }) {
+            return item
+        }
+        var seen: [String] = []
+        for item in apps {
+            let names = shownNames(item)
+            if AppMatch.named(name, names: names) { return item }
+            seen.append(names.first ?? item.deletingPathExtension().lastPathComponent)
         }
         let close = NameMatch.closest(to: name, among: seen)
         throw HelperError(.notFound, "No app called “\(name)” on this Mac." + suggestion(close), names: close)
+    }
+
+    /// The names the Mac shows for an app that isn't running: the Finder's, and its bundle's display name and name
+    /// (in the person's language when the app has one).
+    static func shownNames(_ app: URL) -> [String] {
+        var names = [FileManager.default.displayName(atPath: app.path)]
+        if let bundle = Bundle(url: app) {
+            for key in ["CFBundleDisplayName", "CFBundleName"] {
+                for info in [bundle.localizedInfoDictionary, bundle.infoDictionary] {
+                    if let v = info?[key] as? String, !v.isEmpty { names.append(v) }
+                }
+            }
+        }
+        var unique: [String] = []
+        for n in names where !n.isEmpty && !unique.contains(n) { unique.append(n) }
+        return unique
     }
 
     /// Starts the app (or brings it forward when it runs) and waits until macOS says it has.
@@ -188,6 +211,33 @@ enum Apps {
         if let error = outcome.lock.withLock({ outcome.error }) {
             throw HelperError(.failed, "\(url.deletingPathExtension().lastPathComponent) didn't open: \(error.localizedDescription)")
         }
+    }
+
+    /// Asks the ordinary app the request names to quit, as its Quit menu item does, and waits up to 3 s for it to
+    /// end. An app with unsaved work may ask first; then it is still closing.
+    static func quit(_ name: String, deadline: Date) throws -> Answer {
+        let regular = NSWorkspace.shared.runningApplications.filter { !$0.isTerminated && $0.activationPolicy == .regular }
+        guard let i = AppMatch.best(name, among: regular.map(candidate)) else {
+            let close = NameMatch.closest(to: name, among: regular.compactMap(\.localizedName))
+            throw HelperError(.notFound, "No open app is called “\(name)”." + suggestion(close), names: close)
+        }
+        let app = regular[i]
+        let pid = app.processIdentifier
+        let shown = app.localizedName ?? name
+        if !app.terminate(), running(pid) {
+            throw HelperError(.failed, "macOS couldn't ask \(shown) to quit.")
+        }
+        let until = min(deadline, Date().addingTimeInterval(Limits.quitSeconds))
+        while running(pid), Date() < until {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return running(pid) ? .note("It is still closing.") : .done
+    }
+
+    /// Whether the process still exists: asked of the kernel, which knows at once (NSRunningApplication learns it
+    /// on the main run loop).
+    static func running(_ pid: pid_t) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
     }
 
     /// Opens a link or a Settings page with the app macOS chooses for it.

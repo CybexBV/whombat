@@ -1402,8 +1402,9 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
     bodyOf,
   });
 
-  // studio, a Mac: its screen as the Mac's agent answers it (macos-servers.md MAC-36).
-  const macFx = createMacFixture(now().getTime());
+  // studio, a Mac: its screen as the Mac's agent answers it (macos-servers.md MAC-36) and its Find My, on the demo
+  // world's clock (a read and a picture take a couple of seconds of it).
+  const macFx = createMacFixture(now().getTime(), 'ready', () => now().getTime());
   // thetitan's Incus instances and blackbox's Unraid, containers and VMs (incus-unraid-mobile.md AP-1640).
   const iu = createIuFixtures({ now, emit, setTimer, hostsTopic, guests, json, notFound, bodyOf });
   // The servers' Summaries: figures, sensors, storages and history of the dashboards' servers (AP-2135).
@@ -1814,6 +1815,26 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
           id === 'hosts.screen'
             ? macFx.screen(await bodyOf<Record<string, unknown>>(init))
             : macFx.look(Object.fromEntries(url.searchParams));
+        return json(answer.body, answer.status);
+      }
+      case 'hosts.findMy':
+      case 'hosts.findMyRefresh':
+      case 'hosts.findMyExact':
+      case 'hosts.findMyMap':
+      case 'hosts.findMyPicture': {
+        if (params.serverId !== MAC_SERVER) return notFound(`${params.serverId} isn’t a Mac`);
+        const fm = macFx.findMy;
+        const query = Object.fromEntries(url.searchParams);
+        const answer =
+          id === 'hosts.findMy'
+            ? fm.state()
+            : id === 'hosts.findMyRefresh'
+              ? fm.refresh()
+              : id === 'hosts.findMyExact'
+                ? fm.exact(await bodyOf<unknown>(init))
+                : id === 'hosts.findMyMap'
+                  ? fm.map(query)
+                  : fm.picture(query);
         return json(answer.body, answer.status);
       }
       case 'hosts.getServer': {

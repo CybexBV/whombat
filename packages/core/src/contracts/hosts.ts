@@ -55,6 +55,15 @@ import {
   HostsStatus,
   HostTask,
 } from '../domain/hosts.js';
+import {
+  HostFindMy,
+  HostFindMyExactBody,
+  HostFindMyMap,
+  HostFindMyMapQuery,
+  HostFindMyPicture,
+  HostFindMyPictureQuery,
+  HostFindMyRefreshBody,
+} from '../domain/hosts-findmy.js';
 import { BurrowParam, endpoint } from './endpoint.js';
 import { OkResponse as Ok } from './errors.js';
 
@@ -468,6 +477,56 @@ export const hostsEndpoints = {
     params: S,
     query: HostScreenLookQuery,
     response: HostScreenResult,
+  }),
+  // Find My on a Mac's page (docs/implementation/macos/findmy.md): what Whombat read last, kept in the box's memory only.
+  findMy: endpoint({
+    id: 'hosts.findMy',
+    method: 'GET',
+    path: '/burrows/:burrow/hosts/servers/:serverId/find-my',
+    summary:
+      'What Whombat read last from a Mac’s Find My: its People with their places, whether a read is under way, why the last one didn’t work and the exact picture asked last. Kept in memory only, for an hour after the last look.',
+    params: S,
+    response: HostFindMy,
+  }),
+  findMyRefresh: endpoint({
+    id: 'hosts.findMyRefresh',
+    method: 'POST',
+    path: '/burrows/:burrow/hosts/servers/:serverId/find-my/refresh',
+    summary:
+      'Read a Mac’s Find My now, unless a read is under way or the last is under two minutes old: Whombat unlocks the screen when it is locked (and locks it again), opens Find My, reads its People and finds their places with the Mac’s geocoder. Someone using the Mac is left alone (`in_use`).',
+    params: S,
+    body: HostFindMyRefreshBody,
+    response: HostFindMy,
+  }),
+  findMyExact: endpoint({
+    id: 'hosts.findMyExact',
+    method: 'POST',
+    path: '/burrows/:burrow/hosts/servers/:serverId/find-my/exact',
+    summary:
+      'Take Find My’s own map of one person from the Mac’s screen (`hosts.findMyPicture` once `exact.state` is `ready`).',
+    params: S,
+    body: HostFindMyExactBody,
+    response: HostFindMy,
+  }),
+  findMyMap: endpoint({
+    id: 'hosts.findMyMap',
+    method: 'GET',
+    path: '/burrows/:burrow/hosts/servers/:serverId/find-my/map',
+    summary:
+      'A map picture drawn by the Mac with everyone Whombat found a place for, and where each of them is on it. Larger than one session message: clients read it through an export stream.',
+    params: S,
+    query: HostFindMyMapQuery,
+    response: HostFindMyMap,
+  }),
+  findMyPicture: endpoint({
+    id: 'hosts.findMyPicture',
+    method: 'GET',
+    path: '/burrows/:burrow/hosts/servers/:serverId/find-my/picture',
+    summary:
+      'Find My’s own map of one person, cut from the Mac’s screen when it was asked (kept ten minutes). Larger than one session message: clients read it through an export stream.',
+    params: S,
+    query: HostFindMyPictureQuery,
+    response: HostFindMyPicture,
   }),
   inspect: endpoint({
     id: 'hosts.inspect',

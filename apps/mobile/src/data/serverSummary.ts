@@ -10,7 +10,7 @@ import { SERVER_COPY } from './servers';
 import type { PhoneThingTab } from './thingPage';
 
 /** The server segments the phone has (the rest stay on the web). */
-export type ServerTab = 'summary' | 'guests' | 'backups' | 'array' | 'plugins' | 'screen';
+export type ServerTab = 'summary' | 'guests' | 'backups' | 'array' | 'plugins' | 'screen' | 'findmy';
 
 /**
  * The web's tab keys each phone segment stands for: a Summary's link to Docker, Containers, VMs or Instances opens
@@ -22,8 +22,9 @@ const SERVER_TAB_ALIASES: Record<ServerTab, readonly string[]> = {
   backups: [],
   array: ['pools', 'disks', 'notifications', 'system'],
   plugins: ['updates'],
-  // A Mac's screen (macos-servers.md).
+  // A Mac's screen and its Find My (macos-servers.md).
   screen: [],
+  findmy: [],
 };
 
 /** The phone's segments as the renderer's tabs, with the keys a link may name for each. */

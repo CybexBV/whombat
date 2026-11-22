@@ -40,6 +40,7 @@ import { serverAsksOf } from './asks-store';
 import { HOSTS_API, type HostsActor, HostsUnavailable, networksOf, poolsOf, seg } from './client';
 import { type HostsChangeInput, recordHostsChange } from './commands';
 import { type HostsNames, hostsCall, refusedBeforeActing } from './errors';
+import { findMyFor } from './findmy';
 import { type InstallPlan, installsFor } from './install';
 import {
   ADDRESS_FIELD_TEXT,
@@ -84,7 +85,13 @@ import { serverNameOf as givenNameOf, loadServerNames } from './names-store';
 import { canManageServers, ONLY_YOU_CHANGE_SERVERS_TEXT } from './person';
 import { quietAlertById } from './quiet';
 import { REPOINT_TEXT, RepointBusy, type RepointView, repointsFor } from './repoint';
-import { isScreenRead, screenChangeText, screenStep, screenStepIsEveryday } from './screen';
+import {
+  destructiveActionText,
+  isScreenRead,
+  screenChangeText,
+  screenStep,
+  screenStepIsEveryday,
+} from './screen';
 import { knownServer, SELF_GUEST_TEXT, selfActionRefused, selfOpRefused, serverLabel } from './self';
 import { actorOf, HOSTS_TEXT, type HostsService, hostsFor } from './service';
 import { hostsAddressChange } from './sources';
@@ -1834,6 +1841,11 @@ export const hostsRoutes: RouteDef[] = [
     const read = isScreenRead(b.op);
     const g = await guard(ctx, { manage: !read });
     const { serverId } = ctx.params;
+    // An element's own action that removes, erases or signs out is the person's to do on the Mac's screen.
+    const destructive =
+      b.op === 'ui.action' ? destructiveActionText(b.action ?? '', serverLabel(serverId)) : null;
+    if (destructive)
+      throw new ApiError('forbidden', destructive, { details: { code: 'destructive_action' } });
     const names = { server: serverLabel(serverId), op: 'screen' };
     const step = () => screenStep(g.hosts, serverId, b, read ? asOperator(g) : g.actor);
     const result = read ? await hostsCall(step, names) : await act('screen', names, step);
@@ -1864,6 +1876,46 @@ export const hostsRoutes: RouteDef[] = [
         ),
       { server: serverLabel(serverId), op: 'screen' },
     );
+  }),
+
+  // Find My on a Mac's page: an owner's, as a look is (a read unlocks the Mac and reads its screen). What was read
+  // stays in memory only (`findmy.ts`), and none of its steps is signed.
+  route(api.hosts.findMy, async (ctx) => {
+    await guard(ctx, { manage: true });
+    return findMyFor(ctx.services).view(ctx.params.serverId);
+  }),
+
+  route(api.hosts.findMyRefresh, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    // The read runs on after this answer, outside the request's command (its receipt keeps nothing).
+    return outsideCommandScope(() => findMyFor(ctx.services).refresh(g.hosts, serverId, g.actor, label));
+  }),
+
+  route(api.hosts.findMyExact, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    return outsideCommandScope(() =>
+      findMyFor(ctx.services).exact(g.hosts, serverId, ctx.body.person, g.actor, label),
+    );
+  }),
+
+  route(api.hosts.findMyMap, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    return hostsCall(() => findMyFor(ctx.services).map(g.hosts, serverId, ctx.query, g.actor, label), {
+      server: label,
+      op: 'screen',
+    });
+  }),
+
+  route(api.hosts.findMyPicture, async (ctx) => {
+    await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    return findMyFor(ctx.services).picture(serverId, ctx.query.person, serverLabel(serverId));
   }),
 
   route(api.hosts.inspect, async (ctx) => {

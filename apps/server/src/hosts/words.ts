@@ -513,7 +513,10 @@ function macScreenPhrase(action: string, server: string, keys: string): Phrase {
   }
 }
 
-/** `mac_ui`'s step in words: “press “Allow” on Studio”, “choose File → Save… on Studio”. */
+/**
+ * `mac_ui`'s step in words: “press “Allow” on Studio”, “choose File → Save… on Studio”, “choose “Play” for “Mara’s
+ * Keys” on Studio”.
+ */
 function macUiPhrase(args: Args, action: string, server: string): Phrase {
   const name = named(args, 'name', 'it');
   const app = named(args, 'app', 'the app');
@@ -544,6 +547,15 @@ function macUiPhrase(args: Args, action: string, server: string): Phrase {
           }
         : { ask: `open ${target} on ${server}`, done: `Opened ${target} on ${server}` };
     }
+    case 'action': {
+      const perform = named(args, 'perform', 'an action');
+      return {
+        ask: `choose “${perform}” for “${name}” on ${server}`,
+        done: `Chose “${perform}” for “${name}” on ${server}`,
+      };
+    }
+    case 'quit':
+      return { ask: `quit ${app} on ${server}`, done: `Quit ${app} on ${server}` };
     default:
       return { ask: `use the apps on ${server}`, done: `Used the apps on ${server}` };
   }

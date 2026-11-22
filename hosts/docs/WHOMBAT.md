@@ -573,10 +573,39 @@ one step on a Mac's screen (`docs/AGENT-PROTOCOL.md` "Screen"). Body:
 `dx`, `dy`, `text` (`type`, and `ui.set`'s value), `keys`, `max_w`,
 `format`, `app`, `window`, `name`, `role`, `index`, `path` (`ui.menu`),
 `limit`, `target` (`ui.open`), `account: {user, password}`
-(`account.set` only). Ops: `status`, `look`, `click`, `drag`, `scroll`,
-`type`, `keys`, `unlock`, `password`, `account.set`, `account.check`,
-`account.clear`, `ui.apps`, `ui.list`, `ui.press`, `ui.set`, `ui.menu`,
-`ui.focus`, `ui.open`. `password` types the Mac's stored password into
+(`account.set` only), `crop: {x, y, w, h}` (`look`), `action`
+(`ui.action`), `queries` (`map.geocode`), `w`, `h`, `scale`, `dark`,
+`pins: [{lat, lon}]`, `lat`, `lon`, `span_m` (`map.snapshot`). Ops:
+`status`, `look`, `click`, `drag`, `scroll`, `type`, `keys`, `unlock`,
+`password`, `account.set`, `account.check`, `account.clear`, `ui.apps`,
+`ui.list`, `ui.press`, `ui.set`, `ui.menu`, `ui.focus`, `ui.open`,
+`ui.action`, `ui.quit`, `map.geocode`, `map.snapshot`. `look` with `crop`
+takes only that part of the screen (framebuffer pixels, clamped to the
+screen, cut before `max_w` scales it). `ui.open`'s app is its name as the
+Mac shows it (“Find My”), its file's (“FindMy”) or its bundle id
+(`com.apple.findmy`, the same in every language); app names in `ui.*`
+match with case and spaces ignored, an ordinary app before an accessory or
+an extension matched alike. `ui.action` runs an element's accessibility
+action by name (found as `ui.press` finds it): an app's own (Find My's rows:
+“Open Details”, “Directions”, “Play”; Find My lists them only for the
+selected row) or an `AX…` one; the whole name first, then the one that
+starts with it (“Directions” runs “Directions · 0 min”); two that start
+with it run nothing (`not_found`, the names in its message). `ui.quit` asks
+an ordinary app to quit as its menu does and waits up to 3 s (`message`
+“It is still closing.” when it hasn't ended; `not_found` when it isn't
+open). `map.geocode` finds each address with Apple's geocoder
+(`places`, one per query in order: `{lat, lon, accuracy_m}` or null when
+nothing was found; kept by the Mac for an hour). `map.snapshot` draws a
+map picture on the Mac with MapKit (a standard map without points of
+interest, dark with `dark`): `image_b64`, `format` (jpeg by default),
+`w`, `h` (pixels: `w` × `scale` by `h` × `scale`, 600 × 400 points at 2
+by default), `points` (one per pin in the picture's points from its
+top-left, null outside it), `lat`, `lon` and `span_m` (the region drawn,
+metres across its shorter side). Its region is `lat`, `lon` and `span_m`
+when given (all three), else every pin with 30 % more around them and at
+least 600 m. `ui.quit` and the `map.*` steps need neither Accessibility nor
+an unlocked screen; `ui.action` needs both, as `ui.press` does. The `map.*`
+steps may take 20 s on the Mac. `password` types the Mac's stored password into
 macOS's own password prompt in front (an administrator prompt, a privacy
 switch's) and takes no `text` (400 `invalid_value` with one); its
 `element` is the prompt's password field, whose `app` names the prompt.
@@ -592,7 +621,10 @@ ident, enabled, focused, x, y, w, h, actions, app, window}]`, pixels),
 `ui.press`/`set`/`menu` acted on, its `title` the name it was found by
 when it has none of its own), `truncated`; `status` (`{sharing,
 account, sign_in, sign_in_at, locked, w, h}`) and `helper` (`{installed,
-version, running, ax, user}`); `message` when the agent says something
+version, running, ax, user, idle_s}`: `idle_s` the whole seconds since the
+last keyboard or mouse input at the Mac, Screen Sharing's included, from
+Whombat Helper 1.1.0 and only in `status`'s answer, else null);
+`places`, `points`, `lat`, `lon`, `span_m` (above); `message` when the agent says something
 about a step that worked (an unlock through Screen Sharing that macOS
 undoes when the session ends, a press whose app is still busy); `audit_id`
 for every step but `status`. A step the agent ran but couldn't do is 200
@@ -611,14 +643,18 @@ still there, the password field didn't have the keyboard, the lock state
 couldn't be told). Only `status` is an operator's; every other step needs
 an admin and a recent sign-in (the service token counts) and is audited
 as `screen.<op>`: the steps that act with their target (coordinates, keys,
-names, menu path, the account's user, a typed text's length, the app of
-the prompt `password` answered; never the text or the password), `look`,
-`ui.apps` and `ui.list` with the op and the app only, never what they
-saw; refused with 503 `audit_unavailable` when the audit log is. Errors:
-400 `invalid_value` (a field beyond the limits below, or the agent refused
-the step: `detail` says why), 403 `insufficient_role`, 403
-`host_shell_disabled`, 409 `agent_offline`, 501 `unsupported` (not a Mac,
-or an agent without a screen), 502 `agent_error`; 30 s at most, `password`
+names, an action's name, menu path, the account's user, a typed text's
+length, the app of the prompt `password` answered; never the text or the
+password), `look`, `ui.apps` and `ui.list` with the op and the app only,
+never what they saw, and `map.geocode` and `map.snapshot` with the op
+alone, never an address or a place; refused with 503 `audit_unavailable`
+when the audit log is. Errors: 400 `invalid_value` (a field beyond the
+limits below, or the agent refused the step: `detail` says why), 403
+`insufficient_role`, 403 `host_shell_disabled`, 409 `agent_offline`, 501
+`unsupported` (not a Mac, an agent without a screen, or a Whombat Helper
+older than the step: “Whombat Helper on this Mac is older than this step;
+it updates itself.”, which `detail` says; an agent older than the step
+refuses it as 400 `invalid_value`), 502 `agent_error`; 30 s at most, `password`
 and `unlock` 65 s (the password goes one character at a time, each checked
 first: a long one takes tens of seconds), so a caller waits at least that
 long for those two.
@@ -645,12 +681,23 @@ long for those two.
 | `path` | `ui.menu` | 1 to 8 menu items, each 1 to 200 characters |
 | `limit` | `ui.list` | 0 (300) to 1000 |
 | `target` | `ui.open` | `accessibility`, an app's name or bundle id (at most 200 characters, no `/`), or an `https` address (at most 2048) |
+| `action` | `ui.action` | 1 to 200 characters (`name` is needed too) |
+| `app` | `ui.quit` | 1 to 200 characters |
+| `crop` | `look` | `x`, `y` 0 or more; `w`, `h` 1 or more (the hub: at most 16384 each); clamped to the screen, none of it on the screen is `invalid_request` |
+| `queries` | `map.geocode` | 1 to 8, each 1 to 300 characters |
+| `w`, `h` | `map.snapshot` | 64 to 1600 points (0: 600 × 400) |
+| `scale` | `map.snapshot` | 1 or 2 pixels per point (0: 2) |
+| `format` | `map.snapshot` | `jpeg` (default) or `png` |
+| `pins` | `map.snapshot` | at most 20, `lat` −90 to 90, `lon` −180 to 180 |
+| `lat`, `lon`, `span_m` | `map.snapshot` | all three or none (then pins are needed); `span_m` 50 to 20 000 000 metres |
 | `account.user`, `account.password` | `account.set` | 1 to 63 bytes each (Apple's sign-in carries 63), one line of text, no NUL |
 | the stored password | `unlock`, `password` | the screen account's, so at most 63 bytes |
 
 Answers are bounded too: `elements` at most 1000, `apps` 500 (each at most
 50 windows), names and values 200 characters, `message` 1000, a picture
-under 7 MiB (made smaller when it would be bigger).
+under 7 MiB (a look's made smaller when it would be bigger; a map that
+would be bigger is `failed`: ask for a smaller one), `places` 8, `points`
+20.
 
 What the password checks can't do: `password` and `unlock` look at where
 the keyboard goes right before each key, and then send it. Those are two

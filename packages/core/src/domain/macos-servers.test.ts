@@ -86,7 +86,10 @@ describe('a Mac’s page', () => {
 
 describe('hosts.screen', () => {
   it('has the hub’s ops and codes, and only status reads: a look and the UI lists show the whole desktop', () => {
-    expect(HOST_SCREEN_OPS).toHaveLength(19);
+    expect(HOST_SCREEN_OPS).toHaveLength(23);
+    expect(HOST_SCREEN_OPS).toEqual(
+      expect.arrayContaining(['ui.action', 'ui.quit', 'map.geocode', 'map.snapshot']),
+    );
     expect(HOST_SCREEN_OPS).toContain('password');
     expect(HOST_SCREEN_READ_OPS).toEqual(['status']);
     expect(HOST_SCREEN_CODES).toEqual(

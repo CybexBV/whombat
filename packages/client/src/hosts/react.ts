@@ -36,6 +36,7 @@ import { macStepText } from './macos';
 import { type RepointView, repointView } from './repoint';
 import type { Verdict } from './verdict';
 
+export * from './findmy-react';
 export { useHostsStatus } from './status';
 
 /** Every server with its status and load, the totals, open alerts and hints. */

@@ -17,6 +17,8 @@ public final class SocketServer: @unchecked Sendable {
     private let handler: Handler
     private let pollInterval: TimeInterval
     private let requestTimeout: TimeInterval
+    /// How long one request line gets, from its op (Apple's map service takes longer than the screen).
+    private let timeoutFor: @Sendable (Data) -> TimeInterval
     private let maxInFlight: Int
     /// The users that may connect: root alone (the agent). Any program of the helper's own user could otherwise
     /// drive Accessibility through it, the permission the person gave Whombat Helper, not that program.
@@ -33,6 +35,7 @@ public final class SocketServer: @unchecked Sendable {
         path: String,
         pollInterval: TimeInterval = 2,
         requestTimeout: TimeInterval = Limits.requestSeconds,
+        timeoutFor: (@Sendable (Data) -> TimeInterval)? = nil,
         maxInFlight: Int = 8,
         allowedPeers: Set<uid_t> = [0],
         log: @escaping @Sendable (String) -> Void = { _ in },
@@ -41,6 +44,7 @@ public final class SocketServer: @unchecked Sendable {
         self.path = path
         self.pollInterval = pollInterval
         self.requestTimeout = requestTimeout
+        self.timeoutFor = timeoutFor ?? { _ in requestTimeout }
         self.maxInFlight = maxInFlight
         self.allowedPeers = allowedPeers
         self.log = log
@@ -198,21 +202,22 @@ public final class SocketServer: @unchecked Sendable {
 
     private func handle(_ conn: Int32) {
         let started = Date()
-        let hardDeadline = started.addingTimeInterval(requestTimeout)
         switch Self.readRequest(conn) {
         case .nothing:
             return
         case .tooLong:
             Self.writeAll(conn, Answer.failure(.invalid("the request is too long")).line())
         case let .line(line):
-            let workDeadline = started.addingTimeInterval(requestTimeout * Limits.workSeconds / Limits.requestSeconds)
-            Self.writeAll(conn, answer(line, workDeadline: workDeadline, hardDeadline: hardDeadline))
+            let timeout = timeoutFor(line)
+            let workDeadline = started.addingTimeInterval(timeout * Limits.workShare)
+            let hardDeadline = started.addingTimeInterval(timeout)
+            Self.writeAll(conn, answer(line, workDeadline: workDeadline, hardDeadline: hardDeadline, seconds: timeout))
         }
     }
 
     /// Runs the handler, but answers by the hard deadline whatever it does: an app that doesn't answer Accessibility
     /// can hold a request up, and the agent must not wait for it.
-    private func answer(_ line: Data, workDeadline: Date, hardDeadline: Date) -> Data {
+    private func answer(_ line: Data, workDeadline: Date, hardDeadline: Date, seconds timeout: TimeInterval) -> Data {
         final class Box: @unchecked Sendable {
             let lock = NSLock()
             var value: Data?
@@ -225,7 +230,7 @@ public final class SocketServer: @unchecked Sendable {
             box.lock.withLock { box.value = result }
             done.signal()
         }
-        let seconds = Int((requestTimeout).rounded())
+        let seconds = Int(timeout.rounded())
         if done.wait(timeout: .now() + max(0, hardDeadline.timeIntervalSinceNow)) == .timedOut {
             return Answer.failure(HelperError(.failed, "timed out after \(seconds) s: the app isn't answering")).line()
         }

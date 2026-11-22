@@ -41,6 +41,10 @@ public enum Limits {
     public static let requestSeconds: TimeInterval = 10
     /// Work stops a moment before the request's 10 s so a long list still comes back, cut short.
     public static let workSeconds: TimeInterval = 8.5
+    /// `geocode` and `map` ask Apple's map service over the network, which takes longer.
+    public static let slowRequestSeconds: TimeInterval = 20
+    /// The share of a request's time its work may use: the rest is for answering.
+    public static let workShare = workSeconds / requestSeconds
     public static let defaultListLimit = 300
     public static let maxListLimit = 1000
     public static let defaultDepth = 12
@@ -62,6 +66,13 @@ public enum Limits {
     public static let maxWindowsPerApp = 50
     /// The names a `not_found` answer suggests.
     public static let closeNames = 10
+    /// The longest action name (`action`).
+    public static let maxActionCharacters = 200
+    /// How many places one `geocode` looks up, and the longest of them.
+    public static let maxQueries = 8
+    public static let maxQueryCharacters = 300
+    /// How long `quit` waits for the app to end.
+    public static let quitSeconds: TimeInterval = 3
 }
 
 /// Which elements to look at: an app (name or bundle id, nil = the one in front), and for press/set the name, roles
@@ -112,6 +123,14 @@ public enum Command: Equatable, Sendable {
     /// The element with the keyboard focus: its process, role and place, never its value or title (the agent checks
     /// a password field has the keyboard before typing a password).
     case focused
+    /// Runs an action of the element `Target` names by the action's name (an app's own, such as Find My's “Play”).
+    case action(Target, action: String)
+    /// Asks a running app to quit, as its Quit menu item does.
+    case quit(app: String)
+    /// Finds places by address with Apple's geocoder.
+    case geocode([String])
+    /// Draws a map picture with MapKit.
+    case map(MapRequest)
 
     public var op: String {
         switch self {
@@ -127,23 +146,41 @@ public enum Command: Equatable, Sendable {
         case .unlock: "unlock"
         case .windows: "windows"
         case .focused: "focused"
+        case .action: "action"
+        case .quit: "quit"
+        case .geocode: "geocode"
+        case .map: "map"
         }
+    }
+
+    /// How long the agent gives it: Apple's map service may take a while.
+    public var seconds: TimeInterval {
+        switch self {
+        case .geocode, .map: Limits.slowRequestSeconds
+        default: Limits.requestSeconds
+        }
+    }
+
+    /// The time a request line gets, read before it runs; a line that doesn't parse is answered quickly anyway.
+    public static func seconds(forLine line: Data) -> TimeInterval {
+        (try? parse(line))?.seconds ?? Limits.requestSeconds
     }
 
     /// Needs Accessibility to do anything: the rest answer without it (status says it's off; apps lists apps
     /// without their windows; focus and open ask macOS, not the app; windows asks the window server).
     public var needsAccessibility: Bool {
         switch self {
-        case .list, .press, .set, .type, .menu, .unlock, .focused: true
-        case .status, .apps, .focus, .open, .windows: false
+        case .list, .press, .set, .type, .menu, .unlock, .focused, .action: true
+        case .status, .apps, .focus, .open, .windows, .quit, .geocode, .map: false
         }
     }
 
     /// Reads or acts on what is on the screen, which while the screen is locked is the lock screen, not the apps.
+    /// Quitting an app, finding places and drawing a map don't touch what is on the screen.
     public var refusedWhileLocked: Bool {
         switch self {
-        case .status, .apps, .unlock, .windows, .focused: false
-        case .list, .press, .set, .type, .menu, .focus, .open: true
+        case .status, .apps, .unlock, .windows, .focused, .quit, .geocode, .map: false
+        case .list, .press, .set, .type, .menu, .focus, .open, .action: true
         }
     }
 }
@@ -164,6 +201,27 @@ struct RawRequest: Decodable {
     var path: [String]?
     var target: String?
     var password: String?
+    var action: String?
+    var queries: [String]?
+    var w: Int?
+    var h: Int?
+    var scale: Int?
+    var dark: Bool?
+    var format: String?
+    var pins: [RawPin]?
+    var lat: Double?
+    var lon: Double?
+    var spanM: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case v, op, app, window, limit, depth, name, role, index, value, text, path, target, password, action, queries
+        case w, h, scale, dark, format, pins, lat, lon, spanM = "span_m"
+    }
+}
+
+struct RawPin: Decodable {
+    var lat: Double?
+    var lon: Double?
 }
 
 extension Command {
@@ -247,6 +305,31 @@ extension Command {
                 throw HelperError.invalid("that isn't a password the lock screen takes")
             }
             return .unlock(password: password)
+        case "action":
+            guard let name = try optionalName(raw.name, field: "name") else {
+                throw HelperError.invalid("action needs the name of the element")
+            }
+            guard let action = raw.action?.trimmingCharacters(in: .whitespacesAndNewlines), !action.isEmpty else {
+                throw HelperError.invalid("action needs the action's name, such as \"Open Details\"")
+            }
+            if action.count > Limits.maxActionCharacters { throw HelperError.invalid("the action's name is too long") }
+            let target = Target(app: app, name: name, roles: try RoleFilter.parse(raw.role), index: try index(raw.index))
+            return .action(target, action: action)
+        case "quit":
+            guard let app else { throw HelperError.invalid("quit needs the app to quit") }
+            return .quit(app: app)
+        case "geocode":
+            let queries = (raw.queries ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if queries.isEmpty || queries.count > Limits.maxQueries {
+                throw HelperError.invalid("geocode needs 1 to \(Limits.maxQueries) places to find")
+            }
+            if queries.contains(where: \.isEmpty) { throw HelperError.invalid("a place to find is empty") }
+            if queries.contains(where: { $0.count > Limits.maxQueryCharacters }) {
+                throw HelperError.invalid("a place to find is longer than \(Limits.maxQueryCharacters) characters")
+            }
+            return .geocode(queries)
+        case "map":
+            return .map(try mapRequest(raw))
         case "":
             throw HelperError.invalid("the request has no op")
         case let other:
@@ -266,6 +349,54 @@ extension Command {
         guard let value, value != 0 else { return def }
         if value < 0 { throw HelperError.invalid("\(field) can't be negative") }
         return Swift.min(value, max)
+    }
+
+    static func mapRequest(_ raw: RawRequest) throws -> MapRequest {
+        func side(_ v: Int?, _ field: String, _ def: Int) throws -> Int {
+            guard let v, v != 0 else { return def }
+            guard (MapLimits.minSide...MapLimits.maxSide).contains(v) else {
+                throw HelperError.invalid("\(field) is \(MapLimits.minSide) to \(MapLimits.maxSide) points")
+            }
+            return v
+        }
+        var r = MapRequest(w: try side(raw.w, "w", MapLimits.defaultW), h: try side(raw.h, "h", MapLimits.defaultH))
+        switch raw.scale ?? 0 {
+        case 0: break
+        case 1, 2: r.scale = raw.scale!
+        default: throw HelperError.invalid("scale is 1 or 2")
+        }
+        r.dark = raw.dark ?? false
+        switch (raw.format ?? "").lowercased() {
+        case "", "jpeg", "jpg": r.format = .jpeg
+        case "png": r.format = .png
+        default: throw HelperError.invalid("format is jpeg or png")
+        }
+        let pins = raw.pins ?? []
+        if pins.count > MapLimits.maxPins { throw HelperError.invalid("at most \(MapLimits.maxPins) pins") }
+        r.pins = try pins.map { pin in
+            guard let lat = pin.lat, let lon = pin.lon, place(lat, lon) else {
+                throw HelperError.invalid("a pin needs lat (−90 to 90) and lon (−180 to 180)")
+            }
+            return MapPin(lat: lat, lon: lon)
+        }
+        switch (raw.lat, raw.lon, raw.spanM) {
+        case (nil, nil, nil):
+            if r.pins.isEmpty { throw HelperError.invalid("map needs pins, or lat, lon and span_m") }
+        case let (lat?, lon?, span?):
+            guard place(lat, lon) else { throw HelperError.invalid("lat is −90 to 90 and lon −180 to 180") }
+            guard span.isFinite, span >= MapLimits.minSpanM, span <= MapLimits.maxSpanM else {
+                throw HelperError.invalid("span_m is \(Int(MapLimits.minSpanM)) to \(Int(MapLimits.maxSpanM)) metres")
+            }
+            r.center = MapPin(lat: lat, lon: lon)
+            r.spanM = span
+        default:
+            throw HelperError.invalid("give lat, lon and span_m together")
+        }
+        return r
+    }
+
+    static func place(_ lat: Double, _ lon: Double) -> Bool {
+        lat.isFinite && lon.isFinite && abs(lat) <= 90 && abs(lon) <= 180
     }
 
     static func index(_ value: Int?) throws -> Int {

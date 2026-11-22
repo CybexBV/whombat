@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import HelperCore
 
-// The ops that read and act on apps' windows: list, press, set, menu, plus status.
+// The ops that read and act on apps' windows: list, press, set, menu, action, plus status.
 
 /// A window of the app and how near the front it is (Candidate.zone: 0 a dialog in front, 1 the window in front,
 /// 2 another window).
@@ -40,7 +40,8 @@ enum Ops {
             user: NSUserName(),
             frontApp: front?.name,
             frontWindow: frontWindow,
-            displays: Displays.all()
+            displays: Displays.all(),
+            idleS: Session.idleSeconds
         ))
     }
 
@@ -303,6 +304,39 @@ enum Ops {
         throw HelperError(.failed, "“\(node.shownName)” can't be pressed: it has no action and no place on the screen.")
     }
 
+    // MARK: action
+
+    /// Runs an action of the element `target` names, found as `press` finds it, by the action's name: an app's own
+    /// (Find My's rows have Open Details, Directions, Play) or an `AX…` one.
+    static func action(_ target: Target, action: String, deadline: Date) throws -> Answer {
+        let name = target.name ?? ""
+        let (app, hit) = try find(target, name: name, defaults: Roles.interactive, forPress: true, deadline: deadline)
+        let node = hit.visit.node
+        let element = named(info(hit.visit, app: app, actions: hit.actions), by: name, node: node)
+        let shown = node.shownName.isEmpty ? name : node.shownName
+        switch ActionName.pick(action, among: hit.actions) {
+        case .none:
+            let names = hit.actions.map(ActionName.display).filter { !$0.isEmpty }
+            let has = names.isEmpty ? " It has none." : " It has " + names.map { "“\($0)”" }.joined(separator: ", ") + "."
+            throw HelperError(.notFound, "“\(shown)” has no action called “\(action)”." + has, names: names)
+        case let .ambiguous(names):
+            throw HelperError(
+                .notFound, "“\(action)” could be " + names.map { "“\($0)”" }.joined(separator: " or ") + ": say which.",
+                names: names)
+        case let .found(raw, actionName):
+            guard node.enabled else { throw HelperError(.failed, "“\(shown)” is greyed out: it can't do that now.") }
+            switch AXUIElementPerformAction(node.element, raw as CFString) {
+            case .success:
+                return .element(element, note: nil)
+            case .cannotComplete:
+                // As with a press: an action that opens something keeps the app busy past the timeout.
+                return .element(element, note: "Done; \(app.name) is still busy.")
+            case let err:
+                throw HelperError(.failed, "Couldn't do “\(actionName)” on “\(shown)” (\(err.rawValue)).")
+            }
+        }
+    }
+
     // MARK: set
 
     static func set(_ target: Target, value: String, deadline: Date) throws -> Answer {
@@ -425,6 +459,16 @@ enum Session {
     static var locked: Bool {
         guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
         return (session["CGSSessionScreenIsLocked"] as? NSNumber)?.boolValue ?? false
+    }
+
+    /// Whole seconds since the last input from the Mac's own keyboard, mouse or trackpad (the hardware's state, so
+    /// what the helper or Screen Sharing types doesn't count), or nil when macOS can't say.
+    static var idleSeconds: Int? {
+        // kCGAnyInputEventType: any kind of input.
+        guard let any = CGEventType(rawValue: ~0) else { return nil }
+        let s = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: any)
+        guard s.isFinite, s >= 0, s < 100 * 365 * 86400 else { return nil }
+        return Int(s)
     }
 }
 

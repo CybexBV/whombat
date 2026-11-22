@@ -16,7 +16,14 @@ import { serverLine } from '../desk/options';
 import { imageOf, withImage } from '../mcp/image';
 import { installFailureText, macMajor, parseMacFacts, systemLine } from './install-words';
 import { osFamily, serverPlatform, toHostFleet, toHostScreenResult, toHostServerDetail } from './map';
-import { screenBody, screenChangeText, screenRole, screenStepIsEveryday } from './screen';
+import {
+  destructiveActionText,
+  isDestructiveAction,
+  screenBody,
+  screenChangeText,
+  screenRole,
+  screenStepIsEveryday,
+} from './screen';
 import {
   LOOK_NOTE,
   lookFacts,
@@ -25,8 +32,10 @@ import {
   macSays,
   macScreenBody,
   macUiBody,
+  ownActionNames,
   refusal,
 } from './tools-macos';
+import { serversAskWords } from './words';
 
 const NOW = new Date('2026-11-17T10:00:00Z');
 
@@ -153,6 +162,57 @@ describe('a Mac from the hosts service', () => {
     expect(toHostScreenResult({ ok: false, code: 'gremlins' }, 'studio', 'click').code).toBe('failed');
     expect(toHostScreenResult({ ok: false, code: 'locked' }, 'studio', 'ui.press').code).toBe('locked');
   });
+
+  it('reads the Mac’s maps: places, points and the region, a map picture like a look', () => {
+    const places = toHostScreenResult(
+      { ok: true, places: [{ lat: 52.37, lon: 4.89, accuracy_m: 100 }, null, { lat: 'x' }] },
+      'studio',
+      'map.geocode',
+    );
+    expect(HostScreenResult.parse(places).places).toEqual([
+      { lat: 52.37, lon: 4.89, accuracyM: 100 },
+      null,
+      null,
+    ]);
+    const map = toHostScreenResult(
+      {
+        ok: true,
+        image_b64: 'bWFw',
+        format: 'jpeg',
+        w: 1200,
+        h: 800,
+        points: [{ x: 10.5, y: 20 }, null],
+        lat: 52.4,
+        lon: 5.1,
+        span_m: 30000,
+      },
+      'studio',
+      'map.snapshot',
+    );
+    expect(HostScreenResult.parse(map)).toMatchObject({
+      imageB64: 'bWFw',
+      format: 'jpeg',
+      w: 1200,
+      h: 800,
+      points: [{ x: 10.5, y: 20 }, null],
+      lat: 52.4,
+      lon: 5.1,
+      spanM: 30000,
+    });
+    expect(toHostScreenResult({ ok: true }, 'studio', 'look')).not.toHaveProperty('places');
+  });
+
+  it('reads how long the Mac was left alone, and tells an older helper that doesn’t say from one that can’t tell', () => {
+    const status = (helper: Record<string, unknown>) =>
+      toHostScreenResult(
+        { ok: true, helper: { installed: true, running: true, ...helper } },
+        'studio',
+        'status',
+      ).helper;
+    expect(status({ idle_s: 75.6 })?.idleS).toBe(75);
+    expect(status({ idle_s: null })?.idleS).toBeNull();
+    expect(status({})).not.toHaveProperty('idleS');
+  });
 });
 
 describe('a screen step', () => {
@@ -161,6 +221,97 @@ describe('a screen step', () => {
     expect(screenBody(body)).toEqual({ op: 'drag', x: 1, y: 2, to_x: 3, to_y: 4 });
     const account = HostScreenBody.parse({ op: 'account.set', account: { user: 'john', password: 'p' } });
     expect(screenBody(account).account).toEqual({ user: 'john', password: 'p' });
+    expect(
+      screenBody(
+        HostScreenBody.parse({ op: 'ui.action', app: 'Find My', name: 'Mara’s Keys', action: 'Play' }),
+      ),
+    ).toEqual({ op: 'ui.action', app: 'Find My', name: 'Mara’s Keys', action: 'Play' });
+    expect(screenBody(HostScreenBody.parse({ op: 'map.geocode', queries: ['Damrak 1, Amsterdam'] }))).toEqual(
+      {
+        op: 'map.geocode',
+        queries: ['Damrak 1, Amsterdam'],
+      },
+    );
+    expect(
+      screenBody(
+        HostScreenBody.parse({
+          op: 'map.snapshot',
+          w: 600,
+          h: 400,
+          scale: 2,
+          dark: false,
+          format: 'jpeg',
+          pins: [{ lat: 52.37, lon: 4.89 }],
+          lat: 52.4,
+          lon: 5.1,
+          spanM: 5000,
+        }),
+      ),
+    ).toEqual({
+      op: 'map.snapshot',
+      format: 'jpeg',
+      pins: [{ lat: 52.37, lon: 4.89 }],
+      lat: 52.4,
+      lon: 5.1,
+      span_m: 5000,
+      w: 600,
+      h: 400,
+      scale: 2,
+      dark: false,
+    });
+    expect(
+      screenBody(HostScreenBody.parse({ op: 'look', crop: { x: 1, y: 2, w: 30, h: 40 }, maxW: 1280 })),
+    ).toEqual({ op: 'look', max_w: 1280, crop: { x: 1, y: 2, w: 30, h: 40 } });
+  });
+
+  it('never runs an action that removes, erases, signs out, stops sharing or marks lost, in five languages', () => {
+    for (const name of [
+      'Remove Friend',
+      'Remove from Favourites',
+      'Erase This Device',
+      'Forget This Device',
+      'Block Contact',
+      'Unpair',
+      'Sign Out',
+      'Stop Sharing My Location',
+      'Mark As Lost',
+      'Lost Mode',
+      'Verwijder vriend',
+      'Wis dit apparaat',
+      'Stop met delen',
+      'Markeer als verloren',
+      'Freund entfernen',
+      'Dieses Gerät löschen',
+      'Als verloren markieren',
+      'Supprimer l’ami',
+      'Effacer cet appareil',
+      'Arrêter le partage',
+      'Mode perdu',
+      'Eliminar amigo',
+      'Borrar este dispositivo',
+      'Cerrar sesión',
+      'Dejar de compartir',
+      'Name:Remove Friend\nTarget:0x0\nSelector:(null)',
+    ])
+      expect(isDestructiveAction(name), name).toBe(true);
+    for (const name of [
+      'Play',
+      'Directions · 0 min',
+      'Open Details',
+      'Contact',
+      'Share My Location',
+      'Add to Favourites',
+      'Notify When Found',
+      'Wissel',
+      'Quit',
+      'Afspelen',
+      'Abspielen',
+    ])
+      expect(isDestructiveAction(name), name).toBe(false);
+    const text = destructiveActionText('Remove Friend', 'Studio');
+    expect(text).toContain('“Remove Friend”');
+    expect(text).toContain('Mac’s screen');
+    expect(destructiveActionText('Play', 'Studio')).toBeNull();
   });
 
   it('reads the Mac’s state at operator; a look, the UI lists and every change at admin', () => {
@@ -186,6 +337,28 @@ describe('a screen step', () => {
     );
     expect(screenChangeText(HostScreenBody.parse({ op: 'look' }), 'Studio')).toBeNull();
     expect(screenChangeText(HostScreenBody.parse({ op: 'account.check' }), 'Studio')).toBeNull();
+    const played = screenChangeText(
+      HostScreenBody.parse({ op: 'ui.action', name: 'Mara’s Keys', action: 'Play' }),
+      'Studio',
+    );
+    expect(played).toContain('“Play”');
+    expect(played).toContain('“Mara’s Keys”');
+    expect(screenChangeText(HostScreenBody.parse({ op: 'ui.quit', app: 'Find My' }), 'Studio')).toContain(
+      '“Find My”',
+    );
+    // The Mac's maps are never signed: a place is never written down.
+    expect(
+      screenChangeText(
+        HostScreenBody.parse({ op: 'map.geocode', queries: ['Damrak 1, Amsterdam'] }),
+        'Studio',
+      ),
+    ).toBeNull();
+    expect(
+      screenChangeText(
+        HostScreenBody.parse({ op: 'map.snapshot', w: 64, h: 64, pins: [{ lat: 1, lon: 2 }] }),
+        'S',
+      ),
+    ).toBeNull();
     expect(screenStepIsEveryday('click')).toBe(true);
     expect(screenStepIsEveryday('ui.press')).toBe(false);
   });
@@ -224,6 +397,50 @@ describe('mac_screen and mac_ui', () => {
       op: 'ui.open',
       target: 'accessibility',
     });
+    // `action` names the tool's step, so the element's own action goes by `perform`.
+    expect(
+      macUiBody({ server: 'studio', action: 'action', app: 'Find My', name: 'Mara’s Keys', perform: 'Play' }),
+    ).toEqual({ op: 'ui.action', app: 'Find My', name: 'Mara’s Keys', action: 'Play' });
+    expect(macUiBody({ server: 'studio', action: 'quit', app: 'Find My' })).toEqual({
+      op: 'ui.quit',
+      app: 'Find My',
+    });
+    expect(() => macUiBody({ server: 'studio', action: 'action', name: 'Mara’s Keys' })).toThrow(/^perform:/);
+    expect(() => macUiBody({ server: 'studio', action: 'quit' })).toThrow(/^app:/);
+    expect(() => macUiBody({ server: 'studio', action: 'quit', app: 'Find My', name: 'x' })).toThrow(
+      /^name:/,
+    );
+    expect(() => macUiBody({ server: 'studio', action: 'press', name: 'Allow', perform: 'Play' })).toThrow(
+      /^perform:/,
+    );
+  });
+
+  it('list each element’s own actions by name, not the plain accessibility ones', () => {
+    expect(
+      ownActionNames([
+        'AXPress',
+        'Name:Open Details\nTarget:0x0\nSelector:(null)',
+        'Name:Directions · 0 min\nTarget:0x0\nSelector:(null)',
+        'Name:Play\nTarget:0x0\nSelector:(null)',
+        'Name:Play\nTarget:0x1\nSelector:(null)',
+        'AXShowMenu',
+      ]),
+    ).toEqual(['Open Details', 'Directions · 0 min', 'Play']);
+    expect(ownActionNames(['AXPress'])).toEqual([]);
+    // The agent with Find My passes the names as words already.
+    expect(ownActionNames(['AXPress', 'Open Details', 'Play', 'AXShowMenu'])).toEqual([
+      'Open Details',
+      'Play',
+    ]);
+  });
+
+  it('word an element’s own action and a quit for the person', () => {
+    expect(
+      serversAskWords('mac_ui', { server: 'studio', action: 'action', name: 'Mara’s Keys', perform: 'Play' }),
+    ).toContain('“Play”');
+    expect(serversAskWords('mac_ui', { server: 'studio', action: 'quit', app: 'Find My' })).toContain(
+      'Find My',
+    );
   });
 
   it('refuse what an action doesn’t take or misses, by name', () => {

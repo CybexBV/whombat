@@ -176,6 +176,11 @@ export const WORK_SETTINGS = {
   // A Mac's screen: the assistant has its own tools for it (mac_screen, mac_ui).
   'hosts.screen': NONE,
   'hosts.screenLook': NONE,
+  'hosts.findMy': NONE,
+  'hosts.findMyRefresh': NONE,
+  'hosts.findMyExact': NONE,
+  'hosts.findMyMap': NONE,
+  'hosts.findMyPicture': NONE,
   'hosts.serverAction': ask('overview', 'Restart or shut down a server'),
   'hosts.serverMetrics': read('overview', 'Read a server’s charts'),
   'hosts.serverSettings': read('overview', 'Read a server’s group, place and remote-control switches'),
