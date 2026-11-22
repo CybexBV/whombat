@@ -6,7 +6,8 @@ contracts), the appliance (its runtime, operating system, manager, update helper
 service that watches the servers you add. It says what is encrypted end to end, what Whombat's own servers can see,
 and what reading this source can't tell you.
 
-State as of 2026-11-21: app 3.138.0, contracts 4.11.0.
+It describes the current release of the apps, the contracts and the appliance; when one of them changes how it
+handles data, this document changes in the same commit.
 Where this document says something is "planned" or "not in place", it means exactly that.
 
 **How to read it.** This repository holds the appliance's runtime (`apps/server`, `apps/runner`, `apps/agent-net`,
@@ -340,6 +341,20 @@ their network. The agent (Hermes Agent) runs on the appliance and keeps the cred
 the claude.ai link in your browser and paste the code back. ChatGPT uses a device code you enter at OpenAI. The client
 never logs or caches that terminal's output or your keystrokes (`packages/client/src/signins/console.ts`). The
 appliance sends prompts and workspace context to the provider you chose, which sees what it is sent.
+
+**The Vault.** Passwords, API keys and SSH keys the person saves are sealed in the appliance's database and unsealed
+only for a turn that may use them (`apps/server/src/agent-commands/keys.ts`). What that means in practice:
+
+- A turn started by an outsider (mail, a website's feedback, a message from someone else) gets no Vault secrets at
+  all.
+- In the person's own turns, the commands the agent runs get the keys the person switched on for that agent, as files
+  or environment variables. Such a command can read those values, and so can the agent through it: the Vault limits
+  which keys a turn holds, it can't hide a key from a command that uses it.
+- Saved website logins are filled into the page by the browser host; the password doesn't go to the AI model, and
+  filled fields are blanked in screenshots (`docs/decisions/browser.md`).
+- Every value the agent holds is replaced with `[secret]` in whatever it writes (messages, replies, plans, run notes
+  and the activity of its turns), also in its URL, JSON and base64 forms, before it is stored or shown
+  (`apps/server/src/agent-commands/secrets.ts`). Values shorter than six characters aren't looked for.
 
 ### 5.2 Updates
 

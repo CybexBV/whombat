@@ -49,9 +49,9 @@ export const WORD = {
   linkOpen: (url: string) => `On a computer or phone, open ${url} and enter`,
   linkConfirm: 'Sign in or create an account there, then confirm this Whombat.',
   linkRotates: (min: number) => `The code changes in ${min} min.`,
-  linkWaiting: 'Waiting for an address…',
+  linkWaiting: 'Waiting for this Whombat’s web address…',
   linkWaitingHint:
-    'Whombat Link is on. This Whombat gets its web address soon; this screen changes by itself.',
+    'Whombat Link is on. New web addresses are handed out in turn, and this one usually comes within a few minutes. This Whombat asks again every minute by itself; this screen changes when the address is ready.',
   linkStarting: 'Starting Whombat Link…',
   linkGrace: (day: string) =>
     `Whombat Link ends on ${day}. Turn on Tailscale in the Whombat app to keep a way in, and check your paper backup details.`,

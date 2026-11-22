@@ -151,5 +151,5 @@ classifier (MSB-14, text rules) still names the turn's outcome; these states are
   `providers.org.*` and `agents.setCredentialSource` ops, the runner sign-in routes in `runnerApi`, org rows in
   `ProviderStatus` (`ownerAccountId: null` + `credentialId`).
 - Claude `cloud` (3P) sign-in; the Claude subscription sign-in console (SUB-03, SUB-14; turns already run on a
-  subscription home); the Commercial Terms acceptance (X-01, SUB-07).
+  subscription home). The Commercial Terms acceptance is no longer a requirement (John, 2026-11-22, provider-subscriptions.md SUB-59).
 - Unrun qualification: real remote-browser sign-in with real accounts (procedure in `docs/managed/provider-login.md`).

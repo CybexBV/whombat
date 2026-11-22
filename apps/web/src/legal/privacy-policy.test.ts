@@ -30,14 +30,28 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
     expect(text).not.toContain('never contains your content');
   });
 
-  it('is version 2026-11-19 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
-    expect(text).toContain('Version `2026-11-19`');
+  it('is version 2026-11-22 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
+    expect(text).toContain('Version `2026-11-22`');
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\broles?\b/i);
     expect(text).not.toContain('no remote access');
     expect(text).toContain('no standing vendor login');
     expect(text).toContain('**Look and fix**');
     expect(text).toContain('for 90 days');
     expect(text).toContain('stop it at any time');
+  });
+
+  it('names the controller and the services a Whombat talks to itself', () => {
+    for (const fact of ['James Cookstraat 12G', 'KvK', '77711815', 'NL861104432B01'])
+      expect(text).toContain(fact);
+    for (const party of [
+      '**GitHub**',
+      '**Anthropic**',
+      "**Let's Encrypt**",
+      '**Certificate Transparency logs**',
+      '**Cert Spotter**',
+      '**Hugging Face**',
+    ])
+      expect(text).toContain(party);
   });
 
   it('says what control keeps for Whombat Link and how push reaches the phones (ENV-13)', () => {
