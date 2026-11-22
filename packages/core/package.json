@@ -1,7 +1,7 @@
 {
   "name": "@whombat/core",
   "license": "AGPL-3.0-only",
-  "version": "4.12.0",
+  "version": "4.13.0",
   "private": true,
   "type": "module",
   "sideEffects": false,

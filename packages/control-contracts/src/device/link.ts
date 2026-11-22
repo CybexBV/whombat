@@ -4,7 +4,14 @@
  * through the box, and remote help's narrow heartbeat. The Link state also rides on every `ticket.issue` answer
  * (`TicketResponse.link`). Cross-language.
  */
-import { LinkCode, LinkPageUrl, LinkState, NativePushToken, OwnAddressLabel } from '@whombat/protocol';
+import {
+  LinkCode,
+  LinkPageUrl,
+  LinkState,
+  NativePushToken,
+  OwnAddressClaimSecret,
+  OwnAddressLabel,
+} from '@whombat/protocol';
 import { hostTextSchema, PushHandle } from '@whombat/protocol/session';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
@@ -56,9 +63,16 @@ export const LINK_DEVICE_OPS = {
     body: z.strictObject({ registration: DeviceRegistration, name: hostTextSchema(64).optional() }),
     response: z.object({ link: DeviceLinkStatus }),
   },
-  /** This box's Link state, as `ticket.issue` carries it. A box control doesn't know is refused `unknown_device`. */
+  /**
+   * This box's Link state, as `ticket.issue` carries it. A box control doesn't know is refused `unknown_device`.
+   * `claimLink` (4.13): the six letters of the box's claim link (`https://<host>/c/<letters>`), sent only while nobody
+   * claimed the box and its own address serves its page. Control keeps the last one and shows the link only to the
+   * account the box is linked to (`LinkedBox.claimUrl`), so the person who just linked it opens the claim directly;
+   * a request without it makes control forget the one it had. A secret: never logged, never in an audit record. A
+   * control before 4.13 refuses the member (strict body), so a box sends it only to a control on 4.13.
+   */
   'link.status': {
-    body: z.strictObject({}),
+    body: z.strictObject({ claimLink: OwnAddressClaimSecret.optional() }),
     response: z.object({ link: DeviceLinkStatus }),
   },
   /**

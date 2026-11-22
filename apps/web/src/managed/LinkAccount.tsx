@@ -385,8 +385,9 @@ function linkedBoxRuns(box: Pick<LinkedBox, 'state'>): boolean {
 
 /**
  * Once a Whombat is linked: waits for its own address (`pollLinkAddress`), and stops when the page closes or the step
- * changes. A Whombat without a name is one nobody set up yet (an Easy box links before its setup asks for one): its
- * page opens on the claim with the account's name and email in the fragment, which never reaches a server.
+ * changes. A Whombat nobody set up yet (an Easy box links before its setup asks for one) opens on its claim: its claim
+ * link when control has it, so only the four letters on its screen are left to type, with the account's name and
+ * email in the fragment, which never reaches a server.
  */
 function useLinkAddress(
   control: ControlApi,
@@ -406,11 +407,10 @@ function useLinkAddress(
     void pollLinkAddress({ device, load: () => load(), live: () => live }).then((out) => {
       if (!live || out === 'stopped') return;
       if (out === 'timeout') return setAddress({ kind: 'slow' });
-      const claim = out.box.name === null;
       setAddress({
         kind: 'ready',
-        url: claim ? `${out.url}${ownClaimPrefillHash({ name, email })}` : out.url,
-        claim,
+        url: out.claim ? `${out.url}${ownClaimPrefillHash({ name, email })}` : out.url,
+        claim: out.claim,
       });
     });
     return () => {

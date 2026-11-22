@@ -274,12 +274,18 @@ describe('claiming a box inside A3', () => {
     const url = m.runtime.trust.ceremony.consoleState()?.url;
     expect(url).toBe(`${ORIGIN}/c/${own().claimLink.current}`);
     const link = own().claimLink.current;
+    // The manager has the link for control, which opens the claim for the account that linked this box.
+    await m.runtime.claimHandover?.sync();
+    expect(m.manager.linkClaims.at(-1)).toBe(link);
     ownerId = testIdentity();
     owner = await m.client(ownerId, { transport: DOOR });
     const start = await owner.request('enroll.claim.local.start', { link });
     const claimed = await localClaim(owner, out<{ claimId: string }>(start).claimId);
     expect(claimed as Answer).toMatchObject({ t: 'result' });
     expect(own().claimLink.current).not.toBe(link);
+    // Claimed: the manager is told there is no claim link any more.
+    await m.runtime.claimHandover?.sync();
+    expect(m.manager.linkClaims.at(-1)).toBeNull();
     await m.runtime.trust.reportPending();
     expect(m.manager.claimed).toEqual([]);
     // Claimed, the screen shows the address itself, never a claim link.

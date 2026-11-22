@@ -12414,3 +12414,22 @@ legal-texts.md LGL-03). A minor: two constants change and two lists with their c
   and an app that still shows the earlier text sends its version, which control records as the one the person
   accepted. A new version keeps the one before it in the list; an older one leaves once the apps that send it are gone.
   Nothing is cross-language, and no session op, device op or manager route is new.
+
+
+## CT-1789…CT-1791 The claim link for the account that linked the box — contracts 4.13.0 (2026-11-22)
+
+After linking a box on the account site, the person had to type the six letters of the box's claim link and then its
+four letters. Control now holds the claim link for that account (Whombat own-address.md OWA-39, whombat-link.md
+LNK-79; whombat-cloud control CL-255). A minor: two optional members, one manager route, one schema.
+
+- **CT-1789** `link.status`'s body takes an optional `claimLink` (`OwnAddressClaimSecret`, the six letters), sent only
+  while nobody claimed the box and its own address serves its page; a body without it makes control forget the one it
+  had. A control before 4.13 refuses it (strict body): the manager then asks again without it, and offers it again an
+  hour later. Cross-language: Go `device.LinkStatusRequest.ClaimLink`.
+- **CT-1790** `POST /v1/link/claim` on the manager socket (`MANAGER_PATHS.linkClaim`, `LinkClaimRequest {v,
+  claimLink?}` → `LocalOk`): the runtime hands the link over, again when it changes and now and then; an older manager
+  answers 404. Cross-language: Go `local.LinkClaimRequest`, `local.ManagerPathLinkClaim`.
+- **CT-1791** `LinkedBox.claimUrl` (`OwnAddressClaimUrl`, `https://<own-address host>/c/<six letters>`), optional: only
+  to the account the box is linked to, while nobody claimed it, Link runs and its address exists. The account site
+  opens it from Claim it now; absent, it opens the box's root as before. No session op or event is new.
+

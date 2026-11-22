@@ -8,6 +8,7 @@ import {
   type ControlApi,
   ControlError,
   type ControlSession,
+  LINK_CLAIM_URL_GRACE_MS,
   type LinkAccount,
   SUBSCRIPTION_TERMS_VERSION,
   WHOMBAT_LINK_TEXT as T,
@@ -194,24 +195,42 @@ describe('/link once it is linked: its own page', () => {
   }
   afterEach(() => vi.useRealTimers());
 
-  it('waits for its address, then Claim it now opens its page with the name and email in the fragment', async () => {
+  it('waits for its claim link, then Claim it now opens it with the name and email in the fragment', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    // The lookup's own load, then the first wait's answer: still no address.
-    const { control } = linking([starting, starting]);
+    // The lookup's own load, then the first wait's answer: still no address; then the address before its claim link.
+    const withLink = { ...ready, claimUrl: 'https://calm-otter-reef.box.whombat.app/c/pqrtvw' };
+    const { control } = linking([starting, starting, ready], withLink);
     render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: T.confirm }));
     expect(await screen.findByText(T.addressWaiting)).toBeTruthy();
     expect(screen.queryByTestId('link-claim-now')).toBeNull();
     await vi.advanceTimersByTimeAsync(6_000);
+    // The address alone: still waiting, for the claim link.
+    expect(screen.queryByRole('link', { name: T.claimNow })).toBeNull();
+    await vi.advanceTimersByTimeAsync(6_000);
     const claim = await screen.findByRole('link', { name: T.claimNow });
     const url = new URL(claim.getAttribute('href') ?? '');
     expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');
-    expect(url.pathname).toBe('/');
+    expect(url.pathname).toBe('/c/pqrtvw');
     expect(Object.fromEntries(new URLSearchParams(url.hash.slice(1)))).toEqual({
       name: 'Mara',
       email: 'mara@burrowhq.example',
     });
+  });
+
+  it('opens its page with the fragment when no claim link comes (an older Whombat or control)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { control } = linking([starting, starting]);
+    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: T.confirm }));
+    await vi.advanceTimersByTimeAsync(6_000 + LINK_CLAIM_URL_GRACE_MS + 5_000);
+    const claim = await screen.findByRole('link', { name: T.claimNow });
+    const url = new URL(claim.getAttribute('href') ?? '');
+    expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');
+    expect(url.pathname).toBe('/');
+    expect(new URLSearchParams(url.hash.slice(1)).get('email')).toBe('mara@burrowhq.example');
   });
 
   it('says when it takes long, asks again on Check again, and stops asking once the page closes', async () => {

@@ -31,6 +31,8 @@ export class ClaimLink {
   private secret: string;
   /** The wrong links each visitor address showed in the last hour, with when it first did. */
   private readonly wrong = new Map<string, Map<string, number>>();
+  /** The link changed: the manager is told, so control never keeps one that stopped working. */
+  onRotate: (() => void) | null = null;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -50,6 +52,7 @@ export class ClaimLink {
   rotate(): void {
     this.secret = newClaimLinkSecret(this.random);
     this.wrong.clear();
+    this.onRotate?.();
   }
 
   /**

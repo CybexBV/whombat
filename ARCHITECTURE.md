@@ -121,11 +121,14 @@ full set.
   claim link. Such sessions are admitted apart by the way they came (the relay, the local network and Tailscale, the
   box's own address, and there a few places for the visitor whose hello shows the claim link), so nobody on the
   internet holds a place the person at home needs. Nothing a visitor does changes the claim link: a wrong one is a try
-  of the visitor's own address, ten different ones an hour (`own-address/claim-link.ts`). Under the claim link the
+  of the visitor's own address, ten different ones an hour (`own-address/claim-link.ts`). While nobody claimed the box
+  and its page works, the runtime hands the link to the manager, which sends it to control with `link.status`; control
+  shows it only to the account the box is linked to, so the account site's Claim it now opens the claim itself
+  (`own-address/claim-handover.ts`). Under the claim link the
   screen names a second way in that nobody outside can keep busy, the Tailscale page or the address on the local
   network (`ConsoleState.fallbackUrl`)
-  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, [own-address.md](docs/decisions/own-address.md)
-  OWA-34…OWA-37). Other ways in: six letters on the box's own screen (`managed/screen-signin.ts`), pairing from another of the person's
+  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, LNK-79, [own-address.md](docs/decisions/own-address.md)
+  OWA-34…OWA-37, OWA-39). Other ways in: six letters on the box's own screen (`managed/screen-signin.ts`), pairing from another of the person's
   devices, a device link, a passkey the box verifies itself (`managed/passkeys.ts`) or the recovery kit. A passkey
   uses an owner public key in its authenticator user handle and signs the list of Whombats it opens. Control stores
   that list and the owner seed encrypted with the passkey PRF; the client verifies it before pinning any identity.

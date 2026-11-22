@@ -11,8 +11,10 @@ import {
   hostedOrgOf,
   LINK_ADDRESS_POLL_EVERY_MS,
   LINK_ADDRESS_POLL_FOR_MS,
+  LINK_CLAIM_URL_GRACE_MS,
   LINK_ORG_NAME,
   linkAccountErrorText,
+  linkBoxClaimUrl,
   linkBoxesInOrder,
   linkBoxLine,
   linkBoxOpenUrl,
@@ -357,6 +359,16 @@ describe('opening a Whombat from here', () => {
     expect(linkBoxOpenUrl(box({ host, state: 'ended' }))).toBeNull();
     expect(linkBoxOpenUrl(box({ host: null }))).toBeNull();
   });
+  it('opens the claim link control gave only on the Whombat’s own address, while that works', () => {
+    const host = 'calm-otter-reef.box.whombat.app';
+    const claimUrl = `https://${host}/c/pqrtvw`;
+    expect(linkBoxClaimUrl(box({ host, claimUrl }))).toBe(claimUrl);
+    expect(linkBoxClaimUrl(box({ host }))).toBeNull();
+    expect(linkBoxClaimUrl(box({ host, claimUrl, state: 'ended' }))).toBeNull();
+    expect(
+      linkBoxClaimUrl(box({ host, claimUrl: 'https://other-otter-reef.box.whombat.app/c/pqrtvw' })),
+    ).toBeNull();
+  });
   it('the one this device opened last comes first, the rest in control’s order', () => {
     const boxes = [box({ device: 'a' }), box({ device: 'b' }), box({ device: 'c' })];
     expect(linkBoxesInOrder(boxes, 'c').map((b) => b.device)).toEqual(['c', 'a', 'b']);
@@ -538,7 +550,10 @@ describe('after linking, waiting for the Whombat’s own address', () => {
     };
   };
   const starting = box({ name: null, state: 'starting' });
-  const ready = box({ name: null, label: 'calm-otter-reef', host: 'calm-otter-reef.box.whombat.app' });
+  const host = 'calm-otter-reef.box.whombat.app';
+  const ready = box({ name: 'Kitchen', label: 'calm-otter-reef', host });
+  const unclaimed = box({ name: null, label: 'calm-otter-reef', host });
+  const withLink = { ...unclaimed, claimUrl: `https://${host}/c/pqrtvw` };
 
   it('asks until this Whombat has its address, through a failed answer, then gives its page', async () => {
     const answers: (LinkAccount['boxes'][number] | 'fail')[] = [starting, 'fail', ready];
@@ -556,8 +571,38 @@ describe('after linking, waiting for the Whombat’s own address', () => {
     expect(out).toMatchObject({
       url: 'https://calm-otter-reef.box.whombat.app/',
       box: { device: ready.device },
+      claim: false,
     });
     expect(asked).toBe(3);
+  });
+
+  it('opens a Whombat nobody set up yet on its claim link as soon as control has it', async () => {
+    const answers = [starting, unclaimed, unclaimed, withLink];
+    let asked = 0;
+    const out = await pollLinkAddress({
+      device: unclaimed.device,
+      load: async () => {
+        asked += 1;
+        return { plan: plan(), boxes: [answers.shift() ?? withLink] };
+      },
+      ...clock(),
+    });
+    expect(out).toMatchObject({ url: `https://${host}/c/pqrtvw`, claim: true });
+    expect(asked).toBe(4);
+  });
+
+  it('opens its page after a short wait when no claim link comes (an older Whombat or control)', async () => {
+    let asked = 0;
+    const out = await pollLinkAddress({
+      device: unclaimed.device,
+      load: async () => {
+        asked += 1;
+        return { plan: plan(), boxes: [unclaimed] };
+      },
+      ...clock(),
+    });
+    expect(out).toMatchObject({ url: `https://${host}/`, claim: true });
+    expect(asked).toBe(LINK_CLAIM_URL_GRACE_MS / LINK_ADDRESS_POLL_EVERY_MS + 1);
   });
 
   it('gives up after a while', async () => {

@@ -254,6 +254,11 @@ export const MANAGER_PATHS = {
   linkOn: '/v1/link/on',
   /** Runtime (the owner's): `LinkOffRequest` → `LinkStateResponse` (`off`), after `link.leave`. Errors as `linkOn`. */
   linkOff: '/v1/link/off',
+  /**
+   * Runtime (4.13): `LinkClaimRequest` → `LocalOk`, answered at once. The claim link the box shows, which the manager
+   * sends with `link.status`; without `claimLink` the manager forgets it.
+   */
+  linkClaim: '/v1/link/claim',
   /** Runtime (4.4): `UpdateChannelRequest` → `UpdateChannelResponse`. 404 `update.channel_unavailable`. */
   updateChannel: '/v1/update/channel',
   /** Runtime (the owner's, 4.4): `UpdateChannelSetRequest` → `UpdateChannelResponse`. 409 `busy` while an update runs. */

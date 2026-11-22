@@ -30,6 +30,7 @@ import { registeredAtControl } from './link/origin';
 import { PushTokens } from './link/push-tokens';
 import { LinkService, setLinkFor } from './link/service';
 import { BoxNetworkWatch } from './network-watch';
+import { ClaimLinkHandover } from './own-address/claim-handover';
 import { pushForeign, registerOwnAddressSource } from './own-address/notices';
 import { OwnAddressService } from './own-address/state';
 import type { ManagerPort } from './ports';
@@ -124,6 +125,8 @@ export class ManagedRuntime {
   readonly controlPush: ControlPush;
   /** The box's own address (own-address.md): it has one while Whombat Link runs and gave it a label. */
   readonly ownAddress: OwnAddressService | null;
+  /** Gives the manager the claim link for control (`own-address/claim-handover.ts`); null without an own address. */
+  readonly claimHandover: ClaimLinkHandover | null = null;
   private offLink: (() => void) | null = null;
   private offLinkNotices: (() => void) | null = null;
   private timer: NodeJS.Timeout | null = null;
@@ -189,7 +192,21 @@ export class ManagedRuntime {
           !this.trust.ceremony.claimed && own.claimUrl() ? bestWayPage(this.trust.ways()) : null,
         newLink: () => own.claimLink.rotate(),
       };
-      own.onReady = () => this.trust.ceremony.refresh();
+      // The claim link goes to control for the account that links this box (`claim-handover.ts`): only while nobody
+      // claimed the box and its address serves the page the link opens.
+      const handover = new ClaimLinkHandover({
+        manager: options.manager,
+        current: () =>
+          this.trust.ceremony.claimed === false && own.claimUrl() ? own.claimLink.current : null,
+        log: services.log,
+        ...(options.ownAddress?.timers === false ? { timers: false } : {}),
+      });
+      this.claimHandover = handover;
+      own.claimLink.onRotate = () => void handover.sync();
+      own.onReady = () => {
+        this.trust.ceremony.refresh();
+        void handover.sync();
+      };
       // A certificate it didn't ask for: the screen, the Inbox and a push to the person's devices.
       own.onForeign = (found) => {
         this.trust.ceremony.refresh();
@@ -335,6 +352,8 @@ export class ManagedRuntime {
     this.trust.boxPasskeys.declareSoon();
     // The console's claim state (CC-08): claimed, waiting for a lookup lease, or in backoff from earlier failures.
     await this.trust.refreshClaimConsole();
+    // Now that the claim state and the address are known: the claim link for control, while nobody claimed the box.
+    await this.claimHandover?.start();
     // The claimed console shows the burrows (CT-116, MR-78): re-read them after every commit that creates, renames or
     // removes one (the bus carries committed frames only).
     this.offBurrows = this.services.bus.onFrame((frame) => {
@@ -440,6 +459,7 @@ export class ManagedRuntime {
 
   async close(): Promise<void> {
     this.ownAddress?.stop();
+    this.claimHandover?.stop();
     this.link.stop();
     this.offLink?.();
     this.offLinkNotices?.();

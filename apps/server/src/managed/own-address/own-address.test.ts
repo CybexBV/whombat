@@ -115,11 +115,18 @@ describe('the claim link', () => {
 
   it('changes only when asked to, and every address then starts again', () => {
     const link = new ClaimLink(() => 0);
+    let told = 0;
+    link.onRotate = () => {
+      told += 1;
+    };
     const first = link.current;
     const home = '198.51.100.7';
     for (let i = 0; i < CLAIM_LINK_TRIES_PER_PEER; i += 1) link.check(wrong(i), home);
     expect(link.spent(home)).toBe(true);
+    // Wrong tries told nobody; a change does (the manager, so control never keeps a dead link).
+    expect(told).toBe(0);
     link.rotate();
+    expect(told).toBe(1);
     expect(link.current).not.toBe(first);
     expect(link.spent(home)).toBe(false);
     expect(link.check(first, home)).toBe(false);

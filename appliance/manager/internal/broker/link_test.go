@@ -28,6 +28,7 @@ type fakeLink struct {
 	onErr    error
 	observed []protocol.LinkState
 	ons      []string
+	claims   []string
 	// onObserve runs after an observed state, outside the fake's lock (the daemon's OnChange drops the tickets).
 	onObserve func()
 }
@@ -70,6 +71,12 @@ func (f *fakeLink) Observe(st *device.DeviceLinkStatus) {
 	if hook != nil {
 		hook()
 	}
+}
+
+func (f *fakeLink) SetClaimLink(secret string) {
+	f.mu.Lock()
+	f.claims = append(f.claims, secret)
+	f.mu.Unlock()
 }
 
 func startLink(t *testing.T, fl *fakeLink) (*fakecontrol.Control, string) {
@@ -238,6 +245,33 @@ func TestLinkRoutes(t *testing.T) {
 }
 
 func ptrOf[T any](v T) *T { return &v }
+
+// The runtime hands over the claim link for link.status, and takes it back once there is none; anything that isn't a
+// claim link is refused and kept from the keeper. Without a keeper it is answered and dropped.
+func TestLinkClaimRoute(t *testing.T) {
+	t.Parallel()
+	fl := &fakeLink{}
+	fl.set(protocol.LinkStateOn)
+	_, sock := startLink(t, fl)
+	c := client(sock)
+	for _, body := range []string{`{"v":1,"claimLink":"pqrtvw"}`, `{"v":1}`} {
+		if resp, m := post(t, c, local.ManagerPathLinkClaim, body); resp.StatusCode != 200 || m["ok"] != true {
+			t.Fatalf("%s: %d %v", body, resp.StatusCode, m)
+		}
+	}
+	for _, body := range []string{`{"v":1,"claimLink":"PQRTVW"}`, `{"v":1,"claimLink":"pqrtvwx"}`, `{"v":2}`, `{"v":1,"host":"x"}`} {
+		if resp, _ := post(t, c, local.ManagerPathLinkClaim, body); resp.StatusCode != 400 {
+			t.Fatalf("%s: %d", body, resp.StatusCode)
+		}
+	}
+	if len(fl.claims) != 2 || fl.claims[0] != "pqrtvw" || fl.claims[1] != "" {
+		t.Fatalf("%q", fl.claims)
+	}
+	_, bare, _ := start(t, uint32(os.Getuid()), nil)
+	if resp, _ := post(t, client(bare), local.ManagerPathLinkClaim, `{"v":1,"claimLink":"pqrtvw"}`); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+}
 
 // Without a Link keeper (a manager built without one) the Link routes answer off and unavailable.
 func TestLinkRoutesWithoutLink(t *testing.T) {

@@ -140,6 +140,10 @@ type Control struct {
 	Registered  []device.DeviceRegistration
 	// BeginNames: the name each link.begin carried ("" without one).
 	BeginNames []string
+	// ClaimLinks: the claim link each link.status carried ("" without one). StatusBeforeClaimLinks answers a link.status
+	// that carries one as a control before contracts 4.13 does (its strict body: 400 validation_failed, bad_body).
+	ClaimLinks             []string
+	StatusBeforeClaimLinks bool
 	// support.heartbeat and push.register/unregister: what control took.
 	Heartbeats  []device.SupportReport
 	HeartbeatS  int64
@@ -224,6 +228,18 @@ func (c *Control) link(w http.ResponseWriter, env *device.DeviceRequestEnvelope)
 		c.Link = st
 		_ = json.NewEncoder(w).Encode(device.LinkBeginResponse{Link: *st})
 	case device.DeviceOpNameLinkStatus:
+		var req device.LinkStatusRequest
+		_ = json.Unmarshal(env.Body, &req)
+		if req.ClaimLink != nil && c.StatusBeforeClaimLinks {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = fmt.Fprint(w, `{"error":{"code":"validation_failed","message":"The device request is not valid.","details":{"code":"bad_body"}}}`)
+			return
+		}
+		claim := ""
+		if req.ClaimLink != nil {
+			claim = *req.ClaimLink
+		}
+		c.ClaimLinks = append(c.ClaimLinks, claim)
 		_ = json.NewEncoder(w).Encode(device.LinkStatusResponse{Link: *c.Link})
 	case device.DeviceOpNameLinkLeave:
 		c.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOff, Since: now, Label: c.Link.Label}

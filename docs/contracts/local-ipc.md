@@ -125,6 +125,7 @@ runtime reads it at start, every `LINK_STATE_POLL_S` (300 s) and after its own c
 | `POST /v1/link/state` | runtime | `LinkStateRequest {v}` | `LinkStateResponse {v, enabled, link: LocalLinkStatus}` |
 | `POST /v1/link/on` | runtime (the owner's) | `LinkOnRequest {v, contentProof, name?}` | `LinkStateResponse` after `link.begin` |
 | `POST /v1/link/off` | runtime (the owner's) | `LinkOffRequest {v}` | `LinkStateResponse` (`off`) after `link.leave` |
+| `POST /v1/link/claim` | runtime | `LinkClaimRequest {v, claimLink?}` | `LocalOk`; the manager sends the claim link with `link.status` (4.13) |
 | `POST /v1/update/channel` | runtime | `UpdateChannelRequest {v}` | `UpdateChannelResponse {v, channel, staysOn?}` |
 | `POST /v1/update/channel/set` | runtime (the owner's) | `UpdateChannelSetRequest {v, channel}` | `UpdateChannelResponse` |
 | `POST /v1/runtime/push/register` | runtime | the device op `push.register`'s body | its answer `{handle}` |

@@ -84,6 +84,12 @@ export const OWN_ADDRESS_CLAIM_PATH = '/c/';
 export const OwnAddressClaimSecret = z.string().regex(/^[abcdefghjkmnpqrtvwxy]{6}$/);
 export type OwnAddressClaimSecret = z.infer<typeof OwnAddressClaimSecret>;
 
+/** A whole claim link, `https://<own-address host>/c/<secret>`, as control hands it to the account that linked the box. */
+export const OWN_ADDRESS_CLAIM_URL_RE =
+  /^https:[/][/][a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}[.](box|dev)[.]whombat[.]app[/]c[/][abcdefghjkmnpqrtvwxy]{6}$/;
+export const OwnAddressClaimUrl = z.string().max(80).regex(OWN_ADDRESS_CLAIM_URL_RE);
+export type OwnAddressClaimUrl = z.infer<typeof OwnAddressClaimUrl>;
+
 /** The claim link for `host` and `secret`. Throws on either of the wrong shape. */
 export function ownAddressClaimUrl(host: string, secret: string): string {
   OwnAddressClaimSecret.parse(secret);

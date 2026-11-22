@@ -52,6 +52,7 @@ const (
 	ManagerPathLinkState          = "/v1/link/state"
 	ManagerPathLinkOn             = "/v1/link/on"
 	ManagerPathLinkOff            = "/v1/link/off"
+	ManagerPathLinkClaim          = "/v1/link/claim"
 	ManagerPathUpdateChannel      = "/v1/update/channel"
 	ManagerPathUpdateChannelSet   = "/v1/update/channel/set"
 	ManagerPathPushRegister       = "/v1/runtime/push/register"

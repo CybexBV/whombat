@@ -233,6 +233,7 @@ const LOCAL_SCHEMAS = [
   'LinkStateResponse',
   'LinkOnRequest',
   'LinkOffRequest',
+  'LinkClaimRequest',
   'UpdateChannelRequest',
   'UpdateChannelSetRequest',
   'UpdateChannelResponse',

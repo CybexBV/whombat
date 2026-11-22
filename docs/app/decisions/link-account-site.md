@@ -1,4 +1,4 @@
-# The account site under Whombat Link (AP-9700 … AP-9712, AP-9714 … AP-9723, AP-9770 … AP-9771)
+# The account site under Whombat Link (AP-9700 … AP-9712, AP-9714 … AP-9723, AP-9770 … AP-9771, AP-9773)
 
 Phase 1 of Whombat Link in the hosted app at app.whombat.com (and dev.whombat.com): Whombat
 `docs/decisions/whombat-link.md` LNK-13, LNK-32 … LNK-35 and LNK-06 on the account's side. Control's routes are
@@ -213,6 +213,8 @@ the mocks: the plan card's row with the label beside a native select, like Quiet
 
 ## AP-9770 After linking, `/link` waits for the Whombat's page and opens it (2026-11-22; the Easy-path install test)
 
+*In part amended by AP-9773: control now gives the claim link, and Claim it now opens it.*
+
 The Easy path asked for two codes on two sites: the link code here, then, a minute or two later, the long address and
 four letters from the box's screen. Now “… is linked” waits for that Whombat's own address: it asks control's
 `link.boxes` every 5 s (`pollLinkAddress`) and says “Getting your Whombat’s web address… this usually takes a minute or
@@ -235,3 +237,14 @@ Claim it now carries the signed-in account's name and email in the URL fragment 
 it once on its root or its claim link (`readOwnClaimPrefill`), takes it out of the address at once, and fills Who are
 you? with it; the person can change both. Open on Your Whombats carries nothing.
 
+## AP-9773 Claim it now opens the claim link control gives (2026-11-22; John; own-address.md OWA-39, LNK-79)
+
+Control now answers a Whombat nobody claimed yet with its claim link (`LinkedBox.claimUrl`, contracts 4.13), only to
+the account it is linked to. After the confirm, `pollLinkAddress` returns that link as soon as control has it, and
+Claim it now opens `https://<host>/c/<six letters>#name=…&email=…`: the box's page reads the fragment on its claim link
+as on its root (AP-9771), and the person types only the four letters on the screen. The box reports the link once its
+page works, which takes its certificate, so once the address is there the wait goes on for at most 90 s more
+(`LINK_CLAIM_URL_GRACE_MS`) for a Whombat without a name; the words stay “Getting your Whombat’s web address…”. A box
+or control that never sends the link gets today's button after that wait: the box's root, which asks for the six
+letters too. `linkBoxClaimUrl` takes the link only on the Whombat's own host and while its address works. A Whombat
+with a name opens its page at once, as before.

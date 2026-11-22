@@ -2819,3 +2819,17 @@ manager stores nothing of its own” holds only once a box has signed in.
 - Checked: `manager/internal/clients` `TestClaudeComesFromAnthropic`, `TestClaudeElsewhereComesFromItsTarget`,
   `TestClaudeSiteDown`, and `TestDigestMismatch` (a corrupt file on Anthropic's site; a channel whose source and
   executable disagree).
+
+## MG-185 The claim link goes to control with link.status (2026-11-22; Whombat own-address.md OWA-39, LNK-79)
+
+- The runtime hands the box's claim link (its six letters) to the manager on `POST /v1/link/claim` while nobody
+  claimed the box and its own address serves its page, again when it changes, and without it once there is none. The
+  manager keeps it in memory only (it is a secret; the runtime gives it again after a restart) and sends it in every
+  `link.status` body (`claimLink`, contracts 4.13). A link it didn't have wakes the Link loop, so control has it within
+  moments: the person who just linked the box waits for it on the account site. It is never logged and never in the
+  local Link state.
+- A control from before 4.13 refuses the member (strict body: 400 `validation_failed`, `bad_body`). The manager then
+  asks again without it, so the box's Link state never depends on the link, and offers it again an hour later.
+- A box whose Link is off sends nothing, claim link or not (LNK-03).
+- Checked: `manager/internal/link` `TestTheClaimLinkGoesWithLinkStatus`, `TestAControlBeforeClaimLinksStillGivesTheState`;
+  `manager/internal/broker` `TestLinkClaimRoute`.
