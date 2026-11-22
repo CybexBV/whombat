@@ -29,6 +29,7 @@ import { replyLine } from '../trackers/reply';
 import { assessmentOutput, assessmentReported } from './assessment';
 import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
+import { type CardNames, CardNamesInput } from './proposed-card';
 import { outsidersRun } from './runs';
 import { CONTINUE_STEP } from './steps/approval';
 import { stepRoomsCheck } from './steps/checks';
@@ -97,6 +98,8 @@ export const StepOp = z.discriminatedUnion('op', [
     idx: z.number().int().nonnegative(),
     /** A condition that reads `trigger.trusted`/`assigned`/`linkedPr`: them as GitHub has them now (AR-28). */
     facts: GateFactsInput.optional(),
+    /** A `connection_actions` step: the names of the ids its actions name, as the services have them now. */
+    names: CardNamesInput.optional(),
   }),
   z.object({
     op: z.literal('settle'),
@@ -480,7 +483,7 @@ export const automationStep = defineCommand({
         const row = steps[input.idx];
         if (row?.state !== 'pending') return { status: 'unchanged' };
         if (row.wakeAt && row.wakeAt > ctx.now) return { status: 'pending' };
-        await executeStep(ctx, run, steps, input.idx, row.attempt, input.facts);
+        await executeStep(ctx, run, steps, input.idx, row.attempt, input.facts, input.names);
         await publishRun(ctx, run.id);
         return { status: 'executed' };
       }
@@ -496,6 +499,7 @@ export async function executeStep(
   idx: number,
   attempt: number,
   facts?: z.infer<typeof GateFactsInput>,
+  names?: CardNames,
 ): Promise<void> {
   const tx = ctx.tx;
   const step = definitionStep(run.definition, idx);
@@ -544,7 +548,7 @@ export async function executeStep(
     case 'http_callback':
       return executeHttpCallback({ ...execution, step });
     case 'connection_actions':
-      return executeConnectionActions({ ...execution, step });
+      return executeConnectionActions({ ...execution, step, ...(names ? { names } : {}) });
   }
 }
 

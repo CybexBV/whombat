@@ -17,7 +17,7 @@ import { readAll } from '../../files/previews';
 import { callServerOf } from '../../hosts/asks';
 import { loadGrants } from '../../read/principals';
 import { automationAgent, publisherCheck } from '../authority';
-import { listedWords } from '../listed-actions';
+import { listedThere, listedWords } from '../listed-actions';
 import {
   approvedActionsRequest,
   emailFile,
@@ -92,7 +92,14 @@ export async function runConnectionActions(
   const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, services.files.maxBytes);
 
   // Open and re-validate every action before sending any network request.
-  const ready: { action: PreparedAction; args: Record<string, unknown>; done: string; label: string }[] = [];
+  const ready: {
+    action: PreparedAction;
+    args: Record<string, unknown>;
+    done: string;
+    label: string;
+    /** The answer that means its thing was there already (a folder), and what the thread says then. */
+    there: { status: number; done: string } | null;
+  }[] = [];
   for (const action of actions) {
     const [conn] = await db
       .select()
@@ -150,7 +157,8 @@ export async function runConnectionActions(
     if (outside) return void (await refuse(outside));
     // What the thread says once it ran, in Whombat's words for the call as it runs.
     const { done } = listedWords({ catalogId: conn.catalogId, label: conn.label, tool, args });
-    ready.push({ action, args, done, label: conn.label });
+    const there = listedThere({ catalogId: conn.catalogId, label: conn.label, tool, args });
+    ready.push({ action, args, done, label: conn.label, there });
   }
 
   // Re-verify the exact batch hash against what was approved before sending any network call.
@@ -178,7 +186,8 @@ export async function runConnectionActions(
   };
 
   const results: { handle: string; label: string; summary: string; ok: boolean; status?: number }[] = [];
-  for (const { action, args } of ready) {
+  const doneWords: { done: string; label: string }[] = [];
+  for (const { action, args, done, label, there } of ready) {
     const shown = action.description ?? action.summary;
     const res = await executeConnectionCall(services, {
       burrowId: run.burrowId,
@@ -196,7 +205,10 @@ export async function runConnectionActions(
       approvalId: out.actionsApprovalId,
       uploadAttachment,
     });
-    if (res.kind === 'failed' || res.output.isError) {
+    // A folder that is there already: nothing changed, and what comes after it can go on.
+    const wasThere =
+      there !== null && res.kind === 'ok' && res.output.isError && res.output.httpStatus === there.status;
+    if (!wasThere && (res.kind === 'failed' || res.output.isError)) {
       const timedOut = res.kind === 'failed' && res.reason === 'timeout';
       const earlierSucceeded = results.some((r) => r.ok);
       const reason =
@@ -238,11 +250,12 @@ export async function runConnectionActions(
       label: action.label,
       summary: shown,
       ok: true,
-      ...(res.output.httpStatus ? { status: res.output.httpStatus } : {}),
+      ...(res.kind === 'ok' && res.output.httpStatus ? { status: res.output.httpStatus } : {}),
     });
+    doneWords.push({ done: wasThere && there ? there.done : done, label });
   }
 
-  const doneLine = actionsDoneLine(ready.map((r) => ({ done: r.done, label: r.label })));
+  const doneLine = actionsDoneLine(doneWords);
   await lease.commit({
     op: 'settle',
     idx: row.idx,

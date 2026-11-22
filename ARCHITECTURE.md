@@ -821,17 +821,23 @@ published automation details read their definition and publisher from one versio
   metadata stay.
   Proposed writes (`propose_connection_actions`) are only the listed, create-only actions a mail automation needs
   (`automations/listed-actions.ts`): upload a file of the email to Paperless-ngx, add a purchase invoice or receipt to
-  Moneybird, save a new file (or make a folder) in Dropbox or Nextcloud, add a task to Todoist, show a notification in
-  Home Assistant. Each has a strict schema; Whombat sets what keeps it create-only (`If-None-Match: *` on a WebDAV PUT,
-  Dropbox's `mode: add`, `overwrite: false`) and the `Content-Type`, and refuses any other header, a header name given
-  twice in different case and any value named like a password or key; everything else is refused with what a mail
-  automation can do instead. The prompt lists the listed actions by connection handle, never the person's labels. An
+  Moneybird, save a new file in Dropbox or Nextcloud (or make a folder in Nextcloud), add a task to Todoist, show a
+  notification in Home Assistant. Each has a strict schema; Whombat sets what keeps it create-only (`If-None-Match: *` on
+  a WebDAV PUT, Dropbox's `mode: add`, `overwrite: false`) and the `Content-Type`, and refuses any other header, a
+  header name given twice in different case and any value named like a password or key; everything else is refused with
+  what a mail automation can do instead. The agent can't look anything up, so its paths leave out the person's account
+  ids (Moneybird's from `/documents/`, Nextcloud's from the root of the person's files) and the server writes the
+  connection's administration or WebDAV user in; only an action whose body is JSON reads JSON text. The prompt lists the
+  listed actions by connection handle, never the person's labels or account ids. An
   upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
   first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
   exact `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): the
-  listed action's words as its title, question, message and “Done:” line, then every line that decides what happens —
-  method and path or tool, base, the email's file by name, type and size, every argument and header, nothing hidden, a
-  long value in numbered parts — or the proposal is refused when that doesn't fit on one card. `connection_actions`
+  listed action's words as its title, question, message and “Done:” line, what else it does (the folder Dropbox makes on
+  the way), then every line that decides what happens — method and path as sent or tool, base, the email's file by name,
+  type and size, every argument and header, nothing hidden, a long value in numbered parts, an id by its name — or the
+  proposal is refused when that doesn't fit on one card. The names (a Paperless-ngx tag, a Moneybird contact) are read
+  by the run engine as the connection just before the card is made, outside the transaction and bounded
+  (`automations/card-names.ts`), and kept on the step; an id the service doesn't have refuses the card. `connection_actions`
   runs them after a yes, settling as
   `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
   `request_approval` step's details start with its own question. A session below protocol

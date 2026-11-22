@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { callArgsAad } from '../../connections/call';
 import { automationRuns } from '../../db/schema/index';
 import { approvedActionsRequest, planConnectionActions } from '../proposed-actions';
+import type { CardNames } from '../proposed-card';
 import { CONTINUE_STEP, requestStepApproval } from './approval';
 import { block, skipStep, updateStep } from './state';
 import type { StepExecution } from './types';
@@ -11,7 +12,8 @@ import type { StepExecution } from './types';
 /**
  * Executes a `connection_actions` step: validates proposed actions from step `from`, ALWAYS asks the person on an
  * approval card first regardless of standing connection/key settings, and marks the step `running` only once that
- * approval card has been approved so `runExternal` executes the calls outside any DB transaction.
+ * approval card has been approved so `runExternal` executes the calls outside any DB transaction. `names` are the names
+ * of the ids the actions name, read just before (`card-names.ts`); the card's are kept on the step.
  */
 export async function executeConnectionActions({
   ctx,
@@ -22,10 +24,11 @@ export async function executeConnectionActions({
   scope,
   base,
   step,
-}: StepExecution<'connection_actions'>): Promise<void> {
+  names,
+}: StepExecution<'connection_actions'> & { names?: CardNames }): Promise<void> {
   const tx = ctx.tx;
   const previous = (steps[idx]?.output ?? {}) as JsonObject;
-  const plan = await planConnectionActions(tx, ctx.services, run, steps, step);
+  const plan = await planConnectionActions(tx, ctx.services, run, steps, step, names);
   if (!plan.ok) {
     if (plan.fatal || step.otherwise === 'fail') return block(ctx, run, idx, plan.reason);
     return skipStep(ctx, run, idx, base, plan.reason, { ran: false, count: 0, reason: plan.reason });
@@ -80,7 +83,11 @@ export async function executeConnectionActions({
         state: 'waiting',
         approvalId: approval.id,
         inputSummary: `Asked you to approve ${plan.actions.length} ${plan.actions.length === 1 ? 'action' : 'actions'}`,
-        output: { actionsHash: plan.actionsHash, count: plan.actions.length },
+        output: {
+          actionsHash: plan.actionsHash,
+          count: plan.actions.length,
+          ...(Object.keys(plan.names).length ? { cardNames: plan.names } : {}),
+        },
       },
       ctx.now,
     );

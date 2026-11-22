@@ -1,6 +1,7 @@
 import { catalogEntry } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { ConnectionToolRow } from '../connections/types';
+import { listedHowTo, listedThere } from './listed-actions';
 import { isProposableEntry, outsidersCall } from './proposed-actions';
 import { describePlannedAction, proposalCard } from './proposed-card';
 
@@ -166,13 +167,17 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
       'Content-Type': 'application/octet-stream',
       'Dropbox-API-Arg': '{"path":"/Invoices/acme.pdf","mode":"add","autorename":false,"mute":false}',
     });
-    // The file tools write new files only.
-    for (const kind of ['dropbox', 'nextcloud'])
-      expect(sent(kind, { path: '/Notes/acme.txt', content: 'Paid.' }, adapter('files_write'))).toEqual({
-        path: '/Notes/acme.txt',
-        content: 'Paid.',
-        overwrite: false,
-      });
+    // Dropbox's file tool writes new files only.
+    expect(sent('dropbox', { path: '/Notes/acme.txt', content: 'Paid.' }, adapter('files_write'))).toEqual({
+      path: '/Notes/acme.txt',
+      content: 'Paid.',
+      overwrite: false,
+    });
+    // Nextcloud's makes every missing folder on the way first, which the card wouldn't show: its PUT and MKCOL are
+    // listed instead, each its own action.
+    expect(
+      refusal('nextcloud', { path: '/Notes/acme.txt', content: 'Paid.' }, adapter('files_write')),
+    ).toContain('can’t propose this');
     // Settling what was settled changes nothing: the card, the hash and the wire agree.
     for (const [kind, args, tool] of [
       ['dropbox', dropbox, REQUEST],
@@ -385,14 +390,14 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       invoice({ details_attributes: Array.from({ length: 51 }, () => ({ description: 'x', price: '1' })) }),
     ).toContain('at most 50');
-    // A Nextcloud path outside the connection's own files.
-    expect(
-      refusal('nextcloud', {
-        method: 'PUT',
-        path: '/remote.php/dav/files/someone/a.pdf',
-        upload: { attachmentId: ATT },
-      }),
-    ).toContain('/remote.php/dav/files/mara/');
+    // A Nextcloud path in someone else's files, refused without naming the connection's user.
+    const someone = refusal('nextcloud', {
+      method: 'PUT',
+      path: '/remote.php/dav/files/someone/a.pdf',
+      upload: { attachmentId: ATT },
+    });
+    expect(someone).toContain('a path in the person’s files');
+    expect(someone).not.toContain('mara');
   });
 
   it('refuses headers that could disagree with the card, and any header the action doesn’t take', () => {
@@ -535,5 +540,148 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
         body: '{"purchase_invoice":{"contact_id":424242424242424242424}}',
       }),
     ).toContain('too large to send exactly');
+  });
+  it('takes paths without the person’s account ids and writes the connection’s own in', () => {
+    // Moneybird: from /documents/, the administration put in front by the server.
+    expect(
+      sent('moneybird', {
+        method: 'POST',
+        path: '/documents/purchase_invoices.json',
+        body: { purchase_invoice: { reference: 'INV-1' } },
+      }).path,
+    ).toBe('/12345/documents/purchase_invoices.json');
+    expect(
+      sent('moneybird', {
+        method: 'POST',
+        path: '/documents/receipts',
+        body: { receipt: { reference: 'R-1' } },
+      }).path,
+    ).toBe('/12345/documents/receipts');
+    // Nextcloud: a path from the root of the person's files, the WebDAV part with their user id put in front.
+    const put = sent('nextcloud', {
+      method: 'PUT',
+      path: '/Invoices/acme%20bv.pdf',
+      upload: { attachmentId: ATT },
+    });
+    expect(put.path).toBe('/remote.php/dav/files/mara/Invoices/acme%20bv.pdf');
+    expect(sent('nextcloud', { method: 'MKCOL', path: '/Invoices/2026/' }).path).toBe(
+      '/remote.php/dav/files/mara/Invoices/2026/',
+    );
+    // The user id, not the login name, when they differ (an LDAP account), written as a path segment.
+    expect(
+      sent('nextcloud', { method: 'PUT', path: '/a.txt', body: 'x' }, REQUEST, {
+        url: 'https://cloud.example.com',
+        username: 'mara',
+        userId: 'mara@example.com',
+      }).path,
+    ).toBe('/remote.php/dav/files/mara%40example.com/a.txt');
+    // Settling what was settled changes nothing: the card, the hash and the wire agree.
+    for (const [kind, args] of [
+      [
+        'moneybird',
+        sent('moneybird', {
+          method: 'POST',
+          path: '/documents/purchase_invoices.json',
+          body: { purchase_invoice: { reference: 'INV-1' } },
+        }),
+      ],
+      ['nextcloud', put],
+      ['nextcloud', sent('nextcloud', { method: 'MKCOL', path: '/Invoices/' })],
+    ] as const)
+      expect(sent(kind, args)).toEqual(args);
+  });
+
+  it('never says an account id the agent didn’t write, in what it lists or what it refuses', () => {
+    const tools = [
+      { name: 'request', origin: 'request' as const },
+      { name: 'files_write', origin: 'adapter' as const },
+    ];
+    const how = [...listedHowTo('moneybird', tools), ...listedHowTo('nextcloud', tools)].join('\n');
+    expect(how).toContain('POST /documents/purchase_invoices.json');
+    expect(how).toContain('PUT /<folder>/<name>');
+    expect(how).not.toMatch(/<administration>|<user id>|remote\.php|files_write/);
+    const refusals = [
+      // Another administration, a guess, or none chosen yet.
+      refusal('moneybird', {
+        method: 'POST',
+        path: '/99999/documents/purchase_invoices.json',
+        body: { purchase_invoice: { reference: 'INV-1' } },
+      }),
+      refusal(
+        'moneybird',
+        { method: 'POST', path: '/documents/receipts.json', body: { receipt: { reference: 'R-1' } } },
+        REQUEST,
+        {},
+      ),
+      // Someone else's files, a path outside them, a bad path, a connection that doesn't know its user yet.
+      refusal('nextcloud', { method: 'MKCOL', path: '/remote.php/dav/files/someone/Invoices/' }),
+      refusal('nextcloud', { method: 'PUT', path: '/Invoices/../a.pdf', upload: { attachmentId: ATT } }),
+      refusal('nextcloud', { method: 'PUT', path: '/Invoices/', body: 'x' }),
+      refusal('nextcloud', { method: 'PUT', path: '/a.txt', body: 'x' }, REQUEST, {
+        url: 'https://cloud.example.com',
+      }),
+    ];
+    for (const reason of refusals) {
+      expect(reason).not.toBeNull();
+      expect(reason).not.toMatch(/12345|mara/);
+    }
+    expect(refusals[0]).toContain('/documents/');
+    expect(refusals[1]).toContain('no administration');
+    expect(refusals[5]).toContain('doesn’t know its user');
+  });
+
+  it('keeps text as text: a file, a note or a task that starts with { or [ is never read as JSON', () => {
+    const json = '{"total": 420, "token": "abc", "items": [1, 2]}';
+    const file = sent('nextcloud', { method: 'PUT', path: '/Notes/order.json', body: json });
+    expect(file.body).toBe(json);
+    expect(file.headers).toMatchObject({ 'Content-Type': 'text/plain; charset=utf-8' });
+    expect(
+      sent('dropbox', {
+        method: 'POST',
+        path: '/2/files/upload',
+        base: 'content',
+        headers: { 'Dropbox-API-Arg': '{"path":"/Notes/list.txt"}' },
+        body: '[1, 2, 3]',
+      }).body,
+    ).toBe('[1, 2, 3]');
+    expect(sent('dropbox', { path: '/a.json', content: json }, adapter('files_write')).content).toBe(json);
+    expect(
+      sent('todoist', { content: 'Check the order', description: json }, adapter('tasks_add')).description,
+    ).toBe(json);
+    expect(
+      sent('todoist', {
+        method: 'POST',
+        path: '/api/v1/tasks',
+        body: { content: 'Check it', description: '[{"password": 1}]' },
+      }).body,
+    ).toEqual({ content: 'Check it', description: '[{"password": 1}]' });
+    expect(
+      sent('homeassistant', {
+        method: 'POST',
+        path: '/api/services/persistent_notification/create',
+        body: { message: '{"secret": true}' },
+      }).body,
+    ).toEqual({ message: '{"secret": true}' });
+    // A JSON body is still the JSON it says, a secret in it still refused.
+    expect(
+      sent('todoist', { method: 'POST', path: '/api/v1/tasks', body: '{"content":"Pay it"}' }).body,
+    ).toEqual({ content: 'Pay it' });
+    expect(
+      refusal('moneybird', {
+        method: 'POST',
+        path: '/documents/purchase_invoices.json',
+        body: '{"purchase_invoice":{"reference":"x"},"auth":{"password":"b"}}',
+      }),
+    ).toContain('“auth”');
+  });
+
+  it('counts a folder that is there already as done, and nothing else', () => {
+    const mkcol = sent('nextcloud', { method: 'MKCOL', path: '/Invoices/' });
+    expect(listedThere({ catalogId: 'nextcloud', label: 'Nextcloud', tool: REQUEST, args: mkcol })).toEqual({
+      status: 405,
+      done: 'found the folder already in Nextcloud',
+    });
+    const put = sent('nextcloud', { method: 'PUT', path: '/Invoices/a.pdf', upload: { attachmentId: ATT } });
+    expect(listedThere({ catalogId: 'nextcloud', label: 'Nextcloud', tool: REQUEST, args: put })).toBeNull();
   });
 });
