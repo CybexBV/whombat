@@ -70,4 +70,13 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
     expect(links.length).toBeGreaterThan(0);
     for (const href of links) expect(href).toMatch(/^(https:\/\/|mailto:)/);
   });
+
+  it('says where addresses are still seen or kept: Cloudflare, the network hashes, the server login log', () => {
+    expect(text).toContain('**Cloudflare, Inc.**');
+    expect(text).toContain("visitors' IP addresses");
+    expect(text).toContain('keyed hash of the network you accepted them');
+    expect(text).toContain('**Rate-limit counters:** 2 days');
+    expect(text).toContain('login log');
+    expect(text).toContain('up to 35 days');
+  });
 });

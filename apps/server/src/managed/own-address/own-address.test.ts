@@ -9,6 +9,7 @@ import { CLAIM_LINK_PEERS, CLAIM_LINK_TRIES_PER_PEER, ClaimLink, newClaimLinkSec
 import { coversHost, foreignCertificates, UNCHECKED_AFTER_MS, uncheckedSince } from './ct';
 import { DOOR_BUDGETS, OwnAddressDoor } from './door';
 import { missedWindowsText, OWN_ADDRESS_CHECKS, OWN_ADDRESS_WORDS } from './notices';
+import { summaryFailure } from './state';
 
 const HOST = 'maple-otter-river.dev.whombat.app';
 const cert = (spkiSha256: string, dnsNames: string[], notAfter = '2099-01-01T00:00:00Z') => ({
@@ -181,5 +182,20 @@ describe('kit envelopes stored', () => {
     expect(storedOf(batch, { skipped: 0 })).toEqual(batch);
     expect(storedOf(batch, { skipped: 1, skippedCredentialIds: ['b'] })).toEqual([{ credentialId: 'a' }]);
     expect(storedOf(batch, { skipped: 1 })).toEqual([]);
+  });
+});
+
+describe('why there is no certificate', () => {
+  it('passes the manager’s reason and next try while it is failing, and nothing otherwise', () => {
+    expect(
+      summaryFailure({ state: 'failing', error: 'rate_limited', nextAttemptAt: '2026-11-22T14:05:00Z' }),
+    ).toEqual({ reason: 'rate_limited', retryAt: '2026-11-22T14:05:00.000Z' });
+    expect(summaryFailure({ state: 'failing', error: 'probe_failed' })).toEqual({
+      reason: 'probe_failed',
+      retryAt: null,
+    });
+    expect(summaryFailure({ state: 'ordering', error: 'rate_limited' })).toBeUndefined();
+    expect(summaryFailure({ state: 'failing' })).toBeUndefined();
+    expect(summaryFailure({ state: 'failing', error: 'Odd-Code' })).toBeUndefined();
   });
 });
