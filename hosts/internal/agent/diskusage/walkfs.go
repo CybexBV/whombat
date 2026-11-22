@@ -13,14 +13,24 @@ var (
 	errRootChanged = errors.New("mount root changed before scan started")
 )
 
-// scanUnsupportedError indicates that this host's kernel, security policy, or
-// operating system cannot enforce safe mount-boundary isolation without sending
-// metadata requests to unchecked filesystems.
+// scanUnsupportedError indicates that this host's kernel, security policy,
+// volume, or operating system cannot enforce safe mount-boundary isolation
+// without sending metadata requests to unchecked filesystems.
 type scanUnsupportedError struct {
 	msg string
 }
 
 func (e *scanUnsupportedError) Error() string { return e.msg }
+
+const msgUnsupportedMountStatus = "This volume cannot report mount points, so Whombat cannot scan it safely."
+
+func asUnsupportedErr(err error) *scanUnsupportedError {
+	var unsup *scanUnsupportedError
+	if errors.As(err, &unsup) {
+		return unsup
+	}
+	return nil
+}
 
 // entryKind is the coarse entry type reported by directory iteration (d_type on
 // Linux, ATTR_CMN_OBJTYPE via getattrlistbulk on macOS) before any per-entry
@@ -203,18 +213,18 @@ func openRelDir(rootDir scanDir, scope mountScope, logicalDir string, searchOnly
 
 // dirInScope checks whether logicalDir is a directory on the target mount by
 // stepping from rootDir without crossing mounts or following symlinks.
-func dirInScope(rootDir scanDir, scope mountScope, logicalDir string) bool {
+func dirInScope(rootDir scanDir, scope mountScope, logicalDir string) (bool, *scanUnsupportedError) {
 	cleanDir := filepath.Clean(logicalDir)
 	if !scope.containsPath(cleanDir) {
-		return false
+		return false, nil
 	}
 	if cleanDir == scope.target.MountPoint {
-		return true
+		return true, nil
 	}
 	d, err := openRelDir(rootDir, scope, cleanDir, true)
 	if err != nil {
-		return false
+		return false, asUnsupportedErr(err)
 	}
 	_ = d.Close()
-	return true
+	return true, nil
 }

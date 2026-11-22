@@ -86,7 +86,6 @@ type Runner struct {
 	// Seams for tests; New wires the real host implementations.
 	root           string // optional filesystem prefix in tests ("" = host /)
 	goos           string // optional OS override in tests ("" = runtime.GOOS)
-	dockerSockets  []string
 	listMounts     func() ([]mountInfo, error)
 	statfs         func(path string) (fsStat, error) // optional override; nil uses fstatfs on the open root fd
 	scanFS         scanFS                            // optional override; nil uses the platform descriptor-based FS
@@ -113,7 +112,6 @@ func New(inv agent.InventoryFunc, log *slog.Logger) *Runner {
 		inventory:      inv,
 		log:            log,
 		goos:           runtime.GOOS,
-		dockerSockets:  []string{"/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock"},
 		listMounts:     hostMounts,
 		lookProbeTool:  lookTool,
 		probeCmd:       runStandbyProbeCmd,
@@ -315,10 +313,31 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			catBudget = min(4*time.Second, timeout)
 		}
 		cctx, ccancel := context.WithTimeout(wctx, catBudget)
-		cats, catPartial := r.collectCategories(cctx, rootDir, scope, rootDev, rootMntID)
+		cats, cc, catPartial, catUnsup := r.collectCategories(cctx, rootDir, scope, rootDev, rootMntID)
 		ccancel()
+		if catUnsup != nil {
+			done <- scanOut{errCode: CodeUnsupported, errMsg: catUnsup.msg}
+			return
+		}
 
 		w := r.walkMount(wctx, rootDir, scope, rootDev, rootMntID, maxDepth)
+		if w.unsupported != nil {
+			done <- scanOut{errCode: CodeUnsupported, errMsg: w.unsupported.msg}
+			return
+		}
+		if len(w.dockerRoots) > 0 || len(w.podmanRoots) > 0 {
+			changed, extraPartial, extraUnsup := cc.collectExtraRoots(r, wctx, rootDir, scope, rootDev, rootMntID, w.dockerRoots, w.podmanRoots)
+			if extraUnsup != nil {
+				done <- scanOut{errCode: CodeUnsupported, errMsg: extraUnsup.msg}
+				return
+			}
+			if extraPartial {
+				catPartial = true
+			}
+			if changed {
+				cats = mergeContainerCategories(cats, cc.categories())
+			}
+		}
 		done <- scanOut{
 			totalBytes: totalBytes,
 			usedBytes:  usedBytes,
@@ -445,10 +464,10 @@ func (r *Runner) detectUnraid() bool {
 			return true
 		}
 	}
-	if _, err := os.Stat(r.hostPath("/etc/unraid-version")); err == nil {
+	if _, err := os.Lstat(r.hostPath("/etc/unraid-version")); err == nil {
 		return true
 	}
-	if _, err := os.Stat(r.hostPath("/var/local/emhttp/disks.ini")); err == nil {
+	if _, err := os.Lstat(r.hostPath("/var/local/emhttp/disks.ini")); err == nil {
 		return true
 	}
 	return false

@@ -70,14 +70,19 @@ func loadDarwinAttrSyms() error {
 
 type darwinBulkFunc func(dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error)
 type darwinFgetFunc func(fd int, alist *darwinAttrList, buf []byte, options uint64) error
+type darwinSyscallNFunc func(fn uintptr, args ...uintptr) (r1, r2, err uintptr)
 
 func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error) {
+	return callDarwinGetattrlistbulk(purego.SyscallN, darwinLib.getattrlistbulk, dirfd, alist, buf, options)
+}
+
+func callDarwinGetattrlistbulk(syscallN darwinSyscallNFunc, fn uintptr, dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error) {
 	if len(buf) == 0 {
 		return 0, unix.ERANGE
 	}
 	for {
-		r1, _, errno := purego.SyscallN(
-			darwinLib.getattrlistbulk,
+		r1, _, errno := syscallN(
+			fn,
 			uintptr(dirfd),
 			uintptr(unsafe.Pointer(alist)),
 			uintptr(unsafe.Pointer(&buf[0])),
@@ -86,7 +91,7 @@ func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, opt
 		)
 		n := int(int32(r1))
 		if n < 0 {
-			err := unix.Errno(errno)
+			err := darwinPuregoErrno(errno)
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
@@ -97,12 +102,16 @@ func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, opt
 }
 
 func hostDarwinFgetattrlist(fd int, alist *darwinAttrList, buf []byte, options uint64) error {
+	return callDarwinFgetattrlist(purego.SyscallN, darwinLib.fgetattrlist, fd, alist, buf, options)
+}
+
+func callDarwinFgetattrlist(syscallN darwinSyscallNFunc, fn uintptr, fd int, alist *darwinAttrList, buf []byte, options uint64) error {
 	if len(buf) == 0 {
 		return unix.ERANGE
 	}
 	for {
-		r1, _, errno := purego.SyscallN(
-			darwinLib.fgetattrlist,
+		r1, _, errno := syscallN(
+			fn,
 			uintptr(fd),
 			uintptr(unsafe.Pointer(alist)),
 			uintptr(unsafe.Pointer(&buf[0])),
@@ -110,7 +119,7 @@ func hostDarwinFgetattrlist(fd int, alist *darwinAttrList, buf []byte, options u
 			uintptr(options),
 		)
 		if int32(r1) != 0 {
-			err := unix.Errno(errno)
+			err := darwinPuregoErrno(errno)
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
@@ -214,6 +223,10 @@ func (f *darwinScanFS) OpenRoot(hostPath, logicalMount string, expected mountInf
 	}
 
 	_, _, fsid, hasFSID, ferr := state.fdIdentity(fd)
+	if errors.Is(ferr, unix.ENOTSUP) || errors.Is(ferr, unix.EOPNOTSUPP) || errors.Is(ferr, unix.ENOSYS) {
+		_ = unix.Close(fd)
+		return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+	}
 	if ferr == nil && hasFSID {
 		state.rootFSID = fsid
 		state.hasRootFSID = true
@@ -324,6 +337,9 @@ func (d *darwinScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 			return nil, io.EOF
 		}
 		for _, ent := range entries {
+			if ent.unsupported {
+				return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			if ent.skippedMnt {
 				continue
 			}
@@ -347,6 +363,9 @@ func (d *darwinScanDir) readBulkRaw() ([]darwinBulkEntry, bool, error) {
 			continue
 		}
 		if err != nil {
+			if errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.ENOSYS) {
+				return nil, false, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			return nil, false, err
 		}
 		if n == 0 {
@@ -383,6 +402,9 @@ func (d *darwinScanDir) lookupChildBulk(name string) (darwinBulkEntry, bool, err
 		}
 		for _, ent := range entries {
 			seen++
+			if ent.unsupported {
+				return darwinBulkEntry{}, false, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			if ent.info.Name == name {
 				return ent, true, nil
 			}
@@ -407,6 +429,9 @@ func (d *darwinScanDir) OpenDir(name, logicalPath string, _, prechecked bool) (s
 		}
 		if !found {
 			return nil, fs.ErrNotExist
+		}
+		if ent.unsupported {
+			return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
 		}
 		if ent.skippedMnt {
 			return nil, errWrongMount
@@ -440,6 +465,9 @@ func (d *darwinScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 	}
 	if !found {
 		return entryStat{}, fs.ErrNotExist
+	}
+	if ent.unsupported {
+		return entryStat{}, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
 	}
 	if ent.skippedMnt {
 		return entryStat{}, errWrongMount

@@ -373,8 +373,10 @@ func parseDarwinAttrlistBulk(buf []byte, count int, rootDev uint64, hasRootFSID 
 
 		case darwinVReg:
 			var alloc uint64
-			if hasAllocSize && allocSize > 0 {
-				alloc = uint64(allocSize)
+			if hasAllocSize {
+				if allocSize > 0 {
+					alloc = uint64(allocSize)
+				}
 			} else if hasTotalSize && totalSize > 0 {
 				alloc = uint64(totalSize)
 			}
