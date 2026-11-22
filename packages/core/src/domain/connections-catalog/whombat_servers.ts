@@ -92,7 +92,7 @@ export const MAC_SCREEN_ACTIONS = [
   'password',
 ];
 /** What `mac_ui` does: `apps` and `list` only read (and don't ask), as owner's steps like a look. */
-export const MAC_UI_ACTIONS = ['apps', 'list', 'press', 'set', 'menu', 'focus', 'open'];
+export const MAC_UI_ACTIONS = ['apps', 'list', 'press', 'set', 'menu', 'focus', 'open', 'action', 'quit'];
 
 /** The hosts service's limits on a Mac's screen step, as the tools' schemas say them. */
 const SL = HOST_SCREEN_LIMITS;
@@ -1069,22 +1069,27 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'mac_ui',
     title: 'Use a Mac’s apps by name',
     description:
-      'A Mac’s apps through Whombat Helper: apps (what runs), list (an app’s buttons and fields), press, set (type into a field), menu, focus (bring an app forward), open (accessibility, an app or an https address). Steps but apps and list ask a person first unless the server is set not to ask.',
+      'A Mac’s apps through Whombat Helper: apps (what runs), list (an app’s buttons and fields, with each one’s own actions), press, set (type into a field), menu, focus (bring an app forward), open (accessibility, an app or an https address), action (run an element’s own action by name, like Play), quit (an app). Whombat never runs an action that removes, erases, signs out, stops sharing or marks something lost: the person does that on the Mac. Steps but apps and list ask a person first unless the server is set not to ask.',
     access: 'write',
     inputSchema: obj(
       {
         server: SERVER,
-        action: str('apps, list, press, set, menu, focus or open', { enum: MAC_UI_ACTIONS }),
-        app: str('The app’s name or bundle id (left out: the one in front)', { maxLength: SL.name }),
+        action: str('apps, list, press, set, menu, focus, open, action or quit', { enum: MAC_UI_ACTIONS }),
+        app: str('The app’s name or bundle id (left out: the one in front; quit needs it)', {
+          maxLength: SL.name,
+        }),
         window: str('list: a window title, or part of it', { maxLength: SL.name }),
-        name: str('press, set: the element’s title, description, value or identifier', {
+        name: str('press, set, action: the element’s title, description, value or identifier', {
           maxLength: SL.name,
         }),
         role: str(
-          'press, set: button, checkbox, switch, text_field, menu_item, link, tab, row, popup, radio or any, or a comma list of them',
+          'press, set, action: button, checkbox, switch, text_field, menu_item, link, tab, row, popup, radio or any, or a comma list of them',
           { maxLength: SL.role },
         ),
-        index: int('press, set: the n-th match, from 0', { minimum: 0, maximum: 1000 }),
+        index: int('press, set, action: the n-th match, from 0', { minimum: 0, maximum: 1000 }),
+        perform: str('action: the element’s own action, as list shows it (Play, Directions)', {
+          maxLength: SL.name,
+        }),
         value: str('set: the text', { maxLength: SL.text }),
         path: {
           type: 'array',
@@ -1250,7 +1255,7 @@ export const SERVERS_SENSITIVE: readonly SensitiveRule[] = [
   {
     tools: ['mac_ui'],
     arg: 'action',
-    argValue: '^(press|set|menu|focus|open)$',
+    argValue: '^(press|set|menu|focus|open|action|quit)$',
     reason: 'Using a Mac’s apps asks',
   },
 ];

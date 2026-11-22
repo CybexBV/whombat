@@ -52,13 +52,24 @@ export function screenBody(b: HostScreenBody): Record<string, unknown> {
   put('path', b.path);
   put('limit', b.limit);
   put('target', b.target);
+  put('action', b.action);
+  put('queries', b.queries);
+  if (b.pins) out.pins = b.pins.map((p) => ({ lat: p.lat, lon: p.lon }));
+  put('lat', b.lat);
+  put('lon', b.lon);
+  put('span_m', b.spanM);
+  put('w', b.w);
+  put('h', b.h);
+  put('scale', b.scale);
+  put('dark', b.dark);
+  if (b.crop) out.crop = { x: b.crop.x, y: b.crop.y, w: b.crop.w, h: b.crop.h };
   if (b.account) out.account = { user: b.account.user, password: b.account.password };
   return out;
 }
 
 /** One screen step on a Mac, as `actor` with the role the step needs; the Mac's refusals come back `ok: false`. */
 export async function screenStep(
-  hosts: HostsService,
+  hosts: Pick<HostsService, 'call'>,
   serverId: string,
   body: HostScreenBody,
   actor: HostsActor,
@@ -71,6 +82,67 @@ export async function screenStep(
     timeoutMs: hostScreenTimeoutMs(body.op),
   });
   return toHostScreenResult(raw, serverId, body.op);
+}
+
+/**
+ * Words of an element's own action that undo something a person can't easily get back: removing a friend, erasing a
+ * device, signing out, stopping sharing, marking something lost. Compared without case or accents, in English, Dutch,
+ * German, French and Spanish; each word stands at the start of a word, so “Wissel” isn't “wis”.
+ */
+const DESTRUCTIVE_ACTION_WORDS: readonly RegExp[] = [
+  // English
+  /\b(remov|delet|eras|forget|block|unpair|unfriend)/,
+  /\b(sign|log)(ing|ging)? ?out\b/,
+  /\bstop sharing\b/,
+  /\b(mark|marked|marking) as lost\b/,
+  /\blost mode\b/,
+  // Dutch
+  /\b(verwijder|vergeet|vergeten|blokkeer|blokkeren|ontkoppel|afmeld|uitlog|log uit|meld af)/,
+  /\b(wis|wissen)\b/,
+  /\b(stop met|stoppen met) del(en|ing)\b/,
+  /\bniet meer delen\b/,
+  /\b(markeer|markeren) als (verloren|kwijt)\b/,
+  /\bverloren[- ]?modus\b/,
+  // German
+  /\b(entfern|losch|vergiss|vergessen|blockier|abmeld|entkoppel)/,
+  /\b(teilen beenden|nicht mehr teilen|freigabe beenden)\b/,
+  /\bals verloren markier/,
+  // French
+  /\b(supprim|retir|effac|oubli|bloqu|dissoci|deconnect)/,
+  /\b(arreter|arreter de|ne plus) (le )?partag/,
+  /\b(marquer|signaler) comme perdu/,
+  /\bmode perdu\b/,
+  // Spanish
+  /\b(elimin|borr|olvid|desvincul|desemparej)/,
+  /\bquitar\b/,
+  /\bcerrar sesion\b/,
+  /\bdejar de compartir\b/,
+  /\bmarcar como perdid/,
+  /\bmodo perdido\b/,
+];
+
+/** A name as the destructive words compare it: lower case, no accents, one space between words. */
+const plainWords = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[\s\u00a0]+/g, ' ')
+    .trim();
+
+/** Whether an element's own action (“Remove Friend”, “Erase This Device”) undoes something: Whombat never runs those. */
+export function isDestructiveAction(action: string): boolean {
+  const words = plainWords(action);
+  return DESTRUCTIVE_ACTION_WORDS.some((re) => re.test(words));
+}
+
+/**
+ * The refusal of an element's own action that undoes something, in one sentence, or null when Whombat may run it.
+ * The person does those on the Mac's screen themselves, where they see what goes.
+ */
+export function destructiveActionText(action: string, server: string): string | null {
+  if (!isDestructiveAction(action)) return null;
+  return `Whombat doesn’t choose ${quoted(action)} on ${server}: do that on the Mac’s screen yourself.`;
 }
 
 /** A quoted name, cut to a readable length. */
@@ -87,6 +159,9 @@ export function screenChangeText(b: HostScreenBody, server: string): string | nu
     case 'ui.apps':
     case 'ui.list':
     case 'account.check':
+    // The Mac's maps only read, and their places are never written down anywhere.
+    case 'map.geocode':
+    case 'map.snapshot':
       return null;
     case 'click': {
       const how =
@@ -121,6 +196,10 @@ export function screenChangeText(b: HostScreenBody, server: string): string | nu
       return b.target === 'accessibility'
         ? `Opened the Accessibility settings on ${server}`
         : `Opened ${quoted(b.target ?? '')} on ${server}`;
+    case 'ui.action':
+      return `Chose ${quoted(b.action ?? '')} for ${quoted(b.name ?? '')} on ${server}`;
+    case 'ui.quit':
+      return `Quit ${quoted(b.app ?? '')} on ${server}`;
   }
 }
 

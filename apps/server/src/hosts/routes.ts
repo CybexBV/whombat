@@ -84,7 +84,13 @@ import { serverNameOf as givenNameOf, loadServerNames } from './names-store';
 import { canManageServers, ONLY_YOU_CHANGE_SERVERS_TEXT } from './person';
 import { quietAlertById } from './quiet';
 import { REPOINT_TEXT, RepointBusy, type RepointView, repointsFor } from './repoint';
-import { isScreenRead, screenChangeText, screenStep, screenStepIsEveryday } from './screen';
+import {
+  destructiveActionText,
+  isScreenRead,
+  screenChangeText,
+  screenStep,
+  screenStepIsEveryday,
+} from './screen';
 import { knownServer, SELF_GUEST_TEXT, selfActionRefused, selfOpRefused, serverLabel } from './self';
 import { actorOf, HOSTS_TEXT, type HostsService, hostsFor } from './service';
 import { hostsAddressChange } from './sources';
@@ -1834,6 +1840,11 @@ export const hostsRoutes: RouteDef[] = [
     const read = isScreenRead(b.op);
     const g = await guard(ctx, { manage: !read });
     const { serverId } = ctx.params;
+    // An element's own action that removes, erases or signs out is the person's to do on the Mac's screen.
+    const destructive =
+      b.op === 'ui.action' ? destructiveActionText(b.action ?? '', serverLabel(serverId)) : null;
+    if (destructive)
+      throw new ApiError('forbidden', destructive, { details: { code: 'destructive_action' } });
     const names = { server: serverLabel(serverId), op: 'screen' };
     const step = () => screenStep(g.hosts, serverId, b, read ? asOperator(g) : g.actor);
     const result = read ? await hostsCall(step, names) : await act('screen', names, step);
