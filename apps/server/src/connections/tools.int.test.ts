@@ -35,7 +35,10 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, type TestDispatchOptions } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { ConnectionChangedError, callTarget } from './call-target';
 import { visibleConnections } from './context';
+import { sealConnectionSecret } from './crypto';
+import { currentRow, signedConnectionFetch } from './http';
 import { connectionsFor } from './pool';
 import { syncTools } from './sync';
 import {
@@ -445,6 +448,96 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
           .update(catalogConnections)
           .set({ credentialVersion: before?.credentialVersion ?? 1 })
           .where(eq(catalogConnections.id, ha));
+      }
+    });
+
+    /** The person pastes another account's token on the same Home Assistant; returns what puts the first back. */
+    async function replaceToken(token: string) {
+      const before = await currentRow(t.services, ha);
+      if (!before) throw new Error('no connection');
+      await t.services.db
+        .update(catalogConnections)
+        .set({
+          secretEnc: sealConnectionSecret(t.services.custody, ha, 'secret', token),
+          credentialVersion: before.credentialVersion + 1,
+        })
+        .where(eq(catalogConnections.id, ha));
+      return async () => {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ secretEnc: before.secretEnc, credentialVersion: before.credentialVersion })
+          .where(eq(catalogConnections.id, ha));
+        await connectionsFor(t.services).evict(ha);
+      };
+    }
+    const signedWith = (token: string) =>
+      home.seen.filter((s) => s.headers.authorization === `Bearer ${token}`).length;
+
+    it('sends nothing when the token is replaced after the approved call was checked, and drops the session opened before', async () => {
+      const service = connectionsFor(t.services);
+      // A session is open already, from a call made before the token changes.
+      const first = await askToTurnOn('stair-lamp');
+      await t.commit(IDS.mara, decideApproval, { number: first.number, decision: 'approve' });
+      await expect
+        .poll(async () => (await executionOf(first.id))?.state, { timeout: 10_000 })
+        .toBe('succeeded');
+      expect(service.pool.size).toBe(1);
+
+      const row = await askToTurnOn('cellar-lamp');
+      const other = 'ha-llat-Other7Account2Rp4';
+      let restore: (() => Promise<void>) | null = null;
+      const pooled = service.pool.call.bind(service.pool);
+      // Between the call's check of the connection and its signing, the token is replaced (no eviction yet).
+      const race = vi.spyOn(service.pool, 'call').mockImplementationOnce(async (target, tool, args) => {
+        restore = await replaceToken(other);
+        return pooled(target, tool, args);
+      });
+      try {
+        await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' });
+        await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(row.id))?.error).toContain('changed since you said yes');
+        expect(seenFor('cellar-lamp')).toBe(0);
+        expect(signedWith(other)).toBe(0);
+        // The session opened as the token before is closed: the next call opens its own.
+        expect(service.pool.size).toBe(0);
+      } finally {
+        race.mockRestore();
+        await (restore as (() => Promise<void>) | null)?.();
+      }
+    });
+
+    it('never signs a request with a connection that changed since its call was checked', async () => {
+      const row = await currentRow(t.services, ha);
+      if (!row) throw new Error('no connection');
+      const checked = callTarget(row);
+      const url = `http://ha.home.test:${home.port}/api/`;
+      // While it is the same, the request goes.
+      expect(
+        (await signedConnectionFetch(t.services, row, { method: 'GET', url }, { target: checked })).status,
+      ).toBe(200);
+      const other = 'ha-llat-Other7Account2Rp5';
+      const restore = await replaceToken(other);
+      try {
+        const sent = home.seen.length;
+        // The row it was checked on, or the row as it is now: neither is signed while the stored one differs.
+        await expect(
+          signedConnectionFetch(t.services, row, { method: 'GET', url }, { target: checked }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        const now = await currentRow(t.services, ha);
+        if (!now) throw new Error('no connection');
+        await expect(
+          signedConnectionFetch(t.services, now, { method: 'GET', url }, { target: checked }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        // A pooled MCP session made for the connection as it was sends nothing either.
+        const service = connectionsFor(t.services);
+        await expect(
+          service.pool.call(service.target(row, `http://ha.home.test:${home.port}/api/mcp`), 'HassTurnOn', {
+            name: 'shed-lamp',
+          }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        expect(home.seen.length).toBe(sent);
+      } finally {
+        await restore();
       }
     });
 

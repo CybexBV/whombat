@@ -10,6 +10,7 @@ import type { AddressInfo } from 'node:net';
 import { agentDefaultGrants, type DeviceProfileInput, type DeviceSkillCard } from '@whombat/core';
 import { and, desc, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { ConnectionChangedError } from '../connections/call-target';
 import {
   approvals,
   catalogConnections,
@@ -35,6 +36,7 @@ import {
   startDeviceReader,
   stopDeviceReader,
 } from './home';
+import { runDeviceTool } from './run';
 import { type FakeModbus, startFakeModbus } from './testing/fake-modbus';
 import { undoDeviceChange } from './undo';
 
@@ -445,6 +447,41 @@ describe('using it within the limits', () => {
     });
     changeId = change?.id ?? '';
     await mcp.close();
+  });
+
+  it('a write never goes to another device than the one its connection was checked for', async () => {
+    const [row] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    if (!row) throw new Error('no connection');
+    const before = writes().length;
+    // The connection as a call checked it before another skill (another device at that address) was switched on, or
+    // before the device was given another address: the skill read again now isn't that one, so nothing is sent.
+    const since: Record<string, string>[] = [
+      { skillId: 'dsk_switched_since' },
+      { host: '192.168.91.43' },
+      { port: '5020' },
+    ];
+    for (const fields of since) {
+      await expect(
+        runDeviceTool(
+          t.services,
+          { ...row, fields: { ...row.fields, ...fields } },
+          { name: `${slug}_room_setpoint` },
+          {
+            value: 21,
+          },
+          {
+            burrowId: t.burrowId,
+            agentId: whombat.agentId,
+            callId: `call_device_changed_${Object.keys(fields)[0]}`,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+    }
+    expect(writes()).toHaveLength(before);
+    expect(fake.tables.holding[100]).toBe(215);
   });
 
   it('a write outside the limits is refused before anything is signed or sent', async () => {

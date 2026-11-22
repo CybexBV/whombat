@@ -26,6 +26,7 @@ import { OutboundLineError, outboundLine } from '../lib/outbound-line';
 import type { Services } from '../services';
 import { summarise, VaultCallError, VaultEchoError, type VaultFetchOptions } from '../vault/net';
 import { bytesHoldSecret, type SecretForms } from '../vault/scrub';
+import { keepTarget } from './call-target';
 import { resolveCredential } from './credentials';
 import { connectionPolicy } from './destination';
 import { ConnectionOutcomeUnknownError } from './request';
@@ -275,17 +276,33 @@ export async function currentRow(
 }
 
 /**
- * Sends one request as the connection. `onForms` hears the credential's secret forms (the pool's echo check). Throws
- * `VaultCallError` (summarised), `VaultEchoError` when the answer holds the credential, or `ConnectionAuthError`.
+ * Throws `ConnectionChangedError` unless the connection is, as it is stored now, still where `target` says its calls go
+ * and as whom: checked once its credential is in hand and before anything is signed with it, since a refresh or a new
+ * sign-in reads the connection again and would hand over a replaced token, account or address.
+ */
+export async function keepStoredTarget(
+  services: Services,
+  connectionId: string,
+  target: string,
+): Promise<void> {
+  keepTarget(await currentRow(services, connectionId), target);
+}
+
+/**
+ * Sends one request as the connection. `onForms` hears the credential's secret forms (the pool's echo check); `target`
+ * (`callTarget`): the request is signed only while the stored connection still has it (`keepStoredTarget`). Throws
+ * `VaultCallError` (summarised; `ConnectionChangedError` for another target), `VaultEchoError` when the answer holds the
+ * credential, or `ConnectionAuthError`.
  */
 export async function signedConnectionFetch(
   services: Services,
   row: CatalogConnectionRow,
   req: ConnectionRequest,
-  options: VaultFetchOptions & { onForms?: (forms: SecretForms[]) => void } = {},
+  options: VaultFetchOptions & { onForms?: (forms: SecretForms[]) => void; target?: string } = {},
 ): Promise<OutboundResponse> {
   const send = async (force: boolean) => {
     const { credential, forms } = await resolveCredential(services, row, { forceRefresh: force });
+    if (options.target !== undefined) await keepStoredTarget(services, row.id, options.target);
     options.onForms?.(forms);
     const policy = await connectionPolicy(services, req.url, { ...options, ...pinOf(row) });
     try {
