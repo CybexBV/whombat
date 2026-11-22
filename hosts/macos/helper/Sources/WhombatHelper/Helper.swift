@@ -74,6 +74,14 @@ enum Helper {
             return OnScreen.windows()
         case .focused:
             return try Ops.focused()
+        case let .action(target, action):
+            return try Ops.action(target, action: action, deadline: deadline)
+        case let .quit(app):
+            return try Apps.quit(app, deadline: deadline)
+        case let .geocode(queries):
+            return try Geo.geocode(queries, deadline: deadline)
+        case let .map(request):
+            return try Geo.map(request, deadline: deadline)
         }
     }
 }

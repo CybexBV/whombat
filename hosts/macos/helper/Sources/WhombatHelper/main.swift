@@ -34,13 +34,16 @@ if let request = options.request {
         FileHandle.standardError.write(Data("WhombatHelper: --request is for root only\n".utf8))
         exit(2)
     }
-    let answer = Helper.respond(Data(request.utf8), deadline: Date().addingTimeInterval(Limits.workSeconds))
+    let line = Data(request.utf8)
+    let answer = Helper.respond(line, deadline: Date().addingTimeInterval(Command.seconds(forLine: line) * Limits.workShare))
     FileHandle.standardOutput.write(answer.line())
     if case .failure = answer { exit(1) }
     exit(0)
 }
 
-let server = SocketServer(path: options.socket ?? SocketServer.defaultPath(), log: { Log.info($0) }) { line, deadline in
+let server = SocketServer(
+    path: options.socket ?? SocketServer.defaultPath(), timeoutFor: { Command.seconds(forLine: $0) }, log: { Log.info($0) }
+) { line, deadline in
     Helper.respond(line, deadline: deadline).line()
 }
 Thread.detachNewThread { server.run() }

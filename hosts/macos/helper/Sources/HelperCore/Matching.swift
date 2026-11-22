@@ -2,11 +2,14 @@ import Foundation
 
 // Finding an element by the name a person or the assistant gives it: “Save”, “don't save”, “Save...”. Names are
 // compared case-insensitively, the whole name first and then a part of it, over an element's title, description,
-// value and identifier.
+// value and identifier. Apps and actions are found the same way with white space ignored as well (AppMatch,
+// ActionName).
 
 public enum MatchKind: Int, Comparable, Sendable {
     case exact = 0
-    case contains = 1
+    /// The name starts with the query (apps and actions only: an element's name is whole or a part).
+    case prefix = 1
+    case contains = 2
 
     public static func < (a: MatchKind, b: MatchKind) -> Bool { a.rawValue < b.rawValue }
 }
@@ -38,6 +41,12 @@ public enum NameMatch {
 
     public static func match(_ query: String, fields: [String]) -> MatchKind? {
         match(normalizedQuery: normalize(query), fields: fields)
+    }
+
+    /// The normalized form without any white space: apps and actions are compared this way, so “FindMy” (the app's
+    /// file) is “Find My” (what the Mac shows) and “Directions·0 min” is “Directions · 0 min”.
+    public static func compact(_ name: String) -> String {
+        normalize(name).replacingOccurrences(of: " ", with: "")
     }
 
     /// The field `query` names, as it is written there: one that is the whole name first, then one that holds it.
@@ -111,6 +120,67 @@ public struct Candidate: Sendable {
         if a.enabled != b.enabled { return a.enabled }
         if a.zone != b.zone { return a.zone < b.zone }
         return a.order < b.order
+    }
+}
+
+/// One running app as a request may name it.
+public struct AppCandidate: Equatable, Sendable {
+    /// What the Mac calls it (in the person's language) and the name of its bundle's file (“FindMy” for Find My).
+    public var names: [String]
+    public var bundleID: String
+    /// An ordinary app with a Dock icon (`activationPolicy == .regular`), not an accessory, an agent or an extension.
+    public var regular: Bool
+
+    public init(names: [String], bundleID: String, regular: Bool) {
+        self.names = names
+        self.bundleID = bundleID
+        self.regular = regular
+    }
+}
+
+public enum AppMatch {
+    /// How well `query` names an app called by any of `names`: the whole name, its start, or a part of it, compared
+    /// with case and white space ignored.
+    public static func kind(_ query: String, names: [String]) -> MatchKind? {
+        let q = NameMatch.compact(query)
+        if q.isEmpty { return nil }
+        var best: MatchKind?
+        for name in names {
+            let n = NameMatch.compact(name)
+            if n.isEmpty { continue }
+            let kind: MatchKind? = n == q ? .exact : n.hasPrefix(q) ? .prefix : n.contains(q) ? .contains : nil
+            if let kind, best.map({ kind < $0 }) ?? true { best = kind }
+        }
+        return best
+    }
+
+    /// Which of `apps` the query names, or nil: its bundle id, else the best kind of name match (whole, then start,
+    /// then part); between apps matched alike an ordinary app wins over an accessory or an extension (Find My's
+    /// widget extensions are called FindMy… too), then the order given.
+    public static func best(_ query: String, among apps: [AppCandidate]) -> Int? {
+        let id = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !id.isEmpty {
+            let same = apps.indices.filter { apps[$0].bundleID.lowercased() == id }
+            if let i = same.first(where: { apps[$0].regular }) ?? same.first { return i }
+        }
+        var best: (rank: (Int, Int), index: Int)?
+        for (i, app) in apps.enumerated() {
+            guard let kind = kind(query, names: app.names) else { continue }
+            let rank = (kind.rawValue, app.regular ? 0 : 1)
+            if best.map({ rank < $0.rank }) ?? true { best = (rank, i) }
+        }
+        return best?.index
+    }
+
+    /// Whether `query` is one of an app's names as a whole (opening an app that isn't running takes nothing less).
+    /// A trailing “.app” counts for nothing on either side: the Finder shows it when file extensions are on.
+    public static func named(_ query: String, names: [String]) -> Bool {
+        let q = NameMatch.compact(withoutApp(query))
+        return !q.isEmpty && names.contains { NameMatch.compact(withoutApp($0)) == q }
+    }
+
+    static func withoutApp(_ name: String) -> String {
+        name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 }
 

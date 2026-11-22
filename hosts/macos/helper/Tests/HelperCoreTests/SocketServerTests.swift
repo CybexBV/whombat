@@ -31,14 +31,20 @@ final class SocketServerTests: XCTestCase {
     /// A server answering every request with its op echoed, as `{"ok":true,"echo":...}`.
     /// The tests run as an ordinary user, so the servers they talk to let that user in besides root.
     @discardableResult
-    func start(timeout: TimeInterval = 2, name: String = "a", peers: Set<uid_t> = [0, getuid()], inFlight: Int = 8,
-               handler: SocketServer.Handler? = nil) -> SocketServer {
+    func start(timeout: TimeInterval = 2, slow: (op: String, seconds: TimeInterval)? = nil, name: String = "a",
+               peers: Set<uid_t> = [0, getuid()], inFlight: Int = 8, handler: SocketServer.Handler? = nil) -> SocketServer {
         let echo: SocketServer.Handler = { line, _ in
             let op = (try? JSONSerialization.jsonObject(with: line) as? [String: Any])?["op"] as? String ?? "?"
             return Data(#"{"ok":true,"echo":"\#(op)","server":"\#(name)"}"#.utf8 + [0x0A])
         }
+        var timeoutFor: (@Sendable (Data) -> TimeInterval)?
+        if let slow {
+            let (op, seconds) = slow
+            timeoutFor = { line in String(decoding: line, as: UTF8.self).contains(op) ? seconds : timeout }
+        }
         let server = SocketServer(
-            path: path, pollInterval: 0.05, requestTimeout: timeout, maxInFlight: inFlight, allowedPeers: peers,
+            path: path, pollInterval: 0.05, requestTimeout: timeout, timeoutFor: timeoutFor,
+            maxInFlight: inFlight, allowedPeers: peers,
             handler: handler ?? echo)
         servers.append(server)
         Thread.detachNewThread { server.run() }
@@ -174,6 +180,25 @@ final class SocketServerTests: XCTestCase {
         // The work was told to stop before the connection's own limit.
         let workDeadline = try XCTUnwrap(seen.get())
         XCTAssertLessThan(workDeadline.timeIntervalSince(started), 0.3)
+    }
+
+    /// A request whose op takes longer (Apple's map service) gets its own time; the others keep theirs.
+    func testSlowOpsGetMoreTime() throws {
+        try makeFolder()
+        let seen = DeadlineBox()
+        start(timeout: 0.3, slow: ("map", 1.5)) { _, deadline in
+            seen.set(deadline)
+            Thread.sleep(forTimeInterval: 0.6)
+            return Data("{\"ok\":true}\n".utf8)
+        }
+        let started = Date()
+        let slow = try XCTUnwrap(ask(#"{"op":"map"}"#))
+        XCTAssertEqual(slow["ok"] as? Bool, true, "answered within its longer time")
+        let workDeadline = try XCTUnwrap(seen.get())
+        XCTAssertGreaterThan(workDeadline.timeIntervalSince(started), 1)
+        XCTAssertLessThan(workDeadline.timeIntervalSince(started), 1.5)
+        let quick = try XCTUnwrap(ask(#"{"op":"list"}"#))
+        XCTAssertEqual(quick["code"] as? String, "failed", "the other ops keep the short time")
     }
 
     func testTooLongARequestIsRefused() throws {
