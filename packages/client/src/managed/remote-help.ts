@@ -72,9 +72,6 @@ export const REMOTE_HELP_POLL_MS = 10_000;
 export const REMOTE_HELP_TEXT = {
   /** The owner has a passkey, and this device can't use passkeys at all. */
   passkeyHere: 'This device can’t use your passkey. Turn remote help on from a device that can.',
-  /** The owner has a passkey, and this page (the box's own address) can't run its ceremony. */
-  passkeyPage:
-    'Your passkey doesn’t work on this page. Turn remote help on in the Whombat app or at app.whombat.com.',
   /** A visit with more steps than are shown (`truncated`): the oldest are left out. */
   earlier: 'Earlier steps aren’t shown.',
   /** A transcript that didn't load. */
@@ -113,12 +110,21 @@ export interface RemoteHelpApi {
   /** The newest visits first. */
   visits(input?: { before?: string; limit?: number }): Promise<RemoteHelpVisit[]>;
   transcript(visitId: string, options?: { signal?: AbortSignal }): Promise<RemoteHelpTranscript>;
-  /** Whether the viewer has a passkey on this Whombat (the hint under the button); null when it can't tell. */
+  /**
+   * Whether the viewer has a passkey that confirms it here (the hint under the button): a box passkey on the box's own
+   * address, a hosted one anywhere else; null when it can't tell.
+   */
   hasPasskey(): Promise<boolean | null>;
 }
 
-/** The ops over this session. */
-export function remoteHelpApi(session: ApplianceSession): RemoteHelpApi {
+/**
+ * The ops over this session. `boxHost`: the box's own host when this is a page at it, where the box's own passkeys
+ * confirm (the hosted app's can't run there).
+ */
+export function remoteHelpApi(
+  session: ApplianceSession,
+  where: { boxHost?: string | null } = {},
+): RemoteHelpApi {
   return {
     get: () => sessionOps.remoteHelpGet(session),
     confirmBegin: (choice) => sessionOps.remoteHelpConfirmBegin(session, choice),
@@ -134,7 +140,10 @@ export function remoteHelpApi(session: ApplianceSession): RemoteHelpApi {
       const me = s.status === 'open' ? s.info.account?.id : null;
       if (!me) return null;
       try {
-        return (await sessionOps.passkeysList(session)).passkeys.some((p) => p.accountId === me);
+        const here = (rpId: string | undefined) => (where.boxHost ? rpId === where.boxHost : !rpId);
+        return (await sessionOps.passkeysList(session)).passkeys.some(
+          (p) => p.accountId === me && here(p.rpId),
+        );
       } catch {
         return null;
       }
@@ -264,7 +273,6 @@ export function remoteHelpErrorText(error: unknown): string | null {
     const reason = operationReason(error);
     // An owner with a passkey who sent none: the same words as one that didn't verify.
     if (reason === 'passkey_required') return W.refusals.passkey_failed;
-    if (reason === 'passkeys_unavailable_here') return REMOTE_HELP_TEXT.passkeyPage;
     return remoteHelpRefusalText(reason) ?? REMOTE_HELP_TEXT.failed;
   }
   if (error instanceof NeedsNewerAppError) return REMOTE_HELP_TEXT.loadError;

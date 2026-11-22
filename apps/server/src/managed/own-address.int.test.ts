@@ -14,13 +14,15 @@ import { isOwnAddressLabel } from '@whombat/core/own-address';
 import { localClaimPakeInitiator } from '@whombat/protocol/claim';
 import { PASSKEY_ANDROID_ORIGINS, passkeyEnrollChallengeBase64url } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appliancePasskeys, applianceState, ownAddressCerts } from '../db/schema/index';
 import { useManagedRuntime } from '../test/managed';
 import { SoftwareAuthenticator } from '../test/webauthn';
 import type { SessionTransport } from './direct/transport';
+import { FakeSupport } from './fake-support';
 import { LABEL_DRAWS_MAX, OwnAddressService, spkiSha256 } from './own-address/state';
 import { ManagerCallError } from './ports';
+import { RemoteHelpService, remoteHelpPasskeys } from './remote-help';
 import {
   FakeManager,
   pakeLocalClaim,
@@ -400,6 +402,74 @@ describe('box passkeys', () => {
         }),
       ),
     ).toBe('passkey_invalid');
+  });
+});
+
+describe('remote help on the address', () => {
+  const auth = new SoftwareAuthenticator();
+  const choice = { level: 'look', duration: 'hour' } as const;
+
+  beforeAll(async () => {
+    m.runtime.dispatcher.remoteHelp = new RemoteHelpService(
+      m.t.services,
+      new FakeSupport(() => m.t.services.clock().getTime(), { visitAfterMs: null }),
+      { ...remoteHelpPasskeys(m.runtime.trust), waitS: 0 },
+    );
+    const begin = out<{ nonce: string; challenge: string; user: { id: string } }>(
+      await owner.request('boxPasskey.register.begin', {}),
+    );
+    const response = auth.create({
+      rpId: HOST,
+      origin: ORIGIN,
+      challenge: begin.challenge,
+      userId: begin.user.id,
+    });
+    expect(
+      await owner.request('boxPasskey.register', { nonce: begin.nonce, response, name: 'Safari' }),
+    ).toMatchObject({
+      t: 'result',
+    });
+  });
+
+  afterAll(() => {
+    m.runtime.dispatcher.remoteHelp = undefined;
+  });
+
+  it('is confirmed with a box passkey there, for exactly the choice begun', async () => {
+    expect(codeOf(await owner.request('remoteHelp.start', choice))).toBe('passkey_required');
+    const begun = out<{ nonce: string; options: { rpId: string; challenge: string } }>(
+      await owner.request('remoteHelp.confirmBegin', choice),
+    );
+    expect(begun.options.rpId).toBe(HOST);
+    // Signed at another page, or for another choice: refused.
+    const elsewhere = auth.get({
+      rpId: HOST,
+      origin: 'https://app.whombat.com',
+      challenge: begun.options.challenge,
+    });
+    expect(codeOf(await owner.request('remoteHelp.start', { ...choice, passkey: elsewhere }))).toBe(
+      'passkey_failed',
+    );
+    const again = out<{ options: { challenge: string } }>(
+      await owner.request('remoteHelp.confirmBegin', choice),
+    );
+    const signed = auth.get({ rpId: HOST, origin: ORIGIN, challenge: again.options.challenge });
+    expect(await owner.request('remoteHelp.start', { ...choice, passkey: signed })).toMatchObject({
+      t: 'result',
+      output: { grant: { level: 'look' } },
+    });
+    expect(await owner.request('remoteHelp.stop', {})).toMatchObject({ t: 'result' });
+  });
+
+  it('asks the same person for no passkey in the app, where box passkeys don’t work', async () => {
+    const app = await m.client(ownerId);
+    expect(out(await app.request('remoteHelp.confirmBegin', choice))).toEqual({ nonce: null, options: null });
+    expect(await app.request('remoteHelp.start', choice)).toMatchObject({
+      t: 'result',
+      output: { grant: {} },
+    });
+    await app.request('remoteHelp.stop', {});
+    app.close();
   });
 });
 

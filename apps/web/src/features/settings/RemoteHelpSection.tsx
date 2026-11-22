@@ -21,6 +21,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { saveBlob } from '../../lib/saveBlob';
+import { PASSKEYS, webAuthnExists } from '../../managed/passkeyEnv';
 import rh from './RemoteHelp.module.css';
 import styles from './SettingsScreen.module.css';
 import tw from './ThisWhombat.module.css';
@@ -38,7 +39,11 @@ const T = REMOTE_HELP_TEXT;
  */
 export function RemoteHelpSection() {
   const { session, managed } = useAppServices();
-  const api = useMemo(() => (managed ? remoteHelpApi(session) : null), [session, managed]);
+  const boxHost = atOwnAddress(managed) ? window.location.hostname : null;
+  const api = useMemo(
+    () => (managed ? remoteHelpApi(session, { boxHost }) : null),
+    [session, managed, boxHost],
+  );
   const model = useRemoteHelp(api);
   const card = remoteHelpCard({
     state: model.state,
@@ -78,6 +83,11 @@ export function RemoteHelpSection() {
   );
 }
 
+/** This is a page at the box's own address, where its own passkeys work. */
+function atOwnAddress(managed: ReturnType<typeof useAppServices>['managed']): boolean {
+  return managed?.page?.atAddress === true && managed.page.secure;
+}
+
 type OffCard = Extract<ReturnType<typeof remoteHelpCard>, { kind: 'off' }>;
 type OnCard = Extract<ReturnType<typeof remoteHelpCard>, { kind: 'on' }>;
 
@@ -91,7 +101,8 @@ function OffPart({ card, model }: { card: OffCard; model: RemoteHelpModel }) {
   const confirm = useConfirm();
   const turnOn = () =>
     void model.turnOn(choice, {
-      platform: managed?.passkeys ?? null,
+      // On the box's own address its own passkeys confirm, in this browser (the hosted app's can't run there).
+      platform: managed?.passkeys ?? (atOwnAddress(managed) && webAuthnExists() ? PASSKEYS : null),
       endpoint: managed?.devicePeerId ?? '',
       confirm: confirm.ask,
     });

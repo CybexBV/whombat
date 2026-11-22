@@ -9,6 +9,8 @@
  *   nonce, this box and its host.
  * - `boxPasskey.enroll.begin {}` / `.enroll {nonce, response, endpoint}` (any session): a join bound to the new device's
  *   key (`passkeyEnrollChallenge` with this session's PeerId). Every failed check is one answer, `passkey_invalid`.
+ * - The step-up on the box's own page (`stepUpOptions`, `confirm`): remote help asks for one of these there, as it asks
+ *   for a hosted passkey in the apps (docs/decisions/remote-help.md).
  *
  * Origins: the box's own address and the Android release app's. Once a box passkey is added or removed, and at start,
  * the box declares the full set to control (`kit.credentials.declare`), retried until control acknowledges it, so control
@@ -32,6 +34,7 @@ import {
   passkeyEnrollChallengeBase64url,
   type WebAuthnAuthenticationResponse,
   type WebAuthnRegistrationResponse,
+  type WebAuthnRequestOptions,
 } from '@whombat/protocol/session';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { appliancePasskeys, applianceState, boxPasskeyUsers } from '../db/schema/index';
@@ -407,6 +410,94 @@ export class BoxPasskeyService {
       newCounter: info.newCounter,
       synced: row.backupEligible || info.credentialDeviceType === 'multiDevice' || info.credentialBackedUp,
     };
+  }
+
+  /* Step-up: confirming a choice with a box passkey on the box's own page (remote help) --------------------------- */
+
+  /** The account's live box passkeys of this host; none while the box has no address of its own. */
+  private async stepUpRows(accountId: string) {
+    const host = this.trust.ownAddress?.host();
+    if (!host) return { host: null, rows: [] };
+    const rows = await this.db
+      .select({ id: appliancePasskeys.id, transports: appliancePasskeys.transports })
+      .from(appliancePasskeys)
+      .where(
+        and(
+          eq(appliancePasskeys.accountId, accountId),
+          isNull(appliancePasskeys.removedAt),
+          eq(appliancePasskeys.rpId, host),
+        ),
+      )
+      .orderBy(desc(appliancePasskeys.createdAt))
+      .limit(PASSKEYS_PER_ACCOUNT_MAX);
+    return { host, rows };
+  }
+
+  /** Whether the account has a live box passkey of this host (then a step-up on the address needs one). */
+  async hasPasskey(accountId: string): Promise<boolean> {
+    return (await this.stepUpRows(accountId)).rows.length > 0;
+  }
+
+  /** What `navigator.credentials.get` needs to confirm `challenge` with one of them, or null when it has none. */
+  async stepUpOptions(accountId: string, challenge: string): Promise<WebAuthnRequestOptions | null> {
+    const { host, rows } = await this.stepUpRows(accountId);
+    if (!host || !rows.length) return null;
+    return {
+      challenge,
+      rpId: host,
+      allowCredentials: rows.map((r) => ({
+        type: 'public-key' as const,
+        id: r.id,
+        ...(r.transports.length ? { transports: r.transports.slice(0, 8) } : {}),
+      })),
+      userVerification: 'required',
+      timeout: BOX_PASSKEY_TIMEOUT_MS,
+    };
+  }
+
+  /**
+   * A step-up with a box passkey: the assertion confirms `challenge` with a live box passkey of `accountId` itself, with
+   * every check of a join (this host, its origins, user verification, the account's box user handle), the person's
+   * policy, and a counter that moves; the counter and the last use are kept. False for every failure (the reason is
+   * logged), never an oracle.
+   */
+  async confirm(
+    accountId: string,
+    response: WebAuthnAuthenticationResponse,
+    challenge: () => string,
+  ): Promise<boolean> {
+    const host = this.trust.ownAddress?.host();
+    let verified: { row: PasskeyRow; newCounter: number; synced: boolean };
+    try {
+      if (!host) throw new Refused('no address of its own');
+      verified = await this.verifyAssertion(response, host, challenge);
+      if (verified.row.accountId !== accountId) throw new Refused('another account’s passkey');
+      if (verified.synced && (await this.deviceBoundOnly())) throw new Refused('synced under the policy');
+    } catch (err) {
+      if (!(err instanceof Refused) && !(err instanceof ApiError)) throw err;
+      this.services.log.info({ reason: String(err) }, 'box passkey: a confirmation did not verify');
+      return false;
+    }
+    const now = this.now();
+    const ok = await this.services.pipeline.transactAccount(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(appliancePasskeys)
+        .where(eq(appliancePasskeys.id, verified.row.id))
+        .for('update');
+      const counterOk =
+        verified.newCounter === 0 && (row?.counter ?? 0) === 0
+          ? true
+          : verified.newCounter > (row?.counter ?? 0);
+      if (!row || row.removedAt || row.accountId !== accountId || !counterOk) return false;
+      await tx
+        .update(appliancePasskeys)
+        .set({ counter: verified.newCounter, lastUsedAt: now })
+        .where(eq(appliancePasskeys.id, row.id));
+      return true;
+    });
+    if (!ok) this.services.log.info('box passkey: a confirmation lost its race (removed or replayed)');
+    return ok;
   }
 
   /* Declaring them to control ------------------------------------------------------------------------------------ */

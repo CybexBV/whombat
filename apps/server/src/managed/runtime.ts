@@ -36,7 +36,7 @@ import { OwnAddressService } from './own-address/state';
 import type { ManagerPort } from './ports';
 import { ControlPush } from './push';
 import { CommandReceipts } from './receipts';
-import { RemoteHelpService, supportFor } from './remote-help';
+import { RemoteHelpService, remoteHelpPasskeys, supportFor } from './remote-help';
 import { SessionUploads } from './resources';
 import { type SessionLimits, SessionRegistry } from './session/registry';
 import type { RelayStatus } from './session/relay-client';
@@ -266,7 +266,7 @@ export class ManagedRuntime {
     // Link is on or in grace (`remote-help.ts`).
     const support = supportFor(services);
     this.remoteHelp = support
-      ? new RemoteHelpService(services, support, { passkeys: this.trust.passkeys, push: this.trust.push })
+      ? new RemoteHelpService(services, support, { ...remoteHelpPasskeys(this.trust), push: this.trust.push })
       : null;
     this.dispatcher.remoteHelp = this.remoteHelp ?? undefined;
     this.diskAlerts = new HostDiskAlerts(services, this.host);
