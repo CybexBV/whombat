@@ -146,9 +146,13 @@ func New(cfg Config, log *slog.Logger, setupOut io.Writer) (*Hub, error) {
 			lock.Close()
 		}
 	}()
+	nowFn := cfg.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
 	// A staged backup is applied before anything opens the database or
 	// listens (HS-178).
-	staged := applyStagedRestore(context.Background(), cfg.DataDir, time.Now(), log)
+	staged := applyStagedRestore(context.Background(), cfg.DataDir, nowFn(), log)
 	st, err := store.Open(filepath.Join(cfg.DataDir, "hub.db"))
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
@@ -159,8 +163,8 @@ func New(cfg Config, log *slog.Logger, setupOut io.Writer) (*Hub, error) {
 		return nil, fmt.Errorf("ca: %w", err)
 	}
 	h := &Hub{
-		cfg: cfg, log: log, store: st, ca: authority, bus: NewBus(), alerts: rules.NewEngine(), now: time.Now, lock: lock,
-		startedAt: time.Now(), servers: map[string]*srvState{},
+		cfg: cfg, log: log, store: st, ca: authority, bus: NewBus(), alerts: rules.NewEngine(), now: nowFn, lock: lock,
+		startedAt: nowFn(), servers: map[string]*srvState{},
 		consoles: newConsoleRegistry(), thumbs: newThumbCache(), actions: newActionTracker(), limits: newLimiters(),
 		tasks: newTaskWatcher(), ceremonies: newCeremonyStore(), seriesCache: newSeriesCache(), stopCh: make(chan struct{}),
 	}

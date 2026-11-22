@@ -11,6 +11,7 @@ import {
   DASH,
   detailGuests,
   diskHealth,
+  diskUsageSkipNote,
   diskUsedLevel,
   formatAgoIso,
   formatGb,
@@ -136,9 +137,8 @@ function SpaceUseCard({
         setNote(commitOutcomeText(r));
         return;
       }
-      if (r.data.ok === false || r.data.code) {
-        setNote(r.data.message ?? 'Skipped because the backing disk is spun down.');
-      }
+      const skip = diskUsageSkipNote(r.data);
+      if (skip) setNote(skip);
     } catch (err) {
       setNote(hostErrorInfo(err).message);
     }

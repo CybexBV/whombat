@@ -179,10 +179,33 @@ func statfsTimeout(mount string, d time.Duration) (syscall.Statfs_t, error) {
 	}
 }
 
-func filesystems(vols []volume) []proto.Filesystem {
+// FilesystemsWithDisks copies the collected volumes and fills Filesystem.Disks
+// with the whole physical disks backing each local volume (resolving
+// synthesized APFS containers through DiskList.Containers).
+func FilesystemsWithDisks(vols []volume, list *DiskList, disks []proto.Disk) []proto.Filesystem {
+	phys := make(map[string]bool, len(disks))
+	for _, d := range disks {
+		if d.Device != "" {
+			phys[d.Device] = true
+		}
+	}
 	out := make([]proto.Filesystem, 0, len(vols))
 	for _, v := range vols {
-		out = append(out, v.Filesystem)
+		fs := v.Filesystem
+		if !fs.Remote && v.container != "" {
+			if list != nil && list.IsContainer(v.container) {
+				seen := map[string]bool{}
+				for _, w := range list.Containers[v.container] {
+					if w != "" && !seen[w] {
+						seen[w] = true
+						fs.Disks = append(fs.Disks, w)
+					}
+				}
+			} else if phys[v.container] {
+				fs.Disks = []string{v.container}
+			}
+		}
+		out = append(out, fs)
 	}
 	return out
 }

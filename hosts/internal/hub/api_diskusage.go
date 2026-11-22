@@ -134,11 +134,14 @@ func (h *Hub) apiDiskUsage(w http.ResponseWriter, r *http.Request, p *principal)
 		}{Server: serverID, OK: true, DiskUsage: out})
 		return nil
 
-	case "spun_down":
-		// Spun-down disks are intentionally not woken; report cleanly without
-		// overwriting any previously stored measurement for this mount.
+	case "spun_down", "standby_unknown":
+		// Skipped without touching the mount (a backing disk is spun down or its
+		// sleep state could not be checked); report cleanly without overwriting
+		// any previously stored measurement for this mount.
 		rec.Code = resp.Code
-		details["spun_down"] = cleanText(strings.Join(resp.SkippedSpunDown, ","), 200)
+		if len(resp.SkippedSpunDown) > 0 {
+			details["spun_down"] = cleanText(strings.Join(resp.SkippedSpunDown, ","), 200)
+		}
 		h.auditReq(r, p, rec)
 		out := model.BuildDiskUsage(resp)
 		writeJSON(w, r, http.StatusOK, struct {

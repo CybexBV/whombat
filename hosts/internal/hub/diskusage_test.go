@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,8 +13,11 @@ import (
 
 func TestDiskUsageHeadlessAndPersistence(t *testing.T) {
 	now := time.Date(2026, 11, 21, 18, 0, 0, 0, time.UTC)
-	e := headlessEnv(t, nil)
-	e.h.now = func() time.Time { return now }
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&now)
+	e := headlessEnv(t, func(c *Config) {
+		c.Now = func() time.Time { return *clock.Load() }
+	})
 	svc := e.service("pe_1|John")
 
 	ag := e.enroll(svc, "srv-disk", "")
@@ -111,6 +115,28 @@ func TestDiskUsageHeadlessAndPersistence(t *testing.T) {
 		t.Fatalf("spun_down overwrote stored breakdown: %+v", detail.DiskUsage)
 	}
 
+	// Standby-unknown answer also returns 200 ok:false with its own code and preserves the stored breakdown.
+	ag.mu.Lock()
+	ag.diskUsageAnswer = func(req proto.DiskUsageRequest) proto.DiskUsageResponse {
+		return proto.DiskUsageResponse{
+			Code:       "standby_unknown",
+			Message:    "Skipped /var/lib/docker because its backing disks could not be identified, so Whombat cannot tell whether a disk is asleep.",
+			Mount:      req.Mount,
+			MeasuredAt: now.Add(2 * time.Minute),
+		}
+	}
+	ag.mu.Unlock()
+	var unknown map[string]any
+	svc.json(http.MethodPost, "/api/v1/servers/srv-disk/disk-usage", map[string]any{"mount": "/var/lib/docker"}, 200, &unknown)
+	if unknown["ok"] != false || unknown["code"] != "standby_unknown" || unknown["skipped_spun_down"] != nil {
+		t.Fatalf("standby_unknown = %v", unknown)
+	}
+	detail.DiskUsage = nil
+	svc.json(http.MethodGet, "/api/v1/servers/srv-disk", nil, 200, &detail)
+	if len(detail.DiskUsage) != 1 || len(detail.DiskUsage[0].Categories) != 2 {
+		t.Fatalf("standby_unknown overwrote stored breakdown: %+v", detail.DiskUsage)
+	}
+
 	// Hub diagnose switch off blocks requests with 403.
 	off := false
 	svc.json(http.MethodPatch, "/api/v1/servers/srv-disk", map[string]any{"remote_control": map[string]any{"diagnose": off}}, 200, nil)
@@ -132,7 +158,8 @@ func TestDiskUsageHeadlessAndPersistence(t *testing.T) {
 	}
 
 	// Once older than 24h, GET /servers/{id} omits the stale breakdown.
-	now = now.Add(model.DiskUsageRecentWindow + time.Minute)
+	later := now.Add(model.DiskUsageRecentWindow + time.Minute)
+	clock.Store(&later)
 	detail.DiskUsage = nil
 	svc.json(http.MethodGet, "/api/v1/servers/srv-disk", nil, 200, &detail)
 	if len(detail.DiskUsage) != 0 {

@@ -1280,7 +1280,7 @@ export const HostDiskUsage = z.object({
   skippedSpunDown: z.array(z.string()).optional(),
   categories: z.array(HostDiskUsageCategory),
   folders: z.array(HostDiskUsageFolder),
-  /** False when skipped without measuring (for example, a backing disk is spun down). */
+  /** False when skipped without measuring (`spun_down` when a disk is asleep, `standby_unknown` when sleep state can’t be checked). */
   ok: z.boolean().optional(),
   code: z.string().max(64).optional(),
   message: z.string().max(500).optional(),

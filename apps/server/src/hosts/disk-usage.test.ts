@@ -1,15 +1,21 @@
-import { api, HostDiskUsage, HostServerDetail, SERVERS_TOOLS } from '@whombat/core';
+import { api, catalogEntry, HostDiskUsage, HostServerDetail, SERVERS_TOOLS } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { toHostDiskUsage, toHostServerDetail } from './map';
 import { SERVERS_TOOL_ARGS } from './tools';
 
 describe('disk usage contract, mapping and tool schema', () => {
-  it('registers server_disk_usage as a read tool with valid schema and allowed args', () => {
+  it('registers server_disk_usage as a read tool with valid schema, guide and allowed args', () => {
     const tool = SERVERS_TOOLS.find((t) => t.name === 'server_disk_usage');
     expect(tool).toBeDefined();
     expect(tool?.access).toBe('read');
     expect(SERVERS_TOOL_ARGS.server_disk_usage).toEqual(['server', 'mount']);
     expect(`${tool?.title} ${tool?.description}`).not.toMatch(/'/);
+    expect(tool?.description).toContain('spun_down');
+    expect(tool?.description).toContain('standby_unknown');
+    const guide = catalogEntry('whombat_servers')?.guide ?? '';
+    expect(guide.length).toBeLessThanOrEqual(1500);
+    expect(guide).toContain('server_disk_usage');
+    expect(guide).not.toMatch(/'/);
     expect(api.hosts.diskUsage.method).toBe('POST');
   });
 
@@ -98,5 +104,28 @@ describe('disk usage contract, mapping and tool schema', () => {
       code: 'spun_down',
       skippedSpunDown: ['disk1'],
     });
+  });
+
+  it('maps standby_unknown responses without marking any disk spun down', () => {
+    const now = new Date('2026-11-21T18:00:00Z');
+    const mapped = toHostDiskUsage(
+      {
+        ok: false,
+        code: 'standby_unknown',
+        message:
+          'Skipped / because its backing disks could not be identified, so Whombat cannot tell whether a disk is asleep.',
+        mount: '/',
+        measured_at: '2026-11-21T18:00:00Z',
+        categories: [],
+        folders: [],
+      },
+      now,
+    );
+    const parsed = HostDiskUsage.parse(mapped);
+    expect(parsed).toMatchObject({
+      ok: false,
+      code: 'standby_unknown',
+    });
+    expect(parsed.skippedSpunDown).toBeUndefined();
   });
 });

@@ -37,6 +37,7 @@ func newTestRunner(t *testing.T, root string, mounts []mountInfo, inv *proto.Rep
 	fixedNow := time.Date(2026, 11, 21, 18, 0, 0, 0, time.UTC)
 	r := &Runner{
 		root: root,
+		goos: "linux",
 		inventory: func() *proto.Report {
 			return inv
 		},
@@ -553,6 +554,13 @@ func TestStaysInsideRequestedMountNestedAndBindMounts(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "mnt/user"), filepath.Join(root, "mnt/cache/esc")); err != nil {
 		t.Fatal(err)
 	}
+	// Non-Unraid Btrfs exposes its complete device list under /sys/fs/btrfs/<fsid>/devices/.
+	if err := os.MkdirAll(filepath.Join(root, "sys/fs/btrfs/11111111-1111-1111-1111-111111111111/devices"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../../../../devices/pci0/nvme0/nvme0n1/nvme0n1p1", filepath.Join(root, "sys/fs/btrfs/11111111-1111-1111-1111-111111111111/devices/nvme0n1p1")); err != nil {
+		t.Fatal(err)
+	}
 
 	mounts := []mountInfo{
 		{ID: 20, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
@@ -884,13 +892,13 @@ func TestFallbackBackingDisksPartitionLVMMdraidAndUnknownStandby(t *testing.T) {
 		t.Fatalf("statfs called on LVM/mdraid with sleeping member disk")
 	}
 
-	// 3. Unknown standby state on rotational disk -> skipped and says so, never walked.
+	// 3. Unknown standby state on rotational disk -> skipped as standby_unknown (not spun_down) and never walked.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unknown"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdd"}) {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 {
 		t.Fatalf("/srv/unknown: %+v", resp)
 	}
-	if !strings.Contains(resp.Message, "could not be checked") {
-		t.Errorf("unknown standby message = %q, want explanation that spin state could not be checked", resp.Message)
+	if !strings.Contains(resp.Message, "sdd") || !strings.Contains(resp.Message, "could not be checked") || strings.Contains(resp.Message, "spun down") {
+		t.Errorf("unknown standby message = %q, want truthful unknown-spin message without 'spun down'", resp.Message)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on rotational disk with unknown spin state")
@@ -941,33 +949,33 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 		return standbyAwake
 	}
 
-	// 1. ZFS mount with nil inventory: backing disks unknown -> skipped without touching mount.
+	// 1. ZFS mount with nil inventory: backing disks unknown -> skipped as standby_unknown without touching mount.
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs without inventory: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on ZFS mount without pool inventory")
 	}
 
-	// 2. ZFS mount with inventory that has no disks for that pool -> still skipped without touching mount.
+	// 2. ZFS mount with inventory that has no disks for that pool -> still skipped as standby_unknown without touching mount.
 	inv = &proto.Report{
 		Pools: []proto.Pool{{Name: "tank", Disks: nil}},
 	}
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs with empty pool disks: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on ZFS mount with empty pool disks")
 	}
 
-	// 3. ZFS mount with pool disks whose rotational state is missing -> skipped without touching mount.
+	// 3. ZFS mount with pool disks whose rotational state is missing -> skipped as standby_unknown without touching mount.
 	inv = &proto.Report{
 		Pools: []proto.Pool{{Name: "tank", Disks: []string{"sdc"}}},
 	}
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sdc") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs with unknown rotational disk: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
@@ -987,34 +995,34 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 	probed = nil
 	statfsCalled.Store(0)
 
-	// 5. Block device whose /sys/block/<dev>/queue/rotational cannot be read -> skipped without waking.
+	// 5. Block device whose /sys/block/<dev>/queue/rotational cannot be read -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/no-sysfs"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sda"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sda") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/no-sysfs: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
 		t.Fatalf("touched /srv/no-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
 	}
 
-	// 6. Malformed queue/rotational -> skipped without waking.
+	// 6. Malformed queue/rotational -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/bad-sysfs"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sdb") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/bad-sysfs: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
 		t.Fatalf("touched /srv/bad-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
 	}
 
-	// 7. Stacked device (dm-9) with no resolvable slaves and no inventory -> skipped without waking.
+	// 7. Stacked device (dm-9) with no resolvable slaves and no inventory -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/unresolved-dm: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on unresolved dm-9")
 	}
 
-	// 7b. Multi-PV dm-10 spanning an NVMe partition AND an unresolved md9 -> skipped rather than passing blind on md9.
+	// 7b. Multi-PV dm-10 spanning an NVMe partition AND an unresolved md9 -> skipped as standby_unknown rather than passing blind on md9.
 	if err := os.MkdirAll(filepath.Join(root, "sys/class/block/dm-10/slaves"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1027,16 +1035,16 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 	rMixed := newTestRunner(t, root, []mountInfo{{ID: 7, MountPoint: "/srv/unresolved-dm", FSType: "xfs", Source: "/dev/dm-10"}}, nil)
 	rMixed.statfs = r.statfs
 	resp = rMixed.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "not all") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("multi-PV dm-10 with unresolved md9: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on multi-PV dm-10 with unresolved md9")
 	}
 
-	// 8. Unraid fuse.shfs without disks.ini or inventory -> skipped without waking.
+	// 8. Unraid fuse.shfs without disks.ini or inventory -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/user"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("shfs without metadata: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
@@ -1143,6 +1151,730 @@ func TestUnreadableDirectoryMarksPartial(t *testing.T) {
 		resp3 := r3.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
 		if resp3.Code != "" || !resp3.Partial {
 			t.Fatalf("chmod 0000 dir: resp = %+v, want Code='' and Partial=true", resp3)
+		}
+	}
+}
+
+func TestDarwinAPFSInternalAndExternalDisks(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "Users/jdoe/data.bin"), 32*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/Users/jdoe/blob.bin"), 24*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/FastSSD/work.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/ExtHDD/archive.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/UnknownUSB/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/Fusion/media.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/AppDMG/app.bin"), 16*1024)
+
+	// Plant a Linux /sys entry that says rotational=0 to prove Darwin never falls back to /sys.
+	if err := os.MkdirAll(filepath.Join(root, "sys/block/disk9/queue"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/disk9/queue/rotational"), []byte("0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	readMacFixture := func(name string) []byte {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join("..", "macos", "testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	disk0Plist := readMacFixture("diskutil_info_disk0.plist")
+	disk3Plist := readMacFixture("diskutil_info_disk3.plist")
+	disk4Plist := readMacFixture("diskutil_info_disk4.plist")
+
+	extSSDPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk8</string>
+		<key>ParentWholeDisk</key><string>disk8</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>SolidState</key><true/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	extHDDPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk9</string>
+		<key>ParentWholeDisk</key><string>disk9</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>SolidState</key><false/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	unknownUSBPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk10</string>
+		<key>ParentWholeDisk</key><string>disk10</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	fusionContainerPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk11</string>
+		<key>ParentWholeDisk</key><string>disk11</string>
+		<key>APFSContainerReference</key><string>disk11</string>
+		<key>APFSPhysicalStores</key><array>
+			<dict><key>APFSPhysicalStore</key><string>disk0s2</string></dict>
+			<dict><key>APFSPhysicalStore</key><string>disk9s2</string></dict>
+		</array>
+		<key>VirtualOrPhysical</key><string>Virtual</string>
+	</dict></plist>`)
+	dmgContainerPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk5</string>
+		<key>ParentWholeDisk</key><string>disk5</string>
+		<key>APFSContainerReference</key><string>disk5</string>
+		<key>APFSPhysicalStores</key><array>
+			<dict><key>APFSPhysicalStore</key><string>disk4s1</string></dict>
+		</array>
+		<key>VirtualOrPhysical</key><string>Virtual</string>
+	</dict></plist>`)
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s3s1"},
+		{ID: 2, MountPoint: "/System/Volumes/Data", FSType: "apfs", Source: "/dev/disk3s1"},
+		{ID: 3, MountPoint: "/Volumes/FastSSD", FSType: "apfs", Source: "/dev/disk8s1"},
+		{ID: 4, MountPoint: "/Volumes/ExtHDD", FSType: "hfs", Source: "/dev/disk9s2"},
+		{ID: 5, MountPoint: "/Volumes/UnknownUSB", FSType: "exfat", Source: "/dev/disk10s1"},
+		{ID: 6, MountPoint: "/Volumes/Fusion", FSType: "apfs", Source: "/dev/disk11s1"},
+		{ID: 7, MountPoint: "/Volumes/AppDMG", FSType: "apfs", Source: "/dev/disk5s1"},
+	}
+
+	var diskutilCalls []string
+	var probed []string
+	hddState := standbyUnknown
+	var inv *proto.Report
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.goos = "darwin"
+	r.inventory = func() *proto.Report { return inv }
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		if dev == "disk9" {
+			return hddState
+		}
+		return standbyUnknown
+	}
+	r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "diskutil" || len(args) < 3 || args[0] != "info" || args[1] != "-plist" {
+			return nil, os.ErrNotExist
+		}
+		diskutilCalls = append(diskutilCalls, args[2])
+		switch args[2] {
+		case "disk0":
+			return disk0Plist, nil
+		case "disk3":
+			return disk3Plist, nil
+		case "disk4":
+			return disk4Plist, nil
+		case "disk5":
+			return dmgContainerPlist, nil
+		case "disk8":
+			return extSSDPlist, nil
+		case "disk9":
+			return extHDDPlist, nil
+		case "disk10":
+			return unknownUSBPlist, nil
+		case "disk11":
+			return fusionContainerPlist, nil
+		default:
+			return nil, os.ErrNotExist
+		}
+	}
+
+	// 1. Internal Mac APFS root (/dev/disk3s3s1) with macos collector inventory -> scans without diskutil or standby probe.
+	inv = &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/", Device: "/dev/disk3", FSType: "apfs", Disks: []string{"disk0"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk0", Type: "nvme", Model: "APPLE SSD AP1024Z"},
+		},
+	}
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" || len(diskutilCalls) != 0 || len(probed) != 0 {
+		t.Fatalf("mac / with inventory: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 2. Sibling APFS volume (/System/Volumes/Data, /dev/disk3s1) matches /dev/disk3 in inventory -> scans cleanly.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/System/Volumes/Data"})
+	if resp.Code != "" || len(diskutilCalls) != 0 || len(probed) != 0 {
+		t.Fatalf("mac Data volume with inventory: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 3. No inventory at all: resolves /dev/disk3s3s1 -> disk3 -> disk0 via diskutil info -plist -> internal SSD scans cleanly.
+	inv = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" || !slices.Equal(diskutilCalls, []string{"disk3", "disk0"}) || len(probed) != 0 {
+		t.Fatalf("mac / via diskutil fallback: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 4. External SSD (SolidState=true) -> scans cleanly without probing standby.
+	diskutilCalls = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/FastSSD"})
+	if resp.Code != "" || len(probed) != 0 {
+		t.Fatalf("mac external SSD: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 5. External HDD (SolidState=false) with unknown power state -> skips as standby_unknown (never falls back to /sys).
+	hddState = standbyUnknown
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !slices.Equal(probed, []string{"disk9"}) {
+		t.Fatalf("mac external HDD unknown: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 6. External HDD asleep -> skips as spun_down naming disk9.
+	probed = nil
+	hddState = standbyAsleep
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"disk9"}) {
+		t.Fatalf("mac external HDD asleep: resp=%+v", resp)
+	}
+
+	// 7. External HDD confirmed awake -> scans cleanly.
+	probed = nil
+	hddState = standbyAwake
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != "" || !slices.Equal(probed, []string{"disk9"}) {
+		t.Fatalf("mac external HDD awake: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 8. External USB enclosure omitting SolidState -> skips as standby_unknown without waking.
+	probed = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/UnknownUSB"})
+	if resp.Code != CodeStandbyUnknown || len(probed) != 0 || !strings.Contains(resp.Message, "disk10") {
+		t.Fatalf("mac unknown SolidState USB: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 9. Multi-store APFS container (Fusion Drive: disk0 SSD + disk9 HDD) skips when HDD member is asleep.
+	hddState = standbyAsleep
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/Fusion"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"disk9"}) {
+		t.Fatalf("mac fusion asleep HDD: resp=%+v", resp)
+	}
+
+	// 10. Mounted .dmg disk image (virtual APFS -> virtual disk4) -> skips as standby_unknown.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/AppDMG"})
+	if resp.Code != CodeStandbyUnknown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("mac dmg virtual disk: resp=%+v", resp)
+	}
+
+	// 11. When diskutil is unavailable and inventory has no disks, Darwin must NOT read /sys/block/disk9/queue/rotational.
+	rNoDiskutil := newTestRunner(t, root, []mountInfo{{ID: 4, MountPoint: "/Volumes/ExtHDD", FSType: "hfs", Source: "/dev/disk9s2"}}, nil)
+	rNoDiskutil.goos = "darwin"
+	resp = rNoDiskutil.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeStandbyUnknown {
+		t.Fatalf("mac without diskutil must not fall back to /sys: resp=%+v", resp)
+	}
+}
+
+func TestVirtualMachineGuestDisksScanWithoutWakingPassthroughHDD(t *testing.T) {
+	root := t.TempDir()
+	writeFile := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// All virtual disks report rotational=1 (typical KVM/Proxmox/Hetzner/VMware/Hyper-V/VBox guests).
+	for _, dev := range []string{"vda", "xvda", "sda", "sdb", "sdc", "sdd", "sde", "sdf", "sdg", "sdh"} {
+		writeFile("sys/block/"+dev+"/queue/rotational", "1\n")
+	}
+	// sda: QEMU/Hetzner/Proxmox virtio-scsi disk.
+	writeFile("sys/block/sda/device/vendor", "QEMU    \n")
+	writeFile("sys/block/sda/device/model", "QEMU HARDDISK   \n")
+	// sdb: VMware virtual SCSI disk.
+	writeFile("sys/block/sdb/device/vendor", "VMware, \n")
+	writeFile("sys/block/sdb/device/model", "VMware Virtual S\n")
+	// sdc: VirtualBox AHCI disk (vendor is ATA, model names VBOX).
+	writeFile("sys/block/sdc/device/vendor", "ATA     \n")
+	writeFile("sys/block/sdc/device/model", "VBOX HARDDISK   \n")
+	// sdd: Hyper-V / Azure virtual disk.
+	writeFile("sys/block/sdd/device/vendor", "Msft    \n")
+	writeFile("sys/block/sdd/device/model", "Virtual Disk    \n")
+	// sde: virtio-scsi disk with custom model identified via sysfs virtio bus symlink.
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/block"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../../devices/pci0000:00/0000:00:05.0/virtio2/host0/target0:0:0/0:0:0:0/block/sde", filepath.Join(root, "sys/class/block/sde")); err != nil {
+		t.Fatal(err)
+	}
+	// sdf: Passed-through real physical HDD inside the VM (must still be checked!).
+	writeFile("sys/block/sdf/device/vendor", "ATA     \n")
+	writeFile("sys/block/sdf/device/model", "WDC WD181KFGX-68CKWN0\n")
+	// sdg: Hardware RAID logical disk (Dell PERC "Virtual Disk" — must NOT be treated as a VM disk!).
+	writeFile("sys/block/sdg/device/vendor", "DELL    \n")
+	writeFile("sys/block/sdg/device/model", "Virtual Disk    \n")
+	// sdh: LVM on top of vda2.
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/block/dm-0/slaves"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../vda2", filepath.Join(root, "sys/class/block/dm-0/slaves/vda2")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "dev/mapper"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../dm-0", filepath.Join(root, "dev/mapper/vg-root")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mp := range []string{"vm/vda", "vm/xvd", "vm/qemu", "vm/vmware", "vm/vbox", "vm/hyperv", "vm/virtio", "vm/lvm", "vm/pass", "vm/raid", "vm/lxc"} {
+		writeBytes(t, filepath.Join(root, mp, "file.bin"), 16*1024)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/vm/vda", FSType: "ext4", Source: "/dev/vda1"},
+		{ID: 2, MountPoint: "/vm/xvd", FSType: "ext4", Source: "/dev/xvda1"},
+		{ID: 3, MountPoint: "/vm/qemu", FSType: "ext4", Source: "/dev/sda1"},
+		{ID: 4, MountPoint: "/vm/vmware", FSType: "ext4", Source: "/dev/sdb1"},
+		{ID: 5, MountPoint: "/vm/vbox", FSType: "ext4", Source: "/dev/sdc1"},
+		{ID: 6, MountPoint: "/vm/hyperv", FSType: "ext4", Source: "/dev/sdd1"},
+		{ID: 7, MountPoint: "/vm/virtio", FSType: "ext4", Source: "/dev/sde1"},
+		{ID: 8, MountPoint: "/vm/lvm", FSType: "ext4", Source: "/dev/mapper/vg-root"},
+		{ID: 9, MountPoint: "/vm/pass", FSType: "ext4", Source: "/dev/sdf1"},
+		{ID: 10, MountPoint: "/vm/raid", FSType: "ext4", Source: "/dev/sdg1"},
+		{ID: 11, MountPoint: "/vm/lxc", FSType: "ext4", Source: "/dev/loop0"},
+	}
+
+	// Inventory says vda and sda are Type:"hdd" (because lsblk saw rota=1) and Host.Virtual="kvm".
+	inv := &proto.Report{
+		Host: proto.HostInfo{Virtual: "kvm"},
+		Disks: []proto.Disk{
+			{Device: "vda", Type: "hdd"},
+			{Device: "sda", Type: "hdd", Model: "QEMU HARDDISK"},
+			{Device: "sdf", Type: "hdd", Model: "WDC WD181KFGX-68CKWN0"},
+		},
+		Filesystems: []proto.Filesystem{
+			{Mount: "/vm/vda", Device: "/dev/vda1", FSType: "ext4", Disks: []string{"vda"}},
+			{Mount: "/vm/qemu", Device: "/dev/sda1", FSType: "ext4", Disks: []string{"sda"}},
+			{Mount: "/vm/pass", Device: "/dev/sdf1", FSType: "ext4", Disks: []string{"sdf"}},
+		},
+	}
+
+	var probed []string
+	var statfsCalled atomic.Int32
+	r := newTestRunner(t, root, mounts, inv)
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		if dev == "sdf" {
+			return standbyAsleep
+		}
+		return standbyUnknown
+	}
+
+	// All virtual guest disks scan cleanly without invoking smartctl/hdparm.
+	for _, mp := range []string{"/vm/vda", "/vm/xvd", "/vm/qemu", "/vm/vmware", "/vm/vbox", "/vm/hyperv", "/vm/virtio", "/vm/lvm"} {
+		probed = nil
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != "" || len(probed) != 0 {
+			t.Errorf("%s: resp=%+v probed=%v, want clean scan with no standby probe", mp, resp, probed)
+		}
+	}
+
+	// Passed-through physical HDD inside the VM must STILL be checked and skip when asleep.
+	probed = nil
+	statfsCalled.Store(0)
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/pass"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdf"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/pass: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// Hardware RAID "Virtual Disk" (DELL) must NOT be misclassified as a VM disk; unknown standby skips as standby_unknown.
+	probed = nil
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/raid"})
+	if resp.Code != CodeStandbyUnknown || !slices.Equal(probed, []string{"sdg"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/raid: resp=%+v probed=%v statfs=%d", resp, probed, statfsCalled.Load())
+	}
+
+	// LXC loop0 root skips as standby_unknown without claiming "spun down".
+	probed = nil
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/lxc"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || strings.Contains(resp.Message, "spun down") || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/lxc: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+}
+
+func TestMultiDeviceBtrfsChecksAllMembersAndFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	mkdir := func(rel string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(root, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile := func(rel, content string) {
+		t.Helper()
+		mkdir(filepath.Dir(rel))
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	symlink := func(target, rel string) {
+		t.Helper()
+		mkdir(filepath.Dir(rel))
+		if err := os.Symlink(target, filepath.Join(root, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("sys/block/sda/queue/rotational", "1\n")
+	writeFile("sys/block/sdb/queue/rotational", "1\n")
+	writeFile("sys/block/sdc/queue/rotational", "1\n")
+	writeFile("sys/block/sdd/queue/rotational", "0\n")
+
+	// Global Btrfs features dir must be ignored when matching FSIDs.
+	mkdir("sys/fs/btrfs/features")
+
+	// Pool 1 (/mnt/pool): mount source is awake NVMe (nvme0n1p1), second member is HDD sdb1.
+	symlink("../../../../devices/pci0/nvme0n1/nvme0n1p1", "sys/fs/btrfs/aaaa-1111/devices/nvme0n1p1")
+	symlink("../../../../devices/pci0/sdb/sdb1", "sys/fs/btrfs/aaaa-1111/devices/sdb1")
+
+	// Pool 2 (/mnt/luks-btrfs): Btrfs over two LUKS dm devices (dm-0 -> sda1, dm-1 -> sdc1).
+	writeFile("sys/block/dm-0/dm/name", "crypt_btrfs0\n")
+	symlink("../sda1", "sys/class/block/dm-0/slaves/sda1")
+	symlink("../sdc1", "sys/class/block/dm-1/slaves/sdc1")
+	symlink("../../../../devices/virtual/block/dm-0", "sys/fs/btrfs/bbbb-2222/devices/dm-0")
+	symlink("../../../../devices/virtual/block/dm-1", "sys/fs/btrfs/bbbb-2222/devices/dm-1")
+
+	// Pool 3 (/mnt/loop-btrfs): one SSD member + one unresolved loop0 member.
+	symlink("../../../../devices/pci0/sdd/sdd1", "sys/fs/btrfs/cccc-3333/devices/sdd1")
+	symlink("../../../../devices/virtual/block/loop0", "sys/fs/btrfs/cccc-3333/devices/loop0")
+
+	// Pool 4 (/mnt/unmatched-btrfs): /dev/sde1 is not present under /sys/fs/btrfs -> must fail closed.
+	writeFile("sys/block/sde/queue/rotational", "0\n")
+
+	for _, dir := range []string{"mnt/pool/data", "mnt/luks-btrfs/data", "mnt/loop-btrfs/data", "mnt/unmatched-btrfs/data"} {
+		writeBytes(t, filepath.Join(root, dir, "file.bin"), 16*1024)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/mnt/pool", FSType: "btrfs", Source: "/dev/nvme0n1p1", MajMin: "0:45"},
+		{ID: 2, MountPoint: "/mnt/luks-btrfs", FSType: "btrfs", Source: "/dev/mapper/crypt_btrfs0", MajMin: "0:46"},
+		{ID: 3, MountPoint: "/mnt/loop-btrfs", FSType: "btrfs", Source: "/dev/sdd1", MajMin: "0:47"},
+		{ID: 4, MountPoint: "/mnt/unmatched-btrfs", FSType: "btrfs", Source: "/dev/sde1", MajMin: "0:48"},
+	}
+
+	states := map[string]standbyState{
+		"sda": standbyAwake,
+		"sdb": standbyAsleep,
+		"sdc": standbyAsleep,
+	}
+	var inv *proto.Report
+	var statfsCalled atomic.Int32
+	var probed []string
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.inventory = func() *proto.Report { return inv }
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		if st, ok := states[dev]; ok {
+			return st
+		}
+		return standbyUnknown
+	}
+
+	// 1. Multi-device Btrfs: mount source is awake NVMe, second member sdb is asleep -> skips as spun_down without touching mount.
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/pool"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("multi-device btrfs sleeping member: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// 2. Multi-device Btrfs: second member sdb standby is unknown -> skips as standby_unknown without claiming spun down.
+	states["sdb"] = standbyUnknown
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/pool"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || strings.Contains(resp.Message, "spun down") || statfsCalled.Load() != 0 {
+		t.Fatalf("multi-device btrfs unknown member: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// 3. Multi-device Btrfs: second member sdb already flagged Standby in inventory (even when fs.Disks is empty) -> skips as spun_down without probing.
+	probed = nil
+	inv = &proto.Report{
+		Disks: []proto.Disk{
+			{Device: "nvme0n1", Type: "nvme"},
+			{Device: "sdb", Type: "hdd", Standby: true},
+		},
+	}
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/pool"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || len(probed) != 0 || statfsCalled.Load() != 0 {
+		t.Fatalf("multi-device btrfs inventory standby: resp=%+v probed=%v statfs=%d", resp, probed, statfsCalled.Load())
+	}
+	inv = nil
+
+	// 4. Multi-device Btrfs: all members awake -> scans cleanly.
+	states["sdb"] = standbyAwake
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/pool"})
+	if resp.Code != "" || len(resp.Folders) == 0 {
+		t.Fatalf("multi-device btrfs all awake: %+v", resp)
+	}
+
+	// 5. Multi-device Btrfs over LUKS: dm-0 (sda awake) + dm-1 (sdc asleep) -> catches sleeping sdc without touching mount.
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/luks-btrfs"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("btrfs over luks sleeping member: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+	states["sdc"] = standbyAwake
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/luks-btrfs"})
+	if resp.Code != "" {
+		t.Fatalf("btrfs over luks all awake: %+v", resp)
+	}
+
+	// 6. Btrfs with an unresolved loop0 member -> skips as standby_unknown without touching mount.
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/loop-btrfs"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || statfsCalled.Load() != 0 {
+		t.Fatalf("btrfs with loop member: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// 7. Btrfs missing from /sys/fs/btrfs fails closed even if inventory listed one SSD disk.
+	statfsCalled.Store(0)
+	inv = &proto.Report{
+		Disks:       []proto.Disk{{Device: "sde", Type: "ssd"}},
+		Filesystems: []proto.Filesystem{{Mount: "/mnt/unmatched-btrfs", FSType: "btrfs", Device: "/dev/sde1", Disks: []string{"sde"}}},
+	}
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/unmatched-btrfs"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || statfsCalled.Load() != 0 {
+		t.Fatalf("btrfs missing from sysfs with partial inventory: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+}
+
+func TestMultiDeviceClassBcachefsLVMmdraidZFSUnionAndDevPaths(t *testing.T) {
+	root := t.TempDir()
+	mkdir := func(rel string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(root, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile := func(rel, content string) {
+		t.Helper()
+		mkdir(filepath.Dir(rel))
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	symlink := func(target, rel string) {
+		t.Helper()
+		mkdir(filepath.Dir(rel))
+		if err := os.Symlink(target, filepath.Join(root, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeFile("sys/block/sda/queue/rotational", "0\n")
+	writeFile("sys/block/sdb/queue/rotational", "1\n")
+	writeFile("sys/block/sdc/queue/rotational", "1\n")
+	writeFile("sys/block/sdd/queue/rotational", "1\n")
+	// ZFS zvol reports rotational=0 even over a sleeping HDD pool; must still fail closed!
+	writeFile("sys/block/zd0/queue/rotational", "0\n")
+
+	// 1. bcachefs multi-device: mount source lists sda1:sdb1, sysfs also shows dev-2 -> sdc1 (added later).
+	symlink("../../../../devices/pci0/sda/sda1", "sys/fs/bcachefs/1111-bch/dev-0/block")
+	symlink("../../../../devices/pci0/sdb/sdb1", "sys/fs/bcachefs/1111-bch/dev-1/block")
+	symlink("../../../../devices/pci0/sdc/sdc1", "sys/fs/bcachefs/1111-bch/dev-2/block")
+	// bcachefs UUID= with two awake members.
+	symlink("../../../../devices/pci0/nvme0n1/nvme0n1p1", "sys/fs/bcachefs/2222-uuid/dev-0/block")
+	symlink("../../../../devices/pci0/sda/sda2", "sys/fs/bcachefs/2222-uuid/dev-1/block")
+	// bcachefs with incomplete dev-1 (missing block symlink).
+	symlink("../../../../devices/pci0/nvme0n1/nvme0n1p2", "sys/fs/bcachefs/3333-bad/dev-0/block")
+	mkdir("sys/fs/bcachefs/3333-bad/dev-1")
+
+	// 2. Multi-PV LVM thin pool: dm-5 (thin LV) -> dm-4 (tpool) -> {dm-2 (tdata -> sda3), dm-3 (tmeta -> sdd1)}.
+	symlink("../dm-4", "sys/class/block/dm-5/slaves/dm-4")
+	symlink("../dm-2", "sys/class/block/dm-4/slaves/dm-2")
+	symlink("../dm-3", "sys/class/block/dm-4/slaves/dm-3")
+	symlink("../sda3", "sys/class/block/dm-2/slaves/sda3")
+	symlink("../sdd1", "sys/class/block/dm-3/slaves/sdd1")
+	symlink("../dm-5", "dev/mapper/vg0-thinlv")
+
+	// 2b. Multi-PV LVM with one resolved PV and one unresolved md9, even if inventory lists sda.
+	symlink("../sda4", "sys/class/block/dm-6/slaves/sda4")
+	symlink("../md9", "sys/class/block/dm-6/slaves/md9")
+
+	// 3. Partitioned mdraid (/dev/md0p1 -> md0) and md/dev-* fallback (/dev/md/named -> md1).
+	symlink("../sda5", "sys/class/block/md0/slaves/sda5")
+	symlink("../sdb2", "sys/class/block/md0/slaves/sdb2")
+	symlink("../md1", "dev/md/named")
+	symlink("../../../sda6", "sys/block/md1/md/dev-sda6/block")
+	symlink("../../../sdc2", "sys/block/md1/md/dev-sdc2/block")
+
+	// 4. /dev/root resolved via /sys/dev/block/8:1 -> sda1.
+	symlink("../../devices/pci0/sda/sda1", "sys/dev/block/8:1")
+
+	for _, dir := range []string{
+		"mnt/bch", "mnt/bch-uuid", "mnt/bch-bad", "mnt/bch-missing",
+		"mnt/lvm-thin", "mnt/lvm-partial", "mnt/md-part", "mnt/md-named",
+		"mnt/zfs-multi", "mnt/zfs-snap", "mnt/zfs-loop", "mnt/zvol",
+		"mnt/merger", "mnt/union", "mnt/overlay", "mnt/dev-root", "mnt/dev-root-bad", "mnt/bad-uuid",
+	} {
+		writeBytes(t, filepath.Join(root, dir, "data/item.bin"), 16*1024)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/mnt/bch", FSType: "bcachefs", Source: "/dev/sda1:/dev/sdb1", MajMin: "0:50"},
+		{ID: 2, MountPoint: "/mnt/bch-uuid", FSType: "bcachefs", Source: "UUID=2222-uuid", MajMin: "0:51"},
+		{ID: 3, MountPoint: "/mnt/bch-bad", FSType: "bcachefs", Source: "/dev/nvme0n1p2", MajMin: "0:52"},
+		{ID: 4, MountPoint: "/mnt/bch-missing", FSType: "bcachefs", Source: "/dev/nvme0n1p9", MajMin: "0:53"},
+		{ID: 5, MountPoint: "/mnt/lvm-thin", FSType: "ext4", Source: "/dev/mapper/vg0-thinlv", MajMin: "253:5"},
+		{ID: 6, MountPoint: "/mnt/lvm-partial", FSType: "ext4", Source: "/dev/dm-6", MajMin: "253:6"},
+		{ID: 7, MountPoint: "/mnt/md-part", FSType: "xfs", Source: "/dev/md0p1", MajMin: "259:1"},
+		{ID: 8, MountPoint: "/mnt/md-named", FSType: "xfs", Source: "/dev/md/named", MajMin: "9:1"},
+		{ID: 9, MountPoint: "/mnt/zfs-multi", FSType: "zfs", Source: "tank/media", MajMin: "0:54"},
+		{ID: 10, MountPoint: "/mnt/zfs-snap", FSType: "zfs", Source: "tank@nightly", MajMin: "0:55"},
+		{ID: 11, MountPoint: "/mnt/zfs-loop", FSType: "zfs", Source: "looppool/data", MajMin: "0:56"},
+		{ID: 12, MountPoint: "/mnt/zvol", FSType: "ext4", Source: "/dev/zd0p1", MajMin: "230:1"},
+		{ID: 13, MountPoint: "/mnt/merger", FSType: "fuse.mergerfs", Source: "/mnt/d1:/mnt/d2", MajMin: "0:60"},
+		{ID: 14, MountPoint: "/mnt/union", FSType: "fuse.unionfs-fuse", Source: "/mnt/d1=RW:/mnt/d2=RO", MajMin: "0:61"},
+		{ID: 15, MountPoint: "/mnt/overlay", FSType: "overlay", Source: "overlay", MajMin: "0:62"},
+		{ID: 16, MountPoint: "/mnt/dev-root", FSType: "ext4", Source: "/dev/root", MajMin: "8:1"},
+		{ID: 17, MountPoint: "/mnt/dev-root-bad", FSType: "ext4", Source: "/dev/root", MajMin: "0:63"},
+		{ID: 18, MountPoint: "/mnt/bad-uuid", FSType: "ext4", Source: "/dev/disk/by-uuid/does-not-exist", MajMin: "0:64"},
+	}
+
+	inv := &proto.Report{
+		Disks: []proto.Disk{
+			{Device: "nvme0n1", Type: "nvme"},
+			{Device: "sda", Type: "ssd"},
+			{Device: "sdb", Type: "hdd"},
+			{Device: "sdc", Type: "hdd"},
+			{Device: "sdd", Type: "hdd"},
+		},
+		Filesystems: []proto.Filesystem{
+			// Deliberately partial inventory for dm-6: must NOT hide unresolved md9!
+			{Mount: "/mnt/lvm-partial", FSType: "ext4", Device: "/dev/dm-6", Disks: []string{"sda"}},
+			// Deliberately partial inventory for mergerfs: must still fail closed!
+			{Mount: "/mnt/merger", FSType: "fuse.mergerfs", Device: "/mnt/d1:/mnt/d2", Disks: []string{"sda"}},
+		},
+		Pools: []proto.Pool{
+			{Name: "tank", Disks: []string{"nvme0n1", "sdb"}},
+			{Name: "looppool", Disks: []string{"sda", "loop0"}},
+		},
+	}
+
+	states := map[string]standbyState{
+		"sdb": standbyAwake,
+		"sdc": standbyAsleep,
+		"sdd": standbyAsleep,
+	}
+	var statfsCalled atomic.Int32
+	r := newTestRunner(t, root, mounts, inv)
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		if st, ok := states[dev]; ok {
+			return st
+		}
+		return standbyUnknown
+	}
+
+	// bcachefs: sda+sdb in Source are awake, but 3rd member sdc in sysfs is asleep -> spun_down without touching mount.
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/bch"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("bcachefs 3rd member asleep: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+	// bcachefs UUID= with all SSD/NVMe members -> scans cleanly.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/bch-uuid"})
+	if resp.Code != "" {
+		t.Fatalf("bcachefs UUID awake: %+v", resp)
+	}
+	// bcachefs incomplete dev-1 or missing sysfs -> standby_unknown without touching mount.
+	for _, mp := range []string{"/mnt/bch-bad", "/mnt/bch-missing"} {
+		statfsCalled.Store(0)
+		resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != CodeStandbyUnknown || statfsCalled.Load() != 0 {
+			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
+		}
+	}
+
+	// Multi-PV LVM thin pool: sleeping sdd behind dm-5->dm-4->dm-3 -> spun_down, then awake -> scans cleanly.
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/lvm-thin"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdd"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("lvm thin sleeping sdd: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+	states["sdd"] = standbyAwake
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/lvm-thin"})
+	if resp.Code != "" {
+		t.Fatalf("lvm thin awake: %+v", resp)
+	}
+
+	// Multi-PV LVM with unresolved md9 fails closed even though inventory listed sda.
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/lvm-partial"})
+	if resp.Code != CodeStandbyUnknown || statfsCalled.Load() != 0 {
+		t.Fatalf("lvm partial with inventory: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// Partitioned mdraid (/dev/md0p1) scans when both sda and sdb are awake, skips if sdb sleeps.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/md-part"})
+	if resp.Code != "" {
+		t.Fatalf("md0p1 awake: %+v", resp)
+	}
+	states["sdb"] = standbyAsleep
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/md-part"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("md0p1 sleeping sdb: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+	// Named mdraid (/dev/md/named -> md1 via md/dev-*) catches sleeping sdc.
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/md-named"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("md/named sleeping sdc: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// ZFS multi-disk pool and snapshot mount (tank@nightly) both catch sleeping sdb.
+	for _, mp := range []string{"/mnt/zfs-multi", "/mnt/zfs-snap"} {
+		statfsCalled.Store(0)
+		resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || statfsCalled.Load() != 0 {
+			t.Fatalf("%s sleeping sdb: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
+		}
+	}
+	// ZFS pool containing a loop0 vdev and ext4 on ZFS zvol (/dev/zd0p1 with rotational=0) both skip as standby_unknown.
+	for _, mp := range []string{"/mnt/zfs-loop", "/mnt/zvol"} {
+		statfsCalled.Store(0)
+		resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || statfsCalled.Load() != 0 {
+			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
+		}
+	}
+
+	// Pooled/union FUSE and overlay filesystems always fail closed as standby_unknown.
+	for _, mp := range []string{"/mnt/merger", "/mnt/union", "/mnt/overlay"} {
+		statfsCalled.Store(0)
+		resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || strings.Contains(resp.Message, "spun down") || statfsCalled.Load() != 0 {
+			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
+		}
+	}
+
+	// /dev/root resolves cleanly through /sys/dev/block/<MajMin> -> sda1 (SSD), while unresolved /dev/root and broken by-uuid fail closed.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/dev-root"})
+	if resp.Code != "" {
+		t.Fatalf("/mnt/dev-root: %+v", resp)
+	}
+	for _, mp := range []string{"/mnt/dev-root-bad", "/mnt/bad-uuid"} {
+		statfsCalled.Store(0)
+		resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != CodeStandbyUnknown || statfsCalled.Load() != 0 {
+			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
 		}
 	}
 }

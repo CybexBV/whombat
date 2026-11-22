@@ -197,7 +197,7 @@ wait:
 	}
 	r.CPU, r.Memory = c.cpu, c.mem
 	r.Sensors = append([]proto.Sensor(nil), c.sensors...)
-	r.Filesystems = filesystems(c.vols)
+	r.Filesystems = FilesystemsWithDisks(c.vols, c.list, c.disks)
 	r.Disks = c.disksWithUse()
 	r.Net = c.netIfaces()
 	sys := c.sys

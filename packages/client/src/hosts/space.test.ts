@@ -2,7 +2,7 @@
 import type { HostDisk, HostGuest, HostServerDetail, HostVolume } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import { createHostsWorld } from './fixtures';
-import { diskHealth, spaceTiles, spaceUse } from './space';
+import { diskHealth, diskUsageSkipNote, spaceTiles, spaceUse } from './space';
 
 const NOW = Date.parse('2026-11-04T10:00:00Z');
 const world = createHostsWorld(NOW);
@@ -196,5 +196,26 @@ describe('spaceTiles', () => {
       now: NOW,
     });
     expect(tiles.find((t) => t.key === 'disks')).toMatchObject({ value: '1 failing', tone: 'bad' });
+  });
+});
+
+describe('diskUsageSkipNote', () => {
+  it('returns null when the scan ran, and reports the true skip reason otherwise', () => {
+    expect(diskUsageSkipNote({ ok: true })).toBeNull();
+    expect(
+      diskUsageSkipNote({
+        ok: false,
+        code: 'standby_unknown',
+        message: 'Skipped / because its backing disks could not be identified.',
+      }),
+    ).toBe('Skipped / because its backing disks could not be identified.');
+    const unknownFallback = diskUsageSkipNote({ ok: false, code: 'standby_unknown' });
+    expect(unknownFallback).toContain('can’t tell');
+    expect(unknownFallback).not.toContain('spun down');
+    expect(diskUsageSkipNote({ ok: false, code: 'spun_down', skippedSpunDown: ['disk1'] })).toContain(
+      'disk1',
+    );
+    expect(diskUsageSkipNote({ ok: false, code: 'spun_down' })).toContain('asleep');
+    expect(diskUsageSkipNote({ ok: false, code: 'failed' })).toContain('Could not check');
   });
 });
