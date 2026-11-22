@@ -63,7 +63,10 @@ type entry struct {
 	retryAt time.Time
 	// tries counts downloads that couldn't go on, bad the ones whose bytes were wrong.
 	tries, bad int
-	cancel     context.CancelFunc
+	// gen advances on every Remove so a cancelled download attempt cannot report progress,
+	// commit files, mark a removed model ready, or apply failure backoff to a newer Fetch.
+	gen    uint64
+	cancel context.CancelFunc
 }
 
 // Classes of a download's end.
@@ -170,18 +173,19 @@ func (f *Fetcher) Fetch(id string) error {
 // Remove stops model id's download and deletes it.
 func (f *Fetcher) Remove(id string) error {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	e, ok := f.entries[id]
 	if !ok {
-		f.mu.Unlock()
 		return ErrUnknown
 	}
+	e.gen++
 	if e.cancel != nil {
 		e.cancel()
 		e.cancel = nil
 	}
 	e.wanted, e.state, e.problem, e.received = false, local.VoiceModelStateAbsent, "", 0
+	e.retryAt, e.tries, e.bad = time.Time{}, 0, 0
 	f.saveWanted()
-	f.mu.Unlock()
 	for _, p := range []string{models.Path(f.Dir, e.model), models.PartPath(f.Dir, e.model)} {
 		if err := os.RemoveAll(p); err != nil {
 			return err
@@ -248,18 +252,31 @@ func (f *Fetcher) next() (*entry, time.Duration) {
 func (f *Fetcher) run(ctx context.Context, e *entry) {
 	dctx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
+	if !e.wanted {
+		f.mu.Unlock()
+		cancel()
+		return
+	}
+	gen := e.gen
 	e.cancel, e.state = cancel, local.VoiceModelStateDownloading
 	f.mu.Unlock()
 	start := time.Now()
-	err := f.download(dctx, e)
+	err := f.download(dctx, e, gen)
 	cancel()
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	e.cancel = nil
-	if !e.wanted { // removed while it ran: nothing of it stays, even if it had just finished
+	if e.gen == gen {
+		e.cancel = nil
+	}
+	if e.gen != gen || !e.wanted {
+		// Removed while this attempt ran (even if another Fetch has already queued a fresh one, or if this attempt
+		// just finished): drop any files this attempt left behind without treating its cancellation as a failure or
+		// disturbing a newer Fetch's waiting state.
 		_ = os.RemoveAll(models.Path(f.Dir, e.model))
 		_ = os.RemoveAll(models.PartPath(f.Dir, e.model))
-		e.state, e.received = local.VoiceModelStateAbsent, 0
+		if !e.wanted {
+			e.state, e.received = local.VoiceModelStateAbsent, 0
+		}
 		return
 	}
 	total := e.model.TotalSize()
@@ -300,12 +317,12 @@ func (f *Fetcher) fail(e *entry, problem string, err error) {
 }
 
 // download fetches e's model into its staging file or directory (resuming), checks it and renames it into place.
-func (f *Fetcher) download(ctx context.Context, e *entry) error {
+func (f *Fetcher) download(ctx context.Context, e *entry, gen uint64) error {
 	if e.model.Multi() {
-		return f.downloadMulti(ctx, e)
+		return f.downloadMulti(ctx, e, gen)
 	}
 	m := e.model
-	if err := f.fetchFile(ctx, e, m.URL, models.PartPath(f.Dir, m), models.Path(f.Dir, m), m.Size, m.SHA256, 0, m.Size); err != nil {
+	if err := f.fetchFile(ctx, e, gen, m.URL, models.PartPath(f.Dir, m), models.Path(f.Dir, m), m.Size, m.SHA256, 0, m.Size); err != nil {
 		return err
 	}
 	syncDir(f.Dir)
@@ -314,7 +331,7 @@ func (f *Fetcher) download(ctx context.Context, e *entry) error {
 
 // downloadMulti fetches every file of a multi-file model into a staging directory, checks each file's size and sha256,
 // and renames the directory into place only once every file matches.
-func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
+func (f *Fetcher) downloadMulti(ctx context.Context, e *entry, gen uint64) error {
 	m := e.model
 	stage := models.PartPath(f.Dir, m)
 	final := models.Path(f.Dir, m)
@@ -322,6 +339,9 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
 	already := models.PartialSize(f.Dir, m)
 	if free, err := f.Free(f.Dir); err == nil && free < total-already+Margin {
 		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (total-already+Margin)>>20)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(stage, 0o750); err != nil {
 		return fmt.Errorf("%w: %v", errNoRoom, err)
@@ -335,15 +355,15 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
 		if verifyFile(dest, mf.Size, mf.SHA256) {
 			_ = os.Remove(part)
 			done += mf.Size
-			f.progress(e, done)
+			f.progress(e, gen, done)
 			continue
 		}
 		_ = os.Remove(dest)
-		if err := f.fetchFile(ctx, e, mf.URL, part, dest, mf.Size, mf.SHA256, done, total); err != nil {
+		if err := f.fetchFile(ctx, e, gen, mf.URL, part, dest, mf.Size, mf.SHA256, done, total); err != nil {
 			return err
 		}
 		done += mf.Size
-		f.progress(e, done)
+		f.progress(e, gen, done)
 	}
 	if entries, err := os.ReadDir(stage); err == nil {
 		for _, ent := range entries {
@@ -354,8 +374,7 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
 	}
 	syncDir(stage)
 	// An incomplete final directory would block Rename; we only reach here when the model isn't complete yet.
-	_ = os.RemoveAll(final)
-	if err := os.Rename(stage, final); err != nil {
+	if err := f.commitRename(ctx, e, gen, stage, final, true); err != nil {
 		return err
 	}
 	syncDir(f.Dir)
@@ -364,7 +383,10 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry) error {
 
 // fetchFile downloads one file from url into part (resuming where it stopped), verifies its size and sha256, and
 // renames it to dest.
-func (f *Fetcher) fetchFile(ctx context.Context, e *entry, url, part, dest string, size int64, wantSHA string, progressBase, total int64) error {
+func (f *Fetcher) fetchFile(ctx context.Context, e *entry, gen uint64, url, part, dest string, size int64, wantSHA string, progressBase, total int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNoRoom, err)
@@ -389,19 +411,19 @@ func (f *Fetcher) fetchFile(ctx context.Context, e *entry, url, part, dest strin
 			return err
 		}
 	}
-	f.progress(e, progressBase+have)
+	f.progress(e, gen, progressBase+have)
 	remaining := max(total-(progressBase+have), size-have)
 	if free, err := f.Free(f.Dir); err == nil && free < remaining+Margin {
 		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (remaining+Margin)>>20)
 	}
 	if have < size {
-		got, err := f.get(ctx, e, url, fh, h, have, size, progressBase)
+		got, err := f.get(ctx, e, gen, url, fh, h, have, size, progressBase)
 		have = got
 		if err != nil {
 			if errors.Is(err, errBadBytes) {
 				_ = fh.Close()
 				_ = os.Remove(part)
-				f.progress(e, progressBase)
+				f.progress(e, gen, progressBase)
 			}
 			return err
 		}
@@ -412,7 +434,7 @@ func (f *Fetcher) fetchFile(ctx context.Context, e *entry, url, part, dest strin
 	if sum := hex.EncodeToString(h.Sum(nil)); sum != wantSHA {
 		_ = fh.Close()
 		_ = os.Remove(part)
-		f.progress(e, progressBase)
+		f.progress(e, gen, progressBase)
 		return fmt.Errorf("%w: sha256 %s", errBadBytes, sum)
 	}
 	if err := fh.Sync(); err != nil {
@@ -421,11 +443,11 @@ func (f *Fetcher) fetchFile(ctx context.Context, e *entry, url, part, dest strin
 	if err := fh.Close(); err != nil {
 		return err
 	}
-	return os.Rename(part, dest)
+	return f.commitRename(ctx, e, gen, part, dest, false)
 }
 
 // get requests the rest of url from have on and appends it to fh, hashing as it goes; returns the bytes fh holds then.
-func (f *Fetcher) get(ctx context.Context, e *entry, url string, fh *os.File, h hash.Hash, have, size, progressBase int64) (int64, error) {
+func (f *Fetcher) get(ctx context.Context, e *entry, gen uint64, url string, fh *os.File, h hash.Hash, have, size, progressBase int64) (int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -455,13 +477,13 @@ func (f *Fetcher) get(ctx context.Context, e *entry, url string, fh *os.File, h 
 			}
 			h.Reset()
 			have = 0
-			f.progress(e, progressBase)
+			f.progress(e, gen, progressBase)
 		}
 	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && have == size:
 		return have, nil
 	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
 		_ = restart(fh)
-		f.progress(e, progressBase)
+		f.progress(e, gen, progressBase)
 		return 0, fmt.Errorf("%w: range %d refused", errServer, have)
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= 500:
 		return have, fmt.Errorf("%w: %s", errServer, resp.Status)
@@ -490,7 +512,7 @@ func (f *Fetcher) get(ctx context.Context, e *entry, url string, fh *os.File, h 
 			}
 			_, _ = h.Write(buf[:n])
 			have += int64(n)
-			f.progress(e, progressBase+have)
+			f.progress(e, gen, progressBase+have)
 		}
 		if rerr == io.EOF {
 			return have, nil
@@ -531,10 +553,29 @@ func restart(fh *os.File) error {
 	return err
 }
 
-func (f *Fetcher) progress(e *entry, n int64) {
+func (f *Fetcher) progress(e *entry, gen uint64, n int64) {
 	f.mu.Lock()
-	e.received = n
+	if e.gen == gen {
+		e.received = n
+	}
 	f.mu.Unlock()
+}
+
+// commitRename atomically renames src to dst only while gen is still current and wanted, so a download attempt
+// superseded by Remove never exposes a removed model on disk.
+func (f *Fetcher) commitRename(ctx context.Context, e *entry, gen uint64, src, dst string, removeDest bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if e.gen != gen || !e.wanted {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return context.Canceled
+	}
+	if removeDest {
+		_ = os.RemoveAll(dst)
+	}
+	return os.Rename(src, dst)
 }
 
 // readWanted is the ids asked for before a restart.
