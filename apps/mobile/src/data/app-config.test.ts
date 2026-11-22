@@ -200,5 +200,9 @@ describe('the iPhone App Group flag for the Share Extension and home-screen widg
     expect(live?.[1]?.iosAppGroup).toBe('group.com.whombat.mobile');
     // whombat-live runs after expo-share-intent so the App Group entitlement deduplicates when both turn on.
     expect(plugins.indexOf(live)).toBeGreaterThan(plugins.indexOf(share));
+    // Privacy manifest entry for App Group UserDefaults (`1C8F.1`) stays gated on the same flag.
+    expect((config.ios as { privacyManifests?: unknown }).privacyManifests).toBeUndefined();
+    const rawConfig = readFileSync(require.resolve('../../app.config.cjs'), 'utf8');
+    expect(rawConfig).toContain("'1C8F.1'");
   });
 });
