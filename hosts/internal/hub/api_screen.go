@@ -8,6 +8,7 @@ import (
 	"image"
 	_ "image/jpeg" // DecodeConfig of the agent's pictures
 	_ "image/png"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -29,16 +30,19 @@ import (
 // operator's (and isn't audited); every other step needs an admin: a look
 // shows what the person has open and ui.list other apps' field values.
 // screenReads are the steps that only look: audited with the op and the app,
-// never what they saw.
+// never what they saw. screenPlaces carry places (addresses to look up, pins
+// on a map): audited with the op alone, never a place.
 var (
 	screenOps = []string{
 		proto.ScreenStatus, proto.ScreenLook, proto.ScreenClick, proto.ScreenDrag, proto.ScreenScroll,
 		proto.ScreenType, proto.ScreenKeys, proto.ScreenUnlock, proto.ScreenPassword, proto.ScreenAccountSet, proto.ScreenAccountCheck,
 		proto.ScreenAccountClear, proto.ScreenUIApps, proto.ScreenUIList, proto.ScreenUIPress, proto.ScreenUISet,
-		proto.ScreenUIMenu, proto.ScreenUIFocus, proto.ScreenUIOpen,
+		proto.ScreenUIMenu, proto.ScreenUIFocus, proto.ScreenUIOpen, proto.ScreenUIAction, proto.ScreenUIQuit,
+		proto.ScreenMapGeocode, proto.ScreenMapSnapshot,
 	}
 	screenOperatorOps = []string{proto.ScreenStatus}
 	screenReads       = []string{proto.ScreenLook, proto.ScreenUIApps, proto.ScreenUIList}
+	screenPlaces      = []string{proto.ScreenMapGeocode, proto.ScreenMapSnapshot}
 )
 
 // The limits of a step's fields, the agent's (docs/WHOMBAT.md "A Mac's
@@ -57,6 +61,13 @@ const (
 	screenIndexMax   = 1000  // index
 	screenLimitMax   = 1000  // ui.list's limit (0: 300)
 	screenAccountMax = 63    // account user and password: bytes (Apple's sign-in)
+	screenQueriesMax = 8     // map.geocode's queries
+	screenQueryMax   = 300   // one query: characters
+	screenMapSideMin = 64    // map.snapshot's w and h: points (0: 600×400)
+	screenMapSideMax = 1600
+	screenPinsMax    = 20         // map.snapshot's pins
+	screenSpanMin    = 50.0       // map.snapshot's span_m: metres
+	screenSpanMax    = 20_000_000 // about half the world round
 )
 
 // screenGrace is how much longer than the agent's own limit for a step
@@ -95,6 +106,25 @@ type screenBody struct {
 		User     string `json:"user"`
 		Password string `json:"password"`
 	} `json:"account"`
+	Action  string   `json:"action"`
+	Queries []string `json:"queries"`
+	W       int      `json:"w"`
+	H       int      `json:"h"`
+	Scale   int      `json:"scale"`
+	Dark    bool     `json:"dark"`
+	Pins    []struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+	} `json:"pins"`
+	Lat   *float64 `json:"lat"`
+	Lon   *float64 `json:"lon"`
+	SpanM float64  `json:"span_m"`
+	Crop  *struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+		W int `json:"w"`
+		H int `json:"h"`
+	} `json:"crop"`
 }
 
 // check bounds the fields; the agent checks the rest (and answers
@@ -119,10 +149,21 @@ func (b screenBody) check() *apiError {
 		n    int
 	}{{"text", b.Text, textMax}, {"keys", b.Keys, screenKeysMax}, {"button", b.Button, 16}, {"format", b.Format, 8},
 		{"app", b.App, screenNameMax}, {"window", b.Window, screenNameMax}, {"name", b.Name, screenNameMax},
-		{"role", b.Role, screenRoleMax}, {"target", b.Target, screenTargetMax}} {
+		{"role", b.Role, screenRoleMax}, {"target", b.Target, screenTargetMax}, {"action", b.Action, screenNameMax}} {
 		if e := text(f.name, f.v, f.n); e != nil {
 			return e
 		}
+	}
+	if len(b.Queries) > screenQueriesMax {
+		return invalidFields(map[string]string{"queries": fmt.Sprintf("At most %d places to find.", screenQueriesMax)})
+	}
+	for _, q := range b.Queries {
+		if e := text("queries", q, screenQueryMax); e != nil {
+			return e
+		}
+	}
+	if e := b.checkMap(); e != nil {
+		return e
 	}
 	if len(b.Path) > screenPathMax {
 		return invalidFields(map[string]string{"path": fmt.Sprintf("At most %d menu items.", screenPathMax)})
@@ -176,12 +217,56 @@ func (b screenBody) check() *apiError {
 	return nil
 }
 
+// checkMap bounds the map's and the crop's fields.
+func (b screenBody) checkMap() *apiError {
+	bad := func(field, msg string) *apiError { return invalidFields(map[string]string{field: msg}) }
+	for name, v := range map[string]int{"w": b.W, "h": b.H} {
+		if v != 0 && (v < screenMapSideMin || v > screenMapSideMax) {
+			return bad(name, fmt.Sprintf("%d to %d points (0: 600×400).", screenMapSideMin, screenMapSideMax))
+		}
+	}
+	if b.Scale < 0 || b.Scale > 2 {
+		return bad("scale", "1 or 2 pixels per point (0: 2).")
+	}
+	if len(b.Pins) > screenPinsMax {
+		return bad("pins", fmt.Sprintf("At most %d pins.", screenPinsMax))
+	}
+	for _, p := range b.Pins {
+		if !placeOK(p.Lat, p.Lon) {
+			return bad("pins", "A pin's lat is −90 to 90 and its lon −180 to 180.")
+		}
+	}
+	if (b.Lat != nil && (*b.Lat < -90 || *b.Lat > 90)) || (b.Lon != nil && (*b.Lon < -180 || *b.Lon > 180)) {
+		return bad("lat", "lat is −90 to 90 and lon −180 to 180.")
+	}
+	if b.SpanM != 0 && (b.SpanM < screenSpanMin || b.SpanM > screenSpanMax) {
+		return bad("span_m", fmt.Sprintf("%.0f to %d metres.", screenSpanMin, screenSpanMax))
+	}
+	if c := b.Crop; c != nil && (c.X < 0 || c.Y < 0 || c.X > screenPointMax || c.Y > screenPointMax ||
+		c.W < 1 || c.H < 1 || c.W > screenPointMax || c.H > screenPointMax) {
+		return bad("crop", "x and y 0 or more, w and h 1 or more, in the screen's pixels.")
+	}
+	return nil
+}
+
+func placeOK(lat, lon float64) bool {
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
 func (b screenBody) request() proto.ScreenRequest {
 	r := proto.ScreenRequest{Op: b.Op, X: b.X, Y: b.Y, ToX: b.ToX, ToY: b.ToY, Button: b.Button, Clicks: b.Clicks,
 		DX: b.DX, DY: b.DY, Text: b.Text, Keys: b.Keys, MaxW: b.MaxW, Format: b.Format, App: b.App, Window: b.Window,
-		Name: b.Name, Role: b.Role, Index: b.Index, Path: b.Path, Limit: b.Limit, Target: b.Target}
+		Name: b.Name, Role: b.Role, Index: b.Index, Path: b.Path, Limit: b.Limit, Target: b.Target,
+		Action: b.Action, Queries: b.Queries, W: b.W, H: b.H, Scale: b.Scale, Dark: b.Dark, Lat: b.Lat, Lon: b.Lon,
+		SpanM: b.SpanM}
 	if b.Account != nil {
 		r.Account = &proto.ScreenAccount{User: b.Account.User, Password: b.Account.Password}
+	}
+	for _, p := range b.Pins {
+		r.Pins = append(r.Pins, proto.MapPin{Lat: p.Lat, Lon: p.Lon})
+	}
+	if c := b.Crop; c != nil {
+		r.Crop = &proto.ScreenCrop{X: c.X, Y: c.Y, W: c.W, H: c.H}
 	}
 	return r
 }
@@ -221,6 +306,7 @@ func (b screenBody) auditDetails() map[string]string {
 	}
 	set("app", b.App)
 	set("name", b.Name)
+	set("action", b.Action)
 	set("role", b.Role)
 	if b.Index > 0 {
 		d["index"] = strconv.Itoa(b.Index)
@@ -248,12 +334,17 @@ func (h *Hub) apiScreen(w http.ResponseWriter, r *http.Request, p *principal) er
 	}
 	operatorOp := slices.Contains(screenOperatorOps, body.Op)
 	details := body.auditDetails()
-	if slices.Contains(screenReads, body.Op) {
+	switch {
+	case slices.Contains(screenReads, body.Op):
 		// What a look asked for, never what it saw: the op and the app.
 		details = map[string]string{}
 		if body.App != "" {
 			details["app"] = cleanText(body.App, 200)
 		}
+	case slices.Contains(screenPlaces, body.Op):
+		// Where people are is never kept: not the addresses looked up, not
+		// the places on a map.
+		details = map[string]string{}
 	}
 	details["op"] = body.Op
 	deny := func(e *apiError) error {
@@ -315,7 +406,13 @@ func (h *Hub) apiScreen(w http.ResponseWriter, r *http.Request, p *principal) er
 	case "remote_control_disabled":
 		return apiErr(http.StatusForbidden, "host_shell_disabled", model.ReasonAgentShell+".")
 	case "unsupported":
-		return apiErr(http.StatusNotImplemented, "unsupported", "This server's agent can't reach a screen (not a Mac, or an older agent).")
+		// The agent says why: no screen, or a Whombat Helper older than the
+		// step (it updates itself).
+		msg := cleanText(resp.Message, 300)
+		if msg == "" {
+			msg = "This server's agent can't reach a screen (not a Mac, or an older agent)."
+		}
+		return apiErr(http.StatusNotImplemented, "unsupported", msg)
 	case "invalid_request":
 		msg := resp.Message
 		if msg == "" {
@@ -401,8 +498,44 @@ func screenAnswer(serverID, op string, resp proto.ScreenResponse) (map[string]an
 	if resp.Truncated {
 		out["truncated"] = true
 	}
+	if resp.Places != nil || op == proto.ScreenMapGeocode && resp.OK {
+		places := make([]any, 0, len(resp.Places))
+		for i, p := range resp.Places {
+			if i >= screenQueriesMax {
+				break
+			}
+			if p == nil || !placeOK(p.Lat, p.Lon) || !realNumber(p.AccuracyM) || p.AccuracyM < 0 {
+				places = append(places, nil)
+				continue
+			}
+			places = append(places, map[string]any{"lat": p.Lat, "lon": p.Lon, "accuracy_m": math.Round(p.AccuracyM)})
+		}
+		out["places"] = places
+	}
+	if resp.Points != nil || op == proto.ScreenMapSnapshot && resp.OK {
+		points := make([]any, 0, len(resp.Points))
+		for i, p := range resp.Points {
+			if i >= screenPinsMax {
+				break
+			}
+			if p == nil || !realNumber(p.X) || !realNumber(p.Y) {
+				points = append(points, nil)
+				continue
+			}
+			points = append(points, map[string]any{"x": p.X, "y": p.Y})
+		}
+		out["points"] = points
+	}
+	if resp.Lat != nil && resp.Lon != nil && placeOK(*resp.Lat, *resp.Lon) {
+		out["lat"], out["lon"] = *resp.Lat, *resp.Lon
+	}
+	if realNumber(resp.SpanM) && resp.SpanM > 0 {
+		out["span_m"] = math.Round(resp.SpanM)
+	}
 	return out, nil
 }
+
+func realNumber(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 
 func uiElementJSON(e proto.UIElement) map[string]any {
 	actions := []string{}
@@ -428,8 +561,10 @@ func screenStatusJSON(s proto.MacScreen) map[string]any {
 	return out
 }
 
-// screenHelperJSON is Whombat Helper as the REST API shows it.
+// screenHelperJSON is Whombat Helper as the REST API shows it; idle_s
+// (seconds since the last input at the Mac itself) is null when unknown or
+// outside the status step.
 func screenHelperJSON(h proto.MacHelper) map[string]any {
 	return map[string]any{"installed": h.Installed, "version": cleanText(h.Version, 64), "running": h.Running,
-		"ax": h.Accessibility, "user": cleanText(h.User, 64)}
+		"ax": h.Accessibility, "user": cleanText(h.User, 64), "idle_s": h.IdleS}
 }
