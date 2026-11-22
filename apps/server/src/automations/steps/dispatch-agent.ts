@@ -51,6 +51,28 @@ import { placeFor } from './thread';
 import type { StepExecution } from './types';
 import { checkoutWords, requestLine, stepInstructions } from './words';
 
+/**
+ * Whether this step's prompt is the run's first agent turn, which carries the files of what started the run: no agent
+ * step of the run (this one in an earlier attempt included) posted a prompt yet. Otherwise the ids this step kept from
+ * an earlier attempt, if any.
+ */
+export function handoverOf(
+  run: Pick<AutomationRunRow, 'definition'>,
+  steps: readonly Pick<AutomationStepRow, 'idx' | 'promptMessageId' | 'output'>[],
+  idx: number,
+): { first: true } | { first: false; kept: string[] | null } {
+  const turned = steps.some(
+    (s) => !!s.promptMessageId && run.definition.steps[s.idx]?.kind === 'dispatch_agent',
+  );
+  if (!turned) return { first: true };
+  const kept = (steps.find((s) => s.idx === idx)?.output as { triggerFileIds?: unknown } | undefined)
+    ?.triggerFileIds;
+  return {
+    first: false,
+    kept: Array.isArray(kept) ? kept.filter((x): x is string => typeof x === 'string') : null,
+  };
+}
+
 export async function executeDispatchAgent({
   ctx,
   run,
@@ -173,8 +195,12 @@ export async function executeDispatchAgent({
       return;
     }
   }
-  // The prompt that starts the run's thread carries the files of the message that started the run (OA-S101).
-  const files = place.startsThread ? await triggerFileCopies(ctx, run, conversation.id) : [];
+  // The run's first agent prompt carries the files of what started the run (OA-S101; the email's, for a mail run), once,
+  // whatever step came before it (a posted message may have started the thread). Their ids are kept on the step: only
+  // those files may be uploaded by what the run proposes. A later turn, or this step tried again, gets none.
+  const handover = handoverOf(run, steps, idx);
+  const files = handover.first ? await triggerFileCopies(ctx, run, conversation.id) : [];
+  const triggerFileIds = handover.first ? files.map((f) => f.id) : handover.kept;
   // People see one line (“@Dusty Assess it: #5 “…””); the instructions go to the agent with its turn (CNR-08).
   const posted = await postMessage(ctx, {
     conversation,
@@ -252,6 +278,7 @@ export async function executeDispatchAgent({
       output: {
         agentId: agent.id,
         instructions: prompt,
+        ...(triggerFileIds ? { triggerFileIds } : {}),
         ...(workspace ? { workspace: { ...workspace } } : {}),
         ...(branchApprovalId ? { branchApprovalId } : {}),
       },

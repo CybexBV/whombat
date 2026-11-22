@@ -1,23 +1,25 @@
 /**
  * The approval card for what an outsiders' run proposes (an automation started by an email). The card is the only thing
  * between a stranger's email and the person's services, so it shows everything that decides what happens — the
- * connection, the method and path or the tool, the base, the uploaded file, every argument however deep, every header
- * — with only secrets masked, and when that doesn't fit on one card the proposal is refused. Nothing is ever cut.
- *
- * The same reading of the arguments finds what an outsiders' run may never propose: deleting, removing or emptying
- * anything, whatever the call is named or wherever in its arguments it says so.
+ * connection, the method and path or the tool, the base, the email's file, every argument however deep, every header
+ * — and hides nothing (an outsiders' run can't propose a value named like a password or key: `listed-actions.ts`). A
+ * value too long for one line goes on as numbered parts; when the whole doesn't fit on one card the proposal is
+ * refused. Nothing is ever cut.
  */
 import { catalogEntry } from '@whombat/core';
 import { asQuestion } from '../approvals/create';
-import { ConnectionArgumentError } from '../connections/request';
+import { ConnectionArgumentError, formatBytes } from '../connections/request';
 import type { ConnectionToolRow } from '../connections/types';
-import { actionWords } from './action-words';
+import { listedWords } from './listed-actions';
 
-/** The longest line a card shows (an approval's WHAT HAPPENS item). */
+/** The longest line a card shows (an approval's WHAT HAPPENS item, AR-D02). */
 export const CARD_LINE_MAX = 280;
-/** The most lines one card shows, and the most characters all of them hold together. */
-export const CARD_LINES_MAX = 48;
-export const CARD_TEXT_MAX = 6000;
+/**
+ * The most lines one card shows, and the most characters all of them hold together: room for a ten-line invoice beside
+ * an upload, or a long note, and still something a person reads before saying yes.
+ */
+export const CARD_LINES_MAX = 200;
+export const CARD_TEXT_MAX = 30_000;
 /** How deep inside the arguments a value may sit, and how many values they may hold, and still be read. */
 const DEPTH_MAX = 12;
 const VALUES_MAX = 500;
@@ -25,121 +27,7 @@ const VALUES_MAX = 500;
 const TITLE_MAX = 160;
 
 /** What the agent hears when the proposal can't be shown in full. */
-export const TOO_MUCH_FOR_ONE_CARD = 'Too much to show on one card: propose fewer or smaller actions.';
-
-/* Words ------------------------------------------------------------------------------------------ */
-
-/** The words of a name or value, in lower case: `deleteFile`, `purge_cache`, `clients/delete`, `pool.dataset.delete`. */
-export function wordsOf(text: string): string[] {
-  return text
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .replace(/([A-Za-z])([0-9])/g, '$1 $2')
-    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-}
-
-/** Words that mean deleting, removing or emptying something. */
-const DELETING: ReadonlySet<string> = new Set([
-  'delete',
-  'deletes',
-  'deletion',
-  'del',
-  'remove',
-  'removes',
-  'removal',
-  'rm',
-  'rmdir',
-  'purge',
-  'trash',
-  'clear',
-  'reset',
-  'wipe',
-  'destroy',
-  'unlink',
-  'erase',
-  'drop',
-  'empty',
-  'flush',
-  'truncate',
-]);
-
-/** Of those, the ones that switch deleting on wherever they sit in a key's name (`force_delete`, `hardDelete`). */
-const DELETING_ANYWHERE: ReadonlySet<string> = new Set([
-  'delete',
-  'deletion',
-  'purge',
-  'wipe',
-  'destroy',
-  'erase',
-  'trash',
-  'unlink',
-  'rm',
-  'rmdir',
-  'truncate',
-]);
-
-/** Words of a key that says what a call does: `method`, `action`, `op`, `bulkAction`, `operationType`, `api`. */
-const DOING_KEYS: ReadonlySet<string> = new Set([
-  'method',
-  'action',
-  'actions',
-  'operation',
-  'operations',
-  'op',
-  'ops',
-  'command',
-  'commands',
-  'cmd',
-  'type',
-  'mode',
-  'verb',
-  'api',
-  'intent',
-]);
-
-/** Keys whose value is code or a statement a service runs: read whole for deleting words. */
-const CODE_KEYS: ReadonlySet<string> = new Set([
-  'code',
-  'script',
-  'sql',
-  'javascript',
-  'js',
-  'python',
-  'shell',
-  'bash',
-  'mutation',
-]);
-
-/** Words of a key whose value is a secret: masked on the card. */
-const SECRET_WORDS: ReadonlySet<string> = new Set([
-  'token',
-  'tokens',
-  'password',
-  'passwords',
-  'passwd',
-  'passphrase',
-  'secret',
-  'secrets',
-  'cookie',
-  'cookies',
-  'credential',
-  'credentials',
-  'authorization',
-  'auth',
-  'bearer',
-  'apikey',
-  'privatekey',
-]);
-const SECRET_JOINED = /apikey|privatekey|accesskey|secretkey|sessionid|clientsecret/;
-
-/** Whether a key (an argument, a header) names a secret: a token, a password, an API key, an authorization header. */
-export function isSecretKey(key: string): boolean {
-  const words = wordsOf(key);
-  return words.some((w) => SECRET_WORDS.has(w)) || SECRET_JOINED.test(words.join(''));
-}
+export const TOO_MUCH_FOR_ONE_CARD = `Too much to show on one card (at most ${CARD_LINES_MAX} lines): propose fewer or shorter actions.`;
 
 /* Reading the arguments -------------------------------------------------------------------------- */
 
@@ -152,8 +40,6 @@ interface ArgValue {
   key: string;
   /** A plain value, a list of plain values, or an empty object or list. */
   value: unknown;
-  /** The secret key it sits under (shown masked as one line), or null. */
-  secret: string | null;
 }
 
 interface Reading {
@@ -202,43 +88,33 @@ function childPath(path: string, key: string): string {
   return path ? `${path}.${key}` : key;
 }
 
-function read(
-  value: unknown,
-  path: string,
-  key: string,
-  secret: string | null,
-  depth: number,
-  out: Reading,
-): void {
+function read(value: unknown, path: string, key: string, depth: number, out: Reading): void {
   if (value === undefined || out.overflow) return;
   if (depth > DEPTH_MAX || out.values.length >= VALUES_MAX) {
     out.overflow = true;
     return;
   }
   if (isPlain(value) || (Array.isArray(value) && value.every(isPlain))) {
-    out.values.push({ path, key, value, secret });
+    out.values.push({ path, key, value });
     return;
   }
   if (Array.isArray(value)) {
     value.forEach((item, i) => {
-      read(item, `${path}[${i}]`, key, secret, depth + 1, out);
+      read(item, `${path}[${i}]`, key, depth + 1, out);
     });
     return;
   }
   if (typeof value !== 'object') {
     // Nothing JSON holds besides these; shown as text rather than dropped.
-    out.values.push({ path, key, value: String(value), secret });
+    out.values.push({ path, key, value: String(value) });
     return;
   }
   const entries = Object.entries(value as Record<string, unknown>);
   if (!entries.length) {
-    out.values.push({ path, key, value, secret });
+    out.values.push({ path, key, value });
     return;
   }
-  for (const [k, v] of entries) {
-    const at = childPath(path, k);
-    read(v, at, k, secret ?? (isSecretKey(k) ? at : null), depth + 1, out);
-  }
+  for (const [k, v] of entries) read(v, childPath(path, k), k, depth + 1, out);
 }
 
 /** A raw text body sent as a form (`a=1&b=2`): every field, duplicates included. */
@@ -314,221 +190,39 @@ function readArgs(origin: ConnectionToolRow['origin'], args: Readonly<Record<str
     // The socket's method is on its own line; everything else is read as it is.
     for (const [k, v] of Object.entries(args)) {
       if (origin === 'socket' && k === 'method') continue;
-      read(v, childPath('', k), k, isSecretKey(k) ? childPath('', k) : null, 1, out);
+      read(v, childPath('', k), k, 1, out);
     }
     return out;
   }
-  read(args.query, 'query', 'query', null, 1, out);
+  read(args.query, 'query', 'query', 1, out);
   if (args.headers && typeof args.headers === 'object' && !Array.isArray(args.headers)) {
     for (const [name, value] of Object.entries(args.headers as Record<string, unknown>)) {
-      const at = childPath('headers', name);
-      const secret = isSecretKey(name) ? at : null;
       const json = typeof value === 'string' && /^\s*[[{]/.test(value) ? parsedJson(value) : null;
-      read(json ?? value, at, name, secret, 2, out);
+      read(json ?? value, childPath('headers', name), name, 2, out);
     }
-  } else read(args.headers, 'headers', 'headers', null, 1, out);
+  } else read(args.headers, 'headers', 'headers', 1, out);
   const body = args.body;
   if (typeof body === 'string') {
     const type = headerValue(args.headers, 'content-type');
     const json = readsAsJson(body, type) ? parsedJson(body) : null;
-    if (json) read(json, 'body', 'body', null, 1, out);
+    if (json) read(json, 'body', 'body', 1, out);
     else if (/x-www-form-urlencoded/i.test(type) || (!type && FORM_TEXT.test(body))) {
-      for (const [k, v] of new URLSearchParams(body)) {
-        const at = childPath('body', k);
-        read(v, at, k, isSecretKey(k) ? at : null, 2, out);
-      }
-    } else read(body, 'body', 'body', null, 1, out);
-  } else read(body, 'body', 'body', null, 1, out);
+      for (const [k, v] of new URLSearchParams(body)) read(v, childPath('body', k), k, 2, out);
+    } else read(body, 'body', 'body', 1, out);
+  } else read(body, 'body', 'body', 1, out);
   const upload = args.upload;
   if (upload && typeof upload === 'object' && !Array.isArray(upload)) {
     for (const [k, v] of Object.entries(upload as Record<string, unknown>)) {
       // The file itself is its own line, by name.
       if (k === 'attachmentId' || k === 'field') continue;
-      read(v, childPath('upload', k), k, isSecretKey(k) ? childPath('upload', k) : null, 2, out);
+      read(v, childPath('upload', k), k, 2, out);
     }
   }
   for (const [k, v] of Object.entries(args)) {
     if (REQUEST_ARGS.has(k)) continue;
-    read(v, childPath('', k), k, isSecretKey(k) ? childPath('', k) : null, 1, out);
+    read(v, childPath('', k), k, 1, out);
   }
   return out;
-}
-
-/* What an outsiders' run may never propose ------------------------------------------------------- */
-
-const TRUTHY = new Set(['true', '1', 'yes', 'on']);
-const truthy = (v: unknown) =>
-  v === true || v === 1 || (typeof v === 'string' && TRUTHY.has(v.toLowerCase()));
-
-function deletingIn(texts: readonly unknown[]): string | null {
-  for (const t of texts) {
-    if (typeof t !== 'string') continue;
-    const found = wordsOf(t).find((w) => DELETING.has(w));
-    if (found) return found;
-  }
-  return null;
-}
-
-function decoded(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
-/**
- * The word that makes a call delete, remove or empty something, or null: in the tool's name, a path segment, the value
- * of a key that says what the call does (`method: "delete"`, `op: "remove"`, `api: "SYNO.FileStation.Delete"`), a key
- * that switches deleting on (`deleteFiles: true`, `delete_originals: "true"`), or code a service runs (a GraphQL
- * mutation, SQL) — in nested values, raw JSON or form bodies and JSON headers alike.
- */
-export function deletingWord(
-  tool: Pick<ConnectionToolRow, 'name' | 'origin'>,
-  args: Readonly<Record<string, unknown>>,
-): string | null {
-  const named = deletingIn([tool.name]);
-  if (named) return named;
-  if (tool.origin === 'request' && typeof args.path === 'string') {
-    const inPath = deletingIn(args.path.split('/').map(decoded));
-    if (inPath) return inPath;
-  }
-  for (const v of readArgs(tool.origin, args).values) {
-    const keyWords = wordsOf(v.key);
-    const texts = Array.isArray(v.value) ? v.value : [v.value];
-    if (keyWords.some((w) => DOING_KEYS.has(w))) {
-      const found = deletingIn(texts);
-      if (found) return found;
-    }
-    if (
-      truthy(v.value) &&
-      ((keyWords[0] && DELETING.has(keyWords[0])) || keyWords.some((w) => DELETING_ANYWHERE.has(w)))
-    )
-      return keyWords.find((w) => DELETING.has(w)) ?? null;
-    const code =
-      keyWords.some((w) => CODE_KEYS.has(w)) ||
-      (v.key === 'query' && typeof v.value === 'string' && /^\s*mutation\b/i.test(v.value));
-    if (code) {
-      const found = deletingIn(texts);
-      if (found) return found;
-    }
-  }
-  // A socket's method is read apart from its arguments.
-  if (tool.origin === 'socket' && typeof args.method === 'string') return deletingIn([args.method]);
-  return null;
-}
-
-/** Words that name who can get in or what they may see: users, permissions, sharing, passwords, keys. */
-const ACCESS: ReadonlySet<string> = new Set([
-  'users',
-  'groups',
-  'permission',
-  'permissions',
-  'perms',
-  'acl',
-  'acls',
-  'role',
-  'roles',
-  'member',
-  'members',
-  'membership',
-  'memberships',
-  'collaborator',
-  'collaborators',
-  'invite',
-  'invites',
-  'invitation',
-  'invitations',
-  'share',
-  'shares',
-  'sharing',
-  'owner',
-  'owners',
-  'superuser',
-  'admin',
-  'password',
-  'passwords',
-  'passwd',
-  'passphrase',
-  'credential',
-  'credentials',
-  'token',
-  'tokens',
-  'apikey',
-  'apikeys',
-  'auth',
-  'oauth',
-  'sso',
-  'mfa',
-  'totp',
-  'ssh',
-]);
-
-/** Of those, the ones a key's name says it sets, whatever its value (`set_permissions`, `owner`, `password`). */
-const ACCESS_KEYS: ReadonlySet<string> = new Set([
-  'permission',
-  'permissions',
-  'perms',
-  'acl',
-  'acls',
-  'role',
-  'roles',
-  'member',
-  'members',
-  'collaborator',
-  'collaborators',
-  'share',
-  'shares',
-  'owner',
-  'owners',
-  'superuser',
-  'password',
-  'passwords',
-  'passwd',
-  'passphrase',
-  'credential',
-  'credentials',
-]);
-
-function accessIn(texts: readonly unknown[]): string | null {
-  for (const t of texts) {
-    if (typeof t !== 'string') continue;
-    const words = wordsOf(t);
-    const found = words.find((w) => ACCESS.has(w)) ?? (/apikey/.test(words.join('')) ? 'API key' : null);
-    if (found) return found;
-  }
-  return null;
-}
-
-/**
- * The word that makes a call change who can get in or what they may see, or null: users, groups, permissions, roles,
- * members, invitations, sharing, owners, passwords, tokens and keys, named in the tool, a path segment or what a
- * `method`-like key says, or set by a key of those names anywhere in the arguments.
- */
-export function accessWord(
-  tool: Pick<ConnectionToolRow, 'name' | 'origin'>,
-  args: Readonly<Record<string, unknown>>,
-): string | null {
-  const named = accessIn([tool.name]);
-  if (named) return named;
-  if (tool.origin === 'request' && typeof args.path === 'string') {
-    const inPath = accessIn(args.path.split('/').map(decoded));
-    if (inPath) return inPath;
-  }
-  if (tool.origin === 'socket' && typeof args.method === 'string') {
-    const inMethod = accessIn([args.method]);
-    if (inMethod) return inMethod;
-  }
-  for (const v of readArgs(tool.origin, args).values) {
-    const keyWords = wordsOf(v.key);
-    const setting = keyWords.find((w) => ACCESS_KEYS.has(w));
-    if (setting) return setting;
-    if (keyWords.some((w) => DOING_KEYS.has(w))) {
-      const found = accessIn(Array.isArray(v.value) ? v.value : [v.value]);
-      if (found) return found;
-    }
-  }
-  return null;
 }
 
 /* The card ---------------------------------------------------------------------------------------- */
@@ -538,6 +232,43 @@ function shown(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(shown).join(', ')}]`;
   if (value && typeof value === 'object') return '{}';
   return String(value);
+}
+
+/**
+ * A value as the card's lines: `where: value` on one line, else a list item by item, else a text in numbered parts
+ * (`where (part 1 of 3): "…"`), each part quoted and whole, broken after a space where one is near.
+ */
+export function valueLines(where: string, value: unknown): string[] {
+  const one = `${where}: ${shown(value)}`;
+  if (one.length <= CARD_LINE_MAX) return [one];
+  if (Array.isArray(value)) return value.flatMap((v, i) => valueLines(`${where}[${i}]`, v));
+  if (typeof value !== 'string') return [one];
+  // Room for a part's text once its label and quotes are on the line, whatever its number.
+  const room = CARD_LINE_MAX - `${where} (part 9999 of 9999): ""`.length;
+  if (room < 40) return [one];
+  const parts: string[] = [];
+  let part: string[] = [];
+  let size = 0;
+  let space = -1;
+  for (const ch of value) {
+    const width = quoted(ch).length - 2;
+    if (size + width > room) {
+      // Break after the last space when it isn't far back, so words stay whole.
+      const cut = space >= 0 && space >= part.length - 40 ? space + 1 : part.length;
+      parts.push(part.slice(0, cut).join(''));
+      part = part.slice(cut);
+      size = part.reduce((n, c) => n + quoted(c).length - 2, 0);
+      space = -1;
+      part.forEach((c, i) => {
+        if (/\s/.test(c)) space = i;
+      });
+    }
+    part.push(ch);
+    size += width;
+    if (/\s/.test(ch)) space = part.length - 1;
+  }
+  if (part.length) parts.push(part.join(''));
+  return parts.map((p, i) => `${where} (part ${i + 1} of ${parts.length}): ${quoted(p)}`);
 }
 
 /** One proposed action as the card shows it. */
@@ -552,22 +283,43 @@ export interface DescribedAction {
   overflow: boolean;
 }
 
+/** The email's file a call sends, as the card names it. */
+export interface CardFile {
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+/** The lines for the email's file: its name, type and size, and how it is sent. */
+function fileLines(file: CardFile | null | undefined, field: unknown): string[] {
+  const how =
+    typeof field === 'string' ? `sent as form field ${quoted(field)}` : 'sent as the whole request body';
+  const kind = `${visible(file?.contentType || 'unknown type')}, ${formatBytes(file?.size ?? 0)}`;
+  const one = `File from this email: ${quoted(file?.name ?? '')} (${kind}), ${how}`;
+  if (one.length <= CARD_LINE_MAX) return [one];
+  return [
+    ...valueLines('File from this email', file?.name ?? ''),
+    `File type and size: ${kind}`,
+    `File ${how}`,
+  ];
+}
+
 /**
  * One validated action as the card shows it: Whombat's words, then the method and path (or socket method, or tool),
- * the base, the uploaded file, every argument as `where: value` (secrets masked), and the agent's own note last.
- * `uploadFileName` is the attachment's name; `summary` the agent's words, shown only as its note.
+ * the base, the email's file, every argument as `where: value`, and the agent's own note last. `uploadFile` is the
+ * email's file the call sends; `summary` the agent's words, shown only as its note.
  */
 export function describePlannedAction(input: {
   catalogId: string;
   label: string;
   tool: Pick<ConnectionToolRow, 'name' | 'origin'>;
   args: Readonly<Record<string, unknown>>;
-  uploadFileName?: string | null;
+  uploadFile?: CardFile | null;
   summary?: string;
 }): DescribedAction {
   const { tool, args } = input;
   const label = input.label.replace(/\s+/g, ' ').trim() || 'the service';
-  const words = actionWords({ catalogId: input.catalogId, label, tool: tool.name, args });
+  const words = listedWords({ catalogId: input.catalogId, label, tool, args });
   const lines = [words.ask];
   if (tool.origin === 'request') {
     lines.push(`Request: ${visible(String(args.method ?? ''))} ${visible(String(args.path ?? ''))}`);
@@ -577,22 +329,13 @@ export function describePlannedAction(input: {
       lines.push(`Base: ${quoted(args.base)}${url ? ` (${visible(url)})` : ''}`);
     }
     const upload = args.upload as { field?: unknown } | undefined;
-    if (upload && typeof upload === 'object')
-      lines.push(
-        `File from this email: ${quoted(input.uploadFileName ?? '')}, sent as form field ${quoted(String(upload.field ?? ''))}`,
-      );
+    if (upload && typeof upload === 'object') lines.push(...fileLines(input.uploadFile, upload.field));
   } else if (tool.origin === 'socket') lines.push(`Method: ${visible(String(args.method ?? ''))}`);
   else lines.push(`Tool: ${visible(tool.name)}`);
   const reading = readArgs(tool.origin, args);
-  const masked = new Set<string>();
-  for (const v of reading.values) {
-    if (v.secret) {
-      if (!masked.has(v.secret)) lines.push(`${v.secret}: hidden (it looks like a password or key)`);
-      masked.add(v.secret);
-    } else lines.push(`${v.path}: ${shown(v.value)}`);
-  }
+  for (const v of reading.values) lines.push(...valueLines(v.path, v.value));
   const note = (input.summary ?? '').replace(/\s+/g, ' ').trim();
-  if (note) lines.push(`Agent’s note: ${quoted(note)}`);
+  if (note) lines.push(...valueLines('Agent’s note', note));
   return { ask: words.ask, done: words.done, lines, overflow: reading.overflow };
 }
 

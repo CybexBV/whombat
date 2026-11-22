@@ -19,20 +19,16 @@ import {
   type ProposedConnectionAction,
   REQUEST_TOOL_NAME,
   requestAllowed,
-  resolveRequestPrefixes,
   sensitiveReason,
-  toolAlwaysAsks,
 } from '@whombat/core';
-import { and, asc, eq, or } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { callTier, needsReauthText } from '../connections/call';
 import { connectionCallAccess } from '../connections/call-access';
-import { isCallableEntry } from '../connections/callable';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../connections/request';
-import { normaliseSocketArgs } from '../connections/socket/call';
 import type { ConnectionToolRow } from '../connections/types';
 import type { Db, Tx } from '../db/client';
 import {
@@ -43,7 +39,6 @@ import {
   catalogConnections,
   connectionTools,
   dispatches,
-  messages,
 } from '../db/schema/index';
 import { limitWordsFor } from '../devices/store';
 import type { AttachmentRow } from '../files/service';
@@ -52,10 +47,10 @@ import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
+import { isProposableEntry, listedHowTo, secretKeyOf, settleListed, whatMailCanDo } from './listed-actions';
 import {
-  accessWord,
+  type CardFile,
   type DescribedAction,
-  deletingWord,
   describePlannedAction,
   type ProposalCard,
   proposalCard,
@@ -64,96 +59,98 @@ import {
 } from './proposed-card';
 import { type AutomationRunRow, type AutomationStepRow, publishRun } from './store';
 
-/** Built-in or powerful host-control catalog entries that outsiders' runs may never propose actions on. */
-const DISALLOWED_PROPOSE_CATALOG_IDS: ReadonlySet<string> = new Set(['whombat_servers', 't3code']);
+export { isProposableEntry };
+
+export type OutsidersCall = { ok: true; args: Record<string, unknown> } | { ok: false; reason: string };
 
 /**
- * Whether an outsiders' run may propose actions on this catalog entry: never the box's own powerful connections
- * (Servers, T3 Code, devices, or any other built-in that runs commands or controls machines).
+ * A call an outsiders' run proposes, as Whombat would send it, or why it can't be: only a listed action
+ * (`listed-actions.ts`) on a kind of connection that has them, with every argument as its schema says and the
+ * create-only parts set by Whombat; never a value named like a password or key (an outsiders' turn has none, so it could
+ * only come from the email); and, as a second check, never what the connection always asks about, what can cut the
+ * person off, or a read. Checked when the agent proposes, when the card is made and again before anything runs, so
+ * the same arguments come out each time. `name` is how a refusal names the connection: the handle the agent used, or
+ * the person's own label on their run page.
  */
-export function isProposableEntry(entry: CatalogEntry): boolean {
-  return (
-    isCallableEntry(entry) && entry.transport !== 'builtin' && !DISALLOWED_PROPOSE_CATALOG_IDS.has(entry.id)
-  );
-}
-
-/** “Deletes something” as the end of a sentence: “… because it deletes something.” */
-function becauseIt(reason: string): string {
-  if (reason === 'Always asks') return 'always needs your yes';
-  return reason.charAt(0).toLowerCase() + reason.slice(1).replace(/[.\s]+$/, '');
-}
-
-/**
- * Plain-English refusal when a proposed call falls outside the narrow surface allowed for outsiders' runs: a disallowed
- * connection; a read (`GET`/`HEAD`, or any call that only reads), whose results are thrown away; a `DELETE` request;
- * anything that deletes, removes or empties (`deletingWord`: the tool's name, a path segment, what a `method`- or
- * `action`-like value or a delete switch says, anywhere in the arguments); changing who can get in or what they may see
- * (`accessWord`: users, permissions, sharing, passwords, keys); and anything the connection always asks the
- * person about (its `sensitive` rules) or that can cut the person off (its `cutsOff` rules: DNS, DHCP, firewalls).
- */
-export function proposeCallRefusal(
+export function outsidersCall(
   entry: CatalogEntry,
+  conn: { fields: Readonly<Record<string, string>> },
   tool: Pick<ConnectionToolRow, 'name' | 'access' | 'origin'>,
-  args: Readonly<Record<string, unknown>>,
-  serviceName: string,
-): string | null {
-  if (!isProposableEntry(entry)) {
-    return `Actions on ${serviceName} can’t be proposed from an outsiders’ run.`;
-  }
-  if (tool.origin === 'request') {
-    const method = String(args.method ?? '').toUpperCase();
-    if (method === 'DELETE') {
-      return `${serviceName}: DELETE requests can’t be proposed from an outsiders’ run.`;
-    }
-    if (method === 'GET' || method === 'HEAD') {
-      return `${serviceName}: read-only ${method} requests can’t be proposed because their results aren’t returned.`;
-    }
-  }
-  const deleting = deletingWord(tool, args);
-  if (deleting) {
-    return `${serviceName}: an outsiders’ run can’t propose deleting, removing or emptying anything, and this call says “${deleting}”.`;
-  }
-  const access = accessWord(tool, args);
-  if (access) {
-    return `${serviceName}: an outsiders’ run can’t propose changing who can get in or what they may see, and this call says “${access}”.`;
-  }
-  const reason = sensitiveReason(entry, tool.name, args) ?? cutsOffReason(entry, tool.name, args);
-  if (reason) {
-    return `${serviceName}: an outsiders’ run can’t propose this, because it ${becauseIt(reason)}.`;
-  }
-  if (connectionCallAccess(entry, tool, args) === 'read') {
-    return `${serviceName}: read-only calls can’t be proposed because their results aren’t returned.`;
-  }
-  return null;
-}
-
-/**
- * A proposed `request` call's arguments as Whombat decides on, shows and sends them (method and path canonical, a body
- * written as JSON text read as that JSON, a `base` that is one of the connection's), or why they can't be used.
- */
-export function proposedRequestArgs(
-  entry: CatalogEntry,
   raw: Readonly<Record<string, unknown>>,
-  serviceName: string,
-): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
-  let args: Record<string, unknown>;
-  try {
-    args = settledRequestArgs(normaliseRequestArgs(raw));
-  } catch (err) {
+  name: string,
+): OutsidersCall {
+  if (!isProposableEntry(entry))
     return {
       ok: false,
-      reason: `${serviceName}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
+      reason: `Actions on ${name} can’t be proposed from an outsiders’ run. ${whatMailCanDo()}`,
     };
+  const secret = secretKeyOf(raw);
+  if (secret)
+    return {
+      ok: false,
+      reason: `${name}: an outsiders’ run has no passwords or keys, so it can’t propose a value named “${secret}”: it could only have come from the email.`,
+    };
+  let args: Record<string, unknown> = { ...raw };
+  if (tool.origin === 'request') {
+    try {
+      args = settledRequestArgs(normaliseRequestArgs(raw));
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `${name}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
+      };
+    }
   }
-  const base = args.base;
+  const settled = settleListed(entry.id, tool, args, conn.fields);
+  if (!settled.ok)
+    return {
+      ok: false,
+      reason: settled.listed
+        ? `${name}: ${settled.reason}`
+        : `${name}: a mail automation can’t propose this. ${settled.reason}`,
+    };
+  args = settled.args;
   if (
-    base !== undefined &&
-    base !== null &&
-    base !== '' &&
-    !(typeof base === 'string' && Object.hasOwn(entry.request?.bases ?? {}, base))
+    tool.origin === 'request' &&
+    !requestAllowed(entry, conn.fields, String(args.method), String(args.path))
   )
-    return { ok: false, reason: `${serviceName}: base: not one of this connection’s bases.` };
+    return { ok: false, reason: `${name} doesn’t allow ${String(args.method)} ${String(args.path)}.` };
+  // The second check reads what the call is (its method and path, or its tool), never the text in its values: those are
+  // the listed action's own (a notification that mentions a door unlocks nothing).
+  const what = tool.origin === 'request' ? { method: args.method, path: args.path } : {};
+  const reason = sensitiveReason(entry, tool.name, what) ?? cutsOffReason(entry, tool.name, what);
+  if (reason)
+    return {
+      ok: false,
+      reason: `${name}: an outsiders’ run can’t propose this (${reason.replace(/[.\s]+$/, '').toLowerCase()}).`,
+    };
+  if (connectionCallAccess(entry, tool, args) === 'read')
+    return {
+      ok: false,
+      reason: `${name}: read-only calls can’t be proposed because their results aren’t returned.`,
+    };
   return { ok: true, args };
+}
+
+/** What a refused upload says: only the files that came with this email can be sent. */
+export function notThisEmailsFile(name: string): string {
+  return `That file didn’t come with this email, so it can’t be uploaded to ${name}. Only the email’s own attachments can.`;
+}
+
+/** The email's file a call sends, as the card names it, or why it can't be sent. */
+async function proposedUpload(
+  db: Db | Tx,
+  run: Pick<AutomationRunRow, 'id' | 'burrowId' | 'threadRootId'>,
+  args: Readonly<Record<string, unknown>>,
+  name: string,
+  maxUpload: number,
+): Promise<{ ok: true; file: CardFile | null } | { ok: false; reason: string }> {
+  const upload = parseRequestUpload(args.upload);
+  if (!upload) return { ok: true, file: null };
+  const att = await emailFile(db, run, upload.attachmentId);
+  if (!att?.blobKey) return { ok: false, reason: notThisEmailsFile(name) };
+  if (att.size > maxUpload) return { ok: false, reason: `${att.name} is too large to upload to ${name}.` };
+  return { ok: true, file: { name: att.name, contentType: att.contentType, size: att.size } };
 }
 
 /** Collapses line breaks and repeated whitespace so untrusted text stays on one line. */
@@ -239,6 +236,7 @@ export const proposeConnectionActions = defineCommand({
         .from(catalogConnections)
         .where(eq(catalogConnections.burrowId, ctx.burrow.id));
       const byHandle = new Map(allConnections.map((c) => [c.handle.toLowerCase(), c]));
+      const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, ctx.services.files.maxBytes);
       const described: (DescribedAction & { label: string })[] = [];
       for (const item of input.actions) {
         const handle = item.connection.trim().toLowerCase();
@@ -248,7 +246,9 @@ export const proposeConnectionActions = defineCommand({
           throw badRequest(`No connected service called “${item.connection}”.`);
         }
         if (!isProposableEntry(entry)) {
-          throw forbidden(`Actions on ${item.connection} can’t be proposed from an outsiders’ run.`);
+          throw forbidden(
+            `Actions on ${item.connection} can’t be proposed from an outsiders’ run. ${whatMailCanDo()}`,
+          );
         }
         if (conn.access === 'read') {
           throw forbidden(lookOnlyText(item.connection));
@@ -263,39 +263,18 @@ export const proposeConnectionActions = defineCommand({
         if (tool.tier === 'off') {
           throw forbidden(`${tool.name} is turned off for ${item.connection}.`);
         }
-        let args: Record<string, unknown> = { ...item.arguments };
-        let uploadFileName: string | null = null;
-        if (tool.origin === 'request') {
-          const settled = proposedRequestArgs(entry, args, item.connection);
-          if (!settled.ok) throw badRequest(settled.reason);
-          args = settled.args;
-        } else if (tool.origin === 'socket') {
-          try {
-            args = normaliseSocketArgs(entry, args, item.connection);
-          } catch (err) {
-            throw badRequest(
-              `${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
-            );
-          }
-        }
-        const refused = proposeCallRefusal(entry, tool, args, item.connection);
-        if (refused) throw forbidden(refused);
-        const upload = tool.origin === 'request' ? parseRequestUpload(args.upload) : null;
-        if (upload) {
-          const att = await threadAttachment(tx, turn.run, upload.attachmentId);
-          if (!att?.blobKey)
-            throw forbidden(
-              `That attachment isn’t part of this email’s thread, so it can’t be uploaded to ${item.connection}.`,
-            );
-          uploadFileName = att.name;
-        }
+        const call = outsidersCall(entry, conn, tool, item.arguments, item.connection);
+        if (!call.ok) throw forbidden(call.reason);
+        const args = call.args;
+        const upload = await proposedUpload(tx, turn.run, args, item.connection, maxUpload);
+        if (!upload.ok) throw forbidden(upload.reason);
         described.push({
           ...describePlannedAction({
             catalogId: conn.catalogId,
             label: conn.label,
             tool,
             args,
-            uploadFileName,
+            uploadFile: upload.file,
             summary: item.summary,
           }),
           label: conn.label,
@@ -335,10 +314,10 @@ export const proposeConnectionActions = defineCommand({
 });
 
 /**
- * Short non-secret list of active writable catalog connections (handles, enabled write-capable tool names, allowed
- * REST prefixes and static catalog guides) appended to a `proposeActions` step's instructions. Never exposes
- * credentials, the person's own connection labels, live data, or powerful built-in/host-control connections, and the
- * turn still has no `connection_call` or `connection_tools`.
+ * What a `proposeActions` step's agent may propose, appended to its instructions: for each active connection that
+ * isn't look-only, the listed actions (`listed-actions.ts`) its enabled tools offer, by handle, each with the tool and
+ * the shape of its arguments. Never credentials, the person's own connection labels or live data, and the turn still
+ * has no `connection_call` or `connection_tools`.
  */
 export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): Promise<string> {
   const rows = await db
@@ -352,62 +331,65 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
     const entry = catalogEntry(row.catalogId);
     if (!entry || !isProposableEntry(entry)) continue;
     const tools = await db
-      .select({
-        name: connectionTools.name,
-        tier: connectionTools.tier,
-        access: connectionTools.access,
-      })
+      .select({ name: connectionTools.name, tier: connectionTools.tier, origin: connectionTools.origin })
       .from(connectionTools)
       .where(eq(connectionTools.connectionId, row.id))
       .orderBy(asc(connectionTools.name));
-    const enabled = tools
-      .filter(
-        (t) =>
-          t.tier !== 'off' &&
-          t.access !== 'read' &&
-          !deletingWord({ name: t.name, origin: 'adapter' }, {}) &&
-          !accessWord({ name: t.name, origin: 'adapter' }, {}) &&
-          !toolAlwaysAsks(entry, t.name),
-      )
-      .map((t) => t.name);
-    if (!enabled.length) continue;
-    const prefixes = entry.request ? resolveRequestPrefixes(entry, row.fields) : [];
-    const prefixPart = prefixes.length ? `; paths under ${prefixes.join(' or ')}` : '';
-    const guidePart = entry.guide ? ` — ${entry.guide.slice(0, 320)}` : '';
-    lines.push(`- ${row.handle}: tools [${enabled.join(', ')}]${prefixPart}${guidePart}`);
+    for (const how of listedHowTo(
+      row.catalogId,
+      tools.filter((t) => t.tier !== 'off'),
+    ))
+      lines.push(`- ${row.handle}: ${how}`);
   }
   if (!lines.length) return '';
-  return `Connections you can propose write actions for (nothing that deletes, removes or empties, nothing about users, permissions, sharing or passwords, nothing the person is always asked about first, no changes to DNS, DHCP, firewalls or networks, no read-only calls; each waits for the person’s approval card, which shows every argument, so keep them few and short):\n${lines.join('\n')}`.slice(
-    0,
-    2500,
-  );
+  // Whole lines only, so an action's shape is never cut off.
+  let note =
+    'These are the only actions you can propose, each on the connection named first (each waits for the person’s yes on a card that shows every argument, so keep them few and short; a file must be one attached to this message):';
+  for (const line of lines) {
+    if (note.length + line.length + 1 > 4000) break;
+    note += `\n${line}`;
+  }
+  return note;
+}
+
+/** The attachment ids a step's output says the server handed over from what started the run. */
+function handedOverIds(output: unknown): string[] | null {
+  const ids = (output as { triggerFileIds?: unknown } | null)?.triggerFileIds;
+  return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
 }
 
 /**
- * Loads an attachment ONLY when it belongs to a message in THIS run's thread (preventing a prompt-injected email from
- * naming another file in Chat Files or another thread).
+ * Loads an attachment ONLY when the server handed it over from what started THIS run (the email's files, copied onto
+ * the run's first agent prompt and recorded there by id), so neither a prompt-injected email nor a file the person
+ * added to the thread with the same name can be uploaded. A run started before the handover was recorded counts the
+ * files on its first prompt when that prompt started the run's thread, as the server put them there.
  */
-export async function threadAttachment(
+export async function emailFile(
   db: Db | Tx,
-  run: Pick<AutomationRunRow, 'burrowId' | 'conversationId' | 'threadRootId'>,
+  run: Pick<AutomationRunRow, 'id' | 'burrowId' | 'threadRootId'>,
   attachmentId: string,
 ): Promise<AttachmentRow | null> {
-  if (!run.threadRootId) return null;
+  const steps = await db
+    .select({ output: automationRunSteps.output, promptMessageId: automationRunSteps.promptMessageId })
+    .from(automationRunSteps)
+    .where(eq(automationRunSteps.runId, run.id));
+  const recorded = steps.map((s) => handedOverIds(s.output)).filter((ids): ids is string[] => ids !== null);
+  const fromRoot =
+    recorded.length === 0 && !!run.threadRootId && steps.some((s) => s.promptMessageId === run.threadRootId);
+  if (!fromRoot && !recorded.some((ids) => ids.includes(attachmentId))) return null;
   const [found] = await db
-    .select({ attachment: attachments })
+    .select()
     .from(attachments)
-    .innerJoin(messages, eq(messages.id, attachments.messageId))
     .where(
       and(
         eq(attachments.id, attachmentId),
         eq(attachments.burrowId, run.burrowId),
         eq(attachments.state, 'ready'),
-        eq(messages.conversationId, run.conversationId),
-        or(eq(messages.id, run.threadRootId), eq(messages.threadRootId, run.threadRootId)),
+        ...(fromRoot ? [eq(attachments.messageId, run.threadRootId as string)] : []),
       ),
     )
     .limit(1);
-  return found?.attachment ?? null;
+  return found ?? null;
 }
 
 export interface PlannedConnectionAction {
@@ -439,8 +421,9 @@ export type ConnectionActionsPlan =
   | { ok: false; fatal: boolean; reason: string };
 
 /**
- * Validates every proposed connection action from step `from`, ensuring each target connection, tool, path, limit,
- * key (not `cannot`), and uploaded attachment (on this run's thread) is permitted. Returns a deterministic
+ * Validates every proposed connection action from step `from`, ensuring each is a listed action (`outsidersCall`) and
+ * its connection, tool, limit, key (not `cannot`) and file (one the server handed over from this run's email) are
+ * permitted. Returns a deterministic
  * `actionsHash` and plain-English approval proposal.
  */
 export async function planConnectionActions(
@@ -473,13 +456,6 @@ export async function planConnectionActions(
     if (!row || !entry) {
       return { ok: false, fatal: false, reason: `No connected service called “${item.connection}”.` };
     }
-    if (!isProposableEntry(entry)) {
-      return {
-        ok: false,
-        fatal: false,
-        reason: `Actions on ${row.label} can’t be proposed from an outsiders’ run.`,
-      };
-    }
     if (row.status !== 'active') {
       return { ok: false, fatal: false, reason: needsReauthText(row) };
     }
@@ -490,58 +466,11 @@ export async function planConnectionActions(
     if (!tool) {
       return { ok: false, fatal: false, reason: `${row.label} has no tool called “${item.tool}”.` };
     }
-    let args: Record<string, unknown> = { ...item.arguments };
-    let uploadFileName: string | null = null;
-    if (tool.origin === 'request') {
-      const settled = proposedRequestArgs(entry, args, row.label);
-      if (!settled.ok) return { ok: false, fatal: false, reason: settled.reason };
-      args = settled.args;
-      const refused = proposeCallRefusal(entry, tool, args, row.label);
-      if (refused) return { ok: false, fatal: false, reason: refused };
-      const method = String(args.method);
-      const path = String(args.path);
-      if (!requestAllowed(entry, row.fields, method, path)) {
-        return {
-          ok: false,
-          fatal: false,
-          reason: `${row.label} doesn’t allow ${method} ${path}.`,
-        };
-      }
-      const upload = parseRequestUpload(args.upload);
-      if (upload) {
-        const att = await threadAttachment(db, run, upload.attachmentId);
-        if (!att?.blobKey) {
-          return {
-            ok: false,
-            fatal: false,
-            reason: `That attachment isn’t part of this email’s thread, so it can’t be uploaded to ${row.label}.`,
-          };
-        }
-        if (att.size > maxUpload) {
-          return {
-            ok: false,
-            fatal: false,
-            reason: `${att.name} is too large to upload to ${row.label}.`,
-          };
-        }
-        uploadFileName = att.name;
-      }
-    } else if (tool.origin === 'socket') {
-      try {
-        args = normaliseSocketArgs(entry, args, row.label);
-      } catch (err) {
-        return {
-          ok: false,
-          fatal: false,
-          reason: `${row.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
-        };
-      }
-      const refused = proposeCallRefusal(entry, tool, args, row.label);
-      if (refused) return { ok: false, fatal: false, reason: refused };
-    } else {
-      const refused = proposeCallRefusal(entry, tool, args, row.label);
-      if (refused) return { ok: false, fatal: false, reason: refused };
-    }
+    const call = outsidersCall(entry, row, tool, item.arguments, row.label);
+    if (!call.ok) return { ok: false, fatal: false, reason: call.reason };
+    const args = call.args;
+    const upload = await proposedUpload(db, run, args, row.label, maxUpload);
+    if (!upload.ok) return { ok: false, fatal: false, reason: upload.reason };
     const server = await callServerOf(db as Db, services, row.burrowId, row.catalogId, args);
     const decided = callTier(
       entry,
@@ -565,7 +494,7 @@ export async function planConnectionActions(
       label: row.label,
       tool,
       args,
-      uploadFileName,
+      uploadFile: upload.file,
       summary,
     });
 
