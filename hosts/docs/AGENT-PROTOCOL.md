@@ -513,10 +513,15 @@ disk from RAM/metadata (Unraid's `/var/local/emhttp/disks.ini`, macOS
 inventory/`diskutil` plist for APFS containers and slices, Linux
 `/sys/fs/btrfs/<fsid>/devices/`, `/sys/fs/bcachefs/<uuid>/dev-*/block`,
 `dm-*`/`md*` `slaves/`, ZFS pool inventory) and checks spin state for
-rotational physical disks via cached `Standby` state and
-`smartctl -i -n standby` / `hdparm -C` (hypervisor virtual guest disks such as
-`vd*`, `xvd*` and QEMU/VMware/VBOX/Hyper-V disks cannot spin down, while
-passed-through physical HDDs in a VM are still checked). If any backing disk
+rotational physical disks via cached `Standby` state, Linux kernel sysfs
+(`device/power/runtime_status` and `device/state`), and — only for confirmed
+ATA/SAT disks (direct `libata`, SAS HBA SATL with vendor `ATA`, or legacy
+IDE) — `hdparm -C` or `smartctl -d <sat|ata> -n standby,3,5 -i` (treating an
+unsupported `CHECK POWER MODE` as unknown; USB bridges, native SCSI/SAS,
+hardware RAID volumes, and macOS rotational drives are never probed and return
+`standby_unknown`; hypervisor virtual guest disks such as `vd*`, `xvd*` and
+QEMU/VMware/VBOX/Hyper-V disks and non-rotational NVMe/SSD/MMC devices cannot
+spin down, while passed-through physical HDDs in a VM are still checked). If any backing disk
 is confirmed asleep it returns `code: "spun_down"` with `skipped_spun_down`; if
 the backing disks, disk type or spin state cannot be confirmed (for example
 LXC `loop*` mounts, ZFS without visible pool disks, missing Btrfs/bcachefs
