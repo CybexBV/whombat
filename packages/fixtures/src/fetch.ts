@@ -48,6 +48,7 @@ import {
   groupCommentThreads,
   mergeBlock,
   prStatus,
+  resolveAgentModelRuntime,
   searchFilterOf,
   shortNameOf,
 } from '@whombat/core/domain';
@@ -277,17 +278,7 @@ function createWorld() {
     update(body: UpdateAgentBody) {
       const before = currentAgent;
       const nextRuntime: Agent['runtime'] | undefined = body.runtime
-        ? (() => {
-            const { backgroundModel, ...rest } = body.runtime;
-            const resolvedBg =
-              backgroundModel === undefined
-                ? body.runtime.provider === before.runtime.provider
-                  ? before.runtime.backgroundModel
-                  : undefined
-                : (backgroundModel ?? undefined);
-            const { backgroundModel: _prevBg, ...kept } = before.runtime;
-            return { ...kept, ...rest, ...(resolvedBg ? { backgroundModel: resolvedBg } : {}) };
-          })()
+        ? resolveAgentModelRuntime(body.runtime, before.runtime)
         : undefined;
       const updated: Agent = {
         ...before,

@@ -110,7 +110,7 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
     const next = modelRuntimeDraft(saved);
     form.saved(() => next);
     form.edit(() => next);
-    if (!modelRuntimeSaved(body, saved)) {
+    if (!modelRuntimeSaved(body, saved, models)) {
       return setNotice(MODEL_EFFORT_COPY.notSaved);
     }
     toast.show(modelSavedText(agent.name, before, next));

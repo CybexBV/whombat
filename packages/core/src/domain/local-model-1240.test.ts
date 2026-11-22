@@ -161,11 +161,11 @@ describe('turns on it (CT-1172, CT-1174)', () => {
     expect(CHAT_PROVIDER_LABELS.local).toBe('Custom');
     expect(chatRuntimeOf({ provider: 'local' })).toEqual({ provider: 'local' });
     const picked = chatRuntimeWithModel(
-      { provider: 'local', effort: 'high' },
-      'qwen3:32b',
+      { provider: 'local', effort: 'high', fast: true },
+      'gemma3:27b',
       localProviderModels(view),
     );
-    expect(picked).toEqual({ provider: 'local', model: 'qwen3:32b' });
+    expect(picked).toEqual({ provider: 'local', model: 'gemma3:27b' });
     expect(ChatRuntime.parse({ provider: 'local', model: 'anything:7b' }).model).toBe('anything:7b');
     expect(
       RanOn.parse({ provider: 'local', model: 'qwen3:32b', modelLabel: null, effort: null, fast: false })

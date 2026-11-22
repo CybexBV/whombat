@@ -247,6 +247,32 @@ describe('Settings → Advanced → Model and effort on Custom', () => {
     expect(writes[0]?.body).toEqual({ runtime: { provider: 'local', model: 'gemma3:27b' } });
     expect(await screen.findByText(`Updated ${ASSISTANT_NAME}’s AI provider and model.`)).toBeTruthy();
   });
+
+  it('warns when an older box strips the Custom AI model id', async () => {
+    const base = createWebFixtureFetch({ models: true, localModel: true });
+    const { fetch, writes } = server({
+      localModel: true,
+      respond: (w) => {
+        if (w.method !== 'PATCH' || w.path !== '/burrows/burrow-hq/agent') return undefined;
+        // Simulate an older runtime that strips `model` for `local`.
+        return base(
+          new Request('http://whombat.test/api/v1/burrows/burrow-hq/agent', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runtime: { provider: 'local' } }),
+          }),
+        ) as unknown as Response;
+      },
+    });
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    await user.type(screen.getByLabelText('Another model'), 'gemma3:27b');
+    await user.click(screen.getByRole('button', { name: 'Use' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(await screen.findByText(/Update this Whombat/i)).toBeTruthy();
+  });
 });
 
 describe('Settings → Advanced → Model and effort background model', () => {

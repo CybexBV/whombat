@@ -345,6 +345,29 @@ describe('writes', () => {
       code: 'validation_failed',
       fields: { name: [expect.any(String)] },
     });
+
+    // Runtime updates normalize like the server: provider switches clear stale fields, and local drops effort/fast.
+    const claude = await patch({
+      runtime: { provider: 'claude', model: 'opus', backgroundModel: 'haiku', effort: 'high', fast: true },
+    });
+    expect(endpoint('agent.update').response.parse(await claude.json()).agent.runtime).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: 'haiku',
+      effort: 'high',
+      fast: true,
+    });
+    const local = await patch({
+      runtime: { provider: 'local', model: 'gemma3:27b', effort: 'high', fast: true },
+    });
+    expect(endpoint('agent.update').response.parse(await local.json()).agent.runtime).toEqual({
+      provider: 'local',
+      model: 'gemma3:27b',
+    });
+    const switched = await patch({ runtime: { provider: 'codex' } });
+    expect(endpoint('agent.update').response.parse(await switched.json()).agent.runtime).toEqual({
+      provider: 'codex',
+    });
   });
 
   it('serves Mara’s memory and the notes, and writes them within Hermes’s limits (CT-1200…CT-1206)', async () => {

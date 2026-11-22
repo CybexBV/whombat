@@ -19,11 +19,14 @@ import {
   type AgentModelRuntime,
   type AgentModelRuntimeUpdate,
   type AgentSetupStatus,
+  MODEL_ID_MAX,
+  modelFast,
   modelOf,
   PROVIDER_LABELS,
   type ProviderModel,
+  resolveAgentModelRuntime,
 } from '@whombat/core/domain';
-import { EFFORT_LABELS } from '@whombat/core/text';
+import { EFFORT_LABELS, fastNoneText } from '@whombat/core/text';
 import { burrow } from '@whombat/fixtures';
 import { WHOMBAT_HANDLE } from './oneFixtures';
 
@@ -166,17 +169,27 @@ export function createModelFixtures(): ModelFixtures {
     return null;
   };
 
-  /** The server's checks of a new model and effort (ME-04): the refusal's sentence, or null. */
-  const refusal = (runtime: AgentModelRuntimeUpdate): string | null => {
+  /** The server's checks of a new model and effort: the refusal's sentence, or null. */
+  const refusal = (runtime: AgentModelRuntime, before: AgentModelRuntime): string | null => {
+    const sameTool = before.provider === runtime.provider;
+    const modelChanged = !sameTool || before.model !== runtime.model;
+    const bgChanged = !sameTool || before.backgroundModel !== runtime.backgroundModel;
+    if (modelChanged && runtime.model && runtime.model.length > MODEL_ID_MAX)
+      return `A model’s name has at most ${MODEL_ID_MAX} characters.`;
+    if (bgChanged && runtime.backgroundModel && runtime.backgroundModel.length > MODEL_ID_MAX)
+      return `A model’s name has at most ${MODEL_ID_MAX} characters.`;
     if (runtime.provider !== 'claude' && runtime.provider !== 'codex') return null;
     const models = MODELS[runtime.provider];
     const model = modelOf(models, runtime.model);
-    if (runtime.model && !model)
+    if (modelChanged && runtime.model && !model)
       return `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.model}” on this Whombat.`;
-    if (runtime.backgroundModel && !models.some((m) => m.id === runtime.backgroundModel))
+    if (bgChanged && runtime.backgroundModel && !models.some((m) => m.id === runtime.backgroundModel))
       return `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.backgroundModel}” on this Whombat.`;
     if (runtime.effort && model && !model.efforts.includes(runtime.effort))
       return `${model.label} doesn’t take ${EFFORT_LABELS[runtime.effort]} effort.`;
+    const fastChanged = modelChanged || before.fast !== runtime.fast;
+    if (runtime.fast && fastChanged && !modelFast(models, runtime.model))
+      return fastNoneText(models, runtime.model);
     return null;
   };
 
@@ -195,33 +208,24 @@ export function createModelFixtures(): ModelFixtures {
       );
       if (!read.ok) return read;
       const agent = ((await read.json()) as AgentProfile).agent;
-      const refused = refusal(body.runtime);
+      const before = stateOf(handle);
+      const sent = resolveAgentModelRuntime(body.runtime, before.runtime);
+      const refused = refusal(sent, before.runtime);
       if (refused)
         return json(
           { error: { code: 'validation_failed', message: refused, fields: { runtime: [refused] } } },
           422,
         );
-      const before = stateOf(handle);
-      const { provider, model, backgroundModel, effort, fast } = body.runtime;
-      const resolvedBg =
-        backgroundModel === undefined
-          ? provider === before.runtime.provider
-            ? before.runtime.backgroundModel
-            : undefined
-          : (backgroundModel ?? undefined);
-      const tool = provider === 'local' ? null : MODELS[provider];
-      const runtime: AgentModelRuntime = {
-        provider,
-        ...(model ? { model } : {}),
-        ...(resolvedBg ? { backgroundModel: resolvedBg } : {}),
-        // A custom AI model takes no effort and has no fast replies.
-        ...(effort && tool ? { effort } : {}),
-        // Fast replies: kept where the model offers them, as the server does.
-        ...(fast !== undefined && tool && modelOf(tool, model)?.fast ? { fast } : {}),
-      };
+      const tool = sent.provider === 'local' ? null : MODELS[sent.provider];
+      const runtime: AgentModelRuntime =
+        sent.fast === false && tool && !modelFast(tool, sent.model)
+          ? (({ fast: _fast, ...rest }) => rest)(sent)
+          : sent;
       // A new model (a new provider is one too) clears the note (ME-05).
       const fallback =
-        before.fallback && before.runtime.provider === provider && before.runtime.model === model
+        before.fallback &&
+        before.runtime.provider === runtime.provider &&
+        before.runtime.model === runtime.model
           ? before.fallback
           : null;
       state.set(handle, { runtime, fallback });

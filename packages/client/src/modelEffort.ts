@@ -19,7 +19,9 @@ import {
   localProviderModels,
   modelFast,
   modelOf,
+  modelRuntimeSaved,
   type ProviderModel,
+  providerHasModelEffort,
   turnEffort,
 } from '@whombat/core/domain';
 import {
@@ -52,7 +54,7 @@ export interface ModelRuntimeDraft {
 
 /** The tools whose effort and fast replies an agent picks: Claude Code and ChatGPT (custom AI models have neither). */
 export function hasModelEffort(provider: AgentProvider): provider is 'claude' | 'codex' {
-  return provider === 'claude' || provider === 'codex';
+  return providerHasModelEffort(provider);
 }
 
 /** An agent's stored model runtime as a draft. */
@@ -80,8 +82,9 @@ export function draftWithProvider(draft: ModelRuntimeDraft, provider: AgentProvi
 
 /**
  * Another model picked (null: the default): a chosen effort stays when the model takes it, else becomes the nearest
- * level it does take (`turnEffort`), and automatic when it takes none; fast replies are dropped when it
- * has none. While the list doesn't know the model, the effort and fast replies stay as they are.
+ * level it does take (`turnEffort`), and automatic when it takes none; fast replies are dropped when it has none (and
+ * `fast: false` is dropped for unknown models when the provider's list is known, matching the server). Custom AI models
+ * never keep effort or fast replies.
  */
 export function draftWithModel(
   draft: ModelRuntimeDraft,
@@ -90,9 +93,11 @@ export function draftWithModel(
 ): ModelRuntimeDraft {
   const known = modelOf(models, model);
   const supported = known?.efforts ?? null;
-  const effort = draft.effort ? turnEffort(draft.effort, 'chat', supported) : null;
+  const own = hasModelEffort(draft.provider);
+  const effort = own && draft.effort ? turnEffort(draft.effort, 'chat', supported) : null;
   const { fast, ...rest } = draft;
-  return { ...rest, model, effort, ...(fast !== undefined && (!known || known.fast) ? { fast } : {}) };
+  const keepFast = own && fast !== undefined && (known ? !!known.fast : !models?.length || fast === true);
+  return { ...rest, model, effort, ...(keepFast ? { fast } : {}) };
 }
 
 /** Another background model picked (null: explicit “Same as the main model”). */
@@ -163,25 +168,7 @@ export function modelRuntimeBody(
   };
 }
 
-/**
- * Whether the box's returned `agent.runtime` kept every setting `agents.update` asked to save.
- * Catches older runtimes that silently strip a newer field (such as `backgroundModel`) while answering 200 OK.
- */
-export function modelRuntimeSaved(
-  requested: AgentModelRuntimeUpdate,
-  returned: Pick<AgentModelRuntime, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
-): boolean {
-  if (returned.provider !== requested.provider) return false;
-  if ((returned.model ?? null) !== (requested.model ?? null)) return false;
-  if (
-    requested.backgroundModel !== undefined &&
-    (returned.backgroundModel ?? null) !== requested.backgroundModel
-  )
-    return false;
-  if ((returned.effort ?? null) !== (requested.effort ?? null)) return false;
-  if ((returned.fast ?? undefined) !== (requested.fast ?? undefined)) return false;
-  return true;
-}
+export { modelRuntimeSaved };
 
 /**
  * The models a provider offers on this Whombat: a tool's as the runner lists them (`ProviderSetup.models`; undefined
