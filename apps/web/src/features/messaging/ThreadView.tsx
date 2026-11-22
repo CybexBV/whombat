@@ -9,8 +9,8 @@ import {
   MOVED_CARD_WORDS,
   movedCardLink,
   ranOnSwitches,
+  rootTitle,
   textFoldsIntoCard,
-  threadTitle,
   wordsUnderCard,
 } from '@whombat/client';
 import {
@@ -504,7 +504,7 @@ export function ThreadView({
         (back ? (
           <RoomThreadHead
             back={back}
-            question={messages[0] ? threadTitle(messages[0].text) : ''}
+            question={messages[0] ? rootTitle(messages[0]) : ''}
             replies={status ? 0 : replies}
             stageWord={status ? null : stageWord}
             subject={headExtra}

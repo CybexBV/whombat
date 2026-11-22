@@ -55,7 +55,12 @@ import {
 } from '@whombat/core/domain';
 import { agentDefaultGrants, describeGrantChange, diffGrants } from '@whombat/core/keys';
 import { burrow, cnv_dm_dusty, deployApproval, dusty, mara, withServiceThings } from '@whombat/fixtures';
-import { type FirstDayFixture, firstDayBackupItem, firstDayWelcome } from './firstDayFixtures';
+import {
+  FIRST_DAY_ROOT_ID,
+  type FirstDayFixture,
+  firstDayBackupItem,
+  firstDayWelcome,
+} from './firstDayFixtures';
 
 const API = '/api/v1';
 const B = `${API}/burrows/${burrow.slug}`;
@@ -1057,6 +1062,7 @@ export function createOneFixtures(
       firstDayWelcome(options.firstDay, { person: 'Mara', assistant: ASSISTANT_NAME }).map((m, i) =>
         message({
           id: `msg_first-day-${i + 1}` as Message['id'],
+          threadRootId: i > 0 ? (FIRST_DAY_ROOT_ID as Message['id']) : null,
           conversationId: DEFAULT_CHAT_ID as Message['conversationId'],
           authorId: bot,
           createdAt: at(0, `09:0${i}`),

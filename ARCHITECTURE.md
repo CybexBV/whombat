@@ -553,8 +553,9 @@ published.
 ## The agent and whose turn it is
 
 The agent is made with the burrow at the claim (`domain/the-agent.ts`): Dusty by default, with a face, the default
-keys and the first ready provider. Its first message in the person's Chat is the welcome (`guides/welcome.ts`): what the
-network scan found, a button each, then mail; the claim's own last step signs the person in to ChatGPT or Claude
+keys and the first ready provider. Its first message in the person's Chat is the welcome (`guides/welcome.ts`), one thread: what
+the network scan found, a button each, with mail as its reply (and the scan's finds as a later reply when it finished
+after the welcome); the claim's own last step signs the person in to ChatGPT or Claude
 ([first-day.md](docs/decisions/first-day.md)). The person changes its name and face, its AI sign-in and memory in
 Settings under its name (its keys in What it may do), its model and effort in Settings → Advanced, and its schedules in
 Automations. Code finds it by kind
@@ -1362,7 +1363,7 @@ Setup and operation: `docs/github.md`.
   network's addresses on the catalog's ports, Modbus's and SSH's; a service is named by its entry's probes, a device by
   Modbus, and a computer by its SSH greeting (a server to add). One row stands for one machine, and what is connected
   or added as a server already is left out. The burrow's own scans run at start and daily, and right after the claim;
-  what they find is named in the assistant's welcome, or in one message after it, with a button that connects or adds
+  what they find is named in the assistant's welcome, or in one reply in its thread after it, with a button that connects or adds
   each ([first-day.md](docs/decisions/first-day.md)).
 - **Accounts** (`apps/server/src/connectors/`): Google through an OAuth client the person stores, with tokens sealed
   per connection and refreshed on the server (`WHOMBAT_GOOGLE=real|fake|off`); the connector tools are pipeline

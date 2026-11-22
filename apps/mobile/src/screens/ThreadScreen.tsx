@@ -15,7 +15,7 @@
  * changes, the checks, the field that steers it). An ended job keeps its receipt while the Whombat still lists it.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CHAT_WORDS, jobPartsAfter, roomOfConversation, threadTitle } from '@whombat/client';
+import { CHAT_WORDS, jobPartsAfter, roomOfConversation, rootTitle } from '@whombat/client';
 import { useChatRooms, useChatThreads, useHandoffs, useThread, useTyping } from '@whombat/client/react';
 import type { ChatSubject } from '@whombat/core';
 import { useCallback, useMemo, useState } from 'react';
@@ -134,7 +134,7 @@ export function ThreadScreen({ route, navigation }: Props) {
         <RoomThreadHeader
           back={back}
           onBack={goBack}
-          question={threadTitle(query.data.root.text)}
+          question={rootTitle(query.data.root)}
           showQuestion={!rootInView}
           subject={query.data.root.subject ?? null}
           onSettle={offer === 'settle' ? settleHere : null}

@@ -253,7 +253,10 @@ export const ChatThread = z.object({
   /** The thread's first message: `?thread=` in its link (`chatThreadHref`). */
   rootId: MessageId,
   authorId: PrincipalId,
-  /** The start of the first message, plain text. */
+  /**
+   * The start of the first message, plain text; how many files (“A file”) when it has only files, and what its card is
+   * called (`cardTitle`) when it is only a card.
+   */
   text: z.string().max(CHAT_THREAD_TEXT_MAX),
   subject: ChatSubject.nullable().optional(),
   createdAt: Timestamp,
