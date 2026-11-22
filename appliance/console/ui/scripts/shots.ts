@@ -57,6 +57,14 @@ const PREPARE: Record<string, (page: Page) => Promise<void>> = {
   'installer-erase-typed': async (p) => {
     await p.keyboard.type('sda');
   },
+  'installer-checks-ok-details': async (p) => {
+    await p.getByRole('button', { name: 'Details' }).click();
+  },
+  // Enter on the focused button, with nothing typed: an empty disk needs no name.
+  'installer-erase-empty-refused': async (p) => {
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(400);
+  },
   'installer-erase-refused': async (p) => {
     await p.keyboard.type('sda');
     await p.keyboard.press('Enter');

@@ -91,9 +91,25 @@ export interface Fixture {
 const GiB = 1024 ** 3;
 const NOW = '2026-09-27T12:00:00Z';
 
+/** A disk that held Windows: its name is typed to confirm. */
 const disks: Disk[] = [
-  { path: '/dev/sda', name: 'sda', model: 'QEMU HARDDISK', sizeBytes: 128 * GiB, eligible: true, reason: '' },
+  {
+    path: '/dev/sda',
+    name: 'sda',
+    model: 'QEMU HARDDISK',
+    sizeBytes: 128 * GiB,
+    eligible: true,
+    reason: '',
+    empty: false,
+    parts: [
+      { label: '', fsType: 'vfat', sizeBytes: 100 * 1024 ** 2 },
+      { label: '', fsType: '', sizeBytes: 16 * 1024 ** 2 },
+      { label: 'OS', fsType: 'ntfs', sizeBytes: 127 * GiB },
+    ],
+  },
 ];
+/** A new disk with nothing on it: a button confirms. */
+const emptyDisks: Disk[] = [{ ...(disks[0] as Disk), empty: true, parts: [] }];
 const manyDisks: Disk[] = [
   {
     path: '/dev/nvme0n1',
@@ -299,6 +315,11 @@ export const FIXTURES: Record<string, Fixture> = {
     ),
   },
   'installer-checks-ok': { note: 'Checks all ok', wizard: { step: 'checks' }, timeline: one(installer()) },
+  'installer-checks-ok-details': {
+    note: 'Checks all ok, Details open',
+    wizard: { step: 'checks' },
+    timeline: one(installer()),
+  },
   'installer-checks-warn': {
     note: 'Checks with warnings',
     wizard: { step: 'checks' },
@@ -374,6 +395,17 @@ export const FIXTURES: Record<string, Fixture> = {
     note: 'Erase and install, nothing typed',
     wizard: { step: 'erase' },
     timeline: one(installer()),
+  },
+  'installer-erase-empty': {
+    note: 'Erase and install on an empty disk: a button, no typing',
+    wizard: { step: 'erase' },
+    timeline: one(installer({ preflight: { status: 'done', checks: okChecks, disks: emptyDisks } })),
+  },
+  'installer-erase-empty-refused': {
+    note: 'Erase and install on an empty disk, Enter pressed, the server refused',
+    wizard: { step: 'erase' },
+    post: { '/api/install': 400 },
+    timeline: one(installer({ preflight: { status: 'done', checks: okChecks, disks: emptyDisks } })),
   },
   'installer-erase-typed': {
     note: 'Erase and install, “sda” typed',

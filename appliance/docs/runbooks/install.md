@@ -250,13 +250,15 @@ The installer is graphical (CG-11…CG-14): Hazel, the Assistant, walks you thro
 2. **Checking this machine:** UEFI, CPU (warns below 4 cores), memory (warns below 8 GiB), a disk of at least 110 GiB,
    a network address (DHCP), and whether it reaches `api.whombat.com`, `updates.whombat.com` and `relay.whombat.com`
    (dev: the `-dev` names). A red item blocks the install (fix it, then **Check again**); warnings don't, but a box
-   that can't reach those hosts will only say “Connecting to Whombat…” after the restart.
+   that can't reach those hosts will only say “Connecting to Whombat…” after the restart. When everything passes the
+   page says so in one line, the items behind **Details**; a warning or a red item shows unfolded.
 3. **Wi-Fi** (when a cable has no address): choose a network, enter its password if needed, and wait for the card
    to get an address. The checks run again over the connection. Its saved network is copied onto the installed
    system, so it reconnects after restarting. You can skip this and connect later on the box's screen.
 4. **Choose a disk** (skipped when there is exactly one). The installer medium, USB drives, disks in use and disks
    under 110 GiB are never offered.
-5. **Erase and install:** type the disk's name (e.g. `sda`, `nvme0n1`) to enable the button. **Installing** shows the
+5. **Erase and install:** on an empty disk press **Erase and install** (or Enter); on a disk that holds something the
+   page says what is on it, and you type the disk's name (e.g. `sda`, `nvme0n1`) to enable the button. **Installing** shows the
    steps and a progress bar; **Show details** shows the log. It creates a 2 GiB FAT32 boot partition, a 40 GiB ext4
    system partition and btrfs `/persist` using the remaining space, without LUKS. Updates keep existing partitions.
 6. **Whombat is installed:** press **Restart**. The screen then shows what to do next: the Whombat Link code (Easy) or
@@ -377,7 +379,7 @@ Everything through `agent-resource` (`/home/me/Code/dashboard/docs/agent-resourc
    dir>` (in the background; `<state dir>/workspace` names the workspace with `qmp.sock`). The box's port 4480 is
    `127.0.0.1:47480`; it reaches this machine's ports at `10.0.2.2`.
 3. `WB_TESSERACT=<nixpkgs tesseract> vm-tests/community-install/install.sh <workspace> <shots dir>`: Start, the checks,
-   `vda` to confirm, Restart; prints the claim letters (check them against `5-claim.png`).
+   Erase and install (Enter on the blank disk), Restart; prints the claim letters (check them against `5-claim.png`).
 4. With a Whombat checkout (`WHOMBAT_APP`, installed), `$WHOMBAT_APP/node_modules/.bin/tsx
    vm-tests/community-install/client.mts …` with `--url http://10.0.2.15:4480 --connect 127.0.0.1:47480` (the box answers
    only for its own addresses): `identity` (edition `community`, `claimed: false`), `claim --letters ABCD --key

@@ -9,7 +9,13 @@ import { CLAIM_LINK_PEERS, CLAIM_LINK_TRIES_PER_PEER, ClaimLink, newClaimLinkSec
 import { coversHost, foreignCertificates, UNCHECKED_AFTER_MS, uncheckedSince } from './ct';
 import { DOOR_BUDGETS, OwnAddressDoor } from './door';
 import { missedWindowsText, OWN_ADDRESS_CHECKS, OWN_ADDRESS_WORDS } from './notices';
-import { summaryFailure } from './state';
+import {
+  OWN_ADDRESS_SOON_FOR_MS,
+  OWN_ADDRESS_SOON_POLL_MS,
+  OWN_ADDRESS_WAITING_POLL_MS,
+  ownAddressReadDue,
+  summaryFailure,
+} from './state';
 
 const HOST = 'maple-otter-river.dev.whombat.app';
 const cert = (spkiSha256: string, dnsNames: string[], notAfter = '2099-01-01T00:00:00Z') => ({
@@ -204,5 +210,33 @@ describe('why there is no certificate', () => {
     expect(summaryFailure({ state: 'ordering', error: 'rate_limited' })).toBeUndefined();
     expect(summaryFailure({ state: 'failing' })).toBeUndefined();
     expect(summaryFailure({ state: 'failing', error: 'Odd-Code' })).toBeUndefined();
+  });
+});
+
+describe('when the manager’s state is read', () => {
+  const start = 1_790_000_000_000;
+  const due = (afterLast: number, o: { waiting?: boolean; renewing?: boolean; soonFor?: number } = {}) =>
+    ownAddressReadDue({
+      at: start + afterLast,
+      lastPollAt: start,
+      soonUntil: start + (o.soonFor ?? 0),
+      waiting: o.waiting ?? false,
+      renewing: o.renewing ?? false,
+    });
+
+  it('reads within seconds right after a start or a move of Link, while the first certificate is awaited', () => {
+    expect(OWN_ADDRESS_SOON_POLL_MS).toBeLessThanOrEqual(5_000);
+    expect(due(OWN_ADDRESS_SOON_POLL_MS - 1, { waiting: true, soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(
+      false,
+    );
+    expect(due(OWN_ADDRESS_SOON_POLL_MS, { waiting: true, soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(true);
+  });
+
+  it('goes back to every 30 seconds once those minutes are over, and the usual pace once served', () => {
+    expect(due(OWN_ADDRESS_SOON_POLL_MS, { waiting: true })).toBe(false);
+    expect(due(OWN_ADDRESS_WAITING_POLL_MS, { waiting: true })).toBe(true);
+    expect(due(OWN_ADDRESS_WAITING_POLL_MS, { renewing: true })).toBe(true);
+    // Served and not renewing: the quick minutes don't matter.
+    expect(due(OWN_ADDRESS_WAITING_POLL_MS, { soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(false);
   });
 });

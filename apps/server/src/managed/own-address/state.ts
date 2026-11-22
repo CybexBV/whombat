@@ -3,8 +3,9 @@
  * certificate and watches Certificate Transparency; this side
  *
  * - reads the manager's state at start and every `OWN_ADDRESS_STATE_POLL_S` (every 30 s while it waits for its first
- *   certificate, and once the served one is past two thirds of its life, when the manager renews it), treating 404
- *   (`own_address.off`, or a manager without the routes) as none;
+ *   certificate, and once the served one is past two thirds of its life, when the manager renews it; every few seconds
+ *   for the first minutes after a start or a move of Link, while the person who just linked the box waits for its
+ *   address), treating 404 (`own_address.off`, or a manager without the routes) as none;
  * - decides the A3 flag once, at the first start, from that answer (`shared_route_off`);
  * - draws the label (three words of the curated list) and has the manager register it; when control says it was used,
  *   draws again, at most 5 times, then waits an hour;
@@ -48,6 +49,28 @@ export function summaryFailure(
 }
 /** While the box waits for its first certificate (the manager probes and orders right after registering). */
 export const OWN_ADDRESS_WAITING_POLL_MS = 30_000;
+/**
+ * Right after a start or a move of Link, while it waits for its first certificate: the person who just linked the box
+ * waits on the account site for its address, and the runtime must read the label soon to declare it to the relay
+ * (the manager's probe of the path needs it). Reads of the manager are local and cheap; after the first minutes the
+ * 30-second pace returns, so a certificate that fails for hours isn't asked about every few seconds.
+ */
+export const OWN_ADDRESS_SOON_POLL_MS = 3_000;
+export const OWN_ADDRESS_SOON_FOR_MS = 10 * 60_000;
+
+/** Whether the manager's state is due to be read now (`at` and the others in epoch ms). */
+export function ownAddressReadDue(o: {
+  at: number;
+  lastPollAt: number;
+  soonUntil: number;
+  waiting: boolean;
+  renewing: boolean;
+}): boolean {
+  const since = o.at - o.lastPollAt;
+  if (o.waiting && o.at < o.soonUntil) return since >= OWN_ADDRESS_SOON_POLL_MS;
+  if (o.waiting || o.renewing) return since >= OWN_ADDRESS_WAITING_POLL_MS;
+  return since >= OWN_ADDRESS_STATE_POLL_S * 1000;
+}
 /** Draws of a label in a row that control may call used, then a pause. */
 export const LABEL_DRAWS_MAX = 5;
 export const LABEL_PAUSE_MS = 3_600_000;
@@ -123,6 +146,7 @@ export class OwnAddressService {
   /* Start -------------------------------------------------------------------------------------------------------- */
 
   async start(): Promise<void> {
+    this.soon();
     await this.load();
     await this.poll();
     await this.readCt();
@@ -132,15 +156,9 @@ export class OwnAddressService {
       timer.unref?.();
       this.timers.push(timer);
     };
-    // The regular read, and a quicker one while the address waits for its first certificate.
-    every(OWN_ADDRESS_WAITING_POLL_MS, async () => {
-      if (
-        this.waiting() ||
-        this.renewing() ||
-        Date.now() - this.lastPollAt >= OWN_ADDRESS_STATE_POLL_S * 1000
-      )
-        await this.poll();
-    });
+    // The regular read, a quicker one while the address waits for its first certificate, and quicker still right
+    // after a start or a move of Link (`soon`).
+    every(OWN_ADDRESS_SOON_POLL_MS, () => this.tick());
     every(OWN_ADDRESS_CT_POLL_S * 1000, () => this.readCt());
   }
 
@@ -150,6 +168,24 @@ export class OwnAddressService {
   }
 
   private lastPollAt = 0;
+  private soonUntil = 0;
+
+  /** Read the manager quickly for the next minutes while the first certificate is awaited (a start, Link moved). */
+  soon(): void {
+    this.soonUntil = this.now().getTime() + OWN_ADDRESS_SOON_FOR_MS;
+  }
+
+  /** One beat of the read timer: reads the manager's state when it is due. */
+  tick(): Promise<void> {
+    const due = ownAddressReadDue({
+      at: this.now().getTime(),
+      lastPollAt: this.lastPollAt,
+      soonUntil: this.soonUntil,
+      waiting: this.waiting(),
+      renewing: this.renewing(),
+    });
+    return due ? this.poll() : Promise.resolve();
+  }
 
   /**
    * Whether the served certificate is past two thirds of its life, when the manager renews it: read quickly until the
@@ -196,7 +232,7 @@ export class OwnAddressService {
   }
 
   private async pollOnce(): Promise<void> {
-    this.lastPollAt = Date.now();
+    this.lastPollAt = this.now().getTime();
     const read = this.options.manager.ownAddressState?.bind(this.options.manager);
     let state: OwnAddressStateResponse | null;
     try {

@@ -239,16 +239,24 @@ func TestRenderClaimOnTailnet(t *testing.T) {
 	}
 }
 
-// Everything at once still fits the screen, the footer at the bottom and the codes in plain letters at least.
+// Everything at once still fits the screen, the codes in plain letters at least: on a claimed box with the footer at the
+// bottom, on one being set up without it (it gives way to Link's code).
 func TestRenderReachGeometry(t *testing.T) {
 	footer := strings.Split(Banner, "\n")
-	sc := mustParse(t, reachFile(claimableFile+`,"alert":{"kind":"own_address_foreign","since":"2026-09-26T11:00:00Z"}`,
-		`{"link":`+linkStarting+`,"tailscale":{`+loginURL+`,"needsHttps":true}}`))
+	const alert = `,"alert":{"kind":"own_address_foreign","since":"2026-09-26T11:00:00Z"}`
+	const reach = `{"link":` + linkStarting + `,"tailscale":{` + loginURL + `,"needsHttps":true}}`
+	claimed := mustParse(t, reachFile(`"state":"claimed",`+claimedURL+alert, reach))
+	sc := mustParse(t, reachFile(claimableFile+alert, reach))
 	for _, size := range [][2]int{{80, 25}, {64, 24}, {160, 45}, {100, 30}} {
-		f := Render(sc, now, size[0], size[1], footer)
+		f := Render(claimed, now, size[0], size[1], footer)
 		lines := strings.Split(f, "\n")
-		if len(lines) != size[1] || !strings.Contains(lines[len(lines)-1], "disk recovery key") {
-			t.Fatalf("%v: %d lines, footer not at the bottom\n%s", size, len(lines), f)
+		if len(lines) != size[1] || !strings.Contains(lines[len(lines)-1], "disk recovery key") || !strings.Contains(f, "ABCD-EFGH") {
+			t.Fatalf("claimed %v: %d lines, footer not at the bottom\n%s", size, len(lines), f)
+		}
+		f = Render(sc, now, size[0], size[1], footer)
+		lines = strings.Split(f, "\n")
+		if len(lines) != size[1] || strings.Contains(f, "disk recovery key") {
+			t.Fatalf("%v: %d lines, or the footer shows while the box is set up\n%s", size, len(lines), f)
 		}
 		for _, l := range lines {
 			if utf8.RuneCountInString(l) > size[0] {

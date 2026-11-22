@@ -109,9 +109,16 @@ func TestRenderWords(t *testing.T) {
 	}
 	for _, c := range cases {
 		f := frame(c.sc)
-		for _, w := range append(c.want, strings.Split(Banner, "\n")...) {
+		for _, w := range c.want {
 			if !strings.Contains(f, w) {
 				t.Errorf("%s: %q missing from\n%s", c.sc.State, w, f)
+			}
+		}
+		// The footer under every screen but the claim's (the person setting the box up doesn't need it yet).
+		setup := c.sc.State == Claimable || c.sc.State == Backoff
+		for _, w := range strings.Split(Banner, "\n") {
+			if strings.Contains(f, w) == setup {
+				t.Errorf("%s: footer line %q shown %v\n%s", c.sc.State, w, !setup, f)
 			}
 		}
 		if c.sc.State != Claimable && strings.Contains(f, "█") {
@@ -170,16 +177,24 @@ func TestRenderFullScreenGeometry(t *testing.T) {
 	footer := strings.Split(Banner, "\n")
 	for _, size := range [][2]int{{80, 25}, {64, 24}, {50, 18}, {160, 45}} {
 		for _, sc := range []Screen{StartingScreen, {State: Claimable, Code: "KXQM", URL: "dev.whombat.com/claim"},
-			{State: Waiting, URL: "x.y/claim"}} {
+			{State: Waiting, URL: "x.y/claim"}, {State: Claimed, URL: "app.whombat.com"}} {
 			f := Render(sc, now, size[0], size[1], footer)
 			lines := strings.Split(f, "\n")
-			if len(lines) != size[1] || strings.HasSuffix(f, "\n") {
+			// Exactly the screen's lines, none more (a VT never scrolls); the last may be blank without the footer.
+			if len(lines) != size[1] || strings.Count(f, "\n") != size[1]-1 {
 				t.Fatalf("%v %s: %d lines", size, sc.State, len(lines))
 			}
 			for _, l := range lines {
 				if utf8.RuneCountInString(l) > size[0] {
 					t.Fatalf("%v %s: line wider than the screen: %q", size, sc.State, l)
 				}
+			}
+			// During the claim the footer gives way: the person setting the box up doesn't need it yet.
+			if sc.State == Claimable {
+				if strings.Contains(f, "There is no login on this") {
+					t.Fatalf("%v %s: the footer shows during the claim:\n%s", size, sc.State, f)
+				}
+				continue
 			}
 			if !strings.HasPrefix(lines[len(lines)-1], "  ") || !strings.Contains(f, "There is no login on this") {
 				t.Fatalf("%v %s: footer not at the bottom:\n%s", size, sc.State, f)

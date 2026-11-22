@@ -168,6 +168,17 @@ export interface Disk {
   sizeBytes: number;
   eligible: boolean;
   reason: DiskReason;
+  /** No partitions and no file system: erasing it loses nothing (absent from an older server: not known to be). */
+  empty?: boolean;
+  /** What is on a disk that isn't empty: its partitions, or its own file system. */
+  parts?: DiskPart[];
+}
+
+/** A partition (or a disk's own file system) as blkid found it; "" for a label or type it has none of. */
+export interface DiskPart {
+  label: string;
+  fsType: string;
+  sizeBytes: number;
 }
 
 export const INSTALL_STEPS = ['partition', 'filesystems', 'copy', 'boot', 'finish'] as const;
@@ -397,6 +408,15 @@ function parseInstaller(v: Obj): InstallerState {
             sizeBytes: num(d.sizeBytes, 0, Number.MAX_SAFE_INTEGER),
             eligible: bool(d.eligible),
             reason: oneOf(d.reason, DISK_REASONS, ''),
+            empty: bool(d.empty),
+            parts: (Array.isArray(d.parts) ? d.parts : [])
+              .filter(isObj)
+              .slice(0, 16)
+              .map((p) => ({
+                label: str(p.label),
+                fsType: str(p.fsType),
+                sizeBytes: num(p.sizeBytes, 0, Number.MAX_SAFE_INTEGER),
+              })),
           },
         ]
       : [],

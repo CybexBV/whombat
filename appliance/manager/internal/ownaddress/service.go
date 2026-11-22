@@ -44,7 +44,19 @@ type Service struct {
 	wake     chan struct{}
 	watching bool
 	watchWG  sync.WaitGroup
+	// soonUntil: until then a failed probe is tried again within seconds (a new label, or the first look after a
+	// start), while the path to the box is still being put together.
+	soonUntil time.Time
 }
+
+// A failed probe right after the box got its label is usually the path still being put together: the runtime declares
+// the name to the relay only once it read it from the manager, a few seconds later. The person who just linked the box
+// waits for its address, so a probe that failed then is tried again within seconds rather than in a minute; a probe
+// costs nothing at the CA. After probeSoonFor the usual retries apply, so a path that stays broken isn't hammered.
+const (
+	probeSoon    = 5 * time.Second
+	probeSoonFor = 3 * time.Minute
+)
 
 var (
 	labelRe = regexp.MustCompile(protocol.OwnAddressLabelPattern)
@@ -182,6 +194,7 @@ func (s *Service) Accept(resp *device.AddressRegisterResponse) error {
 	if err := s.Store.SaveState(next); err != nil {
 		return err
 	}
+	s.soonUntil = s.now().Add(probeSoonFor)
 	if s.saved.Label != "" {
 		s.pair = nil
 	}
@@ -223,6 +236,12 @@ func (s *Service) Run(ctx context.Context) {
 	defer s.watchWG.Wait()
 	retryMin, retryMax := or(s.RetryMin, time.Minute), or(s.RetryMax, 6*time.Hour)
 	retry := retryMin
+	s.mu.Lock()
+	if s.pair == nil {
+		// The first look after a start: the runtime may still be declaring the name to the relay.
+		s.soonUntil = s.now().Add(probeSoonFor)
+	}
+	s.mu.Unlock()
 	fail := func(code string, err error, wait time.Duration) time.Duration {
 		if wait <= 0 {
 			wait = retry
@@ -259,7 +278,13 @@ func (s *Service) Run(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			if !s.sleep(ctx, fail("probe_failed", err, 0)) {
+			wait := time.Duration(0)
+			s.mu.Lock()
+			if s.now().Before(s.soonUntil) {
+				wait = probeSoon
+			}
+			s.mu.Unlock()
+			if !s.sleep(ctx, fail("probe_failed", err, wait)) {
 				return
 			}
 			continue
