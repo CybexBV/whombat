@@ -1063,7 +1063,8 @@ async function askCallAgain(
         ...(call.conversationId ? { conversationId: call.conversationId } : {}),
         ...(call.change ? { change: call.change } : {}),
         target: callTarget(row),
-        ...(Object.keys(others).length ? { others } : {}),
+        // Always, also none: the fresh card's own yes is bound and never asks again.
+        others,
         askAgainOf: call.approvalId,
       },
       { burrowId: call.burrowId, actorId: call.agentId },
