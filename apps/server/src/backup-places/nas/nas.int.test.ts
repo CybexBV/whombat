@@ -8,19 +8,27 @@
  */
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { type AnyEndpoint, api, BACKUP_PLACE_TEXT, buildPath, type JsonValue } from '@whombat/core';
+import { type AnyEndpoint, api, BACKUP_PLACE_TEXT, buildPath, type JsonValue, newId } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { decideApproval } from '../../commands/approvals';
 import type { AdapterContext } from '../../connections/adapters/types';
+import { signingOnlyAs } from '../../connections/bound-targets';
+import { ConnectionChangedError, callTarget } from '../../connections/call-target';
+import { sealConnectionSecret } from '../../connections/crypto';
+import { currentRow } from '../../connections/http';
 import { FAKE_CERT_SHA256, type FakeSocketServer, fakeTrueNas } from '../../connections/socket/testing';
-import { catalogConnections, vaultNetworks } from '../../db/schema/index';
+import { syncTools } from '../../connections/sync';
+import { approvals, catalogConnections, vaultNetworks } from '../../db/schema/index';
 import { WHOMBAT_ACTOR } from '../../hosts/service';
-import { BACKUP_PLACE_TOOLS } from '../../hosts/tools-backup-places';
+import { BACKUP_PLACE_TOOLS, serversReach } from '../../hosts/tools-backup-places';
 import type { BackupPort } from '../../managed/backup';
 import { useBoxBackup } from '../../managed/box-backup';
 import { IDS } from '../../seed/test-world';
+import { setConnectionKeys } from '../../test/connections';
 import { useTestServer } from '../../test/harness';
-import { accountOf, sessionFor } from '../../test/tokens';
+import { mcpClient } from '../../test/mcp';
+import { accountOf, agentTokenFor, sessionFor } from '../../test/tokens';
 import { useVaultNetForTests } from '../../vault/net';
 import { placeDriver } from '../drivers/index';
 import { PLACE_KEEP_90 } from '../keep';
@@ -349,5 +357,163 @@ describe('a TrueNAS keeps this Whombat’s backups', () => {
       message: BACKUP_PLACE_TEXT.reasons.manage,
     });
     expect(nas.received.length).toBe(before);
+  });
+});
+
+describe('a Servers call that shares on the TrueNAS is bound to where the TrueNAS goes too', () => {
+  let servers = '';
+  const args = () => ({
+    server: `connection:${connectionId}`,
+    name: 'whombat-pve-04',
+    clients: ['192.168.1.9'],
+  });
+
+  beforeAll(async () => {
+    // Manage again, after the test before it looked only.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ access: 'manage' })
+      .where(eq(catalogConnections.id, connectionId));
+    const [nasRow] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    servers = newId('connection');
+    // The built-in Servers connection as the server provisions it (`hosts/provision.ts`), with its tools.
+    await t.services.db.insert(catalogConnections).values({
+      id: servers,
+      catalogId: 'whombat_servers',
+      burrowId: nasRow?.burrowId ?? '',
+      connectedById: null,
+      label: 'Servers',
+      handle: 'servers-nas',
+      transport: 'builtin',
+      signIn: 'none',
+      baseUrl: 'whombat-hosts:',
+      fields: {},
+      status: 'active',
+      access: 'manage',
+      createdAt: t.services.clock(),
+      updatedAt: t.services.clock(),
+    });
+    await syncTools(t.services, servers);
+    await setConnectionKeys(t.services, IDS.dusty, { read: 'can', write: 'ask' });
+  });
+
+  /** The person pastes another key into the TrueNAS's connection; returns what puts the first back. */
+  async function replaceKey() {
+    const before = await currentRow(t.services, connectionId);
+    if (!before) throw new Error('no connection');
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        secretEnc: sealConnectionSecret(t.services.custody, connectionId, 'secret', `2-${'c'.repeat(64)}`),
+        credentialVersion: before.credentialVersion + 1,
+      })
+      .where(eq(catalogConnections.id, connectionId));
+    return async () => {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ secretEnc: before.secretEnc, credentialVersion: before.credentialVersion })
+        .where(eq(catalogConnections.id, connectionId));
+    };
+  }
+
+  async function askToShare() {
+    const d = await agentTokenFor(t.services, t.burrowId, IDS.dusty, IDS.billing, {
+      onBehalfOfAccountId: await accountOf(t.services, IDS.mara),
+    });
+    const mcp = await mcpClient(t.baseUrl, d.token);
+    try {
+      const res = await mcp.client.callTool({
+        name: 'connection_call',
+        arguments: { connection: 'servers-nas', tool: 'backup_place_nfs', arguments: args() },
+      });
+      const body = (res.structuredContent ?? {}) as Record<string, unknown>;
+      expect(body.status, JSON.stringify(body)).toBe('pending_approval');
+      const [row] = await t.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.number, Number(body.approvalNumber)));
+      if (!row) throw new Error('no approval');
+      return row;
+    } finally {
+      await mcp.close();
+    }
+  }
+  const executionOf = async (id: string) =>
+    (await t.services.db.select().from(approvals).where(eq(approvals.id, id)))[0]?.execution;
+
+  it('binds the yes to the TrueNAS: a key replaced while the card waited sends nothing to it', async () => {
+    const row = await askToShare();
+    // What the yes binds: the Servers connection and the TrueNAS, each where it went when the call was asked for.
+    const nasRow = await currentRow(t.services, connectionId);
+    const input = (row.command?.input ?? {}) as { others?: Record<string, string> };
+    expect(input.others).toEqual({ [connectionId]: callTarget(nasRow as NonNullable<typeof nasRow>) });
+    const opened = nas.connections;
+    const shares = state.nfs.length;
+    const restore = await replaceKey();
+    try {
+      await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' });
+      await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 10_000 }).toBe('failed');
+      expect((await executionOf(row.id))?.error).toContain('Vault changed since you said yes');
+      expect(nas.connections).toBe(opened);
+      expect(state.nfs.length).toBe(shares);
+    } finally {
+      await restore();
+    }
+  });
+
+  it('runs the approved share while the TrueNAS is as it was', async () => {
+    const row = await askToShare();
+    await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' });
+    await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 15_000 }).toBe('succeeded');
+    expect(state.nfs.some((s) => s.path === '/mnt/tank/whombat-pve-04')).toBe(true);
+  });
+
+  it('signs in to the TrueNAS only as the connection the call was checked on, whatever the tool makes of it', async () => {
+    const nasRow = await currentRow(t.services, connectionId);
+    if (!nasRow) throw new Error('no connection');
+    const checked = callTarget(nasRow);
+    const ctx: AdapterContext = {
+      baseUrl: '',
+      fields: {},
+      bases: {},
+      send: () => Promise.reject(new Error('no')),
+      call: {
+        services: t.services,
+        burrowId: nasRow.burrowId,
+        agentId: IDS.dusty,
+        connectionId: servers,
+        callId: 'call-bound',
+        conversationId: null,
+        personId: IDS.mara,
+      },
+    };
+    const tool = BACKUP_PLACE_TOOLS.backup_place_nfs;
+    if (!tool) throw new Error('no tool');
+    const opened = nas.connections;
+    // The key is replaced between the call's check and its sign-in: nothing is signed in as the new one.
+    const restore = await replaceKey();
+    try {
+      const refused = signingOnlyAs({ [connectionId]: checked }, () => tool(ctx, args()));
+      await expect(refused).rejects.toBeInstanceOf(ConnectionChangedError);
+      await expect(refused).rejects.toMatchObject({ connectionId });
+      expect(nas.connections).toBe(opened);
+    } finally {
+      await restore();
+    }
+    // As it was, it goes.
+    const { value, refused } = await signingOnlyAs({ [connectionId]: checked }, () => tool(ctx, args()));
+    expect(value.isError, value.content).toBe(false);
+    expect(refused).toBeNull();
+  });
+
+  it('names the TrueNAS among what a Servers call acts through only when it shares there', () => {
+    expect(serversReach('backup_place_nfs', { server: ` connection:${connectionId} ` })).toEqual([
+      connectionId,
+    ]);
+    expect(serversReach('backup_place_nfs', { server: 'blackbox' })).toEqual([]);
+    expect(serversReach('proxmox_storage_add', { server: `connection:${connectionId}` })).toEqual([]);
   });
 });

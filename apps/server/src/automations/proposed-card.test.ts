@@ -397,6 +397,29 @@ describe('the ids, folders and nothing-changes an action’s card names', () => 
     expect(tags.length).toBeLessThan(CARD_LINE_MAX);
   });
 
+  it('shows an id the service doesn’t have as it is, with a line that says so, instead of refusing the card', () => {
+    const lines = linesOf(
+      'paperless',
+      'Paperless-ngx',
+      upload({ tags: ['3', '99', '99'], correspondent: '4' }),
+      {
+        names: { 'tag:3': 'Invoices', 'correspondent:4': 'Acme BV' },
+        missing: ['tag:99'],
+        summary: 'File it',
+      },
+    );
+    expect(lines).toContain('upload.fields.tags: ["Invoices" (3), "99", "99"]');
+    // Said once however often the action names it, and not as a name Whombat couldn't read.
+    expect(lines.filter((l) => l === 'Paperless-ngx has no tag 99.')).toHaveLength(1);
+    expect(lines.some((l) => l.includes('couldn’t look up'))).toBe(false);
+    expect(lines.at(-1)).toBe('Agent’s note: "File it"');
+    // An id that could disguise itself is escaped there too.
+    const odd = linesOf('paperless', 'Paperless-ngx', upload({ tags: ['\u202e9'] }), {
+      missing: ['tag:\u202e9'],
+    });
+    expect(odd).toContain('Paperless-ngx has no tag \\u202e9.');
+  });
+
   it('says the folder Dropbox makes on the way, and that a folder there already changes nothing', () => {
     const dropbox = linesOf('dropbox', 'Dropbox', {
       method: 'POST',

@@ -44,6 +44,7 @@ import {
   executeConnectionCall,
   needsReauthText,
   newCallId,
+  otherTargetsOf,
 } from './call';
 import { coversReads } from './call-access';
 import { callTarget } from './call-target';
@@ -288,8 +289,10 @@ export const CONNECTION_TOOL_HANDLERS: {
     }
     const callId = newCallId();
     const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));
-    // Where it goes and as whom now: a yes is bound to it, and the call is sent only while the connection still has it.
+    // Where it goes and as whom now, and every other connection it acts through: a yes is bound to them, and the call
+    // is sent only while each still has it.
     const target = callTarget(c.row);
+    const others = await otherTargetsOf(services, c.row, tool.name, args);
     const res = await services.pipeline.commit(
       callConnectionTool,
       {
@@ -302,6 +305,7 @@ export const CONNECTION_TOOL_HANDLERS: {
         conversationId: ctx.dispatch.conversationId,
         ...(input.change ? { change: input.change } : {}),
         target,
+        others,
       },
       { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
     );
@@ -340,6 +344,7 @@ export const CONNECTION_TOOL_HANDLERS: {
       personId: person?.id ?? ctx.onBehalfOf.principalId ?? null,
       change: input.change ?? null,
       target,
+      others,
     });
     if (result.kind === 'failed') return failed(result.reason, result.message);
     let out = result.output;

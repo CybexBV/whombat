@@ -58,7 +58,8 @@ import { loadConversationRow } from '../read/conversations';
 import { loadGrants, loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
 import { VaultCallError, VaultEchoError } from '../vault/net';
-import { adapterFor, callWordsFor } from './adapters/index';
+import { adapterFor, callReaches, callWordsFor } from './adapters/index';
+import { NOWHERE, signingOnlyAs } from './bound-targets';
 import { connectionCallAccess, coversReads } from './call-access';
 import {
   ConnectionChangedError,
@@ -273,6 +274,14 @@ export const callConnectionTool = defineCommand({
       .string()
       .regex(/^[0-9a-f]{64}$/)
       .optional(),
+    /**
+     * Where each other connection the call acts through went and as whom when it was asked for, by id (`callReaches`,
+     * `otherTargetsOf`): the yes is bound to them too. Absent on a call asked before calls carried them.
+     */
+    others: z
+      .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
+      .refine((o) => Object.keys(o).length <= 8)
+      .optional(),
   }),
   async requiredKey(input, { db, services, actor }): Promise<KeyRequirement | null> {
     const plan = await planCall(db, services, actor.id, input);
@@ -387,6 +396,7 @@ export const callConnectionTool = defineCommand({
           approvalId,
           ...(input.change ? { change: input.change } : {}),
           ...(input.target ? { target: input.target } : {}),
+          ...(input.others ? { others: input.others } : {}),
         }),
       );
     }
@@ -448,6 +458,54 @@ export function failureOf(err: unknown): { reason: CallFailure; message: string;
   return { reason: 'service_error', message: 'The call failed on our side.', outcome: 'failed' };
 }
 
+/**
+ * The other connections of the burrow a call of `tool` on `row` acts through as well (`callReaches`: a Servers backup
+ * place on a TrueNAS), as they are stored now by id; null for one that isn't there (the tool refuses it).
+ */
+export async function reachedConnections(
+  services: Services,
+  row: Pick<CatalogConnectionRow, 'id' | 'burrowId' | 'catalogId'>,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<Map<string, CatalogConnectionRow | null>> {
+  const out = new Map<string, CatalogConnectionRow | null>();
+  for (const id of callReaches(row.catalogId, tool, args)) {
+    if (id === row.id || out.has(id)) continue;
+    const other = await currentRow(services, id);
+    out.set(id, other && other.burrowId === row.burrowId ? other : null);
+  }
+  return out;
+}
+
+/** Where each other connection a call acts through goes and as whom now (`callTarget`), by id: what its yes binds. */
+export async function otherTargetsOf(
+  services: Services,
+  row: Pick<CatalogConnectionRow, 'id' | 'burrowId' | 'catalogId'>,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [id, other] of await reachedConnections(services, row, tool, args))
+    if (other) out[id] = callTarget(other);
+  return out;
+}
+
+/**
+ * The first other connection a call acts through that isn't where, or as whom, it was when the call was asked for: one
+ * whose target changed, or one that is there now and wasn't then. Null when none changed.
+ */
+function changedOther(
+  reached: ReadonlyMap<string, CatalogConnectionRow | null>,
+  others: Readonly<Record<string, string>>,
+): CatalogConnectionRow | null {
+  for (const [id, now] of reached) {
+    if (!now) continue;
+    const was = others[id];
+    if (was === undefined || callTarget(now) !== was) return now;
+  }
+  return null;
+}
+
 /** Runs an allowed call against the service and records how it went (`connection.tool_finished`). */
 export async function executeConnectionCall(
   services: Services,
@@ -476,6 +534,11 @@ export async function executeConnectionCall(
      * connection the request is made with, and nothing is sent when it differs.
      */
     target?: string;
+    /**
+     * The same for each other connection the call acts through, by id (`otherTargetsOf` when it was asked for). Absent
+     * on a call asked before calls carried them: each is then signed only as it is when the call starts.
+     */
+    others?: Readonly<Record<string, string>>;
   },
 ): Promise<CallResult> {
   const started = Date.now();
@@ -493,13 +556,30 @@ export async function executeConnectionCall(
   let outcome: CallOutcome;
   let bytes = 0;
   let prepared: PreparedChange | null = null;
-  if (call.target !== undefined && callTarget(row) !== call.target) {
-    // Asked for, or said yes to, while the connection went elsewhere or as someone else: checked on the very row the
-    // request would be made with, and nothing is sent (the agent that asked hears it and may ask again).
+  // The other connections the call acts through, each bound to where it went when the call was asked for (or, for a
+  // call asked before calls carried them, where it goes now): it signs as each only there.
+  const reached = await reachedConnections(services, row, call.tool, call.args);
+  const others = call.others;
+  const bound: Record<string, string> = call.target !== undefined ? { [row.id]: call.target } : {};
+  for (const [id, now] of reached)
+    bound[id] = others ? (others[id] ?? NOWHERE) : now ? callTarget(now) : NOWHERE;
+  // What a change the call records keeps of where the other connections went (`withDestination`).
+  const kept = Object.fromEntries(
+    Object.entries(bound).filter(([id, target]) => id !== row.id && target !== NOWHERE),
+  );
+  const changedLabel = (id: string | undefined) =>
+    (id && id !== row.id ? reached.get(id)?.label : undefined) ?? row.label;
+  const changedText = (label: string) =>
+    call.approvalId ? changedSinceYesText(label) : changedWhileAskedText(label);
+  const otherChanged = call.target !== undefined && others ? changedOther(reached, others) : null;
+  if ((call.target !== undefined && callTarget(row) !== call.target) || otherChanged) {
+    // Asked for, or said yes to, while the connection, or another it acts through, went elsewhere or as someone else:
+    // checked on the very rows the requests would be made with, and nothing is sent (the agent that asked hears it and
+    // may ask again).
     result = {
       kind: 'failed',
       reason: 'destination_refused',
-      message: call.approvalId ? changedSinceYesText(row.label) : changedWhileAskedText(row.label),
+      message: changedText(otherChanged && callTarget(row) === call.target ? otherChanged.label : row.label),
       changed: true,
     };
     outcome = 'refused';
@@ -512,18 +592,28 @@ export async function executeConnectionCall(
     outcome = 'busy';
   } else {
     try {
-      // A write that works becomes a change on Done recently, with its inverse where Whombat knows one (ONE-08): the
-      // old state is read first, with the connection's own tools.
-      prepared = await prepareConnectionChange(
-        services,
-        row,
-        entry,
-        tool,
-        call.args,
-        (name, args) => readForChange(services, row, entry, name, args),
-        call.change,
-      ).catch(() => null);
-      const output = await runTool(services, row, entry, tool, call.args, call);
+      const { value, refused: changed } = await signingOnlyAs(bound, async () => {
+        // A write that works becomes a change on Done recently, with its inverse where Whombat knows one (ONE-08): the
+        // old state is read first, with the connection's own tools.
+        const change = await prepareConnectionChange(
+          services,
+          row,
+          entry,
+          tool,
+          call.args,
+          (name, args) => readForChange(services, row, entry, name, args),
+          call.change,
+        ).catch(() => null);
+        return {
+          change,
+          output: await runTool(services, row, entry, tool, call.args, { ...call, others: kept }),
+        };
+      });
+      prepared = value.change;
+      const output = value.output;
+      // A tool that answered in its own words for a connection refused as changed (a TrueNAS that “didn’t answer”):
+      // it changed, and nothing was signed as it.
+      if (changed && output.isError) throw new ConnectionChangedError(changed);
       result = { kind: 'ok', output };
       outcome = output.isError ? 'error' : 'done';
       bytes = output.bytes;
@@ -558,7 +648,7 @@ export async function executeConnectionCall(
               // with what it holds now, so nothing was sent (the agent that asked hears it and may ask again).
               kind: 'failed',
               reason: failure.reason,
-              message: call.approvalId ? changedSinceYesText(row.label) : changedWhileAskedText(row.label),
+              message: changedText(changedLabel(err.connectionId)),
               changed: true,
             }
           : { kind: 'failed', reason: failure.reason, message: failure.message };
@@ -667,6 +757,7 @@ async function runTool(
     threadRootId?: string | null;
     approvalId?: string | null;
     uploadAttachment?: ResolveRequestUpload;
+    others?: Readonly<Record<string, string>>;
   },
 ): Promise<CallOutput> {
   // Every transport signs only while the stored connection still goes where `row`'s calls go and as whom: a refresh, a
@@ -712,6 +803,7 @@ async function runTool(
                 personId: call.personId ?? null,
                 approvalId: call.approvalId ?? null,
                 target,
+                ...(call.others ? { others: call.others } : {}),
               },
             }
           : {}),
@@ -767,6 +859,8 @@ interface DeferredCall {
   change?: string;
   /** Where the call may go and as whom (`callTarget`), as it was when it was asked for. */
   target?: string;
+  /** The same for each other connection it acts through, by id. */
+  others?: Readonly<Record<string, string>>;
 }
 
 /**

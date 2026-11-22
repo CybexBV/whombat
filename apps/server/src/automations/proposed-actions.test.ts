@@ -2,7 +2,7 @@ import { catalogEntry } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { ConnectionToolRow } from '../connections/types';
 import { listedHowTo, listedThere } from './listed-actions';
-import { isProposableEntry, outsidersCall } from './proposed-actions';
+import { isProposableEntry, notOfferedText, outsidersCall } from './proposed-actions';
 import { describePlannedAction, proposalCard } from './proposed-card';
 
 function entryOrThrow(id: string) {
@@ -718,5 +718,37 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     });
     const put = sent('nextcloud', { method: 'PUT', path: '/Invoices/a.pdf', upload: { attachmentId: ATT } });
     expect(listedThere({ catalogId: 'nextcloud', label: 'Nextcloud', tool: REQUEST, args: put })).toBeNull();
+  });
+});
+
+describe('what an outsiders’ turn hears of what the person has', () => {
+  it('marks a refusal for the person’s setup apart from one for the arguments', () => {
+    const theirs = [
+      call(
+        'whombat_servers',
+        { server: 'pve-01' },
+        { name: 'guest_power', access: 'write', origin: 'builtin' },
+      ),
+      call('paperless', { method: 'DELETE', path: '/api/documents/1/' }),
+      call('dropbox', { path: '/old.pdf' }, adapter('files_delete')),
+    ];
+    for (const out of theirs) expect(out).toMatchObject({ ok: false, offered: false });
+    // A listed action with an argument it doesn't take: about the agent's own arguments, said as it is.
+    const own = call('paperless', {
+      method: 'POST',
+      path: '/api/documents/post_document/',
+      upload: { field: 'document', attachmentId: ATT, fields: { title: 'x'.repeat(200) } },
+    });
+    expect(own.ok).toBe(false);
+    expect(own).not.toHaveProperty('offered');
+  });
+
+  it('says the same words for any action it wasn’t offered, naming nothing of the person’s', () => {
+    const words = notOfferedText('paperless');
+    expect(words).toContain('“paperless”');
+    expect(words).toContain('can’t be proposed');
+    // The handle as the agent wrote it, on one line; whatever else differs, the words don't.
+    expect(notOfferedText('  github\nnow ')).toBe(notOfferedText('github now'));
+    expect(notOfferedText('servers').replace('servers', 'paperless')).toBe(words);
   });
 });

@@ -66,7 +66,24 @@ import { type AutomationRunRow, type AutomationStepRow, publishRun } from './sto
 
 export { isProposableEntry };
 
-export type OutsidersCall = { ok: true; args: Record<string, unknown> } | { ok: false; reason: string };
+/**
+ * `offered: false`: refused for what the person has, not for the arguments of an action the turn was offered — the kind
+ * of connection, a call that is no listed action there, or a path the connection's own settings don't allow. An
+ * outsiders' turn hears every such refusal in the same words (`notOfferedText`); the person's run page says why.
+ */
+export type OutsidersCall =
+  | { ok: true; args: Record<string, unknown> }
+  | { ok: false; reason: string; offered?: false };
+
+/**
+ * What an outsiders' turn hears for any action it wasn't offered, whatever the reason: no connection by that handle,
+ * one that is signed out, looks only or can't take proposals, a tool it doesn't have or that is off, a call that is no
+ * listed action. The same words every time, so a turn can't learn from them what the person has.
+ */
+export function notOfferedText(handle: string): string {
+  const name = singleLine(handle).slice(0, 40);
+  return `That action on “${name}” isn’t one listed for you, so it can’t be proposed. ${whatMailCanDo()}`;
+}
 
 /**
  * A call an outsiders' run proposes, as Whombat would send it, or why it can't be: only a listed action
@@ -90,6 +107,7 @@ export function outsidersCall(
   if (!isProposableEntry(entry))
     return {
       ok: false,
+      offered: false,
       reason: `Actions on ${name} can’t be proposed from an outsiders’ run. ${whatMailCanDo()}`,
     };
   let args: Record<string, unknown> = { ...raw };
@@ -106,18 +124,23 @@ export function outsidersCall(
   const given = args;
   const listed = settleListed(entry.id, tool, args, conn.fields, settled);
   if (!listed.ok)
-    return {
-      ok: false,
-      reason: listed.listed
-        ? `${name}: ${listed.reason}`
-        : `${name}: a mail automation can’t propose this. ${listed.reason}`,
-    };
+    return listed.listed
+      ? { ok: false, reason: `${name}: ${listed.reason}` }
+      : {
+          ok: false,
+          offered: false,
+          reason: `${name}: a mail automation can’t propose this. ${listed.reason}`,
+        };
   args = listed.args;
   if (
     tool.origin === 'request' &&
     !requestAllowed(entry, conn.fields, String(args.method), String(args.path))
   )
-    return { ok: false, reason: `${name} doesn’t allow ${String(given.method)} ${String(given.path)}.` };
+    return {
+      ok: false,
+      offered: false,
+      reason: `${name} doesn’t allow ${String(given.method)} ${String(given.path)}.`,
+    };
   // The second check reads what the call is (its method and path, or its tool), never the text in its values: those are
   // the listed action's own (a notification that mentions a door unlocks nothing).
   const what = tool.origin === 'request' ? { method: args.method, path: args.path } : {};
@@ -245,29 +268,24 @@ export const proposeConnectionActions = defineCommand({
         const handle = item.connection.trim().toLowerCase();
         const conn = byHandle.get(handle);
         const entry = conn ? catalogEntry(conn.catalogId) : null;
-        if (!conn || !entry) {
-          throw badRequest(`No connected service called “${item.connection}”.`);
-        }
-        if (!isProposableEntry(entry)) {
-          throw forbidden(
-            `Actions on ${item.connection} can’t be proposed from an outsiders’ run. ${whatMailCanDo()}`,
-          );
-        }
-        if (conn.access === 'read') {
-          throw forbidden(lookOnlyText(item.connection));
-        }
+        // Only what the turn's instructions offered it (`proposableConnectionsNote`): anything else, whatever the
+        // reason, is refused in the same words, so the refusal says nothing of what the person has.
+        const notOffered = () => forbidden(notOfferedText(item.connection));
+        if (
+          !conn ||
+          !entry ||
+          !isProposableEntry(entry) ||
+          conn.status !== 'active' ||
+          conn.access === 'read'
+        )
+          throw notOffered();
         const [tool] = await tx
           .select()
           .from(connectionTools)
           .where(and(eq(connectionTools.connectionId, conn.id), eq(connectionTools.name, item.tool)));
-        if (!tool) {
-          throw badRequest(`${item.connection} has no tool called “${item.tool}”.`);
-        }
-        if (tool.tier === 'off') {
-          throw forbidden(`${tool.name} is turned off for ${item.connection}.`);
-        }
+        if (!tool || tool.tier === 'off') throw notOffered();
         const call = outsidersCall(entry, conn, tool, item.arguments, item.connection);
-        if (!call.ok) throw forbidden(call.reason);
+        if (!call.ok) throw call.offered === false ? notOffered() : forbidden(call.reason);
         const args = call.args;
         const upload = await proposedUpload(tx, turn.run, args, item.connection, maxUpload);
         if (!upload.ok) throw forbidden(upload.reason);
@@ -491,13 +509,14 @@ export async function planConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, row, tool));
     if (outside) return { ok: false, fatal: false, reason: outside };
 
-    // An id the service says it doesn't have is refused; one it couldn't read shows as it is.
+    // An id the service says it doesn't have goes on the card with a line that says so, and one it couldn't read shows
+    // as it is: never a refusal, so what a later step can read of this one is the same whether the id is there or not.
     const named: Record<string, string> = {};
+    const missing: string[] = [];
     for (const ref of cardRefs(row.catalogId, tool, args)) {
       const found = known[cardNameKey(row, ref.kind, ref.id)];
-      if (found && 'missing' in found)
-        return { ok: false, fatal: false, reason: `${row.label} has no ${ref.what} ${ref.id}.` };
-      if (found) named[`${ref.kind}:${ref.id}`] = found.name;
+      if (found && 'missing' in found) missing.push(`${ref.kind}:${ref.id}`);
+      else if (found) named[`${ref.kind}:${ref.id}`] = found.name;
     }
 
     const summary = singleLine(item.summary);
@@ -509,6 +528,7 @@ export async function planConnectionActions(
       uploadFile: upload.file,
       summary,
       names: named,
+      missing,
     });
 
     planned.push({
