@@ -235,6 +235,7 @@ export class RunAdvancer {
           op: 'finish',
           status: 'failed',
           error: `Step “${row.name}” failed${row.error ? `: ${row.error}` : '.'}`.slice(0, 1000),
+          idx: row.idx,
         });
         return false;
       }
@@ -243,6 +244,7 @@ export class RunAdvancer {
           op: 'finish',
           status: 'failed',
           error: (row.error ?? `Step “${row.name}” was refused.`).slice(0, 1000),
+          idx: row.idx,
         });
         return false;
       }

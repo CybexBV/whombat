@@ -76,6 +76,7 @@ import { vaultContextFor } from '../vault/context';
 import { webSearchDispatch } from '../web-search/store';
 import { contextThreadCandidates, contextWindowCandidates } from './context-selection';
 import { notifyContextOf } from './job-notify';
+import { forOutsiders } from './outsiders-view';
 import { dispatchPerson, outsidersTurn } from './person';
 import { sessionSince, turnSession } from './sessions';
 
@@ -284,6 +285,20 @@ export async function buildDispatchContext(
     trigger = trigger ? keep(trigger) : trigger;
     window = window.map(keep);
     if (thread) thread = { ...thread, root: keep(thread.root), replies: thread.replies.map(keep) };
+  }
+  // An outsiders' turn reads an approval card, and what a step told the person of the calls they approved, only as a
+  // line: never the names, paths, labels or answers the server read from the person's services for them.
+  if (outsidersTurn(row)) {
+    const shown = await forOutsiders(db, [
+      ...(trigger ? [trigger] : []),
+      ...window,
+      ...(thread ? [thread.root, ...thread.replies] : []),
+    ]);
+    let at = 0;
+    if (trigger) trigger = shown[at++] as Message;
+    window = shown.slice(at, at + window.length);
+    at += window.length;
+    if (thread) thread = { ...thread, root: shown[at++] as Message, replies: shown.slice(at) };
   }
 
   // Whombat's own signers are `system` (one-agent.md OA-17).

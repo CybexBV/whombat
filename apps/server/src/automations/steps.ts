@@ -48,7 +48,7 @@ import {
 } from './steps/open-pull-request';
 import { executePostMessage } from './steps/post-message';
 import { definitionStep, GateFactsInput, retryBackoffMs, stepScope, stepTimeoutMs } from './steps/scope';
-import { block, lockRun, revokeTrackerAccessAfter, stopRun, updateStep } from './steps/state';
+import { block, lockRun, noticeOnStep, revokeTrackerAccessAfter, stopRun, updateStep } from './steps/state';
 import { placeFor, postInRunThread } from './steps/thread';
 import { executeTrackerDecision, executeTrackerReply, executeTrackerUpdate } from './steps/tracker';
 import { queuedNoteOf, queuedSummary } from './steps/turn-words';
@@ -129,6 +129,8 @@ export const StepOp = z.discriminatedUnion('op', [
     error: z.string().max(1000).nullable(),
     /** A person said no to its card (automation-recipes.md AR-52): the run page says so, the thread hears nothing more. */
     quiet: z.boolean().optional(),
+    /** The step it stopped at (`stopRun`'s `noticeOn`): its notice is kept with that step's messages. */
+    idx: z.number().int().nonnegative().optional(),
   }),
   /**
    * A `merge_pull_request` step (automation-recipes.md AR-46, AR-47): from waiting for its checks to `running` when they
@@ -205,7 +207,10 @@ export const automationStep = defineCommand({
         return { status: 'running' };
       }
       case 'finish': {
-        await stopRun(ctx, run, input.status, input.error, { quiet: input.quiet === true });
+        await stopRun(ctx, run, input.status, input.error, {
+          quiet: input.quiet === true,
+          ...(input.idx !== undefined ? noticeOnStep(run, input.idx) : {}),
+        });
         await publishRun(ctx, run.id);
         return { status: input.status };
       }
@@ -410,7 +415,8 @@ export const automationStep = defineCommand({
             },
             ctx.now,
           );
-          if (input.state === 'uncertain') await stopRun(ctx, run, 'needs_review', input.error ?? null);
+          if (input.state === 'uncertain')
+            await stopRun(ctx, run, 'needs_review', input.error ?? null, noticeOnStep(run, input.idx));
           // A no that lets it go on puts the run back among those that take a place, as a yes does (`continueStep`,
           // AR-56); a no that stops it ends it instead.
           if (
