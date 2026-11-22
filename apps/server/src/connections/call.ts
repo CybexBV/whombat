@@ -804,8 +804,8 @@ async function runTool(
             target,
             ...(options?.truncateAt !== undefined ? { truncateAt: options.truncateAt } : {}),
           }),
-        datagram: (port, payload) => connectionDatagram(services, row, port, payload),
-        line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent),
+        datagram: (port, payload) => connectionDatagram(services, row, port, payload, { target }),
+        line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent, target),
         // A callable builtin acts as the agent (the Servers tools, one-whombat-servers.md ONE-DH14).
         ...(call
           ? {

@@ -40,6 +40,8 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { catalogConnections } from '../../db/schema/index';
 import type { Services } from '../../services';
+import { boundTarget } from '../bound-targets';
+import { callTarget } from '../call-target';
 import {
   firmwareOf,
   PS5_WEBKIT_AT_FIELD,
@@ -249,22 +251,35 @@ async function writeStartup(ctx: Ps5Context, next: z.infer<typeof Ps5Config>) {
   return saved;
 }
 
-/** Keeps a few facts on the connection (the WebKit installer Whombat ran); a failure to keep them changes nothing else. */
+/**
+ * Keeps a few facts on the connection (the WebKit installer Whombat ran); a failure to keep them changes nothing else.
+ * Work bound to where the connection went (`bound-targets.ts`) keeps them only while it still goes there: what was done
+ * on one console isn't written to a connection given another one meanwhile.
+ */
 export async function keepPs5Fields(
   services: Services,
   connectionId: string,
   values: Record<string, string>,
 ): Promise<void> {
+  const target = boundTarget(connectionId);
   try {
-    await services.pipeline.transactAccount((tx) =>
-      tx
+    await services.pipeline.transactAccount(async (tx) => {
+      if (target !== undefined) {
+        const [now] = await tx
+          .select()
+          .from(catalogConnections)
+          .where(eq(catalogConnections.id, connectionId))
+          .for('update');
+        if (!now || callTarget(now) !== target) return;
+      }
+      await tx
         .update(catalogConnections)
         .set({
           fields: sql`${catalogConnections.fields} || ${JSON.stringify(values)}::jsonb`,
           updatedAt: services.clock(),
         })
-        .where(eq(catalogConnections.id, connectionId)),
-    );
+        .where(eq(catalogConnections.id, connectionId));
+    });
   } catch (err) {
     services.log.warn({ err: err instanceof Error ? err.message : String(err) }, 'ps5: record not kept');
   }

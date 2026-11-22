@@ -16,6 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { type AnyEndpoint, api, buildPath, CONNECTIONS_MAX } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { observeExternalEffects } from '../commit/scope';
 import {
   catalogConnections,
   connectionClients,
@@ -28,11 +29,16 @@ import {
   watchOns,
 } from '../db/schema/index';
 import { IDS } from '../seed/test-world';
+import { insertConnection } from '../test/connections';
 import { useTestServer } from '../test/harness';
 import { addPersonalAgent } from '../test/personal';
 import { SELF_SIGNED_CERT_A, SELF_SIGNED_KEY_A } from '../test/self-signed';
 import { sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { keepPs5Fields } from './adapters/ps5';
+import { signingOnlyAs } from './bound-targets';
+import { ConnectionChangedError, callTarget } from './call-target';
+import { connectionDatagram, connectionLine, currentRow } from './http';
 import { appRedirectUri, haClientId } from './redirect';
 import { refreshConnectionAccess } from './refresh';
 import { ensureTools } from './sync';
@@ -53,6 +59,8 @@ const HOSTS: Record<string, string[]> = {
   'pve.home.test': ['192.168.77.50'],
   'tower.home.test': ['192.168.77.60'],
   'ps5.home.test': ['192.168.77.70'],
+  // Another console: where a PS5 connection is pointed while work bound to the first one waits.
+  'ps5-other.home.test': ['192.168.77.71'],
 };
 
 async function call(
@@ -191,6 +199,63 @@ describe('a PS5 without a sign-in', () => {
     ]);
     const removed = await call(api.connections.disconnect, { connectionId: connection.id });
     expect(removed.status).toBe(200);
+  });
+});
+
+describe('a PS5’s datagrams and lines, bound to where it went', () => {
+  it('sends neither, and keeps nothing on it, once the connection was given another console', async () => {
+    const id = await insertConnection(t.services, {
+      catalogId: 'ps5',
+      burrowId: t.burrowId,
+      label: 'Lounge PS5',
+      handle: 'lounge-ps5',
+      signIn: 'none',
+      auth: null,
+      fields: { url: stubs.url('ps5.home.test') },
+    });
+    const asked = await currentRow(t.services, id);
+    if (!asked) throw new Error('no connection');
+    const checked = callTarget(asked);
+    const other = stubs.url('ps5-other.home.test');
+    await t.services.db
+      .update(catalogConnections)
+      .set({ baseUrl: other, fields: { url: other }, credentialVersion: asked.credentialVersion + 1 })
+      .where(eq(catalogConnections.id, id));
+    const moved = await currentRow(t.services, id);
+    if (!moved) throw new Error('no connection');
+    const started: string[] = [];
+    const stop = observeExternalEffects((e) => started.push(e.label));
+    try {
+      const wake = Buffer.from('WAKEUP * HTTP/1.1\n');
+      // A connection call's own target, and the binding of the work under way (a page's button): neither sends.
+      await expect(
+        connectionDatagram(t.services, asked, 9302, wake, { target: checked }),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+      await expect(
+        connectionLine(t.services, asked, 9090, 'REBOOT\n', false, checked),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+      for (const row of [asked, moved]) {
+        await expect(
+          signingOnlyAs({ [id]: checked }, () => connectionDatagram(t.services, row, 9302, wake)),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        await expect(
+          signingOnlyAs({ [id]: checked }, () => connectionLine(t.services, row, 9090, 'REBOOT\n', false)),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+      }
+      expect(started.filter((l) => l === 'connections.datagram' || l === 'connections.line')).toEqual([]);
+    } finally {
+      stop();
+    }
+    // What an update did on the first console isn't kept on the connection given another one meanwhile.
+    await signingOnlyAs({ [id]: checked }, () => keepPs5Fields(t.services, id, { webkitVersion: 'v0.7.1' }));
+    expect((await currentRow(t.services, id))?.fields).toEqual(moved.fields);
+    // Bound to where it goes now, it is kept.
+    await signingOnlyAs({ [id]: callTarget(moved) }, () =>
+      keepPs5Fields(t.services, id, { webkitVersion: 'v0.7.1' }),
+    );
+    expect((await currentRow(t.services, id))?.fields).toMatchObject({ webkitVersion: 'v0.7.1' });
+    // The burrow's list of connections in the tests below is as it was.
+    await t.services.db.delete(catalogConnections).where(eq(catalogConnections.id, id));
   });
 });
 
