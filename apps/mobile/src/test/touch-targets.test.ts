@@ -70,9 +70,9 @@ const FILES: Record<string, number> = {
   // A live card's quiet Stop and its ⋯ (CARD_TARGET).
   'src/ui/cardStop.tsx': 2,
   // What answers in Chat (chat-runtime-android.md AP-2715…AP-2728): the composer's 32dp icon (chat-runtime-icon.md
-  // AP-2962) and a reply's 20dp mark (both padded); the sheet's “Set it up” (20dp, padded), Claude · ChatGPT (44dp), a model's 48dp row and “N more…”
+  // AP-2962), its 32dp “No AI yet” circle while no AI is signed in, and a reply's 20dp mark (all padded); the sheet's “Set it up” (20dp, padded), Claude · ChatGPT (44dp), a model's 48dp row and “N more…”
   // (44dp), an effort's 36dp pill (padded) and “Make this Neo’s default” (46dp).
-  'src/ui/chatRuntime.tsx': 2,
+  'src/ui/chatRuntime.tsx': 3,
   'src/screens/ChatRuntimeSheet.tsx': 6,
   'src/screens/VaultScreen.tsx': 0,
   'src/screens/VaultEntryScreen.tsx': 0,
