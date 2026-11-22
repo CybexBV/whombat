@@ -536,10 +536,7 @@ export class VoiceTypingService {
       return;
     }
     if (this.#syncTimer || this.#closed) return;
-    this.#syncWait = Math.min(
-      START_RETRY_MAX_MS,
-      this.#syncWait ? this.#syncWait * 2 : this.#timings.pollMs,
-    );
+    this.#syncWait = Math.min(START_RETRY_MAX_MS, this.#syncWait ? this.#syncWait * 2 : this.#timings.pollMs);
     this.#syncTimer = setTimeout(
       () =>
         outsideCommandScope(() => {
