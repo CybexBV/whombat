@@ -79,6 +79,10 @@ let
             start_problem failed
             exit 1
           fi
+          # A server that started before the release was recorded (the box was offline at its first start) runs with
+          # WHOMBAT_RELEASE_ID=factory and can't tell where an update would go back to: a restart gives it the
+          # release's own id (runtime.nix). One that isn't running starts with it below.
+          systemctl --no-block try-restart whombat-server.service
         ''}
       fi
     else

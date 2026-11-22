@@ -69,6 +69,7 @@ import {
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import {
+  BEFORE_FIRST_RELEASE,
   knownRelease,
   MAIL_AUTOMATIONS_LATER,
   NewerAutomationsGate,
@@ -3482,6 +3483,9 @@ describe('mail-arrives automations', () => {
       await w.settle();
       expect((await runsOf(liveId))[0]?.status).toBe('queued');
 
+      // A runtime that started before the box's release was recorded doesn't record its stand-in id as one.
+      await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: BEFORE_FIRST_RELEASE }, w.now());
+      expect(await knownRelease(w.services.db, BEFORE_FIRST_RELEASE)).toBe(false);
       // The next release: the one it goes back to recorded itself at its start, so they go on.
       await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: OLD }, w.now());
       expect(await gate.ready()).toBe(true);

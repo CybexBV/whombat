@@ -847,8 +847,10 @@ published automation details read their definition and publisher from one versio
   then they wait, kept as they are: no mailbox is read, their runs don't start or move on (a run's time counts from when
   it first starts, and its email's files stay while it hasn't ended), and making, turning on or
   running one, or the assistant's `draft_automation`, answers “Mail automations come with the next update.” (or the same
-  about connected services), as `automation_read`'s guide says. Development boxes, tests and a box that never updated
-  have them on.
+  about connected services), as `automation_read`'s guide says. Development boxes, tests, a box that never updated and
+  a production runtime no update helper started (it names no release, and no manager rolls it back) have them on. A
+  server that started before the box's release was recorded (offline at its first start) is restarted once it is, so it
+  knows its release (`provisioning.nix`).
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
