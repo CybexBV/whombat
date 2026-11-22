@@ -1,8 +1,8 @@
 /**
  * Feeds the phone's home-screen status widget from the open Whombat's `home.overview` query (the same query that
  * drives Overview and the Inbox tab badge, so it makes no extra requests). Mounted inside `ApplianceRoot` only so
- * demo mode never overwrites the person's widget; sign-out, revocation and box removal clear it in `ApplianceRoot`,
- * `ManagedApp` and `CommunityApp`.
+ * demo mode never overwrites the person's widget; explicit switches, sign-out, revocation and box removal clear the
+ * departing box's snapshot in `ApplianceRoot`, `ManagedApp`, `CommunityApp`, and here when `applianceId` changes.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useWhombat } from '@whombat/client/react';
@@ -42,6 +42,15 @@ export function StatusWidgetBridge() {
       now: clock(),
     });
   }, [overview, applianceId, applianceName, burrowName, source, timeZone, clock]);
+
+  const activeApplianceId = useRef<string | null>(applianceId);
+  useEffect(() => {
+    const previous = activeApplianceId.current;
+    activeApplianceId.current = applianceId;
+    if (previous && previous !== applianceId) {
+      void sync.current?.clear(previous);
+    }
+  }, [applianceId]);
 
   useEffect(() => {
     if (!payload) return;

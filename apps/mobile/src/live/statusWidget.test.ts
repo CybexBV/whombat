@@ -3,10 +3,12 @@ import type { ClearStatusWidgetFilter, StatusWidgetPayload } from '../../modules
 import { COMMUNITY_ORG } from '../managed/community';
 import {
   clearCloudStatusWidget,
+  clearDepartingStatusWidget,
   createStatusWidgetSync,
   shouldClearStatusWidget,
   statusWidgetPayload,
   statusWidgetSourceFor,
+  switchActiveAppliance,
 } from './statusWidget';
 
 const TZ = 'Europe/Amsterdam';
@@ -158,5 +160,135 @@ describe('home-screen status widget bridge model', () => {
     // Removing that specific community box still clears it by applianceId.
     await nativeStore.clearStatusWidget('wb-comm');
     expect(stored).toBeNull();
+  });
+
+  it('clears the departing box on switch so an offline next box never keeps the previous box status', async () => {
+    const boxA = statusWidgetPayload({
+      overview,
+      applianceId: 'wb-a',
+      applianceName: 'Home',
+      burrowName: null,
+      source: 'cloud',
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+    const boxB = statusWidgetPayload({
+      overview: { ...overview, summary: { needsYou: 0, working: 0, problems: 0 } },
+      applianceId: 'wb-b',
+      applianceName: 'Office',
+      burrowName: null,
+      source: 'cloud',
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+
+    let stored: StatusWidgetPayload | null = boxA;
+    let lastUsed: string | null = 'wb-a';
+    const registry = {
+      lastUsed: () => lastUsed,
+      setLastUsed: (device: string | null) => {
+        lastUsed = device;
+      },
+    };
+    const nativeStore = {
+      async setStatusWidget(payload: StatusWidgetPayload) {
+        stored = payload;
+      },
+      async clearStatusWidget(filter?: string | ClearStatusWidgetFilter) {
+        if (shouldClearStatusWidget(stored, filter)) stored = null;
+      },
+    };
+
+    // Reopening the same box preserves its status while it reconnects.
+    switchActiveAppliance(registry, nativeStore, 'wb-a');
+    await Promise.resolve();
+    expect(lastUsed).toBe('wb-a');
+    expect(stored).toEqual(boxA);
+
+    // Switching to another box (which may be offline and never push) clears the departing box.
+    switchActiveAppliance(registry, nativeStore, 'wb-b');
+    await Promise.resolve();
+    expect(lastUsed).toBe('wb-b');
+    expect(stored).toBeNull();
+
+    // Explicit departure to the appliances list (no next box) clears the departing box only.
+    stored = boxB;
+    await clearDepartingStatusWidget(nativeStore, 'wb-a');
+    expect(stored).toEqual(boxB);
+    await clearDepartingStatusWidget(nativeStore, 'wb-b', 'wb-b');
+    expect(stored).toEqual(boxB);
+    await clearDepartingStatusWidget(nativeStore, 'wb-b');
+    expect(stored).toBeNull();
+
+    // Switching away from box B to an unpinned/changed box C clears box B's snapshot.
+    stored = boxB;
+    await clearDepartingStatusWidget(nativeStore, 'wb-b', 'wb-c');
+    expect(stored).toBeNull();
+  });
+
+  it('serializes writes and clears so an in-flight push from a departing box cannot overwrite a clear', async () => {
+    const boxA1 = statusWidgetPayload({
+      overview,
+      applianceId: 'wb-a',
+      applianceName: 'Home',
+      burrowName: null,
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+    const boxA2 = { ...boxA1, status: 'All good', tone: 'ok' as const };
+    const boxB = statusWidgetPayload({
+      overview: { ...overview, summary: { needsYou: 0, working: 0, problems: 0 } },
+      applianceId: 'wb-b',
+      applianceName: 'Office',
+      burrowName: null,
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+
+    let stored: StatusWidgetPayload | null = null;
+    const events: string[] = [];
+    let enteredFirst!: () => void;
+    const firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstWrite = true;
+
+    const sync = createStatusWidgetSync({
+      async setStatusWidget(payload) {
+        if (firstWrite) {
+          firstWrite = false;
+          enteredFirst();
+          await firstGate;
+        }
+        events.push(`set:${payload.applianceId}:${payload.status}`);
+        stored = payload;
+      },
+      async clearStatusWidget(filter) {
+        const id = typeof filter === 'string' ? filter : (filter?.applianceId ?? '*');
+        events.push(`clear:${id}`);
+        if (shouldClearStatusWidget(stored, filter)) stored = null;
+      },
+    });
+
+    // Wait for box A's first write to enter native storage, then queue a second box A write and clear box A.
+    const p1 = sync.push(boxA1);
+    await firstEntered;
+    const p2 = sync.push(boxA2);
+    const pClear = sync.clear('wb-a');
+    releaseFirst();
+
+    expect(await p1).toBe(true);
+    expect(await p2).toBe(false);
+    await pClear;
+    expect(stored).toBeNull();
+    expect(events).toEqual(['set:wb-a:1 thing needs you', 'clear:wb-a']);
+
+    // Once box B comes online later, its write lands cleanly.
+    expect(await sync.push(boxB)).toBe(true);
+    expect(stored).toEqual(boxB);
   });
 });

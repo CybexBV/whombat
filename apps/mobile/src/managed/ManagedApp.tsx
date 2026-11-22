@@ -62,7 +62,11 @@ import { WhombatLive } from '../../modules/whombat-live';
 import { QUERY_CACHE_NAME } from '../data/queryPersist';
 import { deviceBox } from '../data/secureBoxNative';
 import { LookAround } from '../demo/LookAround';
-import { clearCloudStatusWidget } from '../live/statusWidget';
+import {
+  clearCloudStatusWidget,
+  clearDepartingStatusWidget,
+  switchActiveAppliance,
+} from '../live/statusWidget';
 import { prefetchNavigation } from '../navigation/useNavigationPersistence';
 import { phoneNotifications } from '../push/phoneNotifications';
 import { initialNotificationUrl, onNotificationTap } from '../push/taps';
@@ -386,11 +390,18 @@ export function ManagedApp() {
     return stop;
   }, [start, askCloud]);
   // The session for the next start: kept while signed in, forgotten on a definite signed-out (AP-921).
+  const prevAccountId = useRef<string | null>(null);
   useEffect(() => {
     if (cloud === null) {
+      prevAccountId.current = null;
       void start.kept.clear();
       void clearCloudStatusWidget(WhombatLive);
     } else if (typeof cloud === 'object') {
+      const nextAccountId = cloud.account.accountId;
+      if (prevAccountId.current && prevAccountId.current !== nextAccountId) {
+        void clearCloudStatusWidget(WhombatLive);
+      }
+      prevAccountId.current = nextAccountId;
       void start.kept.set(cloud);
     }
   }, [cloud, start]);
@@ -551,6 +562,7 @@ export function ManagedApp() {
       default:
         pendingRoute.set({ name: 'appliances' });
     }
+    if (outcome.kind !== 'open') void clearCloudStatusWidget(WhombatLive);
     setCloud(outcome.session);
     setPasskeyEpoch((n) => n + 1);
   }, [env, key]);
@@ -635,7 +647,8 @@ export function ManagedApp() {
   const communityEntry = {
     boxes: knownCommunityBoxes(communityRegistry),
     onOpen: (device: string) => {
-      communityRegistry.setLastUsed(device);
+      switchActiveAppliance(communityRegistry, WhombatLive, device);
+      void clearCloudStatusWidget(WhombatLive);
       setCommunity({ name: 'open' });
     },
     onJoin: () => setCommunity({ name: 'join' }),
@@ -735,7 +748,13 @@ function phonePasskeySignIn(
     control: env.control,
     platform: PASSKEYS,
     endpoint: { peerId: keyPair.peerId, label: phoneLabel(), platform: PHONE_PLATFORM },
-    registryFor: (accountId) => createRegistry(accountId, storage()),
+    registryFor: (accountId) => {
+      const reg = createRegistry(accountId, storage());
+      return {
+        ...reg,
+        setLastUsed: (device) => switchActiveAppliance(reg, WhombatLive, device),
+      };
+    },
     openEnroll: (t) => openEnrollSession(env, keyPair, t),
     onStep: (step, appliance) => {
       if (step === 'opening') onOpening(appliance?.name ?? null);
@@ -935,8 +954,11 @@ function SignedIn({
       const started = takeHeldConnect();
       const device = finishingDevice(started, registry.lastUsed());
       const known = device ? registry.get(device) : undefined;
-      if (!known?.enrolled) return setRoute({ name: 'appliances' });
-      registry.setLastUsed(known.device);
+      if (!known?.enrolled) {
+        void clearDepartingStatusWidget(WhombatLive, registry.lastUsed());
+        return setRoute({ name: 'appliances' });
+      }
+      switchActiveAppliance(registry, WhombatLive, known.device);
       pushConnectReturn({ device: known.device, back: asStarted(linkIn.back, started), entry: linkIn.entry });
       return setRoute({ name: 'open' });
     }
@@ -952,7 +974,7 @@ function SignedIn({
     const known = registry.get(device);
     const openIt = (k: KnownAppliance) => {
       const showing = registry.lastUsed();
-      registry.setLastUsed(k.device);
+      switchActiveAppliance(registry, WhombatLive, k.device);
       if (!k.enrolled) return setRoute({ name: 'pair', device: k.device });
       sendLink(links, path, showing, k.device);
       setRoute({ name: 'open' });
@@ -964,8 +986,14 @@ function SignedIn({
         if (!a) return setRoute({ name: 'appliances' });
         if (isRetired(a)) return leave(device, 'retired', a.name ?? known?.name ?? null);
         const decision = openDecision(known, a.contentPeerId);
-        if (decision.kind === 'unpinned') return setRoute({ name: 'setup', device });
-        if (decision.kind === 'changed') return setRoute({ name: 'identityChanged', device });
+        if (decision.kind === 'unpinned') {
+          void clearDepartingStatusWidget(WhombatLive, registry.lastUsed(), device);
+          return setRoute({ name: 'setup', device });
+        }
+        if (decision.kind === 'changed') {
+          void clearDepartingStatusWidget(WhombatLive, registry.lastUsed(), device);
+          return setRoute({ name: 'identityChanged', device });
+        }
         openIt(decision.known);
       },
       // Control is unreachable: a pinned Whombat still opens (its session checks the pin); nothing else does.
@@ -1002,11 +1030,18 @@ function SignedIn({
   // Open (AP-696).
   const open = (a: ApplianceSummary) => {
     if (isRetired(a)) return;
+    const previous = registry.lastUsed();
     const decision = openDecision(registry.get(a.device), a.contentPeerId);
-    if (decision.kind === 'unpinned') return setRoute({ name: 'setup', device: a.device });
-    if (decision.kind === 'changed') return setRoute({ name: 'identityChanged', device: a.device });
+    if (decision.kind === 'unpinned') {
+      void clearDepartingStatusWidget(WhombatLive, previous, a.device);
+      return setRoute({ name: 'setup', device: a.device });
+    }
+    if (decision.kind === 'changed') {
+      void clearDepartingStatusWidget(WhombatLive, previous, a.device);
+      return setRoute({ name: 'identityChanged', device: a.device });
+    }
     registry.put({ ...decision.known, name: a.name });
-    registry.setLastUsed(a.device);
+    switchActiveAppliance(registry, WhombatLive, a.device);
     setRoute(decision.known.enrolled ? { name: 'open' } : { name: 'pair', device: a.device });
   };
   const toAppliances = () => setRoute({ name: 'appliances' });
@@ -1092,7 +1127,7 @@ function SignedIn({
             },
             { replacePin: true },
           );
-          registry.setLastUsed(device);
+          switchActiveAppliance(registry, WhombatLive, device);
           setRoute({ name: 'restore', device });
         }}
       />
@@ -1208,7 +1243,7 @@ function SignedIn({
         onIn={(k) => {
           // Let in like a pairing approval: a new pin only from the box's own tag (BX-03, `screen`).
           registry.put(k);
-          registry.setLastUsed(k.device);
+          switchActiveAppliance(registry, WhombatLive, k.device);
           PASSKEY_NUDGE.due(k.device, keyPair.peerId);
           setRoute({ name: 'open' });
         }}
@@ -1228,7 +1263,7 @@ function SignedIn({
         onBack={toAppliances}
         onForget={forget}
         onOpen={(known) => {
-          registry.setLastUsed(known.device);
+          switchActiveAppliance(registry, WhombatLive, known.device);
           PASSKEY_NUDGE.due(known.device, keyPair.peerId);
           setRoute({ name: 'open' });
         }}
@@ -1251,7 +1286,7 @@ function SignedIn({
           // Pinned from the link: now the pairing (code + fingerprint) lets this phone in.
           <GoTo
             go={() => {
-              registry.setLastUsed(known.device);
+              switchActiveAppliance(registry, WhombatLive, known.device);
               setRoute(known.enrolled ? { name: 'open' } : { name: 'pair', device: known.device });
             }}
           />
@@ -1272,7 +1307,7 @@ function SignedIn({
         onForget={() => forget(device)}
         onRecovered={(k) => {
           registry.put(k);
-          registry.setLastUsed(k.device);
+          switchActiveAppliance(registry, WhombatLive, k.device);
           PASSKEY_NUDGE.due(k.device, keyPair.peerId);
           setRoute({ name: 'open' });
         }}
@@ -1296,9 +1331,13 @@ function SignedIn({
       links={links}
       addSignOutTask={addSignOutTask}
       onSignOut={signOut}
-      onSwitch={toAppliances}
+      onSwitch={() => {
+        void clearDepartingStatusWidget(WhombatLive, active.device);
+        toAppliances();
+      }}
       onNotEnrolled={() => {
         registry.put({ ...active, enrolled: false });
+        void clearDepartingStatusWidget(WhombatLive, active.device);
         bump((n) => n + 1);
         setRoute({ name: 'pair', device: active.device });
       }}
@@ -1330,7 +1369,10 @@ function SignedIn({
           });
         },
         open,
-        claim: () => setRoute({ name: 'claim' }),
+        claim: () => {
+          void clearDepartingStatusWidget(WhombatLive, active.device);
+          setRoute({ name: 'claim' });
+        },
       }}
       onDirect={(direct) => {
         const k = registry.get(active.device);

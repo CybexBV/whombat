@@ -160,24 +160,28 @@ export function modelEffortView(
   fallback: AgentModelFallback | null | undefined,
   fastFeature = false,
   localModel: LocalModelView | null = null,
+  backgroundModelFeature = true,
 ): ModelEffortView | null {
   if (!feature) return null;
   const models = providerModels(status, agent.runtime.provider, localModel);
   const draft = modelRuntimeDraft(agent.runtime);
   const labels = modelEffortLabels(draft, models);
-  const bgChoices = backgroundModelChoices(models, draft.backgroundModel).map((c) => ({
-    key: c.id ?? 'same',
-    label: c.label,
-    detail: c.description,
-    checked: c.id === (draft.backgroundModel ?? null),
-    runtime: modelRuntimeBody(draftWithBackgroundModel(draft, c.id)),
-  }));
+  const bodyOptions = { backgroundModel: backgroundModelFeature };
+  const bgChoices = backgroundModelFeature
+    ? backgroundModelChoices(models, draft.backgroundModel).map((c) => ({
+        key: c.id ?? 'same',
+        label: c.label,
+        detail: c.description,
+        checked: c.id === (draft.backgroundModel ?? null),
+        runtime: modelRuntimeBody(draftWithBackgroundModel(draft, c.id)),
+      }))
+    : [];
   const efforts = effortChoices(models, draft.model, draft.effort).map((c) => ({
     key: c.value ?? 'automatic',
     label: c.label,
     detail: c.value ? null : MODEL_EFFORT_COPY.automaticHint,
     checked: c.value === draft.effort,
-    runtime: modelRuntimeBody(draftWithEffort(draft, c.value)),
+    runtime: modelRuntimeBody(draftWithEffort(draft, c.value), bodyOptions),
   }));
   return {
     model: {
@@ -188,7 +192,7 @@ export function modelEffortView(
         label: c.label,
         detail: c.description,
         checked: c.id === draft.model,
-        runtime: modelRuntimeBody(draftWithModel(draft, c.id, models)),
+        runtime: modelRuntimeBody(draftWithModel(draft, c.id, models), bodyOptions),
       })),
     },
     backgroundModel:
@@ -208,7 +212,8 @@ export function modelEffortView(
             label: LOCAL_MODEL_TEXT.another,
             hint: LOCAL_MODEL_TEXT.anotherHint,
             use: LOCAL_MODEL_TEXT.use,
-            runtime: (name) => modelRuntimeBody(draftWithModel(draft, name.trim() || null, models)),
+            runtime: (name) =>
+              modelRuntimeBody(draftWithModel(draft, name.trim() || null, models), bodyOptions),
           }
         : null,
   };
@@ -216,7 +221,7 @@ export function modelEffortView(
   function fastOf(): ModelEffortView['fast'] {
     const fast = fastFeature ? fastChoice(draft, models) : null;
     if (!fast) return null;
-    return { ...fast, runtime: (on) => modelRuntimeBody(draftWithFast(draft, on, models)) };
+    return { ...fast, runtime: (on) => modelRuntimeBody(draftWithFast(draft, on, models), bodyOptions) };
   }
 }
 

@@ -46,7 +46,17 @@ function VoiceCard({ api, view }: { api: VoiceApi; view: VoiceSectionView }) {
   const actions = useVoiceActions(api);
   const toast = useToast();
   const save = (patch: VoiceTypingPatch) =>
-    void actions.update(patch).catch((error) => toast.show(voiceSettingErrorText(error)));
+    void actions
+      .update(patch)
+      .then((saved) => {
+        if (
+          (patch.on !== undefined && saved.on !== patch.on) ||
+          (patch.model !== undefined && saved.model !== patch.model) ||
+          (patch.language !== undefined && saved.language !== patch.language)
+        )
+          toast.show(VOICE_TEXT.errors.notSaved);
+      })
+      .catch((error) => toast.show(voiceSettingErrorText(error)));
   const modelMeta = [view.model.uses, view.model.warning].filter(Boolean);
   return (
     <section className={styles.section} aria-labelledby={`${ids}-label`} data-voice="">
@@ -134,6 +144,9 @@ function DutchVoiceRow({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
     setPending(true);
     void actions
       .setDutchVoice({ on: false })
+      .then((saved) => {
+        if (saved.dutchVoice?.on !== false) toast.show(VOICE_TEXT.errors.notSaved);
+      })
       .catch((error) => toast.show(voiceSettingErrorText(error)))
       .finally(() => setPending(false));
   };
@@ -224,7 +237,11 @@ function DutchLicenceDialog({
     setBusy(true);
     setNote(null);
     try {
-      await actions.setDutchVoice({ on: true, licenceVersion: row.licenceVersion });
+      const saved = await actions.setDutchVoice({ on: true, licenceVersion: row.licenceVersion });
+      if (saved.dutchVoice?.on !== true) {
+        setNote(VOICE_TEXT.errors.notSaved);
+        return;
+      }
       onClose();
     } catch (error) {
       setNote(voiceSettingErrorText(error));

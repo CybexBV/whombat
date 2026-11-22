@@ -30,8 +30,10 @@ import {
   spaceVolumes,
 } from '@whombat/client/hosts';
 import { useHostManageRead, useHostsChange } from '@whombat/client/hosts/react';
+import { useSessionProtocol } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import type { HostDisk, HostServerDetail, HostStorage } from '@whombat/core/domain';
+import { DISK_USAGE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type CSSProperties, useMemo, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
@@ -123,8 +125,10 @@ function SpaceUseCard({
     [detail, volumes, now],
   );
   const measure = useHostsChange(api.hosts.diskUsage);
+  const protocol = useSessionProtocol();
   const [note, setNote] = useState<string | null>(null);
   const canMeasure =
+    protocolAtLeast(protocol, DISK_USAGE_MINOR) &&
     detail.server.remoteControl.diagnose !== false &&
     detail.server.agent.connected !== false &&
     volumes.length > 0;

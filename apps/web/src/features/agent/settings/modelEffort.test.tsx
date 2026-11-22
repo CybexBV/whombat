@@ -285,4 +285,50 @@ describe('Settings → Advanced → Model and effort background model', () => {
     expect(within(codexBg).queryByRole('radio', { name: /^Haiku/ })).toBeNull();
     expect(within(codexBg).getByRole('radio', { name: /^GPT-6\.1-Sol/ })).toBeTruthy();
   });
+
+  it('hides the background model picker on an older box (protocol minor 2) and omits it when saving', async () => {
+    const { fetch, writes } = server();
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch, { protocolMinor: 2 }));
+    await modelGroup();
+    expect(screen.queryByRole('radiogroup', { name: 'Background model' })).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: 'Max' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.body).toEqual({ runtime: { provider: 'claude', model: 'fable', effort: 'max' } });
+    expect((await screen.findByRole('status')).textContent).toBe(
+      `Updated ${ASSISTANT_NAME}’s model and effort.`,
+    );
+  });
+
+  it('confirms saves from the box’s response: warns and never toasts saved when the box strips backgroundModel', async () => {
+    const base = createWebFixtureFetch({ models: true });
+    const { fetch, writes } = server({
+      respond: (w) => {
+        if (w.method !== 'PATCH' || w.path !== '/burrows/burrow-hq/agent') return undefined;
+        // Simulate an older runtime stripping `backgroundModel` and answering 200 OK without it.
+        const body = w.body as { runtime?: Record<string, unknown> };
+        const { backgroundModel: _dropped, ...kept } = body.runtime ?? {};
+        return base(
+          new Request('http://whombat.test/api/v1/burrows/burrow-hq/agent', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runtime: kept }),
+          }),
+        ) as unknown as Response;
+      },
+    });
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await modelGroup();
+    const bgGroup = screen.getByRole('radiogroup', { name: 'Background model' });
+    await user.click(within(bgGroup).getByRole('radio', { name: /^Haiku/ }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(await screen.findByText(/Update this Whombat/i)).toBeTruthy();
+    expect(screen.queryByText(`Updated ${ASSISTANT_NAME}’s model and effort.`)).toBeNull();
+    // Picker reflects what the box actually kept, not the stripped request.
+    expect(checked(bgGroup)).toEqual(['Same as the main model']);
+  });
 });

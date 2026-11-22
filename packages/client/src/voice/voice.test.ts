@@ -100,6 +100,9 @@ describe('voice typing over the session', () => {
   it('a box without voice typing answers unknown_op', async () => {
     const { api } = open(createFakeVoice({ initial: { available: false } }));
     await expect(api.get()).rejects.toMatchObject({ code: 'unknown_op' });
+    expect(
+      voiceSettingErrorText(new OperationError('voice.setDutchVoice', 404, 'unknown_op', 'Unknown op')),
+    ).toBe(VOICE_TEXT.errors.needsUpdate);
   });
 
   it('agrees to the Dutch voice licence, downloads it, and removes it when turned off', async () => {

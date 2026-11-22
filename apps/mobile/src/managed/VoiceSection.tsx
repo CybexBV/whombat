@@ -42,7 +42,18 @@ const failed = (error: unknown) => Alert.alert('That didn’t go through', voice
 function VoiceCard({ api, view }: { api: VoiceApi; view: VoiceSectionView }) {
   const theme = useTheme();
   const actions = useVoiceActions(api);
-  const save = (patch: VoiceTypingPatch) => void actions.update(patch).catch(failed);
+  const save = (patch: VoiceTypingPatch) =>
+    void actions
+      .update(patch)
+      .then((saved) => {
+        if (
+          (patch.on !== undefined && saved.on !== patch.on) ||
+          (patch.model !== undefined && saved.model !== patch.model) ||
+          (patch.language !== undefined && saved.language !== patch.language)
+        )
+          Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+      })
+      .catch(failed);
   return (
     <Card label={VOICE_TEXT.sectionLabel}>
       <Part first>
@@ -125,6 +136,9 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
     setPending(true);
     void actions
       .setDutchVoice({ on: false })
+      .then((saved) => {
+        if (saved.dutchVoice?.on !== false) Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+      })
       .catch(failed)
       .finally(() => setPending(false));
   };
@@ -134,7 +148,13 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
     setAgreeing(true);
     void actions
       .setDutchVoice({ on: true, licenceVersion: row.licenceVersion })
-      .then(() => setAskLicence(false))
+      .then((saved) => {
+        if (saved.dutchVoice?.on !== true) {
+          Alert.alert('That didn’t go through', VOICE_TEXT.errors.notSaved);
+          return;
+        }
+        setAskLicence(false);
+      })
       .catch(failed)
       .finally(() => setAgreeing(false));
   };

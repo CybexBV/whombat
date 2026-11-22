@@ -72,6 +72,15 @@ interface NativeWhombatLive {
 
 const native = requireOptionalNativeModule<NativeWhombatLive>('WhombatLive');
 
+// Serialize status-widget writes and clears so an earlier setStatusWidget can never overtake a later
+// clearStatusWidget on a native concurrent pool (e.g., Swift's AsyncFunction executor).
+let statusWidgetQueue: Promise<void> = Promise.resolve();
+function enqueueStatusWidget(work: () => Promise<void>): Promise<void> {
+  const next = statusWidgetQueue.then(work, work);
+  statusWidgetQueue = next.catch(() => {});
+  return next;
+}
+
 function on(event: string, listener: (e: Record<string, string>) => void): () => void {
   if (!native) return () => {};
   const sub = native.addListener(event, listener);
@@ -114,17 +123,21 @@ export const WhombatLive = {
   },
 
   /** Save the latest calm status for the home-screen widget (never gated on Live Activities permission). */
-  async setStatusWidget(payload: StatusWidgetPayload): Promise<void> {
-    await native?.setStatusWidget?.(JSON.stringify(payload));
+  setStatusWidget(payload: StatusWidgetPayload): Promise<void> {
+    return enqueueStatusWidget(async () => {
+      await native?.setStatusWidget?.(JSON.stringify(payload));
+    });
   },
 
-  /** Forget the saved home-screen widget status (on sign-out, revocation or box removal). */
-  async clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void> {
-    if (typeof filter === 'string') {
-      await native?.clearStatusWidget?.(filter, null);
-      return;
-    }
-    await native?.clearStatusWidget?.(filter?.applianceId ?? null, filter?.source ?? null);
+  /** Forget the saved home-screen widget status (on switch, sign-out, revocation or box removal). */
+  clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void> {
+    return enqueueStatusWidget(async () => {
+      if (typeof filter === 'string') {
+        await native?.clearStatusWidget?.(filter, null);
+        return;
+      }
+      await native?.clearStatusWidget?.(filter?.applianceId ?? null, filter?.source ?? null);
+    });
   },
 
   /** Ongoing activities on screen. */

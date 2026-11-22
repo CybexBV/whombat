@@ -23,6 +23,7 @@ import {
   localModelDraft,
   localModelProblems,
   localModelRow,
+  localModelSaved,
   localModelSetBody,
   localModelTestBody,
 } from '@whombat/client';
@@ -58,6 +59,7 @@ function refusalOf(
 export function LocalModelSection({ burrow, view }: { burrow: string; view: LocalModelView | null }) {
   const id = useId();
   const [editing, setEditing] = useState(false);
+  const [mismatch, setMismatch] = useState<string | null>(null);
   const form = !view || editing;
   return (
     <section
@@ -76,12 +78,35 @@ export function LocalModelSection({ burrow, view }: { burrow: string; view: Loca
             <LocalModelForm
               burrow={burrow}
               view={view}
-              onDone={() => setEditing(false)}
-              onCancel={view ? () => setEditing(false) : null}
+              onStart={() => setMismatch(null)}
+              onMismatch={(msg) => {
+                setMismatch(msg);
+                setEditing(false);
+              }}
+              onDone={() => {
+                setMismatch(null);
+                setEditing(false);
+              }}
+              onCancel={
+                view
+                  ? () => {
+                      setMismatch(null);
+                      setEditing(false);
+                    }
+                  : null
+              }
             />
           </div>
         ) : view ? (
-          <SavedRow burrow={burrow} view={view} onChange={() => setEditing(true)} />
+          <SavedRow
+            burrow={burrow}
+            view={view}
+            notice={mismatch}
+            onChange={() => {
+              setMismatch(null);
+              setEditing(true);
+            }}
+          />
         ) : null}
       </div>
     </section>
@@ -92,10 +117,12 @@ export function LocalModelSection({ burrow, view }: { burrow: string; view: Loca
 function SavedRow({
   burrow,
   view,
+  notice,
   onChange,
 }: {
   burrow: string;
   view: LocalModelView;
+  notice?: string | null;
   onChange: () => void;
 }) {
   const toast = useToast();
@@ -124,6 +151,10 @@ function SavedRow({
     try {
       const result = await clear.mutateAsync({ params: { burrow } });
       if (result.status === 'ok') {
+        if (result.data.burrow.localModel != null) {
+          setProblem(LOCAL_MODEL_TEXT.failed);
+          return;
+        }
         setAsking(false);
         toast.show(LOCAL_MODEL_COPY.removed);
         return;
@@ -157,9 +188,9 @@ function SavedRow({
       <span className={styles.hint} role="status" data-tone={line.tone}>
         {line.text}
       </span>
-      {problem && !asking ? (
+      {(problem ?? notice) && !asking ? (
         <span className={styles.problem} role="alert">
-          {problem}
+          {problem ?? notice}
         </span>
       ) : null}
       {asking ? (
@@ -189,11 +220,15 @@ function SavedRow({
 function LocalModelForm({
   burrow,
   view,
+  onStart,
+  onMismatch,
   onDone,
   onCancel,
 }: {
   burrow: string;
   view: LocalModelView | null;
+  onStart: () => void;
+  onMismatch: (message: string) => void;
   onDone: () => void;
   onCancel: (() => void) | null;
 }) {
@@ -236,10 +271,17 @@ function LocalModelForm({
     e.preventDefault();
     setTried(true);
     setProblem(null);
+    onStart();
     if (!ready) return;
+    const body = localModelSetBody(draft, view);
     try {
-      const result = await set.mutateAsync({ params: { burrow }, body: localModelSetBody(draft, view) });
+      const result = await set.mutateAsync({ params: { burrow }, body });
       if (result.status === 'ok') {
+        if (!localModelSaved(body, result.data.localModel)) {
+          setProblem(LOCAL_MODEL_TEXT.failed);
+          onMismatch(LOCAL_MODEL_TEXT.failed);
+          return;
+        }
         toast.show(LOCAL_MODEL_COPY.saved);
         onDone();
         return;

@@ -78,7 +78,13 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
         (result) => {
           const refused = outcomeText(result);
           if (refused) return say(refused.body, true);
-          say(words.renamed(result.status === 'ok' ? result.data.agent.name : name), false);
+          if (result.status !== 'ok') return;
+          const saved = result.data.agent.name;
+          if (saved !== name) {
+            setDraft(saved);
+            return say('Couldn’t save that. Try again in a moment.', true);
+          }
+          say(words.renamed(saved), false);
         },
         (error: unknown) => {
           const text =
@@ -103,6 +109,14 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
           if (refused) {
             setPicked(null);
             return say(refused.body, true);
+          }
+          if (result.status !== 'ok') {
+            setPicked(null);
+            return;
+          }
+          if (agentFaceOf(result.data.agent) !== next) {
+            setPicked(null);
+            return say('Couldn’t save that face. Try again in a moment.', true);
           }
           say(words.newFace, false);
         },

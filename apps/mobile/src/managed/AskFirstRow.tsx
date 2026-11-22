@@ -34,7 +34,8 @@ export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; on
       .then(
         (r) => {
           setWanted(r.askFirst);
-          showNotice(UPDATE_TEXT.askSwitched(r.askFirst));
+          if (r.askFirst === next) showNotice(UPDATE_TEXT.askSwitched(r.askFirst));
+          else Alert.alert('That didn’t go through', UPDATE_TEXT.failed);
           onChanged();
         },
         (e) => {

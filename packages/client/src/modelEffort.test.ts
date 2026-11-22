@@ -16,6 +16,7 @@ import {
   modelFallbackNote,
   modelRuntimeBody,
   modelRuntimeDraft,
+  modelRuntimeSaved,
   providerModels,
 } from './modelEffort';
 
@@ -304,5 +305,53 @@ describe('background model in Configure → Model', () => {
     });
     expect(modelEffortLabels(draft({ backgroundModel: 'haiku' }), CLAUDE).backgroundModel).toBe('Haiku');
     expect(modelEffortLabels(draft(), CLAUDE).backgroundModel).toBe('Same as the main model');
+  });
+
+  it('omits backgroundModel when building a body for an older box and verifies saves from the response', () => {
+    const withBg = draft({ model: 'opus', backgroundModel: 'haiku', effort: 'high' });
+    expect(modelRuntimeBody(withBg, { backgroundModel: false })).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      effort: 'high',
+    });
+    expect(modelRuntimeBody(draftWithBackgroundModel(withBg, null), { backgroundModel: false })).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      effort: 'high',
+    });
+
+    const requested = modelRuntimeBody(withBg);
+    expect(
+      modelRuntimeSaved(requested, {
+        provider: 'claude',
+        model: 'opus',
+        backgroundModel: 'haiku',
+        effort: 'high',
+      }),
+    ).toBe(true);
+    // Older box silently stripped backgroundModel.
+    expect(modelRuntimeSaved(requested, { provider: 'claude', model: 'opus', effort: 'high' })).toBe(false);
+    // Explicit null clear must come back without backgroundModel.
+    const cleared = modelRuntimeBody(draftWithBackgroundModel(withBg, null));
+    expect(modelRuntimeSaved(cleared, { provider: 'claude', model: 'opus', effort: 'high' })).toBe(true);
+    expect(
+      modelRuntimeSaved(cleared, {
+        provider: 'claude',
+        model: 'opus',
+        backgroundModel: 'haiku',
+        effort: 'high',
+      }),
+    ).toBe(false);
+    // Omitted backgroundModel on the same provider keeps whatever the box already stored.
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'opus', effort: 'max' },
+        { provider: 'claude', model: 'opus', backgroundModel: 'haiku', effort: 'max' },
+      ),
+    ).toBe(true);
+    // Dropped model, effort or fast also fails confirmation.
+    expect(modelRuntimeSaved({ provider: 'claude', model: 'sonnet' }, { provider: 'claude' })).toBe(false);
+    expect(modelRuntimeSaved({ provider: 'claude', effort: 'max' }, { provider: 'claude' })).toBe(false);
+    expect(modelRuntimeSaved({ provider: 'claude', fast: true }, { provider: 'claude' })).toBe(false);
   });
 });

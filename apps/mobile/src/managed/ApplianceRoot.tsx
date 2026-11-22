@@ -201,7 +201,7 @@ function createSetup(input: {
     { clear: () => clearResourceFiles(expoFileApi) },
     { clear: () => sharedFiles.clear() },
     { clear: () => phoneNotifications.endAll() },
-    { clear: () => WhombatLive.clearStatusWidget() },
+    { clear: () => WhombatLive.clearStatusWidget(input.appliance.device) },
     { clear: () => deviceBox().wipe() },
     // A share waiting to be sent, and its copies in the cache (MX-07).
     { clear: () => wipeShares() },

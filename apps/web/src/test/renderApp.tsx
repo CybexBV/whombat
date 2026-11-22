@@ -51,19 +51,21 @@ export function fixtureServices(options: WebFixtureOptions = {}): AppServices {
  */
 export function mockedServices(
   fetch: typeof globalThis.fetch,
-  extra: CreateServicesOptions = {},
+  extra: CreateServicesOptions & { protocolMinor?: number } = {},
 ): AppServices {
+  const { protocolMinor, ...serviceExtra } = extra;
   const rest = fetch as unknown as (url: string, init: RequestInit) => Promise<Response>;
   const { session } = createFakeSession({
     handle: restHandler(rest, { origin: '' }),
     resources: restResources(rest, ''),
     account: { id: 'acc_mara', name: 'Mara Okafor' },
+    ...(protocolMinor !== undefined ? { protocolMinor } : {}),
   });
   return createAppServices({
     session,
     realtime: null,
     queryClient: testQueryClient(),
-    ...extra,
+    ...serviceExtra,
   });
 }
 

@@ -56,8 +56,14 @@ type Fetcher struct {
 	entries  map[string]*entry
 	wake     chan struct{}
 	trashSeq uint64
+	deleting map[string]*pendingDelete
 	// removeAll deletes a renamed-aside path after unlocking f.mu (defaults to os.RemoveAll; tests may hook it).
 	removeAll func(string) error
+}
+
+type pendingDelete struct {
+	done chan struct{}
+	err  error
 }
 
 type entry struct {
@@ -183,7 +189,8 @@ func (f *Fetcher) Fetch(id string) error {
 }
 
 // Remove stops model id's download and deletes it. Files and folders are renamed aside under f.mu and removed after
-// unlocking so status and progress reads never stall during recursive deletion.
+// unlocking so status and progress reads never stall during recursive deletion. Any previously renamed-aside entries
+// for id are also retried, and Remove reports an error while any files for id remain on disk.
 func (f *Fetcher) Remove(id string) error {
 	f.mu.Lock()
 	e, ok := f.entries[id]
@@ -202,7 +209,7 @@ func (f *Fetcher) Remove(id string) error {
 	var trash []string
 	var stageErr error
 	for _, p := range []string{models.Path(f.Dir, e.model), models.PartPath(f.Dir, e.model)} {
-		t, err := f.stageRemove(p)
+		t, err := f.stageRemove(id, p)
 		if err != nil && stageErr == nil {
 			stageErr = err
 		}
@@ -212,17 +219,34 @@ func (f *Fetcher) Remove(id string) error {
 	}
 	f.mu.Unlock()
 
+	existing, scanErr := f.modelTrash(id)
+	for _, t := range existing {
+		if !slices.Contains(trash, t) {
+			trash = append(trash, t)
+		}
+	}
+
 	var removeErr error
 	for _, t := range trash {
 		if err := f.deletePath(t); err != nil && removeErr == nil {
 			removeErr = err
 		}
 	}
+	remaining, checkErr := f.modelTrash(id)
 	if stageErr != nil {
-		return stageErr
+		return fmt.Errorf("%s: not removed yet: %w", id, stageErr)
 	}
 	if removeErr != nil {
-		return removeErr
+		return fmt.Errorf("%s: not removed yet: %w", id, removeErr)
+	}
+	if scanErr != nil {
+		return fmt.Errorf("%s: not removed yet: %w", id, scanErr)
+	}
+	if checkErr != nil {
+		return fmt.Errorf("%s: not removed yet: %w", id, checkErr)
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("%s: not removed yet (%d leftover entries remain)", id, len(remaining))
 	}
 	f.logf("%s: removed", id)
 	return nil
@@ -306,7 +330,7 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 		// just finished): rename aside any files this attempt left behind under f.mu, then delete after unlocking,
 		// without treating its cancellation as a failure or disturbing a newer Fetch's waiting state.
 		for _, p := range []string{models.Path(f.Dir, e.model), models.PartPath(f.Dir, e.model)} {
-			if t, _ := f.stageRemove(p); t != "" {
+			if t, _ := f.stageRemove(e.model.ID, p); t != "" {
 				trash = append(trash, t)
 			}
 		}
@@ -333,7 +357,7 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 		e.state, e.problem = local.VoiceModelStateWaiting, local.VoiceModelProblemBadDownload
 		f.logf("%s: the download was damaged, starting again: %v", e.model.ID, err)
 	case errors.Is(err, errBadBytes):
-		if t, _ := f.stageRemove(models.PartPath(f.Dir, e.model)); t != "" {
+		if t, _ := f.stageRemove(e.model.ID, models.PartPath(f.Dir, e.model)); t != "" {
 			trash = append(trash, t)
 		}
 		e.received = 0
@@ -622,7 +646,7 @@ func (f *Fetcher) commitRename(ctx context.Context, e *entry, gen uint64, src, d
 	}
 	var trash string
 	if removeDest {
-		trash, _ = f.stageRemove(dst)
+		trash, _ = f.stageRemove(e.model.ID, dst)
 	}
 	err := os.Rename(src, dst)
 	f.mu.Unlock()
@@ -632,11 +656,15 @@ func (f *Fetcher) commitRename(ctx context.Context, e *entry, gen uint64, src, d
 	return err
 }
 
-// stageRemove renames path aside inside f.Dir (f.mu held) and returns the temporary path to delete after unlocking.
-// Returns ("", nil) when path does not exist.
-func (f *Fetcher) stageRemove(path string) (string, error) {
+func modelTrashPrefix(id string) string {
+	return trashPrefix + id + "."
+}
+
+// stageRemove renames path aside inside f.Dir tagged with model id (f.mu held) and returns the temporary path to
+// delete after unlocking. Returns ("", nil) when path does not exist.
+func (f *Fetcher) stageRemove(id, path string) (string, error) {
 	f.trashSeq++
-	trash := filepath.Join(f.Dir, fmt.Sprintf("%s%d-%d-%d", trashPrefix, os.Getpid(), time.Now().UnixNano(), f.trashSeq))
+	trash := filepath.Join(f.Dir, fmt.Sprintf("%s%d-%d-%d", modelTrashPrefix(id), os.Getpid(), time.Now().UnixNano(), f.trashSeq))
 	err := os.Rename(path, trash)
 	if err == nil {
 		return trash, nil
@@ -647,11 +675,49 @@ func (f *Fetcher) stageRemove(path string) (string, error) {
 	return "", err
 }
 
-func (f *Fetcher) deletePath(path string) error {
-	if f.removeAll != nil {
-		return f.removeAll(path)
+// modelTrash returns any renamed-aside files or directories for model id still present in f.Dir.
+func (f *Fetcher) modelTrash(id string) ([]string, error) {
+	entries, err := os.ReadDir(f.Dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return os.RemoveAll(path)
+	prefix := modelTrashPrefix(id)
+	var out []string
+	for _, ent := range entries {
+		if strings.HasPrefix(ent.Name(), prefix) {
+			out = append(out, filepath.Join(f.Dir, ent.Name()))
+		}
+	}
+	return out, nil
+}
+
+func (f *Fetcher) deletePath(path string) error {
+	f.mu.Lock()
+	if f.deleting == nil {
+		f.deleting = map[string]*pendingDelete{}
+	}
+	if p, ok := f.deleting[path]; ok {
+		f.mu.Unlock()
+		<-p.done
+		return p.err
+	}
+	p := &pendingDelete{done: make(chan struct{})}
+	f.deleting[path] = p
+	removeAll := f.removeAll
+	f.mu.Unlock()
+	if removeAll == nil {
+		removeAll = os.RemoveAll
+	}
+	err := removeAll(path)
+	f.mu.Lock()
+	p.err = err
+	delete(f.deleting, path)
+	close(p.done)
+	f.mu.Unlock()
+	return err
 }
 
 // cleanTrash removes any renamed-aside files or directories left behind by an interrupted deletion.

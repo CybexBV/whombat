@@ -520,7 +520,7 @@ function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged
       .then(
         (r) => {
           setWanted(r.askFirst);
-          toast.show(UPDATE_TEXT.askSwitched(r.askFirst));
+          toast.show(r.askFirst === next ? UPDATE_TEXT.askSwitched(r.askFirst) : UPDATE_TEXT.failed);
           onChanged?.();
         },
         (e) => {

@@ -23,8 +23,20 @@ function serviceCode(err: ApiError): string | null {
   return typeof d?.code === 'string' ? d.code : null;
 }
 
+function rawErrorCode(err: ApiError): string | null {
+  const code = (err.body as { error?: { code?: unknown } } | null)?.error?.code;
+  return typeof code === 'string' ? code : null;
+}
+
 export function hostErrorInfo(err: unknown): HostErrorInfo {
   if (err instanceof ApiError) {
+    if (rawErrorCode(err) === 'unknown_op')
+      return {
+        message: 'Update this Whombat to use this feature.',
+        code: 'unknown_op',
+        conflict: false,
+        fields: {},
+      };
     const code = serviceCode(err);
     const conflict = code === 'digest_mismatch';
     const fields = Object.fromEntries(

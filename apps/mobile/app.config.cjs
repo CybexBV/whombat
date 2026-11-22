@@ -67,7 +67,9 @@ const BRAND = { ink: '#2b221d', cocoa: '#7d6353' };
  * App Group shared by the iPhone app, the Share Extension and the home-screen status widget. Apple signs those
  * extensions only once this group is registered on developer.apple.com (Identifiers → App Groups) and ticked on the
  * App IDs (`com.whombat.mobile`, `com.whombat.mobile.share-extension`, `com.whombat.mobile.WhombatLiveWidget`); no
- * API registers one. Switch `IOS_APP_GROUP_ENABLED` to `true` once the group exists to turn both on together.
+ * API registers one. Switch `IOS_APP_GROUP_ENABLED` to `true` once the group exists to turn both on together, then run
+ * a clean iOS prebuild (`npx expo prebuild --platform ios --clean`) — incremental prebuilds refuse when the existing
+ * `WhombatLiveWidget` target's App Group wiring does not match this flag.
  */
 const IOS_APP_GROUP = 'group.com.whombat.mobile';
 const IOS_APP_GROUP_ENABLED = false;
