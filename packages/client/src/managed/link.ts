@@ -546,26 +546,55 @@ export async function pollLinkCheckout(input: {
 export const LINK_ADDRESS_POLL_EVERY_MS = 5_000;
 export const LINK_ADDRESS_POLL_FOR_MS = 5 * 60_000;
 
-/** The linked Whombat's page (`https://<host>/`) once it has one, or why the wait ended. */
+/**
+ * How long the wait goes on for a Whombat's claim link once its address is known. The box reports the link once its
+ * page works, which takes its certificate, a minute or so after the address; until then the page wouldn't open anyway.
+ * A box or a control from before the claim link never sends it: then its page opens after this, asking for the six
+ * letters too.
+ */
+export const LINK_CLAIM_URL_GRACE_MS = 90_000;
+
+/**
+ * The claim link control gave for this Whombat (`https://<host>/c/<six letters>`): only while its address works, and
+ * only on its own host.
+ */
+export function linkBoxClaimUrl(box: Pick<LinkedBox, 'host' | 'state' | 'claimUrl'>): string | null {
+  if (!box.claimUrl || !linkBoxOpenUrl(box)) return null;
+  return box.claimUrl.startsWith(`https://${box.host}/c/`) ? box.claimUrl : null;
+}
+
+/**
+ * The linked Whombat's page once it has one, or why the wait ended. `claim`: nobody set it up yet (it has no name, or
+ * control gave its claim link), so the page opens on its claim; `url` is then the claim link when control has it.
+ */
 export async function pollLinkAddress(input: {
   device: string;
   load: () => Promise<LinkAccount>;
   live?: () => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
-}): Promise<{ url: string; box: LinkedBox } | 'timeout' | 'stopped'> {
+}): Promise<{ url: string; box: LinkedBox; claim: boolean } | 'timeout' | 'stopped'> {
   const now = input.now ?? Date.now;
   const sleep = input.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const live = input.live ?? (() => true);
   const started = now();
+  let addressAt: number | null = null;
   for (;;) {
     // A failed load is one more wait: control or the network may be back by the next.
     const account = await input.load().catch(() => null);
     if (!live()) return 'stopped';
     const box = account?.boxes.find((b) => b.device === input.device);
-    const url = box ? linkBoxOpenUrl(box) : null;
-    if (box && url) return { url, box };
-    if (now() - started + LINK_ADDRESS_POLL_EVERY_MS > LINK_ADDRESS_POLL_FOR_MS) return 'timeout';
+    const open = box ? linkBoxOpenUrl(box) : null;
+    const claimUrl = box ? linkBoxClaimUrl(box) : null;
+    if (box && claimUrl) return { url: claimUrl, box, claim: true };
+    const last = now() - started + LINK_ADDRESS_POLL_EVERY_MS > LINK_ADDRESS_POLL_FOR_MS;
+    if (box && open) {
+      addressAt ??= now();
+      // A Whombat nobody set up yet: a little longer for its claim link, so the person types only the four letters.
+      const waitForLink = box.name === null && now() - addressAt < LINK_CLAIM_URL_GRACE_MS;
+      if (!waitForLink || last) return { url: open, box, claim: box.name === null };
+    }
+    if (last) return 'timeout';
     await sleep(LINK_ADDRESS_POLL_EVERY_MS);
     if (!live()) return 'stopped';
   }
