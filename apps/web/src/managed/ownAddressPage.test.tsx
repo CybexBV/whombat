@@ -5,7 +5,13 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { fakePeerId } from '@whombat/client/fake';
-import { type ApplianceSummary, BOX_SETUP_TEXT, COPY, OWN_ADDRESS_TEXT } from '@whombat/client/managed';
+import {
+  type ApplianceSummary,
+  BOX_SETUP_TEXT,
+  COMMUNITY_TEXT,
+  COPY,
+  OWN_ADDRESS_TEXT,
+} from '@whombat/client/managed';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoxEnvironment } from './boxEnv';
 
@@ -48,10 +54,37 @@ describe('an unclaimed box at its own address', () => {
     expect(screen.getByText(BOX_SETUP_TEXT.steps.passkey.t)).toBeTruthy();
   });
 
-  it('says where the link is when the page has none', async () => {
+  it('asks for the letters after /c/ when the page has no link, and claims with them', async () => {
+    const user = userEvent.setup();
     await ownBoxPage('/');
-    expect(await screen.findByText(T.openOnScreen.sub)).toBeTruthy();
+    const field = await screen.findByLabelText(T.openOnScreen.label);
     expect(screen.queryByRole('heading', { name: T.claim.title })).toBeNull();
+    // A wrong link is the box's to refuse: the page says so and asks again.
+    await user.type(field, 'bbbbbb');
+    await user.click(screen.getByRole('button', { name: T.openOnScreen.next }));
+    expect(await screen.findByText(T.openOnScreen.wrong)).toBeTruthy();
+    // The whole address pasted works too.
+    await user.type(screen.getByLabelText(T.openOnScreen.label), `${FAKE_OWN_HOST}/c/${FAKE_OWN_CLAIM_LINK}`);
+    await user.click(screen.getByRole('button', { name: T.openOnScreen.next }));
+    expect(await screen.findByRole('heading', { name: T.claim.title })).toBeTruthy();
+    expect(window.location.pathname).toBe(`/c/${FAKE_OWN_CLAIM_LINK}`);
+  });
+
+  it('takes the name and email the account site sent in the fragment, and leaves them out of the address', async () => {
+    const user = userEvent.setup();
+    const world = await ownBoxPage(
+      `/c/${FAKE_OWN_CLAIM_LINK}#name=Mara+Visser&email=mara%40burrowhq.example`,
+    );
+    expect(await screen.findByRole('heading', { name: T.claim.title })).toBeTruthy();
+    expect(window.location.hash).toBe('');
+    await user.type(screen.getByLabelText(COMMUNITY_TEXT.claim.letters), world.faults.ownLetters() as string);
+    await user.click(screen.getByRole('button', { name: COMMUNITY_TEXT.claim.next }));
+    expect(((await screen.findByLabelText(COMMUNITY_TEXT.account.name)) as HTMLInputElement).value).toBe(
+      'Mara Visser',
+    );
+    expect((screen.getByLabelText(COMMUNITY_TEXT.account.email) as HTMLInputElement).value).toBe(
+      'mara@burrowhq.example',
+    );
   });
 });
 

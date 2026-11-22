@@ -6,6 +6,7 @@ import type { ApplianceSession } from '../session/types';
 import {
   accountLinkErrorText,
   claimSecretOfPath,
+  claimSecretOfTyped,
   linkCodeTimeLeft,
   normalizeLinkCode,
   OWN_ADDRESS_TEXT,
@@ -13,9 +14,11 @@ import {
   ownAddressRoute,
   ownAddressView,
   ownClaimHere,
+  ownClaimPrefillHash,
   ownClaimProbeOf,
   ownSetupSteps,
   probeOwnClaim,
+  readOwnClaimPrefill,
 } from './own-address';
 
 const HOST = 'maple-otter-river.box.whombat.app';
@@ -220,5 +223,45 @@ describe('the words (design §7.5)', () => {
     expect(OWN_ADDRESS_TEXT.passkey.words).toContain('can’t use it to open your Whombat');
     expect(OWN_ADDRESS_TEXT.hosted.accountPasskeyWords).toContain('which has a passkey of its own');
     expect(OWN_ADDRESS_TEXT.onlyContinue(HOST)).toContain(HOST);
+  });
+});
+
+describe('the claim link typed on the page at the address', () => {
+  it('takes the six letters, in any case or as the whole address', () => {
+    expect(claimSecretOfTyped('kxmprt')).toBe('kxmprt');
+    expect(claimSecretOfTyped(' KXMPRT ')).toBe('kxmprt');
+    expect(claimSecretOfTyped(`https://${HOST}/c/kxmprt`)).toBe('kxmprt');
+    expect(claimSecretOfTyped(`${HOST}/c/kxmprt/`)).toBe('kxmprt');
+  });
+  it('refuses what can’t be one', () => {
+    expect(claimSecretOfTyped('kxmpr')).toBeNull();
+    expect(claimSecretOfTyped('kxmprtt')).toBeNull();
+    // Letters the box never draws (its alphabet leaves out look-alikes).
+    expect(claimSecretOfTyped('kxmpri')).toBeNull();
+    expect(claimSecretOfTyped(HOST)).toBeNull();
+  });
+});
+
+describe('the name and email carried to the claim', () => {
+  it('goes there and back in the fragment', () => {
+    const hash = ownClaimPrefillHash({ name: ' Mara Visser ', email: 'mara@burrowhq.example' });
+    expect(hash.startsWith('#')).toBe(true);
+    expect(readOwnClaimPrefill({ pathname: '/', hash })).toEqual({
+      name: 'Mara Visser',
+      email: 'mara@burrowhq.example',
+    });
+    expect(readOwnClaimPrefill({ pathname: '/c/kxmprt', hash })).toMatchObject({ name: 'Mara Visser' });
+  });
+  it('carries what there is, and nothing without either', () => {
+    expect(
+      readOwnClaimPrefill({ pathname: '/', hash: ownClaimPrefillHash({ email: 'mara@burrowhq.example' }) }),
+    ).toEqual({ name: '', email: 'mara@burrowhq.example' });
+    expect(ownClaimPrefillHash({ name: ' ', email: '' })).toBe('');
+    expect(readOwnClaimPrefill({ pathname: '/', hash: '' })).toBeNull();
+    expect(readOwnClaimPrefill({ pathname: '/', hash: '#other=1' })).toBeNull();
+  });
+  it('is read only on the claim’s own pages, never on a device link’s', () => {
+    expect(readOwnClaimPrefill({ pathname: '/add-device', hash: '#name=Mara' })).toBeNull();
+    expect(readOwnClaimPrefill({ pathname: '/settings', hash: '#name=Mara' })).toBeNull();
   });
 });
