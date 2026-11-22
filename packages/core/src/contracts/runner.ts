@@ -437,6 +437,8 @@ export const LocalModelDispatchContext = z.object({
   v: z.literal(1),
   baseUrl: z.string().min(1).max(LOCAL_MODEL_URL_MAX),
   model: ModelId,
+  /** The burrow's configured Custom AI model default, kept apart from per-turn overrides for fallback retries. */
+  defaultModel: ModelId.optional(),
   apiKey: z.string().min(1).max(LOCAL_MODEL_KEY_MAX).nullable(),
 });
 export type LocalModelDispatchContext = z.infer<typeof LocalModelDispatchContext>;

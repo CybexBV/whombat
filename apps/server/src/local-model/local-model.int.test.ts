@@ -286,10 +286,19 @@ describe('turns and Chat on it', () => {
   it('a turn on `local` carries the model and its key; another turn doesn’t', async () => {
     await setAgentRuntime({ provider: 'local', model: 'llama3.3' });
     const onLocal = await claimTurn(['local']);
-    expect(onLocal.localModel).toEqual({ v: 1, baseUrl: `${base}/v1`, model: 'llama3.3', apiKey: KEY });
+    expect(onLocal.localModel).toEqual({
+      v: 1,
+      baseUrl: `${base}/v1`,
+      model: 'llama3.3',
+      defaultModel: 'qwen3:32b',
+      apiKey: KEY,
+    });
     // Without a model of its own: the burrow's.
     await setAgentRuntime({ provider: 'local' });
-    expect((await claimTurn(['local'])).localModel).toMatchObject({ model: 'qwen3:32b' });
+    expect((await claimTurn(['local'])).localModel).toMatchObject({
+      model: 'qwen3:32b',
+      defaultModel: 'qwen3:32b',
+    });
     await setAgentRuntime({ provider: 'claude' });
     expect((await claimTurn(['claude'])).localModel ?? null).toBeNull();
   });

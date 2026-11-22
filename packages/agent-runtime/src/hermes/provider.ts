@@ -385,7 +385,7 @@ export class HermesProvider implements AgentProvider {
       if (!local) return null;
       return {
         kind: 'local',
-        model: input.model?.trim() || local.model,
+        model: input.model?.trim() || local.defaultModel?.trim() || local.model,
         baseUrl: input.modelEndpoint ?? local.baseUrl,
         ...(local.apiKey ? { keyFile: join(profile, LOCAL_MODEL_KEY_FILE) } : {}),
       };
