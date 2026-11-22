@@ -3,6 +3,11 @@
   "$id": "https://schemas.whombat.com/contracts/LinkStatusRequest.json",
   "title": "LinkStatusRequest",
   "type": "object",
-  "properties": {},
+  "properties": {
+    "claimLink": {
+      "type": "string",
+      "pattern": "^[abcdefghjkmnpqrtvwxy]{6}$"
+    }
+  },
   "additionalProperties": false
 }

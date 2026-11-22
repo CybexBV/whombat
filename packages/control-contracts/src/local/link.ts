@@ -9,7 +9,7 @@
  * token goes to control through the manager (`push.register`, `push.unregister`, the device ops' own schemas). An older
  * manager answers 404 on these paths: the runtime reads that as “no Link here” and “no channel to choose”.
  */
-import { LinkCode, LinkPageUrl, LinkState, OwnAddressLabel } from '@whombat/protocol';
+import { LinkCode, LinkPageUrl, LinkState, OwnAddressClaimSecret, OwnAddressLabel } from '@whombat/protocol';
 import { hostTextSchema, LocalIdent as ident, Rfc3339 } from '@whombat/protocol/session';
 import { SignatureHex, UpdateChannel } from '@whombat/release';
 import { z } from 'zod';
@@ -73,6 +73,16 @@ export const LinkOnRequest = z.strictObject({
 });
 /** `POST /v1/link/off` (the owner's): the manager sends `link.leave` and forgets the code. */
 export const LinkOffRequest = z.strictObject({ v: V });
+
+/**
+ * `POST /v1/link/claim` (4.13) → `LocalOk`: the claim link the box shows now, for the manager to send with `link.status`
+ * (`claimLink`), so control can open the claim for the account that linked the box. The runtime sends it while nobody
+ * claimed the box and its own address serves its page, again when it changes, and without `claimLink` once there is
+ * none (claimed, or no page). The manager keeps it in memory only and calls control at once when it changed; the
+ * runtime sends it again now and then, so a manager that restarted has it back. An older manager answers 404.
+ */
+export const LinkClaimRequest = z.strictObject({ v: V, claimLink: OwnAddressClaimSecret.optional() });
+export type LinkClaimRequest = z.infer<typeof LinkClaimRequest>;
 
 /**
  * The update channel. `staysOn`: the box runs a release newer than its channel's newest (it just moved from

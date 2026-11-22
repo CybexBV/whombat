@@ -4561,7 +4561,12 @@ export const SCHEMA_CASES: Case[] = [
     ['an unknown state', { link: { state: 'paused', since: now } }, false],
     ['a newer member stripped', { link: { ...linkOn, plan: 'yearly' } }, true, { link: linkOn }],
   ]),
-  ...cases('LinkStatusRequest', {}, [['a member', { force: true }, false]]),
+  ...cases('LinkStatusRequest', {}, [
+    ['a member', { force: true }, false],
+    ['a claim link', { claimLink: 'abcdef' }, true],
+    ['a claim link with a letter left out of the alphabet', { claimLink: 'abcdei' }, false],
+    ['a whole claim link', { claimLink: 'https://maple-otter-river.box.whombat.app/c/abcdef' }, false],
+  ]),
   ...cases('LinkStatusResponse', { link: linkGrace }, [
     ['ended', { link: { state: 'ended', since: now, label: 'maple-otter-river' } }, true],
     ['off', { link: { state: 'off', since: 0 } }, true],
@@ -4631,6 +4636,12 @@ export const SCHEMA_CASES: Case[] = [
     ['an upper-case proof', { v: 1, contentProof: 'D'.repeat(128) }, false],
   ]),
   ...cases('LinkOffRequest', { v: 1 }, [['version 2', { v: 2 }, false]]),
+  ...cases('LinkClaimRequest', { v: 1 }, [
+    ['a claim link', { v: 1, claimLink: 'pqrtvw' }, true],
+    ['upper case', { v: 1, claimLink: 'PQRTVW' }, false],
+    ['five letters', { v: 1, claimLink: 'pqrtv' }, false],
+    ['another member', { v: 1, host: 'maple-otter-river.box.whombat.app' }, false],
+  ]),
   ...cases('UpdateChannelRequest', { v: 1 }, [['a channel', { v: 1, channel: 'production' }, false]]),
   ...cases('UpdateChannelSetRequest', { v: 1, channel: 'development' }, [
     ['production', { v: 1, channel: 'production' }, true],

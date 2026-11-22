@@ -1009,6 +1009,11 @@ type LinkOffRequest struct {
 	V int64 `json:"v"` // always 1
 }
 
+type LinkClaimRequest struct {
+	V         int64   `json:"v"` // always 1
+	ClaimLink *string `json:"claimLink,omitempty"`
+}
+
 type UpdateChannelRequest struct {
 	V int64 `json:"v"` // always 1
 }
@@ -4223,6 +4228,20 @@ func ParseLinkOffRequest(data []byte) (*LinkOffRequest, error) {
 func (v *LinkOffRequest) Validate() error { return schemas.ValidateValue("LinkOffRequest", v) }
 
 var _ = register("LinkOffRequest", func(data []byte) (any, error) { return ParseLinkOffRequest(data) })
+
+// ParseLinkClaimRequest validates data against the LinkClaimRequest JSON Schema and decodes it.
+func ParseLinkClaimRequest(data []byte) (*LinkClaimRequest, error) {
+	v := new(LinkClaimRequest)
+	if err := schemas.Decode("LinkClaimRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the LinkClaimRequest JSON Schema (as it would be sent).
+func (v *LinkClaimRequest) Validate() error { return schemas.ValidateValue("LinkClaimRequest", v) }
+
+var _ = register("LinkClaimRequest", func(data []byte) (any, error) { return ParseLinkClaimRequest(data) })
 
 // ParseUpdateChannelRequest validates data against the UpdateChannelRequest JSON Schema and decodes it.
 func ParseUpdateChannelRequest(data []byte) (*UpdateChannelRequest, error) {

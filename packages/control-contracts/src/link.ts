@@ -4,7 +4,7 @@
  * state, and opens Stripe Checkout or the Customer Portal for the one Link subscription (`LINK_OFFER_TEXT`: the first
  * month free, then €2.50 a month or €25 a year a box). Not cross-language: only the hosted app and control use these.
  */
-import { LinkCode, LinkState, OwnAddressHost, OwnAddressLabel } from '@whombat/protocol';
+import { LinkCode, LinkState, OwnAddressClaimUrl, OwnAddressHost, OwnAddressLabel } from '@whombat/protocol';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
 import { BillingRedirect, PlanInterval, SubscriptionTerms } from './billing.js';
@@ -181,6 +181,13 @@ export const LinkedBox = z.object({
   host: OwnAddressHost.nullable(),
   /** The last ticket the box asked for. */
   lastSeenAt: EpochSeconds.nullable(),
+  /**
+   * The box's claim link (4.13), `https://<host>/c/<six letters>`: only while nobody claimed the box, it has its address
+   * and Link runs, and only in the answers of the account the box is linked to. The box reports it (`link.status`
+   * `claimLink`); “Claim it now” opens it, so the person types only the four letters on the screen. Absent from an older
+   * control or box: open `https://<host>/`, which asks for the six letters too.
+   */
+  claimUrl: OwnAddressClaimUrl.optional(),
 });
 export type LinkedBox = z.infer<typeof LinkedBox>;
 

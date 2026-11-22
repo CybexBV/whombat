@@ -50158,6 +50158,30 @@
       }
     },
     {
+      "schema": "LinkStatusRequest",
+      "name": "a claim link",
+      "valid": true,
+      "value": {
+        "claimLink": "abcdef"
+      }
+    },
+    {
+      "schema": "LinkStatusRequest",
+      "name": "a claim link with a letter left out of the alphabet",
+      "valid": false,
+      "value": {
+        "claimLink": "abcdei"
+      }
+    },
+    {
+      "schema": "LinkStatusRequest",
+      "name": "a whole claim link",
+      "valid": false,
+      "value": {
+        "claimLink": "https://maple-otter-river.box.whombat.app/c/abcdef"
+      }
+    },
+    {
       "schema": "LinkStatusResponse",
       "name": "base",
       "valid": true,
@@ -50624,6 +50648,50 @@
       "valid": false,
       "value": {
         "v": 2
+      }
+    },
+    {
+      "schema": "LinkClaimRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1
+      }
+    },
+    {
+      "schema": "LinkClaimRequest",
+      "name": "a claim link",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "claimLink": "pqrtvw"
+      }
+    },
+    {
+      "schema": "LinkClaimRequest",
+      "name": "upper case",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "claimLink": "PQRTVW"
+      }
+    },
+    {
+      "schema": "LinkClaimRequest",
+      "name": "five letters",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "claimLink": "pqrtv"
+      }
+    },
+    {
+      "schema": "LinkClaimRequest",
+      "name": "another member",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "host": "maple-otter-river.box.whombat.app"
       }
     },
     {

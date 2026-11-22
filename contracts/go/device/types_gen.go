@@ -350,6 +350,7 @@ type LinkBeginResponse struct {
 }
 
 type LinkStatusRequest struct {
+	ClaimLink *string `json:"claimLink,omitempty"`
 }
 
 type LinkStatusResponse struct {

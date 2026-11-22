@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.whombat.com/contracts/LinkClaimRequest.json",
+  "title": "LinkClaimRequest",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "claimLink": {
+      "type": "string",
+      "pattern": "^[abcdefghjkmnpqrtvwxy]{6}$"
+    }
+  },
+  "required": [
+    "v"
+  ],
+  "additionalProperties": false
+}
