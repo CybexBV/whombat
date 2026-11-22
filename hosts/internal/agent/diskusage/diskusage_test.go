@@ -368,13 +368,17 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	}
 	r := newTestRunner(t, root, mounts, inv)
 
-	// Stub zfs list for VM zvols and snapshots.
+	// Stub zfs list: verify it queries only the selected dataset (-d 0, no -r)
+	// and ignores any child dataset rows even if present in output.
+	var zfsArgs []string
 	r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name != "zfs" {
 			return nil, os.ErrNotExist
 		}
+		zfsArgs = append([]string(nil), args...)
 		return []byte(strings.Join([]string{
 			"rpool/ROOT/pve-1\tfilesystem\t1000000\t50000000",
+			"rpool/ROOT/pve-1/child\tfilesystem\t2000000\t30000000",
 			"rpool/ROOT/pve-1/vm-101-disk-0\tvolume\t400000000\t25000000",
 		}, "\n")), nil
 	}
@@ -382,6 +386,12 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
 	if resp.Code != "" {
 		t.Fatalf("unexpected error: %+v", resp)
+	}
+	if slices.Contains(zfsArgs, "-r") {
+		t.Fatalf("zfs list unexpectedly used recursive -r: %v", zfsArgs)
+	}
+	if dIdx := slices.Index(zfsArgs, "-d"); dIdx < 0 || dIdx+1 >= len(zfsArgs) || zfsArgs[dIdx+1] != "0" {
+		t.Fatalf("zfs list missing -d 0: %v", zfsArgs)
 	}
 
 	byKey := map[string]proto.DiskUsageCategory{}
@@ -411,12 +421,108 @@ func TestCategoriesDockerJournalPackagesVMAndZFS(t *testing.T) {
 	if c := byKey[proto.DiskCatPackageCache]; c.Bytes < 32*1024 || !strings.Contains(c.Detail, "apt") || !strings.Contains(c.Detail, "dnf") {
 		t.Errorf("package_cache = %+v", c)
 	}
-	if c := byKey[proto.DiskCatVMDisks]; c.Bytes < 400_000_000+64*1024 {
-		t.Errorf("vm_disks = %+v", c)
+	// Only file-backed VM disk (64 KiB) is on rpool/ROOT/pve-1; child zvol must NOT be summed.
+	if c := byKey[proto.DiskCatVMDisks]; c.Bytes < 64*1024 || c.Bytes >= 400_000_000 {
+		t.Errorf("vm_disks = %+v, want ~64 KiB without child zvol", c)
 	}
-	if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes < 75_000_000+16*1024 {
-		t.Errorf("vm_snapshots = %+v", c)
+	// Only rpool/ROOT/pve-1's own snapshots (50 MB) + file-backed save (16 KiB); child datasets' snapshots must NOT be summed.
+	if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes < 50_000_000+16*1024 || c.Bytes >= 75_000_000 {
+		t.Errorf("vm_snapshots = %+v, want ~50 MB + 16 KiB without child dataset snapshots", c)
 	}
+}
+
+func TestZFSCountsOnlySelectedDatasetNotChildren(t *testing.T) {
+	t.Run("parent_excludes_separately_mounted_child_snapshots", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "tank/keep.bin"), 16*1024)
+		writeBytes(t, filepath.Join(root, "tank/media/movie.bin"), 256*1024)
+
+		mounts := []mountInfo{
+			{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 2, ParentID: 1, MountPoint: "/tank", FSType: "zfs", Source: "tank"},
+			{ID: 3, ParentID: 2, MountPoint: "/tank/media", FSType: "zfs", Source: "tank/media"},
+		}
+		inv := &proto.Report{
+			Pools: []proto.Pool{{Name: "tank", Disks: []string{"nvme0n1"}}},
+			Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
+		}
+		r := newTestRunner(t, root, mounts, inv)
+		var gotArgs []string
+		r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+			if name != "zfs" {
+				return nil, os.ErrNotExist
+			}
+			gotArgs = append([]string(nil), args...)
+			// Even if the output contains child datasets, only "tank" may be counted.
+			return []byte(strings.Join([]string{
+				"tank\tfilesystem\t12000000\t10000000",
+				"tank/media\tfilesystem\t900000000\t80000000",
+				"tank/vm-100-disk-0\tvolume\t500000000\t40000000",
+			}, "\n")), nil
+		}
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if slices.Contains(gotArgs, "-r") {
+			t.Fatalf("zfs list used -r: %v", gotArgs)
+		}
+		if dIdx := slices.Index(gotArgs, "-d"); dIdx < 0 || dIdx+1 >= len(gotArgs) || gotArgs[dIdx+1] != "0" {
+			t.Fatalf("zfs list missing -d 0: %v", gotArgs)
+		}
+		if gotArgs[len(gotArgs)-1] != "tank" {
+			t.Fatalf("zfs list target = %q, want %q", gotArgs[len(gotArgs)-1], "tank")
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes != 10_000_000 {
+			t.Errorf("vm_snapshots = %d, want 10000000 (selected dataset only)", c.Bytes)
+		}
+		if c, ok := byKey[proto.DiskCatVMDisks]; ok {
+			t.Errorf("vm_disks unexpectedly present on parent dataset: %+v", c)
+		}
+	})
+
+	t.Run("selected_guest_dataset_counts_only_itself", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/ct/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 1, ParentID: 0, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 2, ParentID: 1, MountPoint: "/srv/ct", FSType: "zfs", Source: "rpool/data/subvol-200-disk-0"},
+		}
+		inv := &proto.Report{
+			Pools: []proto.Pool{{Name: "rpool", Disks: []string{"nvme0n1"}}},
+			Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme"}},
+		}
+		r := newTestRunner(t, root, mounts, inv)
+		r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+			if name != "zfs" {
+				return nil, os.ErrNotExist
+			}
+			return []byte(strings.Join([]string{
+				"rpool/data/subvol-200-disk-0\tfilesystem\t300000000\t15000000",
+				"rpool/data/subvol-200-disk-0/nested\tfilesystem\t100000000\t90000000",
+			}, "\n")), nil
+		}
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/ct"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		byKey := map[string]proto.DiskUsageCategory{}
+		for _, c := range resp.Categories {
+			byKey[c.Key] = c
+		}
+		if c := byKey[proto.DiskCatVMDisks]; c.Bytes != 300_000_000 {
+			t.Errorf("vm_disks = %d, want 300000000 (selected guest dataset only)", c.Bytes)
+		}
+		if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes != 15_000_000 {
+			t.Errorf("vm_snapshots = %d, want 15000000 (selected dataset only)", c.Bytes)
+		}
+	})
 }
 
 func TestConcurrencyGuardReturnsBusy(t *testing.T) {
