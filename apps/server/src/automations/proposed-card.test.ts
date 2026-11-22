@@ -77,6 +77,15 @@ describe('the approval card of proposed actions', () => {
     expect(dropbox).toContain('Base: "content" (https://content.dropboxapi.com)');
     expect(dropbox).toContain('headers.Dropbox-API-Arg.path: "/Invoices/inv.pdf"');
     expect(dropbox).toContain('headers.Dropbox-API-Arg.mode: "add"');
+    // Any other header is the text it is, whatever it starts with.
+    expect(
+      linesOf('nextcloud', 'Nextcloud', {
+        method: 'PUT',
+        path: '/remote.php/dav/files/mara/a.txt',
+        headers: { Accept: '{"a":1}' },
+        body: 'x',
+      }),
+    ).toContain('headers.Accept: "{\\"a\\":1}"');
     const webdav = linesOf('nextcloud', 'Nextcloud', {
       method: 'MOVE',
       path: '/remote.php/dav/files/mara/a.pdf',

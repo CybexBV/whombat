@@ -172,6 +172,9 @@ function parsedJson(text: string): object | null {
   }
 }
 
+/** Headers whose value a service reads as JSON (Dropbox's arguments). */
+const JSON_HEADERS: ReadonlySet<string> = new Set(['dropbox-api-arg']);
+
 const REQUEST_ARGS = new Set(['method', 'path', 'base', 'query', 'headers', 'body', 'upload']);
 
 /** Every value of a call's arguments, raw text bodies and JSON headers read as what they hold. */
@@ -188,7 +191,11 @@ function readArgs(origin: ConnectionToolRow['origin'], args: Readonly<Record<str
   read(args.query, 'query', 'query', 1, out);
   if (args.headers && typeof args.headers === 'object' && !Array.isArray(args.headers)) {
     for (const [name, value] of Object.entries(args.headers as Record<string, unknown>)) {
-      const json = typeof value === 'string' && /^\s*[[{]/.test(value) ? parsedJson(value) : null;
+      // Only a header the service reads as JSON is shown as its JSON; any other is the text it is.
+      const json =
+        typeof value === 'string' && JSON_HEADERS.has(name.toLowerCase()) && /^\s*[[{]/.test(value)
+          ? parsedJson(value)
+          : null;
       read(json ?? value, childPath('headers', name), name, 2, out);
     }
   } else read(args.headers, 'headers', 'headers', 1, out);
