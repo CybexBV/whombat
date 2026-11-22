@@ -71,6 +71,7 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 	unknownRotational := map[string]bool{}
 	var backing []string
 	var rotational map[string]bool
+	var diskModels map[string]string
 
 	// 1. Unraid's emhttp state in RAM (/var/local/emhttp/disks.ini) knows every
 	// array and pool disk's spin state without touching any drive.
@@ -86,7 +87,11 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 	if r.inventory != nil {
 		if rep := r.inventory(); rep != nil {
 			rotational = make(map[string]bool, len(rep.Disks))
+			diskModels = make(map[string]string, len(rep.Disks))
 			for _, d := range rep.Disks {
+				if d.Device != "" && d.Model != "" {
+					diskModels[d.Device] = d.Model
+				}
 				switch d.Type {
 				case "hdd":
 					rotational[d.Device] = true
@@ -156,7 +161,7 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			continue
 		}
 		checked[dev] = true
-		switch r.rotationalStateOf(dev, rotational) {
+		switch r.rotationalStateOf(dev, rotational, diskModels) {
 		case rotationalNo:
 			continue
 		case rotationalUnknown:
@@ -470,7 +475,14 @@ func (r *Runner) rotationalStateOfDarwin(ctx context.Context, dev string, rotati
 	return rotationalUnknown
 }
 
-func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool) rotationalState {
+func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool, diskModels map[string]string) rotationalState {
+	// Virtual guest disks (virtio-blk, Xen xvd, hypervisor SCSI/SATA/IDE)
+	// cannot spin down even when the guest kernel reports rotational=1. Check
+	// this per disk rather than per host so PCI-passed-through physical HDDs in
+	// a VM still have their standby state verified.
+	if r.isVirtualGuestDisk(dev, diskModels) {
+		return rotationalNo
+	}
 	if rotational != nil {
 		if h, ok := rotational[dev]; ok {
 			if h {
@@ -495,6 +507,123 @@ func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool) rotat
 	default:
 		return rotationalUnknown
 	}
+}
+
+// isVirtualGuestDisk reports whether dev is a hypervisor virtual disk that
+// cannot spin down (virtio-blk/scsi, Xen, VMware, VirtualBox, Hyper-V, QEMU,
+// GCE, Parallels, bhyve). It reads only sysfs metadata and inventory models.
+func (r *Runner) isVirtualGuestDisk(dev string, diskModels map[string]string) bool {
+	if isParavirtualBlockName(dev) {
+		return true
+	}
+	// Check sysfs driver and device bus path (e.g. virtio-blk, virtio-scsi,
+	// Hyper-V hv_storvsc/VMBUS, VMware vmw_pvscsi, Xen xen-blkfront).
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev, "device/driver"),
+		filepath.Join("/sys/class/block", dev, "device/driver"),
+	} {
+		if link, err := os.Readlink(r.hostPath(p)); err == nil {
+			switch filepath.Base(filepath.Clean(link)) {
+			case "virtio_blk", "xen-blkfront", "hv_storvsc", "vmw_pvscsi", "vbd":
+				return true
+			}
+		}
+	}
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev),
+		filepath.Join("/sys/class/block", dev),
+		filepath.Join("/sys/block", dev, "device"),
+	} {
+		if link, err := os.Readlink(r.hostPath(p)); err == nil && isHypervisorSysfsPath(link) {
+			return true
+		}
+	}
+	vendor := r.readSysfsTrimmed(filepath.Join("/sys/block", dev, "device/vendor"))
+	model := r.readSysfsTrimmed(filepath.Join("/sys/block", dev, "device/model"))
+	if isHypervisorDiskIdentity(vendor, model) {
+		return true
+	}
+	if diskModels != nil {
+		if invModel := diskModels[dev]; invModel != "" && isHypervisorDiskIdentity(vendor, invModel) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runner) readSysfsTrimmed(path string) string {
+	b, err := os.ReadFile(r.hostPath(path))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func isParavirtualBlockName(name string) bool {
+	if strings.HasPrefix(name, "vd") && allLowerLetters(name[2:]) {
+		return true
+	}
+	if strings.HasPrefix(name, "xvd") && allLowerLetters(name[3:]) {
+		return true
+	}
+	return false
+}
+
+func isHypervisorSysfsPath(link string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(link)), "/") {
+		low := strings.ToLower(seg)
+		if strings.HasPrefix(low, "virtio") || strings.HasPrefix(low, "vbd-") ||
+			low == "vmbus" || strings.HasPrefix(low, "vmbus:") || strings.HasPrefix(low, "vmbus_") {
+			return true
+		}
+	}
+	return false
+}
+
+func isHypervisorDiskIdentity(vendor, model string) bool {
+	v := strings.ToUpper(strings.TrimSpace(vendor))
+	m := strings.ToUpper(strings.TrimSpace(model))
+	if v == "" && m == "" {
+		return false
+	}
+	vClean := strings.TrimRight(v, ",. ")
+	switch vClean {
+	case "QEMU", "VMWARE", "VBOX", "XEN", "XENSRC", "PARALLELS", "BHYVE", "HYPER-V", "VIRTIO", "NUTANIX", "OPENSTACK":
+		return true
+	}
+	if (vClean == "MSFT" || vClean == "MICROSOFT") && (strings.Contains(m, "VIRTUAL") || strings.Contains(m, "HYPER-V")) {
+		return true
+	}
+	if vClean == "GOOGLE" && (strings.Contains(m, "PERSISTENTDISK") || strings.Contains(m, "EPHEMERAL")) {
+		return true
+	}
+	if vClean == "RED HAT" && (strings.Contains(m, "VIRTIO") || strings.Contains(m, "QEMU")) {
+		return true
+	}
+	for _, needle := range []string{
+		"QEMU HARDDISK",
+		"QEMU DVD-ROM",
+		"VMWARE VIRTUAL",
+		"VBOX HARDDISK",
+		"MSFT VIRTUAL DISK",
+		"MICROSOFT VIRTUAL",
+		"HYPER-V",
+		"XEN VIRTUAL",
+		"XENSRC",
+		"GOOGLE PERSISTENTDISK",
+		"PERSISTENTDISK",
+		"BHYVE",
+		"PARALLELS",
+		"VIRTIO",
+	} {
+		if strings.Contains(m, needle) {
+			return true
+		}
+	}
+	if m == "VIRTUAL HD" && (vClean == "" || vClean == "ATA" || vClean == "MSFT" || vClean == "MICROSOFT") {
+		return true
+	}
+	return false
 }
 
 // backingDisksFromSource derives underlying physical block devices from a

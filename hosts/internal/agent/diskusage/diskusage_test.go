@@ -1358,3 +1358,141 @@ func TestDarwinAPFSInternalAndExternalDisks(t *testing.T) {
 		t.Fatalf("mac without diskutil must not fall back to /sys: resp=%+v", resp)
 	}
 }
+
+func TestVirtualMachineGuestDisksScanWithoutWakingPassthroughHDD(t *testing.T) {
+	root := t.TempDir()
+	writeFile := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// All virtual disks report rotational=1 (typical KVM/Proxmox/Hetzner/VMware/Hyper-V/VBox guests).
+	for _, dev := range []string{"vda", "xvda", "sda", "sdb", "sdc", "sdd", "sde", "sdf", "sdg", "sdh"} {
+		writeFile("sys/block/"+dev+"/queue/rotational", "1\n")
+	}
+	// sda: QEMU/Hetzner/Proxmox virtio-scsi disk.
+	writeFile("sys/block/sda/device/vendor", "QEMU    \n")
+	writeFile("sys/block/sda/device/model", "QEMU HARDDISK   \n")
+	// sdb: VMware virtual SCSI disk.
+	writeFile("sys/block/sdb/device/vendor", "VMware, \n")
+	writeFile("sys/block/sdb/device/model", "VMware Virtual S\n")
+	// sdc: VirtualBox AHCI disk (vendor is ATA, model names VBOX).
+	writeFile("sys/block/sdc/device/vendor", "ATA     \n")
+	writeFile("sys/block/sdc/device/model", "VBOX HARDDISK   \n")
+	// sdd: Hyper-V / Azure virtual disk.
+	writeFile("sys/block/sdd/device/vendor", "Msft    \n")
+	writeFile("sys/block/sdd/device/model", "Virtual Disk    \n")
+	// sde: virtio-scsi disk with custom model identified via sysfs virtio bus symlink.
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/block"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../../devices/pci0000:00/0000:00:05.0/virtio2/host0/target0:0:0/0:0:0:0/block/sde", filepath.Join(root, "sys/class/block/sde")); err != nil {
+		t.Fatal(err)
+	}
+	// sdf: Passed-through real physical HDD inside the VM (must still be checked!).
+	writeFile("sys/block/sdf/device/vendor", "ATA     \n")
+	writeFile("sys/block/sdf/device/model", "WDC WD181KFGX-68CKWN0\n")
+	// sdg: Hardware RAID logical disk (Dell PERC "Virtual Disk" — must NOT be treated as a VM disk!).
+	writeFile("sys/block/sdg/device/vendor", "DELL    \n")
+	writeFile("sys/block/sdg/device/model", "Virtual Disk    \n")
+	// sdh: LVM on top of vda2.
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/block/dm-0/slaves"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../vda2", filepath.Join(root, "sys/class/block/dm-0/slaves/vda2")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "dev/mapper"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../dm-0", filepath.Join(root, "dev/mapper/vg-root")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mp := range []string{"vm/vda", "vm/xvd", "vm/qemu", "vm/vmware", "vm/vbox", "vm/hyperv", "vm/virtio", "vm/lvm", "vm/pass", "vm/raid", "vm/lxc"} {
+		writeBytes(t, filepath.Join(root, mp, "file.bin"), 16*1024)
+	}
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/vm/vda", FSType: "ext4", Source: "/dev/vda1"},
+		{ID: 2, MountPoint: "/vm/xvd", FSType: "ext4", Source: "/dev/xvda1"},
+		{ID: 3, MountPoint: "/vm/qemu", FSType: "ext4", Source: "/dev/sda1"},
+		{ID: 4, MountPoint: "/vm/vmware", FSType: "ext4", Source: "/dev/sdb1"},
+		{ID: 5, MountPoint: "/vm/vbox", FSType: "ext4", Source: "/dev/sdc1"},
+		{ID: 6, MountPoint: "/vm/hyperv", FSType: "ext4", Source: "/dev/sdd1"},
+		{ID: 7, MountPoint: "/vm/virtio", FSType: "ext4", Source: "/dev/sde1"},
+		{ID: 8, MountPoint: "/vm/lvm", FSType: "ext4", Source: "/dev/mapper/vg-root"},
+		{ID: 9, MountPoint: "/vm/pass", FSType: "ext4", Source: "/dev/sdf1"},
+		{ID: 10, MountPoint: "/vm/raid", FSType: "ext4", Source: "/dev/sdg1"},
+		{ID: 11, MountPoint: "/vm/lxc", FSType: "ext4", Source: "/dev/loop0"},
+	}
+
+	// Inventory says vda and sda are Type:"hdd" (because lsblk saw rota=1) and Host.Virtual="kvm".
+	inv := &proto.Report{
+		Host: proto.HostInfo{Virtual: "kvm"},
+		Disks: []proto.Disk{
+			{Device: "vda", Type: "hdd"},
+			{Device: "sda", Type: "hdd", Model: "QEMU HARDDISK"},
+			{Device: "sdf", Type: "hdd", Model: "WDC WD181KFGX-68CKWN0"},
+		},
+		Filesystems: []proto.Filesystem{
+			{Mount: "/vm/vda", Device: "/dev/vda1", FSType: "ext4", Disks: []string{"vda"}},
+			{Mount: "/vm/qemu", Device: "/dev/sda1", FSType: "ext4", Disks: []string{"sda"}},
+			{Mount: "/vm/pass", Device: "/dev/sdf1", FSType: "ext4", Disks: []string{"sdf"}},
+		},
+	}
+
+	var probed []string
+	var statfsCalled atomic.Int32
+	r := newTestRunner(t, root, mounts, inv)
+	r.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		if dev == "sdf" {
+			return standbyAsleep
+		}
+		return standbyUnknown
+	}
+
+	// All virtual guest disks scan cleanly without invoking smartctl/hdparm.
+	for _, mp := range []string{"/vm/vda", "/vm/xvd", "/vm/qemu", "/vm/vmware", "/vm/vbox", "/vm/hyperv", "/vm/virtio", "/vm/lvm"} {
+		probed = nil
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp})
+		if resp.Code != "" || len(probed) != 0 {
+			t.Errorf("%s: resp=%+v probed=%v, want clean scan with no standby probe", mp, resp, probed)
+		}
+	}
+
+	// Passed-through physical HDD inside the VM must STILL be checked and skip when asleep.
+	probed = nil
+	statfsCalled.Store(0)
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/pass"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdf"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/pass: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+
+	// Hardware RAID "Virtual Disk" (DELL) must NOT be misclassified as a VM disk; unknown standby skips as standby_unknown.
+	probed = nil
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/raid"})
+	if resp.Code != CodeStandbyUnknown || !slices.Equal(probed, []string{"sdg"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/raid: resp=%+v probed=%v statfs=%d", resp, probed, statfsCalled.Load())
+	}
+
+	// LXC loop0 root skips as standby_unknown without claiming "spun down".
+	probed = nil
+	statfsCalled.Store(0)
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/vm/lxc"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || strings.Contains(resp.Message, "spun down") || statfsCalled.Load() != 0 {
+		t.Fatalf("/vm/lxc: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+}
