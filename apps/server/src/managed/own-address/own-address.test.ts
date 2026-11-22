@@ -226,7 +226,9 @@ describe('when the manager’s state is read', () => {
 
   it('reads within seconds right after a start or a move of Link, while the first certificate is awaited', () => {
     expect(OWN_ADDRESS_SOON_POLL_MS).toBeLessThanOrEqual(5_000);
-    expect(due(OWN_ADDRESS_SOON_POLL_MS - 1, { waiting: true, soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(false);
+    expect(due(OWN_ADDRESS_SOON_POLL_MS - 1, { waiting: true, soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(
+      false,
+    );
     expect(due(OWN_ADDRESS_SOON_POLL_MS, { waiting: true, soonFor: OWN_ADDRESS_SOON_FOR_MS })).toBe(true);
   });
 
