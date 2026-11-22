@@ -1902,34 +1902,7 @@ func (p *Publisher) BootstrapFiles() ([]devtuf.ReleaseFile, error) {
 	if !r.GitHub() {
 		return nil, errors.New("ghpublish: the repository is not of the GitHub layout")
 	}
-	var out []devtuf.ReleaseFile
-	seen := map[string]bool{}
-	add := func(files []devtuf.ReleaseFile) {
-		for _, f := range files {
-			if k := f.Tag + "/" + f.Name; !seen[k] {
-				seen[k] = true
-				out = append(out, f)
-			}
-		}
-	}
-	for _, channel := range []string{trust.ChannelDevelopment, trust.ChannelProduction} {
-		if !r.HasChannel(channel) {
-			continue
-		}
-		releases, err := r.ChannelReleases(channel)
-		if err != nil {
-			return nil, err
-		}
-		for _, rel := range releases {
-			files, err := r.ReleaseFiles(channel, rel.ID)
-			if err != nil {
-				return nil, fmt.Errorf("ghpublish: %s in %s: %w", rel.ID, channel, err)
-			}
-			add(files)
-		}
-	}
-	add(r.ClientFiles())
-	return out, nil
+	return r.ListedFiles()
 }
 
 // InitClone turns a GitHub-layout repository (tufrepo gh-continue's output) into the clone the publisher works in:
