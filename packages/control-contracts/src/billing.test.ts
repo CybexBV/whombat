@@ -7,7 +7,9 @@ import {
   normaliseSignupCode,
   OPERATOR_PERMISSIONS,
   SIGNUP_CODE_ALPHABET,
+  SUBSCRIPTION_TERMS_ACCEPTED,
   SUBSCRIPTION_TERMS_VERSION,
+  subscriptionTermsAccepted,
 } from './index.js';
 
 const now = 1_790_000_000;
@@ -67,11 +69,19 @@ describe('orgs.create (BL-21, BL-24)', () => {
   const terms = { version: SUBSCRIPTION_TERMS_VERSION };
 
   it('requires the terms and takes an optional normalised code', () => {
-    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-19');
+    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-22');
     expect(body.parse({ name: ' Lumio BV ', terms })).toEqual({ name: 'Lumio BV', terms });
     expect(body.safeParse({ name: 'Lumio', terms, code: 'AB12-CD34' }).success).toBe(true);
     expect(body.safeParse({ name: 'Lumio', terms, code: 'AB12CD34' }).success).toBe(true);
     expect(body.safeParse({ name: 'Lumio', terms: { version: '2027-01-01' } }).success).toBe(true);
+  });
+
+  it('control takes the current subscription terms and the one before, nothing else', () => {
+    expect(SUBSCRIPTION_TERMS_ACCEPTED[0]).toBe(SUBSCRIPTION_TERMS_VERSION);
+    expect(subscriptionTermsAccepted(SUBSCRIPTION_TERMS_VERSION)).toBe(true);
+    expect(subscriptionTermsAccepted('2026-11-19')).toBe(true);
+    for (const version of ['2026-10-25', '2027-01-01'])
+      expect(subscriptionTermsAccepted(version)).toBe(false);
   });
 
   it('refuses a body without terms, a raw code or extra members', () => {

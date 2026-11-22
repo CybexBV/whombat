@@ -42,8 +42,8 @@ export function useAndroidDownload(load: DownloadLoader | null): AndroidDownload
 
 /**
  * “Get the app” (AP-525): the APK while the app isn't in the stores (a plain link to control's file, served as an
- * attachment), its size and what Android asks the first time; then the iPhone app, in testing on TestFlight, with a
- * way to ask for an invite. Give it `download` when the page needs the answer too (the Mobile app page's steps), or
+ * attachment), its size and what Android asks the first time; then the iPhone app, in testing on TestFlight, with its
+ * public link. Give it `download` when the page needs the answer too (the Mobile app page's steps), or
  * `load` and it asks by itself.
  */
 export function DownloadCard({
@@ -105,8 +105,15 @@ export function DownloadCard({
             <span className={styles.downloadName}>{t.iphoneName}</span>
             <span className={styles.downloadNote}>{t.iphoneMeta}</span>
           </div>
-          <ButtonLink variant="secondary" size="lg" className={styles.downloadButton} href={t.iphoneMail}>
-            {t.iphoneAsk}
+          <ButtonLink
+            variant="secondary"
+            size="lg"
+            className={styles.downloadButton}
+            href={t.iphoneLink}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t.iphoneJoin}
           </ButtonLink>
         </div>
       </div>

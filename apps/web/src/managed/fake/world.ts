@@ -66,12 +66,13 @@ import {
   ticketConnectError,
 } from '@whombat/client/session';
 import {
-  APPLIANCE_TERMS_VERSION,
+  applianceTermsAccepted,
   isSafeNext,
   type KitEnvelopeInput,
   linkSoldIn,
   normaliseSignupCode,
   SUBSCRIPTION_TERMS_VERSION,
+  subscriptionTermsAccepted,
 } from '@whombat/control-contracts';
 import { canonicalJson, deriveSeedKeypair, sha256Hex, utf8ToBytes, verifyBytes } from '@whombat/core/audit';
 import { BACKUP_FILE_CONTENT_TYPE } from '@whombat/core/backup';
@@ -3350,7 +3351,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
   const termsAccepted = (l: FakeLink) => l.termsAccepted === true || (l.terms ?? []).some((v) => v !== null);
   /** Checkout and the portal: the terms sent are recorded; none sent while none were ever accepted is refused. */
   const acceptTerms = (l: FakeLink, terms: { version: string } | undefined) => {
-    if (terms && terms.version !== SUBSCRIPTION_TERMS_VERSION)
+    if (terms && !subscriptionTermsAccepted(terms.version))
       throw new ControlError('terms_outdated', 'The terms have changed.');
     if (terms) {
       l.termsAccepted = true;
@@ -3710,8 +3711,9 @@ export async function createFakeWorld(): Promise<FakeWorld> {
     async createOrg({ name, terms, code }) {
       guard();
       if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
-      // Control accepts only the current Subscription Terms (BL-21) and a code by its canonical form (CT-107).
-      if (terms.version !== SUBSCRIPTION_TERMS_VERSION)
+      // Control accepts the current Subscription Terms and the ones before (BL-21) and a code by its canonical form
+      // (CT-107).
+      if (!subscriptionTermsAccepted(terms.version))
         throw new ControlError('terms_outdated', 'The terms have changed.');
       const canonical = code ? normaliseSignupCode(code) : null;
       if (code && !/^[0-9A-HJKMNP-TV-Z]{4}-?[0-9A-HJKMNP-TV-Z]{4}$/.test(code))
@@ -3812,7 +3814,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
       if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
       const c = liveCode(code);
       const l = linkNow();
-      if (terms && terms.version !== SUBSCRIPTION_TERMS_VERSION)
+      if (terms && !subscriptionTermsAccepted(terms.version))
         throw new ControlError('terms_outdated', 'The terms have changed.');
       if (!terms && !termsAccepted(l))
         throw new ControlError('terms_required', 'Accept the Whombat Subscription Terms first.');
@@ -3949,7 +3951,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
       guard();
       if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
       if (!state.org || orgId !== state.org.orgId) throw new ControlError('not_found', 'No such org.');
-      if (terms.version !== APPLIANCE_TERMS_VERSION)
+      if (!applianceTermsAccepted(terms.version))
         throw new ControlError('terms_required', 'Accept the current terms.');
       const letters = 'ABCDEFGHJKMNPQRTVWXY';
       const pick = () => letters[Math.floor(Math.random() * letters.length)];
@@ -3982,8 +3984,8 @@ export async function createFakeWorld(): Promise<FakeWorld> {
     async startClaim(input) {
       guard();
       if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
-      // Control accepts only the current appliance terms (LC-18, CL-44) and records them on the claim.
-      if (input.terms?.version !== APPLIANCE_TERMS_VERSION)
+      // Control accepts the current appliance terms and the ones before (LC-18, CL-44) and records them on the claim.
+      if (!input.terms || !applianceTermsAccepted(input.terms.version))
         throw new ControlError('terms_required', 'Accept the current appliance terms.');
       if (state.claimRefusal === 'self_install_not_allowed')
         throw new ControlError('self_install_not_allowed', 'Self-installed Whombats aren’t in this plan.');

@@ -12396,3 +12396,21 @@ one reason.
 - **CT-1786** New reason `link_country` (403): `link.checkout` with a `country` outside `LINK_COUNTRIES`. Nothing is
   cross-language, no session op, device op or manager route is new.
 
+
+## CT-1787…CT-1788 The terms of 22 November — contracts 4.12.0 (2026-11-22)
+
+The Appliance Terms and the Subscription Terms get a new version for fixes the launch review found (Whombat
+legal-texts.md LGL-03). A minor: two constants change and two lists with their checks are new.
+
+- **CT-1787** `APPLIANCE_TERMS_VERSION` and `SUBSCRIPTION_TERMS_VERSION` are `2026-11-22`. The Appliance Terms name
+  the seller (address, KvK, VAT), say Claude Code downloads from Anthropic's own site, list only the keys a
+  self-installed Whombat has (the passkey for the backups, the recovery kit if made; no disk recovery key) and carry
+  the Dutch voice's Open RAIL-M use restrictions as Attachment A. The Subscription Terms name the seller and say
+  Whombat Link is sold in EU countries only, as `LINK_COUNTRIES` already makes control do.
+- **CT-1788** Control accepts the current terms and the version before them, so a new version needs no release in
+  lock-step. `APPLIANCE_TERMS_ACCEPTED` and `SUBSCRIPTION_TERMS_ACCEPTED` list every version control takes, the current
+  one first, with `applianceTermsAccepted` and `subscriptionTermsAccepted` to check one; today `2026-11-22` and
+  `2026-11-19`. Control goes out first (a candidate deploys it before the hosted app); the apps follow when they update,
+  and an app that still shows the earlier text sends its version, which control records as the one the person
+  accepted. A new version keeps the one before it in the list; an older one leaves once the apps that send it are gone.
+  Nothing is cross-language, and no session op, device op or manager route is new.

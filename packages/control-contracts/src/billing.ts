@@ -112,13 +112,25 @@ export type BillingProviderName = z.infer<typeof BillingProviderName>;
 
 /**
  * The version of the Whombat Subscription Terms accepted when a box joins an account's Whombat Link (`link.confirm`,
- * 4.7) and when an org is created (BL-06, BL-24). Control accepts only this version (`terms_outdated` otherwise);
- * changing the terms means a new id, and so a contracts release. The text is the hosted app's
- * `/legal/subscription-terms`. `2026-11-19`: Whombat Link for people and businesses, €2.50 a month or €25 a year a box
- * with VAT, the free month without a card, cancelling any time, money back within 14 days of the first payment, and
- * the grace week when it ends.
+ * 4.7) and when an org is created (BL-06, BL-24): the one an app shows and sends. Control also accepts the versions in
+ * `SUBSCRIPTION_TERMS_ACCEPTED` (`terms_outdated` otherwise); changing the terms means a new id, and so a contracts
+ * release. The text is the hosted app's
+ * `/legal/subscription-terms`. `2026-11-22`: Whombat Link for people and businesses in EU countries, €2.50 a month or
+ * €25 a year a box with VAT, the free month without a card, cancelling any time, money back within 14 days of the first
+ * payment, and the grace week when it ends; the seller's address, KvK and VAT number.
  */
-export const SUBSCRIPTION_TERMS_VERSION = '2026-11-19';
+export const SUBSCRIPTION_TERMS_VERSION = '2026-11-22';
+
+/**
+ * Every Subscription Terms version control accepts, the current one first. A new version keeps the one before it here,
+ * so control can go out first and the apps follow at their own pace; control records the version the person accepted.
+ * An older version leaves the list once the apps that send it are gone.
+ */
+export const SUBSCRIPTION_TERMS_ACCEPTED: readonly string[] = [SUBSCRIPTION_TERMS_VERSION, '2026-11-19'];
+
+/** Does control take this Subscription Terms version for a new org, a Link confirm or Link's start? */
+export const subscriptionTermsAccepted = (version: string): boolean =>
+  SUBSCRIPTION_TERMS_ACCEPTED.includes(version);
 
 /** “I agree to the Whombat Subscription Terms”, ticked when creating an org (BL-21, BL-24). */
 export const SubscriptionTerms = z.strictObject({ version: TermsVersion });

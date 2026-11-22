@@ -40,7 +40,9 @@ import {
   feedbackDropApi,
 } from './feedback.js';
 import {
+  APPLIANCE_TERMS_ACCEPTED,
   APPLIANCE_TERMS_VERSION,
+  applianceTermsAccepted,
   controlApi,
   isSafeNext,
   MagicLinkRequest,
@@ -255,7 +257,7 @@ describe('control api', () => {
   it('claims.start requires the appliance terms (LC-18)', () => {
     const body = controlApi.directory.startClaim.body;
     // The open-source terms: Cybex's service and boxes, not the right to run the software.
-    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-19');
+    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-22');
     expect(body.safeParse({ method: 'code', device: 'dev_1' }).success).toBe(false);
     for (const terms of [{}, { version: 'latest' }, { version: APPLIANCE_TERMS_VERSION, accepted: true }])
       expect(body.safeParse({ method: 'code', device: 'dev_1', terms }).success, JSON.stringify(terms)).toBe(
@@ -264,6 +266,14 @@ describe('control api', () => {
     // Another well-formed version parses (the one before too); control refuses it (`terms_required`).
     for (const version of ['2027-01-01', '2026-10-25-draft'])
       expect(body.safeParse({ method: 'code', device: 'dev_1', terms: { version } }).success).toBe(true);
+  });
+
+  it('control takes the current appliance terms and the one before, nothing else', () => {
+    expect(APPLIANCE_TERMS_ACCEPTED[0]).toBe(APPLIANCE_TERMS_VERSION);
+    expect(applianceTermsAccepted(APPLIANCE_TERMS_VERSION)).toBe(true);
+    expect(applianceTermsAccepted('2026-11-19')).toBe(true);
+    for (const version of ['2026-10-25', '2027-01-01', 'latest'])
+      expect(applianceTermsAccepted(version)).toBe(false);
   });
 
   it('entitlements carry limits and selfInstall; the operator body keeps absent members (LC-11, LC-15)', () => {

@@ -202,14 +202,14 @@ describe('the Mobile app page (AP-521…AP-525)', () => {
     expect(screen.queryByRole('link', { name: 'Download for Android' })).toBeNull();
   });
 
-  it('no Android app published: step 1 doesn’t promise a download; the iPhone row asks for an invite', async () => {
+  it('no Android app published: step 1 doesn’t promise a download; the iPhone row links to TestFlight', async () => {
     const w = world();
     renderPage(w.deps, null);
     await screen.findByRole('img', { name: /QR code/ });
     expect(await screen.findByText(/^The Android app isn’t published here yet\. On an iPhone/)).toBeTruthy();
     expect(screen.queryByText(/it opens the download/)).toBeNull();
-    const invite = screen.getByRole('link', { name: 'Ask for an invite' });
-    expect(invite.getAttribute('href')).toMatch(/^mailto:info@whombat\.com\?subject=/);
+    const join = screen.getByRole('link', { name: 'Join on TestFlight' });
+    expect(join.getAttribute('href')).toMatch(/^https:\/\/testflight\.apple\.com\/join\//);
   });
 
   it('a failed check for the app offers Try again, which asks again', async () => {
