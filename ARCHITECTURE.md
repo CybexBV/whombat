@@ -815,10 +815,17 @@ published automation details read their definition and publisher from one versio
   defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
   email's files attached to the prompt message (`read_attachment`), and once the agent prompt is rendered, `body`,
   `snippet` and `text` are stripped from `automation_runs.scope` while sender, subject and attachment metadata stay.
-  Proposed writes (`propose_connection_actions`, narrowed to writable non-built-in services excluding `whombat_servers`,
-  `t3code`, `DELETE` and read-only calls, with prompts listing handles/tools only) always ask the person on a
-  server-described approval card bound to the exact `actionsHash` regardless of standing settings before
-  `connection_actions` runs them, settling as `uncertain` on timeout or partial-batch failure.
+  Proposed writes (`propose_connection_actions`, prompts listing handles and tools only) are narrow: writable
+  non-built-in services other than `whombat_servers` and `t3code`, never a read, never deleting, removing or emptying
+  (`DELETE`, or said in a tool name, a path segment, a method- or action-like value, a delete switch or code a service
+  runs), never what the connection's `sensitive` rules always ask about or its `cutsOff` rules mark as able to cut the
+  person off (DNS, DHCP, firewalls, networks). They always ask the person on an approval card bound to the exact
+  `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): Whombat's
+  own words for each action (`action-words.ts`) as its title, question, message and “Done:” line, then every line that
+  decides what happens — method and path or tool, base, uploaded file, every argument and header, secrets masked — or
+  the proposal is refused when that doesn't fit on one card. `connection_actions` runs them after a yes, settling as
+  `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
+  `request_approval` step's details start with its own question.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
