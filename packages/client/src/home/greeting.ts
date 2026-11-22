@@ -5,7 +5,7 @@
  * failed.** I’m looking into it.” Pure; web and phone share it.
  */
 import type { DoneTodayItem, HomeChat, HomeOverview, NeedsYouItem, ThingSummary } from '@whombat/core';
-import { dayKey, formatClock, formatDate, zonedParts } from '@whombat/core/text';
+import { daysAgo, formatClock, formatDate, zonedParts } from '@whombat/core/text';
 
 /** By the local hour: morning from 05:00, afternoon from 12:00, evening from 18:00 (and through the night). */
 export function greetingFor(now: Date | number, timeZone: string): string {
@@ -187,26 +187,20 @@ export interface HomeWidgetStatus {
   status: string;
   /** Same tone as `homeStatus`. */
   tone: StatusTone;
-  /** “as of 14:05” — shown while the phone is still on `asOfDay`. */
-  asOf: string;
-  /** “as of 21 Nov” — shown once the calendar day moves past `asOfDay` without the app opening. */
-  asOfEarlier: string;
-  /** Calendar day of `updatedAt` in `timeZone` (`YYYY-MM-DD`), so native code can switch without formatting copy. */
-  asOfDay: string;
-  /** IANA time zone used for `asOfDay`. */
+  /** IANA time zone used when formatting `updatedAt` at draw time. */
   timeZone: string;
-  /** Epoch ms of when the app last had this status. */
+  /** Epoch ms of when the app last had this status (formatted on draw, never stored as a label). */
   updatedAt: number;
 }
 
 export interface WidgetStatusOptions {
   /** The Whombat's name; falls back to “Whombat”. */
   boxName?: string | null;
-  /** IANA time zone for “as of 14:05”. */
+  /** IANA time zone for formatting `updatedAt`. */
   timeZone: string;
   /** When the status was taken (`overview.generatedAt`, else `now`). */
   at?: Date | string | number | null;
-  /** Current clock for day/year comparison when formatting `asOfEarlier`. */
+  /** Fallback clock when `at` and `overview.generatedAt` are missing or invalid. */
   now?: Date | number;
 }
 
@@ -243,20 +237,23 @@ export function homeWidgetStatus(
     boxName,
     status,
     tone,
-    asOf: `as of ${formatClock(atDate, options.timeZone)}`,
-    asOfEarlier: `as of ${formatDate(atDate, options.timeZone, { now: nowDate })}`,
-    asOfDay: dayKey(atDate, options.timeZone),
     timeZone: options.timeZone,
     updatedAt: atDate.getTime(),
   };
 }
 
-/** Which “as of …” line applies at `now` (`as of 14:05` on the same day, `as of 21 Nov` once the day moves on). */
+/**
+ * Formats a saved widget status time at draw time: “as of 14:05” today, “as of yesterday 23:50” on the
+ * next calendar day, or “as of 21 Nov” (with the year when it differs) on any other day.
+ */
 export function widgetAsOfLabel(
-  widget: Pick<HomeWidgetStatus, 'asOf' | 'asOfEarlier' | 'asOfDay' | 'timeZone'>,
+  widget: Pick<HomeWidgetStatus, 'updatedAt' | 'timeZone'>,
   now: Date | number,
 ): string {
-  return dayKey(now, widget.timeZone) === widget.asOfDay ? widget.asOf : widget.asOfEarlier;
+  const diff = daysAgo(widget.updatedAt, now, widget.timeZone);
+  if (diff === 0) return `as of ${formatClock(widget.updatedAt, widget.timeZone)}`;
+  if (diff === 1) return `as of yesterday ${formatClock(widget.updatedAt, widget.timeZone)}`;
+  return `as of ${formatDate(widget.updatedAt, widget.timeZone, { now })}`;
 }
 
 /**

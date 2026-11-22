@@ -142,6 +142,55 @@ describe('home-screen status widget tokens and copy', () => {
     expect(moduleSwift).toContain('obj["source"]');
     expect(moduleSwift).toContain('filterSource == "cloud"');
   });
+
+  it('stores updatedAt (not pre-formatted labels) and formats at draw time with midnight rollover on Android and iOS', () => {
+    const storeKt = readFileSync(
+      join(ROOT, 'android/src/main/java/com/whombat/live/StatusWidgetStore.kt'),
+      'utf8',
+    );
+    const providerKt = readFileSync(
+      join(ROOT, 'android/src/main/java/com/whombat/live/WhombatStatusWidgetProvider.kt'),
+      'utf8',
+    );
+    const manifestXml = readFileSync(join(ROOT, 'android/src/main/AndroidManifest.xml'), 'utf8');
+    const infoXml = readFileSync(
+      join(ROOT, 'android/src/main/res/xml/whombat_status_widget_info.xml'),
+      'utf8',
+    );
+    const widgetSwift = readFileSync(join(ROOT, 'ios/widget/WhombatStatusWidget.swift'), 'utf8');
+
+    // Neither Android nor iOS stores pre-formatted “as of” labels in the snapshot.
+    for (const src of [storeKt, widgetSwift]) {
+      expect(src).not.toContain('asOfEarlier');
+      expect(src).not.toContain('asOfDay');
+      expect(src).toContain('as of yesterday ');
+    }
+    expect(storeKt).not.toContain('val asOf:');
+    expect(storeKt).toContain('updatedAt <= 0L');
+    expect(storeKt).toContain('fun nextRolloverAtMs');
+
+    // Android redraws at midnight via AlarmManager, on clock/date/zone changes, and cleans up on disable.
+    expect(providerKt).toContain('AlarmManager');
+    expect(providerKt).toContain('scheduleNextRollover');
+    expect(providerKt).toContain('onDisabled');
+    expect(providerKt).toContain('Intent.ACTION_TIME_CHANGED');
+    expect(providerKt).toContain('Intent.ACTION_TIMEZONE_CHANGED');
+    expect(providerKt).toContain('Intent.ACTION_DATE_CHANGED');
+    expect(manifestXml).toContain('android.intent.action.DATE_CHANGED');
+    expect(manifestXml).toContain('android.intent.action.TIME_SET');
+    expect(manifestXml).toContain('android.intent.action.TIMEZONE_CHANGED');
+    const periodMatch = /android:updatePeriodMillis="(\d+)"/.exec(infoXml);
+    expect(Number(periodMatch?.[1])).toBeLessThanOrEqual(1_800_000);
+
+    // iOS formats from updatedAt and schedules multi-step midnight timeline entries (today → yesterday → date).
+    const swiftSnapshotMatch = /private struct StatusWidgetSnapshot: Decodable \{[\s\S]*?\n\}/.exec(
+      widgetSwift,
+    );
+    expect(swiftSnapshotMatch?.[0]).toBeTruthy();
+    expect(swiftSnapshotMatch?.[0]).not.toContain('let asOf:');
+    expect(widgetSwift).toContain('snapshot.updatedAt > 0');
+    expect(widgetSwift).toContain('rolloverDates(after: now)');
+  });
 });
 
 interface MockXcodeProject {
