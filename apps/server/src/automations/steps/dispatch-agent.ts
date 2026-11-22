@@ -242,7 +242,9 @@ export async function executeDispatchAgent({
       : 0;
   const missingList = missingParsed.success ? missingParsed.data : [];
   const missingNote =
-    missingList.length > 0 || missingOmitted > 0 ? missingAttachmentsText(missingList, missingOmitted) : '';
+    missingList.length > 0 || missingOmitted > 0
+      ? missingAttachmentsText(missingList, missingOmitted, 3)
+      : '';
   const stepInputSummary = workspace
     ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
     : missingNote
