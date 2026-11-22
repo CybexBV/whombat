@@ -231,14 +231,6 @@ const WORDS: Readonly<Record<string, readonly ((c: Call) => Words | null)[]>> = 
       'Save a file from the web to {label}',
       'saved a file from the web to {label}',
     ]),
-    route(['POST'], /^\/2\/sharing\/create_shared_link(_with_settings)?$/, [
-      'Make a share link in {label}',
-      'made a share link in {label}',
-    ]),
-    route(['POST'], /^\/2\/sharing\/(share_folder|add_folder_member|add_file_member)$/, [
-      'Share a file or folder from {label}',
-      'shared a file or folder from {label}',
-    ]),
   ],
   nextcloud: [
     ...FILE_TOOLS,

@@ -290,6 +290,73 @@ describe('proposed connection action narrowing', () => {
     ).toContain('another address');
   });
 
+  it('refuses changing who can get in or what they may see, wherever the call says it', () => {
+    const says = (word: string) => `“${word}”`;
+    // A new Paperless-ngx account, with a password the card could only hide.
+    expect(
+      requestRefusal('paperless', {
+        method: 'POST',
+        path: '/api/users/',
+        body: { username: 'helper', password: 'x', is_superuser: true },
+      }),
+    ).toContain(says('users'));
+    // Permissions and owners on documents, by bulk edit or on one.
+    expect(
+      requestRefusal('paperless', {
+        method: 'POST',
+        path: '/api/documents/bulk_edit/',
+        body: { documents: [1], method: 'set_permissions', parameters: { set_permissions: {} } },
+      }),
+    ).toContain(says('permissions'));
+    expect(
+      requestRefusal('paperless', { method: 'PATCH', path: '/api/documents/1/', body: { owner: 9 } }),
+    ).toContain(says('owner'));
+    expect(
+      requestRefusal('paperless', { method: 'POST', path: '/api/share_links/', body: { document: 1 } }),
+    ).toContain(says('share'));
+    // Sharing a folder with a stranger, or a public share.
+    expect(
+      requestRefusal('dropbox', {
+        method: 'POST',
+        path: '/2/sharing/add_folder_member',
+        body: {
+          shared_folder_id: '1',
+          members: [{ member: { '.tag': 'email', email: 'someone@example.com' } }],
+        },
+      }),
+    ).toContain(says('sharing'));
+    expect(
+      requestRefusal('nextcloud', {
+        method: 'POST',
+        path: '/ocs/v2.php/apps/files_sharing/api/v1/shares',
+        body: { path: '/Invoices', shareType: 3 },
+      }),
+    ).toContain(says('sharing'));
+    // Users, keys and tokens elsewhere.
+    expect(
+      requestRefusal('jellyfin', {
+        method: 'POST',
+        path: '/Users/abc/Policy',
+        body: { IsAdministrator: true },
+      }),
+    ).toContain(says('users'));
+    expect(
+      requestRefusal('grafana', {
+        method: 'POST',
+        path: '/api/serviceaccounts/1/tokens',
+        body: { name: 'x' },
+      }),
+    ).toContain(says('tokens'));
+    expect(
+      proposeCallRefusal(
+        entryOrThrow('homeassistant'),
+        { name: 'create_api_key', access: 'write', origin: 'mcp' },
+        {},
+        'ha',
+      ),
+    ).toContain('API key');
+  });
+
   it('lets ordinary writes through: upload a document, add a tag, draft an invoice, write a file', () => {
     expect(
       requestRefusal('paperless', {

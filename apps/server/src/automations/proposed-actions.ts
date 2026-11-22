@@ -53,6 +53,7 @@ import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
 import {
+  accessWord,
   type DescribedAction,
   deletingWord,
   describePlannedAction,
@@ -86,7 +87,8 @@ function becauseIt(reason: string): string {
  * Plain-English refusal when a proposed call falls outside the narrow surface allowed for outsiders' runs: a disallowed
  * connection; a read (`GET`/`HEAD`, or any call that only reads), whose results are thrown away; a `DELETE` request;
  * anything that deletes, removes or empties (`deletingWord`: the tool's name, a path segment, what a `method`- or
- * `action`-like value or a delete switch says, anywhere in the arguments); and anything the connection always asks the
+ * `action`-like value or a delete switch says, anywhere in the arguments); changing who can get in or what they may see
+ * (`accessWord`: users, permissions, sharing, passwords, keys); and anything the connection always asks the
  * person about (its `sensitive` rules) or that can cut the person off (its `cutsOff` rules: DNS, DHCP, firewalls).
  */
 export function proposeCallRefusal(
@@ -110,6 +112,10 @@ export function proposeCallRefusal(
   const deleting = deletingWord(tool, args);
   if (deleting) {
     return `${serviceName}: an outsiders’ run can’t propose deleting, removing or emptying anything, and this call says “${deleting}”.`;
+  }
+  const access = accessWord(tool, args);
+  if (access) {
+    return `${serviceName}: an outsiders’ run can’t propose changing who can get in or what they may see, and this call says “${access}”.`;
   }
   const reason = sensitiveReason(entry, tool.name, args) ?? cutsOffReason(entry, tool.name, args);
   if (reason) {
@@ -360,6 +366,7 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
           t.tier !== 'off' &&
           t.access !== 'read' &&
           !deletingWord({ name: t.name, origin: 'adapter' }, {}) &&
+          !accessWord({ name: t.name, origin: 'adapter' }, {}) &&
           !toolAlwaysAsks(entry, t.name),
       )
       .map((t) => t.name);
@@ -370,7 +377,7 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
     lines.push(`- ${row.handle}: tools [${enabled.join(', ')}]${prefixPart}${guidePart}`);
   }
   if (!lines.length) return '';
-  return `Connections you can propose write actions for (nothing that deletes, removes or empties, nothing the person is always asked about first, no changes to DNS, DHCP, firewalls or networks, no read-only calls; each waits for the person’s approval card, which shows every argument, so keep them few and short):\n${lines.join('\n')}`.slice(
+  return `Connections you can propose write actions for (nothing that deletes, removes or empties, nothing about users, permissions, sharing or passwords, nothing the person is always asked about first, no changes to DNS, DHCP, firewalls or networks, no read-only calls; each waits for the person’s approval card, which shows every argument, so keep them few and short):\n${lines.join('\n')}`.slice(
     0,
     2500,
   );

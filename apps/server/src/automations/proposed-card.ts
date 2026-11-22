@@ -418,6 +418,119 @@ export function deletingWord(
   return null;
 }
 
+/** Words that name who can get in or what they may see: users, permissions, sharing, passwords, keys. */
+const ACCESS: ReadonlySet<string> = new Set([
+  'users',
+  'groups',
+  'permission',
+  'permissions',
+  'perms',
+  'acl',
+  'acls',
+  'role',
+  'roles',
+  'member',
+  'members',
+  'membership',
+  'memberships',
+  'collaborator',
+  'collaborators',
+  'invite',
+  'invites',
+  'invitation',
+  'invitations',
+  'share',
+  'shares',
+  'sharing',
+  'owner',
+  'owners',
+  'superuser',
+  'admin',
+  'password',
+  'passwords',
+  'passwd',
+  'passphrase',
+  'credential',
+  'credentials',
+  'token',
+  'tokens',
+  'apikey',
+  'apikeys',
+  'auth',
+  'oauth',
+  'sso',
+  'mfa',
+  'totp',
+  'ssh',
+]);
+
+/** Of those, the ones a key's name says it sets, whatever its value (`set_permissions`, `owner`, `password`). */
+const ACCESS_KEYS: ReadonlySet<string> = new Set([
+  'permission',
+  'permissions',
+  'perms',
+  'acl',
+  'acls',
+  'role',
+  'roles',
+  'member',
+  'members',
+  'collaborator',
+  'collaborators',
+  'share',
+  'shares',
+  'owner',
+  'owners',
+  'superuser',
+  'password',
+  'passwords',
+  'passwd',
+  'passphrase',
+  'credential',
+  'credentials',
+]);
+
+function accessIn(texts: readonly unknown[]): string | null {
+  for (const t of texts) {
+    if (typeof t !== 'string') continue;
+    const words = wordsOf(t);
+    const found = words.find((w) => ACCESS.has(w)) ?? (/apikey/.test(words.join('')) ? 'API key' : null);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * The word that makes a call change who can get in or what they may see, or null: users, groups, permissions, roles,
+ * members, invitations, sharing, owners, passwords, tokens and keys, named in the tool, a path segment or what a
+ * `method`-like key says, or set by a key of those names anywhere in the arguments.
+ */
+export function accessWord(
+  tool: Pick<ConnectionToolRow, 'name' | 'origin'>,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  const named = accessIn([tool.name]);
+  if (named) return named;
+  if (tool.origin === 'request' && typeof args.path === 'string') {
+    const inPath = accessIn(args.path.split('/').map(decoded));
+    if (inPath) return inPath;
+  }
+  if (tool.origin === 'socket' && typeof args.method === 'string') {
+    const inMethod = accessIn([args.method]);
+    if (inMethod) return inMethod;
+  }
+  for (const v of readArgs(tool.origin, args).values) {
+    const keyWords = wordsOf(v.key);
+    const setting = keyWords.find((w) => ACCESS_KEYS.has(w));
+    if (setting) return setting;
+    if (keyWords.some((w) => DOING_KEYS.has(w))) {
+      const found = accessIn(Array.isArray(v.value) ? v.value : [v.value]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /* The card ---------------------------------------------------------------------------------------- */
 
 function shown(value: unknown): string {
