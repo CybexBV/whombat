@@ -1,12 +1,13 @@
 /**
  * What an outsiders' turn sees of what Whombat posted for the person in its thread (docs/decisions/outsiders-turns.md):
- * an approval card only as one line that says the person was asked and what they answered, and what a
- * `connection_actions` step posted — its “Done:” line, a notice about how its calls went — only as one line that says
- * Whombat told the person. Never what the server read from the person's services and connections for them: the names
- * of the ids an action names, paths with their account ids filled in, labels, addresses or the services' answers. The
- * same rule holds for every way such a turn reads its thread: its context and `read_conversation`.
+ * a card only as one line that says what kind of card it was — an approval card as one that says the person was asked
+ * and what they answered —, and what a `connection_actions` step posted — its “Done:” line, a notice about how its
+ * calls went — only as one line that says Whombat told the person. Never what the server read from the person's
+ * services and connections for them: the names of the ids an action names, paths with their account ids filled in,
+ * labels, addresses or the services' answers, nor what a plan, run, job or other card the person asked for in that
+ * thread says. The same rule holds for every way such a turn reads its thread: its context and `read_conversation`.
  */
-import type { ApprovalState, Message } from '@whombat/core';
+import type { ApprovalState, Message, MessageCard } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { automationRunSteps } from '../db/schema/index';
@@ -20,6 +21,39 @@ export const OUTSIDERS_CARD_LINE: Readonly<Record<ApprovalState, string>> = {
 
 /** What an outsiders' turn reads of what a `connection_actions` step told the person. */
 export const OUTSIDERS_ACTIONS_LINE = 'Whombat told the person how the changes they were asked about went.';
+
+/**
+ * What each other card is, as an outsiders' turn reads it: one line with only its kind. Every kind is named here, so a
+ * new card kind can't reach such a turn whole. A Feedback report's card is the outsider's own report (it starts the
+ * assessment's thread, with their screenshots), so it is kept.
+ */
+const CARD_WORDS: Readonly<Record<Exclude<MessageCard['kind'], 'approval' | 'report'>, string>> = {
+  plan: 'a plan',
+  research: 'research',
+  run: 'a run',
+  review: 'a code review',
+  commits: 'a list of commits',
+  pill: 'a status',
+  answer: 'an answer',
+  digest: 'a digest',
+  guide: 'a step of a guide',
+  turn_failed: 'a note that a turn didn’t finish',
+  assessment: 'an assessment',
+  schedule: 'a scheduled turn',
+  deploy: 'a deploy',
+  device_skill: 'a device skill',
+  task: 'a server task',
+  automation_plan: 'a plan for an automation',
+  look_plan: 'a plan for something that needs a look',
+  feature_request: 'a feature request',
+  council: 'a council',
+  delegation: 'work handed to T3 Code',
+};
+
+/** What an outsiders' turn reads of a message with a card (or a job's result) of `kind`. */
+export function outsidersCardLine(kind: keyof typeof CARD_WORDS | 'job_result'): string {
+  return `Whombat showed the person a card here: ${kind === 'job_result' ? 'the result of work handed to T3 Code' : CARD_WORDS[kind]}.`;
+}
 
 /** `message` as one plain line of Whombat's: nothing of it but who posted it, where and when. */
 function asLine<M extends Message>(message: M, text: string): M {
@@ -57,13 +91,17 @@ export async function forOutsiders<M extends Message>(db: Db, messages: readonly
     db,
     messages.map((m) => m.id),
   );
-  return messages.map((m) => {
-    if (told.has(m.id)) return asLine(m, OUTSIDERS_ACTIONS_LINE);
-    const card = m.card?.kind === 'approval' ? m.card : null;
-    if (card) return asLine(m, OUTSIDERS_CARD_LINE[card.approval.state]);
-    // A card kept from before it moved (card-moves.md) is never an approval's; one that is reads as the line too.
-    if (m.earlierCard?.kind === 'approval')
-      return asLine(m, OUTSIDERS_CARD_LINE[m.earlierCard.approval.state]);
-    return m;
-  });
+  return messages.map((m) => outsidersMessage(m, told.has(m.id)));
+}
+
+/** One message as an outsiders' turn reads it; `told`: a `connection_actions` step posted it or it was posted about one. */
+export function outsidersMessage<M extends Message>(m: M, told: boolean): M {
+  if (told) return asLine(m, OUTSIDERS_ACTIONS_LINE);
+  // A card kept from before it moved (card-moves.md) reads as the card it was.
+  const card = m.card ?? m.earlierCard ?? null;
+  if (card?.kind === 'approval') return asLine(m, OUTSIDERS_CARD_LINE[card.approval.state]);
+  if (card && card.kind !== 'report') return asLine(m, outsidersCardLine(card.kind));
+  if (m.movedCard) return asLine(m, outsidersCardLine(m.movedCard.kind));
+  if (m.jobResult) return asLine(m, outsidersCardLine('job_result'));
+  return m;
 }

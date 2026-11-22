@@ -569,9 +569,10 @@ Automations. Code finds it by kind
   run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
   readable or fetched by its runner. What Whombat posted in its thread for the person it reads, in its context and
   through `read_conversation`, only as a line (`runtime/outsiders-view.ts`): an approval card says that the person was
-  asked and what they answered, and what a `connection_actions` step told the person (its “Done:” line, a notice about
-  how its calls went) says only that Whombat told them; templates read such a step only as its state, whether it ran
-  and how many (`automations/steps/scope.ts`). It is served a
+  asked and what they answered, any other card (a plan, a run, a job's result; not the outsider's own Feedback report)
+  only what kind of card it was, and what a `connection_actions` step told the person in any attempt (its “Done:” line,
+  a notice about how its calls went: a step's messages are only added to) says only that Whombat told them; templates
+  read such a step only as its state, whether it ran and how many (`automations/steps/scope.ts`). It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
@@ -836,8 +837,9 @@ published automation details read their definition and publisher from one versio
   a WebDAV PUT, Dropbox's `mode: add`, `overwrite: false`) and the `Content-Type`, and refuses any other header, a
   header name given twice in different case and any value named like a password or key; everything else is refused with
   what a mail automation can do instead. The agent can't look anything up, so its paths leave out the person's account
-  ids (Moneybird's from `/documents/`, Nextcloud's from the root of the person's files) and the server writes the
-  connection's administration or WebDAV user in; only an action whose body is JSON reads JSON text. The prompt lists the
+  ids (Moneybird's from `/documents/`, Nextcloud's from the root of the person's files; one that names them is refused
+  with the same words, right or wrong) and the server writes the connection's administration or WebDAV user in; only an
+  action whose body is JSON reads JSON text. The prompt lists the
   listed actions by connection handle, never the person's labels or account ids. An
   upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
   first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
@@ -1030,7 +1032,11 @@ Setup and operation: `docs/github.md`.
   stored tools, preserving the person’s tiers; remote MCP discovery keeps its hourly refresh.
 - **Catalog connections** (`apps/server/src/connections/`): services the person connects (Home Assistant, Proxmox,
   UniFi, Plex, mail over IMAP/SMTP and many more), each the burrow's, at most 50, every change signed. The agent
-  calls them in the person's turns through `connection_call` under its keys; calls that change things ask. Each
+  calls them in the person's turns through `connection_call` under its keys; calls that change things ask, and a yes
+  is bound to where the call goes and as whom (`connections/call-target.ts`). Every request is signed only as the
+  connection it was checked on: each transport checks the stored connection again before it signs, and pooled MCP
+  sessions are kept per call target (`connections/pool.ts`). A write that worked is recorded for Done recently with
+  its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per
   pass, and Home hears of a change only when what a connection's glance shows changed. A kind may declare the settings

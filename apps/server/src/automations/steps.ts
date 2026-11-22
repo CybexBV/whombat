@@ -406,11 +406,11 @@ export const automationStep = defineCommand({
                     ? { inputSummary: noted.asked }
                     : {}),
               finishedAt: input.state === 'uncertain' ? null : ctx.now,
-              ...(Array.isArray(input.output?.messageIds)
-                ? { messageIds: input.output.messageIds as string[] }
-                : said
-                  ? { messageIds: [said] }
-                  : {}),
+              // Added to the step's messages, never in their place (`updateStep`).
+              messageIds: [
+                ...(Array.isArray(input.output?.messageIds) ? (input.output.messageIds as string[]) : []),
+                ...(said ? [said] : []),
+              ],
               ...(typeof input.output?.prNumber === 'number' ? { prNumber: input.output.prNumber } : {}),
             },
             ctx.now,

@@ -399,7 +399,8 @@ export async function runRequest(
   row: CatalogConnectionRow,
   entry: CatalogEntry,
   args: Readonly<Record<string, unknown>>,
-  options: { uploadAttachment?: ResolveRequestUpload } = {},
+  /** `target`: signed only while the stored connection still goes there and as whom (`signedConnectionFetch`). */
+  options: { uploadAttachment?: ResolveRequestUpload; target?: string } = {},
 ): Promise<CallOutput> {
   if (!entry.request) throw new ConnectionArgumentError('This connection has no request tool.');
   const method = String(args.method);
@@ -464,7 +465,11 @@ export async function runRequest(
     services,
     row,
     { method, url: `${base}${path}${query.search}`, headers, ...(body !== undefined ? { body } : {}) },
-    { truncateAt: CONNECTION_OUTPUT_MAX + 1, ...(maxRequestBytes ? { maxRequestBytes } : {}) },
+    {
+      truncateAt: CONNECTION_OUTPUT_MAX + 1,
+      ...(maxRequestBytes ? { maxRequestBytes } : {}),
+      ...(options.target !== undefined ? { target: options.target } : {}),
+    },
   );
   const shown = filterVaultResponseHeaders(res.headers as Record<string, string>, base, path);
   for (const name of EXTRA_RESPONSE_HEADERS) {

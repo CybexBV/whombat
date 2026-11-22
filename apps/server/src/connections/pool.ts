@@ -1,10 +1,11 @@
 /**
  * Catalog connections' MCP servers (docs/decisions/connections-catalog.md CX-32): the generalised MCP client pool
- * (`mcp/client-pool.ts`, shared with the Vault) keyed by connection, reconnected when the connection's credential
- * version or MCP address changes. Each JSON-RPC request reads the connection as it is now and is signed in on its own
- * (`signedConnectionFetch`: the destination rule, the credential last, one retry after a forced refresh on 401), so a refreshed
- * OAuth token needs no reconnect. 30 s per exchange, 64 KiB of output kept, definitions and answers checked against the
- * credential's forms.
+ * (`mcp/client-pool.ts`, shared with the Vault) keyed by connection, reconnected when where the connection's calls go
+ * or as whom (`callTarget`) or its MCP address changes, so a session opened as one account is never used as another.
+ * Each JSON-RPC request reads the connection as it is now and is signed in on its own (`signedConnectionFetch`: the
+ * destination rule, the credential last, one retry after a forced refresh on 401), so a refreshed OAuth token needs no
+ * reconnect; a connection that goes elsewhere or as someone else by then sends nothing (`ConnectionChangedError`). 30 s
+ * per exchange, 64 KiB of output kept, definitions and answers checked against the credential's forms.
  *
  * `evictConnection` is what the connect side calls when a connection is removed or its credential, address or sign-in
  * change (CX-24).
@@ -15,6 +16,7 @@ import type { Services } from '../services';
 import { VAULT_POOL_IDLE_MS } from '../vault/limits';
 import { VaultCallError, vaultNetOf } from '../vault/net';
 import type { SecretForms } from '../vault/scrub';
+import { callTarget, keepTarget } from './call-target';
 import { closeDiscovery } from './discover';
 import { currentRow, signedConnectionFetch } from './http';
 import { type CatalogConnectionRow, ConnectionAuthError } from './types';
@@ -55,9 +57,13 @@ export class ConnectionService {
     else this.#inflight.set(connectionId, n);
   }
 
-  /** The pool target of a connection's MCP server at `mcpUrl`. */
+  /**
+   * The pool target of a connection's MCP server at `mcpUrl`, as `row` is: its session is the one opened where and as
+   * whom `row`'s calls go, and each request is signed only while the stored connection still goes there.
+   */
   target(row: CatalogConnectionRow, mcpUrl: string): McpPoolTarget {
     const services = this.services;
+    const fingerprint = callTarget(row);
     let forms = this.#forms.get(row.id);
     if (!forms) {
       forms = [];
@@ -67,17 +73,19 @@ export class ConnectionService {
     return {
       key: row.id,
       url: mcpUrl,
-      version: `${row.credentialVersion}|${mcpUrl}`,
+      version: `${fingerprint}|${mcpUrl}`,
       forms: seen,
       post: async (headers, body) => {
-        const now = (await currentRow(services, row.id)) ?? row;
-        if (now.status === 'needs_reauth') throw new VaultCallError('rejected', 'needs_reauth', 401);
+        const now = await currentRow(services, row.id);
+        keepTarget(now, fingerprint);
+        if (now?.status === 'needs_reauth') throw new VaultCallError('rejected', 'needs_reauth', 401);
         return signedConnectionFetch(
           services,
-          now,
+          now ?? row,
           { method: 'POST', url: mcpUrl, headers, body },
           {
             maxBytes: ANSWER_MAX,
+            target: fingerprint,
             onForms: (f) => {
               for (const form of f)
                 if (!seen.some((s) => s.secret === form.secret && s.username === form.username))

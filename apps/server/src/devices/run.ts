@@ -9,6 +9,7 @@ import { CHANGE_UNDO_WINDOW_S, type JsonObject } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
+import { ConnectionChangedError, callTarget } from '../connections/call-target';
 import { type CallOutput, ConnectionArgumentError } from '../connections/request';
 import type { CatalogConnectionRow, ConnectionToolRow } from '../connections/types';
 import { deviceSkills } from '../db/schema/index';
@@ -40,6 +41,11 @@ export interface DeviceUndo {
   value: ReadingValue;
   setTo: ReadingValue;
   profileHash: string;
+  /**
+   * Where the change went (`callTarget` of the device's connection: its skill and address) when it was made: Undo puts
+   * the old value back only there. Absent on changes recorded before it was kept.
+   */
+  destination?: string;
 }
 
 /** Who a device call is for, as the connection call knows it. */
@@ -212,6 +218,20 @@ export function readOutput(readings: readonly ReadingResult[], at: Date): CallOu
   return { content, structured, isError: false, truncated: false, bytes: Buffer.byteLength(content) };
 }
 
+/** Whether `skill` is the device `row` (its connection, as checked) stands for: its skill, address and unit. */
+function sameDevice(
+  row: Pick<CatalogConnectionRow, 'fields'>,
+  skill: Pick<DeviceSkillRow, 'id' | 'host' | 'port' | 'unitId'>,
+): boolean {
+  const f = row.fields ?? {};
+  return (
+    (f.skillId === undefined || f.skillId === skill.id) &&
+    (f.host === undefined || f.host === skill.host) &&
+    (f.port === undefined || f.port === String(skill.port)) &&
+    (f.unitId === undefined || f.unitId === String(skill.unitId))
+  );
+}
+
 /** Runs one tool of a device connection. */
 export async function runDeviceTool(
   services: Services,
@@ -223,6 +243,9 @@ export async function runDeviceTool(
 ): Promise<CallOutput> {
   const skill = await skillOfConnection(services.db, row.id);
   if (!skill) throw new ConnectionArgumentError('This device isn’t switched on any more.');
+  // The skill is read again here: one switched on since the connection was checked (another device at that address,
+  // another profile) or a device given another address is not what the call was asked for, so nothing is sent.
+  if (!sameDevice(row, skill)) throw new ConnectionChangedError();
   const slug = slugOf(row);
   const address = addressOf(skill);
   if (tool.name === readToolName(slug)) {
@@ -270,6 +293,7 @@ export async function runDeviceTool(
                 value: before,
                 setTo: value,
                 profileHash: skill.profileHash,
+                destination: callTarget(row),
               }
             : null,
         undoes,

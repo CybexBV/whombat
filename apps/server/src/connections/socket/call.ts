@@ -31,7 +31,7 @@ import { callDeadlineMs, summarise, VaultCallError, VaultEchoError } from '../..
 import { holdsSecret, type SecretForms } from '../../vault/scrub';
 import { resolveCredential } from '../credentials';
 import { connectionPolicy } from '../destination';
-import { pinOf } from '../http';
+import { keepStoredTarget, pinOf } from '../http';
 import { type CallOutput, ConnectionArgumentError } from '../request';
 import type { CatalogConnectionRow } from '../types';
 import { SocketClosed, SocketUpgradeRefused } from './channel';
@@ -151,6 +151,8 @@ export async function runSocketCall(
   row: CatalogConnectionRow,
   entry: CatalogEntry,
   raw: Readonly<Record<string, unknown>>,
+  /** Sent only while the stored connection still goes there and as whom (`callTarget`), checked once signed in. */
+  target?: string,
 ): Promise<CallOutput> {
   const spec = entry.socket;
   if (!spec) throw new ConnectionArgumentError('This connection has no socket.');
@@ -161,6 +163,7 @@ export async function runSocketCall(
     ? ((args.seconds as number | undefined) ?? SOCKET_STREAM_SECONDS_DEFAULT)
     : undefined;
   const { credential, forms } = await resolveCredential(services, row);
+  if (target !== undefined) await keepStoredTarget(services, row.id, target);
   const deadlineMs = callDeadlineMs(services);
   const outcome = await externalEffect(
     'connections.socket',

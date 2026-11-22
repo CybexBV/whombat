@@ -18,11 +18,12 @@
 import { thingHref } from '@whombat/core';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
+import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
 import { type ConnectionViewer, visibleConnections } from '../connections/store';
 import type { CatalogConnectionRow } from '../connections/types';
 import { EVERYDAY_CHANGE_PREFIX } from '../home/changes';
 import { type DirectUndoer, recordChange } from '../home/registry';
-import { ApiError, badRequest, forbidden } from '../lib/errors';
+import { ApiError, badRequest, conflict, forbidden } from '../lib/errors';
 import { actingAgentId } from '../managed/acting-assistant';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
@@ -57,6 +58,11 @@ const UndoPayload = z.object({
   target: z.string().max(200).optional(),
   value: z.union([z.string().max(200), z.number(), z.boolean()]),
   expect: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+  /**
+   * Where the change went and as whom (`callTarget` of the connection) when it was made: it is put back only there.
+   * Absent on changes recorded before it was kept.
+   */
+  destination: z.string().max(64).optional(),
 });
 type UndoPayload = z.infer<typeof UndoPayload>;
 
@@ -154,10 +160,14 @@ async function executeThingAction(
   input: ThingActionInput,
   timeZone = 'UTC',
   undoes?: string,
+  /** Put it back: where the change went; the connection must still go there. */
+  destination?: string,
 ): Promise<{ outcome: ThingActionOutcome; uncertain: boolean }> {
   const target = await findThing(services, viewer, value);
   if (target.kind !== 'connection') throw badRequest('This has no such action.');
   const row = target.row;
+  // Repointed at another service or account since: the old value would land there, not where it was changed.
+  if (!undoGoesWhereChangeWent(row, destination)) throw conflict(changedSinceChangeText(row.label));
   const run = actionFor(row, viewer, input.action);
   let done: Awaited<ReturnType<typeof run>>;
   try {
@@ -196,6 +206,7 @@ async function executeThingAction(
               ...(done.undo.target !== undefined ? { target: done.undo.target } : {}),
               value: done.undo.value,
               ...(done.undo.expect !== undefined ? { expect: done.undo.expect } : {}),
+              destination: callTarget(row),
             },
           }
         : {}),
@@ -292,6 +303,7 @@ export const undoThingAction: DirectUndoer = async (ctx, change) => {
       },
       'UTC',
       change.id,
+      recipe.destination,
     ));
   } catch (err) {
     // Changed again since, refused, or the service didn't answer: its words.

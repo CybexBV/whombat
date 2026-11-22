@@ -366,6 +366,36 @@ describe('a declared setting (service-settings.md SST-03, SST-04)', () => {
     expect(last.get('quality')).toMatchObject({ byAssistant: false, from: '20000' });
   });
 
+  it('is put back only where it was changed', async () => {
+    quality.value = 8000;
+    const set = await act(mara, shared, { action: 'setting', target: 'quality', value: 16000 });
+    expect(set.status, JSON.stringify(set.body)).toBe(202);
+    const [before] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, shared));
+    if (!before) throw new Error('no connection');
+    // The person points the connection at another server since: the old value would land there, so it isn't sent.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ credentialVersion: before.credentialVersion + 1 })
+      .where(eq(catalogConnections.id, shared));
+    try {
+      const back = await undo(mara, set.body.changeId as string);
+      expect(back.statusCode).toBe(409);
+      expect(back.body).toContain('changed since, so this can’t be undone here');
+      expect(quality.value).toBe(16000);
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: before.credentialVersion })
+        .where(eq(catalogConnections.id, shared));
+    }
+    // Back where it was changed, it is put back.
+    expect((await undo(mara, set.body.changeId as string)).statusCode).toBeLessThan(300);
+    expect(quality.value).toBe(8000);
+  });
+
   it('isn’t put back once it was changed since', async () => {
     quality.value = 8000;
     const set = await act(mara, shared, { action: 'setting', target: 'quality', value: 12000 });

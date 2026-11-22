@@ -21,6 +21,7 @@ import { reportProduct } from '../trackers/connection';
 import { fixOf } from '../trackers/fixes';
 import { scopeReport } from '../trackers/items';
 import { postInRunThread } from './steps';
+import { withStepMessages } from './steps/state';
 import { publishRun } from './store';
 
 /** How long after a merge a branch is still cleaned up (older merges, e.g. from before AR-42, are left alone). */
@@ -89,7 +90,7 @@ export const recordBranchCleanup = defineCommand({
           },
           ...(said ? { mergedNotice: true } : {}),
         },
-        ...(said ? { messageIds: [...(row.messageIds ?? []), said] } : {}),
+        ...(said ? { messageIds: withStepMessages([said]) } : {}),
         updatedAt: ctx.now,
       })
       .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, row.idx)));

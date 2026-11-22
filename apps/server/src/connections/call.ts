@@ -60,7 +60,12 @@ import type { Services } from '../services';
 import { VaultCallError, VaultEchoError } from '../vault/net';
 import { adapterFor, callWordsFor } from './adapters/index';
 import { connectionCallAccess, coversReads } from './call-access';
-import { callTarget, changedSinceYesText, changedWhileAskedText } from './call-target';
+import {
+  ConnectionChangedError,
+  callTarget,
+  changedSinceYesText,
+  changedWhileAskedText,
+} from './call-target';
 import { isCallableEntry } from './callable';
 import { type PreparedChange, prepareConnectionChange } from './changes';
 import { keyTierOf } from './context';
@@ -391,6 +396,8 @@ export const callConnectionTool = defineCommand({
 
 /** A failure in our own words (never the remote side's), and its outcome for the log. */
 export function failureOf(err: unknown): { reason: CallFailure; message: string; outcome: CallOutcome } {
+  if (err instanceof ConnectionChangedError)
+    return { reason: 'destination_refused', message: err.message, outcome: 'refused' };
   if (err instanceof ConnectionOutcomeUnknownError)
     return { reason: 'timeout', message: err.message, outcome: 'timeout' };
   if (err instanceof ConnectionArgumentError)
@@ -544,10 +551,21 @@ export async function executeConnectionCall(
           { err: err instanceof Error ? err.name : 'error', tool: 'connection' },
           'connection call failed',
         );
-      result = { kind: 'failed', reason: failure.reason, message: failure.message };
+      result =
+        err instanceof ConnectionChangedError
+          ? {
+              // The stored connection went elsewhere or as someone else after it was checked here: nothing was signed
+              // with what it holds now, so nothing was sent (the agent that asked hears it and may ask again).
+              kind: 'failed',
+              reason: failure.reason,
+              message: call.approvalId ? changedSinceYesText(row.label) : changedWhileAskedText(row.label),
+              changed: true,
+            }
+          : { kind: 'failed', reason: failure.reason, message: failure.message };
       outcome = failure.outcome;
-      // An answer that echoed the credential: the pooled client goes, the next call reconnects.
-      if (err instanceof VaultEchoError) await service.evict(row.id);
+      // An answer that echoed the credential, or a session opened as the connection before it changed: the pooled
+      // client goes, the next call reconnects.
+      if (err instanceof VaultEchoError || err instanceof ConnectionChangedError) await service.evict(row.id);
     } finally {
       service.release(row.id);
     }
@@ -651,16 +669,16 @@ async function runTool(
     uploadAttachment?: ResolveRequestUpload;
   },
 ): Promise<CallOutput> {
+  // Every transport signs only while the stored connection still goes where `row`'s calls go and as whom: a refresh, a
+  // new sign-in or a pooled session reads it again, and a token, account or address replaced since sends nothing.
+  const target = callTarget(row);
   if (tool.origin === 'request')
-    return runRequest(
-      services,
-      row,
-      entry,
-      args,
-      call?.uploadAttachment ? { uploadAttachment: call.uploadAttachment } : {},
-    );
+    return runRequest(services, row, entry, args, {
+      target,
+      ...(call?.uploadAttachment ? { uploadAttachment: call.uploadAttachment } : {}),
+    });
   // A socket's `call`: one method over the service's socket (docs/decisions/connections-more.md CM-14).
-  if (tool.origin === 'socket') return runSocketCall(services, row, entry, args);
+  if (tool.origin === 'socket') return runSocketCall(services, row, entry, args, target);
   // A device's tools run its profile through the built-in drivers (one-whombat.md ONE-16).
   if (tool.origin === 'device' || tool.origin === 'device-sensitive')
     return runDeviceTool(services, row, tool, args, call);
@@ -674,12 +692,10 @@ async function runTool(
         fields: row.fields,
         bases: entry.request?.bases ?? {},
         send: (req, options) =>
-          signedConnectionFetch(
-            services,
-            row,
-            req,
-            options?.truncateAt !== undefined ? { truncateAt: options.truncateAt } : {},
-          ),
+          signedConnectionFetch(services, row, req, {
+            target,
+            ...(options?.truncateAt !== undefined ? { truncateAt: options.truncateAt } : {}),
+          }),
         datagram: (port, payload) => connectionDatagram(services, row, port, payload),
         line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent),
         // A callable builtin acts as the agent (the Servers tools, one-whombat-servers.md ONE-DH14).
@@ -695,6 +711,7 @@ async function runTool(
                 threadRootId: call.threadRootId ?? null,
                 personId: call.personId ?? null,
                 approvalId: call.approvalId ?? null,
+                target,
               },
             }
           : {}),

@@ -37,6 +37,7 @@ import {
   CHANGE_MERGE_WINDOW_MS,
   type ChangeInput,
   type ChangeMerge,
+  changeUndoAad,
   openChange,
   recordChange,
   recordOrMergeChange,
@@ -218,6 +219,43 @@ describe('changes through connections', () => {
     await expect(undoChange(t.services, await person(IDS.mara), id)).rejects.toMatchObject({
       code: 'conflict',
     });
+  });
+
+  it('Undo sends the inverse only where the change went; a change recorded before that was kept undoes as before', async () => {
+    const id = await switchOff();
+    const [row] = await t.services.db.select().from(changes).where(eq(changes.id, id));
+    const recorded = row ? openChange(t.services.custody, row) : null;
+    expect(recorded?.undo.payload).toMatchObject({ connectionId: ha, destination: expect.any(String) });
+    const [before] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, ha));
+    if (!row || !recorded || !before) throw new Error('no change');
+    // The person points the connection at another Home Assistant, or gives it another account's token, since.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ credentialVersion: before.credentialVersion + 1 })
+      .where(eq(catalogConnections.id, ha));
+    try {
+      await expect(undoChange(t.services, await person(IDS.mara), id)).rejects.toMatchObject({
+        code: 'conflict',
+        message: expect.stringContaining('Home Assistant changed since'),
+      });
+      expect(states['light.hallway']?.state).toBe('off');
+      // Recorded before Undo kept where a change went: it is undone where the connection goes now, as before.
+      const { destination: _kept, ...older } = recorded.undo.payload as Record<string, unknown>;
+      await t.services.db
+        .update(changes)
+        .set({ undoEnc: t.services.custody.seal(changeUndoAad(id), JSON.stringify(older)) })
+        .where(eq(changes.id, id));
+      expect((await undoChange(t.services, await person(IDS.mara), id)).state).toBe('undone');
+      expect(states['light.hallway']?.state).toBe('on');
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: before.credentialVersion })
+        .where(eq(catalogConnections.id, ha));
+    }
   });
 
   it('Undo asks when the keys ask, and says so', async () => {

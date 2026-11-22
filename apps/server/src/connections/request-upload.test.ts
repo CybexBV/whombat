@@ -92,7 +92,7 @@ describe('what a listed action sends on the wire', () => {
     const fields = { url: 'https://cloud.example.com', userId: 'mara' };
     const args = settled(
       'nextcloud',
-      { method: 'PUT', path: '/remote.php/dav/files/mara/Invoices/acme.pdf', upload: { attachmentId: ATT } },
+      { method: 'PUT', path: '/Invoices/acme.pdf', upload: { attachmentId: ATT } },
       fields,
     );
     await runRequest(

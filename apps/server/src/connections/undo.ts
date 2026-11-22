@@ -10,7 +10,7 @@ import { catalogConnections, connectionTools } from '../db/schema/index';
 import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../home/registry';
 import { ApiError } from '../lib/errors';
 import { callArgsAad, callConnectionTool, executeConnectionCall } from './call';
-import { callTarget } from './call-target';
+import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from './call-target';
 import { type ConnectionUndo, undoCallId } from './changes';
 
 function isConnectionUndo(value: unknown): value is ConnectionUndo {
@@ -38,6 +38,9 @@ export async function undoConnectionChange(
     .from(catalogConnections)
     .where(eq(catalogConnections.id, undo.connectionId));
   if (!row) return { ok: false, reason: 'That connection is gone, so this can’t be undone.' };
+  // Repointed at another service or account since: the inverse would land there, not where the change went.
+  if (!undoGoesWhereChangeWent(row, undo.destination))
+    return { ok: false, reason: changedSinceChangeText(row.label) };
   const [tool] = await services.db
     .select()
     .from(connectionTools)
@@ -45,7 +48,8 @@ export async function undoConnectionChange(
   if (!tool) return { ok: false, reason: `${row.label} can’t do that any more, so this can’t be undone.` };
   const callId = undoCallId(change.id, person.id);
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(undo.args));
-  const target = callTarget(row);
+  // The inverse is bound to where the change went: a connection repointed while it starts sends nothing.
+  const target = typeof undo.destination === 'string' ? undo.destination : callTarget(row);
   let res: Awaited<ReturnType<typeof services.pipeline.commit<typeof callConnectionTool.schema, unknown>>>;
   try {
     res = await services.pipeline.commit(

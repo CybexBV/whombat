@@ -28,7 +28,7 @@ import {
   executeConnectionCall,
   newCallId,
 } from '../connections/call';
-import { callTarget } from '../connections/call-target';
+import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { catalogConnections, connectionTools } from '../db/schema/index';
 import { assistantCalled } from '../home/assistant-name';
@@ -101,6 +101,8 @@ export interface ConfigUndo {
   delete: string[];
   /** What the change made them: Undo runs only while they still are. */
   expect: Record<string, string | null>;
+  /** Where an assistant's change went (`tools-shared.ts` `withDestination`): its inverse goes only there. */
+  destination?: string;
 }
 
 const masked = (v: string | undefined) => v !== undefined && /^\*{4,}$/.test(v);
@@ -234,6 +236,10 @@ async function undoAsAssistant(
   const who = assistantCalled((await loadPrincipalRow(services.db, agentId))?.name);
   const row = await serversConnection(services, change.burrowId);
   if (row?.status !== 'active') return { ok: false, reason: HOSTS_TEXT.down };
+  // Where the change's call went (`destination`, kept when it was made): the inverse goes only there.
+  const destination = (change.undo.payload as { destination?: unknown } | null)?.destination;
+  if (!undoGoesWhereChangeWent(row, destination))
+    return { ok: false, reason: changedSinceChangeText(row.label) };
   const [toolRow] = await services.db
     .select()
     .from(connectionTools)
@@ -261,8 +267,8 @@ async function undoAsAssistant(
   pendingUndo.set(callId, { changeId: change.id, byId: actor.id, at: Date.now() });
   for (const [k, v] of pendingUndo) if (Date.now() - v.at > 24 * 3600_000) pendingUndo.delete(k);
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));
-  // Where the inverse goes and as whom now: a yes to it is bound to that, as any call's is.
-  const target = callTarget(row);
+  // Where the change went, and as whom: a yes to the inverse is bound to that, as any call's is.
+  const target = typeof destination === 'string' ? destination : callTarget(row);
   const burrowId = change.burrowId;
   const conversationId = change.conversationId;
   // What the inverse says, and a task it starts, goes in the thread the change was made in (task-feedback.md TF-S11).
