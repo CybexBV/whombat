@@ -61,12 +61,20 @@ func (e *Engine) OfferLatestNow(ctx context.Context, repo *trust.Repo, deviceID,
 }
 
 func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, env string, again bool) (dec Decision, why string, offered *Offered, err error) {
-	if repo.ChannelPaused {
-		return DecisionNoop, "channel paused", nil, nil
+	if repo == nil {
+		return DecisionNoop, "no metadata", nil, nil
 	}
 	st, err := e.Load()
 	if err != nil {
 		return "", "", nil, err
+	}
+	if repo.Channel != "" {
+		if ok, reason := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+			return DecisionNoop, reason, nil, nil
+		}
+	}
+	if repo.ChannelPaused {
+		return DecisionNoop, "channel paused", nil, nil
 	}
 	o, err := LatestOffer(repo, st, deviceID, env)
 	if err != nil {
@@ -77,6 +85,7 @@ func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, en
 	}
 	if repo.Channel != "" {
 		o.Channel = repo.Channel
+		o.ChannelVersion = repo.ChannelVersion
 		if st.LastOffer == offerKey(repo.Channel, o.Release.Digest) && !again && !retryableRepair(st, o.Release.Digest) {
 			// Offered before: a re-signed snapshot is no new offer, so a release refused or rolled back here, or one
 			// waiting for the owner, isn't taken up again four times a day.
@@ -87,6 +96,9 @@ func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, en
 		o.Payload.Sequence = max(o.Payload.Sequence, st.LastAssignmentSeq+1)
 	}
 	dec, why, err = e.Offer(ctx, *o)
+	if err == nil && dec == DecisionNoop && (why == "stale channel metadata" || why == "wrong channel") {
+		return dec, why, nil, nil
+	}
 	return dec, why, o, err
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -192,6 +193,7 @@ func retry[T any](f func() (T, error)) (T, error) {
 type foreign struct {
 	Hold              bool
 	ChannelPaused     bool
+	ChannelVersions   map[string]int64
 	AskFirst          bool
 	Approved          string
 	Lock              *Lock
@@ -206,7 +208,8 @@ type foreign struct {
 }
 
 func foreignOf(st *State) foreign {
-	f := foreign{Hold: st.Hold, ChannelPaused: st.ChannelPaused, AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
+	f := foreign{Hold: st.Hold, ChannelPaused: st.ChannelPaused, ChannelVersions: maps.Clone(st.ChannelVersions),
+		AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
 		LastAssignmentSeq: st.LastAssignmentSeq, LastOffer: st.LastOffer, TimeFloor: st.TimeFloor}
 	if c := st.Candidate; c != nil {
 		f.AssignmentSeq, f.NotBefore, f.AssignmentRaw = c.AssignmentSeq, c.NotBefore, c.AssignmentRaw
@@ -215,7 +218,8 @@ func foreignOf(st *State) foreign {
 }
 
 func setForeign(st *State, f foreign) {
-	st.Hold, st.ChannelPaused, st.AskFirst, st.Approved = f.Hold, f.ChannelPaused, f.AskFirst, f.Approved
+	st.Hold, st.ChannelPaused, st.ChannelVersions = f.Hold, f.ChannelPaused, maps.Clone(f.ChannelVersions)
+	st.AskFirst, st.Approved = f.AskFirst, f.Approved
 	st.Lock, st.Pending, st.LastAssignmentSeq, st.TimeFloor = f.Lock, f.Pending, f.LastAssignmentSeq, f.TimeFloor
 	st.LastOffer = f.LastOffer
 	if c := st.Candidate; c != nil {
@@ -490,6 +494,8 @@ type Offered struct {
 	// Channel is the channel whose newest release this is (OfferLatest); "" for control's assignments and a
 	// community box's offers.
 	Channel string
+	// ChannelVersion is the verified TUF role version of Channel (OfferLatest); 0 when none.
+	ChannelVersion int64
 }
 
 // Decision is the outcome of Offer.
@@ -545,7 +551,11 @@ func (e *Engine) offer(ctx context.Context, o Offered) (Decision, string, error)
 	rel := o.Release
 	id := rel.Tuple.ReleaseID
 	if o.Channel != "" {
+		if ok, why := e.channelRepoFresh(st, o.Channel, o.ChannelVersion); !ok {
+			return DecisionNoop, why, nil
+		}
 		st.LastOffer = offerKey(o.Channel, rel.Digest)
+		recordChannelVersion(st, o.Channel, o.ChannelVersion)
 	}
 	if q, ok := st.Quarantine[id]; ok && q.Digest == rel.Digest {
 		st.LastAssignmentSeq = p.Sequence
@@ -710,6 +720,78 @@ func (e *Engine) setChannelPaused(paused bool) error {
 		note = "channel paused"
 	}
 	return e.persist(st, st.Phase, note)
+}
+
+func (e *Engine) channelRepoFresh(st *State, channel string, version int64) (bool, string) {
+	if channel == "" {
+		return true, ""
+	}
+	if e.Channel != nil {
+		if cur := e.Channel(); cur == "" || channel != cur {
+			return false, "wrong channel"
+		}
+	}
+	if version > 0 {
+		if prev, ok := st.ChannelVersions[channel]; ok && version < prev {
+			return false, "stale channel metadata"
+		}
+	}
+	return true, ""
+}
+
+func recordChannelVersion(st *State, channel string, version int64) {
+	if channel == "" || version <= 0 {
+		return
+	}
+	if st.ChannelVersions == nil {
+		st.ChannelVersions = map[string]int64{}
+	}
+	if version > st.ChannelVersions[channel] {
+		st.ChannelVersions[channel] = version
+	}
+}
+
+// SyncChannelPause applies the verified channel pause flag and role version for repo's channel, ignoring metadata for
+// another channel or an older role version than already applied for that channel.
+func (e *Engine) SyncChannelPause(repo *trust.Repo) (changed bool, applied bool, err error) {
+	type res struct{ changed, applied bool }
+	r, err := retry(func() (res, error) {
+		c, a, err := e.syncChannelPause(repo)
+		return res{c, a}, err
+	})
+	return r.changed, r.applied, err
+}
+
+func (e *Engine) syncChannelPause(repo *trust.Repo) (changed bool, applied bool, err error) {
+	if repo == nil || repo.Channel == "" {
+		return false, false, nil
+	}
+	st, err := e.Load()
+	if err != nil {
+		return false, false, err
+	}
+	if ok, _ := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+		return false, false, nil
+	}
+	prevPaused := st.ChannelPaused
+	prevVer := st.ChannelVersions[repo.Channel]
+	st.ChannelPaused = repo.ChannelPaused
+	recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+	if prevPaused == st.ChannelPaused && prevVer == st.ChannelVersions[repo.Channel] {
+		return false, true, nil
+	}
+	note := "channel metadata"
+	if prevPaused != st.ChannelPaused {
+		if repo.ChannelPaused {
+			note = "channel paused"
+		} else {
+			note = "channel resumed"
+		}
+	}
+	if err := e.persist(st, st.Phase, note); err != nil {
+		return false, false, err
+	}
+	return prevPaused != st.ChannelPaused, true, nil
 }
 
 // channelPaused reports whether a candidate belongs to a channel that is currently paused.
