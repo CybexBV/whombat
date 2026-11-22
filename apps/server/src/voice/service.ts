@@ -140,8 +140,8 @@ export class VoiceTypingService {
   #tail: Promise<unknown> = Promise.resolve();
   /** The models the fetcher had ready when last asked (null: not asked yet). */
   #readyKey: string | null = null;
-  /** Last known size of the Dutch voice model from the fetcher, kept across brief fetcher restarts. */
-  #lastDutchSize: number | null = null;
+  /** Last known total size of each voice model from the fetcher, kept across brief fetcher restarts. */
+  readonly #lastModelSizes: Partial<Record<VoiceDownloadModel, number>> = {};
   /** What `voice.changed` last told (the view as JSON; null: nothing yet). */
   #told: string | null = null;
   #toldAt = 0;
@@ -626,7 +626,8 @@ export class VoiceTypingService {
       health,
       fetched,
       hasFetcher: voiceModelsFor(this.#services) !== null,
-      knownDutchSize: this.#lastDutchSize,
+      knownModelSizes: { ...this.#lastModelSizes },
+      knownDutchSize: this.#lastModelSizes.supertonic ?? null,
       dutchRemovePending: this.#dutchRemovePending,
     };
   }
@@ -639,8 +640,9 @@ export class VoiceTypingService {
       return null;
     });
     if (!state) return null;
-    const dutch = state.models.find((m) => m.id === 'supertonic');
-    if (dutch) this.#lastDutchSize = dutch.size;
+    for (const m of state.models) {
+      if (m.size > 0) this.#lastModelSizes[m.id] = m.size;
+    }
     const ready = state.models
       .filter((m) => m.state === 'ready')
       .map((m) => m.id)

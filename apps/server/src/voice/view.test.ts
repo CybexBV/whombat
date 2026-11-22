@@ -3,7 +3,12 @@
  * settings want downloaded, and the view from the settings, the desk's Talk, the speech service and the downloads.
  */
 import type { VoiceModelState } from '@whombat/control-contracts/local';
-import { DUTCH_VOICE_LICENCE_VERSION, type VoiceDownloadModel, VoiceTyping } from '@whombat/core/domain';
+import {
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
+  type VoiceDownloadModel,
+  VoiceTyping,
+} from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import type { VoiceAbility } from './speech';
 import {
@@ -150,10 +155,44 @@ describe('the view', () => {
     expect(view.models.map((m) => [m.id, m.state, m.inUse])).toEqual([['parakeet', 'downloading', true]]);
   });
 
-  it('shows the models the service runs when there is no fetcher to ask', () => {
-    const view = voiceTypingView(facts({ health: { ...HEALTH, models: ['parakeet'] }, fetched: null }));
-    expect(view.models).toEqual([{ id: 'parakeet', state: 'ready', size: 0, received: 0, inUse: true }]);
+  it('shows the models the service runs with catalog or last-known sizes when there is no fetcher answer', () => {
+    const view = voiceTypingView(
+      facts({ health: { ...HEALTH, models: ['parakeet'] }, fetched: null, hasFetcher: false }),
+    );
+    expect(view.models).toEqual([
+      {
+        id: 'parakeet',
+        state: 'ready',
+        size: VOICE_MODEL_SIZES.parakeet,
+        received: VOICE_MODEL_SIZES.parakeet,
+        inUse: true,
+      },
+    ]);
     expect(view.ready).toBe(true);
+
+    const observed = voiceTypingView(
+      facts({
+        health: { ...HEALTH, models: ['parakeet', 'whisper'] },
+        fetched: null,
+        knownModelSizes: { whisper: 32_000_000 },
+      }),
+    );
+    expect(observed.models).toEqual([
+      {
+        id: 'parakeet',
+        state: 'ready',
+        size: VOICE_MODEL_SIZES.parakeet,
+        received: VOICE_MODEL_SIZES.parakeet,
+        inUse: true,
+      },
+      {
+        id: 'whisper',
+        state: 'ready',
+        size: 32_000_000,
+        received: 32_000_000,
+        inUse: false,
+      },
+    ]);
   });
 
   it('shows a download’s progress and why one waits', () => {
@@ -297,6 +336,51 @@ describe('the view', () => {
       state: 'ready',
       size: 145_310_775,
       received: 145_310_775,
+    });
+    // Right after a server restart before the fetcher has ever answered (knownDutchSize is null/unknown),
+    // fall back to the catalog's total size so ready/waiting/removing rows never report 0 bytes.
+    const onReadyAfterRestart = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: null,
+      }),
+    );
+    expect(onReadyAfterRestart.dutchVoice).toEqual({
+      on: true,
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onWaitingAfterRestart = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en'] },
+        fetched: null,
+      }),
+    );
+    expect(onWaitingAfterRestart.dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: 0,
+    });
+    const offRemovingAfterRestart = voiceTypingView(
+      facts({
+        settings: DEFAULT_VOICE_TYPING,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: null,
+      }),
+    );
+    expect(offRemovingAfterRestart.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
     });
     // Agreed while old removal trash is still on disk: keeps reporting 'removing' and bytes left.
     const onWhileRemoving = voiceTypingView(
