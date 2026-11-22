@@ -491,6 +491,14 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
       args: task,
     });
     expect(proposalCard([{ ...taskCard, label: 'Todoist' }]).ok).toBe(true);
+    // A notification that mentions a door unlocks nothing.
+    expect(
+      refusal('homeassistant', {
+        method: 'POST',
+        path: '/api/services/persistent_notification/create',
+        body: { message: 'The parcel is at the front door; the garage invoice is paid.' },
+      }),
+    ).toBeNull();
     // Words that once read as access or deleting are just words in a value.
     expect(
       refusal('paperless', {

@@ -814,21 +814,25 @@ published automation details read their definition and publisher from one versio
   definitions may not use repository workspaces or external steps other than `connection_actions`, sender-controlled
   fields reach the agent only inside
   defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
-  email's files attached to the prompt message (`read_attachment`). A run keeps the email's text (`body`, `snippet`,
-  `text` in `automation_runs.scope`) only while a step that reads the trigger may still render it; then, and whenever
+  email's files attached to the run's first agent prompt (`read_attachment`). A run keeps the email's text (`body`,
+  `snippet`, `text` in `automation_runs.scope`) only while a step that reads the trigger may still render it; then, and whenever
   the run ends, it goes from the scope, from what settled steps stored (their fenced copies become a short note) and
   from the Hermes sessions the run's turns ran in (`automations/mail-text.ts`), while sender, subject and attachment
   metadata stay.
-  Proposed writes (`propose_connection_actions`, prompts listing handles and tools only) are narrow: writable
-  non-built-in services other than `whombat_servers` and `t3code`, never a read, never deleting, removing or emptying
-  (`DELETE`, or said in a tool name, a path segment, a method- or action-like value, a delete switch or code a service
-  runs), never a change to who can get in or what they may see (users, permissions, sharing, passwords, keys), never
-  what the connection's `sensitive` rules always ask about or its `cutsOff` rules mark as able to cut the person off
-  (DNS, DHCP, firewalls, networks). They always ask the person on an approval card bound to the exact
-  `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): Whombat's
-  own words for each action (`action-words.ts`) as its title, question, message and “Done:” line, then every line that
-  decides what happens — method and path or tool, base, uploaded file, every argument and header, secrets masked — or
-  the proposal is refused when that doesn't fit on one card. `connection_actions` runs them after a yes, settling as
+  Proposed writes (`propose_connection_actions`) are only the listed, create-only actions a mail automation needs
+  (`automations/listed-actions.ts`): upload a file of the email to Paperless-ngx, add a purchase invoice or receipt to
+  Moneybird, save a new file (or make a folder) in Dropbox or Nextcloud, add a task to Todoist, show a notification in
+  Home Assistant. Each has a strict schema; Whombat sets what keeps it create-only (`If-None-Match: *` on a WebDAV PUT,
+  Dropbox's `mode: add`, `overwrite: false`) and the `Content-Type`, and refuses any other header, a header name given
+  twice in different case and any value named like a password or key; everything else is refused with what a mail
+  automation can do instead. The prompt lists the listed actions by connection handle, never the person's labels. An
+  upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
+  first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
+  exact `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): the
+  listed action's words as its title, question, message and “Done:” line, then every line that decides what happens —
+  method and path or tool, base, the email's file by name, type and size, every argument and header, nothing hidden, a
+  long value in numbered parts — or the proposal is refused when that doesn't fit on one card. `connection_actions`
+  runs them after a yes, settling as
   `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
   `request_approval` step's details start with its own question. A session below protocol
   minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such

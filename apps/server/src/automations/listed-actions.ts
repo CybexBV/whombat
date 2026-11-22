@@ -472,8 +472,8 @@ const LISTED: readonly ListedAction[] = [
     method: 'PUT',
     path: NEXTCLOUD_FILES,
     settle(args, fields) {
-      nextcloudPath(String(args.path), fields, false);
       if (String(args.path).endsWith('/')) throw new ListedArgumentError('path: name a file, not a folder.');
+      nextcloudPath(String(args.path), fields, false);
       const { body, upload } = requestParts(args, { body: true, upload: true });
       const content = textOrFile(body, upload);
       // Never over a file that is there already: the server refuses the PUT then (412).

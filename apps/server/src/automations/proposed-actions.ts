@@ -115,7 +115,10 @@ export function outsidersCall(
     !requestAllowed(entry, conn.fields, String(args.method), String(args.path))
   )
     return { ok: false, reason: `${name} doesn’t allow ${String(args.method)} ${String(args.path)}.` };
-  const reason = sensitiveReason(entry, tool.name, args) ?? cutsOffReason(entry, tool.name, args);
+  // The second check reads what the call is (its method and path, or its tool), never the text in its values: those are
+  // the listed action's own (a notification that mentions a door unlocks nothing).
+  const what = tool.origin === 'request' ? { method: args.method, path: args.path } : {};
+  const reason = sensitiveReason(entry, tool.name, what) ?? cutsOffReason(entry, tool.name, what);
   if (reason)
     return {
       ok: false,
