@@ -211,6 +211,9 @@ func TestMapSnapshot(t *testing.T) {
 	if len(r.Points) != 2 || r.Points[0] == nil || r.Points[0].X != 300 || r.Points[1] != nil || r.Lat == nil || *r.Lat != 52.3727 || r.SpanM != 600 {
 		t.Fatalf("points and region: %+v", r)
 	}
+	if r.ScreenW != 0 || r.ScreenH != 0 {
+		t.Fatalf("a map answer carries the screen's size: %+v", r)
+	}
 	last := h.requests()[len(h.requests())-1]
 	if last["op"] != "map" || last["w"] != float64(64) || last["h"] != float64(1600) || last["scale"] != float64(1) || last["dark"] != true ||
 		last["format"] != "jpeg" || len(last["pins"].([]any)) != 2 || last["lat"] != nil {

@@ -68,7 +68,8 @@ func (s *Screen) Screen(ctx context.Context, req proto.ScreenRequest) proto.Scre
 	} else if resp.Code == "" {
 		resp.OK = true
 	}
-	if resp.ScreenW == 0 {
+	// A map's picture isn't the screen: its answer carries no screen size.
+	if resp.ScreenW == 0 && req.Op != proto.ScreenMapGeocode && req.Op != proto.ScreenMapSnapshot {
 		resp.ScreenW, resp.ScreenH = s.fbSize()
 	}
 	return resp
