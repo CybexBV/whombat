@@ -28,6 +28,7 @@ import {
   executeConnectionCall,
   newCallId,
 } from '../connections/call';
+import { callTarget } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { catalogConnections, connectionTools } from '../db/schema/index';
 import { assistantCalled } from '../home/assistant-name';
@@ -260,6 +261,8 @@ async function undoAsAssistant(
   pendingUndo.set(callId, { changeId: change.id, byId: actor.id, at: Date.now() });
   for (const [k, v] of pendingUndo) if (Date.now() - v.at > 24 * 3600_000) pendingUndo.delete(k);
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));
+  // Where the inverse goes and as whom now: a yes to it is bound to that, as any call's is.
+  const target = callTarget(row);
   const burrowId = change.burrowId;
   const conversationId = change.conversationId;
   // What the inverse says, and a task it starts, goes in the thread the change was made in (task-feedback.md TF-S11).
@@ -276,6 +279,7 @@ async function undoAsAssistant(
           callId,
           argsEnc,
           ...(conversationId ? { conversationId } : {}),
+          target,
         },
         { burrowId, actorId: agentId, onBehalfOf: { principalId: change.personId ?? actor.id } },
       );
@@ -292,6 +296,7 @@ async function undoAsAssistant(
         conversationId,
         threadRootId,
         personId: change.personId ?? actor.id,
+        target,
       });
     } catch (err) {
       pendingUndo.delete(callId);
