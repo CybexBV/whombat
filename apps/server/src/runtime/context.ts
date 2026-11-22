@@ -362,6 +362,19 @@ export async function buildDispatchContext(
   // The turn's runtime: its Chat thread's choice, else the agent's.
   const turnRuntime = turnRuntimeOf(agent.runtime, row.runtime);
 
+  const connectionsPartOfTurn = side(() => connectionsPart(db, agentRow, grants, row, assessing !== null));
+  // A tracker report can follow its own hand-offs on the T3 Code connections it may use.
+  const t3HandoffsPart = (async () => {
+    if (
+      outside &&
+      !(await connectionsPartOfTurn).connections?.some(
+        (c) => c.catalogId === 't3code' && c.status === 'active',
+      )
+    )
+      return null;
+    return side(() => t3HandoffsOf(db, row, outside));
+  })();
+
   const [
     { run, stalledRun },
     { grantedApproval, grantedResult },
@@ -407,7 +420,7 @@ export async function buildDispatchContext(
     // The T3 Code threads it handed work to that finished or ask something.
     outside ? null : side(async () => t3ThreadsOf(db, row)),
     // The T3 Code threads this thread already handed work to: where a follow-up goes.
-    outside ? null : side(async () => t3HandoffsOf(db, row)),
+    t3HandoffsPart,
     outside ? null : side(async () => councilOfTurn(db, row)),
     // Tasks it handed to T3 Code that ended, or the delegation card of the thread the person writes in (delegate.md).
     outside ? null : side(async () => delegationOfTurn(db, row, now)),
@@ -440,7 +453,7 @@ export async function buildDispatchContext(
       : side(async () => vaultContextFor(db, agentRow.id, row, { commands: commandsTurn(agentRow, row) })),
     // The connected services it can use in this turn, one line each; none in an
     // assessment, a search answer or a reflection, and absent when there are none (older runners read it as none).
-    side(async () => connectionsPart(db, agentRow, grants, row, assessing !== null)),
+    connectionsPartOfTurn,
     // The guard's and the commands' network facts: production servers, home networks, the local network switch. Null in
     // turns that run no commands, outsiders' among them.
     side(async () => commandsContextFor(services, agentRow, row)),
