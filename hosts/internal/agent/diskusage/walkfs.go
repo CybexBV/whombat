@@ -23,9 +23,10 @@ type scanUnsupportedError struct {
 func (e *scanUnsupportedError) Error() string { return e.msg }
 
 // entryKind is the coarse entry type reported by directory iteration (d_type on
-// Linux) before any per-entry stat. entryUnknown means the filesystem did not
-// report d_type (for example XFS without ftype=1, FUSE, or macOS Readdirnames)
-// and the entry must be inspected safely relative to its open parent directory.
+// Linux, ATTR_CMN_OBJTYPE via getattrlistbulk on macOS) before any per-entry
+// stat. entryUnknown means the filesystem did not report d_type (for example
+// XFS without ftype=1 or FUSE) and the entry must be inspected safely relative
+// to its open parent directory.
 type entryKind uint8
 
 const (

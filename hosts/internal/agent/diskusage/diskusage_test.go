@@ -2433,8 +2433,8 @@ func (d *recordingScanDir) StatEntry(name, logicalPath string) (entryStat, error
 type fakeFSMode int
 
 const (
-	fakeModeOpenat2  fakeFSMode = iota // Linux openat2(RESOLVE_NO_XDEV): refuses mount crossings before touching the mounted fs
-	fakeModeFallback                   // Linux ENOSYS fallback / macOS: checks st_dev and mount ID before ReadDir
+	fakeModeOpenat2    fakeFSMode = iota // Linux openat2(RESOLVE_NO_XDEV): refuses mount crossings before touching the mounted fs
+	fakeModeDarwinBulk                   // macOS getattrlistbulk(NOCROSSMOUNT): skips mount points/triggers/firmlinks before openat and returns file stats inline
 )
 
 type fakeMountTracker struct {
@@ -2449,6 +2449,10 @@ type fakeNode struct {
 	allocBytes uint64
 	dev        uint64
 	mntID      uint64
+	fsid       [2]int32
+	hasFSID    bool
+	firmlink   bool
+	automount  bool
 	ino        uint64
 	nlink      uint64
 	children   map[string]*fakeNode
@@ -2651,6 +2655,8 @@ func (d *fakeScanDir) Stat() (entryStat, error) {
 		HasInode:   true,
 		MntID:      n.mntID,
 		HasMntID:   true,
+		FSID:       n.fsid,
+		HasFSID:    n.hasFSID,
 	}, nil
 }
 
@@ -2684,6 +2690,56 @@ func (d *fakeScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 		out := make([]dirEntryInfo, 0, len(names))
 		for _, name := range names {
 			ch := d.node.children[name]
+			if d.fs.mode == fakeModeDarwinBulk {
+				// macOS getattrlistbulk(NOCROSSMOUNT) identifies mount points,
+				// automount triggers and APFS firmlinks from the parent volume
+				// without touching the mounted filesystem, and supplies regular
+				// file metadata inline without fstatat.
+				if ch.dev != d.node.dev || ch.mntID != d.node.mntID || ch.firmlink || ch.automount {
+					continue
+				}
+				switch {
+				case ch.mode&fs.ModeSymlink != 0:
+					out = append(out, dirEntryInfo{Name: name, Kind: entrySymlink})
+				case ch.mode.IsDir():
+					out = append(out, dirEntryInfo{
+						Name:    name,
+						Kind:    entryDir,
+						HasStat: true,
+						Stat: entryStat{
+							Mode:     ch.mode,
+							Dev:      ch.dev,
+							HasDev:   true,
+							Ino:      ch.ino,
+							Nlink:    ch.nlink,
+							HasInode: true,
+							MntID:    ch.mntID,
+							HasMntID: true,
+						},
+					})
+				case ch.mode.IsRegular():
+					out = append(out, dirEntryInfo{
+						Name:    name,
+						Kind:    entryRegular,
+						HasStat: true,
+						Stat: entryStat{
+							Mode:       ch.mode,
+							Size:       int64(ch.allocBytes),
+							AllocBytes: ch.allocBytes,
+							Dev:        ch.dev,
+							HasDev:     true,
+							Ino:        ch.ino,
+							Nlink:      ch.nlink,
+							HasInode:   true,
+							MntID:      ch.mntID,
+							HasMntID:   true,
+						},
+					})
+				default:
+					out = append(out, dirEntryInfo{Name: name, Kind: entryOther})
+				}
+				continue
+			}
 			kind := entryUnknown
 			if !d.fs.noDType {
 				switch {
@@ -2712,14 +2768,13 @@ func (d *fakeScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 	return batch, nil
 }
 
-func (d *fakeScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
+func (d *fakeScanDir) OpenDir(name, logicalPath string, _, prechecked bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}
 	d.fs.mu.Lock()
 	ch, ok := d.node.children[name]
 	parentDev, parentMnt := d.node.dev, d.node.mntID
-	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
 	d.fs.mu.Unlock()
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -2731,19 +2786,23 @@ func (d *fakeScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, err
 		return nil, errNotDir
 	}
 	if d.fs.mode == fakeModeOpenat2 {
-		// Linux openat2(RESOLVE_NO_XDEV) refuses the mount crossing in VFS
-		// BEFORE touching the mounted filesystem's root inode.
-		if ch.dev != parentDev || ch.mntID != parentMnt {
+		// Linux openat2(O_PATH, RESOLVE_NO_XDEV) refuses mount crossings in VFS
+		// and rejects automount triggers before touching the mounted filesystem.
+		if ch.dev != parentDev || ch.mntID != parentMnt || ch.automount {
 			return nil, errWrongMount
 		}
 		return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
 	}
-	// Fallback (Linux ENOSYS / macOS): openat binds the mounted root inode
-	// (no data/directory read), then checks st_dev and mount ID before returning.
-	if ch.tracker != nil {
-		ch.tracker.touched.Add(1)
+	// macOS getattrlistbulk(NOCROSSMOUNT): when called from openRelDir
+	// (prechecked=false), lookupChildBulk inspects the parent directory first
+	// and rejects mount points, triggers and firmlinks without touching them.
+	if !prechecked && (ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount) {
+		return nil, errWrongMount
 	}
-	if ch.dev != rootDev || ch.mntID != rootMnt {
+	if ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount {
+		if ch.tracker != nil {
+			ch.tracker.touched.Add(1)
+		}
 		return nil, errWrongMount
 	}
 	return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
@@ -2756,27 +2815,17 @@ func (d *fakeScanDir) StatEntry(name, _ string) (entryStat, error) {
 	d.fs.mu.Lock()
 	ch, ok := d.node.children[name]
 	parentDev, parentMnt := d.node.dev, d.node.mntID
-	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
 	d.fs.mu.Unlock()
 	if !ok {
 		return entryStat{}, fs.ErrNotExist
 	}
-	if d.fs.mode == fakeModeOpenat2 {
-		// Linux openat2(O_PATH, RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS) rejects
-		// symlinks and mount crossings before calling getattr on the mounted fs.
-		if ch.mode&fs.ModeSymlink != 0 {
-			return entryStat{}, errWrongMount
-		}
-		if ch.dev != parentDev || ch.mntID != parentMnt {
-			return entryStat{}, errWrongMount
-		}
-	} else {
-		if ch.tracker != nil {
-			ch.tracker.touched.Add(1)
-		}
-		if ch.mode&fs.ModeSymlink == 0 && (ch.dev != rootDev || ch.mntID != rootMnt) {
-			return entryStat{}, errWrongMount
-		}
+	if ch.mode&fs.ModeSymlink != 0 {
+		return entryStat{}, errWrongMount
+	}
+	// Both Linux openat2(O_PATH, RESOLVE_NO_XDEV) and macOS getattrlistbulk
+	// refuse mount crossings without sending metadata requests to the mounted fs.
+	if ch.dev != parentDev || ch.mntID != parentMnt || ch.firmlink || ch.automount {
+		return entryStat{}, errWrongMount
 	}
 	return entryStat{
 		Mode:       ch.mode,
@@ -2802,8 +2851,7 @@ func TestMidWalkMountNeverTouchedOrReadFakeFS(t *testing.T) {
 	}{
 		{"openat2_with_dtype", fakeModeOpenat2, false},
 		{"openat2_without_dtype", fakeModeOpenat2, true},
-		{"fallback_with_dtype", fakeModeFallback, false},
-		{"fallback_without_dtype", fakeModeFallback, true},
+		{"darwin_getattrlistbulk", fakeModeDarwinBulk, false},
 	}
 
 	for _, tc := range cases {
@@ -2898,8 +2946,8 @@ func TestMidWalkMountNeverTouchedOrReadFakeFS(t *testing.T) {
 				if tr.dataReads.Load() != 0 {
 					t.Errorf("%s: newly mounted filesystem had %d data/readdir reads, want 0", tr.name, tr.dataReads.Load())
 				}
-				if tc.mode == fakeModeOpenat2 && tr.touched.Load() != 0 {
-					t.Errorf("%s: openat2 mode touched newly mounted filesystem %d times, want 0", tr.name, tr.touched.Load())
+				if tr.touched.Load() != 0 {
+					t.Errorf("%s: mode %s touched newly mounted filesystem %d times, want 0", tr.name, tc.name, tr.touched.Load())
 				}
 			}
 
@@ -3324,4 +3372,89 @@ func TestBatchedReadDirCapsAndCancelsLargeDirectories(t *testing.T) {
 			t.Errorf("container logs huge dir read %d entries, want <= %d", got, r2.catMaxEntries+r2.maxEntries+2)
 		}
 	})
+}
+
+type stubUnsupportedScanFS struct {
+	msg string
+}
+
+func (s stubUnsupportedScanFS) OpenRoot(string, string, mountInfo) (scanDir, error) {
+	return nil, &scanUnsupportedError{msg: s.msg}
+}
+
+func TestDarwinRootFSIDMismatchRefusedBeforeStatfsOrReadDir(t *testing.T) {
+	checkedFSID := [2]int32{0x01000004, 0x1a}
+	swappedFSID := [2]int32{0x01000009, 0x1a}
+
+	inv := &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/Volumes/FastSSD", Device: "/dev/disk5", FSType: "apfs", Disks: []string{"disk4"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk4", Type: "ssd"},
+		},
+	}
+
+	for _, tc := range []struct {
+		name       string
+		rootFSID   [2]int32
+		hasFSID    bool
+		wantFailed bool
+	}{
+		{"matching_fsid", checkedFSID, true, false},
+		{"swapped_volume_fsid", swappedFSID, true, true},
+		{"missing_root_fsid", [2]int32{}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ffs := newFakeScanFS(fakeModeDarwinBulk, false, 100, 1)
+			ffs.addFile("/srv/keep.bin", 16*1024)
+			overTracker := &fakeMountTracker{name: tc.name}
+			ffs.onOpenRoot = func(_ string, fs *fakeScanFS) {
+				fs.mu.Lock()
+				fs.root.fsid = tc.rootFSID
+				fs.root.hasFSID = tc.hasFSID
+				if tc.wantFailed {
+					fs.root.tracker = overTracker
+				}
+				fs.mu.Unlock()
+			}
+
+			mounts := []mountInfo{
+				{ID: 1, MountPoint: "/Volumes/FastSSD", FSType: "apfs", Source: "/dev/disk5s1", FSID: checkedFSID, HasFSID: true},
+			}
+			r := newTestRunner(t, t.TempDir(), mounts, inv)
+			r.goos = "darwin"
+			r.scanFS = ffs
+			r.statfs = nil
+
+			resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/FastSSD"})
+			if tc.wantFailed {
+				if resp.Code != CodeFailed || !strings.Contains(resp.Message, "changed before the scan started") {
+					t.Fatalf("resp = %+v, want CodeFailed about changed filesystem", resp)
+				}
+				if overTracker.statfsCalls.Load() != 0 {
+					t.Errorf("Statfs called %d times on mismatched macOS volume, want 0", overTracker.statfsCalls.Load())
+				}
+				if overTracker.dataReads.Load() != 0 {
+					t.Errorf("ReadDir called %d times on mismatched macOS volume, want 0", overTracker.dataReads.Load())
+				}
+			} else if resp.Code != "" {
+				t.Fatalf("unexpected error on matching f_fsid: %+v", resp)
+			}
+		})
+	}
+}
+
+func TestUnsupportedPlatformRefusesScanCleanly(t *testing.T) {
+	mounts := []mountInfo{{ID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+	r := newTestRunner(t, t.TempDir(), mounts, nil)
+	r.scanFS = stubUnsupportedScanFS{msg: "This server's system does not support safe disk scans."}
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != CodeUnsupported {
+		t.Fatalf("resp.Code = %q, want %q (resp=%+v)", resp.Code, CodeUnsupported, resp)
+	}
+	if !strings.Contains(resp.Message, "does not support safe disk scans") {
+		t.Errorf("resp.Message = %q, want plain unsupported reason", resp.Message)
+	}
 }

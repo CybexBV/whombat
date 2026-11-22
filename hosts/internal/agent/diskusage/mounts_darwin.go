@@ -36,6 +36,8 @@ func hostMounts() ([]mountInfo, error) {
 		virtual := !remote && !darwinLocalFSTypes[fsType]
 		out = append(out, mountInfo{
 			ID:         i + 1,
+			FSID:       st.Fsid.Val,
+			HasFSID:    true,
 			MountPoint: mp,
 			FSType:     fsType,
 			Source:     src,

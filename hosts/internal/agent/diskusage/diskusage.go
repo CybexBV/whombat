@@ -52,6 +52,8 @@ type mountInfo struct {
 	ID         int
 	ParentID   int
 	MajMin     string
+	FSID       [2]int32
+	HasFSID    bool
 	MountPoint string
 	FSType     string
 	Source     string
@@ -285,6 +287,15 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		} else if r.isLinux() && r.root == "" && r.scanFS == nil && scope.target.ID > 0 {
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not confirm the mounted filesystem at %s.", mount)}
 			return
+		}
+		if scope.target.HasFSID {
+			// Refuse if another volume was mounted over the mount point between
+			// reading the mount table / checking standby and opening the root
+			// descriptor (macOS getfsstat f_fsid vs opened root f_fsid).
+			if !rootMeta.HasFSID || rootMeta.FSID != scope.target.FSID {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
+				return
+			}
 		}
 
 		var totalBytes, usedBytes uint64
