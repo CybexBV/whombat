@@ -222,13 +222,18 @@ function createMockXcodeProject(): MockXcodeProject {
   const buildSettings: Record<string, unknown> = {};
   const phases: MockXcodeProject['phases'] = [];
   const groups: MockXcodeProject['groups'] = [];
+  let addedTarget: { uuid: string; pbxNativeTarget: { buildConfigurationList: string } } | null = null;
   return {
     hash: { project: { objects: {} } },
     phases,
     groups,
     buildSettings,
-    pbxTargetByName: () => null,
-    addTarget: () => ({ uuid: 'target-uuid', pbxNativeTarget: { buildConfigurationList: 'cfg-list' } }),
+    pbxTargetByName: (name) =>
+      name === 'WhombatLiveWidget' && addedTarget ? addedTarget.pbxNativeTarget : null,
+    addTarget: () => {
+      addedTarget = { uuid: 'target-uuid', pbxNativeTarget: { buildConfigurationList: 'cfg-list' } };
+      return addedTarget;
+    },
     addPbxGroup(files, name) {
       groups.push({ files, name });
       return { uuid: 'group-uuid' };
@@ -258,7 +263,10 @@ describe('whombat-live iOS config plugin', () => {
     };
   };
 
-  async function runPlugin(props?: { iosStatusWidget?: boolean; iosAppGroup?: string }) {
+  async function runPlugin(
+    props?: { iosStatusWidget?: boolean; iosAppGroup?: string },
+    existingXcode?: MockXcodeProject,
+  ) {
     const dir = mkdtempSync(join(tmpdir(), 'whombat-live-plugin-'));
     try {
       const configured = withWhombatLive(
@@ -282,7 +290,7 @@ describe('whombat-live iOS config plugin', () => {
 
       if (mods.dangerous) await mods.dangerous({ modResults: {}, modRequest: { platformProjectRoot: dir } });
 
-      const xcode = createMockXcodeProject();
+      const xcode = existingXcode ?? createMockXcodeProject();
       if (mods.xcodeproj) {
         await mods.xcodeproj({
           ios: { bundleIdentifier: 'com.whombat.mobile', buildNumber: '3000000' },
@@ -356,5 +364,25 @@ describe('whombat-live iOS config plugin', () => {
     expect(String(out.xcode.buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS)).toContain(
       'WHOMBAT_STATUS_WIDGET',
     );
+  });
+
+  it('stays idempotent when iosStatusWidget matches the existing target and refuses incremental flips', async () => {
+    // Generated with iosStatusWidget off: re-running off succeeds, flipping on refuses with clean-prebuild guidance.
+    const off = await runPlugin({ iosStatusWidget: false, iosAppGroup: 'group.com.whombat.mobile' });
+    await expect(
+      runPlugin({ iosStatusWidget: false, iosAppGroup: 'group.com.whombat.mobile' }, off.xcode),
+    ).resolves.toBeDefined();
+    await expect(
+      runPlugin({ iosStatusWidget: true, iosAppGroup: 'group.com.whombat.mobile' }, off.xcode),
+    ).rejects.toThrow(/expo prebuild --clean/);
+
+    // Generated with iosStatusWidget on: re-running on succeeds, flipping off refuses with clean-prebuild guidance.
+    const on = await runPlugin({ iosStatusWidget: true, iosAppGroup: 'group.com.whombat.mobile' });
+    await expect(
+      runPlugin({ iosStatusWidget: true, iosAppGroup: 'group.com.whombat.mobile' }, on.xcode),
+    ).resolves.toBeDefined();
+    await expect(
+      runPlugin({ iosStatusWidget: false, iosAppGroup: 'group.com.whombat.mobile' }, on.xcode),
+    ).rejects.toThrow(/expo prebuild --clean/);
   });
 });

@@ -10,7 +10,9 @@
 // widget (`WhombatStatusWidget.swift`) and its privacy manifest, writes `WhombatStatusWidgetAppGroup` to both
 // Info.plists and defines `WHOMBAT_STATUS_WIDGET` on the widget target. With `iosStatusWidget: false` (default),
 // the generated iOS project is unchanged so signing and builds need no App Group.
-// Idempotent. Build and sign on macOS: apps/mobile/README.md "iOS".
+// Idempotent while `iosStatusWidget` stays unchanged; toggling it on an existing `ios/` project requires a clean
+// prebuild (`expo prebuild --platform ios --clean`) so the target, entitlements and sources match. Build and sign on
+// macOS: apps/mobile/README.md "iOS".
 const fs = require('node:fs');
 const path = require('node:path');
 const {
@@ -106,10 +108,45 @@ function withWidgetSources(config, opts) {
   ]);
 }
 
+function targetStatusWidgetWiring(project, target) {
+  const listId = target.buildConfigurationList;
+  const list = listId ? project.pbxXCConfigurationList()?.[listId] : null;
+  const configurations = project.pbxXCBuildConfigurationSection() ?? {};
+  const buildConfigs = list?.buildConfigurations ?? [];
+  const expectedEntitlements = `${TARGET}/${ENTITLEMENTS_FILE}`;
+  let wiredCount = 0;
+  let anyWired = false;
+  for (const { value } of buildConfigs) {
+    const settings = configurations[value]?.buildSettings;
+    if (!settings) continue;
+    const entitlements = String(settings.CODE_SIGN_ENTITLEMENTS ?? '').replaceAll('"', '');
+    const flags = String(settings.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? '');
+    const hasEntitlements = entitlements === expectedEntitlements;
+    const hasFlag = /\bWHOMBAT_STATUS_WIDGET\b/.test(flags);
+    if (hasEntitlements || hasFlag) anyWired = true;
+    if (hasEntitlements && hasFlag) wiredCount++;
+  }
+  return {
+    allWired: buildConfigs.length > 0 && wiredCount === buildConfigs.length,
+    anyWired,
+  };
+}
+
 function withWidgetTarget(config, opts) {
   return withXcodeProject(config, (c) => {
     const project = c.modResults;
-    if (project.pbxTargetByName(TARGET)) return c;
+    const existing = project.pbxTargetByName(TARGET);
+    if (existing) {
+      const { allWired, anyWired } = targetStatusWidgetWiring(project, existing);
+      if (opts.iosStatusWidget ? !allWired : anyWired) {
+        throw new Error(
+          `whombat-live: Xcode target ${TARGET} already exists ${anyWired ? 'with' : 'without'} the iOS status widget wired, ` +
+            `but iosStatusWidget is now ${opts.iosStatusWidget}. Run \`expo prebuild --clean\` (for example, ` +
+            '`npx expo prebuild --platform ios --clean`) after changing IOS_APP_GROUP_ENABLED.',
+        );
+      }
+      return c;
+    }
     const bundleId = `${c.ios?.bundleIdentifier ?? 'com.whombat.mobile'}.${TARGET}`;
     const pref = (file) => `${TARGET}/${file}`;
     const sources = (opts.iosStatusWidget ? [...BASE_SOURCES, STATUS_WIDGET_SOURCE] : BASE_SOURCES).map(pref);

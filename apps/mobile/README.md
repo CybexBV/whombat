@@ -256,7 +256,11 @@ xcrun simctl install <simulator udid> build/dd/Build/Products/Release-iphonesimu
 ```
 
 1. Signing & Capabilities: pick the team for **Whombat** and **WhombatLiveWidget**; the app target needs
-   Push Notifications (its entitlement is generated) — the widget extension needs no capability.
+   Push Notifications (its entitlement is generated) — the widget extension needs no capability until
+   `IOS_APP_GROUP_ENABLED` in `app.config.cjs` is turned on. Whenever you flip `IOS_APP_GROUP_ENABLED` (on or off),
+   run `npx expo prebuild --platform ios --clean` so the `WhombatLiveWidget` target, App Group entitlements and
+   Share Extension are regenerated cleanly (an incremental prebuild refuses when the existing target's wiring does not
+   match the flag).
 2. Build and run on an iPhone (iOS 16.4+; push-to-start needs 17.2+). Live Activities must be allowed in
    Settings → Whombat.
 3. Server: set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_ID=com.whombat.mobile`.
