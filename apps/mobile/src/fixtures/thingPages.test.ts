@@ -187,10 +187,13 @@ describe('thing page fixtures', () => {
     if (after.status !== 'ok') throw new Error(after.status);
     const rows = after.data.tabs.find((t) => t.key === 'service-settings')?.panels[1];
     expect(rows?.kind === 'settings' ? rows.rows[1]?.choose?.current : null).toBe(8000);
+    // Remote access and Secure connections stay in Plex.
+    expect((await press({ action: 'setting', target: 'remote_access', value: false })).status).toBe(400);
+    expect((await press({ action: 'setting', target: 'secure_connections', value: 1 })).status).toBe(400);
     // Yesterday's change by Neo can't be put back now: the setting was changed since… and back. A switch flipped
     // twice leaves its first change behind it.
-    const off = await press({ action: 'setting', target: 'remote_access', value: false });
-    await press({ action: 'setting', target: 'remote_access', value: true });
+    const off = await press({ action: 'setting', target: 'hardware_transcoding', value: false });
+    await press({ action: 'setting', target: 'hardware_transcoding', value: true });
     const refused = await undo((off.data as { changeId: string }).changeId);
     expect(refused.status).toBe(409);
   });

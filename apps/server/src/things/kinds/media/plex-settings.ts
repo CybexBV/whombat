@@ -1,9 +1,10 @@
 /**
  * Plex's settings that matter: read from `/:/prefs`, written with field-only `PUT /:/prefs?<id>=<value>`, in four
- * groups — watching away from home, converting video, libraries, upkeep. Secure connections, emptying the trash and
- * updates stay in Plex: requiring encryption immediately refuses plain HTTP on port 32400 (cutting off plain-HTTP
- * local access and Whombat's default HTTP connection), emptying the trash can drop a library when a drive is briefly
- * away, and installing an update restarts the server.
+ * groups — watching away from home, converting video, libraries, upkeep. Remote access, secure connections, emptying
+ * the trash and updates stay in Plex: turning remote access off cuts off access from outside the home, requiring
+ * encryption immediately refuses plain HTTP on port 32400 (cutting off plain-HTTP local access and Whombat's default
+ * HTTP connection), emptying the trash can drop a library when a drive is briefly away, and installing an update
+ * restarts the server.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -118,12 +119,11 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     id: 'remote_access',
     group: 'away',
     label: 'Remote access',
-    help: 'People can watch outside your home.',
-    kind: 'switch',
+    // Turning remote access off cuts off people reaching Plex from outside the home in one click.
+    help: 'People can watch outside your home. Turning it off can cut off access from outside, so it stays in Plex.',
+    kind: 'elsewhere',
     read: (p) => prefBool(p, 'PublishServerOnPlexOnlineKey'),
-    write: (v) => put({ PublishServerOnPlexOnlineKey: bit(v) }),
-    sentence: (v) =>
-      asBool(v) ? 'People can now watch Plex outside your home.' : 'Plex is now only for your home.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
   },
   {
     id: 'remote_quality',

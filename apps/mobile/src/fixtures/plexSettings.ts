@@ -60,8 +60,9 @@ const SPECS: Spec[] = [
     id: 'remote_access',
     group: 'remote',
     label: 'Remote access',
-    help: 'People can watch outside your home.',
-    kind: 'switch',
+    help: 'People can watch outside your home. Turning it off can cut off access from outside, so it stays in Plex.',
+    kind: 'elsewhere',
+    words: (v) => (v ? 'On' : 'Off'),
   },
   {
     id: 'remote_quality',
@@ -89,12 +90,9 @@ const SPECS: Spec[] = [
     id: 'secure_connections',
     group: 'remote',
     label: 'Secure connections',
-    help: 'Plex only accepts encrypted connections.',
-    kind: 'choice',
-    choices: [
-      { value: 0, label: 'Required', note: 'only encrypted' },
-      { value: 1, label: 'Preferred', note: 'encrypted when the device can' },
-    ],
+    help: 'Whether Plex only accepts encrypted connections. Requiring encryption stops plain HTTP access on port 32400, so it stays in Plex.',
+    kind: 'elsewhere',
+    words: (v) => (Number(v) === 0 ? 'Required' : 'Preferred'),
   },
   {
     id: 'hardware_transcoding',
