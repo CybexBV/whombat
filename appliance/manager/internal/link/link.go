@@ -117,7 +117,16 @@ type Keeper struct {
 	// notes are the changes saved under mu, for OnChange once it is released.
 	notes [][2]Record
 	wake  chan struct{}
+	// claim is the box's claim link as the runtime last gave it ("" none: claimed, or no page at its address yet), sent
+	// with every link.status so control can open the claim for the account that linked the box. Memory only, like the
+	// runtime's own copy: it is a secret, and the runtime gives it again after a restart. claimRefusedAt is when a
+	// control from before the field refused it.
+	claim          string
+	claimRefusedAt time.Time
 }
+
+// claimRetry: how long a box waits before it offers the claim link again to a control that refused the field.
+const claimRetry = time.Hour
 
 // Errors of On and Off (the broker maps them to the contract's LINK_ERRORS).
 var (
@@ -247,6 +256,18 @@ func adopt(r Record, st *device.DeviceLinkStatus, now time.Time) Record {
 		r.Want = ""
 	}
 	return r
+}
+
+// SetClaimLink keeps the box's claim link from the runtime ("" for none). A link control doesn't have yet wakes the loop,
+// so link.status carries it within moments: the person who just linked the box is waiting on the account site for it.
+func (k *Keeper) SetClaimLink(secret string) {
+	k.mu.Lock()
+	fresh := secret != k.claim
+	k.claim = secret
+	k.mu.Unlock()
+	if fresh && k.Available() {
+		k.poke()
+	}
 }
 
 // Observe takes a Link state control sent with another answer (ticket.issue). Ignored while the owner's change runs
@@ -516,6 +537,13 @@ func (r Record) Status() local.LocalLinkStatus {
 	return out
 }
 
+// refusedClaimLink: control refused the body of link.status (a control from before contracts 4.13 and its strict body).
+func refusedClaimLink(err error) bool {
+	var he *controlapi.HTTPError
+	code, detail := controlapi.ErrorCodes(err)
+	return errors.As(err, &he) && he.Status == 400 && code == "validation_failed" && detail == "bad_body"
+}
+
 // The poll loop's waits per state: soon while a person types the code, now and then otherwise (every ticket answer
 // brings the state too). Once Link ended the box has no tickets, so link.status is the only way it hears that its owner
 // subscribed again: as often as in grace, so it comes back within minutes, not hours (LNK-06).
@@ -605,8 +633,28 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 }
 
 func (k *Keeper) status(ctx context.Context) error {
+	k.mu.Lock()
+	claim := k.claim
+	if claim != "" && !k.claimRefusedAt.IsZero() && k.now().Sub(k.claimRefusedAt) < claimRetry {
+		claim = ""
+	}
+	k.mu.Unlock()
+	req := device.LinkStatusRequest{}
+	if claim != "" {
+		req.ClaimLink = &claim
+	}
 	var out device.LinkStatusResponse
-	if err := k.Control.Do(ctx, device.DeviceOpNameLinkStatus, device.LinkStatusRequest{}, &out); err != nil {
+	err := k.Control.Do(ctx, device.DeviceOpNameLinkStatus, req, &out)
+	if err != nil && claim != "" && refusedClaimLink(err) {
+		// A control from before the field takes no member in this body: the state matters more than the link, so ask
+		// again without it, and offer it again later (control may have been updated by then).
+		k.mu.Lock()
+		k.claimRefusedAt = k.now()
+		k.mu.Unlock()
+		req.ClaimLink = nil
+		err = k.Control.Do(ctx, device.DeviceOpNameLinkStatus, req, &out)
+	}
+	if err != nil {
 		return refusal(err)
 	}
 	if err := out.Validate(); err != nil {

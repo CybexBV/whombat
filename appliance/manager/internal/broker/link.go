@@ -8,6 +8,7 @@ package broker
 //	                                                                          429 link.rate_limited | 503 control_unreachable |
 //	                                                                          502 control_refused
 //	POST /v1/link/off               {v: 1}                          runtime → 200 LinkStateResponse (off) | 404 | 409 busy
+//	POST /v1/link/claim             {v: 1, claimLink?}              runtime → 200 LocalOk (kept for link.status)
 //	POST /v1/runtime/push/register  {token}                         runtime → control's push.register answer
 //	POST /v1/runtime/push/unregister {handle}                       runtime → control's push.unregister answer
 //
@@ -41,6 +42,7 @@ type Link interface {
 	On(ctx context.Context, contentProof, name string) (link.Record, error)
 	Off(ctx context.Context) (link.Record, error)
 	Observe(st *device.DeviceLinkStatus)
+	SetClaimLink(secret string)
 }
 
 // linkBodyMax: {v: 1, contentProof (128 hex), name (64)} and the push routes' token.
@@ -167,6 +169,28 @@ func (s *Server) linkOff(w http.ResponseWriter, r *http.Request) {
 	}
 	s.DropTickets()
 	writeJSON(w, http.StatusOK, s.linkResponse(rec))
+}
+
+// linkClaim keeps the box's claim link for link.status (contracts 4.13): control opens the claim for the account that
+// linked the box with it. Answered at once; the keeper calls control when the link is new to it. Never logged.
+func (s *Server) linkClaim(w http.ResponseWriter, r *http.Request) {
+	b, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	req, err := local.ParseLinkClaimRequest(b)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", "the claim link isn't one")
+		return
+	}
+	if s.Link != nil {
+		claim := ""
+		if req.ClaimLink != nil {
+			claim = *req.ClaimLink
+		}
+		s.Link.SetClaimLink(claim)
+	}
+	writeJSON(w, http.StatusOK, local.LocalOk{Ok: true})
 }
 
 // DropTickets forgets the cached tickets: after Link went off none is handed out again.

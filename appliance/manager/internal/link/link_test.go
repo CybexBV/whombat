@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -395,5 +396,99 @@ func TestStatusShowsOnlyWhatTheStateHas(t *testing.T) {
 		WaitingForAddress: true}
 	if st := r.Status(); st.Pending != nil || st.WaitingForAddress != nil {
 		t.Fatalf("%+v", st)
+	}
+}
+
+// The claim link the runtime hands over goes with link.status, at once when it is new, and stops once the runtime takes
+// it back (the box was claimed). A box whose Link is off sends nothing, claim link or not.
+func TestTheClaimLinkGoesWithLinkStatus(t *testing.T) {
+	b := newBox(t, false)
+	b.keep.SetClaimLink("pqrtvw")
+	if calls(b.fc) != 0 || len(b.fc.ClaimLinks) != 0 {
+		t.Fatal("a box with Link off called control")
+	}
+	if wait, err := b.keep.step(context.Background()); err != nil || calls(b.fc) != 0 {
+		t.Fatal(wait, err)
+	}
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: ptr("maple-otter-river")})
+	if _, err := b.keep.On(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.fc.ClaimLinks; len(got) != 1 || got[0] != "pqrtvw" {
+		t.Fatalf("%q", got)
+	}
+	// A new link wakes the loop, so it reaches control without waiting for the hourly look.
+	drain(b.keep)
+	b.keep.SetClaimLink("abcdef")
+	if !woken(b.keep) {
+		t.Fatal("a new claim link didn't wake the loop")
+	}
+	b.keep.SetClaimLink("abcdef")
+	if woken(b.keep) {
+		t.Fatal("the same link again woke the loop")
+	}
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.keep.SetClaimLink("")
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.fc.ClaimLinks; len(got) != 3 || got[1] != "abcdef" || got[2] != "" {
+		t.Fatalf("%q", got)
+	}
+	// The local view never shows it.
+	if st := b.keep.Snapshot().Status(); strings.Contains(fmt.Sprintf("%+v", st), "abcdef") {
+		t.Fatalf("%+v", st)
+	}
+}
+
+// A control from before the field refuses the body: the state still comes, and the link is offered again an hour later.
+func TestAControlBeforeClaimLinksStillGivesTheState(t *testing.T) {
+	b := newBox(t, false)
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()})
+	if _, err := b.keep.On(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	b.fc.StatusBeforeClaimLinks = true
+	b.keep.SetClaimLink("pqrtvw")
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateGrace, Since: b.now.Unix(), GraceEndsAt: ptr(b.now.Unix() + 86400)})
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if r := b.keep.Snapshot(); r.State != protocol.LinkStateGrace {
+		t.Fatalf("%+v", r)
+	}
+	if got := b.fc.ClaimLinks; len(got) != 1 || got[0] != "" {
+		t.Fatalf("%q", got)
+	}
+	// Within the hour it isn't offered again; after it, it is.
+	b.fc.StatusBeforeClaimLinks = false
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b.now = b.now.Add(claimRetry)
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.fc.ClaimLinks; len(got) != 3 || got[1] != "" || got[2] != "pqrtvw" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func drain(k *Keeper) {
+	for woken(k) {
+	}
+}
+
+func woken(k *Keeper) bool {
+	select {
+	case <-k.wake:
+		return true
+	default:
+		return false
 	}
 }
