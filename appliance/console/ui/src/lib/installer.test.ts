@@ -118,7 +118,9 @@ describe('wizard steps', () => {
     expect(nextStep(s, 'checks')).toBe('wifi');
     expect(nextStep(s, 'wifi')).toBe('erase');
     expect(prevStep(s, 'erase')).toBe('wifi');
-    expect(stepOf(s, 'wifi')).toEqual({ n: 3, of: 4 });
+    // Part of the checks' stage: the count doesn't grow once the checks found no cable.
+    expect(stepOf(s, 'wifi')).toEqual({ n: 2, of: 3 });
+    expect(stepOf(s, 'erase')).toEqual({ n: 3, of: 3 });
   });
 
   it('goes forward and back along the steps', () => {
@@ -142,13 +144,17 @@ describe('wizard steps', () => {
     expect(stepOf(s, 'reach')).toEqual({ n: 1, of: 3 });
     expect(stepOf(s, 'checks')).toEqual({ n: 2, of: 3 });
     expect(stepOf(s, 'erase')).toEqual({ n: 3, of: 3 });
-    const two = state({ preflight: { status: 'done', checks: ok, disks: [sda, sdb, usb] } });
-    expect(['reach', 'checks', 'disk', 'erase'].map((x) => stepOf(two, x as 'checks'))).toEqual([
-      { n: 1, of: 4 },
-      { n: 2, of: 4 },
-      { n: 3, of: 4 },
-      { n: 4, of: 4 },
-    ]);
+    // Choosing a disk is part of the last stage: the total is the same with one disk, several, or none found yet.
+    for (const disks of [[sda], [sda, sdb, usb], []]) {
+      const s2 = state({ preflight: { status: 'done', checks: ok, disks } });
+      expect(['reach', 'checks', 'disk', 'erase'].map((x) => stepOf(s2, x as 'checks'))).toEqual([
+        { n: 1, of: 3 },
+        { n: 2, of: 3 },
+        { n: 3, of: 3 },
+        { n: 3, of: 3 },
+      ]);
+    }
+    expect(stepOf(state({ edition: 'community' }), 'erase')).toEqual({ n: 2, of: 2 });
   });
 });
 

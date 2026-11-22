@@ -7,7 +7,8 @@
  * not the Whombat's agent, which is made at the claim and named in setup (CG-338).
  */
 import { LINK_OFFER_TEXT } from '../../vendor/whombat-contracts/link-price';
-import type { CheckId, CheckStatus, DiskReason, InstallStep } from './api';
+import type { CheckId, CheckStatus, Disk, DiskReason, InstallStep } from './api';
+import { formatSize } from './installer';
 
 /** The text console's words (render.go), unchanged. */
 export const WORD = {
@@ -119,7 +120,7 @@ export const INSTALLER = {
   welcomeTitle: 'Let’s set up your Whombat',
   welcomeSub:
     'This installs Whombat on this machine. It takes a few minutes, and everything on the disk you choose is erased.',
-  welcomeNext: 'After a restart, the screen shows a code to claim your Whombat.',
+  welcomeNext: 'After a restart, the screen shows what to do next.',
   start: 'Start',
   welcomeSay: `Hi, I’m ${GUIDE}. I’ll show you the way. It’s mostly digging.`,
 
@@ -189,7 +190,7 @@ export const INSTALLER = {
   progressLabel: 'Installation progress',
 
   doneTitle: 'Whombat is installed',
-  doneSub: 'Restart to start it. The screen then shows a code to claim your Whombat.',
+  doneSub: 'Restart to start it. The screen then shows what to do next.',
   doneMedium:
     'If the installer starts again after the restart, remove the USB stick or detach the ISO, then restart.',
   restart: 'Restart',
@@ -216,8 +217,16 @@ export const CHECK_LABEL: Record<CheckId, string> = {
   'reach-login': 'Tailscale login',
 };
 
-/** A line under a check that isn't ok. `value` is the server's plain value (a host, “2 cores”, …). */
-export function checkNote(id: CheckId, status: CheckStatus, value: string): string | null {
+/**
+ * A line under a check that isn't ok. `value` is the server's plain value (a host, “2 cores”, …); `disks` what the disk
+ * check found, so its line says what stops each one.
+ */
+export function checkNote(
+  id: CheckId,
+  status: CheckStatus,
+  value: string,
+  disks: Disk[] = [],
+): string | null {
   if (status === 'ok' || status === 'running') return null;
   const warn = status === 'warn';
   switch (id) {
@@ -230,13 +239,33 @@ export function checkNote(id: CheckId, status: CheckStatus, value: string): stri
         ? 'Less than 8 GiB. Agents may run short of memory.'
         : 'Whombat needs at least 4 GiB of memory.';
     case 'disk':
-      return 'No disk of 110 GiB or more to install on.';
+      return diskNote(disks);
     case 'network':
       return 'No network address yet. Whombat needs the network after the restart.';
     default:
       return value
         ? `Can’t reach ${value}. Whombat needs it when it first starts.`
         : 'Can’t reach it. Whombat needs it when it first starts.';
+  }
+}
+
+/** Why no disk can take Whombat, in one line: what stops each disk the installer found. */
+export function diskNote(disks: Disk[]): string {
+  const refused = disks.filter((d) => !d.eligible && d.reason !== '');
+  if (refused.length === 0) return 'No disk found to install on.';
+  return `No disk to install on: ${refused.map(diskWhy).join('; ')}.`;
+}
+
+function diskWhy(d: Disk): string {
+  switch (d.reason) {
+    case 'too-small':
+      return `${d.name} is too small (${formatSize(d.sizeBytes)}, needs 110 GiB)`;
+    case 'installer-medium':
+      return `${d.name} holds this installer`;
+    case 'in-use':
+      return `${d.name} is in use`;
+    default:
+      return `${d.name} is connected by USB`;
   }
 }
 

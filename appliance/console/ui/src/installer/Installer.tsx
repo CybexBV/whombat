@@ -217,7 +217,7 @@ function Checks({
     >
       <ul className={styles.checks} aria-live="polite">
         {state.preflight.checks.map((c) => {
-          const note = checkNote(c.id, c.status, c.value);
+          const note = checkNote(c.id, c.status, c.value, state.preflight.disks);
           return (
             <li key={c.id} className={styles.check}>
               <StatusIcon status={c.status} />

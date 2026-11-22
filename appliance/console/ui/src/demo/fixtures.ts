@@ -320,6 +320,36 @@ export const FIXTURES: Record<string, Fixture> = {
       }),
     ),
   },
+  'installer-checks-disk-refused': {
+    note: 'Checks: no disk to install on, each one’s reason',
+    wizard: { step: 'checks' },
+    timeline: one(
+      installer({
+        ...prod,
+        preflight: {
+          status: 'done',
+          checks: withChecks({ disk: { status: 'fail', value: '' } }),
+          disks: manyDisks.map((d) =>
+            d.eligible ? { ...d, eligible: false, reason: 'in-use' as const } : d,
+          ),
+        },
+      }),
+    ),
+  },
+  'installer-checks-disk-small': {
+    note: 'Checks: the only disk is too small (a VM’s default disk)',
+    wizard: { step: 'checks' },
+    timeline: one(
+      installer({
+        ...prod,
+        preflight: {
+          status: 'done',
+          checks: withChecks({ disk: { status: 'fail', value: '' } }),
+          disks: [{ ...(disks[0] as Disk), sizeBytes: 10 * GiB, eligible: false, reason: 'too-small' }],
+        },
+      }),
+    ),
+  },
   'installer-disk': {
     note: 'Choose a disk (two eligible, a USB drive, a small eMMC)',
     wizard: { step: 'disk' },

@@ -116,11 +116,19 @@ export function prevStep(s: InstallerState, step: WizardStep): WizardStep {
   return i <= 0 ? 'welcome' : (steps[i - 1] ?? 'welcome');
 }
 
-/** “STEP 2 OF 3”: the steps after Welcome. Null on Welcome. */
+/**
+ * “STEP 2 OF 3”: the stages after Welcome. Wi-Fi belongs to the checks' stage and choosing a disk to the erase's, so the
+ * count stays the same from the first screen on: whether those steps show is known only once the checks ran. Null on
+ * Welcome.
+ */
 export function stepOf(s: InstallerState, step: WizardStep): { n: number; of: number } | null {
-  const steps: WizardStep[] = wizardSteps(s).filter((x) => x !== 'welcome');
-  const i = steps.indexOf(step);
-  return i < 0 ? null : { n: i + 1, of: steps.length };
+  const stages: WizardStep[][] = [
+    ...(asksReach(s) ? [['reach'] as WizardStep[]] : []),
+    ['checks', 'wifi'],
+    ['disk', 'erase'],
+  ];
+  const i = stages.findIndex((stage) => stage.includes(step));
+  return i < 0 ? null : { n: i + 1, of: stages.length };
 }
 
 export type ChecksVerdict = 'running' | 'ok' | 'warn' | 'fail';
