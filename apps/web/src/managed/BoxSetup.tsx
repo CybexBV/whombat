@@ -3,16 +3,19 @@
  * own-address setups): nobody claimed this box yet, so the page that opened it claims it. In onboarding's frame (the
  * aside with the numbered steps and the agent's tip, the kicker, the title, the footer's buttons):
  *
+ * 0. **Link your Whombat**, shown done, when the account site's link page opened this page (its count goes on here).
  * 1. **Claim your Whombat** — the four letters on its screen; at its own address with the claim link's secret from
  *    `/c/<secret>` (`runLocalClaim`: CPace bound to both Noise keys, the box's tag checked). A wrong guess comes back
- *    here, with the new letters the box shows.
- * 2. **Who are you?** — name and email, kept on the box; Claim it runs the claim.
- * 3. At the box's own address, **Make its passkey** (two touches; the passkey is that address's). Elsewhere (its
- *    Tailscale page, a developer's machine) **Reach it from anywhere**: Tailscale on, with the advice to turn off key
- *    expiry for the box (LNK-14), and Whombat Link offered once as a card, never as a gate.
- * 4. **Protect your Whombat** — where backups go, “Let {assistant} set it up” for a NAS it found (`ProtectPlaces`).
- * 5.–7. **Name your Whombat**, **Set up your AI**, **Meet your agent** — the app's own setup (onboarding), which opens
- *    next and carries on this count (`boxSetupSteps`).
+ *    here, with the new letters the box shows. With the name and email the account site sent along, Continue claims it
+ *    at once (only the name is asked here when the account site had none).
+ * 2. **Who are you?** — name and email, kept on the box, only when nothing was sent along; Claim it runs the claim.
+ * 3. At the box's own address, **Make its passkey** (two touches; the passkey is that address's), which goes on by
+ *    itself once made. Elsewhere (its Tailscale page, a developer's machine) **Reach it from anywhere**: Tailscale on,
+ *    with the advice to turn off key expiry for the box (LNK-14), and Whombat Link offered once as a card, never as a
+ *    gate.
+ * 4. **Set up your AI** — the app's own setup (onboarding), which opens next and carries on this count
+ *    (`boxSetupSteps`). Backups, the Whombat's name and its agent aren't asked: Needs you proposes where backups go, and
+ *    the name and agent start as “Mara’s Whombat” and Dusty, changed in Settings.
  */
 import { WhombatAvatar } from '@whombat/avatars/react';
 import { WhombatLogo } from '@whombat/brand/react';
@@ -26,12 +29,9 @@ import {
   tailscaleView,
 } from '@whombat/client';
 import {
-  BACKUP_SETUP_TEXT,
-  BOX_APP_STEPS,
+  type BOX_APP_STEPS,
   BOX_SETUP_TEXT,
-  type BoxPasskeyMade,
   type BoxSetupStep,
-  boxPasskeyOutcome,
   boxSetupSteps,
   COMMUNITY_TEXT,
   createBoxPasskey,
@@ -51,37 +51,25 @@ import {
   REACH_TEXT,
   runLocalClaim,
 } from '@whombat/client/managed';
-import { type ApplianceSession, createSecureSession, sessionOps } from '@whombat/client/session';
+import { type ApplianceSession, createSecureSession } from '@whombat/client/session';
 import { DEFAULT_AGENT_FACE, DEFAULT_AGENT_NAME } from '@whombat/core/domain';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button, ButtonLink } from '../components/Button';
 import { Input } from '../components/Input';
 import { StatusDot } from '../components/StatusDot';
 import { type Reach, useNow, useReach } from '../features/machine/useReach';
 import ob from '../features/onboarding/OnboardingScreen.module.css';
-import { ONBOARDING_STEPS } from '../features/onboarding/onboardingCopy';
-import { savedNotes } from '../features/settings/BackupDestination';
 import setup from './BoxSetup.module.css';
 import type { BoxEnvironment } from './boxEnv';
 import { WEB_CLIENT } from './connect';
 import { type EndpointKey, browserLabel as label } from './keys';
 import { LettersInput } from './LettersInput';
-import { ProtectPlaces } from './ProtectPlaces';
 import { PASSKEYS } from './passkeyEnv';
 
 const T = BOX_SETUP_TEXT;
 
-/** Where the setup stands: the claim's two screens, then the steps after it; the app's own steps come after. */
-type Stage = Exclude<BoxSetupStep, (typeof BOX_APP_STEPS)[number]> | 'letters';
-
-/** A step's title and line in the aside: the claim's own, or onboarding's for the app's steps that follow. */
-function stepCopy(step: BoxSetupStep): { t: string; d: string } {
-  if (step === 'name' || step === 'ai' || step === 'agent') {
-    const copy = ONBOARDING_STEPS[BOX_APP_STEPS.indexOf(step)];
-    return copy ? { t: copy.t, d: copy.d } : { t: '', d: '' };
-  }
-  return T.steps[step];
-}
+/** Where the setup stands: the claim's two screens, then the step after it; the app's own step comes after. */
+type Stage = Exclude<BoxSetupStep, (typeof BOX_APP_STEPS)[number] | 'link'> | 'letters';
 
 export function BoxSetup({
   env,
@@ -122,11 +110,14 @@ export function BoxSetup({
   /** Into the app, where its own setup carries on the count. */
   onDone: () => void;
 }) {
-  const steps = boxSetupSteps({ atAddress });
+  // The email came along from the account site: Who are you? isn't asked (the name is, on the claim, if it didn't).
+  const knowsAccount = Boolean(prefill?.email);
+  const steps = boxSetupSteps({ atAddress, fromLink: prefill?.fromLink ?? false, knowsAccount });
   const [stage, setStage] = useState<Stage>('letters');
   const [letters, setLetters] = useState('');
   const [name, setName] = useState(prefill?.name ?? '');
   const [email, setEmail] = useState(prefill?.email ?? '');
+  const askName = knowsAccount && !prefill?.name;
   const [lettersProblem, setLettersProblem] = useState<string | null>(notice ?? null);
   const [claimProblem, setClaimProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -189,7 +180,14 @@ export function BoxSetup({
       // Four letters of the box's own alphabet, checked before a try is spent on them.
       const ready = localClaimLettersReady(letters);
       setLettersProblem(ready ? null : COMMUNITY_TEXT.claim.errors.letters);
-      if (ready) setStage('account');
+      if (!ready) return;
+      if (!knowsAccount) return setStage('account');
+      if (!name.trim()) return;
+      // What the account site sent, by the box's own rules; one it refuses is shown to change on Who are you?.
+      const problem = localClaimAccountProblem({ name, email });
+      setClaimProblem(problem);
+      if (problem) setStage('account');
+      else void claim();
     } else if (stage === 'account' && name.trim() && email.trim()) {
       // The box's own rules for a name and an email, before the exchange starts.
       const problem = localClaimAccountProblem({ name, email });
@@ -208,9 +206,7 @@ export function BoxSetup({
         ? T.account.tip
         : stage === 'reach'
           ? T.reach.tip
-          : stage === 'backups'
-            ? BACKUP_SETUP_TEXT.tip
-            : null;
+          : null;
 
   return (
     <div className={ob.screen} data-box-setup={current}>
@@ -223,8 +219,8 @@ export function BoxSetup({
               type="button"
               className={ob.step}
               data-current={i === at || undefined}
-              // Back to the letters before the claim; after it there's no going back.
-              disabled={claimed || i > at}
+              // Back to the letters before the claim; after it there's no going back, nor to the link page.
+              disabled={claimed || i > at || s === 'link'}
               onClick={() => setStage(s === 'account' ? 'account' : 'letters')}
             >
               <span
@@ -235,8 +231,8 @@ export function BoxSetup({
                 {i < at ? '✓' : i + 1}
               </span>
               <span className={ob.stepText}>
-                <span className={ob.stepTitle}>{stepCopy(s).t}</span>
-                <span className={ob.stepDesc}>{stepCopy(s).d}</span>
+                <span className={ob.stepTitle}>{T.steps[s].t}</span>
+                <span className={ob.stepDesc}>{T.steps[s].d}</span>
               </span>
             </button>
           ))}
@@ -254,21 +250,9 @@ export function BoxSetup({
       <main className={ob.main}>
         {claimed ? (
           !app ? null : stage === 'passkey' ? (
-            <PasskeyStep
-              session={app}
-              appliance={known.peerId}
-              kicker={kicker}
-              onDone={() => setStage('backups')}
-            />
-          ) : stage === 'reach' ? (
-            <ReachStep
-              session={app}
-              kicker={kicker}
-              tailscaleName={tailscaleName}
-              onDone={() => setStage('backups')}
-            />
+            <PasskeyStep session={app} appliance={known.peerId} kicker={kicker} onDone={onDone} />
           ) : (
-            <BackupsStep session={app} kicker={kicker} onDone={onDone} />
+            <ReachStep session={app} kicker={kicker} tailscaleName={tailscaleName} onDone={onDone} />
           )
         ) : (
           <form className={ob.content} onSubmit={submit}>
@@ -278,26 +262,46 @@ export function BoxSetup({
               sub={stage === 'letters' ? OWN_ADDRESS_TEXT.claim.sub : T.account.sub}
             />
             {stage === 'letters' ? (
-              <div className={ob.nameBlock}>
-                <label htmlFor="setup-letters" className={ob.label}>
-                  {COMMUNITY_TEXT.claim.letters}
-                </label>
-                <LettersInput
-                  id="setup-letters"
-                  value={letters}
-                  onChange={(v) => {
-                    setLetters(v);
-                    setLettersProblem(null);
-                  }}
-                  placeholder={COMMUNITY_TEXT.claim.lettersPlaceholder}
-                  invalid={lettersProblem !== null}
-                  aria-describedby={lettersProblem ? 'setup-letters-problem' : undefined}
-                  autoFocus
-                />
-                {lettersProblem && (
-                  <span id="setup-letters-problem" className={ob.urlNote} role="alert">
-                    {lettersProblem}
-                  </span>
+              <div className={setup.fields}>
+                <div className={ob.nameBlock}>
+                  <label htmlFor="setup-letters" className={ob.label}>
+                    {COMMUNITY_TEXT.claim.letters}
+                  </label>
+                  <LettersInput
+                    id="setup-letters"
+                    value={letters}
+                    onChange={(v) => {
+                      setLetters(v);
+                      setLettersProblem(null);
+                    }}
+                    placeholder={COMMUNITY_TEXT.claim.lettersPlaceholder}
+                    invalid={lettersProblem !== null}
+                    aria-describedby={lettersProblem ? 'setup-letters-problem' : undefined}
+                    autoFocus
+                  />
+                  {lettersProblem && (
+                    <span id="setup-letters-problem" className={ob.urlNote} role="alert">
+                      {lettersProblem}
+                    </span>
+                  )}
+                </div>
+                {askName && (
+                  <div className={ob.nameBlock}>
+                    <label htmlFor="setup-name" className={ob.label}>
+                      {COMMUNITY_TEXT.account.name}
+                    </label>
+                    <Input
+                      id="setup-name"
+                      size="lg"
+                      autoComplete="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      aria-describedby="setup-name-hint"
+                    />
+                    <span id="setup-name-hint" className={setup.hint}>
+                      {T.name.hint}
+                    </span>
+                  </div>
                 )}
               </div>
             ) : (
@@ -330,7 +334,7 @@ export function BoxSetup({
                 </div>
               </div>
             )}
-            {claimProblem && stage === 'account' && (
+            {claimProblem && (
               <p className={ob.finishProblem} role="alert">
                 {claimProblem}
               </p>
@@ -342,7 +346,10 @@ export function BoxSetup({
                   size="xl"
                   padY={12}
                   type="button"
-                  onClick={() => setStage('letters')}
+                  onClick={() => {
+                    setClaimProblem(null);
+                    setStage('letters');
+                  }}
                 >
                   {COMMUNITY_TEXT.account.back}
                 </Button>
@@ -356,13 +363,15 @@ export function BoxSetup({
                 padY={12}
                 type="submit"
                 disabled={
-                  stage === 'letters' ? letters.length < 4 : busy || !enrol || !name.trim() || !email.trim()
+                  stage === 'letters'
+                    ? letters.length < 4 || (knowsAccount && (busy || !enrol || !name.trim()))
+                    : busy || !enrol || !name.trim() || !email.trim()
                 }
               >
-                {stage === 'letters'
-                  ? COMMUNITY_TEXT.claim.next
-                  : busy
-                    ? COMMUNITY_TEXT.account.claiming
+                {busy
+                  ? COMMUNITY_TEXT.account.claiming
+                  : stage === 'letters'
+                    ? COMMUNITY_TEXT.claim.next
                     : COMMUNITY_TEXT.account.claim}
               </Button>
             </div>
@@ -418,7 +427,8 @@ const PROMPT: Partial<Record<PasskeySetupStep, string>> = {
 
 /**
  * The box's own passkey, two touches (three without PRF at creation), with the words that say our website can't use
- * it, linked to the privacy page.
+ * it, linked to the privacy page. Once it is made the setup goes on by itself: what it unlocks shows in Settings →
+ * Devices, and backups aren't set up yet at this point anyway.
  */
 function PasskeyStep({
   session,
@@ -435,30 +445,26 @@ function PasskeyStep({
   const [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [made, setMade] = useState<BoxPasskeyMade | null>(null);
 
   const make = async () => {
     setBusy(true);
     setProblem(null);
     try {
-      setMade(
-        await createBoxPasskey({
-          session,
-          platform: PASSKEYS,
-          appliance,
-          name: label(),
-          onPrompt: (step) => setPrompt(PROMPT[step] ?? null),
-        }),
-      );
+      await createBoxPasskey({
+        session,
+        platform: PASSKEYS,
+        appliance,
+        name: label(),
+        onPrompt: (step) => setPrompt(PROMPT[step] ?? null),
+      });
+      onDone();
     } catch (error) {
       if (!(error instanceof PasskeyCancelled)) setProblem(passkeyErrorText(error) ?? t.make);
-    } finally {
       setBusy(false);
       setPrompt(null);
     }
   };
 
-  const outcome = made ? boxPasskeyOutcome(made) : null;
   return (
     <div className={ob.content} data-step="passkey">
       <Header kicker={kicker} title={t.title} sub={t.sub} />
@@ -468,11 +474,7 @@ function PasskeyStep({
           {t.why}
         </a>
       </p>
-      {outcome ? (
-        <p className={setup.note} role="status">
-          {outcome}
-        </p>
-      ) : prompt ? (
+      {prompt ? (
         <p className={setup.hint} role="status">
           {prompt}
         </p>
@@ -483,22 +485,12 @@ function PasskeyStep({
         </p>
       )}
       <div className={ob.footer}>
-        {made ? (
-          <span />
-        ) : (
-          <Button variant="secondary" size="xl" padY={12} onClick={onDone}>
-            {t.skip}
-          </Button>
-        )}
-        {made ? (
-          <Button variant="primary" size="xl" padX={22} padY={12} onClick={onDone}>
-            {t.next}
-          </Button>
-        ) : (
-          <Button variant="primary" size="xl" padX={22} padY={12} disabled={busy} onClick={() => void make()}>
-            {busy ? t.making : t.make}
-          </Button>
-        )}
+        <Button variant="secondary" size="xl" padY={12} disabled={busy} onClick={onDone}>
+          {t.skip}
+        </Button>
+        <Button variant="primary" size="xl" padX={22} padY={12} disabled={busy} onClick={() => void make()}>
+          {busy ? t.making : t.make}
+        </Button>
       </div>
     </div>
   );
@@ -788,71 +780,5 @@ function LinkOffer({ reach }: { reach: Reach }) {
         </Button>
       </div>
     </section>
-  );
-}
-
-/* Step 4: backups ------------------------------------------------------------------------------------------------------ */
-
-/**
- * Protect your Whombat (first-day.md): where backups go, what is there first (`ProtectPlaces`). Skippable; a Whombat
- * that has a destination already, or whose status can't be read, goes straight on.
- */
-function BackupsStep({
-  session,
-  kicker,
-  onDone,
-}: {
-  session: ApplianceSession;
-  kicker: string;
-  onDone: () => void;
-}) {
-  const B = BACKUP_SETUP_TEXT;
-  const [needed, setNeeded] = useState<boolean | null>(null);
-  const [saved, setSaved] = useState<string[] | null>(null);
-  /** “Let {assistant} set it up”: the yes is kept, said before going on. */
-  const [said, setSaid] = useState<string | null>(null);
-  const done = useRef(onDone);
-  done.current = onDone;
-  useEffect(() => {
-    let live = true;
-    sessionOps.applianceStatus(session).then(
-      (s) => {
-        if (!live) return;
-        if (s.backup.state === 'unprotected') setNeeded(true);
-        else done.current();
-      },
-      () => live && done.current(),
-    );
-    return () => {
-      live = false;
-    };
-  }, [session]);
-  if (!needed) return null;
-  return (
-    <div className={ob.content} data-step="backups">
-      <Header kicker={kicker} title={B.title} sub={saved ? B.saved : (said ?? B.sub)} />
-      {said || saved ? (
-        <>
-          {(saved ?? []).map((note) => (
-            <p key={note} className={setup.note} role="status">
-              {note}
-            </p>
-          ))}
-          <div className={ob.footer}>
-            <span />
-            <Button variant="primary" size="xl" padX={22} padY={12} onClick={onDone}>
-              {B.continue}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <ProtectPlaces
-          session={session}
-          onSaved={(result) => setSaved(savedNotes(result))}
-          onAssistant={setSaid}
-          onDone={onDone}
-        />
-      )}
-    </div>
   );
 }

@@ -13,9 +13,11 @@ import {
   CHANNEL_TEXT,
   channelErrorText,
   channelView,
+  defaultWhombatName,
   KNOWN_BOXES_TEXT,
   knownBoxRows,
   knownSummaries,
+  LINK_JOURNEY_STEPS,
   type LinkSummary,
   linkBannerView,
   linkPageText,
@@ -235,24 +237,35 @@ describe('words and small parts', () => {
 });
 
 describe('the setup', () => {
-  it('makes the passkey at the address and asks about reach elsewhere', () => {
-    expect(boxSetupSteps({ atAddress: true })).toEqual([
-      'claim',
-      'account',
-      'passkey',
-      'backups',
-      'name',
-      'ai',
-      'agent',
-    ]);
-    expect(boxSetupSteps({ atAddress: false }).slice(0, 4)).toEqual(['claim', 'account', 'reach', 'backups']);
+  it('makes the passkey at the address and asks about reach elsewhere; backups, name and agent aren’t steps', () => {
+    expect(boxSetupSteps({ atAddress: true })).toEqual(['claim', 'account', 'passkey', 'ai']);
+    expect(boxSetupSteps({ atAddress: false })).toEqual(['claim', 'account', 'reach', 'ai']);
   });
-  it('counts on into the app’s setup: one count from the claim to the agent', () => {
-    expect(boxSetupSteps({ atAddress: true })).toEqual([
-      ...boxClaimSteps({ atAddress: true }),
-      ...BOX_APP_STEPS,
+  it('from the link page: Link your Whombat counts first, and Who are you? isn’t asked', () => {
+    expect(boxSetupSteps({ atAddress: true, fromLink: true, knowsAccount: true })).toEqual([
+      'link',
+      'claim',
+      'passkey',
+      'ai',
     ]);
-    expect(boxSetupAiKicker()).toBe('STEP 6 OF 7');
+    expect(LINK_JOURNEY_STEPS).toEqual(
+      boxSetupSteps({ atAddress: true, fromLink: true, knowsAccount: true }),
+    );
+  });
+  it('counts four whichever way the page was opened, Set up your AI last', () => {
+    // From the link page, which sends the email along; or any other way in, which asks for it.
+    for (const atAddress of [true, false])
+      for (const fromLink of [true, false]) {
+        const page = { atAddress, fromLink, knowsAccount: fromLink };
+        expect(boxSetupSteps(page)).toEqual([...boxClaimSteps(page), ...BOX_APP_STEPS]);
+        expect(boxSetupSteps(page)).toHaveLength(4);
+      }
+    expect(boxSetupAiKicker()).toBe('STEP 4 OF 4');
+  });
+  it('names the Whombat after the person, else “My Whombat”', () => {
+    expect(defaultWhombatName('Mara Visser')).toBe('Mara’s Whombat');
+    expect(defaultWhombatName('  ')).toBe('My Whombat');
+    expect(defaultWhombatName(null)).toBe('My Whombat');
   });
   it('knows a Tailscale page', () => {
     expect(tailscalePageName('home.tail1234.ts.net')).toBe('home.tail1234.ts.net');

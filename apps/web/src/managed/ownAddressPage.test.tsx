@@ -21,6 +21,13 @@ vi.mock('./keys', async (original) => ({
   loadOrCreateEndpointKey: keys.load,
 }));
 
+// The box's passkey without a browser's WebAuthn: made at once, as a person's touch would.
+const boxPasskey = vi.hoisted(() => ({ create: vi.fn(async () => ({ backups: 'saving' })) }));
+vi.mock('@whombat/client/managed', async (original) => ({
+  ...(await original<typeof import('@whombat/client/managed')>()),
+  createBoxPasskey: boxPasskey.create,
+}));
+
 const { BoxRoot } = await import('./BoxRoot');
 const { createFakeWorld, FAKE_OWN_CLAIM_LINK, FAKE_OWN_HOST } = await import('./fake/world');
 const { AppliancesScreen } = await import('./screens');
@@ -49,9 +56,10 @@ describe('an unclaimed box at its own address', () => {
   it('claims only with the claim link from its screen', async () => {
     await ownBoxPage(`/c/${FAKE_OWN_CLAIM_LINK}`);
     expect(await screen.findByRole('heading', { name: T.claim.title })).toBeTruthy();
-    // Claim, who you are, the passkey, backups, Connect your AI: five steps at the address (LNK-40).
-    expect(screen.getByText(BOX_SETUP_TEXT.stepLabel(0, 7))).toBeTruthy();
+    // Claim, who you are, the passkey, Set up your AI: four steps at the address; no backups step.
+    expect(screen.getByText(BOX_SETUP_TEXT.stepLabel(0, 4))).toBeTruthy();
     expect(screen.getByText(BOX_SETUP_TEXT.steps.passkey.t)).toBeTruthy();
+    expect(screen.getByText(BOX_SETUP_TEXT.steps.account.t)).toBeTruthy();
   });
 
   it('asks for the letters after /c/ when the page has no link, and claims with them', async () => {
@@ -70,21 +78,39 @@ describe('an unclaimed box at its own address', () => {
     expect(window.location.pathname).toBe(`/c/${FAKE_OWN_CLAIM_LINK}`);
   });
 
-  it('takes the name and email the account site sent in the fragment, and leaves them out of the address', async () => {
+  it('from the link page: the name and email sent along claim it with the letters alone, and its count goes on', async () => {
     const user = userEvent.setup();
     const world = await ownBoxPage(
-      `/c/${FAKE_OWN_CLAIM_LINK}#name=Mara+Visser&email=mara%40burrowhq.example`,
+      `/c/${FAKE_OWN_CLAIM_LINK}#name=Mara+Visser&email=mara%40burrowhq.example&from=link`,
     );
     expect(await screen.findByRole('heading', { name: T.claim.title })).toBeTruthy();
     expect(window.location.hash).toBe('');
+    // Link your Whombat was the first step, on the account site; Who are you? isn't asked.
+    expect(screen.getByText(BOX_SETUP_TEXT.stepLabel(1, 4))).toBeTruthy();
+    expect(screen.getByText(BOX_SETUP_TEXT.steps.link.t)).toBeTruthy();
+    expect(screen.queryByText(BOX_SETUP_TEXT.steps.account.t)).toBeNull();
+    expect(screen.queryByLabelText(COMMUNITY_TEXT.account.name)).toBeNull();
     await user.type(screen.getByLabelText(COMMUNITY_TEXT.claim.letters), world.faults.ownLetters() as string);
     await user.click(screen.getByRole('button', { name: COMMUNITY_TEXT.claim.next }));
-    expect(((await screen.findByLabelText(COMMUNITY_TEXT.account.name)) as HTMLInputElement).value).toBe(
-      'Mara Visser',
-    );
-    expect((screen.getByLabelText(COMMUNITY_TEXT.account.email) as HTMLInputElement).value).toBe(
-      'mara@burrowhq.example',
-    );
+    expect(await screen.findByRole('heading', { name: T.passkey.title }, { timeout: 5_000 })).toBeTruthy();
+    expect(screen.getByText(BOX_SETUP_TEXT.stepLabel(2, 4))).toBeTruthy();
+    // Made, it goes on by itself to Set up your AI in the app: no Continue, no backups step.
+    await user.click(screen.getByRole('button', { name: T.passkey.make }));
+    await vi.waitFor(() => expect(window.location.pathname).toBe('/connect-ai'), { timeout: 5_000 });
+    expect(boxPasskey.create).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('heading', { name: T.passkey.title })).toBeNull();
+    expect(screen.queryByRole('button', { name: T.passkey.next })).toBeNull();
+  });
+
+  it('from the link page without a name: the claim asks for the name beside the letters', async () => {
+    await ownBoxPage(`/c/${FAKE_OWN_CLAIM_LINK}#email=mara%40burrowhq.example&from=link`);
+    expect(await screen.findByRole('heading', { name: T.claim.title })).toBeTruthy();
+    const name = screen.getByLabelText(COMMUNITY_TEXT.account.name) as HTMLInputElement;
+    expect(name.value).toBe('');
+    expect(screen.queryByLabelText(COMMUNITY_TEXT.account.email)).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: COMMUNITY_TEXT.claim.next }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });
 

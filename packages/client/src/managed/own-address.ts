@@ -48,6 +48,11 @@ export function claimSecretOfTyped(typed: string): string | null {
 export interface OwnClaimPrefill {
   name: string;
   email: string;
+  /**
+   * Opened from the account site's link page right after linking: the setup carries on that page's count (its first
+   * step, Link your Whombat, is done).
+   */
+  fromLink?: boolean;
 }
 
 /** Longer than the box takes: anything past it isn't something the account site sent. */
@@ -63,6 +68,7 @@ export function ownClaimPrefillHash(prefill: Partial<OwnClaimPrefill>): string {
   const email = prefill.email?.trim();
   if (name) params.set('name', name.slice(0, PREFILL_MAX));
   if (email) params.set('email', email.slice(0, PREFILL_MAX));
+  if (prefill.fromLink && (name || email)) params.set('from', 'link');
   const text = params.toString();
   return text ? `#${text}` : '';
 }
@@ -74,7 +80,8 @@ export function readOwnClaimPrefill(loc: { pathname: string; hash: string }): Ow
   const params = new URLSearchParams(loc.hash.replace(/^#/, ''));
   const name = (params.get('name') ?? '').trim().slice(0, PREFILL_MAX);
   const email = (params.get('email') ?? '').trim().slice(0, PREFILL_MAX);
-  return name || email ? { name, email } : null;
+  if (!name && !email) return null;
+  return params.get('from') === 'link' ? { name, email, fromLink: true } : { name, email };
 }
 
 /** The address as people read it: the host, without `https://` or a trailing slash. */

@@ -1,6 +1,6 @@
 /**
  * Review screenshots of the box's page for Whombat Link (whombat-link.md LNK-40, LNK-42, LNK-06; not baselines): the one
- * setup (claim, who you are, Reach with Tailscale and the Link offer, the code, backups; the passkey at the own
+ * setup (claim, who you are, Reach with Tailscale and the Link offer, the code, Connect your AI; the passkey at the own
  * address), This Whombat → About's REACH in each Link state and “Updates from”, and the strip while Link ends and after.
  * Light and dark, 1440×900; REACH with its folds open also at a phone's 390×844. `LINK_SHOTS=<dir>` writes them.
  */
@@ -50,15 +50,10 @@ for (const theme of ['light', 'dark'] as const)
     await expect(page.getByTestId('whombat-link-box-code')).toBeVisible();
     await shot('setup-3-reach-link-code');
 
-    // Protect your Whombat, then Connect your AI in the app.
+    // Connect your AI in the app, the setup's last step (no backups step).
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible({
-      timeout: 20_000,
-    });
-    await shot('setup-4-backups');
-    await page.getByRole('button', { name: 'Skip for now' }).click();
     await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
-    await shot('setup-5-ai');
+    await shot('setup-4-ai');
     await page.getByRole('button', { name: 'Later' }).click();
     await inTheApp(page);
 

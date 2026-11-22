@@ -50,5 +50,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStepCopy[] = [
  */
 export const AI_STEP_TEXT = {
   skip: 'Skip for now',
+  /** The box's own page makes the Whombat by itself before its AI step. */
+  preparing: 'Getting your Whombat ready…',
   later: 'If you skip this, your agent can’t answer until you sign in. You can do it later in Settings → AI.',
 } as const;

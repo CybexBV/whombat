@@ -8,7 +8,7 @@ import {
   agentNameForFace,
   InvalidRequestError,
 } from '@whombat/client';
-import { BOX_SETUP_TEXT, boxClaimSteps } from '@whombat/client/managed';
+import { BOX_SETUP_TEXT, boxClaimSteps, defaultWhombatName } from '@whombat/client/managed';
 import { useApiMutation, useOnboarding, useSlugCheck } from '@whombat/client/react';
 import { clientUsable } from '@whombat/client/signins';
 import { api } from '@whombat/core/contracts';
@@ -58,10 +58,13 @@ export interface OnboardingScreenProps {
    */
   resumeBurrow?: string;
   resumeStep?: number;
+  /** The person's name: on the box's own page the Whombat is named after them (“Mara’s Whombat”). */
+  personName?: string | null;
 }
 
 const LAST_STEP = ONBOARDING_STEP_COUNT - 1;
 const AGENT_STEP = ONBOARDING_PROVIDER_STEP + 1;
+const CREATE_FAILED = 'Couldn’t get your Whombat ready. Try again in a moment.';
 
 /**
  * The 3-step onboarding flow (TODO 14.1/14.2; SUB-08, CT-68; Whombat one-agent.md OA-13, one-person.md OP-11; app
@@ -77,12 +80,23 @@ const AGENT_STEP = ONBOARDING_PROVIDER_STEP + 1;
  * set for pure-data reads; onboarding is exercised end-to-end with a mocked-server test instead, matching
  * `apps/web/src/app/auth/auth.test.tsx`).
  */
-export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: OnboardingScreenProps) {
+export function OnboardingScreen({
+  onDone,
+  onSkip,
+  resumeBurrow,
+  resumeStep,
+  personName,
+}: OnboardingScreenProps) {
   const toast = useToast();
   const { fixtures, managed } = useAppServices();
-  const [step, setStep] = useState(0);
+  // On the box's own page this setup carries on the claim's count, and only Set up your AI is asked: the Whombat
+  // gets the person's name (“Mara’s Whombat”) and the agent stays Dusty, both changed later in Settings.
+  const boxPage = managed?.page?.kind === 'box' ? managed.page : null;
+  const short = boxPage !== null;
+  const lastStep = short ? ONBOARDING_PROVIDER_STEP : LAST_STEP;
+  const [step, setStep] = useState(short ? ONBOARDING_PROVIDER_STEP : 0);
   // On a Whombat, a new burrow starts with the organization's name (AP-75); most keep it.
-  const suggestedName = managed?.orgName?.trim() ?? '';
+  const suggestedName = managed?.orgName?.trim() || (short ? defaultWhombatName(personName) : '');
   const [burrowName, setBurrowName] = useState(suggestedName);
   /** The server's `app.whombat.com/{slug}` for the created (or resumed) burrow. */
   const [burrowHostname, setBurrowHostname] = useState<string | null>(null);
@@ -104,6 +118,8 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
   const [agentName, setAgentName] = useState<string | null>(null);
   const [agentFace, setAgentFace] = useState<AgentFace | null>(null);
   const [agentProblem, setAgentProblem] = useState<string | null>(null);
+  /** The box's page made the Whombat by itself and that failed: the reason, with Try again. */
+  const [createProblem, setCreateProblem] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedName(burrowName.trim()), 300);
@@ -134,8 +150,8 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
     setClients([...o.clients]);
     setProvider(o.provider);
     setSaved({ name: o.agentName, face: o.agentFace });
-    setStep(Math.min(Math.max(resumeStep ?? o.step, 0), LAST_STEP));
-  }, [resuming, resumeBurrow, resumeStep, resumeQuery.data]);
+    setStep(short ? ONBOARDING_PROVIDER_STEP : Math.min(Math.max(resumeStep ?? o.step, 0), LAST_STEP));
+  }, [resuming, resumeBurrow, resumeStep, resumeQuery.data, short]);
 
   // “Set up your AI”: the clients on this Whombat (CT-72).
   const onAiStep = step === ONBOARDING_PROVIDER_STEP && Boolean(burrowSlug);
@@ -146,11 +162,16 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
   const aiUnknown = clientsQuery.isError || signInsQuery.isError;
   const aiReady =
     aiUnknown || LIVE_PROVIDERS.some((p) => clientUsable(p, clientsQuery.data, signInsQuery.data));
-  // On the box's own page this setup carries on the claim's count (FDY-32): its steps show done above these.
-  const boxPage = managed?.page?.kind === 'box' ? managed.page : null;
-  const claimSteps = boxPage ? boxClaimSteps({ atAddress: boxPage.atAddress ?? true }) : [];
+  // On the box's own page the claim's steps show done above Set up your AI, and the count goes on from them.
+  const claimSteps = boxPage
+    ? boxClaimSteps({
+        atAddress: boxPage.atAddress ?? true,
+        fromLink: boxPage.fromLink ?? false,
+        knowsAccount: boxPage.knowsAccount ?? false,
+      })
+    : [];
   const kicker = boxPage
-    ? BOX_SETUP_TEXT.stepLabel(claimSteps.length + step, claimSteps.length + ONBOARDING_STEP_COUNT)
+    ? BOX_SETUP_TEXT.stepLabel(claimSteps.length, claimSteps.length + 1)
     : onboardingStepLabel(step, ONBOARDING_STEP_COUNT);
   const savedName = saved.name;
   const savedFace = saved.face;
@@ -180,8 +201,25 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
       setBurrowHostname(onboarding.host);
       setSaved({ name: onboarding.agentName, face: onboarding.agentFace });
       setStep(1);
-    }
+    } else setCreateProblem(result.status === 'blocked' ? result.message : CREATE_FAILED);
   }
+
+  // The box's own page makes the Whombat by itself, with the default name, once.
+  const autoCreate = useRef(0);
+  const [createRun, setCreateRun] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per try (`createRun`)
+  useEffect(() => {
+    if (!short || burrowSlug || resumeBurrow || autoCreate.current > createRun) return;
+    autoCreate.current = createRun + 1;
+    setCreateProblem(null);
+    handleCreateBurrow().catch((err: unknown) =>
+      setCreateProblem(
+        err instanceof ApiError || err instanceof InvalidRequestError
+          ? (err.fields.name?.[0] ?? err.message)
+          : CREATE_FAILED,
+      ),
+    );
+  }, [short, burrowSlug, resumeBurrow, createRun]);
 
   function saveProgress(
     nextStep: number,
@@ -216,7 +254,7 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
       return;
     }
     if (step === AGENT_STEP && !(await saveAgent())) return;
-    if (step < LAST_STEP) {
+    if (step < lastStep) {
       const next = step + 1;
       setStep(next);
       saveProgress(next);
@@ -307,13 +345,14 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
   const copy = steps[step];
   if (!copy) return <div className={styles.status}>Couldn’t load onboarding.</div>;
 
+  const finishing = completeOnboarding.isPending || updateOnboarding.isPending;
   const nextDisabled =
     step === 0
       ? !nameTrimmed || createBurrow.isPending || Boolean(unavailableReason)
-      : step === LAST_STEP
-        ? completeOnboarding.isPending || updateOnboarding.isPending
-        : step === ONBOARDING_PROVIDER_STEP
-          ? !aiReady
+      : step === ONBOARDING_PROVIDER_STEP
+        ? !aiReady || !burrowSlug || (step === lastStep && finishing)
+        : step === lastStep
+          ? finishing
           : false;
   /** A step left behind is ticked; Set up your AI only once an AI is signed in. */
   const stepDone = (i: number) => i < step && (i !== ONBOARDING_PROVIDER_STEP || aiReady);
@@ -335,27 +374,29 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
               </span>
             </div>
           ))}
-          {steps.map((s, i) => (
-            <button
-              key={s.t}
-              type="button"
-              className={styles.step}
-              data-current={i === step || undefined}
-              onClick={() => goToStep(i)}
-            >
-              <span
-                className={styles.stepDot}
-                data-done={stepDone(i) || undefined}
+          {steps.map((s, i) =>
+            short && i !== ONBOARDING_PROVIDER_STEP ? null : (
+              <button
+                key={s.t}
+                type="button"
+                className={styles.step}
                 data-current={i === step || undefined}
+                onClick={() => goToStep(i)}
               >
-                {stepDone(i) ? '✓' : claimSteps.length + i + 1}
-              </span>
-              <span className={styles.stepText}>
-                <span className={styles.stepTitle}>{s.t}</span>
-                <span className={styles.stepDesc}>{s.d}</span>
-              </span>
-            </button>
-          ))}
+                <span
+                  className={styles.stepDot}
+                  data-done={stepDone(i) || undefined}
+                  data-current={i === step || undefined}
+                >
+                  {stepDone(i) ? '✓' : short ? claimSteps.length + 1 : i + 1}
+                </span>
+                <span className={styles.stepText}>
+                  <span className={styles.stepTitle}>{s.t}</span>
+                  <span className={styles.stepDesc}>{s.d}</span>
+                </span>
+              </button>
+            ),
+          )}
         </div>
 
         <div className={styles.tipRow}>
@@ -388,7 +429,8 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
                 invalid={Boolean(unavailableReason)}
                 autoFocus
               />
-              <span className={styles.urlPreview}>{previewHost}</span>
+              {/* The path on the hosted server; a Whombat's own page has no address to show for it. */}
+              {!managed && <span className={styles.urlPreview}>{previewHost}</span>}
               {unavailableReason ? (
                 <span className={styles.urlNote}>
                   {unavailableReason === 'taken'
@@ -432,6 +474,21 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
             <div className={styles.status}>Checking the AI providers…</div>
           )}
           {onAiStep && !aiReady && <p className={styles.aiLater}>{AI_STEP_TEXT.later}</p>}
+          {short && !burrowSlug && (
+            <div className={styles.status} role={createProblem ? 'alert' : 'status'}>
+              {createProblem ?? AI_STEP_TEXT.preparing}{' '}
+              {createProblem && (
+                <Button variant="link" onClick={() => setCreateRun((n) => n + 1)}>
+                  Try again
+                </Button>
+              )}
+            </div>
+          )}
+          {short && burrowSlug && (
+            <p className={styles.aiLater} data-testid="onboarding-named">
+              {BOX_SETUP_TEXT.named(burrowName, shownName)}
+            </p>
+          )}
 
           {step === AGENT_STEP && (
             <div className={styles.meetAgent}>
@@ -512,15 +569,19 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
             </div>
           )}
 
-          {finishProblem && step === LAST_STEP && (
+          {finishProblem && step === lastStep && (
             <p className={styles.finishProblem} role="alert">
               {finishProblem}
             </p>
           )}
           <div className={styles.footer}>
-            <Button variant="secondary" size="xl" padY={12} onClick={handleBack}>
-              {onboardingBackLabel(step)}
-            </Button>
+            {short ? (
+              <span />
+            ) : (
+              <Button variant="secondary" size="xl" padY={12} onClick={handleBack}>
+                {onboardingBackLabel(step)}
+              </Button>
+            )}
             <span className={styles.footerEnd}>
               {onAiStep && !aiReady && (
                 <Button variant="link" onClick={handleNext}>
@@ -535,7 +596,7 @@ export function OnboardingScreen({ onDone, onSkip, resumeBurrow, resumeStep }: O
                 disabled={nextDisabled}
                 onClick={handleNext}
               >
-                {onboardingNextLabel(step, LAST_STEP, burrowName)}
+                {onboardingNextLabel(step, lastStep, burrowName)}
               </Button>
             </span>
           </div>

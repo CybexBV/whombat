@@ -141,6 +141,10 @@ export interface ManagedContext {
     secure: boolean;
     /** The page is the box's own address (its setup made the passkey there); absent: not known. */
     atAddress?: boolean;
+    /** Its setup came from the account site's link page (Link your Whombat was its first step). */
+    fromLink?: boolean;
+    /** Its setup had the person's email from the account site (Who are you? wasn't asked). */
+    knowsAccount?: boolean;
   };
   /**
    * The box's edition as its page learnt it before connecting (CT-1300); absent on the hosted app, where the session's
