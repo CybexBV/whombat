@@ -1111,3 +1111,186 @@ func TestStartCleansLeftoverTrash(t *testing.T) {
 		t.Fatalf("wanted file removed by startup cleanup: %v", err)
 	}
 }
+
+func TestRemoveRetriesRenamedAsideTrashUntilGone(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx":  {body: body(64 << 10)},
+		"b.onnx":  {body: body(64 << 10)},
+		"LICENSE": {body: []byte("BigScience Open RAIL-M")},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx", "LICENSE"}, 1<<40)
+	defer stop()
+
+	var failDelete atomic.Bool
+	failDelete.Store(true)
+	var attempts atomic.Int32
+	f.removeAll = func(p string) error {
+		attempts.Add(1)
+		if failDelete.Load() {
+			return fmt.Errorf("simulated delete failure on %s", filepath.Base(p))
+		}
+		return os.RemoveAll(p)
+	}
+
+	start(t, f)
+	if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, local.VoiceModelStateReady)
+
+	h := (&Server{Fetcher: f}).Handler()
+	callRemove := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, local.VoiceModelsPathRemove, strings.NewReader(`{"v":1,"model":"supertonic"}`)))
+		return rec
+	}
+
+	// First removal stages the folder aside, fails deletion, and reports not removed yet.
+	rec := callRemove()
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "not removed yet") {
+		t.Fatalf("first remove: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if models.Present(f.Dir, m) {
+		t.Fatal("model still present at original path after staging")
+	}
+	trash, err := f.modelTrash(local.VoiceModelSupertonic)
+	if err != nil || len(trash) != 1 {
+		t.Fatalf("expected 1 renamed-aside folder on disk, got %v (err=%v)", trash, err)
+	}
+
+	// Second removal while deletion still fails must retry the renamed-aside folder and keep failing.
+	rec = callRemove()
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "not removed yet") {
+		t.Fatalf("second remove: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if attempts.Load() < 2 {
+		t.Fatalf("expected second remove to retry renamed-aside folder, attempts=%d", attempts.Load())
+	}
+	trash, err = f.modelTrash(local.VoiceModelSupertonic)
+	if err != nil || len(trash) != 1 {
+		t.Fatalf("renamed-aside folder disappeared unexpectedly: %v (err=%v)", trash, err)
+	}
+
+	// Once deletion can succeed, the next removal deletes the renamed-aside folder and succeeds.
+	failDelete.Store(false)
+	rec = callRemove()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("third remove: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	trash, err = f.modelTrash(local.VoiceModelSupertonic)
+	if err != nil || len(trash) != 0 {
+		t.Fatalf("renamed-aside folder still remains after successful remove: %v (err=%v)", trash, err)
+	}
+}
+
+func TestRemoveReportsNotRemovedWhenTrashRemainsAndIsolatesModels(t *testing.T) {
+	pBody := body(16 << 10)
+	sBody := body(16 << 10)
+	srv := httptest.NewServer(&multiSource{files: map[string]*source{
+		"parakeet.bin": {body: pBody},
+		"a.onnx":       {body: sBody},
+	}})
+	defer srv.Close()
+	sumOf := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return hex.EncodeToString(s[:])
+	}
+	f := &Fetcher{
+		Manifest: models.Manifest{Models: []models.Model{
+			{ID: local.VoiceModelParakeet, File: "parakeet.bin", URL: srv.URL + "/parakeet.bin", Size: int64(len(pBody)), SHA256: sumOf(pBody)},
+			{ID: local.VoiceModelSupertonic, Dir: "supertonic-3-int8", Files: []models.File{
+				{Name: "a.onnx", URL: srv.URL + "/a.onnx", Size: int64(len(sBody)), SHA256: sumOf(sBody)},
+			}},
+		}},
+		Dir:     t.TempDir(),
+		Client:  srv.Client(),
+		Free:    func(string) (int64, error) { return 1 << 40, nil },
+		Backoff: func(int) time.Duration { return 10 * time.Millisecond },
+		Idle:    200 * time.Millisecond,
+	}
+
+	var noopParakeet atomic.Bool
+	noopParakeet.Store(true)
+	f.removeAll = func(p string) error {
+		if noopParakeet.Load() && strings.HasPrefix(filepath.Base(p), modelTrashPrefix(local.VoiceModelParakeet)) {
+			// Return nil without deleting to verify Remove checks disk for remaining entries.
+			return nil
+		}
+		return os.RemoveAll(p)
+	}
+	start(t, f)
+
+	if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, local.VoiceModelStateReady)
+
+	// Parakeet's trash remains even though removeAll returned nil: Remove must report not removed yet.
+	if err := f.Remove(local.VoiceModelParakeet); err == nil || !strings.Contains(err.Error(), "not removed yet") {
+		t.Fatalf("expected not removed yet for parakeet, got %v", err)
+	}
+
+	// Supertonic removal is unaffected by parakeet's leftover trash.
+	if err := f.Remove(local.VoiceModelSupertonic); err != nil {
+		t.Fatalf("supertonic remove failed due to another model's trash: %v", err)
+	}
+
+	// Letting parakeet deletion actually run clears its renamed-aside entry on retry.
+	noopParakeet.Store(false)
+	if err := f.Remove(local.VoiceModelParakeet); err != nil {
+		t.Fatalf("parakeet retry remove failed: %v", err)
+	}
+	trash, err := f.modelTrash(local.VoiceModelParakeet)
+	if err != nil || len(trash) != 0 {
+		t.Fatalf("parakeet trash remains: %v (err=%v)", trash, err)
+	}
+}
+
+func TestConcurrentRemoveWaitsForInFlightDelete(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+	}
+	f, _, stop := newMultiFetcher(t, files, []string{"a.onnx"}, 1<<40)
+	defer stop()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	f.removeAll = func(p string) error {
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return os.RemoveAll(p)
+	}
+	start(t, f)
+	if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, local.VoiceModelStateReady)
+
+	firstErr := make(chan error, 1)
+	go func() { firstErr <- f.Remove(local.VoiceModelSupertonic) }()
+	<-entered
+
+	// A second concurrent Remove must not report success before the in-flight deletion finishes.
+	secondErr := make(chan error, 1)
+	go func() { secondErr <- f.Remove(local.VoiceModelSupertonic) }()
+
+	select {
+	case err := <-secondErr:
+		t.Fatalf("second Remove returned before in-flight delete finished: %v", err)
+	case <-time.After(40 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-firstErr; err != nil {
+		t.Fatalf("first Remove: %v", err)
+	}
+	if err := <-secondErr; err != nil {
+		t.Fatalf("second Remove: %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("expected 1 os.RemoveAll call, got %d", calls.Load())
+	}
+}
