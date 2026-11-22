@@ -81,6 +81,7 @@ type Runner struct {
 
 	// Seams for tests; New wires the real host implementations.
 	root           string // optional filesystem prefix in tests ("" = host /)
+	goos           string // optional OS override in tests ("" = runtime.GOOS)
 	dockerSockets  []string
 	listMounts     func() ([]mountInfo, error)
 	statfs         func(path string) (fsStat, error)
@@ -104,6 +105,7 @@ func New(inv agent.InventoryFunc, log *slog.Logger) *Runner {
 	r := &Runner{
 		inventory:      inv,
 		log:            log,
+		goos:           runtime.GOOS,
 		dockerSockets:  []string{"/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock"},
 		listMounts:     hostMounts,
 		statfs:         hostStatfs,
@@ -363,6 +365,13 @@ func validateMountPath(raw string) (string, error) {
 		}
 	}
 	return cleaned, nil
+}
+
+func (r *Runner) isDarwin() bool {
+	if r.goos != "" {
+		return r.goos == "darwin"
+	}
+	return runtime.GOOS == "darwin"
 }
 
 func (r *Runner) hostPath(p string) string {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"rackoon/internal/agent/macos"
 	"rackoon/internal/proto"
 )
 
@@ -58,6 +59,9 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 	// Virtual/RAM mounts (such as Unraid's tmpfs /var/log) have no physical disks.
 	if target.Virtual || target.FSType == "tmpfs" {
 		return standbyCheckResult{}
+	}
+	if r.isDarwin() {
+		return r.spunDownDisksForDarwin(ctx, mount, target)
 	}
 
 	spun := map[string]bool{}
@@ -179,6 +183,10 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 		}
 	}
 
+	return buildStandbyCheckResult(spun, unknown, unknownRotational, hasBacking, unresolvedBacking)
+}
+
+func buildStandbyCheckResult(spun, unknown, unknownRotational map[string]bool, hasBacking, unresolvedBacking bool) standbyCheckResult {
 	var res standbyCheckResult
 	if len(spun) > 0 {
 		res.spun = make([]string, 0, len(spun))
@@ -204,6 +212,262 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 		res.partialBacking = true
 	}
 	return res
+}
+
+// spunDownDisksForDarwin resolves backing physical disks and rotational/standby
+// state on macOS using inventory and diskutil plist output, never Linux /sys.
+func (r *Runner) spunDownDisksForDarwin(ctx context.Context, mount string, target mountInfo) standbyCheckResult {
+	spun := map[string]bool{}
+	unknown := map[string]bool{}
+	unknownRotational := map[string]bool{}
+	var backing []string
+	var rotational map[string]bool
+	invDisks := map[string]bool{}
+
+	srcContainer := macos.ContainerOfDevice(target.Source)
+	invBacking := 0
+	if r.inventory != nil {
+		if rep := r.inventory(); rep != nil {
+			rotational = make(map[string]bool, len(rep.Disks))
+			for _, d := range rep.Disks {
+				if d.Device != "" {
+					invDisks[d.Device] = true
+				}
+				switch d.Type {
+				case "hdd":
+					rotational[d.Device] = true
+				case "ssd", "nvme":
+					rotational[d.Device] = false
+				}
+			}
+			for _, fs := range rep.Filesystems {
+				matched := filepath.Clean(fs.Mount) == mount
+				if !matched && srcContainer != "" && fs.Device == "/dev/"+srcContainer {
+					matched = true
+				}
+				if matched && len(fs.Disks) > 0 {
+					backing = append(backing, fs.Disks...)
+					invBacking += len(fs.Disks)
+				}
+			}
+			backingSet := map[string]bool{}
+			for _, b := range backing {
+				backingSet[b] = true
+			}
+			for _, d := range rep.Disks {
+				if backingSet[d.Device] && d.Standby {
+					spun[d.Device] = true
+				}
+			}
+		}
+	}
+
+	infos := map[string]*macos.DiskInfo{}
+	unresolvedBacking := false
+	if invBacking == 0 {
+		var srcDevs []string
+		srcDevs, unresolvedBacking = r.backingDisksFromSourceDarwin(ctx, target, infos)
+		backing = append(backing, srcDevs...)
+	}
+
+	var resolvedBacking []string
+	seenResolved := map[string]bool{}
+	for _, dev := range backing {
+		if dev == "" {
+			continue
+		}
+		if invBacking > 0 && !invDisks[dev] {
+			devs, unres := r.resolveDarwinDisk(ctx, dev, infos)
+			if unres {
+				unresolvedBacking = true
+			}
+			for _, d := range devs {
+				if !seenResolved[d] {
+					seenResolved[d] = true
+					resolvedBacking = append(resolvedBacking, d)
+				}
+			}
+			continue
+		}
+		if !seenResolved[dev] {
+			seenResolved[dev] = true
+			resolvedBacking = append(resolvedBacking, dev)
+		}
+	}
+
+	hasBacking := len(resolvedBacking) > 0
+	checked := map[string]bool{}
+	for _, dev := range resolvedBacking {
+		if dev == "" || checked[dev] || spun[dev] {
+			continue
+		}
+		checked[dev] = true
+		switch r.rotationalStateOfDarwin(ctx, dev, rotational, infos) {
+		case rotationalNo:
+			continue
+		case rotationalUnknown:
+			unknownRotational[dev] = true
+			continue
+		case rotationalYes:
+		}
+		state := standbyUnknown
+		if r.checkStandby != nil {
+			pctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+			state = r.checkStandby(pctx, dev)
+			cancel()
+		}
+		switch state {
+		case standbyAsleep:
+			spun[dev] = true
+		case standbyAwake:
+		default:
+			unknown[dev] = true
+		}
+	}
+
+	return buildStandbyCheckResult(spun, unknown, unknownRotational, hasBacking, unresolvedBacking)
+}
+
+func (r *Runner) backingDisksFromSourceDarwin(ctx context.Context, target mountInfo, infos map[string]*macos.DiskInfo) ([]string, bool) {
+	whole := macos.ContainerOfDevice(target.Source)
+	if whole == "" {
+		return nil, true
+	}
+	return r.resolveDarwinDisk(ctx, whole, infos)
+}
+
+func (r *Runner) resolveDarwinDisk(ctx context.Context, start string, infos map[string]*macos.DiskInfo) ([]string, bool) {
+	visited := map[string]bool{}
+	found := map[string]bool{}
+	var out []string
+	unresolved := false
+	var list *macos.DiskList
+	listTried := false
+
+	var walk func(id string)
+	walk = func(id string) {
+		id = macos.WholeDiskOf(strings.TrimPrefix(id, "/dev/"))
+		if id == "" || visited[id] {
+			return
+		}
+		visited[id] = true
+
+		di, err := r.darwinDiskInfo(ctx, id, infos)
+		if err != nil || di == nil {
+			unresolved = true
+			return
+		}
+		if len(di.APFSPhysicalStores) > 0 {
+			for _, store := range di.APFSPhysicalStores {
+				walk(store)
+			}
+			return
+		}
+		if di.APFSContainer != "" && di.APFSContainer != id {
+			walk(di.APFSContainer)
+			return
+		}
+		if di.ParentWholeDisk != "" && di.ParentWholeDisk != id {
+			walk(di.ParentWholeDisk)
+			return
+		}
+		// Some macOS versions omit APFSPhysicalStores in `diskutil info` for a
+		// synthesized container; fall back to `diskutil list -plist` once.
+		if di.Virtual && !di.RAIDMaster && !di.CoreStorage && di.Bus != "Disk Image" {
+			if !listTried {
+				listTried = true
+				list = r.darwinDiskList(ctx)
+			}
+			if list != nil {
+				if stores := list.Containers[id]; len(stores) > 0 {
+					for _, store := range stores {
+						walk(store)
+					}
+					return
+				}
+			}
+			unresolved = true
+			return
+		}
+		if di.Virtual || di.RAIDMaster || di.CoreStorage {
+			unresolved = true
+			return
+		}
+		if !found[id] {
+			found[id] = true
+			out = append(out, id)
+		}
+	}
+
+	walk(start)
+	return out, unresolved
+}
+
+func (r *Runner) darwinDiskInfo(ctx context.Context, dev string, cache map[string]*macos.DiskInfo) (*macos.DiskInfo, error) {
+	if cache != nil {
+		if di, ok := cache[dev]; ok {
+			return di, nil
+		}
+	}
+	if r.runCmd == nil || dev == "" || strings.ContainsAny(dev, "/\\ \t\n\r") {
+		return nil, os.ErrNotExist
+	}
+	pctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	out, err := r.runCmd(pctx, "diskutil", "info", "-plist", dev)
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+	di, err := macos.ParseDiskutilInfo(out)
+	if err != nil {
+		return nil, err
+	}
+	if cache != nil {
+		cache[dev] = di
+	}
+	return di, nil
+}
+
+func (r *Runner) darwinDiskList(ctx context.Context) *macos.DiskList {
+	if r.runCmd == nil {
+		return nil
+	}
+	pctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	out, err := r.runCmd(pctx, "diskutil", "list", "-plist")
+	cancel()
+	if err != nil {
+		return nil
+	}
+	list, err := macos.ParseDiskutilList(out)
+	if err != nil {
+		return nil
+	}
+	return list
+}
+
+func (r *Runner) rotationalStateOfDarwin(ctx context.Context, dev string, rotational map[string]bool, cache map[string]*macos.DiskInfo) rotationalState {
+	if rotational != nil {
+		if h, ok := rotational[dev]; ok {
+			if h {
+				return rotationalYes
+			}
+			return rotationalNo
+		}
+	}
+	di, err := r.darwinDiskInfo(ctx, dev, cache)
+	if err != nil || di == nil {
+		return rotationalUnknown
+	}
+	if di.SolidStateKnown {
+		if di.SolidState {
+			return rotationalNo
+		}
+		return rotationalYes
+	}
+	if di.Internal && (di.Bus == "Apple Fabric" || strings.Contains(strings.ToLower(di.Bus), "nvme")) {
+		return rotationalNo
+	}
+	return rotationalUnknown
 }
 
 func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool) rotationalState {

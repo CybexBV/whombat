@@ -37,6 +37,7 @@ func newTestRunner(t *testing.T, root string, mounts []mountInfo, inv *proto.Rep
 	fixedNow := time.Date(2026, 11, 21, 18, 0, 0, 0, time.UTC)
 	r := &Runner{
 		root: root,
+		goos: "linux",
 		inventory: func() *proto.Report {
 			return inv
 		},
@@ -1144,5 +1145,216 @@ func TestUnreadableDirectoryMarksPartial(t *testing.T) {
 		if resp3.Code != "" || !resp3.Partial {
 			t.Fatalf("chmod 0000 dir: resp = %+v, want Code='' and Partial=true", resp3)
 		}
+	}
+}
+
+func TestDarwinAPFSInternalAndExternalDisks(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "Users/jdoe/data.bin"), 32*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/Users/jdoe/blob.bin"), 24*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/FastSSD/work.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/ExtHDD/archive.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/UnknownUSB/file.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/Fusion/media.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "Volumes/AppDMG/app.bin"), 16*1024)
+
+	// Plant a Linux /sys entry that says rotational=0 to prove Darwin never falls back to /sys.
+	if err := os.MkdirAll(filepath.Join(root, "sys/block/disk9/queue"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/disk9/queue/rotational"), []byte("0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	readMacFixture := func(name string) []byte {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join("..", "macos", "testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	disk0Plist := readMacFixture("diskutil_info_disk0.plist")
+	disk3Plist := readMacFixture("diskutil_info_disk3.plist")
+	disk4Plist := readMacFixture("diskutil_info_disk4.plist")
+
+	extSSDPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk8</string>
+		<key>ParentWholeDisk</key><string>disk8</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>SolidState</key><true/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	extHDDPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk9</string>
+		<key>ParentWholeDisk</key><string>disk9</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>SolidState</key><false/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	unknownUSBPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk10</string>
+		<key>ParentWholeDisk</key><string>disk10</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>VirtualOrPhysical</key><string>Physical</string>
+	</dict></plist>`)
+	fusionContainerPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk11</string>
+		<key>ParentWholeDisk</key><string>disk11</string>
+		<key>APFSContainerReference</key><string>disk11</string>
+		<key>APFSPhysicalStores</key><array>
+			<dict><key>APFSPhysicalStore</key><string>disk0s2</string></dict>
+			<dict><key>APFSPhysicalStore</key><string>disk9s2</string></dict>
+		</array>
+		<key>VirtualOrPhysical</key><string>Virtual</string>
+	</dict></plist>`)
+	dmgContainerPlist := []byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk5</string>
+		<key>ParentWholeDisk</key><string>disk5</string>
+		<key>APFSContainerReference</key><string>disk5</string>
+		<key>APFSPhysicalStores</key><array>
+			<dict><key>APFSPhysicalStore</key><string>disk4s1</string></dict>
+		</array>
+		<key>VirtualOrPhysical</key><string>Virtual</string>
+	</dict></plist>`)
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s3s1"},
+		{ID: 2, MountPoint: "/System/Volumes/Data", FSType: "apfs", Source: "/dev/disk3s1"},
+		{ID: 3, MountPoint: "/Volumes/FastSSD", FSType: "apfs", Source: "/dev/disk8s1"},
+		{ID: 4, MountPoint: "/Volumes/ExtHDD", FSType: "hfs", Source: "/dev/disk9s2"},
+		{ID: 5, MountPoint: "/Volumes/UnknownUSB", FSType: "exfat", Source: "/dev/disk10s1"},
+		{ID: 6, MountPoint: "/Volumes/Fusion", FSType: "apfs", Source: "/dev/disk11s1"},
+		{ID: 7, MountPoint: "/Volumes/AppDMG", FSType: "apfs", Source: "/dev/disk5s1"},
+	}
+
+	var diskutilCalls []string
+	var probed []string
+	hddState := standbyUnknown
+	var inv *proto.Report
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.goos = "darwin"
+	r.inventory = func() *proto.Report { return inv }
+	r.checkStandby = func(_ context.Context, dev string) standbyState {
+		probed = append(probed, dev)
+		if dev == "disk9" {
+			return hddState
+		}
+		return standbyUnknown
+	}
+	r.runCmd = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "diskutil" || len(args) < 3 || args[0] != "info" || args[1] != "-plist" {
+			return nil, os.ErrNotExist
+		}
+		diskutilCalls = append(diskutilCalls, args[2])
+		switch args[2] {
+		case "disk0":
+			return disk0Plist, nil
+		case "disk3":
+			return disk3Plist, nil
+		case "disk4":
+			return disk4Plist, nil
+		case "disk5":
+			return dmgContainerPlist, nil
+		case "disk8":
+			return extSSDPlist, nil
+		case "disk9":
+			return extHDDPlist, nil
+		case "disk10":
+			return unknownUSBPlist, nil
+		case "disk11":
+			return fusionContainerPlist, nil
+		default:
+			return nil, os.ErrNotExist
+		}
+	}
+
+	// 1. Internal Mac APFS root (/dev/disk3s3s1) with macos collector inventory -> scans without diskutil or standby probe.
+	inv = &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/", Device: "/dev/disk3", FSType: "apfs", Disks: []string{"disk0"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk0", Type: "nvme", Model: "APPLE SSD AP1024Z"},
+		},
+	}
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" || len(diskutilCalls) != 0 || len(probed) != 0 {
+		t.Fatalf("mac / with inventory: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 2. Sibling APFS volume (/System/Volumes/Data, /dev/disk3s1) matches /dev/disk3 in inventory -> scans cleanly.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/System/Volumes/Data"})
+	if resp.Code != "" || len(diskutilCalls) != 0 || len(probed) != 0 {
+		t.Fatalf("mac Data volume with inventory: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 3. No inventory at all: resolves /dev/disk3s3s1 -> disk3 -> disk0 via diskutil info -plist -> internal SSD scans cleanly.
+	inv = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" || !slices.Equal(diskutilCalls, []string{"disk3", "disk0"}) || len(probed) != 0 {
+		t.Fatalf("mac / via diskutil fallback: resp=%+v diskutil=%v probed=%v", resp, diskutilCalls, probed)
+	}
+
+	// 4. External SSD (SolidState=true) -> scans cleanly without probing standby.
+	diskutilCalls = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/FastSSD"})
+	if resp.Code != "" || len(probed) != 0 {
+		t.Fatalf("mac external SSD: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 5. External HDD (SolidState=false) with unknown power state -> skips as standby_unknown (never falls back to /sys).
+	hddState = standbyUnknown
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !slices.Equal(probed, []string{"disk9"}) {
+		t.Fatalf("mac external HDD unknown: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 6. External HDD asleep -> skips as spun_down naming disk9.
+	probed = nil
+	hddState = standbyAsleep
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"disk9"}) {
+		t.Fatalf("mac external HDD asleep: resp=%+v", resp)
+	}
+
+	// 7. External HDD confirmed awake -> scans cleanly.
+	probed = nil
+	hddState = standbyAwake
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != "" || !slices.Equal(probed, []string{"disk9"}) {
+		t.Fatalf("mac external HDD awake: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 8. External USB enclosure omitting SolidState -> skips as standby_unknown without waking.
+	probed = nil
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/UnknownUSB"})
+	if resp.Code != CodeStandbyUnknown || len(probed) != 0 || !strings.Contains(resp.Message, "disk10") {
+		t.Fatalf("mac unknown SolidState USB: resp=%+v probed=%v", resp, probed)
+	}
+
+	// 9. Multi-store APFS container (Fusion Drive: disk0 SSD + disk9 HDD) skips when HDD member is asleep.
+	hddState = standbyAsleep
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/Fusion"})
+	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"disk9"}) {
+		t.Fatalf("mac fusion asleep HDD: resp=%+v", resp)
+	}
+
+	// 10. Mounted .dmg disk image (virtual APFS -> virtual disk4) -> skips as standby_unknown.
+	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/AppDMG"})
+	if resp.Code != CodeStandbyUnknown || !strings.Contains(resp.Message, "backing disks") {
+		t.Fatalf("mac dmg virtual disk: resp=%+v", resp)
+	}
+
+	// 11. When diskutil is unavailable and inventory has no disks, Darwin must NOT read /sys/block/disk9/queue/rotational.
+	rNoDiskutil := newTestRunner(t, root, []mountInfo{{ID: 4, MountPoint: "/Volumes/ExtHDD", FSType: "hfs", Source: "/dev/disk9s2"}}, nil)
+	rNoDiskutil.goos = "darwin"
+	resp = rNoDiskutil.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/Volumes/ExtHDD"})
+	if resp.Code != CodeStandbyUnknown {
+		t.Fatalf("mac without diskutil must not fall back to /sys: resp=%+v", resp)
 	}
 }
