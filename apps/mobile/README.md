@@ -34,7 +34,8 @@ modules/whombat-fold/    folding phones: the system's vertical bar, the fold, th
 modules/whombat-menu/    iOS only: a message's long-press menu as iOS's own context menu (UIContextMenuInteraction)
 modules/whombat-sheet/   iOS only: the app's sheets as iOS's own form sheets, with the system's grabber
 modules/whombat-system-bars/ Android only: the area under the tab bar drawn for the app's theme
-modules/whombat-diagnostics/ iOS only: the crash and hang reports and exit counts iOS hands the app (MetricKit), kept for its error notes
+modules/whombat-diagnostics/ how the app ended, for its error notes: iOS's crash and hang reports and exit counts
+                         (MetricKit); Android 11+'s exit reasons (crash, native crash, ANR, memory while on screen)
 modules/whombat-transfer/ big files to and from the phone: Android's “Save as”, and the screen kept on while one moves
 src/
   App.tsx                safe area → theme → fonts → the managed app (or, in a demo build, the demo world)
@@ -84,7 +85,8 @@ Without Metro it falls back to nothing, so use a release build for a standalone 
 
 ```sh
 pnpm --filter @whombat/mobile android:apk --variant release    # JS bundled, signed with the debug key
-pnpm --filter @whombat/mobile android:apk --arch all            # x86_64 + arm64-v8a (real phones)
+pnpm --filter @whombat/mobile android:apk --arch arm64-v8a      # phones
+pnpm --filter @whombat/mobile android:apk --arch all            # x86_64 + arm64-v8a: an emulator and phones
 pnpm --filter @whombat/mobile android:apk --clean               # regenerate android/ from app.config.cjs
 ```
 
@@ -168,6 +170,10 @@ asked for in one of their conversations), an approval they can decide — show a
   background or killed. On iOS ActivityKit hands the app an activity's push token and a push-to-start token, but the
   app doesn't send them anywhere yet, so an iPhone's activity updates only while the app runs.
 
+Settings → Notifications says on Android what Android holds back although notifications are allowed (a channel turned
+off, the app's battery use restricted, Live Updates off), with a button to the page that turns it back on
+(`deliveryStatus` in `modules/whombat-live`, read when the row shows and when the app comes back to the foreground).
+
 An ongoing notification goes 10 minutes after its last update; the app reconciles on every push and on coming to the
 foreground (MN-02). Inbox pushes open their screen — with the tabs beneath it (MN-01) — (needs-you rows open the
 approval) and mark the row read; a row read in the app or on another device takes its notification out of the shade
@@ -190,9 +196,17 @@ unless told otherwise (`--env prod`: `api.whombat.com` and `app.whombat.com`). T
 production control's downloads folder; the iPhone app goes to TestFlight (below).
 
 ```sh
-pnpm --filter @whombat/mobile publish:apk --dir <production control's DOWNLOADS_DIR> --arch all
+pnpm --filter @whombat/mobile publish:apk --dir <production control's DOWNLOADS_DIR>
 pnpm --filter @whombat/mobile publish:ios
 ```
+
+The published APK is for `arm64-v8a`, the phones' architecture, so nobody downloads the emulator's libraries;
+`--arch all` adds x86_64 for an emulator.
+
+Each published APK's bundle source map and R8 mapping stay beside it, in `<dir>/sourcemaps/<versionCode>-<rev>.map` and
+`.mapping.txt` (the newest 30 builds; control serves only the APK `latest.json` names): they turn an error note's
+frames back into the code's. Only a bundle map that run's build wrote is kept (`--skip-build` keeps none and says so);
+R8's mapping whenever it is there.
 
 `--env dev` is still accepted until the move to production is done; it goes with DEV.
 

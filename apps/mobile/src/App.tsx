@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DEMO } from './data/config';
+import { noteEndingsAfterFirstFrame } from './errors/nativeErrorNotes';
 import { sharedFiles } from './lib/sharedCache';
 import { secureStore } from './lib/storage';
 import { PageBoundary } from './navigation/PageBoundary';
@@ -43,6 +44,8 @@ function Root() {
   useEffect(() => {
     sharedFiles.sweep().catch(() => {});
   }, []);
+  // How Android says the earlier runs ended, once the first screen is drawn.
+  useEffect(() => noteEndingsAfterFirstFrame(), []);
   const Body = Demo ?? Managed;
   // The frame keeps every screen clear of the iPhone Duo's clock and knows the window's shape (iphone-duo.md).
   return (

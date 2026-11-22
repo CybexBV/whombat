@@ -4,13 +4,18 @@
  * activity is on screen (a managed Whombat sends no live pushes, NT-13: its updates come only through the connection);
  * those are asked again every `BUSY_RETRY_MS`. Something that needs the connection while it is let go (a push that
  * reloads a list) opens it again, and it goes again after the grace. Back in the foreground it opens at once; the
- * subscriptions resume from their cursors, and the appliance asks for a resync where it can't (WE-04).
+ * subscriptions resume from their cursors, and the appliance asks for a resync where it can't (WE-04). One that still
+ * says it is open after a while away is checked (`probe`): Android stops the app's timers in the background and mobile
+ * networks drop quiet sockets without a word.
  *
  * A read is refetched on coming back or on getting online only when it may have missed a change: the live updates
  * came back without picking up where they left off since it was answered, or nothing changed it for a while
  * (`createFreshness`). A connection let go in
  * the background and opened again resumes its subscription from its cursor, so the events it missed arrive and nothing
  * needs reading again; one that can't resume says so, and what its topics feed is read again then (`onResync`).
+ *
+ * Box reads run while the box can be reached (`createBoxReach`): an open connection, whatever the phone thinks of the
+ * internet (a Wi-Fi with no internet still reaches the box on its direct way).
  *
  * Pure: the session, the timers' clock and the live-activity check are passed in.
  */
@@ -22,8 +27,13 @@ import type { ApplianceSession } from '@whombat/client/session';
 export const BACKGROUND_GRACE_MS = 2 * 60_000;
 /** Work under way or a live activity on screen: asked again this much later. */
 export const BUSY_RETRY_MS = 30_000;
+/** Back after this long away, a connection that says it is open is checked before it is trusted. */
+export const WAKE_CHECK_AFTER_MS = 30_000;
 
-type Connection = Pick<ApplianceSession, 'state' | 'onState' | 'connect' | 'reconnectNow' | 'suspend'>;
+type Connection = Pick<
+  ApplianceSession,
+  'state' | 'onState' | 'connect' | 'reconnectNow' | 'suspend' | 'probe'
+>;
 
 export interface BackgroundRelease {
   /** The app went to the background. */
@@ -39,11 +49,14 @@ export function createBackgroundRelease(input: {
   keep: () => Promise<boolean>;
   graceMs?: number;
   retryMs?: number;
+  now?: () => number;
 }): BackgroundRelease {
   const { session } = input;
   const graceMs = input.graceMs ?? BACKGROUND_GRACE_MS;
   const retryMs = input.retryMs ?? BUSY_RETRY_MS;
+  const now = input.now ?? Date.now;
   let away = false;
+  let awayAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const clear = () => {
     if (timer) clearTimeout(timer);
@@ -68,20 +81,94 @@ export function createBackgroundRelease(input: {
   return {
     background() {
       away = true;
+      awayAt = now();
       schedule(graceMs);
     },
     foreground() {
+      const wasAway = away;
+      const awayFor = wasAway ? now() - awayAt : 0;
       away = false;
       clear();
       const status = session.state().status;
       if (status === 'idle') session.connect();
       else if (status !== 'open') session.reconnectNow();
+      // Its timers stopped while away: the socket may have died without the session hearing of it.
+      else if (awayFor >= WAKE_CHECK_AFTER_MS) session.probe?.();
+      // A check begun in the background (another network) pinged before the freeze: it pings again now.
+      else if (wasAway) session.probe?.({ onlyIfChecking: true });
     },
     dispose() {
       away = false;
       clear();
       off();
     },
+  };
+}
+
+/** What the reach check reads of NetInfo's state. */
+export interface NetSnapshot {
+  type: string;
+  isConnected: boolean | null;
+  isInternetReachable?: boolean | null;
+  details?: unknown;
+}
+
+/** The network the phone is on: its kind and, where NetInfo says, its address; null without one. */
+export function networkKey(n: NetSnapshot): string | null {
+  if (n.isConnected === false || n.type === 'none') return null;
+  const ip = (n.details as { ipAddress?: unknown } | null | undefined)?.ipAddress;
+  return `${n.type}|${typeof ip === 'string' ? ip : ''}`;
+}
+
+export interface BoxReach {
+  /** NetInfo's newest state. */
+  net(n: NetSnapshot): void;
+  dispose(): void;
+}
+
+/**
+ * Whether box reads may run (`setOnline`, TanStack's `onlineManager`): while the connection is open, or while the phone
+ * says it is online (the connection is then being opened, and reads wait for it). An open connection on a Wi-Fi without
+ * internet reaches the box on its direct way; going by the phone's internet check alone, every read waited there.
+ *
+ * NetInfo is a hint for the connection. While it isn't open, it dials now when the phone is connected again after none,
+ * onto another network (`networkKey`), or online again after its internet check said no (a hotel's sign-in page passed:
+ * the way out may only now be open). While it is open, another network checks it (`probe`), since its socket may be
+ * tied to the old one. Nothing else counts: NetInfo repeats itself, and an internet check that was unknown and comes
+ * in as yes is no change. Dialing is a no-op while open or dialing, so a burst of these can't storm.
+ */
+export function createBoxReach(input: {
+  session: Pick<ApplianceSession, 'state' | 'onState' | 'reconnectNow' | 'probe'>;
+  setOnline: (online: boolean) => void;
+}): BoxReach {
+  const { session } = input;
+  let netOnline = true;
+  // Unknown until NetInfo first says: that first answer is no change.
+  let key: string | null | undefined;
+  let shown: boolean | null = null;
+  const update = () => {
+    const online = session.state().status === 'open' || netOnline;
+    if (online === shown) return;
+    shown = online;
+    input.setOnline(online);
+  };
+  const off = session.onState(update);
+  update();
+  return {
+    net(n) {
+      const online = n.isConnected !== false && n.isInternetReachable !== false;
+      const cameOnline = online && !netOnline;
+      netOnline = online;
+      // Connected again, or onto another network: the key changes.
+      const next = networkKey(n);
+      const moved = key !== undefined && next !== key;
+      key = next;
+      if (session.state().status === 'open') {
+        if (moved) session.probe?.();
+      } else if ((moved && next !== null) || cameOnline) session.reconnectNow();
+      update();
+    },
+    dispose: off,
   };
 }
 

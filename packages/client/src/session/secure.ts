@@ -350,6 +350,8 @@ const SNAPSHOT_REPEAT_MS = 10_000;
 
 /** The longest the stall check waits (AP-4401), and how long stuck connections count as one spell. */
 const MAX_STALL_MS = 20_000;
+/** A `probe()`'s wait when the stall check is turned off. */
+const DEFAULT_CHECK_MS = 2500;
 const STUCK_SPELL_MS = 120_000;
 
 interface StreamHandler {
@@ -381,6 +383,16 @@ interface Conn {
   pongN: number;
   /** The next stall check, armed while something is sent. */
   watch: ReturnType<typeof setTimeout> | null;
+  /**
+   * The `probe()` waiting for its `pong`: its timer, its ping's number, when the check began, when its current wait
+   * began and is due (`now()`), and whether it already had its one more wait after firing late.
+   */
+  check: ReturnType<typeof setTimeout> | null;
+  checkN: number;
+  checkSince: number;
+  checkFrom: number;
+  checkDue: number;
+  checkLate: boolean;
   /**
    * Until when the appliance owes this connection another frame: an agent's thinking line is refreshed every few
    * seconds while its turn runs, so silence before then is a dead path, checked at once like an unanswered request.
@@ -637,6 +649,12 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
           probeN: 0,
           pongN: 0,
           watch: null,
+          check: null,
+          checkN: 0,
+          checkSince: 0,
+          checkFrom: 0,
+          checkDue: 0,
+          checkLate: false,
           liveUntil: 0,
           draining: false,
           streams: new Map(),
@@ -839,6 +857,74 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
     connectionEnded(c, 'lost');
   }
 
+  /**
+   * `probe()`: one `ping`; no `pong` within the stall check's wait and the connection is lost, dialed again at once. A
+   * check already out is replaced by a fresh ping: what asked again (another network) may have left the first one's
+   * answer on the old path. Not a stuck spell (the stall check's wait isn't doubled after it): a socket that died while
+   * the app was away says nothing about the network now.
+   */
+  function probe(c: Conn, onlyIfChecking: boolean) {
+    if (c.closed || c.draining) return;
+    if (onlyIfChecking && !c.check) return;
+    if (c.check) clearTimeout(c.check);
+    c.check = null;
+    c.checkLate = false;
+    c.checkSince = now();
+    checkPing(c);
+  }
+
+  function checkPing(c: Conn) {
+    c.checkN = ++pingN;
+    if (!send(c, { t: 'ping', n: c.checkN })) {
+      checkFailed(c);
+      return;
+    }
+    checkWait(c);
+  }
+
+  function checkWait(c: Conn) {
+    const wait = stallWait() || DEFAULT_CHECK_MS;
+    c.checkFrom = now();
+    c.checkDue = c.checkFrom + wait;
+    c.check = setTimeout(() => checkEnded(c, wait), wait);
+  }
+
+  function checkEnded(c: Conn, wait: number) {
+    c.check = null;
+    if (c.closed || conn !== c || c.pongN >= c.checkN) return;
+    const at = now();
+    // Fired far later than it was set for: the app's JavaScript was frozen (in the background), and the answer may be
+    // waiting behind the timer. One more short wait, on a fresh ping, before giving up on it.
+    if (!c.checkLate && at - c.checkDue > wait) {
+      c.checkLate = true;
+      c.checkSince = at;
+      checkPing(c);
+      return;
+    }
+    // Something came during this wait: a slow link working through what piled up while the phone was away, with the
+    // pong behind it. Wait again, as long as the stall check would at most; silence, or no pong by then, is lost.
+    if (c.lastInbound >= c.checkFrom && at - c.checkSince < MAX_STALL_MS) {
+      checkWait(c);
+      return;
+    }
+    checkFailed(c);
+  }
+
+  /** The check went unanswered, or its ping couldn't be sent: lost, and dialed again without the backoff. */
+  function checkFailed(c: Conn) {
+    if (conn !== c) return;
+    connectionEnded(c, 'lost');
+    dialNow();
+  }
+
+  /** Dial now instead of waiting out the backoff (a no-op while open or dialing). */
+  function dialNow() {
+    if (!wanted || conn || connecting) return;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    void attemptConnect();
+  }
+
   async function attemptConnect() {
     if (!wanted || conn || connecting) return;
     const controller = new AbortController();
@@ -904,6 +990,8 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
     if (c.heartbeat) clearInterval(c.heartbeat);
     if (c.watch) clearTimeout(c.watch);
     c.watch = null;
+    if (c.check) clearTimeout(c.check);
+    c.check = null;
     try {
       c.wire.close(reason);
     } catch {
@@ -1162,6 +1250,11 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
         return;
       case 'pong':
         c.pongN = Math.max(c.pongN, m.n);
+        // The check's own answer ends it: the next network change gets a check of its own.
+        if (c.check && c.pongN >= c.checkN) {
+          clearTimeout(c.check);
+          c.check = null;
+        }
         return;
       case 'welcome':
         return;
@@ -2337,11 +2430,9 @@ export function createSecureSession(options: SecureSessionOptions): ApplianceSes
       attempt = 0;
       connectNow();
     },
-    reconnectNow() {
-      if (!wanted || conn || connecting) return;
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = null;
-      void attemptConnect();
+    reconnectNow: dialNow,
+    probe(options) {
+      if (conn && state.status === 'open') probe(conn, options?.onlyIfChecking === true);
     },
     close(reason = 'closed') {
       terminate(reason);

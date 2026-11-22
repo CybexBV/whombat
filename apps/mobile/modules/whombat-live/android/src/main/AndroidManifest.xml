@@ -3,6 +3,13 @@
   <!-- Android 16 Live Updates: ongoing notifications promoted to the status bar chip and the top of the shade. -->
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
+  <!-- Whether this phone has a Live Updates settings page for the app (Settings → Notifications names it only then). -->
+  <queries>
+    <intent>
+      <action android:name="android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS" />
+    </intent>
+  </queries>
+
   <application>
     <!--
       Receives Whombat's FCM data messages (live activities and inbox notifications) whether or not the app

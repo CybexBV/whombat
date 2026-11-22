@@ -15,6 +15,7 @@ interface NativeWhombatUpdater {
   isSupported(): boolean;
   canInstall(): boolean;
   openInstallSettings(): boolean;
+  openAppDetails?(): boolean;
   download(url: string, sha256: string, size: number, versionCode: number): Promise<string>;
   install(path: string): Promise<void>;
   addListener(event: 'onProgress', listener: (event: UpdaterProgress) => void): { remove(): void };
@@ -44,6 +45,14 @@ export const WhombatUpdater = {
   canInstall: (): boolean => native?.canInstall() ?? false,
   /** Opens that setting for this app; false when it couldn't. */
   openInstallSettings: (): boolean => native?.openInstallSettings() ?? false,
+  /** Opens this app's page in Android's settings; false when it couldn't (or the build has no such call). */
+  openAppDetails: (): boolean => {
+    try {
+      return native?.openAppDetails?.() ?? false;
+    } catch {
+      return false;
+    }
+  },
   /** Downloads and checks the APK; resolves with its path in the app's cache. */
   async download(
     apk: { url: string; sha256: string; size: number; versionCode: number },

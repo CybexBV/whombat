@@ -21,7 +21,7 @@ import { useWhombat } from '@whombat/client/react';
 import { api, type ChatsListResponse, type HomeOverview } from '@whombat/core';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useMemo } from 'react';
-import { Keyboard, useWindowDimensions, View } from 'react-native';
+import { Keyboard, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { chatTabCount } from '../data/chatRoom';
@@ -179,63 +179,77 @@ export function SideBar({
   const badges = useBadges();
   return (
     <View
-      accessibilityRole="tablist"
       style={{
         width: shape.barWidth,
-        paddingTop: shape.barTop + 8,
-        paddingBottom: insets.bottom + 8,
-        justifyContent: 'center',
-        gap: 6,
         backgroundColor: theme.colors.bg,
         borderColor: theme.colors.line,
         ...(shape.tabs === 'right' ? { borderLeftWidth: 1 } : { borderRightWidth: 1 }),
       }}
     >
-      {TAB_SPECS.map((tab) => {
-        const selected = tab.name === active;
-        const color = selected ? theme.colors.ink : theme.colors.mut;
-        const Icon = tab.icon;
-        const badge = badges[tab.name];
-        return (
-          <Touchable
-            key={tab.name}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            accessibilityLabel={
-              badge?.dot && badge.spoken
-                ? `${tab.label}, ${badge.spoken}`
-                : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
-            }
-            feedback="fade"
-            ringRadius={12}
-            onPress={() => onSelect(tab.name)}
-            style={{
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              minHeight: 60,
-              paddingHorizontal: 2,
-            }}
-          >
-            <View>
-              <Icon size={24} color={color} strokeWidth={selected ? 2 : 1.7} />
-              <Badge badge={badge} under={theme.colors.bg} left={17} />
-            </View>
-            {/* “Automations” has 72 points; larger text shrinks it to fit instead of cutting it off. */}
-            <Text
-              size={11}
-              weight={selected ? 600 : 500}
-              color={color}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-              maxFontSizeMultiplier={1.6}
-            >
-              {tab.label}
-            </Text>
-          </Touchable>
-        );
-      })}
+      {/* In a short window (split screen) the tabs scroll, so the last stays in reach; when they fit, nothing moves. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: shape.barTop + 8,
+          paddingBottom: insets.bottom + 8,
+          justifyContent: 'center',
+        }}
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
+        // A tab tapped with the keyboard up switches tabs, not only closes the keyboard.
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* The tab list holds the tabs itself, so TalkBack counts them (“Tab 2 of 5”). */}
+        <View accessibilityRole="tablist" style={{ gap: 6 }}>
+          {TAB_SPECS.map((tab) => {
+            const selected = tab.name === active;
+            const color = selected ? theme.colors.ink : theme.colors.mut;
+            const Icon = tab.icon;
+            const badge = badges[tab.name];
+            return (
+              <Touchable
+                key={tab.name}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                accessibilityLabel={
+                  badge?.dot && badge.spoken
+                    ? `${tab.label}, ${badge.spoken}`
+                    : tabBadgeLabel(tab.label, badge?.count ?? 0, badge?.dot)
+                }
+                feedback="fade"
+                ringRadius={12}
+                onPress={() => onSelect(tab.name)}
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  minHeight: 60,
+                  paddingHorizontal: 2,
+                }}
+              >
+                <View>
+                  <Icon size={24} color={color} strokeWidth={selected ? 2 : 1.7} />
+                  <Badge badge={badge} under={theme.colors.bg} left={17} />
+                </View>
+                {/* “Automations” has 72 points; larger text shrinks it to fit instead of cutting it off. */}
+                <Text
+                  size={11}
+                  weight={selected ? 600 : 500}
+                  color={color}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.6}
+                  maxFontSizeMultiplier={1.6}
+                >
+                  {tab.label}
+                </Text>
+              </Touchable>
+            );
+          })}
+        </View>
+      </ScrollView>
     </View>
   );
 }

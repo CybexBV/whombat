@@ -82,7 +82,13 @@ import { useTheme } from '../theme/theme';
 import { Screen, ScreenStripContext } from '../ui/headers';
 import { Button, ErrorState, Loading } from '../ui/primitives';
 import { StartHold } from '../ui/StartHold';
-import { createBackgroundRelease, createFreshness, type Freshness, retryFailedReads } from './background';
+import {
+  createBackgroundRelease,
+  createBoxReach,
+  createFreshness,
+  type Freshness,
+  retryFailedReads,
+} from './background';
 import { useDeliverBackupKey } from './backupPasskey';
 import { APP_BUILD } from './config';
 import {
@@ -295,6 +301,11 @@ export function ApplianceRoot(props: ApplianceRootProps) {
     });
     const offGuard = s.guard.watch(s.raw, orgId);
     const offState = s.raw.onState(setState);
+    // Box reads run while the connection is open, or while the phone says it is online (the connection is then on its
+    // way): a Wi-Fi without internet still reaches the box on its direct way. Another network dials now, or checks an
+    // open connection, whose socket may be tied to the old one. Its listener comes before the one that asks the owed
+    // reads as the connection opens, so they find the reads online and don't wait paused.
+    const reach = createBoxReach({ session: s.raw, setOnline: (on) => onlineManager.setOnline(on) });
     // This phone's sync log (`data/syncLog.ts`): the reads worth knowing about, the connection and the app coming and
     // going; the notes of earlier runs come back from the device, and go there with the copy on the way out.
     const offReads = watchReads(s.queryClient.getQueryCache(), syncLog);
@@ -371,9 +382,10 @@ export function ApplianceRoot(props: ApplianceRootProps) {
         },
       },
     );
-    // Back in the foreground or back online: reconnect now (a fresh handshake), instead of waiting out the backoff. In the
-    // background the connection is let go after a grace, unless work is under way, messages wait to be sent or a live
-    // activity is on screen (AP-925); what is kept on the device is saved at once.
+    // Back in the foreground or back online: reconnect now (a fresh handshake), instead of waiting out the backoff, and
+    // after a while away check a connection that says it is open. In the background the connection is let go after a
+    // grace, unless work is under way, messages wait to be sent or a live activity is on screen (AP-925); what is kept on
+    // the device is saved at once.
     const release = createBackgroundRelease({
       session: s.raw,
       keep: async () => s.holds.outbox || (await liveActivityShown()),
@@ -388,13 +400,7 @@ export function ApplianceRoot(props: ApplianceRootProps) {
         saveNotes();
       }
     });
-    let online = true;
-    const offNet = NetInfo.addEventListener((n) => {
-      const now = n.isConnected !== false && n.isInternetReachable !== false;
-      onlineManager.setOnline(now);
-      if (now && !online) s.raw.reconnectNow();
-      online = now;
-    });
+    const offNet = NetInfo.addEventListener((n) => reach.net(n));
     const offSignOut = callbacks.current.addSignOutTask(async () => {
       // A phone that joined without a cloud account handed its token to the box: the box forgets it (LNK-36).
       if (callbacks.current.community) return clearBoxPush(s.raw.state().status === 'open' ? s.raw : null);
@@ -414,6 +420,7 @@ export function ApplianceRoot(props: ApplianceRootProps) {
       release.dispose();
       s.freshness.dispose();
       offNet();
+      reach.dispose();
       offSignOut();
       s.raw.close();
       // Leaving this appliance (switch, sign-out): nothing of it stays on the phone.

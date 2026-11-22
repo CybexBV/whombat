@@ -10,7 +10,8 @@
  * opens the new chat (`newChat`); the rows scroll under it and the last one clear of it.
  *
  * The rows are the shared `inboxRows` over `chats.threads` (`state: open`, paged) and `chats.unread`; settling is the
- * phone's own (`useSettleThread`), marking the shared hooks'.
+ * phone's own (`useSettleThread`), marking the shared hooks'. Over old rows the quiet “Updating…” or “Couldn’t update ·
+ * Try again” floats as over a conversation (`ReadStatePill`); a pull spins until its reads have answered.
  */
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -46,6 +47,7 @@ import {
 import { CHAT_COPY } from '../data/chatRoom';
 import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
+import { pullSettled, pullTargets } from '../data/pullRefresh';
 import { threadQuery } from '../data/threadPages';
 import { SETTLE_COPY } from '../data/threadSettle';
 import { showToast } from '../data/toast';
@@ -68,6 +70,7 @@ import { closeSwipeRows, type SwipeAction, SwipeRow } from '../ui/swipeRow';
 import { Touchable } from '../ui/Touchable';
 import { THREAD_ICON, ThreadIcon } from '../ui/threadIcon';
 import { hitSlopFor } from '../ui/touchTarget';
+import { ReadStatePill } from '../ui/updatingPill';
 import { errorText } from './feedback';
 
 /** SF Symbols for a row's menu on iPhone. */
@@ -199,9 +202,18 @@ export function ChatInbox({
   );
   // Elsewhere than iPhone a row's menu is a sheet, for the row it was opened on.
   const [menuFor, setMenuFor] = useState<{ rootId: string; spec: NativeMenuSpec } | null>(null);
+  // A pull spins until the reads it asked for have answered or failed, or until they wait to get online: they go on
+  // by themselves then, and the pill says “Updating…” meanwhile. Either way the pill says what came of it.
+  const [pulling, setPulling] = useState(false);
   const refresh = () => {
-    threads.refetch();
-    void qc.invalidateQueries({ queryKey: queryKeys.scope('chats.unread') });
+    setPulling(true);
+    const unreadKey = queryKeys.scope('chats.unread');
+    const watched = pullTargets(qc, { exact: [threads.queryKey], active: [unreadKey] });
+    void pullSettled(
+      qc,
+      [threads.read.refetch(), qc.invalidateQueries({ queryKey: unreadKey })],
+      watched,
+    ).then(() => setPulling(false));
   };
 
   const renderItem = ({ item }: { item: InboxRow }) => {
@@ -263,7 +275,7 @@ export function ChatInbox({
           }}
           refreshControl={
             <RefreshControl
-              refreshing={false}
+              refreshing={pulling}
               onRefresh={refresh}
               colors={[theme.colors.ink]}
               tintColor={theme.colors.mut}
@@ -272,6 +284,9 @@ export function ChatInbox({
           }
           ListEmptyComponent={<View style={{ flex: 1, justifyContent: 'center' }}>{empty}</View>}
         />
+        {/* Over old threads: “Updating…” or “Couldn’t update · Try again”, as over a conversation. A pull has its
+            spinner, and an empty list showing its own error says it already. */}
+        {pulling || (shown.length === 0 && !!threads.error) ? null : <ReadStatePill source={threads.read} />}
         <NewChatButton
           label={newChat.label}
           selected={newChat.selected}

@@ -52,6 +52,43 @@ export interface ShadeNotification {
   ref?: string;
 }
 
+/**
+ * The low-priority channel of runs in progress (`LiveNotifications.CHANNEL_RUNS`): turned off, it is usually on purpose,
+ * and the rest still arrives.
+ */
+export const RUNS_CHANNEL = 'whombat.runs';
+
+/** One of Whombat's Android notification channels: its id, the name Android shows, and whether it is turned off. */
+export interface DeliveryChannel {
+  id: string;
+  name: string;
+  blocked: boolean;
+}
+
+/**
+ * Android: what lets Whombat's notifications through beyond the app-wide permission. Null where Android has no such
+ * thing (an older version).
+ */
+export interface DeliveryStatus {
+  /** The app-wide switch (Android 8 to 12 leave the channels as they were when it is off). */
+  enabled: boolean | null;
+  /** In the order they matter: needs you, mentions and updates, runs. */
+  channels: DeliveryChannel[];
+  /** The person restricted the app's battery use: its pushes don't arrive in the background. */
+  backgroundRestricted: boolean | null;
+  /** Android's default battery optimisation (most apps have it). */
+  batteryOptimized: boolean | null;
+  /** Android 16 QPR1+: runs and approvals may show as Live Updates. */
+  liveUpdatesAllowed: boolean | null;
+}
+
+/** A settings page that turns one of those back on. */
+export type DeliveryPage =
+  | { page: 'channel'; channel: string }
+  | { page: 'notifications' }
+  | { page: 'liveUpdates' }
+  | { page: 'battery' };
+
 /** Who is looking, from the burrow's bootstrap. */
 export interface LiveViewer {
   id: string;

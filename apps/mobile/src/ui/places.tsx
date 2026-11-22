@@ -42,7 +42,7 @@ import {
   Zap,
 } from './icons';
 import { focusRowSoon, registerRowFocus } from './rowFocus';
-import { Sheet } from './sheet';
+import { Sheet, useAfterSheet } from './sheet';
 import { Touchable } from './Touchable';
 
 /** The smallest target: 44pt on iPhone, 48dp on Android. */
@@ -72,9 +72,6 @@ export function useServerFacts(): ServerFacts[] {
   const fleet = useHostsFleet(present ? { params: { burrow: slug } } : null, { retry: false });
   return useMemo(() => serverFacts(fleet.data?.servers ?? []), [fleet.data?.servers]);
 }
-
-/** How long the sheet takes to go down before the place opens (iOS shows no new screen under a sheet it still shows). */
-const SHEET_DOWN_MS = 600;
 
 const OPENER = 'places-opener';
 
@@ -161,19 +158,11 @@ function PlacesSheet({
     () => placesThings(overview.data?.things, servers),
     [overview.data?.things, servers],
   );
-  const next = useRef<(() => void) | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const go = () => {
-    clearTimeout(timer.current);
-    const run = next.current;
-    next.current = null;
-    run?.();
-  };
+  const after = useAfterSheet();
+  const go = after.onDismissed;
   const choose = (run: () => void) => {
-    next.current = run;
+    after.later(run);
     onChosen();
-    timer.current = setTimeout(go, SHEET_DOWN_MS);
   };
   const openPlace = (place: PlaceId) =>
     choose(() => {

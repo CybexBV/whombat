@@ -1,6 +1,8 @@
 package com.whombat.fold
 
 import android.app.Activity
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
@@ -9,6 +11,7 @@ import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * `WhombatFold` (Android): where a foldable's fold is and whether it is half open, from Jetpack WindowManager
@@ -18,8 +21,12 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * is `modules/whombat-fold/index.ts`.
  */
 class WhombatFoldModule : Module() {
+  // Touched only on the main thread: listen and stop both post their work there, in the order they were called.
   private var tracker: WindowInfoTrackerCallbackAdapter? = null
   private var listening: Activity? = null
+  private val main = Handler(Looper.getMainLooper())
+  /** Bumped by every stop, so a listen that was asked for before it can't register after it. */
+  private val generation = AtomicInteger()
   @Volatile private var last: Map<String, Any?>? = null
   private val consumer = Consumer<WindowLayoutInfo> { info -> publish(info) }
 
@@ -44,9 +51,10 @@ class WhombatFoldModule : Module() {
 
   private fun listen() {
     val activity = appContext.currentActivity ?: return
-    activity.runOnUiThread {
-      if (listening === activity) return@runOnUiThread
-      stop()
+    val asked = generation.get()
+    main.post {
+      if (asked != generation.get() || listening === activity) return@post
+      unregister()
       val adapter = WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(activity))
       adapter.addWindowLayoutInfoListener(activity, ContextCompat.getMainExecutor(activity), consumer)
       tracker = adapter
@@ -55,6 +63,12 @@ class WhombatFoldModule : Module() {
   }
 
   private fun stop() {
+    generation.incrementAndGet()
+    main.post { unregister() }
+  }
+
+  /** Main thread only. */
+  private fun unregister() {
     tracker?.removeWindowLayoutInfoListener(consumer)
     tracker = null
     listening = null
@@ -87,6 +101,7 @@ class WhombatFoldModule : Module() {
       )
     if (state == last) return
     last = state
-    sendEvent("onChange", state)
+    // The JavaScript runtime may be going away while the window still reports.
+    runCatching { sendEvent("onChange", state) }
   }
 }

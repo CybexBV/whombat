@@ -318,9 +318,13 @@ export interface FakeAppliance {
     hangConnects(n?: number): void;
     /** Pings get no pong while on: the newest bytes stuck on a bad path while older answers still trickle in (AP-4409). */
     mutePongs(on?: boolean): void;
+    /** Pongs go out this long after their ping (0: at once): a slow link working through a backlog. */
+    delayPongs(ms: number): void;
   };
   stats(): {
     connects: number;
+    /** `ping`s that arrived, on every connection. */
+    pings: number;
     /** Connects that hung (`hangConnects`) and were then given up. */
     abandoned: number;
     open: number;
@@ -366,6 +370,8 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
   let connects = 0;
   let hanging = 0;
   let pongless = false;
+  let pongDelayMs = 0;
+  let pings = 0;
   let abandoned = 0;
   /** Each live connection's `stall` switch. */
   const stallers = new Set<() => void>();
@@ -702,7 +708,12 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
           this.subs.delete(m.sub);
           return;
         case 'ping':
+          pings += 1;
           if (pongless) return;
+          if (pongDelayMs) {
+            setTimeout(() => this.send({ t: 'pong', n: m.n }), pongDelayMs);
+            return;
+          }
           return this.send({ t: 'pong', n: m.n });
         case 'open':
           if (m.spec.kind === 'download') return this.openDownload(m.stream, m.spec);
@@ -1539,9 +1550,13 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
       mutePongs(on = true) {
         pongless = on;
       },
+      delayPongs(ms) {
+        pongDelayMs = ms;
+      },
     },
     stats: () => ({
       connects,
+      pings,
       abandoned,
       open: sessions.size,
       executed,
