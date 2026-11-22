@@ -186,6 +186,12 @@ export class MailTriggerService {
   /** Polls every mailbox with a live mail automation once, reconciles IDLE watchers, clears unwatched cursors and prunes expired rows. */
   async pollOnce(): Promise<number> {
     if (this.services.schemaAccess === 'read-only') return 0;
+    // Mail automations wait while the release the box would go back to doesn't know them: no mailbox is read, and
+    // what they keep (cursors, items) stays for when they go on (automations/release-gate.ts).
+    if (!(await this.services.newerAutomations.ready())) {
+      this.reconcileIdleStop(new Map());
+      return 0;
+    }
     const listened = await listenedMailConnections(this.services.db);
     await this.clearUnwatched(listened);
     await this.pruneExpiredItems();
@@ -219,6 +225,10 @@ export class MailTriggerService {
     this.inFlight.add(connectionId);
     let triggered = 0;
     try {
+      if (!(await this.services.newerAutomations.ready())) {
+        this.stopIdle(connectionId);
+        return 0;
+      }
       const target = watched ?? (await listenedMailConnections(this.services.db)).get(connectionId);
       if (!target || target.triggers.length === 0) return 0;
       triggered = await this.syncOne(connectionId, target);

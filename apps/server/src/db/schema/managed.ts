@@ -456,3 +456,17 @@ export const boxNetwork = pgTable('box_network', {
   state: jsonb('state').$type<Record<string, unknown>>().notNull(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
+
+/**
+ * The runtime releases that ran on this database, each recorded at its first start on a managed box (its
+ * `WHOMBAT_RELEASE_ID`). Recording began with the release that brought automations started by mail, so every release
+ * here knows them: the box turns them on only when the release it would go back to after a failed update is here
+ * (automations/release-gate.ts).
+ */
+export const runtimeReleases = pgTable('runtime_releases', {
+  releaseId: text('release_id').primaryKey(),
+  version: text('version').notNull(),
+  /** The newest migration it has (`0015_runtime_releases`). */
+  schema: text('schema'),
+  firstStartedAt: ts('first_started_at').notNull(),
+});

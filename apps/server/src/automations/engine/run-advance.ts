@@ -10,6 +10,7 @@ import type { Db } from '../../db/client';
 import { automationRuns, automations } from '../../db/schema/index';
 import type { Services } from '../../services';
 import { type GateFacts, gateFacts, readsGateFacts } from '../github-items';
+import { newerRun } from '../release-gate';
 import { runDeadline } from '../runs';
 import { automationStep, definitionStep, type StepOp } from '../steps';
 import {
@@ -63,6 +64,12 @@ export class RunAdvancer {
 
   /** Moves a run as far as it can go now (bounded), one committed transition at a time. */
   async advance(runId: string): Promise<void> {
+    // A run of an automation the release the box would go back to can't run waits, kept as it is, until it may.
+    if (
+      !(await this.services.newerAutomations.ready()) &&
+      newerRun(await loadRunRow(this.services.db, runId))
+    )
+      return;
     const fence = await this.claim(runId);
     if (fence === null) return;
     for (let guard = 0; guard < 40; guard++) {

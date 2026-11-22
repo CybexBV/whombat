@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { defaultWhombatHome } from '@whombat/agent-runtime/host';
 import { z } from 'zod';
+import { recordRuntimeRelease } from '../automations/release-gate';
 import { startKeepPlaceRight } from '../backup-places/keep-right';
 import { looksFor } from '../backups/look/service';
 import { type Config, useBoxPageAsApp, webDistDir } from '../config';
@@ -131,6 +132,13 @@ export async function startManaged(
   if (runtime.dispatcher.backup) registerBackupPasskeySource();
   // An update waiting for the owner's yes, in the Inbox (ask-before-updating.md ABU-05).
   registerUpdateOwnerSource(() => runtime.dispatcher.facts.update);
+  // Which release the box would go back to says whether automations the release before them can't run may run here
+  // (automations/release-gate.ts); this release says it knows them for the releases after it.
+  services.newerAutomations.follow(() => runtime.dispatcher.facts.update);
+  if (services.schemaAccess === 'read-write')
+    await recordRuntimeRelease(services.db, config, services.clock()).catch((err) =>
+      services.log.warn({ err: String(err) }, 'this release could not be recorded'),
+    );
   // Shared links (share-links.md): the manager's share routes, and the round that keeps the links right.
   useShares(services, manager);
   startShareRound(services);

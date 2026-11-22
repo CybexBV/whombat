@@ -61,6 +61,7 @@ function makeServices() {
     background: { run: vi.fn() },
     housekeeping: { add: vi.fn() },
     automations: { nudge: vi.fn() },
+    newerAutomations: { ready: async () => true },
   } as unknown as Services;
   return { services, warn };
 }
@@ -167,6 +168,7 @@ describe('MailTriggerService.pollOnce', () => {
       background: { run: vi.fn() },
       housekeeping: { add: vi.fn() },
       automations: { nudge: vi.fn() },
+      newerAutomations: { ready: async () => true },
     } as unknown as Services;
 
     vi.mocked(providerWorkspace).mockReturnValue({
@@ -309,6 +311,7 @@ describe('MailTriggerService.pollOnce', () => {
       background: { run: vi.fn() },
       housekeeping: { add: vi.fn() },
       automations: { nudge: vi.fn() },
+      newerAutomations: { ready: async () => true },
     } as unknown as Services;
 
     vi.mocked(providerWorkspace).mockReturnValue({

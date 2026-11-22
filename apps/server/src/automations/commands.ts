@@ -235,6 +235,7 @@ export async function storeDraft(
   patch: { name?: string; description?: string; definition: JsonObject | null },
 ) {
   refuseWebhookTrigger(patch.definition);
+  await ctx.services.newerAutomations.refuse(patch.definition);
   await ctx.tx
     .update(automations)
     .set({
@@ -254,6 +255,7 @@ export async function insertAutomation(
   args: { name: string; description: string; draft: JsonObject | null },
 ): Promise<string> {
   refuseWebhookTrigger(args.draft);
+  await ctx.services.newerAutomations.refuse(args.draft);
   const id = newId('automation');
   const principalId = await createAutomationPrincipal(ctx, { name: args.name, createdAt: ctx.now });
   await ctx.tx.insert(automations).values({
@@ -478,6 +480,7 @@ export async function publishVersion(
   def: AutomationDefinition,
   enable: boolean,
 ): Promise<number> {
+  await ctx.services.newerAutomations.refuse(def);
   const tx = ctx.tx;
   const [currentAuto] = await tx
     .select({ status: automations.status, mailActiveAt: automations.mailActiveAt })
@@ -888,6 +891,7 @@ export const setAutomationEnabled = defineCommand({
       .where(and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)));
     if (!current) throw notFound('Automation version');
     const def = current.definition;
+    if (input.enabled) await ctx.services.newerAutomations.refuse(def);
     const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
@@ -1085,6 +1089,7 @@ export const runAutomationNow = defineCommand({
       if (!input.test && !def.triggers.some((t) => t.kind === 'manual'))
         throw conflict('This automation starts on its own. Try it with a test run instead.');
     }
+    await ctx.services.newerAutomations.refuse(def);
     // A run acts in the rooms its definition names: each must still be the burrow's (BP-C19).
     await requireRoomsHere(ctx, def);
     // A test run on a sample (“Try it on …”): `trigger.*` as a real event about that issue or pull request fills it,

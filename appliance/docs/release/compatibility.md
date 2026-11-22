@@ -41,6 +41,9 @@ custody-signed tuple that permits it (MA-21c).
   incompatible migration ships alone, behind a checkpoint; after activation the way out of a failure is a fix-forward
   release (`ForwardRepairRequired`). A PostgreSQL major is its own class (MD-09); none so far.
 - A runtime validates the schema at start and refuses one outside its range; only `whombat migrate` migrates (MD-07).
+- What the release before a feature can't run reaches a box one release later: the runtime turns it on only while the
+  release the box would go back to knows it. Mail automations (and ones that change connected services) are the first:
+  they come on with the release after the one that brings them (Whombat `automation-recipes.md` AR-71).
 - Proven in VMs from the baseline runtime on: `release/upgrade-gates` gates 1, 2, 4 and 6 (updates from the releases
   boxes run, `vm-tests/upgrade-gates/previous.json`, IN-415), 5 (`update-migration`: expand, contract, checkpoint,
   rollback, IN-416) and 7 (the restore drill).

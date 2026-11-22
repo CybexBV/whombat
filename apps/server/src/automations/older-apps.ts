@@ -6,14 +6,9 @@
  * such an app gets a form it reads — the run's trigger as a message, such a step as an earlier step, the automation
  * without that definition (its summary and glance still say what it does) — and a newer app gets everything.
  */
-import type {
-  Automation,
-  AutomationDefinition,
-  AutomationExport,
-  AutomationRun,
-  RealtimeEvent,
-} from '@whombat/core';
+import type { Automation, AutomationExport, AutomationRun, RealtimeEvent } from '@whombat/core';
 import { ApiError } from '../lib/errors';
+import { newerDefinition } from './release-gate';
 
 /** The protocol minor that reads automations started by mail and their `connection_actions` steps. */
 export const MAIL_AUTOMATIONS_MINOR = 3;
@@ -21,19 +16,6 @@ export const MAIL_AUTOMATIONS_MINOR = 3;
 /** Whether a session at `minor` reads them; outside a session (`undefined`), it does. */
 export const readsMailAutomations = (minor: number | undefined) =>
   minor === undefined || minor >= MAIL_AUTOMATIONS_MINOR;
-
-/** Whether a definition has anything an app below `MAIL_AUTOMATIONS_MINOR` refuses. */
-function newerDefinition(definition: AutomationDefinition | null | undefined): boolean {
-  if (!definition) return false;
-  return (
-    definition.triggers.some((t) => t.kind === 'mail') ||
-    definition.recipe?.when.kind === 'mail' ||
-    definition.steps.some(
-      (s) =>
-        s.kind === 'connection_actions' || (s.kind === 'dispatch_agent' && s.proposeActions !== undefined),
-    )
-  );
-}
 
 /** An automation as an app at `minor` reads it. */
 export function automationFor(automation: Automation, minor: number | undefined): Automation {
