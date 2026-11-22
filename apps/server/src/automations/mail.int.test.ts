@@ -3394,7 +3394,8 @@ describe('mail-arrives automations', () => {
     const offId = await createMailAutomation({ ...when, subjectContains: ['gate-off'] });
     await w.ok(IDS.mara, setAutomationEnabled, { automationId: offId, enabled: false });
     await pollAndSettle();
-    const deliver = (id: string, subject: string) =>
+    const pdf = Buffer.from('%PDF-1.4\nGate invoice\n%%EOF');
+    const deliver = (id: string, subject: string, withFile = false) =>
       fake.deliverMail(FAKE_ACCESS_TOKEN, {
         id,
         from: 'Billing <billing@example.com>',
@@ -3404,11 +3405,21 @@ describe('mail-arrives automations', () => {
         messageId: `<${id}@example.com>`,
         date: w.now(),
         labelIds: ['INBOX', 'UNREAD'],
-        attachments: [],
+        attachments: withFile
+          ? [
+              {
+                id: `${id}_pdf`,
+                name: 'gate-invoice.pdf',
+                mimeType: 'application/pdf',
+                size: pdf.length,
+                contentBase64: pdf.toString('base64'),
+              },
+            ]
+          : [],
       });
-    // A mail that arrived just before: its run is made after the switch.
+    // A mail that arrived just before, with a file: its run is made after the switch.
     w.advance(10_000);
-    deliver('msg_gate_before', 'gate before');
+    deliver('msg_gate_before', 'gate before', true);
     expect(await w.services.mailTriggers.pollOnce()).toBe(1);
 
     // This release on a box updated from one that doesn't know them.
@@ -3464,14 +3475,40 @@ describe('mail-arrives automations', () => {
       expect(await pollAndSettle()).toBe(0);
       expect(state.calls).toEqual([]);
       expect(await runsOf(liveId)).toHaveLength(1);
+      // A month goes by, far longer than a run may take: the run waiting there hasn't started, so its time hasn't
+      // either.
+      const limit = (waiting?.definition.limits.runTimeoutMinutes ?? 0) * 60_000;
+      w.advance(31 * 24 * 60 * 60_000);
+      await w.settle();
+      expect((await runsOf(liveId))[0]?.status).toBe('queued');
 
       // The next release: the one it goes back to recorded itself at its start, so they go on.
       await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: OLD }, w.now());
       expect(await gate.ready()).toBe(true);
-      expect(await pollAndSettle()).toBe(1);
+      // The email's record is older than a month and goes, but its file stays while its run hasn't ended.
+      expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+      await w.services.files.sweep();
+      expect(await pollAndSettle()).toBe(0);
       const runs = await runsOf(liveId);
       expect(runs).toHaveLength(2);
-      expect(runs[0]?.status).not.toBe('queued');
+      // It starts now and asks the agent with the email's file, its time counted from now; past that, it ran out of
+      // time.
+      expect(runs[0]).toMatchObject({ status: 'waiting', error: null, startedAt: w.now() });
+      const asked = await w.run(runs[0]?.id as string);
+      const [turn] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, asked.steps[0]?.dispatchId as string));
+      const context = await buildDispatchContext(w.services, turn as NonNullable<typeof turn>);
+      expect(context.attachments.map((a) => a.name)).toEqual(['gate-invoice.pdf']);
+      w.advance(limit - 60_000);
+      await w.settle();
+      expect((await loadRunRow(w.services.db, runs[0]?.id as string)).status).toBe('waiting');
+      w.advance(2 * 60_000);
+      await w.settle();
+      const late = await loadRunRow(w.services.db, runs[0]?.id as string);
+      expect(late.status).toBe('failed');
+      expect(late.error).toContain('ran out of time');
     } finally {
       w.services.newerAutomations = open;
       await w.ok(IDS.mara, deleteAutomation, { automationId: liveId });

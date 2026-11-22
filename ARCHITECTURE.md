@@ -844,7 +844,8 @@ published automation details read their definition and publisher from one versio
   the release it would go back to after a failed update knows them (`automations/release-gate.ts`): from the manager's
   update facts, the box's current release while this one is being tried, else the release its own last update came
   from, looked up in `runtime_releases`, where each release records itself at its first start on a managed box. Until
-  then they wait, kept as they are: no mailbox is read, their runs don't start or move on, and making, turning on or
+  then they wait, kept as they are: no mailbox is read, their runs don't start or move on (a run's time counts from when
+  it first starts, and its email's files stay while it hasn't ended), and making, turning on or
   running one, or the assistant's `draft_automation`, answers “Mail automations come with the next update.” (or the same
   about connected services), as `automation_read`'s guide says. Development boxes, tests and a box that never updated
   have them on.
@@ -857,7 +858,7 @@ published automation details read their definition and publisher from one versio
   `steps/turn-words.ts`). A run started by incoming mail, or one with a `connection_actions` step, is stored with
   `deadline_at` at the epoch: the release before mail triggers checks a started run's deadline before any step, so after
   a rollback it fails such a run instead of asking the agent as the person; here its deadline is its own time limit after
-  it was created (`runDeadline`, docs/decisions/automation-recipes.md).
+  it first started (`runDeadline`, docs/decisions/automation-recipes.md).
 - **Identity**: each automation signs as its own system principal, with authority = its grants ∩ the publisher's
   current authority, checked before every step and inside approval execution; the rooms a step uses must still be the
   burrow's. The agent can only draft until the

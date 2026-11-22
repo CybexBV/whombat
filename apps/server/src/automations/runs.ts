@@ -12,6 +12,7 @@ import type { Db, Tx } from '../db/client';
 import { automationRunSteps, automationRuns, messages } from '../db/schema/index';
 import { thePersonAccountId } from '../domain/the-person';
 import { itemThread } from './github-items';
+import { newerRun } from './release-gate';
 import { runRoomOf } from './rooms';
 import { type AutomationRow, type AutomationRunRow, publishAutomation, publishRun } from './store';
 
@@ -196,14 +197,21 @@ export function previousReleaseStops(run: {
  */
 export const PREVIOUS_RELEASE_STOPS_AT = new Date(0);
 
-/** When a run gives up: its own time limit after it was created, also for a run stored for the previous release. */
+/**
+ * When a run gives up: its own time limit after it was created, also for a run stored for the previous release. A run
+ * the release gate may hold (`newerRun`) counts it from when it first started instead: made while the gate is shut, it
+ * waits there unstarted, maybe for days, and its email would never start it again.
+ */
 export function runDeadline(
-  run: Pick<AutomationRunRow, 'deadlineAt' | 'createdAt'> & {
+  run: Pick<AutomationRunRow, 'deadlineAt' | 'createdAt' | 'startedAt'> & {
+    trigger: { kind: string };
     definition: { limits: Pick<AutomationDefinition['limits'], 'runTimeoutMinutes'> };
   },
 ): Date {
+  const limit = run.definition.limits.runTimeoutMinutes * 60_000;
+  if (newerRun(run)) return new Date((run.startedAt ?? run.createdAt).getTime() + limit);
   if (run.deadlineAt.getTime() !== PREVIOUS_RELEASE_STOPS_AT.getTime()) return run.deadlineAt;
-  return new Date(run.createdAt.getTime() + run.definition.limits.runTimeoutMinutes * 60_000);
+  return new Date(run.createdAt.getTime() + limit);
 }
 
 /**
