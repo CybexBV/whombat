@@ -102,14 +102,13 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
     expect(by('quiet_hours')?.value).toBe('02:00 – 05:00');
     // Left out: the graphics chip, which this Plex doesn't report.
     expect(by('graphics_chip')).toBeUndefined();
-    // Emptying the trash and updates stay in Plex: no switch, no Change.
-    for (const id of ['empty_trash', 'updates']) {
+    // Secure connections, emptying the trash and updates stay in Plex: no switch, no Change.
+    for (const id of ['secure_connections', 'empty_trash', 'updates']) {
       expect(by(id)?.elsewhere?.label).toBe('In Plex');
       expect(by(id)?.toggle).toBeUndefined();
       expect(by(id)?.choose).toBeUndefined();
     }
-    // Secure connections never offers Off.
-    expect(by('secure_connections')?.choose?.choices.map((c) => c.value)).toEqual([0, 1]);
+    expect(by('secure_connections')?.value).toBe('Required');
   });
 
   it('draws them disabled with the reason on Look only', () => {
@@ -155,11 +154,15 @@ describe('changing one (SST-02, SST-03)', () => {
     await expect(act(ctx, { target: 'remote_quality', value: 20000 })).rejects.toThrow(/didn’t take/);
   });
 
-  it('takes only a choice it offers, and changes nothing when it already is', async () => {
+  it('takes only a choice it offers, refuses elsewhere settings, and changes nothing when it already is', async () => {
     reset();
     await expect(act(ctx, { target: 'remote_quality', value: 123 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'secure_connections', value: 0 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'secure_connections', value: 1 })).rejects.toThrow();
     await expect(act(ctx, { target: 'secure_connections', value: 2 })).rejects.toThrow();
+    expect(await describeSetting(PLEX_SETTINGS, ctx, { target: 'secure_connections', value: 1 })).toBeNull();
     await expect(act(ctx, { target: 'empty_trash', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'updates', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
     plex.calls = [];
     const same = await act(ctx, { target: 'remote_quality', value: 8000 });
@@ -167,14 +170,26 @@ describe('changing one (SST-02, SST-03)', () => {
     expect(plex.calls.some((c) => c.method === 'PUT')).toBe(false);
   });
 
-  it('flips a switch and sets two prefs for a schedule', async () => {
+  it('writes only the targeted preference(s) for each writable Plex setting', async () => {
     reset();
-    await act(ctx, { target: 'remote_access', value: false });
-    expect(plex.prefs.get('PublishServerOnPlexOnlineKey')).toBe(false);
-    await act(ctx, { target: 'scan_schedule', value: 0 });
-    expect(plex.prefs.get('ScheduledLibraryUpdatesEnabled')).toBe(false);
-    await act(ctx, { target: 'scan_schedule', value: 3600 });
-    expect(plex.prefs.get('ScheduledLibraryUpdateInterval')).toBe(3600);
+    plex.prefs.set('HardwareAcceleratedCodecs', true);
+    const cases: [string, string | number | boolean, string][] = [
+      ['remote_access', false, '?PublishServerOnPlexOnlineKey=0'],
+      ['remote_quality', 12000, '?WanPerStreamMaxUploadRate=12000'],
+      ['graphics_chip', false, '?HardwareAcceleratedCodecs=0'],
+      ['conversion_quality', 2, '?TranscoderQuality=2'],
+      ['conversions_at_once', 2, '?TranscodeCountLimit=2'],
+      ['scan_on_change', false, '?FSEventLibraryUpdatesEnabled=0'],
+      ['scan_schedule', 0, '?ScheduledLibraryUpdatesEnabled=0'],
+      ['scan_schedule', 3600, '?ScheduledLibraryUpdatesEnabled=1&ScheduledLibraryUpdateInterval=3600'],
+      ['quiet_hours', '3-6', '?ButlerStartHour=3&ButlerEndHour=6'],
+    ];
+    for (const [target, value, query] of cases) {
+      plex.calls = [];
+      const done = await act(ctx, { target, value });
+      expect(done.message).toContain('Checked with Plex');
+      expect(plex.calls.filter((c) => c.method === 'PUT').map((c) => c.query)).toEqual([query]);
+    }
   });
 
   it('puts it back only while it still has the value Whombat set', async () => {

@@ -1,6 +1,7 @@
 /**
- * AdGuard Home's declared settings: read-only rows from its OpenAPI config endpoints, keeping every setting in
- * AdGuard Home so `POST /control/filtering/config` cannot overwrite a concurrent DNS filtering change.
+ * AdGuard Home's declared settings: Safe browsing and Parental control write through their dedicated single-field
+ * `/enable` and `/disable` endpoints with read-back and Undo; every whole-section, destructive or cut-off setting
+ * stays in AdGuard Home.
  */
 import { ThingPagePanel, type ThingSetting } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
@@ -134,16 +135,16 @@ describe('AdGuard Home declared settings', () => {
     expect(by('filter_update_interval')?.choose).toBeUndefined();
     expect(by('safebrowsing')).toMatchObject({
       value: 'On',
-      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+      on: true,
+      toggle: { action: 'setting', target: 'safebrowsing', allowed: true },
     });
-    expect(by('safebrowsing')?.toggle).toBeUndefined();
-    expect(by('safebrowsing')?.on).toBeUndefined();
+    expect(by('safebrowsing')?.elsewhere).toBeUndefined();
     expect(by('parental')).toMatchObject({
       value: 'Off',
-      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+      on: false,
+      toggle: { action: 'setting', target: 'parental', allowed: true },
     });
-    expect(by('parental')?.toggle).toBeUndefined();
-    expect(by('parental')?.on).toBeUndefined();
+    expect(by('parental')?.elsewhere).toBeUndefined();
     expect(by('safesearch')).toMatchObject({
       value: 'Off',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -187,21 +188,81 @@ describe('AdGuard Home declared settings', () => {
       url: 'http://192.0.2.15:3000/#dns',
     });
 
-    for (const r of rows) {
-      expect(r.toggle).toBeUndefined();
-      expect(r.choose).toBeUndefined();
-      expect(r.elsewhere?.label).toBe('In AdGuard Home');
-    }
+    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
+    expect(look.find((r) => r.id === 'safebrowsing')?.toggle?.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'safebrowsing')?.toggle?.reason).toMatch(/Look only/);
+    expect(look.find((r) => r.id === 'parental')?.toggle?.allowed).toBe(false);
   });
 
-  it('refuses every AdGuard Home setting write so POST /control/filtering/config cannot overwrite concurrent filtering.enabled changes', async () => {
+  it('writes Safe browsing and Parental control through dedicated single-field endpoints with read-back and Undo', async () => {
+    reset();
+    const sbOff = await act(ctx, { target: 'safebrowsing', value: false });
+    expect(sbOff.message).toContain('Checked with AdGuard Home');
+    expect(sbOff).toMatchObject({
+      changeKind: 'setting.safebrowsing',
+      detail: 'On',
+      undo: { target: 'safebrowsing', value: true, expect: false },
+    });
+    expect(ag.store.calls).toEqual([
+      { method: 'GET', path: '/control/safebrowsing/status', body: null },
+      { method: 'POST', path: '/control/safebrowsing/disable', body: null },
+      { method: 'GET', path: '/control/safebrowsing/status', body: null },
+    ]);
+
+    // Undo restores Safe browsing only while unchanged.
+    ag.store.safebrowsing.enabled = true;
+    await expect(
+      act(ctx, { target: 'safebrowsing', value: sbOff.undo?.value, expect: sbOff.undo?.expect }),
+    ).rejects.toThrow(/changed again since/);
+    ag.store.safebrowsing.enabled = false;
+    ag.store.calls = [];
+    await act(ctx, { target: 'safebrowsing', value: sbOff.undo?.value, expect: sbOff.undo?.expect });
+    expect(ag.store.safebrowsing.enabled).toBe(true);
+    expect(ag.store.calls.filter((c) => c.method === 'POST')).toEqual([
+      { method: 'POST', path: '/control/safebrowsing/enable', body: null },
+    ]);
+
+    ag.store.calls = [];
+    const parOn = await act(ctx, { target: 'parental', value: true });
+    expect(parOn.message).toContain('Checked with AdGuard Home');
+    expect(parOn).toMatchObject({
+      changeKind: 'setting.parental',
+      detail: 'Off',
+      undo: { target: 'parental', value: false, expect: true },
+    });
+    expect(ag.store.calls).toEqual([
+      { method: 'GET', path: '/control/parental/status', body: null },
+      { method: 'POST', path: '/control/parental/enable', body: null },
+      { method: 'GET', path: '/control/parental/status', body: null },
+    ]);
+
+    const same = await act(ctx, { target: 'parental', value: true });
+    expect(same.unchanged).toBe(true);
+
+    ag.store.deaf = true;
+    await expect(act(ctx, { target: 'parental', value: false })).rejects.toThrow(/didn’t take/);
+
+    ag.store.deaf = false;
+    const words = await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'parental', value: false });
+    expect(words?.title).toContain('AdGuard Home');
+    expect(words?.lines[0]).toContain('On → Off');
+
+    // Concurrent changes to sibling AdGuard Home settings are untouched by single-field enable/disable calls.
+    reset();
+    ag.store.filtering.enabled = false;
+    ag.store.parental.enabled = true;
+    await act(ctx, { target: 'safebrowsing', value: false });
+    expect(ag.store.safebrowsing.enabled).toBe(false);
+    expect(ag.store.filtering.enabled).toBe(false);
+    expect(ag.store.parental.enabled).toBe(true);
+  });
+
+  it('refuses every whole-section, destructive or cut-off AdGuard Home setting write', async () => {
     reset();
     for (const [target, value] of [
       ['dns_and_access', true],
       ['filtering_enabled', false],
       ['filter_update_interval', 12],
-      ['safebrowsing', false],
-      ['parental', true],
       ['safesearch', true],
       ['querylog_enabled', false],
       ['querylog_interval', 2_592_000_000],
@@ -213,6 +274,6 @@ describe('AdGuard Home declared settings', () => {
       await expect(act(ctx, { target, value })).rejects.toThrow();
       expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target, value })).toBeNull();
     }
-    expect(ag.store.calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(ag.store.calls.some((c) => c.method === 'POST' || c.method === 'PUT')).toBe(false);
   });
 });

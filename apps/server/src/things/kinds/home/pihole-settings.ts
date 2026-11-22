@@ -1,7 +1,18 @@
 /**
  * Pi-hole v6's declared settings: read from `/api/config/dns`, `/api/config/database` and `/api/config/misc`, written
- * via `PATCH /api/config`. Never touches `/api/config/webserver`, upstream DNS, DNSSEC, DHCP or query-log/privacy
- * recording so nothing here can break name lookups, cut off access or stop keeping lookup history.
+ * via field-only `PATCH /api/config`.
+ *
+ * Writable here:
+ * - `blocking_mode` (`dns.blocking.mode`): field-only PATCH; changes only how already-blocked domains answer.
+ * - `query_logging` (`dns.queryLogging`): field-only PATCH; in `pi-hole/FTL` (`src/config/config.c`), this only
+ *   toggles writing future DNS queries and replies to `pihole.log` and deletes or replaces nothing already stored.
+ * - `privacy_level` (`misc.privacylevel`): field-only PATCH; in `pi-hole/FTL` (`src/database/query-table.c`,
+ *   `src/datastructure.c`), each query keeps the privacy level active when it arrived, so raising the level (even to
+ *   Anonymous) only affects new queries and leaves already-stored rows in `pihole-FTL.db` intact.
+ *
+ * Stays in Pi-hole: `dnssec` (enabling it against a non-DNSSEC upstream breaks name lookups), `dns_and_dhcp`
+ * (upstream DNS, DHCP and sign-in, never `/api/config/webserver`) and `max_db_days` (in `pi-hole/FTL`
+ * `src/database/database-thread.c`, shortening it deletes stored queries older than `maxDBdays * 86400`).
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -67,6 +78,11 @@ async function readPiholeDns(services: Services, row: CatalogConnectionRow): Pro
   return parsePiholeSettings({ dns, database: null, misc: null });
 }
 
+async function readPiholeMisc(services: Services, row: CatalogConnectionRow): Promise<PiholeSettingsState> {
+  const misc = await getJson(services, row, NAME, '/api/config/misc');
+  return parsePiholeSettings({ dns: null, database: null, misc });
+}
+
 const patchConfig = (config: Record<string, unknown>) => ({
   method: 'PATCH' as const,
   path: '/api/config',
@@ -88,6 +104,13 @@ const BLOCKING_SHORT: Record<string, string> = {
   NXDOMAIN: 'NXDOMAIN',
   NODATA: 'NODATA',
 };
+
+const PRIVACY_LEVELS: SettingChoice[] = [
+  { value: 0, label: 'Show everything', note: 'full domains and devices' },
+  { value: 1, label: 'Hide domains', note: 'keeps device counts' },
+  { value: 2, label: 'Hide domains and devices', note: 'totals only' },
+  { value: 3, label: 'Anonymous', note: 'no new lookup history' },
+];
 
 const PRIVACY_WORDS: Record<string, string> = {
   '0': 'Show everything',
@@ -139,19 +162,34 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     id: 'query_logging',
     group: 'logs',
     label: 'Query log',
-    help: 'Record DNS lookups so you can see what was allowed or blocked. Turning it off stops keeping lookup logs, so it stays in Pi-hole.',
-    kind: 'elsewhere',
+    help: 'Record new DNS lookups to Pi-hole’s log file. Existing history stays.',
+    kind: 'switch',
     read: (s) => s.queryLogging ?? undefined,
-    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    readFresh: readPiholeDns,
+    write: (v) => patchConfig({ dns: { queryLogging: asBool(v) === true } }),
+    sentence: (v) =>
+      asBool(v) ? 'Pi-hole is now recording DNS lookups.' : 'Pi-hole’s query log is now off.',
   },
   {
     id: 'privacy_level',
     group: 'logs',
     label: 'Privacy level',
-    help: 'How much detail Pi-hole keeps about lookups and devices. Raising it stops keeping domains, devices or lookup history, so it stays in Pi-hole.',
-    kind: 'elsewhere',
+    help: 'How much detail Pi-hole keeps for new lookups and devices. Existing history stays.',
+    kind: 'choice',
     read: (s) => s.privacyLevel ?? undefined,
+    readFresh: readPiholeMisc,
+    choices: (s) =>
+      withCurrent(
+        PRIVACY_LEVELS,
+        s.privacyLevel ?? undefined,
+        (v) => PRIVACY_WORDS[String(v)] ?? `Level ${String(v)}`,
+      ),
     words: (v) => PRIVACY_WORDS[String(v)] ?? `Level ${String(v)}`,
+    write: (v) => patchConfig({ misc: { privacylevel: Number(v) } }),
+    sentence: (v) => {
+      const label = PRIVACY_WORDS[String(v)] ?? `level ${String(v)}`;
+      return `Pi-hole’s privacy level is now set to ${label.toLowerCase()}.`;
+    },
   },
   {
     id: 'max_db_days',

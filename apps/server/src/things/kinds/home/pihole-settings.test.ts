@@ -124,15 +124,16 @@ describe('Pi-hole declared settings', () => {
     expect(by('rate_limit')).toBeUndefined();
     expect(by('query_logging')).toMatchObject({
       value: 'On',
-      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
+      on: true,
+      toggle: { action: 'setting', target: 'query_logging', allowed: true },
     });
-    expect(by('query_logging')?.toggle).toBeUndefined();
-    expect(by('query_logging')?.on).toBeUndefined();
+    expect(by('query_logging')?.elsewhere).toBeUndefined();
     expect(by('privacy_level')).toMatchObject({
       value: 'Show everything',
-      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
+      choose: { current: 0 },
     });
-    expect(by('privacy_level')?.choose).toBeUndefined();
+    expect(by('privacy_level')?.choose?.choices.map((c) => c.value)).toEqual([0, 1, 2, 3]);
+    expect(by('privacy_level')?.elsewhere).toBeUndefined();
     expect(by('max_db_days')).toMatchObject({
       value: '90 days',
       elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
@@ -143,12 +144,14 @@ describe('Pi-hole declared settings', () => {
       url: 'http://192.0.2.16/admin/settings/dns',
     });
 
-    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : []));
-    expect(look[0]?.choose?.button.allowed).toBe(false);
-    expect(look[0]?.choose?.button.reason).toMatch(/Look only/);
+    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
+    expect(look.find((r) => r.id === 'blocking_mode')?.choose?.button.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'blocking_mode')?.choose?.button.reason).toMatch(/Look only/);
+    expect(look.find((r) => r.id === 'query_logging')?.toggle?.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'privacy_level')?.choose?.button.allowed).toBe(false);
   });
 
-  it('writes via PATCH /api/config and verifies read-back', async () => {
+  it('writes blocking_mode, query_logging and privacy_level as single-field PATCH /api/config and verifies read-back', async () => {
     reset();
     const done = await act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
     expect(done.message).toContain('NXDOMAIN');
@@ -158,6 +161,42 @@ describe('Pi-hole declared settings', () => {
       detail: '0.0.0.0',
       undo: { target: 'blocking_mode', value: 'NULL', expect: 'NXDOMAIN' },
     });
+    expect(ph.store.calls).toEqual([
+      { method: 'GET', path: '/api/config/dns', body: null },
+      { method: 'PATCH', path: '/api/config', body: { config: { dns: { blocking: { mode: 'NXDOMAIN' } } } } },
+      { method: 'GET', path: '/api/config/dns', body: null },
+    ]);
+
+    ph.store.calls = [];
+    const ql = await act(ctx, { target: 'query_logging', value: false });
+    expect(ql.message).toContain('Checked with Pi-hole');
+    expect(ql).toMatchObject({
+      changeKind: 'setting.query_logging',
+      detail: 'On',
+      undo: { target: 'query_logging', value: true, expect: false },
+    });
+    expect(ph.store.calls).toEqual([
+      { method: 'GET', path: '/api/config/dns', body: null },
+      { method: 'PATCH', path: '/api/config', body: { config: { dns: { queryLogging: false } } } },
+      { method: 'GET', path: '/api/config/dns', body: null },
+    ]);
+
+    ph.store.calls = [];
+    const priv = await act(ctx, { target: 'privacy_level', value: 2 });
+    expect(priv.message).toContain('Checked with Pi-hole');
+    expect(priv).toMatchObject({
+      changeKind: 'setting.privacy_level',
+      detail: 'Show everything',
+      undo: { target: 'privacy_level', value: 0, expect: 2 },
+    });
+    expect(ph.store.calls).toEqual([
+      { method: 'GET', path: '/api/config/misc', body: null },
+      { method: 'PATCH', path: '/api/config', body: { config: { misc: { privacylevel: 2 } } } },
+      { method: 'GET', path: '/api/config/misc', body: null },
+    ]);
+    // Unrelated sibling fields in both sections stay untouched.
+    expect(ph.store.misc.delay_startup).toBe(0);
+    expect(ph.store.dns.upstreams).toEqual(['9.9.9.9']);
 
     await act(ctx, { target: 'blocking_mode', value: 'IP_NODATA_AAAA' });
     expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('IP_NODATA_AAAA');
@@ -204,11 +243,10 @@ describe('Pi-hole declared settings', () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'dnssec', value: true })).rejects.toThrow();
-    await expect(act(ctx, { target: 'query_logging', value: false })).rejects.toThrow();
-    await expect(act(ctx, { target: 'privacy_level', value: 2 })).rejects.toThrow();
     await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
     await expect(act(ctx, { target: 'rate_limit', value: 2000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'blocking_mode', value: 'ZERO' })).rejects.toThrow();
+    await expect(act(ctx, { target: 'privacy_level', value: 9 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
 
     const same = await act(ctx, { target: 'blocking_mode', value: 'NULL' });
@@ -216,6 +254,8 @@ describe('Pi-hole declared settings', () => {
 
     ph.store.deaf = true;
     await expect(act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'query_logging', value: false })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'privacy_level', value: 2 })).rejects.toThrow(/didn’t take/);
 
     ph.store.deaf = false;
     const done = await act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
@@ -238,12 +278,16 @@ describe('Pi-hole declared settings', () => {
       value: 'IP_NODATA_AAAA',
     });
     expect(ipv4?.lines[0]).toContain('0.0.0.0 → Pi-hole’s IPv4 address');
+    const ql = await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'query_logging', value: false });
+    expect(ql?.lines[0]).toContain('On → Off');
+    const priv = await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'privacy_level', value: 2 });
+    expect(priv?.lines[0]).toContain('Show everything → Hide domains and devices');
     expect(
       await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' }),
     ).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'dnssec', value: true })).toBeNull();
-    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'query_logging', value: false })).toBeNull();
-    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'privacy_level', value: 2 })).toBeNull();
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'max_db_days', value: 30 })).toBeNull();
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'privacy_level', value: 9 })).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'BAD' })).toBeNull();
   });
 });

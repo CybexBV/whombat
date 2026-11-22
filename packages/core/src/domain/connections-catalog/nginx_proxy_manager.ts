@@ -72,7 +72,7 @@ export const entry = {
     readPaths: [{ method: 'POST', path: '^/api/nginx/certificates/(test-http|validate)$' }],
   },
   guide:
-    'Nginx Proxy Manager’s API under /api/ (JSON); Whombat signs in as its user and sends the token itself. Proxy hosts: GET /api/nginx/proxy-hosts?expand=certificate,access_list (no paging; ?query= searches); POST /api/nginx/proxy-hosts {"domain_names": ["app.example.com"], "forward_scheme": "http", "forward_host": "192.168.1.20", "forward_port": 8080, "certificate_id": 3, "ssl_forced": true, "block_exploits": true, "allow_websocket_upgrade": true} adds one; PUT /api/nginx/proxy-hosts/{id} changes it; POST …/{id}/enable or …/{id}/disable. The same shape for /api/nginx/redirection-hosts, /api/nginx/dead-hosts (404 hosts) and /api/nginx/streams. Certificates: GET /api/nginx/certificates; POST /api/nginx/certificates/test-http {"domains": […]} checks a name is reachable first; POST /api/nginx/certificates {"provider": "letsencrypt", "domain_names": […], "meta": {"dns_challenge": false}} requests one ("certificate_id": "new" on a host does too); POST …/{id}/renew. Access lists: /api/nginx/access-lists. GET /api/reports/hosts counts hosts; /api/settings and /api/audit-log need an administrator. The user Whombat signs in as limits what agents can do: 403 “Permission Denied” means it lacks that permission. Errors are {"error": {"code", "message"}}. Users, permissions, passwords, signing in as someone else and deleting anything always ask a person.',
+    'Nginx Proxy Manager’s API under /api/ (JSON); Whombat signs in as its user and sends the token itself. Proxy hosts: GET /api/nginx/proxy-hosts?expand=certificate,access_list (no paging; ?query= searches); POST /api/nginx/proxy-hosts {"domain_names": ["app.example.com"], "forward_scheme": "http", "forward_host": "192.168.1.20", "forward_port": 8080, "certificate_id": 3, "ssl_forced": true, "block_exploits": true, "allow_websocket_upgrade": true} adds one; PUT /api/nginx/proxy-hosts/{id} changes it; POST …/{id}/enable or …/{id}/disable. The same shape for /api/nginx/redirection-hosts, /api/nginx/dead-hosts (404 hosts) and /api/nginx/streams. Certificates: GET /api/nginx/certificates; POST /api/nginx/certificates/test-http {"domains": […]} checks a name is reachable first; POST /api/nginx/certificates {"provider": "letsencrypt", "domain_names": […], "meta": {"dns_challenge": false}} requests one ("certificate_id": "new" on a host does too); POST …/{id}/renew. Access lists: /api/nginx/access-lists. GET /api/reports/hosts counts hosts; /api/settings and /api/audit-log need an administrator. The user Whombat signs in as limits what agents can do: 403 “Permission Denied” means it lacks that permission. Errors are {"error": {"code", "message"}}. Users, permissions, passwords, downloading certificates, signing in as someone else and deleting anything always ask a person.',
   sensitive: [
     DELETES_ASK,
     {
@@ -80,6 +80,11 @@ export const entry = {
       methods: ['POST', 'PUT'],
       path: '^/api/users(/|$)',
       reason: 'Adds a user, or changes users, passwords, permissions or two-step sign-in',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/nginx/certificates/[^/]+/download(/|$)',
+      reason: 'Downloads a certificate archive, including its TLS private key',
     },
   ],
   cutsOff: [

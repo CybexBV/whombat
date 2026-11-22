@@ -79,7 +79,7 @@ export const entry = {
     readMethods: ['GET', 'HEAD'],
   },
   guide:
-    'qBittorrent’s WebUI API v2 under /api/v2/; Whombat keeps the SID session cookie. Reads: GET /api/v2/sync/maindata (server_state speeds, alltime_dl/ul, free_space_on_disk, connection_status, use_alt_speed_limits, and torrents map), GET /api/v2/torrents/info (?filter=downloading|seeding|stalled|errored&category=…&sort=…), GET /api/v2/transfer/info, GET /api/v2/torrents/categories, GET /api/v2/app/version. Actions (form-encoded POST with hashes=<hash|hash|all>): POST /api/v2/torrents/stop or /start (v5; /pause or /resume on v4), POST /api/v2/transfer/toggleSpeedLimitsMode, POST /api/v2/torrents/reannounce, POST /api/v2/torrents/add (urls=<magnet or URL>&category=…). Deleting torrents or their files (POST /api/v2/torrents/delete), changing preferences (POST /api/v2/app/setPreferences) and shutting qBittorrent down (POST /api/v2/app/shutdown) always ask a person.',
+    'qBittorrent’s WebUI API v2 under /api/v2/; Whombat keeps the SID session cookie. Reads: GET /api/v2/sync/maindata (server_state speeds, alltime_dl/ul, free_space_on_disk, connection_status, use_alt_speed_limits, and torrents map), GET /api/v2/torrents/info (?filter=downloading|seeding|stalled|errored&category=…&sort=…), GET /api/v2/transfer/info, GET /api/v2/torrents/categories, GET /api/v2/app/version. Actions (form-encoded POST with hashes=<hash|hash|all>): POST /api/v2/torrents/stop or /start (v5; /pause or /resume on v4), POST /api/v2/transfer/toggleSpeedLimitsMode, POST /api/v2/torrents/reannounce, POST /api/v2/torrents/add (urls=<magnet or URL>&category=…). Deleting torrents or their files (POST /api/v2/torrents/delete), reading or changing preferences, cookies or the API key (/api/v2/app/preferences, /setPreferences, /cookies, /setCookies, /rotateAPIKey, /deleteAPIKey) and shutting qBittorrent down (POST /api/v2/app/shutdown) always ask a person.',
   sensitive: [
     DELETES_ASK,
     {
@@ -90,9 +90,20 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
+      path: '^/api/v2/app/(preferences|cookies)(/|$)',
+      reason: 'Reads qBittorrent’s settings or cookies, which may contain passwords or an API key',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
       methods: ['POST'],
       path: '^/api/v2/app/setPreferences/?$',
       reason: 'Changes qBittorrent’s settings',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/v2/app/(setCookies|rotateAPIKey|deleteAPIKey)(/|$)',
+      reason: 'Changes qBittorrent’s stored cookies or API key',
     },
     {
       tools: [REQUEST_TOOL_NAME],

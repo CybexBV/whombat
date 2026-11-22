@@ -1,24 +1,16 @@
 /**
  * Sonarr's and Radarr's declared settings: read from `/api/v3/config/mediamanagement`, `/api/v3/config/naming`,
- * `/api/v3/config/downloadclient` and `/api/v3/config/indexer`. Only `naming` and `indexer` (which hold no sign-in,
- * access, network or data-keeping fields) are written via `PUT /api/v3/config/<section>/<id>`, reading that section
- * fresh right before writing and verifying every untouched field still matches afterwards. Never reads or writes
- * `/api/v3/config/host` (API key, auth, ports, TLS), `/api/v3/config/mediamanagement` (holds the recycle bin and
- * import/unmonitor controls) or `/api/v3/config/downloadclient`.
+ * `/api/v3/config/downloadclient` and `/api/v3/config/indexer`. Every row stays read-only (“In Sonarr” / “In Radarr”):
+ * Sonarr and Radarr v3 config endpoints only accept whole-section `PUT /api/v3/config/<section>/<id>` with no
+ * field-only `PATCH` or conditional `If-Match`, so any write could silently overwrite a concurrent change to sibling
+ * settings. Media management, download handling and host settings also carry file-replacement, recycle-bin, auth and
+ * network controls. Never reads or writes `/api/v3/config/host` (API key, auth, ports, TLS).
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
 import { num, rec, str } from '../../words';
 import { getJson, ReadProblem } from '../read';
-import {
-  asBool,
-  type DeclaredSettings,
-  omitFields,
-  type SettingChoice,
-  type SettingSpec,
-  type SettingValue,
-  withCurrent,
-} from '../settings';
+import { asBool, type DeclaredSettings, type SettingSpec, type SettingValue } from '../settings';
 
 export type ArrSettingsApp = 'sonarr' | 'radarr';
 
@@ -79,24 +71,6 @@ export async function readArrSettings(
   return parseArrSettings({ mediamanagement, naming, downloadclient, indexer });
 }
 
-/** Reads only the target config section fresh right before and after a whole-object PUT. */
-async function readArrSection(
-  app: ArrSettingsApp,
-  section: keyof ArrSettingsState,
-  services: Services,
-  row: CatalogConnectionRow,
-): Promise<ArrSettingsState> {
-  const name = APP_NAME[app];
-  const body = await getJson(services, row, name, `/api/v3/config/${section}`);
-  return {
-    mediamanagement: null,
-    naming: null,
-    downloadclient: null,
-    indexer: null,
-    [section]: parseSection(body),
-  };
-}
-
 const boolField = (section: ConfigSection | null, key: string): boolean | undefined => {
   if (!section) return undefined;
   return typeof section.raw[key] === 'boolean' ? (section.raw[key] as boolean) : undefined;
@@ -113,12 +87,6 @@ const strField = (section: ConfigSection | null, key: string): string | undefine
   return str(section.raw[key]) ?? undefined;
 };
 
-const putSection = (sectionName: string, section: ConfigSection, patch: Record<string, unknown>) => ({
-  method: 'PUT' as const,
-  path: `/api/v3/config/${sectionName}/${section.id}`,
-  body: { ...section.raw, ...patch },
-});
-
 function spaceWords(v: SettingValue): string {
   const mb = Number(v);
   if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024} GB`;
@@ -133,19 +101,19 @@ const PROPERS_LABEL: Record<string, string> = {
 
 const propersWords = (v: SettingValue): string => PROPERS_LABEL[String(v)] ?? String(v);
 
-const RSS_INTERVALS: SettingChoice[] = [
-  { value: 10, label: 'Every 10 minutes' },
-  { value: 15, label: 'Every 15 minutes' },
-  { value: 30, label: 'Every 30 minutes' },
-  { value: 60, label: 'Every hour' },
-  { value: 120, label: 'Every 2 hours' },
-];
+const RSS_INTERVAL_LABELS: Record<number, string> = {
+  0: 'Off',
+  10: 'Every 10 minutes',
+  15: 'Every 15 minutes',
+  30: 'Every 30 minutes',
+  60: 'Every hour',
+  120: 'Every 2 hours',
+};
 
 function rssWords(v: SettingValue): string {
   const m = Number(v);
-  if (m === 0) return 'Off';
-  const known = RSS_INTERVALS.find((c) => c.value === m);
-  if (known) return known.label;
+  const known = RSS_INTERVAL_LABELS[m];
+  if (known) return known;
   return m >= 60 && m % 60 === 0 ? `Every ${m / 60} hours` : `Every ${m} minutes`;
 }
 
@@ -164,16 +132,11 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       id: 'rename_files',
       group: 'files',
       label: 'Rename files on import',
-      help: `Rename imported ${unitPlural} to match your naming format.`,
-      kind: 'switch',
+      help: `Rename imported ${unitPlural} to match your naming format. ${name} saves all naming settings together, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.naming, renameField),
-      readFresh: (services, row) => readArrSection(app, 'naming', services, row),
-      untouched: (s) => (s.naming ? omitFields(s.naming.raw, renameField) : undefined),
-      write: (v, s) => putSection('naming', s.naming as ConfigSection, { [renameField]: asBool(v) === true }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now renames ${unitPlural} when importing them.`
-          : `${name} no longer renames ${unitPlural} on import.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'hardlinks',
@@ -249,25 +212,11 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       id: 'rss_sync_interval',
       group: 'downloads',
       label: 'Check for new releases',
-      help: `How often ${name} checks your indexers for new uploads.`,
-      kind: 'choice',
+      help: `How often ${name} checks your indexers for new uploads. ${name} saves all indexer settings together, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => numField(s.indexer, 'rssSyncInterval'),
-      readFresh: (services, row) => readArrSection(app, 'indexer', services, row),
-      untouched: (s) => (s.indexer ? omitFields(s.indexer.raw, 'rssSyncInterval') : undefined),
-      // When RSS sync is off (0), turning it on could grab upgrades and replace files; keep that in Sonarr/Radarr.
-      choices: (s) => {
-        const cur = numField(s.indexer, 'rssSyncInterval');
-        if (cur === 0) return [];
-        return withCurrent(RSS_INTERVALS, cur, rssWords);
-      },
       words: rssWords,
-      short: (v) => rssWords(v).toLowerCase(),
       elsewhere: (base) => `${base}/settings/indexers`,
-      write: (v, s) =>
-        putSection('indexer', s.indexer as ConfigSection, {
-          rssSyncInterval: Number(v),
-        }),
-      sentence: (v) => `${name} now checks for new releases ${rssWords(v).toLowerCase()}.`,
     },
     {
       id: 'general_and_updates',
