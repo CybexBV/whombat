@@ -10,6 +10,7 @@ import {
   type AutomationPlanCard,
   type AutomationRecipeInput,
   agentDefaultGrants,
+  MAIL_TEXT_REMOVED,
   Message,
   newId,
 } from '@whombat/core';
@@ -33,6 +34,7 @@ import {
   connectionTools,
   dispatches,
   events,
+  hermesSessionDrops,
   mailCursors,
   mailTriggerItems,
   messages,
@@ -53,6 +55,7 @@ import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { useVaultNetForTests } from '../vault/net';
 import {
+  controlAutomationRun,
   createAutomation,
   deleteAutomation,
   publishAutomationDraft,
@@ -915,12 +918,29 @@ describe('mail-arrives automations', () => {
     expect(beforeRun?.body).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     expect(beforeRun?.snippet.length).toBeGreaterThan(0);
 
-    // Once the agent step renders its prompt, the rendered prompt has the fenced body, while BOTH mail_trigger_items
-    // AND automation_runs.scope strip body/snippet/text — keeping sender, subject and attachment names on the run.
+    // Once the run starts, the mirrored item's cached body and snippet are cleared; the run keeps the email's text only
+    // while its agent step works on it (its prompt has the fenced body).
     await w.settle();
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
-    const runScope = (runs[0]?.scope ?? {}) as Record<string, unknown>;
+    expect(JSON.stringify(runs[0]?.scope)).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+
+    const runDetail = await w.run(runs[0]?.id as string);
+    const f6DispatchId = runDetail.steps[0]?.dispatchId as string;
+    const [f6Dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, f6DispatchId));
+    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
+    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+
+    // Its step settled: the run's scope and the step's stored instructions keep none of the email's text (sender,
+    // subject and attachment names stay), and the Hermes session its turn ran in is forgotten.
+    await w.services.db
+      .update(dispatches)
+      .set({ providerSessionId: 'hermes:f6-session' })
+      .where(eq(dispatches.id, f6DispatchId));
+    await w.fakeAgentReply(f6DispatchId, 'Nothing to do.');
+    await w.settle();
+    const [settled] = await runsOf(autoId);
+    const runScope = (settled?.scope ?? {}) as Record<string, unknown>;
     expect(runScope).not.toHaveProperty('body');
     expect(runScope).not.toHaveProperty('snippet');
     expect(runScope).not.toHaveProperty('text');
@@ -928,14 +948,19 @@ describe('mail-arrives automations', () => {
     expect(String(runScope.from ?? '')).toContain('billing@example.com');
     expect(String(runScope.subject ?? '')).toContain('Privacy invoice #1');
     expect(String(runScope.attachments ?? '')).toContain('privacy-invoice.pdf');
-
-    const runDetail = await w.run(runs[0]?.id as string);
-    const [f6Dispatch] = await w.services.db
+    const settledSteps = await w.services.db
       .select()
-      .from(dispatches)
-      .where(eq(dispatches.id, runDetail.steps[0]?.dispatchId as string));
-    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
-    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+      .from(automationRunSteps)
+      .where(eq(automationRunSteps.runId, settled?.id as string));
+    expect(JSON.stringify(settledSteps)).not.toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+    const askOutput = (settledSteps.find((r) => r.idx === 0)?.output ?? {}) as { instructions?: unknown };
+    expect(String(askOutput.instructions)).toContain(MAIL_TEXT_REMOVED);
+    expect(
+      await w.services.db
+        .select()
+        .from(hermesSessionDrops)
+        .where(eq(hermesSessionDrops.sessionId, 'f6-session')),
+    ).toHaveLength(1);
     const [afterRun] = await w.services.db
       .select()
       .from(mailTriggerItems)
@@ -2725,6 +2750,107 @@ describe('mail-arrives automations', () => {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       await w.ok(IDS.mara, deleteAutomation, { automationId: actionsId });
       await w.ok(IDS.mara, deleteAutomation, { automationId: plainId });
+      await pollAndSettle();
+    }
+  });
+
+  it('keeps the email’s text until the last step that reads it has rendered, and forgets it when the run ends', async () => {
+    const limits = { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 };
+    const trigger = (word: string) => ({
+      kind: 'mail' as const,
+      connectionId,
+      from: 'example.com',
+      subjectContains: [word],
+    });
+    // An agent step and, after it, a post that reads the body again.
+    const twoStepsId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [trigger('keep-two')],
+        steps: [
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+          { id: 'note', kind: 'post_message', text: 'The body: {{trigger.body}}' },
+        ],
+        limits,
+      },
+      { name: 'Two steps read the mail' },
+    );
+    // No agent step at all.
+    const noAgentId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [trigger('keep-none')],
+        steps: [{ id: 'note', kind: 'post_message', text: 'New mail: {{trigger.subject}}' }],
+        limits,
+      },
+      { name: 'No agent step' },
+    );
+    const deliver = (id: string, subject: string, body: string) =>
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id,
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject,
+        body,
+        messageId: `<${id}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+    const scopeOf = async (automationId: string) => JSON.stringify((await runsOf(automationId))[0]?.scope);
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      deliver('msg_keep_two', 'keep-two invoice', 'BODY_FOR_TWO_STEPS');
+      deliver('msg_keep_none', 'keep-none invoice', 'BODY_WITHOUT_AGENT');
+      expect(await pollAndSettle()).toBe(2);
+
+      // A run without an agent step ends at once and keeps no text.
+      const [noAgentRun] = await runsOf(noAgentId);
+      expect(noAgentRun?.status).toBe('succeeded');
+      expect(await scopeOf(noAgentId)).not.toContain('BODY_WITHOUT_AGENT');
+
+      // The agent step works on it: the run keeps it.
+      const [twoRun] = await runsOf(twoStepsId);
+      const runId = twoRun?.id as string;
+      expect(await scopeOf(twoStepsId)).toContain('BODY_FOR_TWO_STEPS');
+      const asked = await w.run(runId);
+      const dispatchId = asked.steps[0]?.dispatchId as string;
+      // The agent's step settled: the post after it still renders the body, then the run keeps it nowhere but that post.
+      await w.fakeAgentReply(dispatchId, 'Read it.');
+      await w.settle();
+      const done = await loadRunRow(w.services.db, runId);
+      expect(done.status).toBe('succeeded');
+      expect(JSON.stringify(done.scope)).not.toContain('BODY_FOR_TWO_STEPS');
+      const stepRows = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(eq(automationRunSteps.runId, runId));
+      expect(JSON.stringify(stepRows)).not.toContain('BODY_FOR_TWO_STEPS');
+      const posted = stepRows.find((r) => r.stepId === 'note')?.messageIds[0] as string;
+      expect((await loadMessageRow(w.services.db, posted))?.text).toContain('BODY_FOR_TWO_STEPS');
+
+      // A run stopped while its agent works forgets it too.
+      w.advance(10_000);
+      deliver('msg_keep_cancel', 'keep-two again', 'BODY_OF_CANCELLED_RUN');
+      expect(await pollAndSettle()).toBe(1);
+      const cancelled = (await runsOf(twoStepsId)).find((r) => r.id !== runId);
+      if (!cancelled) throw new Error('no second run');
+      expect(JSON.stringify(cancelled.scope)).toContain('BODY_OF_CANCELLED_RUN');
+      await w.ok(IDS.mara, controlAutomationRun, { number: cancelled.number, action: 'cancel' });
+      const after = await loadRunRow(w.services.db, cancelled.id);
+      expect(after.status).toBe('cancelled');
+      expect(JSON.stringify(after.scope)).not.toContain('BODY_OF_CANCELLED_RUN');
+      const cancelledSteps = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(eq(automationRunSteps.runId, cancelled.id));
+      expect(JSON.stringify(cancelledSteps)).not.toContain('BODY_OF_CANCELLED_RUN');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: twoStepsId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: noAgentId });
       await pollAndSettle();
     }
   });

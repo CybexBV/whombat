@@ -814,8 +814,11 @@ published automation details read their definition and publisher from one versio
   definitions may not use repository workspaces or external steps other than `connection_actions`, sender-controlled
   fields reach the agent only inside
   defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
-  email's files attached to the prompt message (`read_attachment`), and once the agent prompt is rendered, `body`,
-  `snippet` and `text` are stripped from `automation_runs.scope` while sender, subject and attachment metadata stay.
+  email's files attached to the prompt message (`read_attachment`). A run keeps the email's text (`body`, `snippet`,
+  `text` in `automation_runs.scope`) only while a step that reads the trigger may still render it; then, and whenever
+  the run ends, it goes from the scope, from what settled steps stored (their fenced copies become a short note) and
+  from the Hermes sessions the run's turns ran in (`automations/mail-text.ts`), while sender, subject and attachment
+  metadata stay.
   Proposed writes (`propose_connection_actions`, narrowed to writable non-built-in services excluding `whombat_servers`,
   `t3code`, `DELETE` and read-only calls, with prompts listing handles/tools only) always ask the person on a
   server-described approval card bound to the exact `actionsHash` regardless of standing settings before
