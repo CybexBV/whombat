@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { JsonObject } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { callArgsAad } from '../../connections/call';
-import { automationRuns } from '../../db/schema/index';
+import { callTarget } from '../../connections/call-target';
+import type { Db, Tx } from '../../db/client';
+import { automationRuns, catalogConnections } from '../../db/schema/index';
 import { approvedActionsRequest, planConnectionActions } from '../proposed-actions';
 import type { CardNames } from '../proposed-card';
 import { CONTINUE_STEP, requestStepApproval } from './approval';
@@ -46,6 +48,23 @@ export async function executeConnectionActions({
     asked !== null &&
     previousHash === plan.actionsHash &&
     (await approvedActionsRequest(tx, asked, run.id, step, attempt, plan.actionsHash));
+  if (asked !== null && !approved) {
+    // A yes to a card that no longer matches what would run (a connection got another address, account or sign-in, say):
+    // asked again on a fresh card, its names read again from where the calls go now (the engine's next pass).
+    await updateStep(
+      tx,
+      run.id,
+      idx,
+      {
+        ...base,
+        state: 'pending',
+        approvalId: null,
+        output: freshCardOutput(changedTargets(previous, plan.actions)),
+      },
+      ctx.now,
+    );
+    return;
+  }
   if (!approved || !asked) {
     // The card shows every line of every action, asks Whombat's own question, and its message names the actions in
     // Whombat's words only: nothing the agent or the email wrote leads it.
@@ -71,7 +90,7 @@ export async function executeConnectionActions({
         question: card.question,
         whatHappens: card.whatHappens,
         summary: card.summary,
-        cardText: card.cardText,
+        cardText: againText(previous) + card.cardText,
       },
     );
     await updateStep(
@@ -86,6 +105,8 @@ export async function executeConnectionActions({
         output: {
           actionsHash: plan.actionsHash,
           count: plan.actions.length,
+          // Where each connection's calls went when the card was made: what a later change is told by.
+          targets: Object.fromEntries(plan.actions.map((a) => [a.connectionId, a.target])),
           ...(Object.keys(plan.names).length ? { cardNames: plan.names } : {}),
         },
       },
@@ -104,6 +125,7 @@ export async function executeConnectionActions({
     return {
       callId,
       connectionId: a.connectionId,
+      target: a.target,
       handle: a.handle,
       label: a.label,
       tool: a.tool,
@@ -133,4 +155,53 @@ export async function executeConnectionActions({
     .update(automationRuns)
     .set({ status: 'running', updatedAt: ctx.now })
     .where(eq(automationRuns.id, run.id));
+}
+
+/** The labels of the connections whose calls go elsewhere, or as someone else, than when the card was made. */
+function changedTargets(
+  previous: JsonObject,
+  actions: readonly { connectionId: string; target: string; label: string }[],
+): string[] {
+  const was = previous.targets;
+  if (!was || typeof was !== 'object' || Array.isArray(was)) return [];
+  const before = was as Record<string, unknown>;
+  return [
+    ...new Set(
+      actions
+        .filter((a) => typeof before[a.connectionId] === 'string' && before[a.connectionId] !== a.target)
+        .map((a) => a.label),
+    ),
+  ];
+}
+
+/** The labels of the connections a waiting card's calls would now send elsewhere, or as someone else. */
+export async function changedSinceCard(db: Db | Tx, output: unknown): Promise<string[]> {
+  const was = (output as { targets?: unknown } | null)?.targets;
+  if (!was || typeof was !== 'object' || Array.isArray(was)) return [];
+  const ids = Object.keys(was);
+  if (!ids.length) return [];
+  const rows = await db.select().from(catalogConnections).where(inArray(catalogConnections.id, ids));
+  return changedTargets(
+    output as JsonObject,
+    rows.map((r) => ({ connectionId: r.id, target: callTarget(r), label: r.label })),
+  );
+}
+
+/**
+ * A `connection_actions` step's output when it asks again: nothing of the card before (no yes, no names), and which
+ * connections changed since the yes, so the fresh card says so.
+ */
+export function freshCardOutput(changed: readonly string[]): JsonObject {
+  return changed.length ? { changedSinceYes: [...changed] } : {};
+}
+
+/** The first words of a card asked again because connections changed since the person's yes. */
+function againText(previous: JsonObject): string {
+  const changed = Array.isArray(previous.changedSinceYes)
+    ? previous.changedSinceYes.filter((l): l is string => typeof l === 'string')
+    : [];
+  if (!changed.length) return '';
+  const names =
+    changed.length === 1 ? changed[0] : `${changed.slice(0, -1).join(', ')} and ${changed.at(-1)}`;
+  return `${names} changed since you said yes. `;
 }

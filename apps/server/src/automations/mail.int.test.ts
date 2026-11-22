@@ -23,6 +23,8 @@ import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
 import { reactToMessage, sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
+import { executeConnectionCall } from '../connections/call';
+import { callTarget } from '../connections/call-target';
 import { syncTools } from '../connections/sync';
 import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
@@ -1931,6 +1933,250 @@ describe('mail-arrives automations', () => {
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       if (ncId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, ncId));
+      await pollAndSettle();
+    }
+  });
+
+  /** A fake service on a made-up host of the home network: it answers each request with `answer`'s. */
+  async function fakeService(
+    answer: (req: { method: string; url: string }) => { status: number; json: unknown },
+  ): Promise<{ port: number; seen: { method: string; url: string }[]; close(): Promise<void> }> {
+    const seen: { method: string; url: string }[] = [];
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      req.resume();
+      req.on('end', () => {
+        const asked = { method: req.method ?? '', url: req.url ?? '' };
+        seen.push(asked);
+        const { status, json } = answer(asked);
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(json));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    return {
+      port: (server.address() as AddressInfo).port,
+      seen,
+      close: () => new Promise<void>((r) => server.close(() => r())),
+    };
+  }
+
+  /** An email with one PDF, delivered and polled; the run it started. */
+  async function deliverInvoice(automationId: string, id: string, subject: string) {
+    w.advance(10_000);
+    const pdf = Buffer.from(`%PDF-1.4\n${subject}\n%%EOF`);
+    fake.deliverMail(FAKE_ACCESS_TOKEN, {
+      id,
+      from: 'Acme Billing <billing@example.com>',
+      to: ['you@example.com'],
+      subject,
+      body: 'Invoice attached.',
+      messageId: `<${id}@example.com>`,
+      date: w.now(),
+      labelIds: ['INBOX', 'UNREAD'],
+      attachments: [
+        {
+          id: `att_${id}`,
+          name: 'invoice.pdf',
+          mimeType: 'application/pdf',
+          size: pdf.length,
+          contentBase64: pdf.toString('base64'),
+        },
+      ],
+    });
+    expect(await pollAndSettle()).toBe(1);
+    const run = (await runsOf(automationId)).at(-1);
+    if (!run) throw new Error('no run');
+    return w.run(run.id);
+  }
+
+  /** A step's turn, claimed as the runner would, with its context and its agent's auth. */
+  async function claimedTurn(dispatchId: string) {
+    await w.services.db
+      .update(dispatches)
+      .set({ state: 'running', claimedAt: w.now() })
+      .where(eq(dispatches.id, dispatchId));
+    const [row] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+    if (!row) throw new Error('no dispatch');
+    const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+    return { row, auth, context: await buildDispatchContext(w.services, row) };
+  }
+
+  it('asks again on a fresh card when a connection goes elsewhere after its card or its yes, and never sends there', async () => {
+    const tagged = (name: string) =>
+      fakeService(({ method, url }) =>
+        method === 'GET'
+          ? url === '/api/tags/7/'
+            ? { status: 200, json: { id: 7, name } }
+            : { status: 404, json: {} }
+          : { status: 200, json: 'task' },
+      );
+    const first = await tagged('Old Server Tag');
+    const second = await tagged('New Server Tag');
+    const netId = newId('vaultNetwork');
+    let plId = '';
+    let autoId = '';
+    try {
+      const hosts: Record<string, string> = {
+        'pl-old.example.com': '10.100.95.10',
+        'pl-new.example.com': '10.100.95.11',
+      };
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          const address = hosts[host];
+          if (address) return [{ address, family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address.startsWith('10.100.95.') ? '127.0.0.1' : address),
+        deadlineMs: 3000,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.95.0/24',
+        ports: [first.port, second.port],
+        note: 'Two Paperless-ngx',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      plId = await insertConnection(w.services, {
+        catalogId: 'paperless',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { url: `http://pl-old.example.com:${first.port}` },
+        auth: { type: 'header', name: 'Authorization', template: 'Token {secret}' },
+        secret: 'e'.repeat(40),
+        label: 'Paperless-ngx',
+      });
+      await syncTools(w.services, plId);
+      // What the person does in Settings → Connections: another address, and the sign-in version moves with it.
+      const moveTo = async (host: string, port: number) => {
+        const [row] = await w.services.db
+          .select()
+          .from(catalogConnections)
+          .where(eq(catalogConnections.id, plId));
+        await w.services.db
+          .update(catalogConnections)
+          .set({
+            fields: { url: `http://${host}:${port}` },
+            baseUrl: `http://${host}:${port}`,
+            credentialVersion: (row?.credentialVersion ?? 1) + 1,
+          })
+          .where(eq(catalogConnections.id, plId));
+      };
+      autoId = await w.publish(
+        {
+          version: 1,
+          conversationId: maraChat.dmId,
+          triggers: [{ kind: 'mail', connectionId, subjectContains: ['moved-server'] }],
+          steps: [
+            { id: 'ask', kind: 'dispatch_agent', prompt: 'File it: {{trigger.subject}}', proposeActions: true },
+            { id: 'act', kind: 'connection_actions', from: 'ask' },
+          ],
+          limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
+        },
+        { name: 'Moved server' },
+      );
+      await pollAndSettle();
+      const writes = (svc: { seen: { method: string }[] }) => svc.seen.filter((r) => r.method !== 'GET').length;
+      const cardOf = async (runId: string) => {
+        const r = await w.run(runId);
+        const [row] = await w.services.db
+          .select()
+          .from(approvals)
+          .where(eq(approvals.id, r.steps[1]?.approvalId as string));
+        if (!row) throw new Error('no card');
+        const [message] = await w.services.db
+          .select()
+          .from(messages)
+          .where(eq(messages.id, row.messageId as string));
+        return { row, text: message?.text ?? '' };
+      };
+      const proposeUpload = async (runId: string) => {
+        const r = await w.run(runId);
+        const turn = await claimedTurn(r.steps[0]?.dispatchId as string);
+        const res = await callTool(w.services, turn.auth, 'propose_connection_actions', {
+          actions: [
+            {
+              connection: 'paperless',
+              tool: 'request',
+              summary: 'Upload the invoice',
+              arguments: {
+                method: 'POST',
+                path: '/api/documents/post_document/',
+                upload: {
+                  field: 'document',
+                  attachmentId: turn.context.attachments[0]?.id as string,
+                  fields: { tags: ['7'] },
+                },
+              },
+            },
+          ],
+        });
+        expect(res.isError, JSON.stringify(res.content)).not.toBe(true);
+        await w.fakeAgentReply(turn.row.id, 'Proposed it.');
+        await w.settle();
+      };
+
+      // Moved while the card waits: the yes is refused, and a fresh card names the new server's tag.
+      const one = await deliverInvoice(autoId, 'msg_moved_waiting', 'moved-server one');
+      await proposeUpload(one.id);
+      const before = await cardOf(one.id);
+      expect(before.row.whatHappens).toContain('upload.fields.tags: ["Old Server Tag" (7)]');
+      await moveTo('pl-new.example.com', second.port);
+      await w.ok(IDS.mara, decideApproval, { number: before.row.number, decision: 'approve' });
+      await w.settle();
+      const again = await cardOf(one.id);
+      expect(again.row.id).not.toBe(before.row.id);
+      expect(again.row.state).toBe('pending');
+      expect(again.row.whatHappens).toContain('upload.fields.tags: ["New Server Tag" (7)]');
+      expect(again.text).toContain('Paperless-ngx changed since you said yes.');
+      expect(writes(first) + writes(second)).toBe(0);
+      await w.ok(IDS.mara, decideApproval, { number: again.row.number, decision: 'approve' });
+      await w.settle();
+      expect((await w.run(one.id)).steps[1]?.state).toBe('succeeded');
+      expect(writes(first)).toBe(0);
+      expect(writes(second)).toBe(1);
+
+      // Moved after the yes, before the run: nothing is sent, and a fresh card asks again.
+      const two = await deliverInvoice(autoId, 'msg_moved_after_yes', 'moved-server two');
+      await proposeUpload(two.id);
+      const card = await cardOf(two.id);
+      expect(card.row.whatHappens).toContain('upload.fields.tags: ["New Server Tag" (7)]');
+      // The yes is taken, then the address moves before the engine runs the step.
+      await w.ok(IDS.mara, decideApproval, { number: card.row.number, decision: 'approve' });
+      await moveTo('pl-old.example.com', first.port);
+      await w.settle();
+      const fresh = await cardOf(two.id);
+      expect(fresh.row.id).not.toBe(card.row.id);
+      expect(fresh.row.state).toBe('pending');
+      expect(fresh.row.whatHappens).toContain('upload.fields.tags: ["Old Server Tag" (7)]');
+      expect(fresh.text).toContain('Paperless-ngx changed since you said yes.');
+      expect(writes(first)).toBe(0);
+      expect(writes(second)).toBe(1);
+
+      // At send time the call is checked on the very connection it is made with.
+      const [row] = await w.services.db.select().from(catalogConnections).where(eq(catalogConnections.id, plId));
+      if (!row) throw new Error('no connection');
+      const sent = await executeConnectionCall(w.services, {
+        burrowId: w.burrowId,
+        agentId: IDS.dusty,
+        connectionId: plId,
+        tool: 'request',
+        handle: 'paperless',
+        callId: newId('event'),
+        args: { method: 'POST', path: '/api/documents/post_document/', body: { title: 'x' } },
+        where: null,
+        approvalId: card.row.id,
+        target: 'f'.repeat(64),
+      });
+      expect(sent).toMatchObject({ kind: 'failed', changed: true });
+      expect(writes(first)).toBe(0);
+      expect(callTarget(row)).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      await first.close();
+      await second.close();
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (plId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, plId));
       await pollAndSettle();
     }
   });

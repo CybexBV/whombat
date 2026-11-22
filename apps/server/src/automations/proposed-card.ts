@@ -9,6 +9,7 @@
 import { catalogEntry } from '@whombat/core';
 import { z } from 'zod';
 import { asQuestion } from '../approvals/create';
+import { type CallTargetRow, callTarget } from '../connections/call-target';
 import { formatBytes } from '../connections/request';
 import type { ConnectionToolRow } from '../connections/types';
 import { listedNotes, listedRefs, listedWords } from './listed-actions';
@@ -34,15 +35,18 @@ export const TOO_MUCH_FOR_ONE_CARD = `Too much to show on one card (at most ${CA
 
 /** The most ids one card looks up by name. */
 export const CARD_NAMES_MAX = 24;
+/** The longest key `CardNames` keeps. */
+export const CARD_NAME_KEY_MAX = 300;
 
 /**
- * What the server read of the ids a card's actions name, by `connectionId:kind:id`: each one's name, or that the service
- * has no such thing. An id it couldn't read is left out (the card shows it as it is, and says so). Read outside any
- * transaction before the card is made, and kept on the step so every later look at the card shows the same.
+ * What the server read of the ids a card's actions name, by `cardNameKey` (the connection, where its calls go, the kind
+ * and the id): each one's name, or that the service has no such thing. An id it couldn't read is left out (the card
+ * shows it as it is, and says so). Read outside any transaction before the card is made, and kept on the step so every
+ * later look at the card shows the same; a name read from where a connection's calls no longer go is never used.
  */
 export const CardNamesInput = z
   .record(
-    z.string().max(300),
+    z.string().max(CARD_NAME_KEY_MAX),
     z.union([
       z.object({ name: z.string().max(200) }).strict(),
       z.object({ missing: z.literal(true) }).strict(),
@@ -51,8 +55,12 @@ export const CardNamesInput = z
   .refine((names) => Object.keys(names).length <= CARD_NAMES_MAX, 'too many names');
 export type CardNames = z.infer<typeof CardNamesInput>;
 
-export const cardNameKey = (connectionId: string, kind: string, id: string) =>
-  `${connectionId}:${kind}:${id}`;
+/**
+ * Where a name was read: the connection and a short form of where its calls go (`callTarget`), so two connections of
+ * one kind never share a name, nor one connection before and after its address or account changed.
+ */
+export const cardNameKey = (connection: CallTargetRow, kind: string, id: string) =>
+  `${connection.id}:${callTarget(connection).slice(0, 16)}:${kind}:${id}`;
 
 /** The names kept on a step's output when its card was made (none when there are none, or they don't parse). */
 export function keptCardNames(output: unknown): CardNames {

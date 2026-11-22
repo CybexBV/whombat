@@ -393,6 +393,56 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
       expect(seenFor('hall-lamp')).toBe(0);
     });
 
+    it('sends nothing when the connection was signed in again after it asked, and wakes the agent to ask again', async () => {
+      const row = await askToTurnOn('attic-lamp');
+      // The person gives the connection a new token while the card waits: where its calls go, and as whom, changed.
+      const [before] = await t.services.db.select().from(catalogConnections).where(eq(catalogConnections.id, ha));
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: (before?.credentialVersion ?? 1) + 1 })
+        .where(eq(catalogConnections.id, ha));
+      try {
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(row.id))?.error).toContain('changed since you said yes');
+        expect(seenFor('attic-lamp')).toBe(0);
+        // The agent hears it, so it can ask again on a fresh card.
+        await expect
+          .poll(
+            async () =>
+              (
+                await t.services.db
+                  .select({ id: dispatches.id })
+                  .from(dispatches)
+                  .where(and(eq(dispatches.approvalId, row.id), eq(dispatches.trigger, 'approval_granted')))
+              )[0]?.id ?? null,
+            { timeout: 10_000 },
+          )
+          .not.toBeNull();
+        const [wake] = await t.services.db
+          .select()
+          .from(dispatches)
+          .where(and(eq(dispatches.approvalId, row.id), eq(dispatches.trigger, 'approval_granted')));
+        const context = await contextOf(wake?.id as string);
+        expect(context.grantedResult).toMatchObject({ outcome: 'failed' });
+        expect(context.grantedResult?.text).toContain('changed since you said yes');
+        // Asked again, the call is bound to the connection as it is now and runs after the yes.
+        const again = await askToTurnOn('attic-lamp');
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: again.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect.poll(async () => (await executionOf(again.id))?.state, { timeout: 10_000 }).toBe('succeeded');
+        expect(seenFor('attic-lamp')).toBe(1);
+      } finally {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ credentialVersion: before?.credentialVersion ?? 1 })
+          .where(eq(catalogConnections.id, ha));
+      }
+    });
+
     it('runs a call a crash stopped before it was recorded once on recovery', async () => {
       const row = await askToTurnOn('porch-lamp');
       // The yes and the start committed, then the process stopped before the call's own commit.

@@ -302,12 +302,19 @@ export const automationStep = defineCommand({
           // A note that its turn waited goes with the attempt.
           const noted = queuedNoteOf(row.output);
           const { queuedBehind: _noted, ...kept } = row.output as JsonObject;
+          // A card of proposed connection actions tried again starts fresh: no earlier yes, and its names read again
+          // from where the calls go now; only what the caller says (which connections changed since the yes) stays.
+          const fresh = step.kind === 'connection_actions';
           await updateStep(
             tx,
             run.id,
             input.idx,
             {
-              ...(noted ? { inputSummary: noted.asked, output: kept } : {}),
+              ...(fresh
+                ? { output: (input.output ?? {}) as JsonObject }
+                : noted
+                  ? { inputSummary: noted.asked, output: kept }
+                  : {}),
               state: 'pending',
               attempt: row.attempt + 1,
               error: input.error ?? null,

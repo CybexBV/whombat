@@ -10,6 +10,7 @@ import { catalogConnections, connectionTools } from '../db/schema/index';
 import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../home/registry';
 import { ApiError } from '../lib/errors';
 import { callArgsAad, callConnectionTool, executeConnectionCall } from './call';
+import { callTarget } from './call-target';
 import { type ConnectionUndo, undoCallId } from './changes';
 
 function isConnectionUndo(value: unknown): value is ConnectionUndo {
@@ -44,6 +45,7 @@ export async function undoConnectionChange(
   if (!tool) return { ok: false, reason: `${row.label} can’t do that any more, so this can’t be undone.` };
   const callId = undoCallId(change.id, person.id);
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(undo.args));
+  const target = callTarget(row);
   let res: Awaited<ReturnType<typeof services.pipeline.commit<typeof callConnectionTool.schema, unknown>>>;
   try {
     res = await services.pipeline.commit(
@@ -56,6 +58,7 @@ export async function undoConnectionChange(
         callId,
         argsEnc,
         ...(change.conversationId ? { conversationId: change.conversationId } : {}),
+        target,
       },
       { burrowId, actorId: change.agentId, onBehalfOf: { principalId: person.id, text: person.shortName } },
     );
@@ -76,6 +79,7 @@ export async function undoConnectionChange(
     args: undo.args,
     where: null,
     conversationId: change.conversationId,
+    target,
   });
   if (result.kind === 'failed') return { ok: false, reason: `It didn’t work: ${result.message}` };
   if (result.output.isError)

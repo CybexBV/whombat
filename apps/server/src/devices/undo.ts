@@ -16,6 +16,7 @@ import {
   executeConnectionCall,
   newCallId,
 } from '../connections/call';
+import { callTarget } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { catalogConnections, connectionTools } from '../db/schema/index';
@@ -102,6 +103,7 @@ export async function undoDeviceChange(
   }
   const callId = newCallId();
   linkUndo(callId, change.id, byId);
+  const target = callTarget(row);
   const res = await services.pipeline.commit(
     callConnectionTool,
     {
@@ -112,6 +114,7 @@ export async function undoDeviceChange(
       callId,
       argsEnc: services.custody.seal(callArgsAad(callId), JSON.stringify(args)),
       ...(change.conversationId ? { conversationId: change.conversationId } : {}),
+      target,
     },
     { burrowId: change.burrowId, actorId: agentId, onBehalfOf: { principalId: byId } },
   );
@@ -135,6 +138,7 @@ export async function undoDeviceChange(
     where: conversation ? (conversation.kind === 'dm' ? 'A DM' : conversationLabel(conversation)) : null,
     conversationId: change.conversationId,
     personId: byId,
+    target,
   });
   if (result.kind === 'failed') await say(services, change, `I couldn’t undo that: ${result.message}`);
   else if (result.output.isError)

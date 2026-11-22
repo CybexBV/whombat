@@ -14,7 +14,7 @@ import type { CatalogConnectionRow } from '../connections/types';
 import { catalogConnections, connectionTools } from '../db/schema/index';
 import type { Services } from '../services';
 import { outsidersCall, reportedProposedActions } from './proposed-actions';
-import { CARD_NAMES_MAX, type CardNames, cardNameKey, cardRefs } from './proposed-card';
+import { CARD_NAME_KEY_MAX, CARD_NAMES_MAX, type CardNames, cardNameKey, cardRefs } from './proposed-card';
 import { type AutomationRunRow, loadStepRows } from './store';
 
 type Fields = Readonly<Record<string, string>>;
@@ -173,7 +173,8 @@ export async function readCardNames(
       .from(catalogConnections)
       .where(eq(catalogConnections.burrowId, run.burrowId));
     const byHandle = new Map(rows.map((c) => [c.handle.toLowerCase(), c]));
-    // One read for each path, however often the card names it (a tax rate on every line).
+    // One read for each path of each connection, however often the card names it (a tax rate on every line); two
+    // connections of one kind each answer for themselves.
     const answers = new Map<string, Promise<Answer | null>>();
     const started = Date.now();
     for (const item of proposed) {
@@ -189,16 +190,18 @@ export async function readCardNames(
       const call = outsidersCall(entry, row, tool, item.arguments, row.label);
       if (!call.ok) continue;
       for (const ref of cardRefs(row.catalogId, tool, call.args)) {
-        const key = cardNameKey(row.id, ref.kind, ref.id);
-        if (Object.hasOwn(names, key)) continue;
+        const key = cardNameKey(row, ref.kind, ref.id);
+        // A key too long to keep is left unread: the card shows the id as it is.
+        if (Object.hasOwn(names, key) || key.length > CARD_NAME_KEY_MAX) continue;
         const lookup = nameLookup(row.catalogId, ref.kind);
         const path = lookup?.path(ref.id, row.fields);
         if (!lookup || !path) continue;
-        let answer = answers.get(path);
+        const asked = `${row.id}\n${path}`;
+        let answer = answers.get(asked);
         if (!answer) {
           if (answers.size >= CARD_NAMES_MAX || Date.now() - started > READS_BUDGET_MS) continue;
           answer = readOnce(services, row, entry, path);
-          answers.set(path, answer);
+          answers.set(asked, answer);
         }
         const read = await answer;
         const name = read ? lookup.name(read, ref.id) : null;

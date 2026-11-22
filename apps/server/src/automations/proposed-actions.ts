@@ -25,6 +25,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { callTier, needsReauthText } from '../connections/call';
+import { callTarget } from '../connections/call-target';
 import { connectionCallAccess } from '../connections/call-access';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
@@ -380,6 +381,8 @@ export async function emailFile(
 
 export interface PlannedConnectionAction {
   connectionId: string;
+  /** Where the connection's calls go and as whom when the card was made (`callTarget`): the yes is bound to it. */
+  target: string;
   handle: string;
   label: string;
   tool: string;
@@ -412,7 +415,7 @@ export type ConnectionActionsPlan =
  * Validates every proposed connection action from step `from`, ensuring each is a listed action (`outsidersCall`) and
  * its connection, tool, limit, key (not `cannot`) and file (one the server handed over from this run's email) are
  * permitted, and that every id it names exists where the server could read it. Returns a deterministic `actionsHash`
- * and plain-English approval proposal. `names` are the ids' names the server just read (`card-names.ts`); without
+ * (bound to where each call goes, `callTarget`) and plain-English approval proposal. `names` are the ids' names the server just read (`card-names.ts`); without
  * them, the ones kept on the step when its card was made, so the card reads the same each time it is made.
  */
 export async function planConnectionActions(
@@ -489,7 +492,7 @@ export async function planConnectionActions(
     // An id the service says it doesn't have is refused; one it couldn't read shows as it is.
     const named: Record<string, string> = {};
     for (const ref of cardRefs(row.catalogId, tool, args)) {
-      const found = known[cardNameKey(row.id, ref.kind, ref.id)];
+      const found = known[cardNameKey(row, ref.kind, ref.id)];
       if (found && 'missing' in found)
         return { ok: false, fatal: false, reason: `${row.label} has no ${ref.what} ${ref.id}.` };
       if (found) named[`${ref.kind}:${ref.id}`] = found.name;
@@ -508,6 +511,7 @@ export async function planConnectionActions(
 
     planned.push({
       connectionId: row.id,
+      target: callTarget(row),
       handle: row.handle,
       label: row.label,
       tool: tool.name,
@@ -535,10 +539,14 @@ export async function planConnectionActions(
   };
 }
 
-/** Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card. */
+/**
+ * Deterministic SHA-256 hash binding a batch of planned connection actions to its approval card: what runs, and where
+ * each call goes and as whom (`callTarget`), so a connection given another address or sign-in needs a new yes.
+ */
 export function hashPlannedActions(
   planned: readonly {
     connectionId: string;
+    target: string;
     tool: string;
     toolHash: string;
     description: string;
@@ -551,6 +559,7 @@ export function hashPlannedActions(
       canonicalJson(
         planned.map((a) => ({
           connectionId: a.connectionId,
+          target: a.target,
           tool: a.tool,
           toolHash: a.toolHash,
           description: a.description,

@@ -6,6 +6,7 @@
 import { type AutomationStep, CONNECTOR_BINARY_MAX_BYTES, catalogEntry, lookOnlyText } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { callArgsAad, callTier, executeConnectionCall, needsReauthText } from '../../connections/call';
+import { callTarget, changedSinceYesText } from '../../connections/call-target';
 import { isCallableEntry } from '../../connections/callable';
 import { keyTierOf } from '../../connections/context';
 import { limitsProblem } from '../../connections/limits';
@@ -28,12 +29,15 @@ import {
 } from '../proposed-actions';
 import { actionsDoneLine } from '../proposed-card';
 import { stepRoomsCheck } from '../steps';
+import { freshCardOutput } from '../steps/connection-actions';
 import type { AutomationStepRow } from '../store';
 import type { LeasedRun } from './step-ops';
 
 interface PreparedAction {
   callId: string;
   connectionId: string;
+  /** Where the connection's calls went and as whom when the person said yes (`callTarget`). */
+  target?: string;
   handle: string;
   label: string;
   tool: string;
@@ -57,6 +61,17 @@ export async function runConnectionActions(
   };
   const refuse = (error: string) =>
     lease.commit({ op: 'settle', idx: row.idx, state: 'blocked', error, from: ['running'] });
+  // A connection that goes elsewhere, or as someone else, than when the person said yes: nothing is sent, and the step
+  // asks again on a fresh card, its names read again from where the calls go now.
+  const askAgain = (label: string) =>
+    lease.commit({
+      op: 'settle',
+      idx: row.idx,
+      state: 'pending',
+      error: changedSinceYesText(label),
+      output: freshCardOutput([label]),
+      from: ['running'],
+    });
 
   const who = await publisherCheck(db, run.burrowId, run.publishedById);
   if (!who.ok) return void (await refuse(who.reason));
@@ -113,6 +128,7 @@ export async function runConnectionActions(
     if (!isProposableEntry(entry))
       return void (await refuse(`Actions on ${conn.label} can’t be proposed from an outsiders’ run.`));
     if (conn.status !== 'active') return void (await refuse(needsReauthText(conn)));
+    if (callTarget(conn) !== action.target) return void (await askAgain(conn.label));
     const [tool] = await db
       .select()
       .from(connectionTools)
@@ -165,6 +181,7 @@ export async function runConnectionActions(
   const openedHash = hashPlannedActions(
     ready.map(({ action, args }) => ({
       connectionId: action.connectionId,
+      target: action.target ?? '',
       tool: action.tool,
       toolHash: action.toolHash,
       description: action.description ?? action.summary,
@@ -204,7 +221,27 @@ export async function runConnectionActions(
       change: shown,
       approvalId: out.actionsApprovalId,
       uploadAttachment,
+      // Checked again on the connection the request is made with.
+      target: action.target ?? '',
     });
+    if (res.kind === 'failed' && res.changed) {
+      const ran = results.filter((r) => r.ok).length;
+      if (!ran) return void (await askAgain(action.label));
+      // Earlier actions ran already: asking again would run them twice, so the person checks instead.
+      await lease.commit({
+        op: 'settle',
+        idx: row.idx,
+        state: 'uncertain',
+        error:
+          `${ran} earlier ${ran === 1 ? 'action' : 'actions'} succeeded, then ${action.label} changed since you said yes, so “${shown}” wasn’t sent. Check what ran, then say what happened.`.slice(
+            0,
+            1000,
+          ),
+        output: { ran: true, count: ran, results },
+        from: ['running'],
+      });
+      return;
+    }
     // A folder that is there already: nothing changed, and what comes after it can go on.
     const wasThere =
       there !== null && res.kind === 'ok' && res.output.isError && res.output.httpStatus === there.status;
