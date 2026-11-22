@@ -398,6 +398,7 @@ describe('MailTriggerService.pollOnce', () => {
       background: { run: vi.fn() },
       housekeeping: { add: vi.fn() },
       automations: { nudge: vi.fn() },
+      newerAutomations: { ready: async () => true },
     } as unknown as Services;
 
     const pdfBase64 = Buffer.from('%PDF-1.4\nhello\n%%EOF').toString('base64');
@@ -596,6 +597,7 @@ describe('MailTriggerService.pollOnce', () => {
         background: { run: vi.fn() },
         housekeeping: { add: vi.fn() },
         automations: { nudge: vi.fn() },
+        newerAutomations: { ready: async () => true },
       } as unknown as Services;
       return new MailTriggerService(services);
     };
