@@ -25,6 +25,8 @@ export const FIND_MY_WORDS = {
   read: (ago: string) => `Read ${ago}`,
   note: 'Spots are where Find My’s address is, about 100 m. Show exactly takes Find My’s own map.',
   showExactly: 'Show exactly',
+  /** The button's spoken name beside the others on the list. */
+  showExactlyLabel: (name: string) => `Show exactly where ${name} is`,
   taking: (server: string) => `Taking the picture on ${server}…`,
   exactTitle: (name: string) => `Exactly where ${name} is`,
   exactLine: (server: string, when: string) => `Find My on ${server} · ${when}`,

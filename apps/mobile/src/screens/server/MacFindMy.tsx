@@ -234,7 +234,7 @@ function PersonRow({
           variant="secondary"
           disabled={!canShow}
           onPress={onShow}
-          accessibilityLabel={`${FIND_MY_WORDS.showExactly}: ${p.name}`}
+          accessibilityLabel={FIND_MY_WORDS.showExactlyLabel(p.name)}
         />
       ) : null}
     </View>

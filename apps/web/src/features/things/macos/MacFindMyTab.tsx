@@ -63,7 +63,7 @@ export function MacFindMyTab({ burrow, serverId, detail }: TabProps) {
         link={
           <button
             type="button"
-            className={styles.cardLink}
+            className={`${styles.cardLink} ${fm.readAgain}`}
             disabled={!view.canRead || tab.asking}
             aria-busy={tab.asking || undefined}
             onClick={() => void tab.readNow().then(say)}
@@ -110,6 +110,7 @@ export function MacFindMyTab({ burrow, serverId, detail }: TabProps) {
                       <Button
                         size="sm"
                         disabled={!screen.can}
+                        aria-label={FIND_MY_WORDS.showExactlyLabel(p.name)}
                         onClick={() => {
                           setExactFor(p);
                           void tab.showExactly(p.id).then((problem) => {

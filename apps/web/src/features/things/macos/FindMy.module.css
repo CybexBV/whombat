@@ -1,6 +1,12 @@
 /* A Mac's Find My tab: the one line under the card's head, the Mac's map with the people's avatars on it and its zoom,
    the people's rows, and the exact picture's dialog. */
 
+/* Read again waits while a read runs or the screen can't be used. Doubled to win over the card link's own colours. */
+.readAgain.readAgain:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
 .status {
   margin: 0;
   padding: 0 20px 14px;

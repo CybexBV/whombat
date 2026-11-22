@@ -80,9 +80,10 @@ describe('a Mac’s Find My tab', () => {
     expect(screen.getByText('Home · Now')).toBeTruthy();
     expect(screen.getByText('No location found')).toBeTruthy();
     // Three people have a place, so three can be shown exactly.
-    const show = screen.getAllByRole('button', { name: 'Show exactly' });
+    const show = screen.getAllByRole('button', { name: /^Show exactly where/ });
     expect(show).toHaveLength(3);
 
+    expect(show[2]?.getAttribute('aria-label')).toContain('Ilse de Wit');
     await user.click(show[2] as HTMLElement);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: 'Exactly where Ilse de Wit is' })).toBeTruthy();
