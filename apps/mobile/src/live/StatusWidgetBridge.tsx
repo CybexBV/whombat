@@ -23,7 +23,10 @@ export function StatusWidgetBridge() {
   }).data;
 
   const sync = useRef<ReturnType<typeof createStatusWidgetSync> | null>(null);
-  sync.current ??= createStatusWidgetSync(WhombatLive);
+  const getSync = () => {
+    sync.current ??= createStatusWidgetSync(WhombatLive);
+    return sync.current;
+  };
 
   const applianceId = managed?.applianceId ?? null;
   const applianceName = managed?.applianceName ?? null;
@@ -43,21 +46,27 @@ export function StatusWidgetBridge() {
     });
   }, [overview, applianceId, applianceName, burrowName, source, timeZone, clock]);
 
+  useEffect(() => {
+    const s = getSync();
+    return () => {
+      s.dispose();
+      if (sync.current === s) sync.current = null;
+    };
+  }, []);
+
   const activeApplianceId = useRef<string | null>(applianceId);
   useEffect(() => {
     const previous = activeApplianceId.current;
     activeApplianceId.current = applianceId;
     if (previous && previous !== applianceId) {
-      void sync.current?.clear(previous);
+      void getSync().clear(previous);
     }
   }, [applianceId]);
 
   useEffect(() => {
     if (!payload) return;
-    void sync.current?.push(payload);
+    void getSync().push(payload);
   }, [payload]);
-
-  useEffect(() => () => sync.current?.reset(), []);
 
   return null;
 }

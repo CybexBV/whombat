@@ -5,12 +5,16 @@
  */
 import { homeWidgetStatus } from '@whombat/client';
 import type { HomeOverview } from '@whombat/core';
-import type {
-  ClearStatusWidgetFilter,
-  StatusWidgetPayload,
-  StatusWidgetSource,
-} from '../../modules/whombat-live';
+import {
+  type ClearStatusWidgetFilter,
+  type StatusWidgetClearListener,
+  type StatusWidgetPayload,
+  type StatusWidgetSource,
+  shouldClearStatusWidget,
+} from '../../modules/whombat-live/src/statusWidget';
 import { COMMUNITY_ORG } from '../managed/community';
+
+export { shouldClearStatusWidget };
 
 export interface StatusWidgetInput {
   overview: Pick<HomeOverview, 'summary' | 'needsYou' | 'things' | 'generatedAt'>;
@@ -39,29 +43,11 @@ export function statusWidgetPayload(input: StatusWidgetInput): StatusWidgetPaylo
   return { ...widget, applianceId: input.applianceId, source: input.source ?? 'cloud' };
 }
 
-/**
- * Mirrors the native widget store's conditional clear rule: clears unconditionally when no filter is given,
- * matches `applianceId` when specified, and matches `source` when specified (treating pre-upgrade snapshots
- * with no `source` as `'cloud'` so cloud sign-out/expiry never leaves them behind).
- */
-export function shouldClearStatusWidget(
-  saved: Pick<StatusWidgetPayload, 'applianceId' | 'source'> | null,
-  filter?: string | ClearStatusWidgetFilter,
-): boolean {
-  if (!saved) return false;
-  const applianceId = (typeof filter === 'string' ? filter : filter?.applianceId)?.trim() ?? '';
-  const source = (typeof filter === 'string' ? undefined : filter?.source)?.trim() ?? '';
-  if (applianceId && saved.applianceId && saved.applianceId !== applianceId) return false;
-  if (source) {
-    const savedSource = saved.source?.trim() ?? '';
-    if (savedSource !== source && !(savedSource === '' && source === 'cloud')) return false;
-  }
-  return true;
-}
-
 export interface StatusWidgetTarget {
   setStatusWidget(payload: StatusWidgetPayload): Promise<void>;
   clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void>;
+  /** Optional hook notified synchronously when any caller clears the underlying native queue. */
+  onClearStatusWidget?(listener: StatusWidgetClearListener): () => void;
 }
 
 /**
@@ -110,12 +96,30 @@ export function switchActiveAppliance(
 
 /**
  * Deduplicates and serializes writes to the native widget store so identical overviews don't re-broadcast
- * updates, stale queued writes are dropped after `clear`/`reset`, and clearing always lets the next push write.
+ * updates, stale queued writes are dropped after `clear`/`reset` or an external clear on `target`, and clearing
+ * always lets the next push write.
  */
 export function createStatusWidgetSync(target: StatusWidgetTarget) {
   let lastKey: string | null = null;
+  let lastPayload: StatusWidgetPayload | null = null;
   let queue: Promise<void> = Promise.resolve();
-  let generation = 0;
+  let suppressSelfClear = 0;
+  const pendingWrites = new Set<{ payload: StatusWidgetPayload; cancelled: boolean }>();
+
+  const invalidate = (filter?: string | ClearStatusWidgetFilter): void => {
+    for (const entry of pendingWrites) {
+      if (shouldClearStatusWidget(entry.payload, filter)) entry.cancelled = true;
+    }
+    if (lastPayload && shouldClearStatusWidget(lastPayload, filter)) {
+      lastKey = null;
+      lastPayload = null;
+    }
+  };
+
+  const unsubscribe = target.onClearStatusWidget?.((filter) => {
+    if (suppressSelfClear > 0) return;
+    invalidate(filter);
+  });
 
   const enqueue = <T>(work: () => Promise<T>): Promise<T> => {
     const run = queue.then(work, work);
@@ -130,31 +134,46 @@ export function createStatusWidgetSync(target: StatusWidgetTarget) {
     push(payload: StatusWidgetPayload): Promise<boolean> {
       const key = JSON.stringify(payload);
       if (key === lastKey) return Promise.resolve(false);
-      const gen = generation;
       lastKey = key;
+      lastPayload = payload;
+      const entry = { payload, cancelled: false };
+      pendingWrites.add(entry);
       return enqueue(async () => {
-        // A clear or reset ran while this write waited in the queue: drop the stale push.
-        if (gen !== generation) return false;
+        pendingWrites.delete(entry);
+        // A clear, external clear, or reset ran while this write waited in the queue: drop the stale push.
+        if (entry.cancelled) return false;
         try {
           await target.setStatusWidget(payload);
           return true;
         } catch {
           // Retry on the next change if the native write failed.
-          if (lastKey === key && gen === generation) lastKey = null;
+          if (lastKey === key && !entry.cancelled) {
+            lastKey = null;
+            lastPayload = null;
+          }
           return false;
         }
       });
     },
     clear(filter?: string | ClearStatusWidgetFilter): Promise<void> {
-      generation++;
-      lastKey = null;
+      invalidate(filter);
       return enqueue(async () => {
-        await target.clearStatusWidget(filter).catch(() => {});
+        suppressSelfClear++;
+        let clearing: Promise<void>;
+        try {
+          clearing = target.clearStatusWidget(filter);
+        } finally {
+          suppressSelfClear--;
+        }
+        await clearing.catch(() => {});
       });
     },
     reset(): void {
-      generation++;
-      lastKey = null;
+      invalidate();
+    },
+    dispose(): void {
+      invalidate();
+      unsubscribe?.();
     },
   };
 }
