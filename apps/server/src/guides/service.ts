@@ -150,7 +150,7 @@ export class GuideService {
   /* Welcome (AG-04; built from what the box found, first-day.md) ---------------------------------------- */
 
   /**
-   * The welcome in the person's Chat, once (an account in a burrow): only while the Chat is empty;
+   * The welcome in the person's Chat, once (an account in a burrow), as one thread: only while the Chat is empty;
    * a Chat with messages already counts as welcomed. It names what the network scan found when a scan finished (and
    * claims the telling, so the scan's own message doesn't come too), else says what the assistant can do; the burrow's
    * automatic scan is started at once rather than within the minute. True when it was posted.

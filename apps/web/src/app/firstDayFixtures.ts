@@ -1,8 +1,8 @@
 /**
  * The first day in fixture mode (`VITE_FIXTURE_FIRST_DAY=found|looking`; Whombat first-day.md): a Whombat just claimed,
- * nothing connected, Chat holding only the welcome as the Whombat posts it — what the network scan found with a button
- * each (`found`), or what the assistant can do while the scan still looks (`looking`) — then mail, and Needs you
- * holding only the assistant's backup proposal. The cards are the Whombat's words, written out here.
+ * nothing connected, Chat holding only the welcome thread as the Whombat posts it — what the network scan found with a
+ * button each (`found`), or what the assistant can do while the scan still looks (`looking`) — with mail as its reply,
+ * and Needs you holding only the assistant's backup proposal. The cards are the Whombat's words, written out here.
  */
 import type { GuideCard, NeedsYouItem } from '@whombat/core';
 
@@ -74,7 +74,10 @@ const found = card({
   ],
 });
 
-/** The welcome's messages: text and card, oldest first. */
+/** The id of the welcome's first message: its thread's root, which the rest reply in. */
+export const FIRST_DAY_ROOT_ID = 'msg_first-day-1';
+
+/** The welcome's messages, oldest first: the first is the thread's root, the others reply in its thread. */
 export function firstDayWelcome(
   kind: FirstDayFixture,
   names: { person: string; assistant: string },

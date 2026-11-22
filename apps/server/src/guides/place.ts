@@ -28,7 +28,7 @@ import { type ConversationRow, loadConversationRow } from '../read/conversations
 import { loadMessages } from '../read/messages';
 import { loadAgentRow, loadPrincipalRow, type PrincipalRow, shortName, toActor } from '../read/principals';
 import type { Services } from '../services';
-import { type GuideFacts, type GuidePost, materialize, type Step } from './flows';
+import type { GuideFacts, GuidePost, Step } from './flows';
 
 /** The agent and the person's Chat with it, in one burrow. */
 export interface PersonalPlace {
@@ -152,9 +152,10 @@ export function agentContext(ctx: ApplyContext, agent: PrincipalRow): ApplyConte
 }
 
 /**
- * Posts a guide’s steps in the person’s Chat as their agent, inside the caller’s commit: in `threadRootId`’s thread,
- * so a guide stays in one thread instead of filling the Chat, or each at the top of the Chat without one. Never wakes
- * anyone (`dispatch: false`); `notify` tells the person (inbox, push) — not for the answer to their own click.
+ * Posts a guide’s steps in the person’s Chat as their agent, inside the caller’s commit: in `threadRootId`’s thread, or
+ * without one as a thread of their own, the first step at the top of the Chat and the rest replying under it (a welcome
+ * and its mail card are one thread, not two). Never wakes anyone (`dispatch: false`); `notify` tells the person (inbox,
+ * push) — not for the answer to their own click.
  */
 export async function postSteps(
   ctx: ApplyContext,
@@ -163,14 +164,15 @@ export async function postSteps(
   facts: GuideFacts,
   options: { notify: boolean; threadRootId?: string | null },
 ): Promise<GuidePost[]> {
-  const threadRootId = options.threadRootId ?? null;
-  const posts = materialize(steps, { ...facts, threadRootId }, () => newId('message'));
+  const ids = steps.map(() => newId('message'));
+  const threadOf = (i: number) => options.threadRootId ?? (i > 0 ? (ids[0] ?? null) : null);
+  const posts = steps.map((step, i) => step({ ...facts, threadRootId: threadOf(i) }, ids[i] as string));
   const as = agentContext(ctx, place.agent);
-  for (const post of posts) {
+  for (const [i, post] of posts.entries()) {
     await postMessage(as, {
       conversation: place.dm,
       id: post.id,
-      threadRootId,
+      threadRootId: threadOf(i),
       text: post.text,
       card: post.card,
       dispatch: false,
