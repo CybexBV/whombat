@@ -351,11 +351,18 @@ describe('voice typing’s settings and models', () => {
     await until(c, (v) => v.dutchVoice?.state === 'ready');
     expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
 
-    // Turn Dutch voice off while remove fails twice: setting turns off immediately, and removal retries until it succeeds.
+    // Turn Dutch voice off while remove fails twice: setting turns off immediately, reports removing while files remain,
+    // and removal retries until it succeeds.
     fetcher.failNextRemove.supertonic = 2;
     const offRes = await c.request('voice.setDutchVoice', { on: false });
     expect(offRes).toMatchObject({ t: 'result' });
-    expect(VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice?.on).toBe(false);
+    expect(VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+    });
+    expect(
+      VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice?.received ?? 0,
+    ).toBeGreaterThan(0);
 
     await vi.waitFor(
       async () => {
@@ -368,7 +375,62 @@ describe('voice typing’s settings and models', () => {
     expect(
       fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
     ).toBeGreaterThanOrEqual(3);
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
     expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+
+    // After a restart (fresh VoiceTypingService with no in-memory retry flag), if the fetcher still reports leftover
+    // files ("removing", bytes left) because startup cleanup failed too, the server exposes "removing" to current apps
+    // (and "absent" to older apps below minor 3) and keeps retrying removal until deletion succeeds.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('supertonic', 65_536);
+    fetcher.setRemoving('whisper', 32_768);
+    const older = await m.client(mara, { minor: 2 });
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'removing', received: 65_536 });
+    expect((await view(c)).models.find((x) => x.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      received: 32_768,
+    });
+    expect((await view(older)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+    expect((await view(older)).models.find((x) => x.id === 'whisper')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+    fetcher.failNextRemove.supertonic = 2;
+    fetcher.failNextRemove.whisper = 1;
+    typing.start();
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        expect(s.models.find((x) => x.id === 'supertonic')).toMatchObject({ state: 'absent', received: 0 });
+        expect(s.models.find((x) => x.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+
+    // An explicit removeModel('whisper') whose deletion fails leaves whisper in 'removing' and retries until gone.
+    fresh({ ready: ['parakeet', 'whisper'] });
+    fetcher.failNextRemove.whisper = 1;
+    expect(await c.request('voice.removeModel', { model: 'whisper' })).toMatchObject({
+      t: 'error',
+      code: 'unknown_outcome',
+    });
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        expect(s.models.find((x) => x.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(2);
 
     // Leftover partial files (state 'absent' with received > 0) while Dutch voice is off are also removed and retried.
     fresh({ ready: ['parakeet'] });

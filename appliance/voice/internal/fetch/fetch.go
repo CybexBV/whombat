@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -114,13 +115,15 @@ func (f *Fetcher) Start(ctx context.Context) error {
 		e := &entry{model: m, state: local.VoiceModelStateAbsent}
 		if models.Present(f.Dir, m) {
 			e.state, e.received = local.VoiceModelStateReady, m.TotalSize()
-		} else {
-			e.received = models.PartialSize(f.Dir, m)
+		} else if m.ID != local.VoiceModelSupertonic && slices.Contains(wanted, m.ID) {
 			// Opt-in Dutch voice (supertonic) is never auto-resumed from .wanted.json
 			// at startup; the server asks again only while the saved setting is on.
-			if m.ID != local.VoiceModelSupertonic && slices.Contains(wanted, m.ID) {
-				e.state, e.wanted, e.asked = local.VoiceModelStateWaiting, true, now
-			}
+			e.state, e.wanted, e.asked = local.VoiceModelStateWaiting, true, now
+			e.received = models.PartialSize(f.Dir, m)
+		} else if leftBytes, hasLeftovers, err := f.startupLeftovers(m); err != nil || hasLeftovers {
+			e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
+		} else {
+			e.received = models.PartialSize(f.Dir, m)
 		}
 		f.entries[m.ID] = e
 	}
@@ -147,13 +150,18 @@ func isDefaultV1Model(id string) bool {
 func (f *Fetcher) state(include []string, all bool) local.VoiceModelsState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	supportsRemoving := all || len(include) > 0
 	out := local.VoiceModelsState{V: 1, Models: []local.VoiceModelState{}}
 	for _, m := range f.Manifest.Models {
 		if !all && !isDefaultV1Model(m.ID) && !slices.Contains(include, m.ID) {
 			continue
 		}
 		e := f.entries[m.ID]
-		s := local.VoiceModelState{ID: m.ID, State: e.state, Size: m.TotalSize(), Received: e.received}
+		st, rec := e.state, e.received
+		if !supportsRemoving && st == local.VoiceModelStateRemoving {
+			st, rec = local.VoiceModelStateAbsent, 0
+		}
+		s := local.VoiceModelState{ID: m.ID, State: st, Size: m.TotalSize(), Received: rec}
 		if e.problem != "" {
 			p := e.problem
 			s.Problem = &p
@@ -180,6 +188,9 @@ func (f *Fetcher) Fetch(id string) error {
 	if e.state == local.VoiceModelStateReady || e.wanted {
 		return nil
 	}
+	if e.state == local.VoiceModelStateRemoving {
+		e.received = models.PartialSize(f.Dir, e.model)
+	}
 	e.wanted, e.asked, e.retryAt, e.tries, e.bad = true, time.Now(), time.Time{}, 0, 0
 	e.state, e.problem = local.VoiceModelStateWaiting, ""
 	f.saveWanted()
@@ -190,7 +201,8 @@ func (f *Fetcher) Fetch(id string) error {
 
 // Remove stops model id's download and deletes it. Files and folders are renamed aside under f.mu and removed after
 // unlocking so status and progress reads never stall during recursive deletion. Any previously renamed-aside entries
-// for id are also retried, and Remove reports an error while any files for id remain on disk.
+// for id are also retried, and Remove reports an error and keeps the model in "removing" with the remaining bytes while
+// any files for id remain on disk.
 func (f *Fetcher) Remove(id string) error {
 	f.mu.Lock()
 	e, ok := f.entries[id]
@@ -199,11 +211,12 @@ func (f *Fetcher) Remove(id string) error {
 		return ErrUnknown
 	}
 	e.gen++
+	gen := e.gen
 	if e.cancel != nil {
 		e.cancel()
 		e.cancel = nil
 	}
-	e.wanted, e.state, e.problem, e.received = false, local.VoiceModelStateAbsent, "", 0
+	e.wanted, e.problem = false, ""
 	e.retryAt, e.tries, e.bad = time.Time{}, 0, 0
 	f.saveWanted()
 	var trash []string
@@ -217,6 +230,12 @@ func (f *Fetcher) Remove(id string) error {
 			trash = append(trash, t)
 		}
 	}
+	if len(trash) > 0 || stageErr != nil || e.state == local.VoiceModelStateRemoving {
+		e.state = local.VoiceModelStateRemoving
+	} else {
+		e.state, e.received = local.VoiceModelStateAbsent, 0
+	}
+	model := e.model
 	f.mu.Unlock()
 
 	existing, scanErr := f.modelTrash(id)
@@ -225,6 +244,13 @@ func (f *Fetcher) Remove(id string) error {
 			trash = append(trash, t)
 		}
 	}
+	if len(existing) > 0 {
+		f.mu.Lock()
+		if e.gen == gen && !e.wanted && e.state != local.VoiceModelStateRemoving {
+			e.state = local.VoiceModelStateRemoving
+		}
+		f.mu.Unlock()
+	}
 
 	var removeErr error
 	for _, t := range trash {
@@ -232,7 +258,19 @@ func (f *Fetcher) Remove(id string) error {
 			removeErr = err
 		}
 	}
-	remaining, checkErr := f.modelTrash(id)
+	leftBytes, hasLeftovers, checkErr := f.modelLeftovers(model)
+	incomplete := hasLeftovers || stageErr != nil || removeErr != nil || scanErr != nil || checkErr != nil
+
+	f.mu.Lock()
+	if e.gen == gen && !e.wanted {
+		if incomplete {
+			e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
+		} else {
+			e.state, e.received = local.VoiceModelStateAbsent, 0
+		}
+	}
+	f.mu.Unlock()
+
 	if stageErr != nil {
 		return fmt.Errorf("%s: not removed yet: %w", id, stageErr)
 	}
@@ -245,8 +283,8 @@ func (f *Fetcher) Remove(id string) error {
 	if checkErr != nil {
 		return fmt.Errorf("%s: not removed yet: %w", id, checkErr)
 	}
-	if len(remaining) > 0 {
-		return fmt.Errorf("%s: not removed yet (%d leftover entries remain)", id, len(remaining))
+	if hasLeftovers {
+		return fmt.Errorf("%s: not removed yet (%d bytes remain)", id, leftBytes)
 	}
 	f.logf("%s: removed", id)
 	return nil
@@ -334,12 +372,27 @@ func (f *Fetcher) run(ctx context.Context, e *entry) {
 				trash = append(trash, t)
 			}
 		}
-		if !e.wanted {
-			e.state, e.received = local.VoiceModelStateAbsent, 0
+		curGen := e.gen
+		wanted := e.wanted
+		model := e.model
+		if !wanted && len(trash) > 0 {
+			e.state = local.VoiceModelStateRemoving
 		}
 		f.mu.Unlock()
 		for _, t := range trash {
 			_ = f.deletePath(t)
+		}
+		if !wanted {
+			leftBytes, hasLeftovers, checkErr := f.modelLeftovers(model)
+			f.mu.Lock()
+			if e.gen == curGen && !e.wanted {
+				if hasLeftovers || checkErr != nil {
+					e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
+				} else {
+					e.state, e.received = local.VoiceModelStateAbsent, 0
+				}
+			}
+			f.mu.Unlock()
 		}
 		return
 	}
@@ -692,6 +745,92 @@ func (f *Fetcher) modelTrash(id string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// modelLeftovers measures any files still on disk for model m after a removal attempt: renamed-aside trash entries plus
+// its final or staging path if staging failed.
+func (f *Fetcher) modelLeftovers(m models.Model) (int64, bool, error) {
+	paths, err := f.modelTrash(m.ID)
+	if err != nil {
+		return 0, true, err
+	}
+	var total int64
+	has := len(paths) > 0
+	for _, p := range paths {
+		total += pathBytes(p)
+	}
+	for _, p := range []string{models.Path(f.Dir, m), models.PartPath(f.Dir, m)} {
+		if _, statErr := os.Lstat(p); statErr == nil {
+			has = true
+			total += pathBytes(p)
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return total, true, statErr
+		}
+	}
+	return total, has, nil
+}
+
+// startupLeftovers checks whether model m (already known not to be Present or auto-resumed) still has leftover removal
+// files on disk after startup trash cleanup: renamed-aside trash entries or a partial/corrupt final path. An ordinary
+// interrupted download living only in PartPath is not treated as removing so Fetch can resume it.
+func (f *Fetcher) startupLeftovers(m models.Model) (int64, bool, error) {
+	paths, err := f.modelTrash(m.ID)
+	if err != nil {
+		return 0, true, err
+	}
+	var total int64
+	has := len(paths) > 0
+	for _, p := range paths {
+		total += pathBytes(p)
+	}
+	finalPath := models.Path(f.Dir, m)
+	if _, statErr := os.Lstat(finalPath); statErr == nil {
+		has = true
+		total += pathBytes(finalPath)
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return total, true, statErr
+	}
+	if has {
+		if _, statErr := os.Lstat(models.PartPath(f.Dir, m)); statErr == nil {
+			total += pathBytes(models.PartPath(f.Dir, m))
+		}
+	}
+	return total, has, nil
+}
+
+// pathBytes sums regular-file bytes inside p without following symlinks.
+func pathBytes(p string) int64 {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return 0
+	}
+	if !fi.IsDir() {
+		if fi.Mode().IsRegular() {
+			return fi.Size()
+		}
+		return 0
+	}
+	var total int64
+	_ = filepath.WalkDir(p, func(_ string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil
+		}
+		if info, infoErr := d.Info(); infoErr == nil && info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+func clampModelBytes(n int64) int64 {
+	if n < 0 {
+		return 0
+	}
+	if n > local.VoiceModelMaxBytes {
+		return local.VoiceModelMaxBytes
+	}
+	return n
 }
 
 func (f *Fetcher) deletePath(path string) error {

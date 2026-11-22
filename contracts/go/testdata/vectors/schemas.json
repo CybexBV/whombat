@@ -40446,6 +40446,17 @@
     },
     {
       "schema": "VoiceModelState",
+      "name": "supertonic removing",
+      "valid": true,
+      "value": {
+        "id": "supertonic",
+        "state": "removing",
+        "size": 145310775,
+        "received": 65536
+      }
+    },
+    {
+      "schema": "VoiceModelState",
       "name": "unknown model",
       "valid": false,
       "value": {

@@ -11,14 +11,15 @@
  * | `POST /v1/voice-models/fetch` | `VoiceModelRequest {v, model}` | `VoiceModelsState` |
  * | `POST /v1/voice-models/remove` | `VoiceModelRequest {v, model}` | `VoiceModelsState` |
  *
- * Plain v1 responses carry only speech-recognition models (`parakeet`, `whisper`) so an earlier runtime after a
- * rollback still parses the response; newer runtimes pass `?include=supertonic` (or name `supertonic` in a fetch or
- * remove request) to receive opt-in TTS models as well.
+ * Plain v1 responses carry only speech-recognition models (`parakeet`, `whisper`) and map `removing` to `absent` so an
+ * earlier runtime after a rollback still parses the response; newer runtimes pass `?include=supertonic` (or name
+ * `supertonic` in a fetch or remove request) to receive opt-in TTS models and the `removing` state as well.
  *
  * `fetch` starts a download or queues it behind the one that runs (one at a time); a model that is there or on its way
  * is left as it is, and a failed one starts again. A download that can't go on (no internet) waits and tries again by
- * itself, resuming where it stopped. `remove` stops a download and deletes the model. Policy (what to fetch, when) is
- * the runtime's; this service only fetches what it is asked.
+ * itself, resuming where it stopped. `remove` stops a download and deletes the model, reporting `removing` with the
+ * remaining bytes until every file for that model is gone from disk. Policy (what to fetch, when) is the runtime's;
+ * this service only fetches what it is asked.
  *
  * Errors are `LocalError`: 400 `bad_request` (not the request's JSON, a model the release doesn't name, a wrong path or
  * method). A peer that isn't the runtime or root gets 403 `forbidden`. Requests are strict, answers tolerant.
@@ -49,8 +50,8 @@ export const VOICE_MODELS_INCLUDE_PARAM = 'include';
 export const VOICE_MODEL_MAX_BYTES = 4_294_967_296;
 
 /**
- * One model: `size` its download in bytes (known before it starts), `received` the bytes kept so far, `problem` why it
- * waits (`waiting`) or stopped (`failed`).
+ * One model: `size` its download in bytes (known before it starts), `received` the bytes kept so far (or bytes left on
+ * disk while `removing`), `problem` why it waits (`waiting`) or stopped (`failed`).
  */
 export const VoiceModelState = z.object({
   id: VoiceDownloadModel,

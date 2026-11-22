@@ -6788,10 +6788,12 @@ looked at and none skipped or loosened.
   inheriting group `whombat-voice` from `/persist/voice-models`'s `2750`), resuming mid-file with HTTP `Range` and
   skipping files already verified by SHA-256 across restarts, checks free space before starting, publishes atomically
   by renaming `.<dir>.part` to `<dir>` only after every file passes size and SHA-256 verification, removes both
-  paths on `remove`, and never resumes `supertonic` from `.wanted.json` at startup (the server asks again while the
-  saved setting is on). Plain v1 responses omit `supertonic` unless the caller asks for it (`?include=supertonic` or
+  paths on `remove` (reporting `removing` and the remaining bytes on disk whenever deletion fails or leftover
+  `.removing-<id>.*` / partial final entries survive startup cleanup, until deletion succeeds), and never resumes
+  `supertonic` from `.wanted.json` at startup (the server asks again while the saved setting is on). Plain v1 responses
+  omit `supertonic` and map `removing` to `absent` unless the caller asks for opt-in models (`?include=supertonic` or
   a `fetch`/`remove` naming `supertonic`), so a runtime rollback whose v1 schema accepts only speech-recognition models
-  still parses the fetcher's answers.
+  and pre-`removing` states still parses the fetcher's answers.
 - **Pinned manifest**: `voice-models.json` (`nix/packages/voice-models/default.nix`) lists `parakeet`, `whisper`, and
   `supertonic` (`dir: "supertonic-3-int8"`): the seven sherpa-onnx int8 files from
   `csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11` (`cca5a0e6`) plus `LICENSE` from

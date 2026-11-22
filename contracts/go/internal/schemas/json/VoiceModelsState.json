@@ -29,7 +29,8 @@
               "downloading",
               "waiting",
               "ready",
-              "failed"
+              "failed",
+              "removing"
             ]
           },
           "size": {

@@ -94,7 +94,7 @@ func requestedIncludes(r *http.Request, extra ...string) []string {
 		}
 	}
 	for _, id := range extra {
-		if id != "" {
+		if id != "" && !isDefaultV1Model(id) {
 			out = append(out, id)
 		}
 	}

@@ -10,6 +10,7 @@ import {
   DEFAULT_VOICE_TYPING,
   modelFor,
   type VoiceFacts,
+  voiceTypingForMinor,
   voiceTypingView,
   wantedModels,
   wantsDutchVoice,
@@ -172,15 +173,15 @@ describe('the view', () => {
 
   it('tracks the opt-in Dutch voice separately from dictation models and requires the current licence version', () => {
     const agreedAt = new Date('2026-11-21T20:00:00.000Z');
-    const fetched = [
+    const fetchedClean = [
       model('parakeet', 'ready'),
       model('whisper', 'absent'),
-      model('supertonic', 'downloading', { size: 145_310_775, received: 50_000_000 }),
+      model('supertonic', 'absent', { size: 145_310_775, received: 0 }),
     ];
-    // Off by default: state stays absent and supertonic isn't listed in dictation models.
-    const off = voiceTypingView(facts({ fetched }));
-    expect(off.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
-    expect(off.dutchVoice).toEqual({
+    // Off and no files on disk: state stays absent and supertonic isn't listed in dictation models.
+    const cleanOff = voiceTypingView(facts({ fetched: fetchedClean }));
+    expect(cleanOff.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
+    expect(cleanOff.dutchVoice).toEqual({
       on: false,
       state: 'absent',
       size: 145_310_775,
@@ -189,6 +190,42 @@ describe('the view', () => {
       licenceVersion: null,
     });
     expect(wantsDutchVoice(DEFAULT_VOICE_TYPING)).toBe(false);
+
+    // Off while leftover files remain (removing, downloading, or partial bytes): reports removing with bytes left.
+    const fetched = [
+      model('parakeet', 'ready'),
+      model('whisper', 'absent'),
+      model('supertonic', 'downloading', { size: 145_310_775, received: 50_000_000 }),
+    ];
+    const offWithFiles = voiceTypingView(facts({ fetched }));
+    expect(VoiceTyping.parse(offWithFiles)).toEqual(offWithFiles);
+    expect(offWithFiles.dutchVoice).toEqual({
+      on: false,
+      state: 'removing',
+      size: 145_310_775,
+      received: 50_000_000,
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    const offRemoving = voiceTypingView(
+      facts({
+        fetched: [
+          model('parakeet', 'ready'),
+          model('whisper', 'removing', { size: 1000, received: 400 }),
+          model('supertonic', 'removing', { size: 145_310_775, received: 65_536 }),
+        ],
+      }),
+    );
+    expect(offRemoving.dutchVoice).toMatchObject({ on: false, state: 'removing', received: 65_536 });
+    expect(offRemoving.models.find((m) => m.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      received: 400,
+    });
+    // Older phone apps (protocol minor < 3) get 'absent'/0 instead of 'removing' so their parser accepts the response.
+    const forOlder = voiceTypingForMinor(offRemoving, 2);
+    expect(forOlder.models.find((m) => m.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+    expect(forOlder.dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+    expect(voiceTypingForMinor(offRemoving, 3)).toEqual(offRemoving);
 
     // Agreed under an outdated licence version: still treated as off.
     const stale = {
@@ -199,7 +236,11 @@ describe('the view', () => {
       dutchVoiceLicenceVersion: 'old-version',
     };
     expect(wantsDutchVoice(stale)).toBe(false);
-    expect(voiceTypingView(facts({ settings: stale, fetched })).dutchVoice?.on).toBe(false);
+    expect(voiceTypingView(facts({ settings: stale, fetched })).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      received: 50_000_000,
+    });
 
     // Agreed under the current licence version: exposes progress and agreement metadata.
     const on = {

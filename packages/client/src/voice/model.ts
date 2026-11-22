@@ -212,6 +212,7 @@ const TONES: Record<VoiceModelState, VoiceModelRow['tone']> = {
   ready: 'ok',
   downloading: 'warn',
   waiting: 'warn',
+  removing: 'warn',
   failed: 'bad',
   absent: 'mut',
 };
@@ -254,9 +255,11 @@ export function voiceDutchRow(dutch: VoiceDutchVoice): VoiceDutchRow {
       ? Math.min(1, dutch.received / dutch.size)
       : null;
   const status =
-    dutch.state === 'downloading'
-      ? fillVoiceWords(VOICE_TEXT.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
-      : VOICE_TEXT.states[dutch.state];
+    dutch.state === 'removing'
+      ? VOICE_TEXT.dutchVoice.removing
+      : dutch.state === 'downloading'
+        ? fillVoiceWords(VOICE_TEXT.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
+        : VOICE_TEXT.states[dutch.state];
   const shownProblem = dutch.on && (dutch.state === 'waiting' || dutch.state === 'failed');
   return {
     title: VOICE_TEXT.dutchVoice.label,

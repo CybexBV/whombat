@@ -15,6 +15,7 @@ import {
   type VoiceTyping,
   type VoiceTypingModel,
 } from '@whombat/core/domain';
+import { VOICE_REMOVING_MINOR } from '@whombat/protocol/session';
 import type { VoiceAbility } from './speech';
 
 /** The box's voice typing and Dutch voice settings (`voice_typing`). */
@@ -119,7 +120,7 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
       id: m.id,
       state: m.state,
       size: m.size,
-      received: Math.min(m.received, m.size),
+      received: m.state === 'removing' ? m.received : Math.min(m.received, m.size),
       ...(m.problem && (m.state === 'waiting' || m.state === 'failed') ? { problem: m.problem } : {}),
       inUse: needed.has(m.id),
     }));
@@ -127,12 +128,17 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
   let dutchVoice: VoiceDutchVoice | null = null;
   if (dutchEntry) {
     const dutchOn = wantsDutchVoice(settings);
-    const dutchState = dutchOn ? dutchEntry.state : 'absent';
+    const dutchFilesLeft = !dutchOn && (dutchEntry.state !== 'absent' || dutchEntry.received > 0);
+    const dutchState = dutchOn ? dutchEntry.state : dutchFilesLeft ? 'removing' : 'absent';
     dutchVoice = {
       on: dutchOn,
       state: dutchState,
       size: dutchEntry.size,
-      received: dutchOn ? Math.min(dutchEntry.received, dutchEntry.size) : 0,
+      received: dutchOn
+        ? Math.min(dutchEntry.received, dutchEntry.size)
+        : dutchFilesLeft
+          ? dutchEntry.received
+          : 0,
       ...(dutchOn && dutchEntry.problem && (dutchState === 'waiting' || dutchState === 'failed')
         ? { problem: dutchEntry.problem }
         : {}),
@@ -151,5 +157,21 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
     models,
     maxSeconds: VOICE_TYPING_MAX_SECONDS,
     dutchVoice,
+  };
+}
+
+/**
+ * Shapes `VoiceTyping` for an older app whose `VoiceModelState` predates `'removing'`
+ * (below `VOICE_REMOVING_MINOR`): maps `'removing'` to `'absent'` with 0 bytes so its parser accepts the response.
+ */
+export function voiceTypingForMinor(view: VoiceTyping, minor: number | undefined): VoiceTyping {
+  if (minor === undefined || minor >= VOICE_REMOVING_MINOR) return view;
+  return {
+    ...view,
+    models: view.models.map((m) => (m.state === 'removing' ? { ...m, state: 'absent', received: 0 } : m)),
+    dutchVoice:
+      view.dutchVoice && view.dutchVoice.state === 'removing'
+        ? { ...view.dutchVoice, state: 'absent', received: 0 }
+        : view.dutchVoice,
   };
 }

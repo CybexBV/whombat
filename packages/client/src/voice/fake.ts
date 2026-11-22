@@ -162,7 +162,8 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
     const now = uses();
     const dutchModel = s.models.supertonic;
     const dutchOn = s.dutchVoice.on;
-    const dutchState = dutchOn ? dutchModel.state : 'absent';
+    const dutchFilesLeft = !dutchOn && (dutchModel.state !== 'absent' || dutchModel.received > 0);
+    const dutchState = dutchOn ? dutchModel.state : dutchFilesLeft ? 'removing' : 'absent';
     return {
       available: s.available,
       on: s.on,
@@ -187,7 +188,13 @@ export function createFakeVoice(options: FakeVoiceOptions = {}): FakeVoice {
         on: dutchOn,
         state: dutchState,
         size: FAKE_VOICE_SIZES.supertonic,
-        received: dutchOn ? (dutchState === 'ready' ? FAKE_VOICE_SIZES.supertonic : dutchModel.received) : 0,
+        received: dutchOn
+          ? dutchState === 'ready'
+            ? FAKE_VOICE_SIZES.supertonic
+            : dutchModel.received
+          : dutchFilesLeft
+            ? dutchModel.received
+            : 0,
         ...(dutchOn && dutchModel.problem && (dutchState === 'waiting' || dutchState === 'failed')
           ? { problem: dutchModel.problem }
           : {}),

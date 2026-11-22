@@ -200,6 +200,7 @@ const (
 	VoiceModelStateWaiting       = "waiting"
 	VoiceModelStateReady         = "ready"
 	VoiceModelStateFailed        = "failed"
+	VoiceModelStateRemoving      = "removing"
 	VoiceModelProblemNoNetwork   = "no_network"
 	VoiceModelProblemNoRoom      = "no_room"
 	VoiceModelProblemBadDownload = "bad_download"

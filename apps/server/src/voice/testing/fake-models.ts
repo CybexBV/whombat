@@ -102,6 +102,12 @@ export class FakeVoiceModels implements VoiceModelsPort {
     this.#set(model, { id: model, state: 'absent', size: m.size, received });
   }
 
+  /** Sets leftover files still being removed (e.g. after a failed deletion and fetcher restart). */
+  setRemoving(model: VoiceDownloadModel, received: number): void {
+    const m = this.#model(model);
+    this.#set(model, { id: model, state: 'removing', size: m.size, received });
+  }
+
   async state(): Promise<VoiceModelsState> {
     if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     return {
@@ -115,8 +121,13 @@ export class FakeVoiceModels implements VoiceModelsPort {
     this.calls.push({ kind: 'fetch', model });
     if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     const m = this.#model(model);
-    if (m.state === 'absent' || m.state === 'failed') {
-      this.#set(model, { id: model, state: 'waiting', size: m.size, received: m.received });
+    if (m.state === 'absent' || m.state === 'failed' || m.state === 'removing') {
+      this.#set(model, {
+        id: model,
+        state: 'waiting',
+        size: m.size,
+        received: m.state === 'removing' ? 0 : m.received,
+      });
       this.#queue.push(model);
       this.#next();
     }
@@ -126,16 +137,20 @@ export class FakeVoiceModels implements VoiceModelsPort {
   async remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'remove', model });
     if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
-    const failCount = this.failNextRemove[model] ?? 0;
-    if (failCount > 0) {
-      this.failNextRemove[model] = failCount - 1;
-      throw new VoiceModelsCallError(0, 'unavailable', 'remove failed');
-    }
     const m = this.#model(model);
     const queued = this.#queue.indexOf(model);
     if (queued >= 0) this.#queue.splice(queued, 1);
-    this.#set(model, { id: model, state: 'absent', size: m.size, received: 0 });
     if (m.state === 'downloading') this.#stop();
+    const failCount = this.failNextRemove[model] ?? 0;
+    if (failCount > 0) {
+      this.failNextRemove[model] = failCount - 1;
+      if (m.state !== 'absent' || m.received > 0) {
+        this.#set(model, { id: model, state: 'removing', size: m.size, received: m.received });
+      }
+      this.#next();
+      throw new VoiceModelsCallError(500, 'bad_request', `${model}: not removed yet`);
+    }
+    this.#set(model, { id: model, state: 'absent', size: m.size, received: 0 });
     this.#next();
     return this.state();
   }
@@ -244,21 +259,25 @@ function fail(res: ServerResponse, status: number, code: string, message: string
 
 function filterModelsState(state: VoiceModelsState, include: ReadonlySet<string>): VoiceModelsState {
   const defaultModels: readonly string[] = VOICE_STT_MODELS;
+  const supportsRemoving = include.size > 0;
   return {
     ...state,
-    models: state.models.filter((m) => defaultModels.includes(m.id) || include.has(m.id)),
+    models: state.models
+      .filter((m) => defaultModels.includes(m.id) || include.has(m.id))
+      .map((m) => (!supportsRemoving && m.state === 'removing' ? { ...m, state: 'absent', received: 0 } : m)),
   };
 }
 
 function requestedIncludes(url: URL, extra?: string): Set<string> {
   const out = new Set<string>();
+  const defaultModels: readonly string[] = VOICE_STT_MODELS;
   for (const raw of url.searchParams.getAll(VOICE_MODELS_INCLUDE_PARAM)) {
     for (const part of raw.split(',')) {
       const id = part.trim();
       if (id) out.add(id);
     }
   }
-  if (extra) out.add(extra);
+  if (extra && !defaultModels.includes(extra)) out.add(extra);
   return out;
 }
 
