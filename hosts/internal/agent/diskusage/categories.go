@@ -3,8 +3,10 @@ package diskusage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -301,12 +303,40 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 					partial = true
 					break
 				}
-				if e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
+				// On filesystems without d_type (XFS without ftype=1, FUSE), e.Type()
+				// is 0 (DT_UNKNOWN) and e.IsDir() is false, so only skip entries known
+				// not to be directories; check unknown entries after the mount-table guard.
+				typ := e.Type()
+				if typ&fs.ModeSymlink != 0 {
+					continue
+				}
+				if typ != 0 && !typ.IsDir() {
 					continue
 				}
 				sub := joinLogical(containersDir, e.Name())
 				if scope.isOtherMount(sub) {
 					continue
+				}
+				if typ == 0 {
+					ei, err := e.Info()
+					if err != nil {
+						if !errors.Is(err, fs.ErrNotExist) {
+							partial = true
+						}
+						continue
+					}
+					if ei.Mode()&fs.ModeSymlink != 0 || !ei.IsDir() {
+						continue
+					}
+					dev, ok := statDev(ei)
+					if !ok || dev != rootDev {
+						continue
+					}
+					if rootMntID != 0 {
+						if id, ok := r.mountIDAt(sub, 0, false); ok && id != rootMntID {
+							continue
+						}
+					}
 				}
 				files, err := r.readDirInScope(scope, sub, rootDev, rootMntID)
 				if err != nil {
@@ -315,12 +345,20 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 					}
 					continue
 				}
-				for _, f := range files {
+				for i, f := range files {
+					if i&255 == 0 && ctx.Err() != nil {
+						partial = true
+						break
+					}
 					name := f.Name()
 					if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
 						continue
 					}
-					if f.Type()&os.ModeSymlink != 0 {
+					ftyp := f.Type()
+					if ftyp&fs.ModeSymlink != 0 {
+						continue
+					}
+					if ftyp != 0 && !ftyp.IsRegular() {
 						continue
 					}
 					child := joinLogical(sub, name)
@@ -328,7 +366,13 @@ func (r *Runner) collectContainerLogs(ctx context.Context, scope mountScope, doc
 						continue
 					}
 					fi, err := f.Info()
-					if err != nil || !fi.Mode().IsRegular() {
+					if err != nil {
+						if !errors.Is(err, fs.ErrNotExist) {
+							partial = true
+						}
+						continue
+					}
+					if fi.Mode()&fs.ModeSymlink != 0 || !fi.Mode().IsRegular() {
 						continue
 					}
 					dev, ok := statDev(fi)
