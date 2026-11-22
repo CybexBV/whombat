@@ -111,13 +111,9 @@ function dutchHasFiles(fetched: readonly VoiceModelState[] | null): boolean {
   return m !== undefined && (m.state !== 'absent' || m.received > 0);
 }
 
-/** Whether any non-wanted model still has leftover files being removed on disk. */
+/** Whether any model still has leftover files being removed on disk (wanted or not). */
 function hasRemovingModels(facts: VoiceFacts): boolean {
-  const gpu = voiceTypingView(facts).gpu !== null;
-  const want = wantedModels(facts.settings, facts.deskTalk, gpu);
-  return (facts.fetched ?? []).some(
-    (m) => m.id !== 'supertonic' && m.state === 'removing' && !want.has(m.id),
-  );
+  return (facts.fetched ?? []).some((m) => m.state === 'removing');
 }
 
 export class VoiceTypingService {
@@ -479,6 +475,7 @@ export class VoiceTypingService {
         this.#services.log.info({ model: model.id, again }, 'voice typing: asked for a speech model');
         asked = true;
       } catch (err) {
+        if (!(err instanceof VoiceModelsCallError && err.status === 0)) asked = true;
         this.#services.log.warn(
           { err: String(err), model: model.id },
           'voice typing: a download wasn’t asked for',

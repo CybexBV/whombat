@@ -121,6 +121,13 @@ export class FakeVoiceModels implements VoiceModelsPort {
     this.calls.push({ kind: 'fetch', model });
     if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     const m = this.#model(model);
+    if (m.state === 'removing') {
+      const failCount = this.failNextRemove[model] ?? 0;
+      if (failCount > 0) {
+        this.failNextRemove[model] = failCount - 1;
+        throw new VoiceModelsCallError(500, 'bad_request', `${model}: previous files not removed yet`);
+      }
+    }
     if (m.state === 'absent' || m.state === 'failed' || m.state === 'removing') {
       this.#set(model, {
         id: model,

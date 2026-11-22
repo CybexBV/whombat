@@ -134,11 +134,12 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
       on: dutchOn,
       state: dutchState,
       size: dutchEntry.size,
-      received: dutchOn
-        ? Math.min(dutchEntry.received, dutchEntry.size)
-        : dutchFilesLeft
+      received:
+        dutchState === 'removing'
           ? dutchEntry.received
-          : 0,
+          : dutchOn
+            ? Math.min(dutchEntry.received, dutchEntry.size)
+            : 0,
       ...(dutchOn && dutchEntry.problem && (dutchState === 'waiting' || dutchState === 'failed')
         ? { problem: dutchEntry.problem }
         : {}),

@@ -119,6 +119,10 @@ func (f *Fetcher) Start(ctx context.Context) error {
 		e := &entry{model: m, state: local.VoiceModelStateAbsent}
 		if models.Present(f.Dir, m) {
 			e.state, e.received = local.VoiceModelStateReady, m.TotalSize()
+		} else if leftBytes, hasTrash, err := f.trashLeftovers(m); err != nil || hasTrash {
+			// Undeletable .removing-* trash takes priority over auto-resuming from .wanted.json
+			// so leftover bytes on disk never vanish from status.
+			e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
 		} else if m.ID != local.VoiceModelSupertonic && slices.Contains(wanted, m.ID) {
 			// Opt-in Dutch voice (supertonic) is never auto-resumed from .wanted.json
 			// at startup; the server asks again only while the saved setting is on.
@@ -182,15 +186,55 @@ func (f *Fetcher) state(include []string, all bool) local.VoiceModelsState {
 var ErrUnknown = errors.New("no such model in this release")
 
 // Fetch asks for model id: a model that is there or on its way stays as it is; a failed one starts again.
+// If renamed-aside .removing-* trash still remains on disk for id, Fetch tries to delete it first; if any trash
+// cannot be deleted yet, Fetch keeps reporting "removing" with the remaining bytes on disk and returns an error
+// instead of hiding those bytes behind PartialSize.
 func (f *Fetcher) Fetch(id string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	e, ok := f.entries[id]
 	if !ok {
+		f.mu.Unlock()
 		return ErrUnknown
 	}
 	if e.state == local.VoiceModelStateReady || e.wanted {
+		f.mu.Unlock()
 		return nil
+	}
+	gen := e.gen
+	model := e.model
+	f.mu.Unlock()
+
+	trash, scanErr := f.modelTrash(id)
+	var removeErr error
+	for _, t := range trash {
+		if err := f.deletePath(t); err != nil && removeErr == nil {
+			removeErr = err
+		}
+	}
+
+	leftBytes, hasTrash, checkErr := f.trashLeftovers(model)
+	blocked := hasTrash || scanErr != nil || removeErr != nil || checkErr != nil
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if e.state == local.VoiceModelStateReady || e.wanted {
+		return nil
+	}
+	if e.gen != gen {
+		return fmt.Errorf("%s: removal in progress", id)
+	}
+	if blocked {
+		e.state, e.received = local.VoiceModelStateRemoving, clampModelBytes(leftBytes)
+		switch {
+		case removeErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, removeErr)
+		case scanErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, scanErr)
+		case checkErr != nil:
+			return fmt.Errorf("%s: previous files not removed yet: %w", id, checkErr)
+		default:
+			return fmt.Errorf("%s: previous files not removed yet (%d bytes remain)", id, leftBytes)
+		}
 	}
 	if e.state == local.VoiceModelStateRemoving {
 		e.received = models.PartialSize(f.Dir, e.model)
@@ -822,6 +866,20 @@ func (f *Fetcher) modelLeftovers(m models.Model) (int64, bool, error) {
 		}
 	}
 	return total, has, nil
+}
+
+// trashLeftovers reports whether any renamed-aside .removing-* trash still remains on disk for m. When any trash
+// remains, total includes all remaining bytes on disk for m so reported bytes left never drop.
+func (f *Fetcher) trashLeftovers(m models.Model) (int64, bool, error) {
+	paths, err := f.modelTrash(m.ID)
+	if err != nil {
+		return 0, true, err
+	}
+	if len(paths) == 0 {
+		return 0, false, nil
+	}
+	total, _, leftErr := f.modelLeftovers(m)
+	return total, true, leftErr
 }
 
 // startupLeftovers checks whether model m (already known not to be Present or auto-resumed) still has leftover removal

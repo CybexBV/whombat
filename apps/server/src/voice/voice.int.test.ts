@@ -449,6 +449,19 @@ describe('voice typing’s settings and models', () => {
       fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
     ).toBeGreaterThanOrEqual(2);
 
+    // A wanted model stuck in 'removing' keeps reporting its remaining bytes until trash clears, then downloads.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('whisper', 49_152);
+    fetcher.failNextRemove.whisper = 2;
+    const wantedRemoving = await settings(c, { on: true, model: 'whisper', language: 'auto' });
+    expect(state(wantedRemoving, 'whisper')).toMatchObject({ state: 'removing', received: 49_152 });
+    const whisperReady = await until(c, (v) => state(v, 'whisper')?.state === 'ready');
+    expect(state(whisperReady, 'whisper')?.state).toBe('ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(3);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+
     // Fetcher completely unreachable when turning Dutch voice off, then comes back online: removal still runs.
     fresh({ ready: ['parakeet'] });
     await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
