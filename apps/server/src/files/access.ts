@@ -18,7 +18,7 @@
  *   assessment, a search answer or an outsiders' turn: they are the person's files.
  * Everything else is “not found”, so nobody can probe for ids.
  */
-import type { AttachmentRef, Message } from '@whombat/core';
+import type { AttachmentRef } from '@whombat/core';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { stepTurnFileIds } from '../automations/handed-files';
 import type { Db } from '../db/client';
@@ -175,15 +175,6 @@ export async function outsidersFileIds(
 ): Promise<ReadonlySet<string> | null> {
   if (!outsidersTurn(row) || row.trigger === 'feedback') return null;
   return new Set(row.trigger === 'automation' ? await stepTurnFileIds(db, row.id) : []);
-}
-
-/** `message` as `only` lets a turn see it: without the files it may not use (all of it when `only` is null). */
-export function withOnlyFiles<M extends Pick<Message, 'attachments'>>(
-  message: M,
-  only: ReadonlySet<string> | null,
-): M {
-  if (!only || message.attachments.every((a) => only.has(a.id))) return message;
-  return { ...message, attachments: message.attachments.filter((a) => only.has(a.id)) };
 }
 
 /** The ready attachments a dispatch's agent may use now, oldest message first. */

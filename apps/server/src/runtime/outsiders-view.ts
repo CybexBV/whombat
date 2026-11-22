@@ -7,10 +7,10 @@
  * labels, addresses or the services' answers, nor what a plan, run, job or other card the person asked for in that
  * thread says. The same rule holds for every way such a turn reads its thread: its context and `read_conversation`.
  */
-import type { ApprovalState, Message, MessageCard } from '@whombat/core';
-import { and, eq, sql } from 'drizzle-orm';
+import type { ApprovalState, Attachment, Message, MessageCard } from '@whombat/core';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { automationRunSteps } from '../db/schema/index';
+import { automationRunSteps, messages, principals } from '../db/schema/index';
 
 /** What an outsiders' turn reads of an approval card, by its state. */
 export const OUTSIDERS_CARD_LINE: Readonly<Record<ApprovalState, string>> = {
@@ -55,19 +55,34 @@ export function outsidersCardLine(kind: keyof typeof CARD_WORDS | 'job_result'):
   return `Whombat showed the person a card here: ${kind === 'job_result' ? 'the result of work handed to T3 Code' : CARD_WORDS[kind]}.`;
 }
 
-/** `message` as one plain line of Whombat's: nothing of it but who posted it, where and when. */
-function asLine<M extends Message>(message: M, text: string): M {
-  const {
-    card: _card,
-    earlierCard: _earlier,
-    movedCard: _moved,
-    previews: _previews,
-    jobResult: _job,
-    vaultSaved: _vault,
-    more: _more,
-    ...kept
-  } = message;
-  return { ...kept, text, card: null, more: null, suggestions: [], attachments: [] } as unknown as M;
+/** An allowed attachment is shown only with its file metadata. */
+function shownFile(file: Attachment): Attachment {
+  const { id, name, contentType, size, url, kind, width, height } = file;
+  return { id, name, contentType, size, url, kind, width, height };
+}
+
+/** The existing message contract also needs these empty fields. Never copy them from the source. */
+function asLine(message: Message, text: string): Message {
+  const { id, authorId, createdAt, conversationId, threadRootId } = message;
+  return {
+    id,
+    authorId,
+    createdAt,
+    conversationId,
+    threadRootId,
+    text,
+    editedAt: null,
+    mentions: [],
+    card: null,
+    more: null,
+    suggestions: [],
+    attachments: [],
+    reactions: [],
+    replyCount: 0,
+    lastReplyAt: null,
+    threadParticipantIds: [],
+    clientId: null,
+  };
 }
 
 /** The ids of `ids` that a `connection_actions` step posted, or that were posted about how it went. */
@@ -85,23 +100,77 @@ async function actionsStepMessages(db: Db, ids: readonly string[]): Promise<Read
   return new Set(rows.flatMap((r) => r.messageIds).filter((id) => ids.includes(id)));
 }
 
-/** `messages` as an outsiders' turn may read them (see the module's comment), in the same order. */
-export async function forOutsiders<M extends Message>(db: Db, messages: readonly M[]): Promise<M[]> {
-  const told = await actionsStepMessages(
-    db,
-    messages.map((m) => m.id),
-  );
-  return messages.map((m) => outsidersMessage(m, told.has(m.id)));
+interface OutsidersView {
+  files?: ReadonlySet<string> | null;
+  reportRootId?: string | null;
 }
 
-/** One message as an outsiders' turn reads it; `told`: a `connection_actions` step posted it or it was posted about one. */
-export function outsidersMessage<M extends Message>(m: M, told: boolean): M {
-  if (told) return asLine(m, OUTSIDERS_ACTIONS_LINE);
-  // A card kept from before it moved (card-moves.md) reads as the card it was.
+/** `shown` as an outsiders’ turn may read it, in the same order. */
+export async function forOutsiders(
+  db: Db,
+  shown: readonly Message[],
+  view: OutsidersView = {},
+): Promise<Message[]> {
+  const ids = [...new Set(shown.map((m) => m.id))];
+  if (!ids.length) return [];
+  const [told, sources] = await Promise.all([
+    actionsStepMessages(db, ids),
+    db
+      .select({
+        id: messages.id,
+        outside: messages.outsidersRun,
+        author: principals.kind,
+      })
+      .from(messages)
+      .innerJoin(principals, eq(principals.id, messages.authorId))
+      .where(inArray(messages.id, ids)),
+  ]);
+  const textIds = new Set(sources.filter((r) => r.outside || r.author === 'person').map((r) => r.id));
+  return shown.map((m) =>
+    outsidersMessage(m, {
+      told: told.has(m.id),
+      text: textIds.has(m.id) || m.provenance === 'feedback_assessment',
+      report: m.id === view.reportRootId,
+      files: view.files,
+    }),
+  );
+}
+
+/** Project a message onto the fields an outsiders’ turn is allowed to read. */
+export function outsidersMessage(
+  m: Message,
+  access: {
+    told?: boolean;
+    text?: boolean;
+    report?: boolean;
+    files?: ReadonlySet<string> | null | undefined;
+  },
+): Message {
+  if (access.told) return asLine(m, OUTSIDERS_ACTIONS_LINE);
   const card = m.card ?? m.earlierCard ?? null;
   if (card?.kind === 'approval') return asLine(m, OUTSIDERS_CARD_LINE[card.approval.state]);
-  if (card && card.kind !== 'report') return asLine(m, outsidersCardLine(card.kind));
+  if (card?.kind === 'report') {
+    if (!access.report) return asLine(m, 'Whombat showed the person a Feedback report here.');
+    const { reportId, reference, product, type, summary, submittedAt, attachments, contentRemoved } = card;
+    const report = {
+      kind: 'report' as const,
+      reportId,
+      reference,
+      product,
+      type,
+      summary,
+      submittedAt,
+      status: 'new' as const,
+      assessment: { state: 'running' as const, outcome: null, summary: null },
+      attachments,
+      contentRemoved,
+    };
+    return { ...asLine(m, ''), card: report, attachments: m.attachments.map(shownFile) };
+  }
+  if (card) return asLine(m, outsidersCardLine(card.kind));
   if (m.movedCard) return asLine(m, outsidersCardLine(m.movedCard.kind));
   if (m.jobResult) return asLine(m, outsidersCardLine('job_result'));
-  return m;
+  const line = asLine(m, access.text ? m.text : 'Whombat wrote privately to the person here.');
+  line.attachments = m.attachments.filter((a) => access.files?.has(a.id)).map(shownFile);
+  return line;
 }

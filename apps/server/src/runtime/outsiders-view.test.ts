@@ -23,7 +23,10 @@ function message(extra: Partial<Message> = {}): Message {
     suggestions: [{ label: SECRET }],
     more: { hint: SECRET, requestedById: null, requestedAt: null },
     attachments: [{ id: 'att_1', name: `${SECRET}.pdf` }],
-    reactions: [],
+    reactions: [{ value: SECRET }],
+    subject: { name: SECRET },
+    ranOn: { model: SECRET },
+    futureField: SECRET,
     threadRootId: 'msg_root',
     replyCount: 0,
     lastReplyAt: null,
@@ -44,7 +47,7 @@ describe('what an outsiders’ turn reads of a message', () => {
   it('reads every card but a report as one line that says only its kind', () => {
     for (const kind of CARD_KINDS) {
       if (kind === 'approval' || kind === 'report') continue;
-      const read = outsidersMessage(message({ card: cardOf(kind) }), false);
+      const read = outsidersMessage(message({ card: cardOf(kind) }), {});
       expect(read.text).toBe(outsidersCardLine(kind));
       expect(JSON.stringify(read)).not.toContain(SECRET);
       expect(read.card).toBeNull();
@@ -59,11 +62,11 @@ describe('what an outsiders’ turn reads of a message', () => {
   });
 
   it('reads a card kept from before it moved, one that moved on, and a job’s result as a line too', () => {
-    const earlier = outsidersMessage(message({ earlierCard: cardOf('council') }), false);
+    const earlier = outsidersMessage(message({ earlierCard: cardOf('council') }), {});
     expect(earlier.text).toBe(outsidersCardLine('council'));
-    const moved = outsidersMessage(message({ movedCard: { kind: 'delegation', id: 'dlg_1' } }), false);
+    const moved = outsidersMessage(message({ movedCard: { kind: 'delegation', id: 'dlg_1' } }), {});
     expect(moved.text).toBe(outsidersCardLine('delegation'));
-    const job = outsidersMessage(message({ jobResult: { handoffId: SECRET } as never }), false);
+    const job = outsidersMessage(message({ jobResult: { handoffId: SECRET } as never }), {});
     expect(job.text).toBe(outsidersCardLine('job_result'));
     for (const read of [earlier, moved, job]) {
       expect(JSON.stringify(read)).not.toContain(SECRET);
@@ -73,17 +76,33 @@ describe('what an outsiders’ turn reads of a message', () => {
 
   it('keeps an approval card’s answer and a step’s report as their own lines', () => {
     const approval = { kind: 'approval', approval: { state: 'approved', title: SECRET } } as never;
-    expect(outsidersMessage(message({ card: approval }), false).text).toBe(OUTSIDERS_CARD_LINE.approved);
-    expect(outsidersMessage(message({ earlierCard: approval }), false).text).toBe(
-      OUTSIDERS_CARD_LINE.approved,
-    );
-    expect(outsidersMessage(message(), true).text).toBe(OUTSIDERS_ACTIONS_LINE);
+    expect(outsidersMessage(message({ card: approval }), {}).text).toBe(OUTSIDERS_CARD_LINE.approved);
+    expect(outsidersMessage(message({ earlierCard: approval }), {}).text).toBe(OUTSIDERS_CARD_LINE.approved);
+    expect(outsidersMessage(message(), { told: true }).text).toBe(OUTSIDERS_ACTIONS_LINE);
   });
 
-  it('keeps a Feedback report’s own card and a plain message as they are', () => {
-    const report = message({ card: cardOf('report') });
-    expect(outsidersMessage(report, false)).toBe(report);
-    const plain = message();
-    expect(outsidersMessage(plain, false)).toBe(plain);
+  it('only keeps an assessment’s own report and rebuilds the card from known fields', () => {
+    const report = message({
+      card: {
+        kind: 'report',
+        reference: 'FB-7K3Q-9M2X',
+        assessment: { summary: SECRET },
+        futureField: SECRET,
+      } as never,
+    });
+    const own = outsidersMessage(report, { report: true });
+    expect(own.card).toMatchObject({ kind: 'report', reference: 'FB-7K3Q-9M2X' });
+    expect(JSON.stringify(own.card)).not.toContain(SECRET);
+    expect(outsidersMessage(report, {}).card).toBeNull();
+  });
+
+  it('keeps the text the turn may read and discards private text and unknown fields', () => {
+    const plain = message({ text: 'Intentionally shared in the thread.' });
+    const allowed = outsidersMessage(plain, { text: true });
+    expect(allowed.text).toBe(plain.text);
+    expect(JSON.stringify(allowed)).not.toContain(SECRET);
+    expect(outsidersMessage(plain, {}).text).not.toBe(plain.text);
+    expect(allowed).not.toHaveProperty('futureField');
+    expect(allowed).toMatchObject({ reactions: [], attachments: [], suggestions: [], more: null });
   });
 });

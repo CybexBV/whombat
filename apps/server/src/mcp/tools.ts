@@ -53,7 +53,7 @@ import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
-import { outsidersFileIds, withOnlyFiles } from '../files/access';
+import { outsidersFileIds } from '../files/access';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
 import { startGuide } from '../guides/commands';
 import { doneInputFor, reportDoneCommand } from '../home/done';
@@ -349,17 +349,21 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     }
     // An automation run's outsiders' turn is told only of the files handed over from what started its run, and reads an
     // approval card, and what a step told the person of the calls they approved, only as a line.
-    const only = await outsidersFileIds(ctx.services.db, ctx.dispatch);
-    if (outsidersTurn(ctx.dispatch)) messages = await forOutsiders(ctx.services.db, messages);
+    const outside = outsidersTurn(ctx.dispatch);
+    if (outside)
+      messages = await forOutsiders(ctx.services.db, messages, {
+        files: await outsidersFileIds(ctx.services.db, ctx.dispatch),
+        reportRootId: ctx.dispatch.trigger === 'feedback' ? ctx.dispatch.threadRootId : null,
+      });
     return {
       status: 'ok',
       conversation: {
         id: conversation.id,
         kind: conversation.kind,
-        title: conversation.title,
-        topic: conversation.topic,
+        title: outside ? '' : conversation.title,
+        topic: outside ? '' : conversation.topic,
       },
-      messages: only ? messages.map((m) => withOnlyFiles(m, only)) : messages,
+      messages,
     };
   },
 
