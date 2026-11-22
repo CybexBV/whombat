@@ -2916,6 +2916,31 @@ describe('mail-arrives automations', () => {
         .from(automationRunSteps)
         .where(eq(automationRunSteps.runId, cancelled.id));
       expect(JSON.stringify(cancelledSteps)).not.toContain('BODY_OF_CANCELLED_RUN');
+
+      // Its turn ended before the runner told its session: the runner's report afterwards forgets it, at the end of the
+      // turn and at a beat alike.
+      const dropped = async (session: string) =>
+        (
+          await w.services.db
+            .select()
+            .from(hermesSessionDrops)
+            .where(eq(hermesSessionDrops.sessionId, session))
+        ).length;
+      const lateTurn = (await w.run(cancelled.id)).steps[0]?.dispatchId as string;
+      const [ended] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, lateTurn));
+      expect(ended?.state).toBe('cancelled');
+      expect(ended?.providerSessionId).toBeNull();
+      await w.services.runtime.progress(lateTurn, { providerSessionId: 'hermes:late-beat' });
+      expect(await dropped('late-beat')).toBe(1);
+      await w.services.runtime.finalize(lateTurn, {
+        outcome: 'cancelled',
+        providerSessionId: 'hermes:late-end',
+      });
+      expect(await dropped('late-end')).toBe(1);
+      // Another automation's turn keeps its session as ever.
+      const chatTurn = await w.turn(ended?.agentId as string, maraChat.dmId, { trigger: 'automation' });
+      await w.services.runtime.finalize(chatTurn, { outcome: 'done', providerSessionId: 'hermes:kept' });
+      expect(await dropped('kept')).toBe(0);
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: twoStepsId });
       await w.ok(IDS.mara, deleteAutomation, { automationId: noAgentId });

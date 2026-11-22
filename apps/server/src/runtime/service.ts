@@ -49,6 +49,7 @@ import type { z } from 'zod';
 import { forgetEndedTurnSecrets, forgetTurnSecrets } from '../agent-commands/secrets';
 import { slidTokenExpiry } from '../auth/agent-tokens';
 import { HANDED_OVER_ERROR } from '../automations/handed-over';
+import { forgetLateMailSession } from '../automations/mail-text';
 import { previewsFor } from '../browser/previews';
 import { correctRanOn } from '../chats/ran-on';
 import { clientJustInstalled } from '../clients/service';
@@ -682,6 +683,14 @@ export class RunnerRuntime {
     return row;
   }
 
+  /** A session a beat tells for a turn that no longer runs (`forgetLateMailSession`). */
+  private async forgetLateSession(id: string, body: ProgressBody): Promise<void> {
+    if (!body.providerSessionId) return;
+    await this.services.pipeline.transactAccount((_tx, session) =>
+      forgetLateMailSession(session, id, body.providerSessionId),
+    );
+  }
+
   /** Why the dispatch's turn must stop, if it must. */
   private async stopReason(tx: Tx | Services['db'], row: DispatchRow): Promise<CancelReason | null> {
     if (row.state === 'cancelled')
@@ -728,10 +737,15 @@ export class RunnerRuntime {
 
   async progress(id: string, body: ProgressBody): Promise<ProgressResponse> {
     const row = await this.load(id);
-    // A runner that lost its lease stops and touches nothing: not the lease, the state or "thinking".
-    if (this.lost(row, body)) return { cancel: true, reason: 'cancelled' };
+    // A runner that lost its lease stops and touches nothing: not the lease, the state or "thinking". Only the session
+    // of a mail run's turn it names is forgotten, as no turn will name it again.
+    if (this.lost(row, body)) {
+      await this.forgetLateSession(id, body);
+      return { cancel: true, reason: 'cancelled' };
+    }
     const reason = await this.stopReason(this.services.db, row);
     if (row.state !== 'claimed' && row.state !== 'running') {
+      await this.forgetLateSession(id, body);
       return { cancel: true, reason: reason ?? 'cancelled' };
     }
     const now = this.services.clock();
@@ -860,6 +874,8 @@ export class RunnerRuntime {
     this.followUps.forget(id);
     const result = await this.services.pipeline.transactAccount(async (tx, session) => {
       const outcome = await this.finalizeIn(tx, id, body, guard, now);
+      // A mail run's turn may tell its session only now, after Whombat ended it: forgotten with the email.
+      await forgetLateMailSession(session, id, body.providerSessionId);
       if (outcome && outcome !== 'lease_lost') {
         // What the turn was still doing is interrupted, never done (WS-15); a new state is a lifecycle frame.
         await interruptActivity(tx, session, [id], now);
