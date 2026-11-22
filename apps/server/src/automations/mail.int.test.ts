@@ -944,6 +944,22 @@ describe('mail-arrives automations', () => {
     // Once the run starts, the mirrored item's cached body and snippet are cleared; the run keeps the email's text only
     // while its agent step works on it (its prompt has the fenced body).
     await w.settle();
+    const [consumed] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(eq(mailTriggerItems.id, beforeRun?.id ?? ''));
+    expect(consumed).toMatchObject({ body: '', snippet: '', messageId: beforeRun?.messageId });
+    // Content left in a previously consumed row is also cleared, without losing deduplication.
+    await w.services.db
+      .update(mailTriggerItems)
+      .set({ body: 'legacy body', snippet: 'legacy snippet' })
+      .where(eq(mailTriggerItems.id, consumed?.id ?? ''));
+    await w.services.mailTriggers.pollOnce();
+    const [compacted] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(eq(mailTriggerItems.id, consumed?.id ?? ''));
+    expect(compacted).toMatchObject({ body: '', snippet: '', messageId: consumed?.messageId });
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
     expect(JSON.stringify(runs[0]?.scope)).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');

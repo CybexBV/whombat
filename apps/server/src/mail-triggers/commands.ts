@@ -24,6 +24,7 @@ import { blobKey } from '../files/store';
 import { forbidden } from '../lib/errors';
 import { loadPrincipalRow } from '../read/principals';
 import { mailPrincipal } from './principal';
+import { consumedMailText } from './store';
 
 const StagedMailAttachment = z.object({
   name: z.string().min(1).max(1000),
@@ -354,6 +355,11 @@ export const pruneMailTriggerItems = defineCommand({
   async apply(tx, ctx, input) {
     await requireMailSigner(tx, ctx.actor.id);
     const cutoff = new Date(input.before);
+    // The scan normally clears the text. Catch cursors reset or skipped without scanning and older cached rows.
+    await tx
+      .update(mailTriggerItems)
+      .set({ body: '', snippet: '' })
+      .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), consumedMailText()));
     const deleted = await tx
       .delete(mailTriggerItems)
       .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), lt(mailTriggerItems.mirroredAt, cutoff)))
