@@ -285,7 +285,7 @@ export async function keepStoredTarget(
   connectionId: string,
   target: string,
 ): Promise<void> {
-  keepTarget(await currentRow(services, connectionId), target);
+  keepTarget(await currentRow(services, connectionId), target, connectionId);
 }
 
 /**

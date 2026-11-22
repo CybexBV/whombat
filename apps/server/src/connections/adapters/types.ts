@@ -48,6 +48,11 @@ export interface AdapterCall {
   approvalId?: string | null;
   /** Where the call goes and as whom (`callTarget` of the connection it runs on): a change it records keeps it. */
   target?: string;
+  /**
+   * Where each other connection the call acts through goes and as whom, by id (`callReaches`): the call signs as each
+   * only there, and a change it records keeps them.
+   */
+  others?: Readonly<Record<string, string>>;
 }
 
 export type AdapterTool = (

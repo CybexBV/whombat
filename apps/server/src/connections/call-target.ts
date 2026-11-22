@@ -81,13 +81,18 @@ export function changedWhileAskedText(label: string): string {
  * token, account or address replaced in between): it is thrown before anything is signed, so nothing was sent.
  */
 export class ConnectionChangedError extends VaultCallError {
-  constructor() {
+  /** `connectionId`: the connection that changed, when the call reached more than its own (a TrueNAS through Servers). */
+  constructor(readonly connectionId?: string) {
     super('not_allowed', 'The connection changed while the call started, so nothing was sent.');
     this.name = 'ConnectionChangedError';
   }
 }
 
 /** Throws `ConnectionChangedError` unless `row` is there and its calls still go to `target` (`callTarget`). */
-export function keepTarget(row: CallTargetRow | null | undefined, target: string): void {
-  if (!row || callTarget(row) !== target) throw new ConnectionChangedError();
+export function keepTarget(
+  row: CallTargetRow | null | undefined,
+  target: string,
+  connectionId?: string,
+): void {
+  if (!row || callTarget(row) !== target) throw new ConnectionChangedError(row?.id ?? connectionId);
 }

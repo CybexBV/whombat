@@ -61,6 +61,27 @@ export function callWordsFor(catalogId: string): CallWords | null {
 
 registerCallWords('ps5', PS5_CALL_WORDS);
 
+/**
+ * The other connections a builtin's call acts through as well as its own, by id, from its arguments (a Servers backup
+ * place on a TrueNAS): a yes to the call is bound to where each of them goes too, and the call signs as each only there.
+ */
+export type CallReaches = (tool: string, args: Readonly<Record<string, unknown>>) => readonly string[];
+
+const reaches = new Map<string, CallReaches>();
+
+export function registerCallReaches(catalogId: string, fn: CallReaches): void {
+  reaches.set(catalogId, fn);
+}
+
+/** The ids of the other connections a call of `tool` on a `catalogId` connection acts through (none for most). */
+export function callReaches(
+  catalogId: string,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  return reaches.get(catalogId)?.(tool, args) ?? [];
+}
+
 /** The adapter of an entry, or null (its typed tools aren't served here). */
 export function adapterFor(catalogId: string): Adapter | null {
   return ADAPTERS[catalogId] ?? builtinAdapters.get(catalogId) ?? null;
