@@ -18,6 +18,14 @@ func isNotDirErr(err error) bool {
 	return errors.Is(err, syscall.ENOTDIR) || errors.Is(err, errNotDir)
 }
 
+// darwinPuregoErrno extracts the 32-bit C int errno from the raw uintptr
+// returned by purego.SyscallN on Darwin. purego v0.11.2 loads *__error() with
+// a 64-bit load, which leaves neighbouring thread-local data in the upper 32
+// bits on 64-bit Macs.
+func darwinPuregoErrno(raw uintptr) unix.Errno {
+	return unix.Errno(uint32(raw))
+}
+
 func entryStatFromUnix(st *unix.Stat_t) entryStat {
 	var alloc uint64
 	if st.Blocks > 0 {

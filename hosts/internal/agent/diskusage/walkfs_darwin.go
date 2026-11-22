@@ -70,14 +70,19 @@ func loadDarwinAttrSyms() error {
 
 type darwinBulkFunc func(dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error)
 type darwinFgetFunc func(fd int, alist *darwinAttrList, buf []byte, options uint64) error
+type darwinSyscallNFunc func(fn uintptr, args ...uintptr) (r1, r2, err uintptr)
 
 func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error) {
+	return callDarwinGetattrlistbulk(purego.SyscallN, darwinLib.getattrlistbulk, dirfd, alist, buf, options)
+}
+
+func callDarwinGetattrlistbulk(syscallN darwinSyscallNFunc, fn uintptr, dirfd int, alist *darwinAttrList, buf []byte, options uint64) (int, error) {
 	if len(buf) == 0 {
 		return 0, unix.ERANGE
 	}
 	for {
-		r1, _, errno := purego.SyscallN(
-			darwinLib.getattrlistbulk,
+		r1, _, errno := syscallN(
+			fn,
 			uintptr(dirfd),
 			uintptr(unsafe.Pointer(alist)),
 			uintptr(unsafe.Pointer(&buf[0])),
@@ -86,7 +91,7 @@ func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, opt
 		)
 		n := int(int32(r1))
 		if n < 0 {
-			err := unix.Errno(errno)
+			err := darwinPuregoErrno(errno)
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}
@@ -97,12 +102,16 @@ func hostDarwinGetattrlistbulk(dirfd int, alist *darwinAttrList, buf []byte, opt
 }
 
 func hostDarwinFgetattrlist(fd int, alist *darwinAttrList, buf []byte, options uint64) error {
+	return callDarwinFgetattrlist(purego.SyscallN, darwinLib.fgetattrlist, fd, alist, buf, options)
+}
+
+func callDarwinFgetattrlist(syscallN darwinSyscallNFunc, fn uintptr, fd int, alist *darwinAttrList, buf []byte, options uint64) error {
 	if len(buf) == 0 {
 		return unix.ERANGE
 	}
 	for {
-		r1, _, errno := purego.SyscallN(
-			darwinLib.fgetattrlist,
+		r1, _, errno := syscallN(
+			fn,
 			uintptr(fd),
 			uintptr(unsafe.Pointer(alist)),
 			uintptr(unsafe.Pointer(&buf[0])),
@@ -110,7 +119,7 @@ func hostDarwinFgetattrlist(fd int, alist *darwinAttrList, buf []byte, options u
 			uintptr(options),
 		)
 		if int32(r1) != 0 {
-			err := unix.Errno(errno)
+			err := darwinPuregoErrno(errno)
 			if errors.Is(err, unix.EINTR) {
 				continue
 			}

@@ -5,6 +5,7 @@ package diskusage
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"testing"
 
@@ -88,5 +89,90 @@ func TestDarwinScanFSRootFSIDMismatchAndMountPointSkip(t *testing.T) {
 		t.Fatal("OpenDir crossed mount point reported by getattrlistbulk")
 	} else if !errors.Is(err, errWrongMount) {
 		t.Fatalf("OpenDir(child-mount) err = %v, want errWrongMount", err)
+	}
+}
+
+func TestDarwinPuregoSyscallWrappersMaskCorruptedErrno(t *testing.T) {
+	corrupt := func(e unix.Errno) uintptr {
+		return uintptr(uint64(0x6dddc000)<<32 | uint64(uint32(e)))
+	}
+	negOne := ^uintptr(0)
+	alist := darwinBulkAttrList()
+	buf := make([]byte, 64)
+
+	// 1. EINTR with corrupted upper 32 bits retries and succeeds on both wrappers.
+	bulkCalls := 0
+	n, err := callDarwinGetattrlistbulk(func(uintptr, ...uintptr) (uintptr, uintptr, uintptr) {
+		bulkCalls++
+		if bulkCalls == 1 {
+			return negOne, 0, corrupt(unix.EINTR)
+		}
+		return 3, 0, 0
+	}, 1, 0, &alist, buf, 0)
+	if err != nil || n != 3 || bulkCalls != 2 {
+		t.Fatalf("getattrlistbulk EINTR retry = (%d, %v, calls=%d), want (3, nil, 2)", n, err, bulkCalls)
+	}
+
+	fgetCalls := 0
+	err = callDarwinFgetattrlist(func(uintptr, ...uintptr) (uintptr, uintptr, uintptr) {
+		fgetCalls++
+		if fgetCalls == 1 {
+			return negOne, 0, corrupt(unix.EINTR)
+		}
+		return 0, 0, 0
+	}, 1, 0, &alist, buf, 0)
+	if err != nil || fgetCalls != 2 {
+		t.Fatalf("fgetattrlist EINTR retry = (%v, calls=%d), want (nil, 2)", err, fgetCalls)
+	}
+
+	// 2. ERANGE, ENOENT, EACCES with corrupted upper 32 bits match standard errors.
+	for _, tc := range []struct {
+		want      unix.Errno
+		stdTarget error
+	}{
+		{unix.ERANGE, nil},
+		{unix.ENOENT, fs.ErrNotExist},
+		{unix.EACCES, fs.ErrPermission},
+	} {
+		_, err := callDarwinGetattrlistbulk(func(uintptr, ...uintptr) (uintptr, uintptr, uintptr) {
+			return negOne, 0, corrupt(tc.want)
+		}, 1, 0, &alist, buf, 0)
+		if !errors.Is(err, tc.want) {
+			t.Errorf("getattrlistbulk(%v): got %v, want %v", tc.want, err, tc.want)
+		}
+		if tc.stdTarget != nil && !errors.Is(err, tc.stdTarget) {
+			t.Errorf("getattrlistbulk(%v): errors.Is(%v, %v) = false", tc.want, err, tc.stdTarget)
+		}
+
+		err = callDarwinFgetattrlist(func(uintptr, ...uintptr) (uintptr, uintptr, uintptr) {
+			return negOne, 0, corrupt(tc.want)
+		}, 1, 0, &alist, buf, 0)
+		if !errors.Is(err, tc.want) {
+			t.Errorf("fgetattrlist(%v): got %v, want %v", tc.want, err, tc.want)
+		}
+	}
+
+	// 3. readBulkRaw grows bulkBuf when getattrlistbulk returns a corrupted-upper-bits ERANGE.
+	var seenLens []int
+	dir := &darwinScanDir{
+		fd: 0,
+		state: &darwinFSState{
+			bulkFn: func(dirfd int, al *darwinAttrList, b []byte, opts uint64) (int, error) {
+				seenLens = append(seenLens, len(b))
+				return callDarwinGetattrlistbulk(func(uintptr, ...uintptr) (uintptr, uintptr, uintptr) {
+					if len(seenLens) == 1 {
+						return negOne, 0, corrupt(unix.ERANGE)
+					}
+					return 0, 0, 0
+				}, 1, dirfd, al, b, opts)
+			},
+		},
+	}
+	_, eof, err := dir.readBulkRaw()
+	if err != nil || !eof {
+		t.Fatalf("readBulkRaw ERANGE growth = (eof=%v, err=%v), want (true, nil)", eof, err)
+	}
+	if len(seenLens) != 2 || seenLens[1] != seenLens[0]*2 {
+		t.Fatalf("readBulkRaw buffer sizes = %v, want doubling on ERANGE", seenLens)
 	}
 }
