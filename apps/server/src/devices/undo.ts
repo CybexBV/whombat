@@ -16,7 +16,12 @@ import {
   executeConnectionCall,
   newCallId,
 } from '../connections/call';
-import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
+import {
+  ChangedWhileAskedError,
+  callTarget,
+  changedSinceChangeText,
+  undoGoesWhereChangeWent,
+} from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { catalogConnections, connectionTools } from '../db/schema/index';
@@ -26,7 +31,7 @@ import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { readActionValue } from './driver';
 import { deviceNoun } from './profile';
-import { DEVICE_UNDO_KIND, type DeviceUndo, linkUndo } from './run';
+import { DEVICE_UNDO_KIND, type DeviceUndo, linkUndo, sameDevice } from './run';
 import { actionOfTool, addressOf, limitWordsFor, skillOfConnection, slugOf } from './store';
 
 function capital(text: string): string {
@@ -71,8 +76,9 @@ export async function undoDeviceChange(
     await say(services, change, 'That device’s skill changed since, so I can’t undo this.');
     return;
   }
-  // Given another address or another device's skill since: the old value would go elsewhere.
-  if (!undoGoesWhereChangeWent(row, undo.destination)) {
+  // Given another address or another device's skill since (also between reading the connection and its skill): the
+  // old value would go elsewhere, and the device read for it would be another one.
+  if (!undoGoesWhereChangeWent(row, undo.destination) || !sameDevice(row, skill)) {
     await say(services, change, changedSinceChangeText(row.label));
     return;
   }
@@ -110,20 +116,28 @@ export async function undoDeviceChange(
   linkUndo(callId, change.id, byId);
   // Bound to where the change went: a device repointed while it starts gets nothing.
   const target = undo.destination ?? callTarget(row);
-  const res = await services.pipeline.commit(
-    callConnectionTool,
-    {
-      connectionId: row.id,
-      handle: row.handle,
-      tool: tool.name,
-      toolHash: tool.hash,
-      callId,
-      argsEnc: services.custody.seal(callArgsAad(callId), JSON.stringify(args)),
-      ...(change.conversationId ? { conversationId: change.conversationId } : {}),
-      target,
-    },
-    { burrowId: change.burrowId, actorId: agentId, onBehalfOf: { principalId: byId } },
-  );
+  let res: Awaited<ReturnType<typeof services.pipeline.commit<typeof callConnectionTool.schema, unknown>>>;
+  try {
+    res = await services.pipeline.commit(
+      callConnectionTool,
+      {
+        connectionId: row.id,
+        handle: row.handle,
+        tool: tool.name,
+        toolHash: tool.hash,
+        callId,
+        argsEnc: services.custody.seal(callArgsAad(callId), JSON.stringify(args)),
+        ...(change.conversationId ? { conversationId: change.conversationId } : {}),
+        target,
+      },
+      { burrowId: change.burrowId, actorId: agentId, onBehalfOf: { principalId: byId } },
+    );
+  } catch (err) {
+    // Given another address while the inverse was being saved: it isn't sent there.
+    if (!(err instanceof ChangedWhileAskedError)) throw err;
+    await say(services, change, changedSinceChangeText(row.label));
+    return;
+  }
   if (res.status === 'blocked') {
     await say(services, change, `I couldn’t undo that: ${res.message}`);
     return;

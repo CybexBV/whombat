@@ -14,6 +14,7 @@
  */
 import type { ThingLine, ThingPageItem, ThingPageKpi } from '@whombat/core';
 import { externalEffect } from '../../../commit/scope';
+import { ConnectionChangedError } from '../../../connections/call-target';
 import { signedConnectionFetch } from '../../../connections/http';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../../../connections/types';
 import { startOfLocalDay } from '../../../home/time';
@@ -1040,7 +1041,7 @@ async function accessWrite(
             },
             { maxBytes: 64 * 1024, deadlineMs: 15_000 },
           ),
-        { refused: (err) => err instanceof ConnectionAuthError },
+        { refused: (err) => err instanceof ConnectionAuthError || err instanceof ConnectionChangedError },
       );
     } catch (err) {
       if (err instanceof ConnectionAuthError)

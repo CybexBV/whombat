@@ -18,8 +18,12 @@ import { z } from 'zod';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { defineCommand, type KeyRequirement } from '../commit/types';
-import { changedSince, signingOnlyAs } from '../connections/bound-targets';
-import { ConnectionChangedError, changedSinceYesText } from '../connections/call-target';
+import { changedSince, heldChanged, signingOnlyAs } from '../connections/bound-targets';
+import {
+  ChangedWhileAskedError,
+  ConnectionChangedError,
+  changedSinceYesText,
+} from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, approvals, principals } from '../db/schema/index';
 import { conflict } from '../lib/errors';
@@ -28,6 +32,7 @@ import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import { loadConversationRow } from '../read/conversations';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
+import { thingActionTargets } from '../things/actions';
 
 /** The key every settings change needs. */
 export const SETTINGS_KEY = 'settings.change' as const;
@@ -93,7 +98,8 @@ const Input = z.object({
   title: z.string().min(1).max(160).optional(),
   /**
    * Where each connection the change signs as goes and as whom when it was asked for, by id (`callTarget`; a page
-   * action's, `thingActionTargets`): the yes is bound to it, and the change runs only while each still goes there.
+   * action's, `askThingAction`, from the same read as the card's words): the card is saved only while each still goes
+   * there, the yes is bound to it, and the change runs only while each still goes there.
    */
   targets: z
     .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
@@ -104,7 +110,13 @@ const Input = z.object({
 export const changeSetting = defineCommand({
   name: 'change_setting',
   schema: Input,
-  async requiredKey(input, { db, actor }): Promise<KeyRequirement> {
+  async requiredKey(input, { db, actor, approvalId }): Promise<KeyRequirement> {
+    // Saved only while each connection it is bound to is still the one its card was made from (held until this
+    // commits); an approved change is checked again when it runs (`runApprovedChange`).
+    if (input.targets && !approvalId) {
+      const changed = await heldChanged(db, input.targets);
+      if (changed) throw new ChangedWhileAskedError(changed.id, changed.label);
+    }
     const e = assistantSetting(input.op);
     const words = input.title ?? e.words ?? input.op;
     const where = pageWords((e.page ?? 'you.profile') as SettingsPageId, actor.shortName).where;
@@ -191,9 +203,11 @@ export async function runApprovedChange(
 ): Promise<void> {
   const account = await approverAccount(services.db, call.approvalId);
   const dispatcher = sessionDispatcherOf(services);
+  // A page action asked before its card kept where it went is bound to where its connection goes at the yes.
+  const targets = call.targets ?? (await thingActionTargets(services, call.burrowId, call.op, call.input));
   const answer =
     account && dispatcher
-      ? await runBound(services, call.targets ?? {}, changedSinceYesText, () =>
+      ? await runBound(services, targets, changedSinceYesText, () =>
           dispatcher.runForAssistant(account, call.agentId, call.op, call.input),
         )
       : ({ type: 'error', message: 'This Whombat can’t run its settings now.' } as const);

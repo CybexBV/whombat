@@ -22,6 +22,7 @@ import {
   ps5UpdatePayload,
   ps5UpdateWebkit,
 } from '../../connections/adapters/ps5';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { connectionDatagram, connectionLine, signedConnectionFetch } from '../../connections/http';
 import {
   firmwareOf,
@@ -130,6 +131,8 @@ function writeContext(services: Services, row: CatalogConnectionRow): Ps5Context
     send: (req) =>
       externalEffect('things.ps5', () => signedConnectionFetch(services, row, req), {
         idempotent: (req.method ?? 'GET') === 'GET',
+        // A connection that changed since it was checked sends nothing: the request didn't act.
+        refused: (err) => err instanceof ConnectionChangedError,
       }),
     datagram: (port, payload) => connectionDatagram(services, row, port, payload),
     line: (port, command, idempotent) => connectionLine(services, row, port, command, idempotent),

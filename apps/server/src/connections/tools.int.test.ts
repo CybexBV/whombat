@@ -35,8 +35,11 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, type TestDispatchOptions } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { signingOnlyAs } from './bound-targets';
+import { callConnectionTool } from './call';
 import { ConnectionChangedError, callTarget } from './call-target';
 import { visibleConnections } from './context';
+import { credentialFor } from './credentials';
 import { sealConnectionSecret } from './crypto';
 import { currentRow, signedConnectionFetch } from './http';
 import { connectionsFor } from './pool';
@@ -538,6 +541,35 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
         expect(home.seen.length).toBe(sent);
       } finally {
         await restore();
+      }
+    });
+
+    it('asks nothing when the connection changes between the call’s read and its card', async () => {
+      const dusty = await turn(IDS.dusty, IDS.billing);
+      const count = async () =>
+        (await t.services.db.select({ n: sql<number>`count(*)::int` }).from(approvals))[0]?.n ?? 0;
+      const asked = await count();
+      const commit = t.services.pipeline.commit.bind(t.services.pipeline);
+      let restore: (() => Promise<void>) | null = null;
+      // The token is replaced after the call read the connection and just before its card is saved.
+      const race = vi.spyOn(t.services.pipeline, 'commit').mockImplementation(async (def, input, options) => {
+        if (def === callConnectionTool && !restore) restore = await replaceToken('ha-llat-Other7Account2Rp6');
+        return commit(def, input, options);
+      });
+      try {
+        const res = await call(dusty.mcp, 'connection_call', {
+          connection: 'homeassistant',
+          tool: 'HassTurnOn',
+          arguments: { name: 'loft-lamp' },
+        });
+        expect(res.body).toMatchObject({ status: 'failed', reason: 'destination_refused' });
+        expect(String(res.body.message)).toContain('changed while this call started');
+        expect(await count()).toBe(asked);
+        expect(seenFor('loft-lamp')).toBe(0);
+      } finally {
+        race.mockRestore();
+        await (restore as (() => Promise<void>) | null)?.();
+        await dusty.mcp.close();
       }
     });
 

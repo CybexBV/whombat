@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@whombat/core';
+import { ApiError } from '../lib/errors';
 import { VaultCallError } from '../vault/net';
 import type { CatalogConnectionRow } from './types';
 
@@ -93,6 +94,21 @@ export class ConnectionChangedError extends VaultCallError {
   constructor(readonly connectionId?: string) {
     super('not_allowed', 'The connection changed while the call started, so nothing was sent.');
     this.name = 'ConnectionChangedError';
+  }
+}
+
+/**
+ * A card or a call saved while a connection it is bound to went elsewhere or as someone else since it was read (the card
+ * would describe one and bind its yes to another): refused in the transaction that would save it, so nothing is asked,
+ * saved or sent. Its words are what the agent hears.
+ */
+export class ChangedWhileAskedError extends ApiError {
+  constructor(
+    readonly connectionId: string,
+    readonly label: string,
+  ) {
+    super('conflict', changedWhileAskedText(label));
+    this.name = 'ChangedWhileAskedError';
   }
 }
 

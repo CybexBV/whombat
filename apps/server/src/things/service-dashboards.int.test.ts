@@ -7,27 +7,37 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { type ThingPage, thingHref, thingId } from '@whombat/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { PNG } from 'pngjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { signingOnlyAs } from '../connections/bound-targets';
 import { callTarget, changedSinceYesText } from '../connections/call-target';
 import { sealConnectionSecret } from '../connections/crypto';
-import { accounts, catalogConnections, changes, events, principals, vaultNetworks } from '../db/schema/index';
+import {
+  accounts,
+  approvals,
+  catalogConnections,
+  changes,
+  events,
+  principals,
+  vaultNetworks,
+} from '../db/schema/index';
 import { sniffBuffer } from '../files/sniff';
 import { recordChange } from '../home/registry';
 import { ApiError, badRequest } from '../lib/errors';
 import { forAssistant } from '../managed/acting-assistant';
+import { SessionDispatcher } from '../managed/dispatcher';
+import { CommandReceipts } from '../managed/receipts';
 import { openDownload, type StreamContext } from '../managed/resources';
 import type { SessionStream } from '../managed/session/streams';
 import type { SessionPrincipal } from '../managed/trust';
 import { IDS } from '../seed/test-world';
-import { runBound } from '../settings/command';
+import { changeSetting, runBound } from '../settings/command';
 import { insertConnection } from '../test/connections';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
-import { runThingAction, thingActionTargets } from './actions';
+import { askThingAction, runThingAction, thingActionTargets } from './actions';
 import { imageRef } from './images';
 import { actAs } from './kinds/act';
 import { pageButton } from './kinds/buttons';
@@ -104,6 +114,12 @@ const testKind: KindModule = {
       title: `Turned ${input.value ? 'on' : 'off'} ${input.target}`,
       everyday: true,
     }),
+  },
+  // The approval card's words, read from the service as the connection (a setting's old value, SST-04).
+  describe: async (ctx, action) => {
+    await midway?.();
+    await actAs(ctx.services, ctx.row, 'Grafana', { method: 'GET', path: '/describe' });
+    return { title: `Do ${action} on Grafana`, lines: ['As it reads now'] };
   },
 };
 const kinds = KIND_MODULES as Record<string, KindModule | undefined>;
@@ -452,6 +468,132 @@ describe('a button signs only as the connection it was checked on', () => {
   });
 });
 
+describe('the assistant’s page action, bound from its card to its run', () => {
+  /** The person pastes another token into the connection; returns what puts the first back. */
+  async function replaceToken() {
+    const [row] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, shared));
+    if (!row) throw new Error('no connection');
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        secretEnc: sealConnectionSecret(t.services.custody, shared, 'secret', 'glsa_another_account'),
+        credentialVersion: row.credentialVersion + 1,
+      })
+      .where(eq(catalogConnections.id, shared));
+    return async () => {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ secretEnc: row.secretEnc, credentialVersion: row.credentialVersion })
+        .where(eq(catalogConnections.id, shared));
+    };
+  }
+  const input = (action: string) => ({
+    params: { burrow: 'burrow-hq', thing: thingId('connection', shared) },
+    body: { action },
+  });
+  const approvalCount = async () =>
+    (await t.services.db.select({ n: sql<number>`count(*)::int` }).from(approvals))[0]?.n ?? 0;
+
+  it('describes the card and binds its yes from one read of the connection', async () => {
+    const [row] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, shared));
+    if (!row) throw new Error('no connection');
+    const read = served.get('/describe') ?? 0;
+    const asked = await askThingAction(t.services, t.burrowId, 'things.action', input('approve'));
+    expect(asked).toMatchObject({
+      targets: { [shared]: callTarget(row) },
+      said: { title: 'Do approve on Grafana' },
+      changed: null,
+    });
+    expect(served.get('/describe')).toBe(read + 1);
+
+    // Signed in again while the card's words are read: no card, and nothing reached Grafana as either token.
+    let restore: (() => Promise<void>) | null = null;
+    midway = async () => {
+      restore = await replaceToken();
+    };
+    try {
+      const changed = await askThingAction(t.services, t.burrowId, 'things.action', input('approve'));
+      expect(changed).toMatchObject({ said: null, changed: 'Grafana' });
+      expect(served.get('/describe')).toBe(read + 1);
+    } finally {
+      midway = null;
+      await (restore as (() => Promise<void>) | null)?.();
+    }
+  });
+
+  it('saves no card once the connection changed after its words were read', async () => {
+    const { targets } = await askThingAction(t.services, t.burrowId, 'things.action', input('approve'));
+    const before = await approvalCount();
+    const restore = await replaceToken();
+    try {
+      await expect(
+        t.services.pipeline.commit(
+          changeSetting,
+          { op: 'things.action', input: input('approve'), conversationId: null, targets },
+          { burrowId: t.burrowId, actorId: IDS.dusty },
+        ),
+      ).rejects.toMatchObject({
+        name: 'ChangedWhileAskedError',
+        message: expect.stringContaining('Grafana'),
+      });
+      expect(await approvalCount()).toBe(before);
+    } finally {
+      await restore();
+    }
+    // As it was read, the change goes on to the person's key (here: no chat to ask in).
+    const asked = await t.services.pipeline
+      .commit(
+        changeSetting,
+        { op: 'things.action', input: input('approve'), conversationId: null, targets },
+        { burrowId: t.burrowId, actorId: IDS.dusty },
+      )
+      .catch((err: unknown) => err);
+    expect(asked).not.toMatchObject({ name: 'ChangedWhileAskedError' });
+  });
+
+  it('stays bound through the session dispatcher while it runs', async () => {
+    const dispatcher = new SessionDispatcher(
+      t.services,
+      {} as never,
+      new CommandReceipts(t.services.db, t.services.clock),
+    );
+    const [account] = await t.services.db.select().from(accounts).where(eq(accounts.id, maraAccount));
+    if (!account) throw new Error('no account');
+    const run = () => dispatcher.runForAssistant(account, IDS.dusty, 'things.action', input('signed'));
+    const targets = await thingActionTargets(t.services, t.burrowId, 'things.action', input('signed'));
+    const sent = served.get('/act') ?? 0;
+
+    // The token is replaced while the action runs, between its check and its request: nothing is sent.
+    let restore: (() => Promise<void>) | null = null;
+    midway = async () => {
+      restore = await replaceToken();
+    };
+    try {
+      const refused = await runBound(t.services, targets, changedSinceYesText, run);
+      expect(refused).toMatchObject({ type: 'error', message: expect.stringContaining('Grafana changed') });
+      expect(served.get('/act') ?? 0).toBe(sent);
+    } finally {
+      midway = null;
+      await (restore as (() => Promise<void>) | null)?.();
+    }
+
+    // Run without the binding a yes or an ask gives it, the assistant's action sends nothing.
+    const unbound = await run();
+    expect(unbound).toMatchObject({ type: 'error', message: expect.stringContaining('Grafana changed') });
+    expect(served.get('/act') ?? 0).toBe(sent);
+
+    // Bound and unchanged, it runs once.
+    expect(await runBound(t.services, targets, changedSinceYesText, run)).toMatchObject({ type: 'result' });
+    expect(served.get('/act')).toBe(sent + 1);
+  });
+});
+
 describe('a declared setting (service-settings.md SST-03, SST-04)', () => {
   const undo = (cookie: string, changeId: string) =>
     t.api.inject({
@@ -522,12 +664,18 @@ describe('a declared setting (service-settings.md SST-03, SST-04)', () => {
     quality.value = 8000;
     const [person] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
     if (!person) throw new Error('no Mara');
-    const out = await forAssistant(IDS.dusty, () =>
-      runThingAction(
-        t.services,
-        { accountId: maraAccount, burrowId: t.burrowId, principal: person },
-        thingId('connection', shared),
-        { action: 'setting', target: 'quality', value: 20000 },
+    // The assistant's page action runs bound to where its yes went (`runBound` does it on the real path).
+    const targets = await thingActionTargets(t.services, t.burrowId, 'things.action', {
+      params: { thing: thingId('connection', shared) },
+    });
+    const { value: out } = await signingOnlyAs(targets, () =>
+      forAssistant(IDS.dusty, () =>
+        runThingAction(
+          t.services,
+          { accountId: maraAccount, burrowId: t.burrowId, principal: person },
+          thingId('connection', shared),
+          { action: 'setting', target: 'quality', value: 20000 },
+        ),
       ),
     );
     const [row] = await t.services.db

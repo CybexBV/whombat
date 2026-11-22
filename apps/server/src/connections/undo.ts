@@ -10,7 +10,12 @@ import { catalogConnections, connectionTools } from '../db/schema/index';
 import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../home/registry';
 import { ApiError } from '../lib/errors';
 import { callArgsAad, callConnectionTool, executeConnectionCall } from './call';
-import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from './call-target';
+import {
+  ChangedWhileAskedError,
+  callTarget,
+  changedSinceChangeText,
+  undoGoesWhereChangeWent,
+} from './call-target';
 import { type ConnectionUndo, undoCallId } from './changes';
 
 function isConnectionUndo(value: unknown): value is ConnectionUndo {
@@ -67,6 +72,9 @@ export async function undoConnectionChange(
       { burrowId, actorId: change.agentId, onBehalfOf: { principalId: person.id, text: person.shortName } },
     );
   } catch (err) {
+    // Repointed while the inverse was being saved: it isn't sent there.
+    if (err instanceof ChangedWhileAskedError)
+      return { ok: false, reason: changedSinceChangeText(row.label) };
     if (err instanceof ApiError) return { ok: false, reason: err.message };
     throw err;
   }

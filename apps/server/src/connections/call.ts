@@ -59,9 +59,10 @@ import { loadGrants, loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
 import { VaultCallError, VaultEchoError } from '../vault/net';
 import { adapterFor, callReaches, callWordsFor } from './adapters/index';
-import { NOWHERE, signingOnlyAs } from './bound-targets';
+import { heldChanged, NOWHERE, signingOnlyAs } from './bound-targets';
 import { connectionCallAccess, coversReads } from './call-access';
 import {
+  ChangedWhileAskedError,
   ConnectionChangedError,
   callTarget,
   changedSinceYesText,
@@ -283,7 +284,14 @@ export const callConnectionTool = defineCommand({
       .refine((o) => Object.keys(o).length <= 8)
       .optional(),
   }),
-  async requiredKey(input, { db, services, actor }): Promise<KeyRequirement | null> {
+  async requiredKey(input, { db, services, actor, approvalId }): Promise<KeyRequirement | null> {
+    // Saved, and asked on a card, only while the connection and every other one the call acts through are the ones its
+    // yes is bound to (held until this commits): the card's words are read from them below. An approved call is
+    // checked again when it runs (`executeConnectionCall`).
+    if (input.target !== undefined && !approvalId) {
+      const changed = await heldChanged(db, { ...input.others, [input.connectionId]: input.target });
+      if (changed) throw new ChangedWhileAskedError(changed.id, changed.label);
+    }
     const plan = await planCall(db, services, actor.id, input);
     // Gone or not this agent's to use: `apply` refuses with the reason.
     if (!plan) return null;

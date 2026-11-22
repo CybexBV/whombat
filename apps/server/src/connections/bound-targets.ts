@@ -11,6 +11,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { eq, inArray } from 'drizzle-orm';
+import type { Db } from '../db/client';
 import { catalogConnections } from '../db/schema/index';
 import type { Services } from '../services';
 import { type CallTargetRow, ConnectionChangedError, callTarget } from './call-target';
@@ -87,4 +88,25 @@ export async function changedSince(
   if (!ids.length) return null;
   const rows = await services.db.select().from(catalogConnections).where(inArray(catalogConnections.id, ids));
   return rows.find((r) => callTarget(r) !== targets[r.id])?.label ?? null;
+}
+
+/**
+ * The first connection in `targets` stored now with another target than its own, read in the transaction `db` that
+ * saves a card or a call bound to them and held there until it ends (FOR SHARE): what a yes is bound to is what the
+ * card was made from, and a connection replaced meanwhile saves no card. Null when none differs (one that is gone
+ * doesn't: what would sign as it refuses by itself).
+ */
+export async function heldChanged(
+  db: Db,
+  targets: Readonly<Record<string, string>>,
+): Promise<{ id: string; label: string } | null> {
+  const ids = Object.keys(targets);
+  if (!ids.length) return null;
+  const rows = await db
+    .select()
+    .from(catalogConnections)
+    .where(inArray(catalogConnections.id, ids))
+    .for('share');
+  const changed = rows.find((r) => callTarget(r) !== targets[r.id]);
+  return changed ? { id: changed.id, label: changed.label } : null;
 }

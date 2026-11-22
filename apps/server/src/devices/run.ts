@@ -219,7 +219,7 @@ export function readOutput(readings: readonly ReadingResult[], at: Date): CallOu
 }
 
 /** Whether `skill` is the device `row` (its connection, as checked) stands for: its skill, address and unit. */
-function sameDevice(
+export function sameDevice(
   row: Pick<CatalogConnectionRow, 'fields'>,
   skill: Pick<DeviceSkillRow, 'id' | 'host' | 'port' | 'unitId'>,
 ): boolean {

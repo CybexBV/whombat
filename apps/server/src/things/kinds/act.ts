@@ -5,6 +5,7 @@
  * reads go through `read.ts`. Never to delete anything, update or restart the service, or change its settings (SD-02).
  */
 import { externalEffect } from '../../commit/scope';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { signedConnectionFetch } from '../../connections/http';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../../connections/types';
 import { ApiError, conflict, forbidden } from '../../lib/errors';
@@ -72,7 +73,8 @@ export async function actAs(
             deadlineMs: Math.min(ACT_DEADLINE_MAX_MS, Math.max(1_000, call.deadlineMs ?? ACT_DEADLINE_MS)),
           },
         ),
-      { refused: (err) => err instanceof ConnectionAuthError },
+      // Refused sign-ins and a connection that changed since it was checked send nothing: the action didn't act.
+      { refused: (err) => err instanceof ConnectionAuthError || err instanceof ConnectionChangedError },
     );
   } catch (err) {
     if (err instanceof ConnectionAuthError) throw conflict(`${name} needs you to sign in again first.`);

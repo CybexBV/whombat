@@ -4,6 +4,7 @@
  * the central checks in `things/actions.ts`; recorded as “Restarted Home Assistant” (kind `thing.restart`, no Undo).
  */
 import { externalEffect } from '../../commit/scope';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { signedConnectionFetch } from '../../connections/http';
 import { ConnectionAuthError } from '../../connections/types';
 import { ApiError, conflict, forbidden } from '../../lib/errors';
@@ -31,7 +32,7 @@ export const restartHomeAssistant: KindAction = async ({ services, row }) => {
           },
           { deadlineMs: 15_000 },
         ),
-      { refused: (err) => err instanceof ConnectionAuthError },
+      { refused: (err) => err instanceof ConnectionAuthError || err instanceof ConnectionChangedError },
     );
     status = res.status;
   } catch (err) {
