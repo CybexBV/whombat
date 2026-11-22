@@ -3,6 +3,8 @@
 package diskusage
 
 import (
+	"errors"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -58,11 +60,29 @@ func hostStatfs(path string) (fsStat, error) {
 	if err := unix.Statfs(path, &st); err != nil {
 		return fsStat{}, err
 	}
+	return statfsFromUnix(&st), nil
+}
+
+func fdStatfs(fd int) (fsStat, error) {
+	var st unix.Statfs_t
+	for {
+		err := unix.Fstatfs(fd, &st)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return fsStat{}, err
+		}
+		return statfsFromUnix(&st), nil
+	}
+}
+
+func statfsFromUnix(st *unix.Statfs_t) fsStat {
 	bsize := uint64(st.Bsize)
 	var used uint64
 	if st.Blocks >= st.Bfree {
 		used = (st.Blocks - st.Bfree) * bsize
 	}
 	avail := st.Bavail * bsize
-	return fsStat{TotalBytes: used + avail, UsedBytes: used}, nil
+	return fsStat{TotalBytes: used + avail, UsedBytes: used}
 }

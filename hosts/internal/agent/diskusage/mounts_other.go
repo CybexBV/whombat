@@ -11,3 +11,7 @@ func hostMounts() ([]mountInfo, error) {
 func hostStatfs(path string) (fsStat, error) {
 	return fsStat{}, errors.New("unsupported platform")
 }
+
+func fdStatfs(int) (fsStat, error) {
+	return fsStat{}, errors.New("unsupported platform")
+}

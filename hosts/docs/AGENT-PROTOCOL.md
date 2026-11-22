@@ -528,13 +528,25 @@ LXC `loop*` mounts, ZFS without visible pool disks, missing Btrfs/bcachefs
 sysfs, ZFS zvols or union/pooled FUSE mounts such as mergerfs) it returns
 `code: "standby_unknown"` without doing I/O on the mount. Walks on a
 low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`; macOS
-`PRIO_DARWIN_BG`), stays strictly on the target filesystem (`st_dev` check
-plus skipping child mount points from mountinfo before `lstat`), never follows
-symlinks, deduplicates hardlinks, and bounds depth (default 6, max 12), entries
-(250,000) and time (default 20 s, max 45 s; sets `partial: true` when cut
-short). Reports recognised categories on that mount (container images, build
-cache, volumes and logs, systemd journal, package caches, VM disks and
-snapshots where known) and up to 15 largest non-overlapping folders.
+`PRIO_DARWIN_BG`), anchors the scan to one open directory descriptor of the
+target mount root (using `fstatfs` on that descriptor, checking mount ID on
+Linux so an overmounted root fails before any read, and skipping child mount
+points from mountinfo before touching them), and resolves every subsequent step
+relative to its open parent descriptor: on Linux via `openat2` with
+`RESOLVE_NO_XDEV | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (refusing
+newly mounted filesystems and bind mounts with `EXDEV` before any stat or open
+touches them, and reading raw `getdents64` entries so `DT_UNKNOWN` entries on
+XFS without `ftype=1` or FUSE never trigger a hidden `lstatat` and are still
+handled across walks and category collectors); on Linux kernels without
+`openat2` (`ENOSYS` / seccomp) via `openat(O_NOFOLLOW | O_DIRECTORY)` plus
+`st_dev` and descriptor mount-ID checks before reading any directory entries;
+and on macOS via `openat(O_NOFOLLOW | O_DIRECTORY)` plus `st_dev` checks before
+descending and `Readdirnames`. Never follows symlinks, deduplicates hardlinks,
+and bounds depth (default 6, max 12), entries (250,000) and time (default 20 s,
+max 45 s; sets `partial: true` when cut short). Reports recognised categories on
+that mount (container images, build cache, volumes and logs, systemd journal,
+package caches, VM disks and snapshots where known) and up to 15 largest
+non-overlapping folders.
 
 **Exec** (`exec` stream, hub → agent): `ExecRequest{cmd, timeout}` →
 `ExecResponse`, needs `Policy.HostShell`. The command (at most 16 KiB, no

@@ -5,64 +5,57 @@ package diskusage
 import (
 	"errors"
 	"io/fs"
-	"os"
 	"syscall"
-)
 
-func openDirNoFollow(path string) (*os.File, uint64, uint64, bool, error) {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, 0, 0, false, err
-	}
-	f := os.NewFile(uintptr(fd), path)
-	fi, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil, 0, 0, false, err
-	}
-	dev, ok := statDev(fi)
-	if !ok {
-		_ = f.Close()
-		return nil, 0, 0, false, errors.New("missing device id")
-	}
-	mntID, hasMntID := fdStatMountID(int(f.Fd()))
-	return f, dev, mntID, hasMntID, nil
-}
+	"golang.org/x/sys/unix"
+)
 
 func isSymlinkLoopErr(err error) bool {
 	return errors.Is(err, syscall.ELOOP)
 }
 
-func statDev(fi fs.FileInfo) (uint64, bool) {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok || st == nil {
-		return 0, false
-	}
-	return uint64(st.Dev), true
+func isNotDirErr(err error) bool {
+	return errors.Is(err, syscall.ENOTDIR) || errors.Is(err, errNotDir)
 }
 
-func statInode(fi fs.FileInfo) (ino uint64, nlink uint64, ok bool) {
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok || st == nil {
-		return 0, 0, false
+func entryStatFromUnix(st *unix.Stat_t) entryStat {
+	var alloc uint64
+	if st.Blocks > 0 {
+		alloc = uint64(st.Blocks) * 512
+	} else if st.Size > 0 {
+		alloc = uint64(st.Size)
 	}
-	return uint64(st.Ino), uint64(st.Nlink), true
+	return entryStat{
+		Mode:       unixModeToFS(uint32(st.Mode)),
+		Size:       st.Size,
+		AllocBytes: alloc,
+		Dev:        uint64(st.Dev),
+		HasDev:     true,
+		Ino:        uint64(st.Ino),
+		Nlink:      uint64(st.Nlink),
+		HasInode:   true,
+	}
 }
 
-// allocatedBytes returns the disk space actually allocated to the file (handling
-// sparse VM disks accurately), falling back to apparent size for inline files.
-func allocatedBytes(fi fs.FileInfo) uint64 {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st != nil {
-		if st.Blocks > 0 {
-			return uint64(st.Blocks) * 512
-		}
-		if fi.Size() > 0 {
-			return uint64(fi.Size())
-		}
-		return 0
+func unixModeToFS(m uint32) fs.FileMode {
+	mode := fs.FileMode(m & 0o777)
+	switch m & unix.S_IFMT {
+	case unix.S_IFDIR:
+		mode |= fs.ModeDir
+	case unix.S_IFLNK:
+		mode |= fs.ModeSymlink
+	case unix.S_IFIFO:
+		mode |= fs.ModeNamedPipe
+	case unix.S_IFSOCK:
+		mode |= fs.ModeSocket
+	case unix.S_IFCHR:
+		mode |= fs.ModeDevice | fs.ModeCharDevice
+	case unix.S_IFBLK:
+		mode |= fs.ModeDevice
+	case unix.S_IFREG:
+		// Regular file: no type bits set.
+	default:
+		mode |= fs.ModeIrregular
 	}
-	if fi.Size() > 0 {
-		return uint64(fi.Size())
-	}
-	return 0
+	return mode
 }
