@@ -1,9 +1,10 @@
 /**
- * The claim's steps (Whombat first-day.md): claim the Whombat, say where its backups go, connect the AI. A new person
- * gets from the claim to an assistant that answers without leaving the journey: the AI sign-in the whole Whombat
- * depends on is a step of the claim, not a line above Chat. Pure, shared by the web and the phone.
+ * The claim's steps (Whombat first-day.md): claim the Whombat, connect the AI. A new person gets from the claim to an
+ * assistant that answers without leaving the journey: the AI sign-in the whole Whombat depends on is a step of the
+ * claim, not a line above Chat. Where backups go isn't asked here: Needs you proposes a place. Pure, shared by the web
+ * and the phone.
  *
- * - **Steps.** Claim · Protect your Whombat · Connect your AI, numbered “CLAIM · STEP n OF 3”.
+ * - **Steps.** Claim · Connect your AI, numbered “CLAIM · STEP n OF 2”.
  * - **Connect your AI** asks only while no provider is ready (signed in, nothing left to install); a Whombat that has
  *   one already, or whose sign-ins can't be read, goes straight on. “Later” opens the Whombat, where the same amber
  *   line as before says the assistant can't work yet.
@@ -17,10 +18,10 @@ import type { WhombatClient } from '../http/client';
 import { CLIENT_NAMES } from '../signins/copy';
 import { type ClientsList, clientUsable, type SignInsList } from '../signins/model';
 
-export const CLAIM_STEPS = ['claim', 'protect', 'ai'] as const;
+export const CLAIM_STEPS = ['claim', 'ai'] as const;
 export type ClaimStepName = (typeof CLAIM_STEPS)[number];
 
-/** “CLAIM · STEP 2 OF 3”. */
+/** “CLAIM · STEP 2 OF 2”. */
 export function claimStepKicker(step: ClaimStepName): string {
   return `CLAIM · STEP ${CLAIM_STEPS.indexOf(step) + 1} OF ${CLAIM_STEPS.length}`;
 }

@@ -1,7 +1,7 @@
 /**
  * “Is this a new Whombat?” and bringing a Whombat back (Whombat backup-options.md BKO-11, BKO-12, BKO-21, BKO-29,
  * BKO-34, backup-passkey.md BPK-05, BPK-06; app backup-options.md AP-6830…, backup-v2.md; mock 3-bring-back, screens
- * b–f). Right after a claim Start fresh goes on to Protect your Whombat; Bring back opens the old Whombat's backups
+ * b–f). Right after a claim Start fresh goes on to Connect your AI; Bring back opens the old Whombat's backups
  * with the passkey first (the account's locked copy, else the copies next to the backups on this network, which the
  * person asks for: it can take a minute), else the paper copy (its file or its text: the web has no camera), joins them
  * (`backup.adopt`), lets the person choose one (the newest first), restores it (`backup.restore`) and follows it every
@@ -103,7 +103,7 @@ export interface BringBackProps {
   device?: string;
   /** Opened from the app's Backups: where a restore stands, or bringing one back on a Whombat that started fresh. */
   later?: 'resume' | 'replace';
-  /** Start fresh: on to Protect your Whombat. */
+  /** Start fresh: on to Connect your AI. */
   onFresh: () => void;
   /** Done: open the Whombat at Chat. */
   onOpenChat: () => void;

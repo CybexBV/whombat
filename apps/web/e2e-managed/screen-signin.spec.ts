@@ -145,11 +145,8 @@ for (const theme of ['light', 'dark'] as const)
     await page.getByRole('checkbox', { name: 'I agree to the Whombat Appliance Terms' }).check();
     await page.getByRole('button', { name: 'Claim it' }).click();
     await startFresh(page);
-    await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
-    await shot('protect-step-2-of-3');
-    await page.getByRole('button', { name: 'Skip for now' }).click();
     await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
-    await shot('connect-ai-step-3-of-3');
+    await shot('connect-ai-step-2-of-2');
     await page.getByRole('button', { name: 'Later' }).click();
     await expect(inTheApp(page)).toBeVisible({ timeout: 20_000 });
     const device = (await fake<Record<string, { device: string }>>(page, 'cards')).fresh?.device as string;
