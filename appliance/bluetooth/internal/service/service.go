@@ -568,12 +568,15 @@ func (s *Service) Confirm(id string, accept bool) (protocol.BluetoothPairing, er
 	if accept {
 		p.Phase = protocol.BluetoothPairingPhasePairing
 	}
+	snap := p.snapshot()
 	s.mu.Unlock()
 	if !accept {
 		s.end(p, protocol.BluetoothPairingFailureFailed)
+		snap = s.snapshotOf(p)
 	}
+	// The answer describes what it did, taken before BlueZ hears it: once it has, the pairing may finish at any moment.
 	ch <- accept
-	return s.snapshotOf(p), nil
+	return snap, nil
 }
 
 // Cancel ends the running pairing (the dialog was closed): canceled. An ended one is answered as it is.
