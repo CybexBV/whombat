@@ -48,11 +48,13 @@ import {
   events,
   messages,
   notifications,
+  searchDocuments,
   t3Watches,
   trackerCursors,
   trackerItems,
   vaultNetworks,
 } from '../db/schema/index';
+import { indexMessage } from '../domain/search-index';
 import { checkConnectionHealth } from '../home/health';
 import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
@@ -1244,6 +1246,11 @@ describe('a stuck intake tells the person', () => {
       await w.services.db.execute(
         sql`update messages set provenance = 'outsiders_run' where id = ${root.id}`,
       );
+      // Indexed while it wasn't marked: the migration takes it out of Search.
+      for (const id of ids) await indexMessage(w.services.db, id);
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).not.toEqual([]);
       const migration = readFileSync(
         new URL('../db/migrations/0014_outsiders_run_mark.sql', import.meta.url),
         'utf8',
@@ -1259,6 +1266,9 @@ describe('a stuck intake tells the person', () => {
         expect(m.outsidersRun, m.text).toBe(m.id !== own.id);
         expect(m.provenance, m.text).toBeNull();
       }
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).toEqual([]);
     } finally {
       await done(trackerAutoId);
       await done(msgWatcherId);

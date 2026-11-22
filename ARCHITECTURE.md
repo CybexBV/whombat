@@ -1400,7 +1400,9 @@ Setup and operation: `docs/github.md`.
 - **Search** (`read/search.ts`): Postgres full-text search over `search_documents` (English stems and the words as
   written), kept in sync by the pipeline and paged by a keyset cursor. What the asker may open is part of the query
   and every row is re-checked: the person sees every room, the agent every room but the branch rooms of switched-off
-  repositories; an outsiders' turn searches nothing.
+  repositories; an outsiders' turn searches nothing. What outsiders can steer is never indexed: an assessor's
+  output, what an outsiders' run posted (`messages.outsiders_run`), an approval asked on such a run's card, and such a
+  run's error.
 - **Canvas**: Hocuspocus in the server, one Yjs document per canvas persisted to Postgres, reached through the
   session's collaboration stream; the agent edits server-side with `canvas_edit`.
 - **Files** (`apps/server/src/files/`): an upload is reserved for one conversation, sent over a resumable session

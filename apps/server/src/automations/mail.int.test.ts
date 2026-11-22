@@ -13,11 +13,12 @@ import {
   Message,
   newId,
 } from '@whombat/core';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
 import { reactToMessage, sendMessage } from '../commands/messages';
+import { loadBurrowRow } from '../commit/pipeline';
 import { syncTools } from '../connections/sync';
 import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
@@ -35,13 +36,17 @@ import {
   mailCursors,
   mailTriggerItems,
   messages,
+  searchDocuments,
   vaultNetworks,
 } from '../db/schema/index';
+import { indexAutomationRun, indexMessage } from '../domain/search-index';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadMessageRow, loadMessages } from '../read/messages';
+import { loadPrincipalRow } from '../read/principals';
+import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
@@ -2283,6 +2288,59 @@ describe('mail-arrives automations', () => {
         expect(m.provenance ?? null).toBeNull();
         expect(Message.safeParse(m).success).toBe(true);
       }
+
+      // Search has none of it: no document for the thread's messages or the run's approval card, and the run's own
+      // document carries none of its error words (they can quote the agent).
+      const approvalIds = (
+        await w.services.db
+          .select({ id: approvals.id })
+          .from(approvals)
+          .where(
+            inArray(
+              approvals.messageId,
+              threadMsgs.map((m) => m.id),
+            ),
+          )
+      ).map((a) => a.id);
+      expect(approvalIds.length).toBeGreaterThan(0);
+      expect(
+        await w.services.db
+          .select()
+          .from(searchDocuments)
+          .where(inArray(searchDocuments.id, [...threadMsgs.map((m) => m.id), ...approvalIds])),
+      ).toEqual([]);
+      await w.services.db
+        .update(automationRuns)
+        .set({ error: 'It said: “TRIGGER_PHRASE”' })
+        .where(eq(automationRuns.id, runId));
+      await indexAutomationRun(w.services.db, runId);
+      const [runDoc] = await w.services.db
+        .select()
+        .from(searchDocuments)
+        .where(eq(searchDocuments.id, runId));
+      expect(runDoc?.text).toBeDefined();
+      expect(runDoc?.text).not.toContain('TRIGGER_PHRASE');
+      // A reply indexed before it was marked isn't found, and indexing it again drops its document.
+      const reply = threadMsgs.find((m) => m.authorId === IDS.dusty);
+      if (!reply) throw new Error('no agent reply');
+      await w.services.db.update(messages).set({ outsidersRun: false }).where(eq(messages.id, reply.id));
+      await indexMessage(w.services.db, reply.id);
+      await w.services.db.update(messages).set({ outsidersRun: true }).where(eq(messages.id, reply.id));
+      const viewer = await loadPrincipalRow(w.services.db, IDS.mara);
+      const burrow = await loadBurrowRow(w.services.db, w.burrowId);
+      if (!viewer || !burrow) throw new Error('no viewer');
+      const found = await searchResults(
+        w.services.db,
+        viewer,
+        burrow,
+        { q: 'TRIGGER_PHRASE', type: 'all', limit: 20 },
+        w.now(),
+      );
+      expect(found.map((r) => r.id)).not.toContain(reply.id);
+      await indexMessage(w.services.db, reply.id);
+      expect(
+        await w.services.db.select().from(searchDocuments).where(eq(searchDocuments.id, reply.id)),
+      ).toEqual([]);
 
       // Neither the message_posted watcher (even with includeAgents + includeReplies) nor reaction_added fired.
       expect(await runsOf(msgWatcherId)).toHaveLength(0);

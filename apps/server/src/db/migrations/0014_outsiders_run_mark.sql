@@ -14,3 +14,16 @@ WHERE r."trigger" ->> 'kind' IN ('tracker', 'mail')
   AND p."id" = m."author_id"
   AND p."kind" <> 'person'
   AND m."outsiders_run" = false;
+--> statement-breakpoint
+-- What outsiders could steer leaves Search: the marked messages, the approvals asked on a marked card, and the error of
+-- a tracker or mail run (it can quote what their agent said).
+DELETE FROM "search_documents" WHERE "id" IN (SELECT "id" FROM "messages" WHERE "outsiders_run");--> statement-breakpoint
+DELETE FROM "search_documents" WHERE "id" IN (
+  SELECT a."id" FROM "approvals" AS a JOIN "messages" AS m ON m."id" = a."message_id" WHERE m."outsiders_run"
+);--> statement-breakpoint
+UPDATE "search_documents" AS d SET "text" = left(d."text", length(d."text") - length(r."error") - 1)
+FROM "automation_runs" AS r
+WHERE d."id" = r."id"
+  AND r."trigger" ->> 'kind' IN ('tracker', 'mail')
+  AND r."error" IS NOT NULL
+  AND right(d."text", length(r."error") + 1) = E'\n' || r."error";

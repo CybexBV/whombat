@@ -17,6 +17,7 @@ import {
   type Tone,
 } from '@whombat/core';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { outsidersRun } from '../automations/runs';
 import { markdownPlainText } from '../collab/document';
 import type { Db } from '../db/client';
 import {
@@ -109,17 +110,20 @@ function cardText(card: StoredCard | null): string {
 }
 
 /**
- * Messages never indexed: what an agent wrote while assessing a website visitor's report (Whombat Feedback). It is
- * visitor-steerable text that every prompt shows only inside an untrusted wrapper, and a search snippet (search
- * page, search answers, the `search` tool) carries none (docs/decisions/feedback.md FB-F3-03). The handoff message
- * (`feedback_handoff`) is Whombat's own fixed text and stays searchable.
+ * Messages never indexed: what an agent wrote while assessing a website visitor's report (Whombat Feedback), and
+ * whatever a run started by outsiders' input posted (an incoming email's, a tracker customer's: `outsiders_run`). It
+ * is text outsiders can steer, which every prompt shows only inside an untrusted wrapper, and a search snippet (search
+ * page, search answers, the `search` tool) carries none (docs/decisions/feedback.md FB-F3-03,
+ * docs/decisions/outsiders-turns.md). The handoff message (`feedback_handoff`) is Whombat's own fixed text and stays
+ * searchable.
  */
 export const UNSEARCHABLE_PROVENANCE = [
   'feedback_assessment',
 ] as const satisfies readonly MessageProvenance[];
 
-const unsearchable = (provenance: MessageProvenance | null) =>
-  (UNSEARCHABLE_PROVENANCE as readonly (MessageProvenance | null)[]).includes(provenance);
+const unsearchable = (row: { provenance: MessageProvenance | null; outsidersRun: boolean }) =>
+  row.outsidersRun ||
+  (UNSEARCHABLE_PROVENANCE as readonly (MessageProvenance | null)[]).includes(row.provenance);
 
 /**
  * Cards that are their own search documents (WS-23): a plan card is found as its PLAN, an approval card as its
@@ -134,7 +138,7 @@ const folded = (card: StoredCard | null) =>
 export async function indexMessage(db: Db, messageId: string): Promise<void> {
   const [row] = await db.select().from(messages).where(eq(messages.id, messageId));
   if (!row) return;
-  if (unsearchable(row.provenance ?? null) || folded(row.card)) {
+  if (unsearchable(row) || folded(row.card)) {
     // Also drops a document indexed before this rule existed.
     await db.delete(searchDocuments).where(eq(searchDocuments.id, row.id));
     return;
@@ -220,11 +224,21 @@ const upper = (s: string) => s.toUpperCase().slice(0, 60);
 async function cardMessageText(db: Db, messageId: string | null): Promise<string> {
   if (!messageId) return '';
   const [row] = await db
-    .select({ text: messages.text, provenance: messages.provenance })
+    .select({ text: messages.text, provenance: messages.provenance, outsidersRun: messages.outsidersRun })
     .from(messages)
     .where(eq(messages.id, messageId));
-  if (!row || unsearchable(row.provenance ?? null)) return '';
+  if (!row || unsearchable(row)) return '';
   return plainMessageText(row.text);
+}
+
+/** Whether a card's message was posted by an outsiders' run (its card's words can be theirs too). */
+async function outsidersCard(db: Db, messageId: string | null): Promise<boolean> {
+  if (!messageId) return false;
+  const [row] = await db
+    .select({ outsidersRun: messages.outsidersRun })
+    .from(messages)
+    .where(eq(messages.id, messageId));
+  return row?.outsidersRun === true;
 }
 
 async function namesOf(db: Db, ids: readonly (string | null | undefined)[]): Promise<Map<string, string>> {
@@ -294,11 +308,14 @@ function assessmentApproval(row: typeof approvals.$inferSelect): boolean {
 export async function indexApproval(db: Db, approvalId: string): Promise<void> {
   const doc = await approvalDoc(db, approvalId);
   if (doc) await upsertSearchDoc(db, doc);
+  // One an outsiders' run asked for isn't searchable (its words, a file's or a value's name, can be theirs); this also
+  // drops one indexed before.
+  else await db.delete(searchDocuments).where(eq(searchDocuments.id, approvalId));
 }
 
 export async function approvalDoc(db: Db, approvalId: string): Promise<SearchDoc | null> {
   const [row] = await db.select().from(approvals).where(eq(approvals.id, approvalId));
-  if (!row) return null;
+  if (!row || (await outsidersCard(db, row.messageId))) return null;
   const conversation = await loadConversationRow(db, row.conversationId);
   if (!conversation) return null;
   const approval = toApproval(row);
@@ -378,8 +395,9 @@ const AUTOMATION_STATUS: Record<string, { text: string; tone: Tone }> = {
 
 /**
  * An automation run as an AUTOMATION document: the automation's name, the run's number and status, its steps'
- * names and states and the run's error. Never a step's input or output (a room's content, redacted per viewer;
- * WS-22). Test runs of drafts and runs that haven't started are not indexed.
+ * names and states and the run's error (not an outsiders' run's: it can quote what their agent said). Never a step's
+ * input or output (a room's content, redacted per viewer; WS-22). Test runs of drafts and runs that haven't started
+ * are not indexed.
  */
 export async function indexAutomationRun(db: Db, runId: string): Promise<void> {
   const doc = await automationRunDoc(db, runId);
@@ -410,7 +428,7 @@ export async function automationRunDoc(db: Db, runId: string): Promise<SearchDoc
     text: [
       `${automation.name} · run #${run.number} · ${status.text.toLowerCase()}`,
       ...steps.map((s) => `${s.idx + 1}. ${s.name} · ${s.state}`),
-      run.error ?? '',
+      outsidersRun(run.trigger) ? '' : (run.error ?? ''),
     ]
       .filter(Boolean)
       .join('\n'),

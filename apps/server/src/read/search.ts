@@ -23,7 +23,7 @@ import {
   searchFilterOf,
   zonedInstant,
 } from '@whombat/core';
-import { type AnyColumn, and, desc, eq, gte, inArray, lt, notExists, type SQL, sql } from 'drizzle-orm';
+import { type AnyColumn, and, desc, eq, gte, inArray, lt, notExists, or, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { BurrowRow } from '../commit/types';
 import type { Db } from '../db/client';
@@ -356,7 +356,8 @@ async function searchScope(
 ): Promise<Scope> {
   const where: SQL[] = [
     eq(searchDocuments.burrowId, burrow.id),
-    // Documents indexed before assessor output stopped being indexed (FB-F3-03).
+    // Documents of messages indexed before they stopped being indexed: an assessor's output (FB-F3-03), what an
+    // outsiders' run posted.
     notExists(
       db
         .select({ id: messages.id })
@@ -364,7 +365,7 @@ async function searchScope(
         .where(
           and(
             eq(messages.id, searchDocuments.id),
-            inArray(messages.provenance, [...UNSEARCHABLE_PROVENANCE]),
+            or(inArray(messages.provenance, [...UNSEARCHABLE_PROVENANCE]), eq(messages.outsidersRun, true)),
           ),
         ),
     ),
