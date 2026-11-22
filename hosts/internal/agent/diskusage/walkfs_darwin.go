@@ -223,6 +223,10 @@ func (f *darwinScanFS) OpenRoot(hostPath, logicalMount string, expected mountInf
 	}
 
 	_, _, fsid, hasFSID, ferr := state.fdIdentity(fd)
+	if errors.Is(ferr, unix.ENOTSUP) || errors.Is(ferr, unix.EOPNOTSUPP) || errors.Is(ferr, unix.ENOSYS) {
+		_ = unix.Close(fd)
+		return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+	}
 	if ferr == nil && hasFSID {
 		state.rootFSID = fsid
 		state.hasRootFSID = true
@@ -333,6 +337,9 @@ func (d *darwinScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 			return nil, io.EOF
 		}
 		for _, ent := range entries {
+			if ent.unsupported {
+				return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			if ent.skippedMnt {
 				continue
 			}
@@ -356,6 +363,9 @@ func (d *darwinScanDir) readBulkRaw() ([]darwinBulkEntry, bool, error) {
 			continue
 		}
 		if err != nil {
+			if errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.ENOSYS) {
+				return nil, false, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			return nil, false, err
 		}
 		if n == 0 {
@@ -392,6 +402,9 @@ func (d *darwinScanDir) lookupChildBulk(name string) (darwinBulkEntry, bool, err
 		}
 		for _, ent := range entries {
 			seen++
+			if ent.unsupported {
+				return darwinBulkEntry{}, false, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+			}
 			if ent.info.Name == name {
 				return ent, true, nil
 			}
@@ -416,6 +429,9 @@ func (d *darwinScanDir) OpenDir(name, logicalPath string, _, prechecked bool) (s
 		}
 		if !found {
 			return nil, fs.ErrNotExist
+		}
+		if ent.unsupported {
+			return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
 		}
 		if ent.skippedMnt {
 			return nil, errWrongMount
@@ -449,6 +465,9 @@ func (d *darwinScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 	}
 	if !found {
 		return entryStat{}, fs.ErrNotExist
+	}
+	if ent.unsupported {
+		return entryStat{}, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
 	}
 	if ent.skippedMnt {
 		return entryStat{}, errWrongMount

@@ -3458,3 +3458,89 @@ func TestUnsupportedPlatformRefusesScanCleanly(t *testing.T) {
 		t.Errorf("resp.Message = %q, want plain unsupported reason", resp.Message)
 	}
 }
+
+type unsupportedMidScanFS struct {
+	rootDev   uint64
+	rootMntID uint64
+	failOn    string // "walk_read", "cat_open", or "cat_read"
+}
+
+func (s *unsupportedMidScanFS) OpenRoot(string, string, mountInfo) (scanDir, error) {
+	return &unsupportedMidScanDir{s: s, path: "/"}, nil
+}
+
+type unsupportedMidScanDir struct {
+	s    *unsupportedMidScanFS
+	path string
+	done bool
+}
+
+func (d *unsupportedMidScanDir) Stat() (entryStat, error) {
+	return entryStat{Mode: fs.ModeDir | 0o755, Dev: d.s.rootDev, HasDev: true, MntID: d.s.rootMntID, HasMntID: true}, nil
+}
+
+func (d *unsupportedMidScanDir) Statfs() (fsStat, error) {
+	return fsStat{TotalBytes: 100 << 30, UsedBytes: 20 << 30}, nil
+}
+
+func (d *unsupportedMidScanDir) OpenSelf() (scanDir, error) {
+	return &unsupportedMidScanDir{s: d.s, path: d.path}, nil
+}
+
+func (d *unsupportedMidScanDir) ReadDirBatch(int) ([]dirEntryInfo, error) {
+	if d.s.failOn == "walk_read" && d.path == "/" {
+		return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+	}
+	if d.s.failOn == "cat_read" && d.path == "/var/log/journal" {
+		return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+	}
+	if d.done {
+		return nil, io.EOF
+	}
+	d.done = true
+	return nil, io.EOF
+}
+
+func (d *unsupportedMidScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
+	if d.s.failOn == "cat_open" && name == "var" {
+		return nil, &scanUnsupportedError{msg: msgUnsupportedMountStatus}
+	}
+	if d.s.failOn == "cat_read" && (logicalPath == "/var" || logicalPath == "/var/log" || logicalPath == "/var/log/journal") {
+		return &unsupportedMidScanDir{s: d.s, path: logicalPath}, nil
+	}
+	return nil, fs.ErrNotExist
+}
+
+func (d *unsupportedMidScanDir) StatEntry(string, string) (entryStat, error) {
+	return entryStat{}, fs.ErrNotExist
+}
+
+func (d *unsupportedMidScanDir) Close() error { return nil }
+
+func TestUnsupportedVolumeMidScanRefusesCleanly(t *testing.T) {
+	for _, mode := range []string{"walk_read", "cat_open", "cat_read"} {
+		t.Run(mode, func(t *testing.T) {
+			mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "exfat", Source: "/dev/disk4s1"}}
+			r := newTestRunner(t, t.TempDir(), mounts, &proto.Report{
+				Filesystems: []proto.Filesystem{{Mount: "/", Device: "/dev/disk4", FSType: "exfat", Disks: []string{"disk4"}}},
+				Disks:       []proto.Disk{{Device: "disk4", Type: "ssd"}},
+			})
+			r.goos = "darwin"
+			r.scanFS = &unsupportedMidScanFS{rootDev: 100, rootMntID: 10, failOn: mode}
+
+			resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+			if resp.Code != CodeUnsupported {
+				t.Fatalf("%s: resp.Code = %q, want %q (resp=%+v)", mode, resp.Code, CodeUnsupported, resp)
+			}
+			if resp.Partial {
+				t.Errorf("%s: resp.Partial = true, want false on unsupported refusal", mode)
+			}
+			if len(resp.Folders) != 0 || len(resp.Categories) != 0 {
+				t.Errorf("%s: expected empty folders/categories on unsupported refusal, got folders=%+v cats=%+v", mode, resp.Folders, resp.Categories)
+			}
+			if !strings.Contains(resp.Message, "mount points") {
+				t.Errorf("%s: resp.Message = %q, want plain mount-point reason", mode, resp.Message)
+			}
+		})
+	}
+}

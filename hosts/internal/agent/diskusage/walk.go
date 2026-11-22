@@ -26,8 +26,9 @@ type dirNode struct {
 }
 
 type walkResult struct {
-	folders []proto.DiskUsageFolder
-	partial bool
+	folders     []proto.DiskUsageFolder
+	partial     bool
+	unsupported *scanUnsupportedError
 }
 
 // virtualRoots are kernel/runtime filesystems never worth traversing even if
@@ -48,9 +49,13 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	seen := make(map[inodeKey]struct{}, 1024)
 	entries := 0
 	partial := false
+	var unsupported *scanUnsupportedError
 
 	startDir, err := rootDir.OpenSelf()
 	if err != nil {
+		if unsup := asUnsupportedErr(err); unsup != nil {
+			return walkResult{unsupported: unsup}
+		}
 		return walkResult{partial: !isSkipDirErr(err)}
 	}
 	defer startDir.Close()
@@ -59,6 +64,9 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	visit = func(dir scanDir, logicalPath string, depth int) *dirNode {
 		node := &dirNode{path: logicalPath, depth: depth}
 		for {
+			if unsupported != nil {
+				return node
+			}
 			if ctx.Err() != nil {
 				partial = true
 				node.partial = true
@@ -85,6 +93,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					return node
 				}
 				if e.Err != nil {
+					if unsup := asUnsupportedErr(e.Err); unsup != nil {
+						unsupported = unsup
+						return node
+					}
 					if !isSkipEntryErr(e.Err) {
 						partial = true
 						node.partial = true
@@ -120,6 +132,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 							// or symlink) without reading its contents.
 							subDir, oerr := dir.OpenDir(name, childLogical, true, true)
 							if oerr != nil {
+								if unsup := asUnsupportedErr(oerr); unsup != nil {
+									unsupported = unsup
+									return node
+								}
 								if !isSkipDirErr(oerr) {
 									partial = true
 									node.partial = true
@@ -134,6 +150,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					}
 					subDir, oerr := dir.OpenDir(name, childLogical, false, true)
 					if oerr != nil {
+						if unsup := asUnsupportedErr(oerr); unsup != nil {
+							unsupported = unsup
+							return node
+						}
 						if !isSkipDirErr(oerr) {
 							partial = true
 							node.partial = true
@@ -142,6 +162,9 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					}
 					sub := visit(subDir, childLogical, depth+1)
 					_ = subDir.Close()
+					if unsupported != nil {
+						return node
+					}
 					node.children = append(node.children, sub)
 					node.totalBytes += sub.totalBytes
 					if sub.partial {
@@ -164,6 +187,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					var serr error
 					st, serr = dir.StatEntry(name, childLogical)
 					if serr != nil {
+						if unsup := asUnsupportedErr(serr); unsup != nil {
+							unsupported = unsup
+							return node
+						}
 						if !isSkipEntryErr(serr) {
 							partial = true
 							node.partial = true
@@ -189,6 +216,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					}
 					subDir, oerr := dir.OpenDir(name, childLogical, false, true)
 					if oerr != nil {
+						if unsup := asUnsupportedErr(oerr); unsup != nil {
+							unsupported = unsup
+							return node
+						}
 						if !isSkipDirErr(oerr) {
 							partial = true
 							node.partial = true
@@ -197,6 +228,9 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 					}
 					sub := visit(subDir, childLogical, depth+1)
 					_ = subDir.Close()
+					if unsupported != nil {
+						return node
+					}
 					node.children = append(node.children, sub)
 					node.totalBytes += sub.totalBytes
 					if sub.partial {
@@ -232,6 +266,10 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 				if errors.Is(err, io.EOF) {
 					return node
 				}
+				if unsup := asUnsupportedErr(err); unsup != nil {
+					unsupported = unsup
+					return node
+				}
 				if !isSkipDirErr(err) {
 					partial = true
 					node.partial = true
@@ -245,6 +283,9 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	}
 
 	root := visit(startDir, mount, 0)
+	if unsupported != nil {
+		return walkResult{unsupported: unsupported}
+	}
 	folders := pickLargestFolders(root, maxDepth, MaxFolders)
 	return walkResult{folders: folders, partial: partial}
 }
@@ -334,14 +375,17 @@ func pickLargestFolders(root *dirNode, maxDepth, limit int) []proto.DiskUsageFol
 // walkDirBytes measures allocated bytes inside one targeted directory on the
 // target mount, resolving every step relative to rootDir without crossing
 // mounts or following symlinks, bounded by ctx, depth and entry cap.
-func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountScope, logicalDir string, rootDev, rootMntID uint64, maxDepth int, seen map[inodeKey]struct{}) (bytes uint64, partial bool) {
+func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountScope, logicalDir string, rootDev, rootMntID uint64, maxDepth int, seen map[inodeKey]struct{}) (bytes uint64, partial bool, unsupported *scanUnsupportedError) {
 	cleanDir := filepath.Clean(logicalDir)
 	startDir, err := openRelDir(rootDir, scope, cleanDir, false)
 	if err != nil {
-		if !isSkipDirErr(err) {
-			return 0, true
+		if unsup := asUnsupportedErr(err); unsup != nil {
+			return 0, false, unsup
 		}
-		return 0, false
+		if !isSkipDirErr(err) {
+			return 0, true, nil
+		}
+		return 0, false, nil
 	}
 	defer startDir.Close()
 
@@ -353,6 +397,9 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 	var walk func(dir scanDir, p string, depth int)
 	walk = func(dir scanDir, p string, depth int) {
 		for {
+			if unsupported != nil {
+				return
+			}
 			if ctx.Err() != nil {
 				partial = true
 				return
@@ -371,6 +418,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					return
 				}
 				if e.Err != nil {
+					if unsup := asUnsupportedErr(e.Err); unsup != nil {
+						unsupported = unsup
+						return
+					}
 					if !isSkipEntryErr(e.Err) {
 						partial = true
 					}
@@ -392,6 +443,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 						if !e.HasStat {
 							subDir, oerr := dir.OpenDir(name, child, true, true)
 							if oerr != nil {
+								if unsup := asUnsupportedErr(oerr); unsup != nil {
+									unsupported = unsup
+									return
+								}
 								if !isSkipDirErr(oerr) {
 									partial = true
 								}
@@ -404,6 +459,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					}
 					subDir, oerr := dir.OpenDir(name, child, false, true)
 					if oerr != nil {
+						if unsup := asUnsupportedErr(oerr); unsup != nil {
+							unsupported = unsup
+							return
+						}
 						if !isSkipDirErr(oerr) {
 							partial = true
 						}
@@ -411,6 +470,9 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					}
 					walk(subDir, child, depth+1)
 					_ = subDir.Close()
+					if unsupported != nil {
+						return
+					}
 					if entries > capEntries || ctx.Err() != nil {
 						partial = true
 						return
@@ -425,6 +487,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					var serr error
 					st, serr = dir.StatEntry(name, child)
 					if serr != nil {
+						if unsup := asUnsupportedErr(serr); unsup != nil {
+							unsupported = unsup
+							return
+						}
 						if !isSkipEntryErr(serr) {
 							partial = true
 						}
@@ -447,6 +513,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					}
 					subDir, oerr := dir.OpenDir(name, child, false, true)
 					if oerr != nil {
+						if unsup := asUnsupportedErr(oerr); unsup != nil {
+							unsupported = unsup
+							return
+						}
 						if !isSkipDirErr(oerr) {
 							partial = true
 						}
@@ -454,6 +524,9 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 					}
 					walk(subDir, child, depth+1)
 					_ = subDir.Close()
+					if unsupported != nil {
+						return
+					}
 					if entries > capEntries || ctx.Err() != nil {
 						partial = true
 						return
@@ -478,6 +551,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 				if errors.Is(err, io.EOF) {
 					return
 				}
+				if unsup := asUnsupportedErr(err); unsup != nil {
+					unsupported = unsup
+					return
+				}
 				if !isSkipDirErr(err) {
 					partial = true
 				}
@@ -489,7 +566,10 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 		}
 	}
 	walk(startDir, cleanDir, 0)
-	return bytes, partial
+	if unsupported != nil {
+		return 0, false, unsupported
+	}
+	return bytes, partial, nil
 }
 
 func joinLogical(base, name string) string {

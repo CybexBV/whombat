@@ -176,3 +176,81 @@ func TestDarwinPuregoSyscallWrappersMaskCorruptedErrno(t *testing.T) {
 		t.Fatalf("readBulkRaw buffer sizes = %v, want doubling on ERANGE", seenLens)
 	}
 }
+
+func TestDarwinUnsupportedMountStatusRefusesCleanly(t *testing.T) {
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "sub/file.bin"), 8192)
+
+	var rootSt unix.Stat_t
+	if err := unix.Stat(root, &rootSt); err != nil {
+		t.Fatal(err)
+	}
+	volFSID := [2]int32{rootSt.Dev, 7}
+
+	newRunner := func(bulk darwinBulkFunc) *Runner {
+		r := newTestRunner(t, root, []mountInfo{
+			{ID: 1, MountPoint: "/", FSType: "exfat", Source: "/dev/disk4s1", FSID: volFSID, HasFSID: true},
+		}, &proto.Report{
+			Filesystems: []proto.Filesystem{{Mount: "/", Device: "/dev/disk4", FSType: "exfat", Disks: []string{"disk4"}}},
+			Disks:       []proto.Disk{{Device: "disk4", Type: "ssd"}},
+		})
+		r.goos = "darwin"
+		r.scanFS = &darwinScanFS{
+			r: r,
+			fgetFn: func(_ int, _ *darwinAttrList, buf []byte, _ uint64) error {
+				copy(buf, buildDarwinIdentityBuffer(rootSt.Dev, true, volFSID, true))
+				return nil
+			},
+			bulkFn: bulk,
+		}
+		return r
+	}
+
+	// 1. Volume omits ATTR_DIR_MOUNTSTATUS (exFAT/msdos/udf) -> refuse with CodeUnsupported, never silent under-count.
+	rMissing := newRunner(func(_ int, _ *darwinAttrList, buf []byte, _ uint64) (int, error) {
+		recs := []testBulkRec{
+			{name: "top.bin", hasDev: true, dev: rootSt.Dev, hasFSID: true, fsid: volFSID, hasObjType: true, objType: darwinVReg, hasFileID: true, fileID: 10, hasTotalSize: true, totalSize: 4096, hasAllocSize: true, allocSize: 4096},
+			{name: "sub", hasDev: true, dev: rootSt.Dev, hasFSID: true, fsid: volFSID, hasObjType: true, objType: darwinVDir, hasFileID: true, fileID: 11, hasMntStatus: false},
+		}
+		raw := buildDarwinBulkBuffer(recs)
+		copy(buf, raw)
+		return len(recs), nil
+	})
+	resp := rMissing.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != CodeUnsupported {
+		t.Fatalf("missing ATTR_DIR_MOUNTSTATUS: resp = %+v, want CodeUnsupported", resp)
+	}
+	if resp.Partial || len(resp.Folders) != 0 || len(resp.Categories) != 0 {
+		t.Errorf("missing ATTR_DIR_MOUNTSTATUS: expected clean refusal without partial/folders/categories, got %+v", resp)
+	}
+	if resp.Message == "" {
+		t.Errorf("missing ATTR_DIR_MOUNTSTATUS: expected plain reason message")
+	}
+
+	// 2. Direct OpenDir(prechecked=false) and StatEntry also return *scanUnsupportedError.
+	rootDir, err := rMissing.scanFS.OpenRoot(root, "/", mountInfo{ID: 1, MountPoint: "/", FSID: volFSID, HasFSID: true})
+	if err != nil {
+		t.Fatalf("OpenRoot: %v", err)
+	}
+	defer rootDir.Close()
+	if sub, err := rootDir.OpenDir("sub", "/sub", false, false); err == nil {
+		_ = sub.Close()
+		t.Fatal("OpenDir succeeded on volume without ATTR_DIR_MOUNTSTATUS")
+	} else if asUnsupportedErr(err) == nil {
+		t.Fatalf("OpenDir err = %v, want *scanUnsupportedError", err)
+	}
+	if _, err := rootDir.StatEntry("sub", "/sub"); err == nil {
+		t.Fatal("StatEntry succeeded on volume without ATTR_DIR_MOUNTSTATUS")
+	} else if asUnsupportedErr(err) == nil {
+		t.Fatalf("StatEntry err = %v, want *scanUnsupportedError", err)
+	}
+
+	// 3. Volume returning ENOTSUP from getattrlistbulk refuses cleanly with CodeUnsupported.
+	rNotSup := newRunner(func(int, *darwinAttrList, []byte, uint64) (int, error) {
+		return 0, unix.ENOTSUP
+	})
+	resp2 := rNotSup.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp2.Code != CodeUnsupported || resp2.Partial {
+		t.Fatalf("getattrlistbulk ENOTSUP: resp = %+v, want CodeUnsupported (Partial=false)", resp2)
+	}
+}

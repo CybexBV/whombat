@@ -315,10 +315,18 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			catBudget = min(4*time.Second, timeout)
 		}
 		cctx, ccancel := context.WithTimeout(wctx, catBudget)
-		cats, catPartial := r.collectCategories(cctx, rootDir, scope, rootDev, rootMntID)
+		cats, catPartial, catUnsup := r.collectCategories(cctx, rootDir, scope, rootDev, rootMntID)
 		ccancel()
+		if catUnsup != nil {
+			done <- scanOut{errCode: CodeUnsupported, errMsg: catUnsup.msg}
+			return
+		}
 
 		w := r.walkMount(wctx, rootDir, scope, rootDev, rootMntID, maxDepth)
+		if w.unsupported != nil {
+			done <- scanOut{errCode: CodeUnsupported, errMsg: w.unsupported.msg}
+			return
+		}
 		done <- scanOut{
 			totalBytes: totalBytes,
 			usedBytes:  usedBytes,

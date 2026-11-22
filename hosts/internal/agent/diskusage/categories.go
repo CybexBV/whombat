@@ -23,7 +23,7 @@ import (
 // collectCategories measures known storage consumers that live on the requested
 // mount (resolving every step relative to rootDir without crossing mounts or
 // following symlinks). Every category is optional and bounded by ctx.
-func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool) {
+func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool, *scanUnsupportedError) {
 	var cats []proto.DiskUsageCategory
 	partial := false
 
@@ -34,7 +34,10 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 	}
 
 	// 1. Container engine (Docker / Podman via unix socket HTTP API).
-	dockerCats, dockerPartial := r.collectDocker(ctx, rootDir, scope, rootDev, rootMntID)
+	dockerCats, dockerPartial, unsup := r.collectDocker(ctx, rootDir, scope, rootDev, rootMntID)
+	if unsup != nil {
+		return nil, false, unsup
+	}
 	for _, c := range dockerCats {
 		add(c)
 	}
@@ -47,7 +50,10 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 		seen := map[inodeKey]struct{}{}
 		var jBytes uint64
 		for _, dir := range []string{"/var/log/journal", "/run/log/journal"} {
-			b, p := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, seen)
+			b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, seen)
+			if unsup != nil {
+				return nil, false, unsup
+			}
 			jBytes += b
 			if p {
 				partial = true
@@ -86,7 +92,10 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 				partial = true
 				break
 			}
-			b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, pd.path), rootDev, rootMntID, 5, seen)
+			b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, pd.path), rootDev, rootMntID, 5, seen)
+			if unsup != nil {
+				return nil, false, unsup
+			}
 			if p {
 				partial = true
 			}
@@ -109,7 +118,10 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 	// 4. VM disks and snapshots where known (ZFS datasets/zvols/snapshots, plus
 	// libvirt, Proxmox, Incus and Unraid directories on this mount).
 	if ctx.Err() == nil {
-		vmDisks, vmSnaps, vmPartial := r.collectVMAndSnapshots(ctx, rootDir, scope, rootDev, rootMntID)
+		vmDisks, vmSnaps, vmPartial, unsup := r.collectVMAndSnapshots(ctx, rootDir, scope, rootDev, rootMntID)
+		if unsup != nil {
+			return nil, false, unsup
+		}
 		if vmPartial {
 			partial = true
 		}
@@ -123,7 +135,7 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 		}
 		return cats[i].Key < cats[j].Key
 	})
-	return cats, partial
+	return cats, partial, nil
 }
 
 // ---- Docker / container engine ---------------------------------------------------------
@@ -146,7 +158,7 @@ type dockerSystemDF struct {
 	} `json:"BuildCache"`
 }
 
-func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool) {
+func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) ([]proto.DiskUsageCategory, bool, *scanUnsupportedError) {
 	var out []proto.DiskUsageCategory
 	partial := false
 
@@ -164,7 +176,11 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 		// Resolve dockerRoot strictly relative to rootDir without crossing mounts
 		// or following symlinks before querying dockerd. Request only images and
 		// build cache so dockerd never runs an unbounded volume/container walk.
-		rootOnMount = dirInScope(rootDir, scope, dockerRoot)
+		var unsup *scanUnsupportedError
+		rootOnMount, unsup = dirInScope(rootDir, scope, dockerRoot)
+		if unsup != nil {
+			return nil, false, unsup
+		}
 		if rootOnMount {
 			var res dockerSystemDF
 			if err := dockerGet(ctx, client, "/system/df?type=image&type=build-cache", &res); err == nil {
@@ -210,7 +226,10 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 	if ctx.Err() == nil {
 		volDir := filepath.Join(dockerRoot, "volumes")
 		seen := map[inodeKey]struct{}{}
-		volBytes, volPartial := r.walkDirBytes(ctx, rootDir, scope, volDir, rootDev, rootMntID, 6, seen)
+		volBytes, volPartial, unsup := r.walkDirBytes(ctx, rootDir, scope, volDir, rootDev, rootMntID, 6, seen)
+		if unsup != nil {
+			return nil, false, unsup
+		}
 		if volPartial {
 			partial = true
 		}
@@ -227,7 +246,10 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 	// if present on this mount). Always measure directly on disk because Docker
 	// /system/df does not separate container logs from writable layers.
 	if ctx.Err() == nil {
-		logBytes, logPartial := r.collectContainerLogs(ctx, rootDir, scope, dockerRoot, rootDev, rootMntID)
+		logBytes, logPartial, unsup := r.collectContainerLogs(ctx, rootDir, scope, dockerRoot, rootDev, rootMntID)
+		if unsup != nil {
+			return nil, false, unsup
+		}
 		if logPartial {
 			partial = true
 		}
@@ -240,7 +262,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 		}
 	}
 
-	return out, partial
+	return out, partial, nil
 }
 
 func summarizeDockerImages(df *dockerSystemDF) (total, reclaimable uint64, unused int) {
@@ -285,7 +307,7 @@ func summarizeDockerBuildCache(df *dockerSystemDF) (total, reclaimable uint64) {
 	return total, reclaimable
 }
 
-func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (uint64, bool) {
+func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scope mountScope, dockerRoot string, rootDev, rootMntID uint64) (uint64, bool, *scanUnsupportedError) {
 	var total uint64
 	partial := false
 	seen := map[inodeKey]struct{}{}
@@ -298,6 +320,9 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 	entries := 0
 	cDir, err := openRelDir(rootDir, scope, containersDir, false)
 	if err != nil {
+		if unsup := asUnsupportedErr(err); unsup != nil {
+			return 0, false, unsup
+		}
 		if !isSkipDirErr(err) {
 			partial = true
 		}
@@ -321,6 +346,10 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 					break outerLoop
 				}
 				if e.Err != nil {
+					if unsup := asUnsupportedErr(e.Err); unsup != nil {
+						_ = cDir.Close()
+						return 0, false, unsup
+					}
 					if !isSkipEntryErr(e.Err) {
 						partial = true
 					}
@@ -340,6 +369,10 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 				}
 				subDir, oerr := cDir.OpenDir(e.Name, sub, false, true)
 				if oerr != nil {
+					if unsup := asUnsupportedErr(oerr); unsup != nil {
+						_ = cDir.Close()
+						return 0, false, unsup
+					}
 					// Plain files and symlinks inside containers/ return ENOTDIR/ELOOP,
 					// and newly mounted filesystems return errWrongMount; all skip cleanly.
 					if !isSkipDirErr(oerr) {
@@ -368,6 +401,11 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 							break outerLoop
 						}
 						if f.Err != nil {
+							if unsup := asUnsupportedErr(f.Err); unsup != nil {
+								_ = subDir.Close()
+								_ = cDir.Close()
+								return 0, false, unsup
+							}
 							if !isSkipEntryErr(f.Err) {
 								partial = true
 							}
@@ -394,6 +432,11 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 							var serr error
 							st, serr = subDir.StatEntry(name, child)
 							if serr != nil {
+								if unsup := asUnsupportedErr(serr); unsup != nil {
+									_ = subDir.Close()
+									_ = cDir.Close()
+									return 0, false, unsup
+								}
 								if !isSkipEntryErr(serr) {
 									partial = true
 								}
@@ -421,6 +464,11 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 						total += st.AllocBytes
 					}
 					if ferr != nil {
+						if unsup := asUnsupportedErr(ferr); unsup != nil {
+							_ = subDir.Close()
+							_ = cDir.Close()
+							return 0, false, unsup
+						}
 						if !errors.Is(ferr, io.EOF) && !isSkipDirErr(ferr) {
 							partial = true
 						}
@@ -433,6 +481,10 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 				_ = subDir.Close()
 			}
 			if rerr != nil {
+				if unsup := asUnsupportedErr(rerr); unsup != nil {
+					_ = cDir.Close()
+					return 0, false, unsup
+				}
 				if !errors.Is(rerr, io.EOF) && !isSkipDirErr(rerr) {
 					partial = true
 				}
@@ -447,13 +499,16 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 
 	// Kubernetes / CRI container logs if present on this mount.
 	if ctx.Err() == nil {
-		b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, seen)
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, seen)
+		if unsup != nil {
+			return 0, false, unsup
+		}
 		total += b
 		if p {
 			partial = true
 		}
 	}
-	return total, partial
+	return total, partial, nil
 }
 
 func (r *Runner) findDockerSocket() string {
@@ -498,7 +553,7 @@ func dockerGet(ctx context.Context, client *http.Client, path string, out any) e
 
 // ---- VM disks & snapshots --------------------------------------------------------------
 
-func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) (disks, snaps proto.DiskUsageCategory, partial bool) {
+func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, scope mountScope, rootDev, rootMntID uint64) (disks, snaps proto.DiskUsageCategory, partial bool, unsupported *scanUnsupportedError) {
 	disks = proto.DiskUsageCategory{Key: proto.DiskCatVMDisks, Label: "VM disks"}
 	snaps = proto.DiskUsageCategory{Key: proto.DiskCatVMSnapshots, Label: "Snapshots"}
 
@@ -546,7 +601,10 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 			partial = true
 			break
 		}
-		b, p := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 6, seen)
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 6, seen)
+		if unsup != nil {
+			return proto.DiskUsageCategory{}, proto.DiskUsageCategory{}, false, unsup
+		}
 		if p {
 			partial = true
 		}
@@ -560,14 +618,17 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 			partial = true
 			break
 		}
-		b, p := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, snapSeen)
+		b, p, unsup := r.walkDirBytes(ctx, rootDir, scope, dir, rootDev, rootMntID, 4, snapSeen)
+		if unsup != nil {
+			return proto.DiskUsageCategory{}, proto.DiskUsageCategory{}, false, unsup
+		}
 		if p {
 			partial = true
 		}
 		snaps.Bytes += b
 	}
 
-	return disks, snaps, partial
+	return disks, snaps, partial, nil
 }
 
 func (r *Runner) collectZFS(ctx context.Context, dataset string) (vmDisks, snapshots uint64, ok bool) {
