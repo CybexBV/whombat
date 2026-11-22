@@ -140,9 +140,10 @@ function isoFromMs(ms: string | undefined): string {
 
 function mailSummary(m: GmailMessage, labels: Map<string, string>): MailSummary {
   const ids = m.labelIds ?? [];
+  const msgId = clip(m.id, 200);
   return {
-    id: m.id,
-    threadId: m.threadId,
+    id: msgId,
+    threadId: clip(m.threadId || m.id, 200),
     from: clip(headerOf(m.payload, 'From') ?? '', 500),
     to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
     subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
@@ -162,10 +163,10 @@ function mailMessage(m: GmailMessage, labels: Map<string, string>): MailMessage 
     body: capped.text,
     bodyTruncated: capped.truncated,
     attachments: body.attachments.map((a) => ({
-      ...(a.id !== undefined ? { id: a.id } : {}),
+      ...(a.id !== undefined ? { id: clip(a.id, 2048) } : {}),
       name: clip(a.name, 500),
       mimeType: clip(a.mimeType, 200),
-      size: a.size,
+      size: Math.max(0, Math.trunc(a.size)),
     })),
   };
 }

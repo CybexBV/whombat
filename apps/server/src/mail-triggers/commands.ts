@@ -190,6 +190,9 @@ export const setMailCursor = defineCommand({
   },
 });
 
+/** Maximum number of attachment metadata records stored per mirrored email. */
+export const MAIL_RECORDED_MAX_ATTACHMENTS = 100;
+
 /**
  * Mirrors one matched incoming email into `mail_trigger_items` (deduplicated by `(connection_id, external_id)`),
  * optionally advances `mail_cursors` in the same transaction, and emits a content-free signed `mail.received` event
@@ -212,8 +215,9 @@ export const recordMailReceived = defineCommand({
     bodyTruncated: z.boolean().default(false),
     attachments: z
       .array(MailAttachment.extend({ missingReason: MissingMailAttachmentReason.optional() }))
-      .max(100)
+      .max(MAIL_RECORDED_MAX_ATTACHMENTS)
       .default([]),
+    omittedAttachmentCount: z.number().int().nonnegative().default(0),
     stagedAttachments: z.array(StagedMailAttachment).max(10).default([]),
     receivedAt: z.string().datetime(),
     cursor: MailProviderCursorSchema.optional(),
@@ -222,6 +226,11 @@ export const recordMailReceived = defineCommand({
     await requireMailSigner(tx, ctx.actor.id);
     const id = newId('mailTriggerItem');
     const messageId = normalizeRfcMessageId(input.messageId);
+    const storedAttachments = input.attachments.map((att, index) =>
+      input.omittedAttachmentCount > 0 && index === input.attachments.length - 1
+        ? { ...att, omittedAfter: input.omittedAttachmentCount }
+        : att,
+    );
     const inserted = await tx
       .insert(mailTriggerItems)
       .values({
@@ -239,7 +248,7 @@ export const recordMailReceived = defineCommand({
         snippet: input.snippet,
         body: input.body,
         bodyTruncated: input.bodyTruncated,
-        attachments: input.attachments,
+        attachments: storedAttachments,
         attachmentIds: [],
         receivedAt: new Date(input.receivedAt),
         mirroredAt: ctx.now,
@@ -329,7 +338,7 @@ export const recordMailReceived = defineCommand({
         rowId: id,
         connectionId: input.connectionId,
         externalId: input.externalId,
-        hasAttachments: input.attachments.length > 0,
+        hasAttachments: input.attachments.length > 0 || input.omittedAttachmentCount > 0,
       },
     });
     return { created: true, rowId: id };

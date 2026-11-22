@@ -229,11 +229,20 @@ export async function executeDispatchAgent({
       runId: run.id,
     },
   });
-  const missingParsed = MissingMailAttachment.array()
-    .max(20)
-    .safeParse((run.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
+  const runScope = run.scope as {
+    missingAttachments?: unknown;
+    missingAttachmentsOmitted?: unknown;
+  } | null;
+  const missingParsed = MissingMailAttachment.array().max(20).safeParse(runScope?.missingAttachments);
+  const missingOmitted =
+    typeof runScope?.missingAttachmentsOmitted === 'number' &&
+    Number.isInteger(runScope.missingAttachmentsOmitted) &&
+    runScope.missingAttachmentsOmitted > 0
+      ? runScope.missingAttachmentsOmitted
+      : 0;
+  const missingList = missingParsed.success ? missingParsed.data : [];
   const missingNote =
-    missingParsed.success && missingParsed.data.length > 0 ? missingAttachmentsText(missingParsed.data) : '';
+    missingList.length > 0 || missingOmitted > 0 ? missingAttachmentsText(missingList, missingOmitted) : '';
   const stepInputSummary = workspace
     ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
     : missingNote

@@ -132,6 +132,11 @@ export async function hasMirroredMailItem(
 export async function mirroredMailItem(db: Db | Tx, rowId: string): Promise<MirroredMailItem | null> {
   const [row] = await db.select().from(mailTriggerItems).where(eq(mailTriggerItems.id, rowId));
   if (!row) return null;
+  const omittedAttachmentCount = row.attachments.reduce(
+    (sum, att) =>
+      sum + (typeof att.omittedAfter === 'number' && att.omittedAfter > 0 ? Math.trunc(att.omittedAfter) : 0),
+    0,
+  );
   return {
     id: row.id,
     burrowId: row.burrowId,
@@ -147,6 +152,7 @@ export async function mirroredMailItem(db: Db | Tx, rowId: string): Promise<Mirr
     body: row.body,
     bodyTruncated: row.bodyTruncated,
     attachments: row.attachments,
+    omittedAttachmentCount,
     attachmentIds: row.attachmentIds ?? [],
     receivedAt: row.receivedAt,
   };

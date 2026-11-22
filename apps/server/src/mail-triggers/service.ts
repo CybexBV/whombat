@@ -14,6 +14,7 @@
 import {
   CONNECTOR_BINARY_MAX_BYTES,
   extractMailAddress,
+  MAIL_BODY_CAP,
   type MailMessage,
   triggerMatches,
 } from '@whombat/core';
@@ -26,6 +27,7 @@ import {
   type MailChangesResult,
   type MailHeader,
   type MailProviderCursor,
+  normalizeRfcMessageId,
   receivedAtOrAfter,
 } from '../connectors/types';
 import { connections, mailCursors, mailTriggerItems } from '../db/schema/index';
@@ -33,7 +35,12 @@ import { sniffBuffer } from '../files/sniff';
 import type { StagedFile } from '../files/store';
 import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
-import { pruneMailTriggerItems, recordMailReceived, setMailCursor } from './commands';
+import {
+  MAIL_RECORDED_MAX_ATTACHMENTS,
+  pruneMailTriggerItems,
+  recordMailReceived,
+  setMailCursor,
+} from './commands';
 import { mailPrincipal } from './principal';
 import {
   hasMirroredMailItem,
@@ -86,6 +93,23 @@ function isMessageGone(err: unknown): boolean {
   if (err instanceof GoogleApiError) return err.status === 404 || err.reason === 'not_found';
   if (err instanceof ApiError) return err.code === 'not_found';
   return false;
+}
+
+function isCommitValidationFailure(err: unknown): boolean {
+  if (err instanceof ApiError) return err.code === 'validation_failed' || err.code === 'bad_request';
+  return err instanceof Error && err.name === 'ZodError';
+}
+
+function normalizeRecordedAttachment(
+  att: MailMessage['attachments'][number],
+): MailMessage['attachments'][number] {
+  const id = typeof att.id === 'string' && att.id.length > 0 && att.id.length <= 2048 ? att.id : undefined;
+  return {
+    ...(id !== undefined ? { id } : {}),
+    name: String(att.name ?? '').slice(0, 500),
+    mimeType: String(att.mimeType || 'application/octet-stream').slice(0, 200),
+    size: Number.isFinite(att.size) ? Math.max(0, Math.trunc(att.size)) : 0,
+  };
 }
 
 function skippedReadProblem(names: readonly string[]): string {
@@ -318,15 +342,61 @@ export class MailTriggerService {
     const readFailures: Record<string, number> = { ...(existing?.readFailures ?? {}) };
     let failuresChanged = false;
     let skippedProblem: string | null = null;
+    const recordBoundedFailure = async (
+      failureKey: string,
+      messageId: string,
+      matchedNames: readonly string[],
+      err: unknown,
+      stage: 'read' | 'commit',
+    ): Promise<'skip' | 'retry'> => {
+      const attempts = (readFailures[failureKey] ?? 0) + 1;
+      if (attempts >= MAX_READ_FAILURES) {
+        delete readFailures[failureKey];
+        failuresChanged = true;
+        skippedProblem = skippedReadProblem(matchedNames);
+        this.services.log.warn(
+          {
+            connectionId,
+            messageId,
+            stage,
+            attempts,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          stage === 'commit'
+            ? 'mail trigger skipped invalid message after 3 failed commits'
+            : 'mail trigger skipped unreadable message after 3 failed reads',
+        );
+        return 'skip';
+      }
+      readFailures[failureKey] = attempts;
+      await this.commitCursor(burrowId, actorId, {
+        connectionId,
+        readFailures: trimReadFailures(readFailures),
+      });
+      this.services.log.warn(
+        {
+          connectionId,
+          messageId,
+          stage,
+          attempts,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        stage === 'commit'
+          ? 'mail trigger commit validation failed; will retry on next poll'
+          : 'mail trigger full read failed; will retry on next poll',
+      );
+      return 'retry';
+    };
     for (const header of changes.headers) {
       // Drop pre-activation mail defensively even if a provider returned an old moved message.
       if (!receivedAtOrAfter(header.date, activationSince)) continue;
       // Only fetch full message body when headers/attachment metadata match a live trigger.
       const matchedNames = matchingAutomationNames(connectionId, header, watched.entries);
       if (matchedNames.length === 0) continue;
+      const failureKey = header.id.slice(0, 200);
       if (await hasMirroredMailItem(this.services.db, connectionId, header.id, header.messageId)) {
-        if (header.id in readFailures) {
-          delete readFailures[header.id];
+        if (failureKey in readFailures) {
+          delete readFailures[failureKey];
           failuresChanged = true;
         }
         continue;
@@ -338,53 +408,28 @@ export class MailTriggerService {
       } catch (err) {
         if (isMessageGone(err)) {
           // Message was deleted or moved away before we could read it: skip it and let the cursor move on.
-          if (header.id in readFailures) {
-            delete readFailures[header.id];
+          if (failureKey in readFailures) {
+            delete readFailures[failureKey];
             failuresChanged = true;
           }
           continue;
         }
-        const attempts = (readFailures[header.id] ?? 0) + 1;
-        if (attempts >= MAX_READ_FAILURES) {
-          delete readFailures[header.id];
-          failuresChanged = true;
-          skippedProblem = skippedReadProblem(matchedNames);
-          this.services.log.warn(
-            {
-              connectionId,
-              messageId: header.id,
-              attempts,
-              err: err instanceof Error ? err.message : String(err),
-            },
-            'mail trigger skipped unreadable message after 3 failed reads',
-          );
-          continue;
-        }
-        readFailures[header.id] = attempts;
-        await this.commitCursor(burrowId, actorId, {
-          connectionId,
-          readFailures: trimReadFailures(readFailures),
-        });
-        this.services.log.warn(
-          {
-            connectionId,
-            messageId: header.id,
-            attempts,
-            err: err instanceof Error ? err.message : String(err),
-          },
-          'mail trigger full read failed; will retry on next poll',
-        );
+        const action = await recordBoundedFailure(failureKey, header.id, matchedNames, err, 'read');
+        if (action === 'skip') continue;
         // Do not advance the cursor yet so the next poll retries this message up to 3 times.
         if (createdCount > 0) this.services.automations.nudge();
         return createdCount;
       }
-      if (header.id in readFailures) {
-        delete readFailures[header.id];
-        failuresChanged = true;
+      if (!full) {
+        if (failureKey in readFailures) {
+          delete readFailures[failureKey];
+          failuresChanged = true;
+        }
+        continue;
       }
-      if (!full) continue;
       // Hand over matched email attachments on the server so the outsiders' turn reads them via `read_attachment`
-      // without ever having access to the person's mailbox.
+      // without ever having access to the person's mailbox. Cap metadata at `MAIL_RECORDED_MAX_ATTACHMENTS` so one
+      // message with hundreds of attachments fits the commit schema, and record how many were left out.
       const maxAttBytes = Math.min(CONNECTOR_BINARY_MAX_BYTES, this.services.files.maxBytes);
       const stagedAttachments: {
         name: string;
@@ -400,14 +445,18 @@ export class MailTriggerService {
       const recordedAttachments: ((typeof full.attachments)[number] & {
         missingReason?: 'too_large' | 'unsupported_type' | 'download_failed' | 'too_many';
       })[] = [];
-      for (let i = 0; i < full.attachments.length; i++) {
-        const att = full.attachments[i];
-        if (!att) continue;
+      const totalAttachments = full.attachments.length;
+      const metadataCap = Math.min(totalAttachments, MAIL_RECORDED_MAX_ATTACHMENTS);
+      const omittedAttachmentCount = Math.max(0, totalAttachments - metadataCap);
+      for (let i = 0; i < metadataCap; i++) {
+        const rawAtt = full.attachments[i];
+        if (!rawAtt) continue;
+        const att = normalizeRecordedAttachment(rawAtt);
         if (i >= MAIL_HANDOVER_MAX_ATTACHMENTS) {
           recordedAttachments.push({ ...att, missingReason: 'too_many' });
           continue;
         }
-        if (!att.id) {
+        if (!rawAtt.id) {
           recordedAttachments.push({ ...att, missingReason: 'download_failed' });
           continue;
         }
@@ -418,7 +467,7 @@ export class MailTriggerService {
         try {
           const downloaded = await workspace.mailAttachment(token, {
             messageId: full.id,
-            attachmentId: att.id,
+            attachmentId: rawAtt.id,
           });
           const bytes = Buffer.from(downloaded.contentBase64, 'base64');
           if (bytes.length > maxAttBytes) {
@@ -429,7 +478,7 @@ export class MailTriggerService {
             recordedAttachments.push({ ...att, missingReason: 'download_failed' });
             continue;
           }
-          const fileName = att.name || downloaded.name || 'attachment';
+          const fileName = (att.name || downloaded.name || 'attachment').slice(0, 1000) || 'attachment';
           const sniffed = sniffBuffer(bytes, fileName);
           if (!sniffed.ok) {
             recordedAttachments.push({
@@ -441,7 +490,7 @@ export class MailTriggerService {
           const staged = await this.services.files.store.stage([bytes], { maxBytes: maxAttBytes });
           stagedAttachments.push({
             name: fileName,
-            declaredType: att.mimeType || downloaded.mimeType || '',
+            declaredType: (att.mimeType || downloaded.mimeType || '').slice(0, 255),
             staged,
             sniffed: sniffed.value,
           });
@@ -452,7 +501,7 @@ export class MailTriggerService {
             {
               connectionId,
               messageId: full.id,
-              attachmentId: att.id,
+              attachmentId: rawAtt.id,
               err: err instanceof Error ? err.message : String(err),
             },
             'mail trigger could not hand over an attachment; continuing without it',
@@ -461,6 +510,10 @@ export class MailTriggerService {
       }
       const fromHeader = full.from || header.from;
       const fromAddress = extractMailAddress(fromHeader) ?? '';
+      const externalId = (full.id || header.id).slice(0, 200);
+      const threadId = (full.threadId || externalId).slice(0, 200);
+      const body = full.body.slice(0, MAIL_BODY_CAP);
+      const bodyTruncated = full.bodyTruncated || full.body.length > MAIL_BODY_CAP;
       let committed = false;
       try {
         const res = await this.services.pipeline.commit(
@@ -468,17 +521,18 @@ export class MailTriggerService {
           {
             connectionId,
             provider: conn.provider,
-            mailbox: conn.email,
-            externalId: full.id,
-            messageId: header.messageId ?? null,
-            threadId: full.threadId,
+            mailbox: (conn.email || 'mailbox').slice(0, 320),
+            externalId,
+            messageId: normalizeRfcMessageId(header.messageId),
+            threadId,
             fromHeader: fromHeader.slice(0, 500),
             fromAddress: fromAddress.slice(0, 320),
             subject: full.subject.slice(0, 1000),
             snippet: full.snippet.slice(0, 500),
-            body: full.body,
-            bodyTruncated: full.bodyTruncated,
+            body,
+            bodyTruncated,
             attachments: recordedAttachments,
+            omittedAttachmentCount,
             stagedAttachments,
             receivedAt: safeIso(full.date, now),
           },
@@ -486,6 +540,18 @@ export class MailTriggerService {
         );
         committed = res.status === 'ok';
         if (res.status === 'ok' && res.result.created) createdCount++;
+        if (failureKey in readFailures) {
+          delete readFailures[failureKey];
+          failuresChanged = true;
+        }
+      } catch (err) {
+        if (isCommitValidationFailure(err)) {
+          const action = await recordBoundedFailure(failureKey, header.id, matchedNames, err, 'commit');
+          if (action === 'skip') continue;
+          if (createdCount > 0) this.services.automations.nudge();
+          return createdCount;
+        }
+        throw err;
       } finally {
         if (!committed && stagedAttachments.length > 0) {
           await Promise.allSettled(stagedAttachments.map((a) => this.services.files.store.discard(a.staged)));

@@ -201,7 +201,7 @@ export function normalizeRfcMessageId(raw: string | null | undefined): string | 
   if (!trimmed) return null;
   const match = /<([^<>\s]+)>/.exec(trimmed);
   const inner = (match ? match[1] : trimmed) ?? '';
-  const clean = inner.replace(/[\r\n\s]+/g, '').slice(0, 500);
+  const clean = inner.replace(/[\r\n\s]+/g, '').slice(0, 498);
   return clean ? `<${clean}>` : null;
 }
 

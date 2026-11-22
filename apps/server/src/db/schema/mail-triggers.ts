@@ -8,6 +8,8 @@ import { burrows } from './tenancy';
 export type StoredMailAttachment = MailAttachment & {
   /** Set when the attachment couldn't be handed over to the run. */
   missingReason?: MissingMailAttachmentReason;
+  /** Count of additional attachments omitted after this entry when the email exceeded the metadata cap. */
+  omittedAfter?: number;
 };
 
 /**

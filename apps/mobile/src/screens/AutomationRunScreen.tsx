@@ -133,9 +133,9 @@ export function AutomationRunScreen({ route, navigation }: Props) {
                   {run.error}
                 </Text>
               ) : null}
-              {run.missingAttachments?.length ? (
+              {run.missingAttachments?.length || run.missingAttachmentsOmitted ? (
                 <Text size={14} lh={1.42} color={toneColor(theme, 'warn')}>
-                  {missingAttachmentsText(run.missingAttachments)}
+                  {missingAttachmentsText(run.missingAttachments ?? [], run.missingAttachmentsOmitted ?? 0)}
                 </Text>
               ) : null}
               {data.automation.deletedAt ? (

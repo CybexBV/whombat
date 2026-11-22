@@ -54,18 +54,38 @@ const unsupported = (): never => {
   );
 };
 
+function safeWebUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2048) return undefined;
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeTimestamp(raw: unknown): string {
+  if (typeof raw === 'string') {
+    const ms = Date.parse(raw);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
 function mail(m: Obj) {
+  const msgId = str(m.id).slice(0, 200);
+  const webUrl = safeWebUrl(m.webLink);
   return MailSummary.parse({
-    id: m.id,
-    threadId: m.conversationId ?? m.id,
-    from: address(m.from),
-    to: addresses(m.toRecipients),
+    id: msgId,
+    threadId: (str(m.conversationId) || msgId).slice(0, 200),
+    from: address(m.from).slice(0, 500),
+    to: addresses(m.toRecipients).map((a) => a.slice(0, 500)),
     subject: str(m.subject).slice(0, 1000),
     snippet: str(m.bodyPreview).slice(0, 500),
-    date: m.receivedDateTime ?? m.createdDateTime,
+    date: safeTimestamp(m.receivedDateTime ?? m.createdDateTime),
     unread: m.isRead === false,
-    labels: strings(m.categories),
-    ...(m.webLink ? { webUrl: m.webLink } : {}),
+    labels: strings(m.categories).map((c) => c.slice(0, 200)),
+    ...(webUrl ? { webUrl } : {}),
   });
 }
 function file(f: Obj) {
@@ -239,6 +259,20 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     }
     throw badRequest('Microsoft collection has too many pages to read completely. Narrow the request.');
   }
+  /** Reads up to `cap` items across up to 10 pages without throwing when an incoming message exceeds `cap`. */
+  private async collectionBounded(token: string, path: string, cap: number): Promise<Obj[]> {
+    const values: Obj[] = [];
+    for (let page = 0; page < 10; page++) {
+      const result = await this.call(token, path);
+      values.push(...arr(result.value));
+      if (values.length >= cap) return values.slice(0, cap);
+      const next = result['@odata.nextLink'];
+      if (!next) return values;
+      if (typeof next !== 'string' || !next.startsWith(`${GRAPH}/`)) return values;
+      path = next.slice(GRAPH.length);
+    }
+    return values.slice(0, cap);
+  }
   async checkService(token: string, service: ConnectorService, scopes: readonly string[]) {
     if (!microsoftServicesGranted(scopes).includes(service))
       return { service, state: 'error' as const, message: 'Reconnect Microsoft with this service selected.' };
@@ -316,20 +350,20 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       if (hasAttachments && options.needAttachmentTypes) {
         let list: Obj[];
         try {
-          list = await this.collection(
+          list = await this.collectionBounded(
             token,
-            `/me/messages/${id(msgId)}/attachments?$select=id,name,contentType,size`,
-            100,
+            `/me/messages/${id(msgId)}/attachments?$select=id,name,contentType,size&$top=100`,
+            500,
           );
         } catch (err) {
           if (err instanceof GoogleApiError && err.status === 404) continue;
           throw err;
         }
         attachments = list.map((a) => ({
-          ...(str(a.id) ? { id: str(a.id) } : {}),
+          ...(str(a.id) ? { id: str(a.id).slice(0, 2048) } : {}),
           name: str(a.name).slice(0, 500),
           mimeType: (str(a.contentType) || 'application/octet-stream').slice(0, 200),
-          size: Math.max(0, Number(a.size) || 0),
+          size: Math.max(0, Math.trunc(Number(a.size) || 0)),
         }));
       }
       headers.push({
@@ -337,7 +371,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
         threadId: str(m.conversationId) || msgId,
         messageId: normalizeRfcMessageId(str(m.internetMessageId)),
         from: from.slice(0, 500),
-        to: addresses(m.toRecipients),
+        to: addresses(m.toRecipients).map((a) => a.slice(0, 500)),
         subject: str(m.subject).slice(0, 1000),
         snippet: str(m.bodyPreview).slice(0, 500),
         date: Number.isFinite(receivedMs) ? new Date(receivedMs).toISOString() : new Date().toISOString(),
@@ -499,23 +533,23 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     return Promise.all(
       messages.map(async (m) => {
         const attachments = m.hasAttachments
-          ? await this.collection(
+          ? await this.collectionBounded(
               token,
-              `/me/messages/${id(str(m.id))}/attachments?$select=id,name,contentType,size`,
-              100,
+              `/me/messages/${id(str(m.id))}/attachments?$select=id,name,contentType,size&$top=100`,
+              500,
             )
           : [];
         const body = textBody(m.body);
         return MailMessage.parse({
           ...mail(m),
-          cc: addresses(m.ccRecipients),
+          cc: addresses(m.ccRecipients).map((a) => a.slice(0, 500)),
           body: body.slice(0, MAIL_BODY_CAP),
           bodyTruncated: body.length > MAIL_BODY_CAP,
           attachments: attachments.map((a) => ({
-            id: a.id,
-            name: a.name,
-            mimeType: a.contentType ?? 'application/octet-stream',
-            size: a.size ?? 0,
+            ...(str(a.id) ? { id: str(a.id).slice(0, 2048) } : {}),
+            name: str(a.name).slice(0, 500),
+            mimeType: (str(a.contentType) || 'application/octet-stream').slice(0, 200),
+            size: Math.max(0, Math.trunc(Number(a.size) || 0)),
           })),
         });
       }),

@@ -374,11 +374,15 @@ export async function toRuns(db: Db, rows: readonly AutomationRunRow[]): Promise
   const approvalNumbers = new Map(approvalRows.map((a) => [a.id, a.number]));
   const automationNames = new Map(names.map((a) => [a.id, a.name]));
   return rows.map((row) => {
-    const missingParsed = MissingMailAttachment.array()
-      .max(20)
-      .safeParse((row.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
+    const scope = row.scope as { missingAttachments?: unknown; missingAttachmentsOmitted?: unknown } | null;
+    const missingParsed = MissingMailAttachment.array().max(20).safeParse(scope?.missingAttachments);
     const missingAttachments =
       missingParsed.success && missingParsed.data.length > 0 ? missingParsed.data : undefined;
+    const rawOmitted = scope?.missingAttachmentsOmitted;
+    const missingAttachmentsOmitted =
+      typeof rawOmitted === 'number' && Number.isInteger(rawOmitted) && rawOmitted > 0
+        ? rawOmitted
+        : undefined;
     return {
       id: row.id,
       number: row.number,
@@ -399,6 +403,7 @@ export async function toRuns(db: Db, rows: readonly AutomationRunRow[]): Promise
       error: row.error,
       tokens: tokens.get(row.id) ?? null,
       ...(missingAttachments ? { missingAttachments } : {}),
+      ...(missingAttachmentsOmitted ? { missingAttachmentsOmitted } : {}),
       steps: (stepsByRun.get(row.id) ?? []).map((s) =>
         toStep(
           s,

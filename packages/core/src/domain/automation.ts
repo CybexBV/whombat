@@ -1385,6 +1385,8 @@ export const AutomationRun = z.object({
   tokens: z.number().int().nonnegative().nullable(),
   /** Incoming-mail attachments that couldn't be handed over to this run (too large, unknown type, download failed, too many). */
   missingAttachments: z.array(MissingMailAttachment).max(20).optional(),
+  /** Additional missing incoming-mail attachments left out past `missingAttachments` (e.g. beyond the 20-item or 100-metadata cap). */
+  missingAttachmentsOmitted: z.number().int().positive().optional(),
   steps: z.array(AutomationRunStep),
 });
 export type AutomationRun = z.infer<typeof AutomationRun>;

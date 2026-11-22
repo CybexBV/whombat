@@ -412,9 +412,9 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
             {run.error}
           </p>
         )}
-        {run.missingAttachments?.length ? (
+        {run.missingAttachments?.length || run.missingAttachmentsOmitted ? (
           <p className={`${styles.note} ${styles.noteWarn}`} data-missing-attachments="">
-            {missingAttachmentsText(run.missingAttachments)}
+            {missingAttachmentsText(run.missingAttachments ?? [], run.missingAttachmentsOmitted ?? 0)}
           </p>
         ) : null}
 
