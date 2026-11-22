@@ -46,7 +46,8 @@ export function runScope(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const s of steps)
-    out[s.stepId] = s.kind === 'connection_actions' ? actionsScope(s) : { ...(s.output as JsonObject), state: s.state };
+    out[s.stepId] =
+      s.kind === 'connection_actions' ? actionsScope(s) : { ...(s.output as JsonObject), state: s.state };
   return { trigger: run.scope, steps: out, run: { number: run.number, id: run.id, test: run.test } };
 }
 

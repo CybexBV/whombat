@@ -2207,9 +2207,9 @@ describe('mail-arrives automations', () => {
       expect(done.steps[2]?.state).toBe('succeeded');
       // The person reads it all, as before.
       const personThread = await w.runThread(run.id);
-      expect(personThread.some((m) => m.text.startsWith('Done:') && m.text.includes('Mara Office Archive'))).toBe(
-        true,
-      );
+      expect(
+        personThread.some((m) => m.text.startsWith('Done:') && m.text.includes('Mara Office Archive')),
+      ).toBe(true);
       const personCard = (await loadMessages(w.services.db, personThread, IDS.mara)).find(
         (m) => m.card?.kind === 'approval',
       );
@@ -2238,7 +2238,8 @@ describe('mail-arrives automations', () => {
       await books.close();
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
-      for (const id of ids) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, id));
+      for (const id of ids)
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, id));
       await pollAndSettle();
     }
   });
@@ -2310,7 +2311,12 @@ describe('mail-arrives automations', () => {
           conversationId: maraChat.dmId,
           triggers: [{ kind: 'mail', connectionId, subjectContains: ['moved-server'] }],
           steps: [
-            { id: 'ask', kind: 'dispatch_agent', prompt: 'File it: {{trigger.subject}}', proposeActions: true },
+            {
+              id: 'ask',
+              kind: 'dispatch_agent',
+              prompt: 'File it: {{trigger.subject}}',
+              proposeActions: true,
+            },
             { id: 'act', kind: 'connection_actions', from: 'ask' },
           ],
           limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
@@ -2318,7 +2324,8 @@ describe('mail-arrives automations', () => {
         { name: 'Moved server' },
       );
       await pollAndSettle();
-      const writes = (svc: { seen: { method: string }[] }) => svc.seen.filter((r) => r.method !== 'GET').length;
+      const writes = (svc: { seen: { method: string }[] }) =>
+        svc.seen.filter((r) => r.method !== 'GET').length;
       const cardOf = async (runId: string) => {
         const r = await w.run(runId);
         const [row] = await w.services.db
@@ -2396,7 +2403,10 @@ describe('mail-arrives automations', () => {
       expect(writes(second)).toBe(1);
 
       // At send time the call is checked on the very connection it is made with.
-      const [row] = await w.services.db.select().from(catalogConnections).where(eq(catalogConnections.id, plId));
+      const [row] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, plId));
       if (!row) throw new Error('no connection');
       const sent = await executeConnectionCall(w.services, {
         burrowId: w.burrowId,
@@ -3152,7 +3162,9 @@ describe('mail-arrives automations', () => {
       expect(timedOutRun.steps[1]?.error).toContain('didn’t answer in time');
       // The person's notice in the thread says why; it is kept with the step, so an outsiders' turn that goes on
       // after the check reads it only as a line, without the connection or what it answered.
-      const notice = (await w.runThread(timedOutRun.id)).find((m) => m.text.includes('waiting for you to check'));
+      const notice = (await w.runThread(timedOutRun.id)).find((m) =>
+        m.text.includes('waiting for you to check'),
+      );
       expect(notice?.text).toContain('didn’t answer in time');
       expect(timedOutRun.steps[1]?.messageIds).toContain(notice?.id);
       const [asRead] = await forOutsiders(

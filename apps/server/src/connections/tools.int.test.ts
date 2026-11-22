@@ -396,7 +396,10 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
     it('sends nothing when the connection was signed in again after it asked, and wakes the agent to ask again', async () => {
       const row = await askToTurnOn('attic-lamp');
       // The person gives the connection a new token while the card waits: where its calls go, and as whom, changed.
-      const [before] = await t.services.db.select().from(catalogConnections).where(eq(catalogConnections.id, ha));
+      const [before] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, ha));
       await t.services.db
         .update(catalogConnections)
         .set({ credentialVersion: (before?.credentialVersion ?? 1) + 1 })
@@ -433,7 +436,9 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
         expect(
           (await t.commit(IDS.mara, decideApproval, { number: again.number, decision: 'approve' })).status,
         ).toBe('ok');
-        await expect.poll(async () => (await executionOf(again.id))?.state, { timeout: 10_000 }).toBe('succeeded');
+        await expect
+          .poll(async () => (await executionOf(again.id))?.state, { timeout: 10_000 })
+          .toBe('succeeded');
         expect(seenFor('attic-lamp')).toBe(1);
       } finally {
         await t.services.db

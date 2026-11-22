@@ -45,8 +45,8 @@ import {
   needsReauthText,
   newCallId,
 } from './call';
-import { callTarget } from './call-target';
 import { coversReads } from './call-access';
+import { callTarget } from './call-target';
 import { connectionByHandle, keyTierOf, type VisibleConnection } from './context';
 import { limitsProblem } from './limits';
 import {

@@ -62,7 +62,8 @@ export async function forOutsiders<M extends Message>(db: Db, messages: readonly
     const card = m.card?.kind === 'approval' ? m.card : null;
     if (card) return asLine(m, OUTSIDERS_CARD_LINE[card.approval.state]);
     // A card kept from before it moved (card-moves.md) is never an approval's; one that is reads as the line too.
-    if (m.earlierCard?.kind === 'approval') return asLine(m, OUTSIDERS_CARD_LINE[m.earlierCard.approval.state]);
+    if (m.earlierCard?.kind === 'approval')
+      return asLine(m, OUTSIDERS_CARD_LINE[m.earlierCard.approval.state]);
     return m;
   });
 }

@@ -86,7 +86,10 @@ export async function stopRun(
     if (notice && o.noticeOn !== undefined)
       await ctx.tx
         .update(automationRunSteps)
-        .set({ messageIds: sql`array_append(${automationRunSteps.messageIds}, ${notice})`, updatedAt: ctx.now })
+        .set({
+          messageIds: sql`array_append(${automationRunSteps.messageIds}, ${notice})`,
+          updatedAt: ctx.now,
+        })
         .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, o.noticeOn)));
   }
   // A customer's bug it set out to fix and didn't: its thread says why and the person's Inbox has it (TA-61).

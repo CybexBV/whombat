@@ -510,7 +510,10 @@ answer is lost retain the redacted-result behavior.
   or fails as uncertain what a dead process left running; nothing runs twice.
 - An approved connection call runs after its deferred command's commit (which records `connection.tool_called`) as a
   required continuation: the approval succeeds, fails in plain words or is uncertain as the call did, and after a crash
-  the call's own events say whether it never ran (it runs once), finished, or may have reached the service.
+  the call's own events say whether it never ran (it runs once), finished, or may have reached the service. The command
+  carries where the call goes and as whom when it was asked (`connections/call-target.ts`: the connection's base
+  address, settings, sign-in, sealed secrets and credential version), so the yes is bound to it; the call is sent only
+  while the connection row the request is made with still has it, and otherwise nothing is sent and the agent hears why.
 - Approvals retain their asking dispatch and run. A yes wakes the agent that asked in the card's thread with the
   approval in its context; a decline tells it too. A live run continues in run mode; a pause or take over holds the
   continuation. Approval changes advance linked activity revisions and publish their derived state to open feeds.
@@ -564,7 +567,11 @@ Automations. Code finds it by kind
   tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). An automation
   run's turn (mail, a tracker report) is shown and reads only the files the server handed over from what started the
   run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
-  readable or fetched by its runner. It is served a
+  readable or fetched by its runner. What Whombat posted in its thread for the person it reads, in its context and
+  through `read_conversation`, only as a line (`runtime/outsiders-view.ts`): an approval card says that the person was
+  asked and what they answered, and what a `connection_actions` step told the person (its “Done:” line, a notice about
+  how its calls went) says only that Whombat told them; templates read such a step only as its state, whether it ran
+  and how many (`automations/steps/scope.ts`). It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
@@ -834,15 +841,17 @@ published automation details read their definition and publisher from one versio
   listed actions by connection handle, never the person's labels or account ids. An
   upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
   first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
-  exact `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): the
+  exact `actionsHash`, which also binds where each call goes and as whom (`connections/call-target.ts`), regardless of
+  standing settings, built only by the server (`automations/proposed-card.ts`): the
   listed action's words as its title, question, message and “Done:” line, what else it does (the folder Dropbox makes on
   the way), then every line that decides what happens — method and path as sent or tool, base, the email's file by name,
   type and size, every argument and header, nothing hidden, a long value in numbered parts, an id by its name — or the
   proposal is refused when that doesn't fit on one card. The names (a Paperless-ngx tag, a Moneybird contact) are read
   by the run engine as the connection just before the card is made, outside the transaction and bounded
-  (`automations/card-names.ts`), and kept on the step; an id the service doesn't have refuses the card. `connection_actions`
-  runs them after a yes, settling as
-  `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
+  (`automations/card-names.ts`), once per connection and path, and kept on the step by connection and where its calls go;
+  an id the service doesn't have refuses the card. `connection_actions` runs them after a yes, sending each only while
+  its connection still goes where it did then (else nothing is sent and a fresh card asks again, its names read again
+  from the new place, “… changed since you said yes.”), settling as `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
   `request_approval` step's details start with its own question. A session below protocol
   minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
   an automation without its definition (`automations/older-apps.ts`).
