@@ -113,6 +113,9 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
       expect(by(id)?.choose).toBeUndefined();
     }
     expect(by('secure_connections')?.value).toBe('Required');
+    expect(by('empty_trash')?.value).toBe('Off');
+    plex.prefs.set('autoEmptyTrash', true);
+    expect(rows().find((x) => x.id === 'empty_trash')?.value).toBe('On');
   });
 
   it('draws them disabled with the reason on Look only', () => {

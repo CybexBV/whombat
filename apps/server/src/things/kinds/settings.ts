@@ -123,7 +123,10 @@ export function asBool(v: unknown): boolean | null {
 export function valueWords<S>(spec: SettingSpec<S>, v: SettingValue, s: S): string {
   if (spec.words) return spec.words(v, s);
   if (spec.kind === 'switch') return asBool(v) ? 'On' : 'Off';
-  return spec.choices?.(s).find((c) => sameValue(c.value, v))?.label ?? String(v);
+  const choice = spec.choices?.(s).find((c) => sameValue(c.value, v))?.label;
+  if (choice !== undefined) return choice;
+  if (typeof v === 'boolean') return v ? 'On' : 'Off';
+  return String(v);
 }
 
 function shortWords<S>(spec: SettingSpec<S>, v: SettingValue, s: S): string {
@@ -240,7 +243,12 @@ export async function describeSetting<S>(
   const spec = d.specs.find((s) => s.id === input.target);
   if (!spec?.write || input.value === undefined) return null;
   const s = await (spec.readFresh ?? d.read)(ctx.services, ctx.row).catch(() => null);
-  if (!s) return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${String(input.value)}`] };
+  if (!s) {
+    const b =
+      spec.kind === 'switch' ? asBool(input.value) : typeof input.value === 'boolean' ? input.value : null;
+    const fallback = b !== null ? (b ? 'On' : 'Off') : String(input.value);
+    return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${fallback}`] };
+  }
   let value: SettingValue;
   try {
     value = wanted(d, spec, s, { ...input, expect: undefined });

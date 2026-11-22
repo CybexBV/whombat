@@ -645,4 +645,45 @@ describe('Email (IMAP) behind the mail tools', () => {
     expect(read?.subject.length).toBe(1000);
     expect(read?.labels.every((l) => l.length <= 200)).toBe(true);
   });
+
+  it('advances IMAP lastUid with more: true when a 50-UID steady-state batch has zero included messages', async () => {
+    const activation = new Date('2026-10-25T10:00:00Z');
+    const baseline = await ws.mailBaseline(TOKEN);
+
+    // Add 55 pre-activation messages moved into INBOX (all filtered out by `since`), followed by 1 fresh invoice.
+    for (let i = 1; i <= 55; i++) {
+      server.add(
+        'INBOX',
+        mail({
+          from: 'Archive <old@example.com>',
+          subject: `Moved old mail ${i}`,
+          body: 'Old',
+          id: `<moved-old-${i}@example.com>`,
+        }),
+        { date: new Date('2026-10-20T10:00:00Z') },
+      );
+    }
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Fresh invoice after 55 moved old mails',
+        body: 'Fresh',
+        id: '<fresh-after-55@example.com>',
+      }),
+      { date: new Date('2026-10-25T10:05:00Z') },
+    );
+
+    const p1 = await ws.mailChanges(TOKEN, baseline.cursor, { since: activation });
+    expect(p1.headers).toEqual([]);
+    expect(p1.more).toBe(true);
+    expect(p1.cursor.kind).toBe('imap');
+    if (p1.cursor.kind === 'imap' && baseline.cursor.kind === 'imap') {
+      expect(p1.cursor.lastUid).toBe(baseline.cursor.lastUid + 50);
+    }
+
+    const p2 = await ws.mailChanges(TOKEN, p1.cursor, { since: activation });
+    expect(p2.more).toBeUndefined();
+    expect(p2.headers.map((h) => h.messageId)).toEqual(['<fresh-after-55@example.com>']);
+  });
 });

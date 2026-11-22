@@ -678,4 +678,130 @@ describe('MailTriggerService.pollOnce', () => {
     expect(cursorRow.problemCode).toBe('read_failed');
     expect(discarded).toHaveLength(3);
   });
+
+  it('commits Gmail history paging cursor with succeeded=false and schedules an immediate follow-up sync until paging finishes', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const priorSucceededAt = new Date('2026-10-28T10:01:00.000Z');
+    const poll2Time = new Date('2026-10-28T10:05:00.000Z');
+    const connRow = {
+      id: 'con_gmail',
+      accountId: 'acc_1',
+      provider: 'google',
+      status: 'active',
+      services: ['mail'],
+      email: 'you@example.com',
+    };
+    const cursorRow: {
+      connectionId: string;
+      cursor: MailProviderCursor;
+      since: Date;
+      succeededAt: Date;
+      problemCode: string | null;
+      problem: string | null;
+      readFailures: Record<string, number> | null;
+    } = {
+      connectionId: 'con_gmail',
+      cursor: { kind: 'gmail', historyId: '500' },
+      since: activation,
+      succeededAt: priorSucceededAt,
+      problemCode: null,
+      problem: null,
+      readFailures: null,
+    };
+
+    let selectCall = 0;
+    const committed: Record<string, unknown>[] = [];
+    const bgRuns: (() => Promise<unknown>)[] = [];
+    const services = {
+      schemaAccess: 'read-write',
+      clock: () => poll2Time,
+      db: {
+        select: () => ({
+          from: () => ({
+            where: async () => {
+              selectCall += 1;
+              return selectCall % 2 === 1 ? [connRow] : [{ ...cursorRow }];
+            },
+          }),
+        }),
+      },
+      google: { tokens: { accessFor: vi.fn(async () => 'tok') } },
+      files: { maxBytes: 10 * 1024 * 1024, store: { stage: vi.fn(), discard: vi.fn() } },
+      pipeline: {
+        commit: vi.fn(
+          async (
+            cmd: { name: string; schema: { parse: (v: unknown) => unknown } },
+            input: Record<string, unknown>,
+          ) => {
+            const parsed = cmd.schema.parse(input) as Record<string, unknown>;
+            committed.push(parsed);
+            if (cmd.name === setMailCursor.name && parsed.cursor) {
+              cursorRow.cursor = parsed.cursor as MailProviderCursor;
+              if (parsed.succeeded && typeof parsed.succeededAt === 'string') {
+                cursorRow.succeededAt = new Date(parsed.succeededAt);
+              }
+            }
+            return { status: 'ok', result: { connectionId: 'con_gmail', cleared: false } };
+          },
+        ),
+      },
+      log: { warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() },
+      background: {
+        run: vi.fn((label: string, fn: () => Promise<unknown>) => {
+          if (label === 'mail triggers resync') bgRuns.push(fn);
+        }),
+      },
+      housekeeping: { add: vi.fn() },
+      automations: { nudge: vi.fn() },
+      newerAutomations: { ready: async () => true },
+    } as unknown as Services;
+
+    const mailChanges = vi
+      .fn()
+      .mockResolvedValueOnce({
+        cursor: {
+          kind: 'gmail',
+          historyId: '500',
+          paging: { startHistoryId: '500', pageToken: 'hp_5' },
+        },
+        headers: [],
+        more: true,
+      })
+      .mockResolvedValueOnce({
+        cursor: { kind: 'gmail', historyId: '805' },
+        headers: [],
+      });
+    vi.mocked(providerWorkspace).mockReturnValue({
+      mailChanges,
+    } as unknown as ReturnType<typeof providerWorkspace>);
+
+    const svc = new MailTriggerService(services);
+    svc.start();
+    await svc.syncConnection('con_gmail', makeMailbox('con_gmail'));
+
+    expect(committed).toHaveLength(1);
+    expect(committed[0]).toMatchObject({
+      cursor: { kind: 'gmail', historyId: '500', paging: { startHistoryId: '500', pageToken: 'hp_5' } },
+      succeeded: false,
+    });
+    expect(committed[0]?.succeededAt).toBeUndefined();
+    expect(cursorRow.succeededAt).toEqual(priorSucceededAt);
+    expect(bgRuns).toHaveLength(1);
+
+    // Running the queued follow-up sync completes paging, clears paging, and advances succeededAt.
+    await svc.syncConnection('con_gmail', makeMailbox('con_gmail'));
+    expect(mailChanges).toHaveBeenNthCalledWith(
+      2,
+      'tok',
+      { kind: 'gmail', historyId: '500', paging: { startHistoryId: '500', pageToken: 'hp_5' } },
+      expect.objectContaining({ resyncSince: priorSucceededAt }),
+    );
+    expect(committed).toHaveLength(2);
+    expect(committed[1]).toMatchObject({
+      cursor: { kind: 'gmail', historyId: '805' },
+      succeeded: true,
+      succeededAt: poll2Time.toISOString(),
+    });
+    await svc.stop();
+  });
 });

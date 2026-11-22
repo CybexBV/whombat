@@ -628,6 +628,160 @@ describe('mail', () => {
     // 1 failed pageToken call + 1 profile call + 1 failed baseline list call = 3 total, no retry loop.
     expect(always400.calls).toHaveLength(3);
   });
+
+  it('persists Gmail history pageToken with startHistoryId across empty history pages and resets cleanly on 400/404/410', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const makeMessage = (id: string, subject: string, offsetMs: number) => ({
+      id,
+      threadId: `t_${id}`,
+      labelIds: ['INBOX'],
+      snippet: subject,
+      internalDate: String(activation.getTime() + offsetMs),
+      payload: {
+        headers: [
+          { name: 'From', value: 'billing@example.com' },
+          { name: 'Subject', value: subject },
+          { name: 'Message-ID', value: `<${id}@example.com>` },
+        ],
+      },
+    });
+    const messages: Record<string, object> = {
+      m_early: makeMessage('m_early', 'Early invoice', 10_000),
+      m_after_empty: makeMessage('m_after_empty', 'After empty history pages', 20_000),
+      m_resynced: makeMessage('m_resynced', 'Recovered on reset', 30_000),
+    };
+
+    // Scenario A: 7 empty history pages (e.g. bulk archive / read-state churn) before page 8 has a new INBOX mail.
+    const { workspace, calls } = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile')) return { json: { historyId: '999' } };
+      if (c.url.pathname.endsWith('/messages')) return { json: { messages: [{ id: 'm_resynced' }] } };
+      if (c.url.pathname.endsWith('/history')) {
+        const start = c.url.searchParams.get('startHistoryId');
+        const token = c.url.searchParams.get('pageToken');
+        if (token === 'err_400') return { status: 400, json: { error: { code: 400, message: 'Bad token' } } };
+        if (token === 'err_404') return { status: 404, json: { error: { code: 404, message: 'Expired' } } };
+        if (token === 'err_410') return { status: 410, json: { error: { code: 410, message: 'Gone' } } };
+        if (token === 'err_500') return { status: 500, json: { error: { code: 500, message: 'Server' } } };
+        if (token === 'loop_tok') return { json: { historyId: '888', nextPageToken: 'loop_tok' } };
+        if (start === '500') {
+          const pageIndex = token ? Number(token.replace('hp_', '')) : 0;
+          if (pageIndex < 7) {
+            return { json: { historyId: '800', nextPageToken: `hp_${pageIndex + 1}` } };
+          }
+          return {
+            json: {
+              historyId: '805',
+              history: [
+                {
+                  id: '802',
+                  messagesAdded: [{ message: { id: 'm_after_empty', labelIds: ['INBOX'] } }],
+                },
+              ],
+            },
+          };
+        }
+        if (start === '600') {
+          const pageIndex = token ? Number(token.replace('mp_', '')) : 0;
+          if (pageIndex === 0) {
+            return {
+              json: {
+                historyId: '700',
+                history: [
+                  { id: '601', messagesAdded: [{ message: { id: 'm_early', labelIds: ['INBOX'] } }] },
+                ],
+                nextPageToken: 'mp_1',
+              },
+            };
+          }
+          if (pageIndex < 5) {
+            return { json: { historyId: '700', nextPageToken: `mp_${pageIndex + 1}` } };
+          }
+          return {
+            json: {
+              historyId: '710',
+              history: [
+                {
+                  id: '705',
+                  messagesAdded: [{ message: { id: 'm_after_empty', labelIds: ['INBOX'] } }],
+                },
+              ],
+            },
+          };
+        }
+      }
+      const id = c.url.pathname.split('/').at(-1) ?? '';
+      return { json: messages[id] };
+    });
+
+    // Poll 1: 5 empty pages hit the cap; persists startHistoryId + pageToken and returns more: true.
+    const p1 = await workspace.mailChanges('tok', { kind: 'gmail', historyId: '500' }, { since: activation });
+    expect(p1.headers).toEqual([]);
+    expect(p1.more).toBe(true);
+    expect(p1.cursor).toEqual({
+      kind: 'gmail',
+      historyId: '500',
+      paging: { startHistoryId: '500', pageToken: 'hp_5' },
+    });
+
+    // Poll 2: resumes from startHistoryId=500 with pageToken=hp_5, finds the new message, and clears paging.
+    const p2 = await workspace.mailChanges('tok', p1.cursor, { since: activation });
+    expect(p2.more).toBeUndefined();
+    expect(p2.cursor).toEqual({ kind: 'gmail', historyId: '805' });
+    expect(p2.headers.map((h) => h.id)).toEqual(['m_after_empty']);
+    const resumedCall = calls.find(
+      (c) => c.url.pathname.endsWith('/history') && c.url.searchParams.get('pageToken') === 'hp_5',
+    );
+    expect(resumedCall?.url.searchParams.get('startHistoryId')).toBe('500');
+
+    // Scenario B: page 0 includes h.id=601, pages 1..4 are empty -> keeps startHistoryId=600 with mp_5.
+    const m1 = await workspace.mailChanges('tok', { kind: 'gmail', historyId: '600' }, { since: activation });
+    expect(m1.more).toBe(true);
+    expect(m1.headers.map((h) => h.id)).toEqual(['m_early']);
+    expect(m1.cursor).toEqual({
+      kind: 'gmail',
+      historyId: '601',
+      paging: { startHistoryId: '600', pageToken: 'mp_5' },
+    });
+    const m2 = await workspace.mailChanges('tok', m1.cursor, { since: activation });
+    expect(m2.more).toBeUndefined();
+    expect(m2.cursor).toEqual({ kind: 'gmail', historyId: '710' });
+    expect(m2.headers.map((h) => h.id)).toEqual(['m_after_empty']);
+    const mixedResume = calls.find(
+      (c) => c.url.pathname.endsWith('/history') && c.url.searchParams.get('pageToken') === 'mp_5',
+    );
+    expect(mixedResume?.url.searchParams.get('startHistoryId')).toBe('600');
+
+    // Scenario C: 400, 404, and 410 on a resumed paging token reset cleanly from resyncSince without paging.
+    for (const token of ['err_400', 'err_404', 'err_410']) {
+      const reset = await workspace.mailChanges(
+        'tok',
+        { kind: 'gmail', historyId: '500', paging: { startHistoryId: '500', pageToken: token } },
+        { since: activation, resyncSince: new Date(activation.getTime() + 25_000) },
+      );
+      expect(reset.reset).toBe(true);
+      expect(reset.more).toBeUndefined();
+      expect(reset.cursor).toEqual({ kind: 'gmail', historyId: '999' });
+      expect(reset.headers.map((h) => h.id)).toEqual(['m_resynced']);
+    }
+
+    // HTTP 500 propagates without resetting.
+    await expect(
+      workspace.mailChanges('tok', {
+        kind: 'gmail',
+        historyId: '500',
+        paging: { startHistoryId: '500', pageToken: 'err_500' },
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+
+    // A repeated nextPageToken terminates paging cleanly instead of looping forever.
+    const looped = await workspace.mailChanges('tok', {
+      kind: 'gmail',
+      historyId: '500',
+      paging: { startHistoryId: '500', pageToken: 'loop_tok' },
+    });
+    expect(looped.more).toBeUndefined();
+    expect(looped.cursor).toEqual({ kind: 'gmail', historyId: '888' });
+  });
 });
 
 describe('calendar', () => {

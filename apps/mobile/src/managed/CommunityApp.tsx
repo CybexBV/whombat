@@ -214,6 +214,7 @@ export function CommunityApp(props: CommunityAppProps) {
         registry.setLastUsed(null);
         void WhombatLive.clearStatusWidget().catch(() => {});
         await props.rekey();
+        void WhombatLive.clearStatusWidget().catch(() => {});
         join();
       }}
     />

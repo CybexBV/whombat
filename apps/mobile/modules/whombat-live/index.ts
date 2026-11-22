@@ -7,7 +7,6 @@
  *
  * Without the native module (tests, web, an old build) every call is a no-op and `supported()` is false.
  */
-import type { HomeWidgetStatus } from '@whombat/client';
 import type { LiveActivityAttributes, LiveActivityDisplay, PushPayload } from '@whombat/core';
 import { requireOptionalNativeModule } from 'expo';
 import type {
@@ -17,25 +16,24 @@ import type {
   LiveColors,
   ShadeNotification,
 } from './src/content';
+import {
+  type ClearStatusWidgetFilter,
+  createStatusWidgetQueue,
+  type StatusWidgetClearListener,
+  type StatusWidgetPayload,
+  type StatusWidgetSource,
+} from './src/statusWidget';
 
 export * from './src/content';
-
-/** Whether a widget snapshot belongs to a cloud-signed-in box or a direct community box. */
-export type StatusWidgetSource = 'cloud' | 'community';
-
-/** Optional scope for `clearStatusWidget`: clear only if the saved snapshot matches the given box and/or source. */
-export interface ClearStatusWidgetFilter {
-  applianceId?: string;
-  source?: StatusWidgetSource;
-}
-
-/** Saved calm status pushed to the Android and iOS home-screen widgets. */
-export interface StatusWidgetPayload extends HomeWidgetStatus {
-  /** Appliance id on this phone, so forgetting one box only clears its own widget status. */
-  applianceId: string;
-  /** Account/connection kind, so cloud sign-out or expiry clears cloud snapshots without wiping community boxes. */
-  source?: StatusWidgetSource;
-}
+export {
+  type ClearStatusWidgetFilter,
+  createStatusWidgetQueue,
+  type NativeStatusWidgetStore,
+  type StatusWidgetClearListener,
+  type StatusWidgetPayload,
+  type StatusWidgetSource,
+  shouldClearStatusWidget,
+} from './src/statusWidget';
 
 /** The native module's surface (`WhombatLiveModule` on Android and iOS). */
 interface NativeWhombatLive {
@@ -72,14 +70,7 @@ interface NativeWhombatLive {
 
 const native = requireOptionalNativeModule<NativeWhombatLive>('WhombatLive');
 
-// Serialize status-widget writes and clears so an earlier setStatusWidget can never overtake a later
-// clearStatusWidget on a native concurrent pool (e.g., Swift's AsyncFunction executor).
-let statusWidgetQueue: Promise<void> = Promise.resolve();
-function enqueueStatusWidget(work: () => Promise<void>): Promise<void> {
-  const next = statusWidgetQueue.then(work, work);
-  statusWidgetQueue = next.catch(() => {});
-  return next;
-}
+const statusWidget = createStatusWidgetQueue(() => native);
 
 function on(event: string, listener: (e: Record<string, string>) => void): () => void {
   if (!native) return () => {};
@@ -124,20 +115,17 @@ export const WhombatLive = {
 
   /** Save the latest calm status for the home-screen widget (never gated on Live Activities permission). */
   setStatusWidget(payload: StatusWidgetPayload): Promise<void> {
-    return enqueueStatusWidget(async () => {
-      await native?.setStatusWidget?.(JSON.stringify(payload));
-    });
+    return statusWidget.setStatusWidget(payload);
   },
 
   /** Forget the saved home-screen widget status (on switch, sign-out, revocation or box removal). */
   clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void> {
-    return enqueueStatusWidget(async () => {
-      if (typeof filter === 'string') {
-        await native?.clearStatusWidget?.(filter, null);
-        return;
-      }
-      await native?.clearStatusWidget?.(filter?.applianceId ?? null, filter?.source ?? null);
-    });
+    return statusWidget.clearStatusWidget(filter);
+  },
+
+  /** Notified synchronously whenever `clearStatusWidget` is called so upstream write queues drop stale entries. */
+  onClearStatusWidget(listener: StatusWidgetClearListener): () => void {
+    return statusWidget.onClearStatusWidget(listener);
   },
 
   /** Ongoing activities on screen. */

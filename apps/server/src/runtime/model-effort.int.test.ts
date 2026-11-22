@@ -399,6 +399,23 @@ describe('the model fallback (ME-05)', () => {
       kind: 'account',
       name: 'Mara',
     });
+    // A Custom AI model agent reports the burrow's custom AI model.
+    await t.services.db
+      .update(burrows)
+      .set({
+        localModel: {
+          baseUrl: 'https://openrouter.example.com/api/v1',
+          model: 'llama3.3',
+          label: 'OpenRouter',
+          check: null,
+          updatedAt: new Date().toISOString(),
+        },
+      })
+      .where(eq(burrows.id, t.burrowId));
+    expect(
+      await fallbackWhere(t.services.db, row, { ...dusty, runtime: { provider: 'local', model: 'removed' } }),
+    ).toEqual({ kind: 'local', name: 'OpenRouter' });
+    await t.services.db.update(burrows).set({ localModel: null }).where(eq(burrows.id, t.burrowId));
   });
 
   it('is not cleared when a background Look or non-main model turn finishes cleanly', async () => {

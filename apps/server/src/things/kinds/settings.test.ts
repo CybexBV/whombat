@@ -9,10 +9,12 @@ import { rowOf } from './media/testing';
 import {
   type DeclaredSettings,
   declaredSettings,
+  describeSetting,
   SERVICE_SETTINGS_TAB_KEY,
   settingAction,
   settingsPanels,
   settingsTab,
+  valueWords,
   withCurrent,
 } from './settings';
 import type { KindCtx } from './types';
@@ -408,5 +410,51 @@ describe('settingAction read-back verification', () => {
     const intro = panels.find((p) => p.id === 'settings-intro');
     expect(intro?.kind === 'text' ? intro.body : '').not.toContain('Change one here');
     expect(intro?.kind === 'text' ? intro.body : '').toContain('stay in Demo');
+  });
+
+  it('shows On/Off for boolean read-only rows without custom words and when describeSetting cannot read', async () => {
+    const roBoolSpec = {
+      id: 'auto_clean',
+      group: 'other',
+      label: 'Auto clean',
+      help: 'Stays in Demo.',
+      kind: 'elsewhere' as const,
+      read: (s: DemoState) => s.flag,
+    };
+    const customBoolSpec = {
+      ...roBoolSpec,
+      id: 'custom_bool',
+      words: (v: string | number | boolean) => (v ? 'Enabled' : 'Disabled'),
+    };
+    const state: DemoState = { flag: true, level: 'high' };
+    expect(valueWords(roBoolSpec, true, state)).toBe('On');
+    expect(valueWords(roBoolSpec, false, state)).toBe('Off');
+    expect(valueWords(customBoolSpec, true, state)).toBe('Enabled');
+    expect(valueWords(customBoolSpec, false, state)).toBe('Disabled');
+
+    const panels = settingsPanels({
+      declared: makeDeclared({ specs: [roBoolSpec, customBoolSpec] }),
+      settings: { flag: false, level: 'high' },
+      who: { row: rowOf('plex', { id: 'con_bool', baseUrl: 'http://192.0.2.10:8080/' }) },
+      url: 'http://192.0.2.10:8080/settings',
+      baseUrl: 'http://192.0.2.10:8080',
+      changed: new Map(),
+      assistant: 'Dusty',
+      now: new Date('2026-11-04T20:13:00Z'),
+      timeZone: 'UTC',
+    });
+    const rows = panels.flatMap((p) => (p.kind === 'settings' ? p.rows : []));
+    expect(rows.find((r) => r.id === 'auto_clean')?.value).toBe('Off');
+    expect(rows.find((r) => r.id === 'custom_bool')?.value).toBe('Disabled');
+
+    const unreadDeclared = makeDeclared({
+      read: async () => {
+        throw new Error('offline');
+      },
+    });
+    const wordsOff = await describeSetting(unreadDeclared, actionCtx(), { target: 'flag', value: false });
+    const wordsOn = await describeSetting(unreadDeclared, actionCtx(), { target: 'flag', value: true });
+    expect(wordsOff?.lines).toEqual(['Flag: Off']);
+    expect(wordsOn?.lines).toEqual(['Flag: On']);
   });
 });

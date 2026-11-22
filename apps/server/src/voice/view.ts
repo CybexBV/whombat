@@ -6,8 +6,10 @@
 import type { VoiceModelState } from '@whombat/control-contracts/local';
 import {
   DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
   VOICE_STT_MODELS,
   VOICE_TYPING_MAX_SECONDS,
+  type VoiceDownloadModel,
   type VoiceDutchVoice,
   type VoiceLanguage,
   type VoiceModelChoice,
@@ -55,6 +57,8 @@ export interface VoiceFacts {
   fetched: readonly VoiceModelState[] | null;
   /** The box has a model fetcher (`WHOMBAT_VOICE_MODELS_SOCKET`): its speech service is one that takes recordings. */
   hasFetcher: boolean;
+  /** Last known total sizes of voice models from the fetcher, kept across brief fetcher outages. */
+  knownModelSizes?: Partial<Record<VoiceDownloadModel, number | null>>;
   /** Last known total size of the Dutch voice model when the fetcher is temporarily unreachable. */
   knownDutchSize?: number | null;
   /** True while turning Dutch voice off has not yet completed at the fetcher. */
@@ -112,9 +116,21 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
   // voice typing or the desk's Talk hears.
   const needed = wantedModels(settings, facts.deskTalk, gpu !== null);
   if (uses && (settings.on || facts.deskTalk)) needed.add(uses);
-  // Without a fetcher (or while it doesn't answer) the models are the ones the service runs.
+  const knownSize = (id: VoiceDownloadModel): number => {
+    const last =
+      id === 'supertonic'
+        ? (facts.knownDutchSize ?? facts.knownModelSizes?.supertonic)
+        : facts.knownModelSizes?.[id];
+    return last !== undefined && last !== null && last > 0 ? last : VOICE_MODEL_SIZES[id];
+  };
+  // Without a fetcher (or while it doesn't answer) the models are the ones the service runs, using their
+  // last observed or pinned catalog total size so ready rows never drop to 0 bytes.
   const listed: readonly VoiceModelState[] =
-    facts.fetched ?? [...running].map((id) => ({ id, state: 'ready' as const, size: 0, received: 0 }));
+    facts.fetched ??
+    [...running].map((id) => {
+      const size = knownSize(id);
+      return { id, state: 'ready' as const, size, received: size };
+    });
   const isSttModel = (m: VoiceModelState): m is VoiceModelState & { id: VoiceSttModel } =>
     (VOICE_STT_MODELS as readonly string[]).includes(m.id);
   const models: VoiceTypingModel[] = listed
@@ -130,6 +146,9 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
     }));
   const dutchOn = wantsDutchVoice(settings);
   const fetchedDutch = available ? (facts.fetched?.find((m) => m.id === 'supertonic') ?? null) : null;
+  const hasKnownDutchSize = (facts.knownDutchSize ?? facts.knownModelSizes?.supertonic ?? null) !== null;
+  const dutchReady = health?.languages?.includes('nl') === true;
+  const dutchSize = knownSize('supertonic');
   // When the box has a fetcher configured that is temporarily unreachable (e.g. restarting), keep reporting
   // the saved Dutch voice state instead of hiding the row so turning it on or off shows its saved state.
   const dutchEntry: VoiceModelState | null =
@@ -137,21 +156,18 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
     (available &&
     facts.hasFetcher &&
     facts.fetched === null &&
-    (dutchOn ||
-      facts.dutchRemovePending === true ||
-      health?.languages?.includes('nl') === true ||
-      (facts.knownDutchSize ?? null) !== null)
+    (dutchOn || facts.dutchRemovePending === true || dutchReady || hasKnownDutchSize)
       ? {
           id: 'supertonic',
           state: dutchOn
-            ? health?.languages?.includes('nl')
+            ? dutchReady
               ? 'ready'
               : 'waiting'
-            : facts.dutchRemovePending || health?.languages?.includes('nl')
+            : facts.dutchRemovePending || dutchReady
               ? 'removing'
               : 'absent',
-          size: facts.knownDutchSize ?? 0,
-          received: dutchOn && health?.languages?.includes('nl') ? (facts.knownDutchSize ?? 0) : 0,
+          size: dutchSize,
+          received: dutchReady ? dutchSize : 0,
         }
       : null);
   let dutchVoice: VoiceDutchVoice | null = null;

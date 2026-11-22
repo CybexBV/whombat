@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { KeyCustody } from '../keys/custody';
-import { type LocalModelListing, localModelCheckOf } from './check';
+import type { Services } from '../services';
+import { type LocalModelListing, localModelCheckOf, localModelDispatch } from './check';
 import {
   keyFor,
   localModelChange,
@@ -115,5 +116,42 @@ describe('a test’s result from its two steps', () => {
     );
     expect(bad.detail?.startsWith('a b')).toBe(true);
     expect(bad.detail?.length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('dispatch context (localModelDispatch)', () => {
+  const fakeServices = {
+    config: { NODE_ENV: 'test' },
+    log: { warn: () => {} },
+  } as unknown as Services;
+
+  it('carries the configured defaultModel separately from a per-turn override (background or main model)', async () => {
+    const override = await localModelDispatch(
+      fakeServices,
+      { baseUrl: BASE, model: 'llama3.3' },
+      'sk-key',
+      'removed-mini',
+    );
+    expect(override).toEqual({
+      v: 1,
+      baseUrl: BASE,
+      model: 'removed-mini',
+      defaultModel: 'llama3.3',
+      apiKey: 'sk-key',
+    });
+
+    const fallback = await localModelDispatch(
+      fakeServices,
+      { baseUrl: BASE, model: 'llama3.3' },
+      null,
+      undefined,
+    );
+    expect(fallback).toEqual({
+      v: 1,
+      baseUrl: BASE,
+      model: 'llama3.3',
+      defaultModel: 'llama3.3',
+      apiKey: null,
+    });
   });
 });

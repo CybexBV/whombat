@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { WIDGET_EMPTY_COPY } from '@whombat/client';
 import { fixedColors, themeColors } from '@whombat/tokens';
 import { describe, expect, it } from 'vitest';
+import { createStatusWidgetQueue, type StatusWidgetPayload, shouldClearStatusWidget } from './statusWidget';
 
 const require = createRequire(import.meta.url);
 const ROOT = join(__dirname, '..');
@@ -384,5 +385,74 @@ describe('whombat-live iOS config plugin', () => {
     await expect(
       runPlugin({ iosStatusWidget: false, iosAppGroup: 'group.com.whombat.mobile' }, on.xcode),
     ).rejects.toThrow(/expo prebuild --clean/);
+  });
+});
+
+describe('createStatusWidgetQueue invalidation', () => {
+  const makePayload = (
+    applianceId: string,
+    status: string,
+    source: 'cloud' | 'community' = 'cloud',
+  ): StatusWidgetPayload => ({
+    applianceId,
+    source,
+    boxName: applianceId,
+    status,
+    tone: 'ok',
+    timeZone: 'Europe/Amsterdam',
+    updatedAt: 1_763_730_300_000,
+  });
+
+  it('drops matching writes still waiting in the native queue when a clear arrives while keeping non-matching writes', async () => {
+    let stored: StatusWidgetPayload | null = null;
+    const calls: string[] = [];
+    let enteredFirst!: () => void;
+    const firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let holdFirst = true;
+
+    const queue = createStatusWidgetQueue(() => ({
+      async setStatusWidget(json) {
+        const parsed = JSON.parse(json) as StatusWidgetPayload;
+        if (holdFirst) {
+          holdFirst = false;
+          enteredFirst();
+          await firstGate;
+        }
+        calls.push(`set:${parsed.applianceId}:${parsed.status}`);
+        stored = parsed;
+      },
+      async clearStatusWidget(applianceId, source) {
+        calls.push(`clear:${applianceId ?? '*'}:${source ?? '*'}`);
+        const filter =
+          applianceId || source
+            ? { ...(applianceId ? { applianceId } : {}), ...(source ? { source } : {}) }
+            : undefined;
+        if (shouldClearStatusWidget(stored, filter)) stored = null;
+      },
+    }));
+
+    const notified: unknown[] = [];
+    const unsubscribe = queue.onClearStatusWidget((filter) => notified.push(filter));
+
+    const w1 = queue.setStatusWidget(makePayload('wb-a', 'first'));
+    await firstEntered;
+    const w2 = queue.setStatusWidget(makePayload('wb-a', 'stale-queued'));
+    const w3 = queue.setStatusWidget(makePayload('wb-b', 'other-box', 'community'));
+    const c1 = queue.clearStatusWidget('wb-a');
+    releaseFirst();
+
+    await Promise.all([w1, w2, w3, c1]);
+    expect(notified).toEqual(['wb-a']);
+    // w2 was cancelled before touching native storage; w3 (for wb-b) survived and wasn't wiped by wb-a's clear.
+    expect(calls).toEqual(['set:wb-a:first', 'set:wb-b:other-box', 'clear:wb-a:*']);
+    expect(stored).toMatchObject({ applianceId: 'wb-b', status: 'other-box' });
+
+    unsubscribe();
   });
 });

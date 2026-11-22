@@ -145,7 +145,10 @@ function sameCursor(a: MailProviderCursor | null | undefined, b: MailProviderCur
         Boolean(a.backfill) === Boolean(b.backfill) &&
         a.backfill?.pageToken === b.backfill?.pageToken &&
         a.backfill?.afterSeconds === b.backfill?.afterSeconds &&
-        a.backfill?.sinceMs === b.backfill?.sinceMs
+        a.backfill?.sinceMs === b.backfill?.sinceMs &&
+        Boolean(a.paging) === Boolean(b.paging) &&
+        a.paging?.startHistoryId === b.paging?.startHistoryId &&
+        a.paging?.pageToken === b.paging?.pageToken
       );
     case 'microsoft':
       return (

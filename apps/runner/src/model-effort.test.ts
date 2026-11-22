@@ -269,6 +269,103 @@ describe('a refused model falls back to the default for the turn (ME-05)', () =>
       modelFallback: { model: 'fable' },
     });
   });
+
+  it('retries a removed Custom background or main model on the configured default, and never retries the default itself', async () => {
+    const localRefused = (id: string): TurnEvent => ({
+      type: 'error',
+      message: `The model '${id}' does not exist.`,
+      retryable: false,
+      code: 'model_not_found',
+    });
+
+    // Background model turn (trigger: look) with a removed Custom override retries on `localModel.defaultModel`.
+    {
+      const { p, seen } = provider(
+        [[localRefused('removed-mini')], [{ type: 'final', text: 'Look done.' }]],
+        'local',
+      );
+      const { d, api } = deps(p, null);
+      const c = ctx({ provider: 'local', model: 'removed-mini' }, { trigger: 'look' });
+      c.localModel = {
+        v: 1,
+        baseUrl: 'http://192.168.1.20:11434/v1',
+        model: 'removed-mini',
+        defaultModel: 'llama4',
+        apiKey: null,
+      };
+      const out = await runDispatch(c, d, new AbortController().signal);
+      expect(out.outcome).toBe('done');
+      expect(seen.map((i) => i.model)).toEqual(['removed-mini', 'llama4']);
+      expect(seen[1]).not.toHaveProperty('effort');
+      expect(seen[1]).not.toHaveProperty('fast');
+      expect(api.completed.at(-1)?.body).toMatchObject({
+        outcome: 'done',
+        modelFallback: { model: 'removed-mini' },
+      });
+    }
+
+    // Main model turn (trigger: dm) with a removed Custom override also retries on `localModel.defaultModel`.
+    {
+      const { p, seen } = provider(
+        [[localRefused('removed-main')], [{ type: 'final', text: 'Main done.' }]],
+        'local',
+      );
+      const { d, api } = deps(p, null);
+      const c = ctx({ provider: 'local', model: 'removed-main' }, { trigger: 'dm' });
+      c.localModel = {
+        v: 1,
+        baseUrl: 'http://192.168.1.20:11434/v1',
+        model: 'removed-main',
+        defaultModel: 'llama4',
+        apiKey: null,
+      };
+      const out = await runDispatch(c, d, new AbortController().signal);
+      expect(out.outcome).toBe('done');
+      expect(seen.map((i) => i.model)).toEqual(['removed-main', 'llama4']);
+      expect(api.completed.at(-1)?.body).toMatchObject({
+        outcome: 'done',
+        modelFallback: { model: 'removed-main' },
+      });
+    }
+
+    // When the rejected Custom model already equals `defaultModel`, do not retry with the same id.
+    {
+      const { p, seen } = provider([[localRefused('llama4')], [{ type: 'final', text: 'never' }]], 'local');
+      const { d, api } = deps(p, null);
+      const c = ctx({ provider: 'local', model: 'llama4' });
+      c.localModel = {
+        v: 1,
+        baseUrl: 'http://192.168.1.20:11434/v1',
+        model: 'llama4',
+        defaultModel: 'llama4',
+        apiKey: null,
+      };
+      const out = await runDispatch(c, d, new AbortController().signal);
+      expect(out.outcome).toBe('failed');
+      expect(seen).toHaveLength(1);
+      expect(api.completed.at(-1)?.body).not.toHaveProperty('modelFallback');
+    }
+
+    // When `defaultModel` is absent (older server), do not retry with the same rejected id.
+    {
+      const { p, seen } = provider(
+        [[localRefused('removed-mini')], [{ type: 'final', text: 'never' }]],
+        'local',
+      );
+      const { d, api } = deps(p, null);
+      const c = ctx({ provider: 'local', model: 'removed-mini' });
+      c.localModel = {
+        v: 1,
+        baseUrl: 'http://192.168.1.20:11434/v1',
+        model: 'removed-mini',
+        apiKey: null,
+      };
+      const out = await runDispatch(c, d, new AbortController().signal);
+      expect(out.outcome).toBe('failed');
+      expect(seen).toHaveLength(1);
+      expect(api.completed.at(-1)?.body).not.toHaveProperty('modelFallback');
+    }
+  });
 });
 
 describe('fast replies and what the turn ran on (CR-06…CR-08)', () => {

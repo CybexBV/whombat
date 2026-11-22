@@ -53,6 +53,12 @@ const MailProviderCursorSchema: z.ZodType<MailProviderCursor> = z.discriminatedU
         sinceMs: z.number().int().nonnegative(),
       })
       .optional(),
+    paging: z
+      .object({
+        startHistoryId: z.string().min(1).max(128),
+        pageToken: z.string().min(1).max(2048),
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal('microsoft'),

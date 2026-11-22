@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { ClearStatusWidgetFilter, StatusWidgetPayload } from '../../modules/whombat-live';
+import {
+  type ClearStatusWidgetFilter,
+  createStatusWidgetQueue,
+  type StatusWidgetPayload,
+} from '../../modules/whombat-live/src/statusWidget';
 import { COMMUNITY_ORG } from '../managed/community';
 import {
   clearCloudStatusWidget,
@@ -290,5 +294,128 @@ describe('home-screen status widget bridge model', () => {
     // Once box B comes online later, its write lands cleanly.
     expect(await sync.push(boxB)).toBe(true);
     expect(stored).toEqual(boxB);
+  });
+
+  it('invalidates queued bridge writes when an external clear runs on the native queue (revocation/rekey, switch, sign-out)', async () => {
+    const boxA1 = statusWidgetPayload({
+      overview,
+      applianceId: 'wb-a',
+      applianceName: 'Home',
+      burrowName: null,
+      source: 'cloud',
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+    const boxA2 = { ...boxA1, status: 'All good', tone: 'ok' as const };
+    const boxB = statusWidgetPayload({
+      overview,
+      applianceId: 'wb-b',
+      applianceName: 'Office',
+      burrowName: null,
+      source: 'community',
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+
+    let stored: StatusWidgetPayload | null = null;
+    const nativeEvents: string[] = [];
+    let enteredFirst!: () => void;
+    let firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    let releaseFirst!: () => void;
+    let firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let holdNextWrite = true;
+
+    const nativeStore = {
+      async setStatusWidget(json: string) {
+        const parsed = JSON.parse(json) as StatusWidgetPayload;
+        if (holdNextWrite) {
+          holdNextWrite = false;
+          enteredFirst();
+          await firstGate;
+        }
+        nativeEvents.push(`set:${parsed.applianceId}:${parsed.status}`);
+        stored = parsed;
+      },
+      async clearStatusWidget(applianceId: string | null, source?: 'cloud' | 'community' | null) {
+        const filter: ClearStatusWidgetFilter | undefined =
+          applianceId || source
+            ? { ...(applianceId ? { applianceId } : {}), ...(source ? { source } : {}) }
+            : undefined;
+        nativeEvents.push(`clear:${applianceId ?? '*'}:${source ?? '*'}`);
+        if (shouldClearStatusWidget(stored, filter)) stored = null;
+      },
+    };
+
+    const nativeQueue = createStatusWidgetQueue(() => nativeStore);
+    const sync = createStatusWidgetSync(nativeQueue);
+
+    // 1. Revocation/rekey: boxA1 is in-flight in native, boxA2 is waiting in the bridge queue,
+    // and ManagedApp calls nativeQueue.clearStatusWidget() before StatusWidgetBridge unmounts.
+    const p1 = sync.push(boxA1);
+    await firstEntered;
+    const p2 = sync.push(boxA2);
+    const pClear = nativeQueue.clearStatusWidget();
+    releaseFirst();
+
+    expect(await p1).toBe(true);
+    expect(await p2).toBe(false);
+    await pClear;
+    expect(stored).toBeNull();
+    expect(nativeEvents).toEqual(['set:wb-a:1 thing needs you', 'clear:*:*']);
+
+    // An external clear also resets deduplication for the cleared box so reconnecting with the same overview writes again.
+    expect(await sync.push(boxA1)).toBe(true);
+    expect(stored).toEqual(boxA1);
+
+    // 2. Scoped cloud sign-out clear drops queued cloud writes in the bridge queue without cancelling a queued community write.
+    nativeEvents.length = 0;
+    firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    holdNextWrite = true;
+
+    const pCloud1 = sync.push(boxA2);
+    await firstEntered;
+    const pCloud2 = sync.push({ ...boxA2, status: '2 things need you' });
+    const pComm = sync.push(boxB);
+    const pCloudClear = nativeQueue.clearStatusWidget({ source: 'cloud' });
+    releaseFirst();
+
+    expect(await pCloud1).toBe(true);
+    expect(await pCloud2).toBe(false);
+    expect(await pComm).toBe(true);
+    await pCloudClear;
+    expect(stored).toEqual(boxB);
+    expect(nativeEvents).toEqual(['set:wb-a:All good', 'clear:*:cloud', 'set:wb-b:1 thing needs you']);
+
+    // 3. A push queued AFTER sync.clear() is not cancelled by sync.clear()'s own clear notification.
+    nativeEvents.length = 0;
+    firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    holdNextWrite = true;
+
+    const pBefore = sync.push(boxA1);
+    await firstEntered;
+    const pSelfClear = sync.clear('wb-a');
+    const pAfter = sync.push(boxA2);
+    releaseFirst();
+
+    expect(await pBefore).toBe(true);
+    await pSelfClear;
+    expect(await pAfter).toBe(true);
+    expect(stored).toEqual(boxA2);
+
+    sync.dispose();
   });
 });

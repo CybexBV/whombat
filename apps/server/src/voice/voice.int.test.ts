@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { topics } from '@whombat/core';
 import {
   DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
   VOICE_STT_MODELS,
   VOICE_TYPING_MAX_BYTES,
   type VoiceDownloadModel,
@@ -523,6 +524,25 @@ describe('voice typing’s settings and models', () => {
       licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
     });
     expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+
+    // 1b. After a server restart (fresh VoiceTypingService with no cached model sizes) while the fetcher is
+    // unreachable, ready models use their catalog total sizes instead of reporting 0 bytes.
+    fresh({ ready: ['parakeet', 'supertonic'] });
+    fetcher.unreachable = true;
+    const restartedView = await view(c);
+    expect(restartedView.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(state(restartedView, 'parakeet')).toMatchObject({
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.parakeet,
+      received: VOICE_MODEL_SIZES.parakeet,
+    });
+    fetcher.unreachable = false;
     await c.request('voice.setDutchVoice', { on: false });
 
     // 2. Turning Dutch voice on when fetch() fails transiently while state() answers 'absent':

@@ -689,4 +689,53 @@ describe('Microsoft mail change feed', () => {
     expect(msg?.webUrl).toBeUndefined();
     expect(msg?.threadId).toBe('m_big');
   });
+
+  it('persists @odata.nextLink with more: true when steady-state delta hits the page cap with zero included messages', async () => {
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const startDelta = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=d0';
+    const finalDelta = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=d1';
+    const nextUrl = (n: number) =>
+      `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=empty_${n}`;
+
+    let page = 0;
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      page++;
+      if (page <= 21) {
+        return response({
+          value: [{ id: `removed_${page}`, '@removed': { reason: 'deleted' } }],
+          '@odata.nextLink': nextUrl(page),
+        });
+      }
+      return response({
+        value: [
+          {
+            id: 'm_after_empty_pages',
+            conversationId: 'c_new',
+            internetMessageId: '<after-empty@example.com>',
+            from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
+            subject: 'Invoice after 21 empty pages',
+            receivedDateTime: '2026-10-28T10:05:00Z',
+            hasAttachments: false,
+            isDraft: false,
+          },
+        ],
+        '@odata.deltaLink': finalDelta,
+      });
+    });
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    const p1 = await ws.mailChanges(
+      'tok',
+      { kind: 'microsoft', deltaLink: startDelta },
+      { since: activation },
+    );
+    expect(p1.headers).toEqual([]);
+    expect(p1.more).toBe(true);
+    expect(p1.cursor).toEqual({ kind: 'microsoft', deltaLink: nextUrl(20) });
+
+    const p2 = await ws.mailChanges('tok', p1.cursor, { since: activation });
+    expect(p2.more).toBeUndefined();
+    expect(p2.cursor).toEqual({ kind: 'microsoft', deltaLink: finalDelta });
+    expect(p2.headers.map((h) => h.id)).toEqual(['m_after_empty_pages']);
+  });
 });

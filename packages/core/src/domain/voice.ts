@@ -20,6 +20,16 @@ export const VOICE_DOWNLOAD_MODELS = ['parakeet', 'whisper', 'supertonic'] as co
 export const VoiceDownloadModel = z.enum(VOICE_DOWNLOAD_MODELS);
 export type VoiceDownloadModel = z.infer<typeof VoiceDownloadModel>;
 
+/**
+ * Pinned total download sizes in bytes of each downloadable voice model
+ * (`appliance/nix/packages/voice-models/default.nix`).
+ */
+export const VOICE_MODEL_SIZES: Readonly<Record<VoiceDownloadModel, number>> = {
+  parakeet: 668_757_119,
+  whisper: 574_041_195,
+  supertonic: 145_310_775,
+};
+
 /** Supertonic 3's licence (BigScience Open RAIL-M, dated August 18, 2022), agreed to before download. */
 export const DUTCH_VOICE_LICENCE_VERSION = 'open-rail-m-2022-08-18';
 export const DUTCH_VOICE_LICENCE_NAME = 'BigScience Open RAIL-M License (August 18, 2022)';

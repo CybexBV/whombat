@@ -311,5 +311,5 @@ export async function localModelDispatch(
     services.log.warn({ host }, 'the local model’s address is not one a turn may reach');
     return null;
   }
-  return { v: 1, baseUrl: stored.baseUrl, model, apiKey: key };
+  return { v: 1, baseUrl: stored.baseUrl, model, defaultModel: stored.model, apiKey: key };
 }

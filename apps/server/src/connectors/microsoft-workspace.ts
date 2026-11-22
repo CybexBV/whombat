@@ -401,8 +401,10 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     let path = `/me/mailFolders/inbox/messages/delta?${query(params)}`;
     let lastNext: string | null = null;
     const kept: Obj[] = [];
+    const seenUrls = new Set<string>();
     for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
       const currentUrl = `${GRAPH}${path}`;
+      seenUrls.add(currentUrl);
       lastNext = null;
       const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
       if (options.since) {
@@ -418,7 +420,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
         return { cursor: { kind: 'microsoft', deltaLink: delta }, kept };
       }
       const next = res['@odata.nextLink'];
-      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && next !== currentUrl) {
+      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && !seenUrls.has(next)) {
         lastNext = next;
         path = next.slice(GRAPH.length);
         continue;
@@ -480,9 +482,11 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     let reachedDelta = false;
     let hasMore = false;
     const rawItems: Obj[] = [];
+    const seenUrls = new Set<string>();
     try {
       for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
         const currentUrl = `${GRAPH}${path}`;
+        seenUrls.add(currentUrl);
         nextDelta = null;
         const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
         if (!dropHeaders) rawItems.push(...arr(res.value));
@@ -493,7 +497,7 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
           break;
         }
         const next = res['@odata.nextLink'];
-        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && next !== currentUrl) {
+        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && !seenUrls.has(next)) {
           nextDelta = next;
           path = next.slice(GRAPH.length);
           if (page === MICROSOFT_DELTA_MAX_PAGES - 1) hasMore = true;
@@ -504,7 +508,10 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     } catch (err) {
       // Sync state expired (410 Gone) or invalid (400/404): resync via documented inbox delta from last successful poll.
       if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404 || err.status === 400)) {
-        const resynced = await this.mailBaseline(token, { ...options, since: resyncSince });
+        const resynced = await this.mailBaseline(token, {
+          ...options,
+          since: cursor.paging?.sinceMs !== undefined ? new Date(cursor.paging.sinceMs) : resyncSince,
+        });
         return { ...resynced, reset: true };
       }
       throw err;

@@ -152,6 +152,8 @@ describe('turns on it (CT-1172, CT-1174)', () => {
   it('hand the runner the address, the model and the key', () => {
     const ctx = { v: 1, baseUrl: view.baseUrl, model: 'qwen3:32b', apiKey: null };
     expect(LocalModelDispatchContext.parse(ctx)).toEqual(ctx);
+    const withDefault = { ...ctx, defaultModel: view.model };
+    expect(LocalModelDispatchContext.parse(withDefault)).toEqual(withDefault);
     expect(LocalModelDispatchContext.safeParse({ ...ctx, v: 2 }).success).toBe(false);
     expect(DispatchContext.shape.localModel.safeParse(undefined).success).toBe(false);
   });

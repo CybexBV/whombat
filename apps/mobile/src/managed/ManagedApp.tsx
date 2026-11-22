@@ -1392,6 +1392,7 @@ function SignedIn({
         registry.setLastUsed(active.device);
         pendingRoute.set(then === 'recover' ? { name: 'recover', device: active.device } : null);
         await rekey();
+        void WhombatLive.clearStatusWidget().catch(() => {});
       }}
     />
   );

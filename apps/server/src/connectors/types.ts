@@ -247,6 +247,8 @@ export type MailProviderCursor =
       historyId: string;
       /** Resumable `messages.list` backfill position until every eligible page since activation/resync is processed. */
       backfill?: { pageToken: string; afterSeconds: number; sinceMs: number };
+      /** Resumable `history.list` page position for `startHistoryId` when a poll hits the page or batch cap. */
+      paging?: { startHistoryId: string; pageToken: string };
     }
   | {
       kind: 'microsoft';

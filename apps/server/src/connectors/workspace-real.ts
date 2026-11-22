@@ -591,12 +591,15 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
         throw err;
       }
     }
+    const startHistoryId = cursor.paging?.startHistoryId ?? cursor.historyId;
     const addedIds: string[] = [];
     const seen = new Set<string>();
     let nextHistoryId = cursor.historyId;
     let lastIncludedHistoryId: string | null = null;
     let truncated = false;
-    let pageToken: string | undefined;
+    let pageToken: string | undefined = cursor.paging?.pageToken;
+    let nextPageTokenForResume: string | undefined;
+    const seenTokens = new Set<string>(pageToken ? [pageToken] : []);
     try {
       for (let page = 0; page < 5; page++) {
         const res = await this.json<{
@@ -608,7 +611,7 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
           }[];
         }>(accessToken, 'GET', `${GMAIL_API}/history`, {
           query: {
-            startHistoryId: cursor.historyId,
+            startHistoryId,
             historyTypes: 'messageAdded',
             labelId: 'INBOX',
             maxResults: 100,
@@ -616,9 +619,16 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
           },
         });
         if (res.historyId !== undefined) nextHistoryId = String(res.historyId);
+        let brokeMidPage = false;
         for (const h of res.history ?? []) {
-          if (addedIds.length >= 50) {
+          if (
+            addedIds.length >= 50 &&
+            lastIncludedHistoryId !== null &&
+            lastIncludedHistoryId !== startHistoryId &&
+            lastIncludedHistoryId !== cursor.historyId
+          ) {
             truncated = true;
+            brokeMidPage = true;
             break;
           }
           for (const added of h.messagesAdded ?? []) {
@@ -631,13 +641,16 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
           }
           if (h.id !== undefined) lastIncludedHistoryId = String(h.id);
         }
-        if (truncated) break;
-        if (!res.nextPageToken || res.nextPageToken === pageToken) break;
-        if (page === 4) {
+        if (brokeMidPage) break;
+        const candidateNext = res.nextPageToken?.trim() || undefined;
+        if (!candidateNext || seenTokens.has(candidateNext)) break;
+        seenTokens.add(candidateNext);
+        if (page === 4 || addedIds.length >= 50) {
           truncated = true;
+          nextPageTokenForResume = candidateNext;
           break;
         }
-        pageToken = res.nextPageToken;
+        pageToken = candidateNext;
       }
     } catch (err) {
       // History IDs or pageTokens expire/become invalid (HTTP 404/400/410): resync from last successful poll time.
@@ -646,8 +659,19 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
       }
       throw err;
     }
-    const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
     const headers = await this.fetchGmailHeaders(accessToken, addedIds, options.since);
+    if (nextPageTokenForResume) {
+      return {
+        cursor: {
+          kind: 'gmail',
+          historyId: lastIncludedHistoryId ?? cursor.historyId,
+          paging: { startHistoryId, pageToken: nextPageTokenForResume },
+        },
+        headers,
+        more: true,
+      };
+    }
+    const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
     return {
       cursor: { kind: 'gmail', historyId: finalHistoryId },
       headers,
