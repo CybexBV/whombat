@@ -546,16 +546,20 @@ func refusedClaimLink(err error) bool {
 
 // The poll loop's waits per state: soon while a person types the code, now and then otherwise (every ticket answer
 // brings the state too). Once Link ended the box has no tickets, so link.status is the only way it hears that its owner
-// subscribed again: as often as in grace, so it comes back within minutes, not hours (LNK-06).
+// subscribed again: as often as in grace, so it comes back within minutes, not hours (LNK-06). While the box waits for
+// its address the person who just confirmed it is usually still watching: soon at first, then once a minute, so a box
+// that waits for hours doesn't keep asking every few seconds.
 const (
-	pollPending  = 5 * time.Second
-	pollWaiting  = time.Minute
-	pollOn       = time.Hour
-	pollGrace    = 15 * time.Minute
-	pollEnded    = 15 * time.Minute
-	retryBase    = 15 * time.Second
-	retryMax     = 30 * time.Minute
-	carriedRetry = time.Hour
+	pollPending     = 5 * time.Second
+	pollWaitingSoon = 10 * time.Second
+	pollWaitingFor  = 10 * time.Minute
+	pollWaiting     = time.Minute
+	pollOn          = time.Hour
+	pollGrace       = 15 * time.Minute
+	pollEnded       = 15 * time.Minute
+	retryBase       = 15 * time.Second
+	retryMax        = 30 * time.Minute
+	carriedRetry    = time.Hour
 )
 
 // Run keeps the state fresh: link.status while Link is known, link.begin again when a code ran out or the owner's
@@ -619,6 +623,9 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 	switch r.State {
 	case protocol.LinkStateStarting:
 		if r.WaitingForAddress {
+			if k.now().Sub(r.Since) < pollWaitingFor {
+				return pollWaitingSoon, nil
+			}
 			return pollWaiting, nil
 		}
 		return pollPending, nil

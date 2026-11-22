@@ -190,7 +190,8 @@ func TestServiceRetriesWithBackoff(t *testing.T) {
 	rate := &acme.Error{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": {"3600"}}}
 	o.errs = []error{&acme.AuthorizationError{Identifier: testHost}, rate, errors.New("boom")}
 	waits, states := step(t, s, c, 6)
-	want := []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, time.Hour, 8 * time.Minute}
+	// The probes right after the label are tried again within seconds and don't count towards the backoff.
+	want := []time.Duration{probeSoon, probeSoon, time.Minute, time.Hour, 2 * time.Minute}
 	for i, w := range want {
 		if waits[i] != w {
 			t.Fatalf("waits %v, want %v first", waits, want)
@@ -215,12 +216,49 @@ func TestServiceRetryCapsAtSixHours(t *testing.T) {
 	c := &clock{t: time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)}
 	s, _, p, _ := newService(t, c)
 	register(t, s)
-	for range 12 {
+	soon := int(probeSoonFor / probeSoon)
+	for range soon + 12 {
 		p.errs = append(p.errs, ErrProbe)
 	}
-	waits, _ := step(t, s, c, 12)
-	if waits[9] != 6*time.Hour || waits[11] != 6*time.Hour || waits[8] != 256*time.Minute {
+	waits, _ := step(t, s, c, soon+12)
+	for i := range soon {
+		if waits[i] != probeSoon {
+			t.Fatalf("wait %d right after the label: %v", i, waits[i])
+		}
+	}
+	waits = waits[soon:]
+	if waits[0] != time.Minute || waits[9] != 6*time.Hour || waits[11] != 6*time.Hour || waits[8] != 256*time.Minute {
 		t.Fatalf("waits %v", waits)
+	}
+}
+
+// A label control gave a while after the start gets the quick probes too: the runtime declares it to the relay only
+// once it read it from the manager.
+func TestServiceProbesSoonAfterALateLabel(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)}
+	s, _, p, o := newService(t, c)
+	p.errs = []error{ErrProbe, ErrProbe}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var waits []time.Duration
+	s.Sleep = func(ctx context.Context, _ <-chan struct{}, d time.Duration) bool {
+		waits = append(waits, d)
+		if len(waits) == 1 {
+			// No label yet: an hour later control gives one.
+			c.add(time.Hour)
+			register(t, s)
+			return true
+		}
+		if len(waits) >= 4 {
+			cancel()
+			return false
+		}
+		c.add(d)
+		return true
+	}
+	s.Run(ctx)
+	if len(waits) != 4 || waits[1] != probeSoon || waits[2] != probeSoon || o.n != 1 {
+		t.Fatalf("waits %v, %d orders", waits, o.n)
 	}
 }
 

@@ -98,7 +98,8 @@ refuses.
 its page at `<label>.box.whombat.app` (DEV: `<label>.dev.whombat.app`), with TLS ending on the box. Control gives the label
 when Link starts and the manager registers it (with a manager from before Link the runtime draws it), orders the
 certificate (ACME TLS-ALPN-01) and watches Certificate Transparency;
-the runtime polls the manager (`own-address/state.ts`), records each certificate before it serves it, keeps what the watch
+the runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
+person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch
 calls foreign and raises the notices. The relay's door hands the box raw TLS streams over the relay client
 (`session/relay-client.ts`, `accepts` in the control hello): `web` ones go to a direct listener made for the door (HTTP/2
 with HTTP/1.1 for the page's WebSocket, the host's certificate only, exact `:authority`/Host, the page's CSP as a header,

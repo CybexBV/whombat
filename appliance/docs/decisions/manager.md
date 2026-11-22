@@ -2507,7 +2507,9 @@ never parses it.
 Before every order the manager dials its own name on 443 with ALPN `acme-tls/1`, as a validator would, and expects back
 a one-off self-signed certificate it just handed the responder. That checks DNS → door → relay → runtime → manager
 without a new runtime ↔ manager message, and spends nothing of Let's Encrypt's 5 failed validations an hour per name.
-A failed probe is `probe_failed` and retries like a failed order.
+A failed probe is `probe_failed` and retries like a failed order, except in the first 3 minutes after the label arrived
+or the loop started without a certificate: then it is tried again in 5 s, outside the backoff (Whombat
+`docs/decisions/whombat-link.md` LNK-86).
 
 - Tests: `TestProbePasses`, `TestProbeFailsOnAnotherCertificate`, `TestProbeFailsWithNothingThere`.
 
