@@ -837,6 +837,14 @@ published automation details read their definition and publisher from one versio
   `request_approval` step's details start with its own question. A session below protocol
   minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
   an automation without its definition (`automations/older-apps.ts`).
+  A box makes, turns on and runs automations started by mail, or that change things in connected services, only while
+  the release it would go back to after a failed update knows them (`automations/release-gate.ts`): from the manager's
+  update facts, the box's current release while this one is being tried, else the release its own last update came
+  from, looked up in `runtime_releases`, where each release records itself at its first start on a managed box. Until
+  then they wait, kept as they are: no mailbox is read, their runs don't start or move on, and making, turning on or
+  running one, or the assistant's `draft_automation`, answers “Mail automations come with the next update.” (or the same
+  about connected services), as `automation_read`'s guide says. Development boxes, tests and a box that never updated
+  have them on.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An

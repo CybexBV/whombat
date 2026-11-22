@@ -6,6 +6,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { turnPrompt } from '@whombat/agent-runtime';
+import type { UpdateFacts } from '@whombat/control-contracts/local';
 import {
   type AutomationPlanCard,
   type AutomationRecipeInput,
@@ -64,6 +65,12 @@ import {
   setAutomationEnabled,
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
+import {
+  knownRelease,
+  MAIL_AUTOMATIONS_LATER,
+  NewerAutomationsGate,
+  recordRuntimeRelease,
+} from './release-gate';
 import { PREVIOUS_RELEASE_STOPS_AT, previousReleaseStops, runDeadline } from './runs';
 import { loadAutomationRow, loadRunRow, toAutomation } from './store';
 
@@ -3153,9 +3160,133 @@ describe('mail-arrives automations', () => {
         .from(automationRunSteps)
         .where(eq(automationRunSteps.runId, cancelled.id));
       expect(JSON.stringify(cancelledSteps)).not.toContain('BODY_OF_CANCELLED_RUN');
+
+      // Its turn ended before the runner told its session: the runner's report afterwards forgets it, at the end of the
+      // turn and at a beat alike.
+      const dropped = async (session: string) =>
+        (
+          await w.services.db
+            .select()
+            .from(hermesSessionDrops)
+            .where(eq(hermesSessionDrops.sessionId, session))
+        ).length;
+      const lateTurn = (await w.run(cancelled.id)).steps[0]?.dispatchId as string;
+      const [ended] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, lateTurn));
+      expect(ended?.state).toBe('cancelled');
+      expect(ended?.providerSessionId).toBeNull();
+      await w.services.runtime.progress(lateTurn, {
+        state: 'running',
+        thinking: false,
+        providerSessionId: 'hermes:late-beat',
+      });
+      expect(await dropped('late-beat')).toBe(1);
+      await w.services.runtime.finalize(lateTurn, {
+        outcome: 'cancelled',
+        providerSessionId: 'hermes:late-end',
+      });
+      expect(await dropped('late-end')).toBe(1);
+      // Another automation's turn keeps its session as ever.
+      const chatTurn = await w.turn(ended?.agentId as string, maraChat.dmId, { trigger: 'automation' });
+      await w.services.runtime.finalize(chatTurn, { outcome: 'done', providerSessionId: 'hermes:kept' });
+      expect(await dropped('kept')).toBe(0);
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: twoStepsId });
       await w.ok(IDS.mara, deleteAutomation, { automationId: noAgentId });
+      await pollAndSettle();
+    }
+  });
+
+  it('waits for the next update on a box whose previous release doesn’t know them, and goes on once it does', async () => {
+    const OLD = 'whombat-20261121.4';
+    const ME = 'whombat-20261122.1';
+    const when = { kind: 'mail' as const, connectionId, from: 'example.com', subjectContains: ['gate'] };
+    // Made while they were on: one live, one switched off.
+    const liveId = await createMailAutomation(when);
+    const offId = await createMailAutomation({ ...when, subjectContains: ['gate-off'] });
+    await w.ok(IDS.mara, setAutomationEnabled, { automationId: offId, enabled: false });
+    await pollAndSettle();
+    const deliver = (id: string, subject: string) =>
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id,
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject,
+        body: 'Gate body',
+        messageId: `<${id}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+    // A mail that arrived just before: its run is made after the switch.
+    w.advance(10_000);
+    deliver('msg_gate_before', 'gate before');
+    expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+
+    // This release on a box updated from one that doesn't know them.
+    const open = w.services.newerAutomations;
+    const update: UpdateFacts = {
+      state: 'Healthy',
+      current: ME,
+      candidate: null,
+      lastCheckedAt: null,
+      deferredReason: null,
+      failure: null,
+      lastUpdate: { release: ME, from: OLD, at: w.now().toISOString() },
+    };
+    const gate = new NewerAutomationsGate({ NODE_ENV: 'production', WHOMBAT_RELEASE_ID: ME }, (id) =>
+      knownRelease(w.services.db, id),
+    );
+    gate.follow(() => update);
+    w.services.newerAutomations = gate;
+    try {
+      // Nothing new of them is made, turned on or run: each says so in one line.
+      await expect(createMailAutomation({ ...when, subjectContains: ['gate-new'] })).rejects.toThrow(
+        MAIL_AUTOMATIONS_LATER,
+      );
+      await expect(
+        w.commit(IDS.mara, setAutomationEnabled, { automationId: offId, enabled: true }),
+      ).rejects.toThrow(MAIL_AUTOMATIONS_LATER);
+      await expect(
+        w.commit(IDS.mara, runAutomationNow, { automationId: liveId, test: true }),
+      ).rejects.toThrow(MAIL_AUTOMATIONS_LATER);
+      // The assistant hears the same.
+      const dispatchId = await w.turn(IDS.dusty, maraChat.dmId);
+      const proposal = await w.ok(IDS.dusty, proposeAutomationPlan, {
+        name: 'Gate plan',
+        description: 'Waits for the update.',
+        recipe: { when, job: 'custom', instructions: 'Read it.', conversationId: maraChat.dmId },
+        dispatchId,
+      });
+      expect(proposal).toMatchObject({ planId: null, problems: [MAIL_AUTOMATIONS_LATER] });
+      const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+      const read = (await callTool(w.services, auth, 'automation_read', {})).structuredContent as {
+        guide: string;
+      };
+      expect(read.guide).toContain(MAIL_AUTOMATIONS_LATER);
+      // What they had stays: switching one off still works, the run of the mail before waits, and no mailbox is read.
+      await w.ok(IDS.mara, setAutomationEnabled, { automationId: offId, enabled: false });
+      await w.settle();
+      const [waiting] = await runsOf(liveId);
+      expect(waiting?.status).toBe('queued');
+      w.advance(10_000);
+      deliver('msg_gate_while', 'gate while waiting');
+      const state = fake.stateFor(FAKE_ACCESS_TOKEN);
+      state.calls.length = 0;
+      expect(await pollAndSettle()).toBe(0);
+      expect(state.calls).toEqual([]);
+      expect(await runsOf(liveId)).toHaveLength(1);
+
+      // The next release: the one it goes back to recorded itself at its start, so they go on.
+      await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: OLD }, w.now());
+      expect(await gate.ready()).toBe(true);
+      expect(await pollAndSettle()).toBe(1);
+      const runs = await runsOf(liveId);
+      expect(runs).toHaveLength(2);
+      expect(runs[0]?.status).not.toBe('queued');
+    } finally {
+      w.services.newerAutomations = open;
+      await w.ok(IDS.mara, deleteAutomation, { automationId: liveId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: offId });
       await pollAndSettle();
     }
   });

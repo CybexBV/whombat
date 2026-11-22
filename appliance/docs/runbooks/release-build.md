@@ -13,7 +13,9 @@ Decisions: `nixos.md` NX-66…NX-70; publishing on production `prod-image.md` PI
 **Releases come through `release/ship build` (UP-C1, UP-X45):** it runs `release/build prod` for the one Whombat
 image (ONE-02; there is no DEV twin since ONE-01), checks it newer than Beta and records everything around it. The
 maintainers' `candidate` runs it and publishes the release to Beta; their `promote` moves it to Production (IN-835). Run
-`release/build` by hand only for a custody rollback (the maintainers' `shipping.md` “A bad release”).
+`release/build` by hand only for a custody rollback (the maintainers' `shipping.md` “A bad release”). Mail automations
+reach a box one release after the release that brings them: they come on once the release the box would go back to
+knows them (`docs/release/compatibility.md`).
 
 ## What a release is
 

@@ -68,7 +68,7 @@
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",
-      "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them. Mail runs themselves live in automation_runs, which that release does advance, and it would ask the agent for one as the person: so a mail run, and a run with a connection_actions step, is stored with deadline_at at the epoch, which that release checks before any step of a started run and fails it (AR-68). Writer floors stay at the baseline: a rollback stays read-write."
+      "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them. Mail runs themselves live in automation_runs, which that release does advance, and it would ask the agent for one as the person: so a mail run, and a run with a connection_actions step, is stored with deadline_at at the epoch, which that release checks before any step of a started run and fails it (AR-68). Since 0015_runtime_releases a box makes and runs mail automations only while the release it would go back to knows them (AR-73); the epoch deadline stays for a box that goes back further. Writer floors stay at the baseline: a rollback stays read-write."
     },
     "0010_dutch_voice": {
       "class": "expand",
@@ -98,7 +98,13 @@
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",
-      "note": "The outsiders' mark in a column of its own (docs/decisions/outsiders-turns.md): a defaulted boolean messages.outsiders_run, set on messages that a tracker or mail run posted in its thread (what no person wrote while the run went on) and on any a newer build marked in provenance, whose provenance goes back to null; the search documents of marked messages and of approvals on their cards are deleted, and a tracker or mail run's document loses its error. provenance keeps only the two Feedback kinds, so the release before it sends every message to apps and backs it up as it always did, and reads and writes past the column."
+      "note": "The outsiders' mark in a column of its own (docs/decisions/outsiders-turns.md): a defaulted boolean messages.outsiders_run, set on messages that a tracker or mail run posted in its thread (what its own steps posted there while it ran, and its own turns for nobody while they ran) and on any a newer build marked in provenance, whose provenance goes back to null; the search documents of marked messages and of approvals on their cards are deleted, and a tracker or mail run's document loses its error. provenance keeps only the two Feedback kinds, so the release before it sends every message to apps and backs it up as it always did, and reads and writes past the column."
+    },
+    "0015_runtime_releases": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The runtime releases that ran on this database (docs/decisions/automation-recipes.md): a new table runtime_releases, where each release from this one on records itself at its first start on a managed box. A box makes, turns on and runs automations started by mail, or that change things in connected services, only while the release it would go back to after a failed update (from the manager's update facts) is in it, so the release before this one never runs on a database that has them: on a box updated from that release they stay off, and the next release turns them on. The release before it never reads the table."
     }
   }
 }

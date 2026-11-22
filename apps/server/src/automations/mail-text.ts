@@ -3,15 +3,18 @@
  * in the run's scope — stays only while a step that reads the trigger may still render it (it hasn't settled yet, or
  * waits to be tried again). Once none may, or the run ended (any outcome), the scope loses it, every step that isn't at
  * work loses the fenced email in what it stored (the agent's instructions, a posted message's text), and the Hermes
- * sessions its finished turns ran in are forgotten. Sender, subject and attachment names stay.
+ * sessions its finished turns ran in are forgotten. Sender, subject and attachment names stay. A turn that tells its
+ * session only after Whombat ended it, or after it was queued again, has its session forgotten then
+ * (`forgetLateMailSession`).
  */
 import { type JsonObject, type JsonValue, stepReads, withoutFencedMail } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, or, sql } from 'drizzle-orm';
 import type { TxSession } from '../commit/types';
-import { automationRunSteps, automationRuns } from '../db/schema/index';
+import { automationRunSteps, automationRuns, dispatches } from '../db/schema/index';
+import { homeOf } from '../hermes-home/housekeeping';
 import { stripMailScopeContent } from '../mail-triggers/index';
-import { dropSessions, finishedAutomationSessions } from '../runtime/sessions';
-import { type AutomationRunRow, loadStepRows } from './store';
+import { dropSessions, finishedAutomationSessions, HERMES_SESSION } from '../runtime/sessions';
+import { type AutomationRunRow, loadRunRow, loadStepRows } from './store';
 
 const ENDED: readonly string[] = ['succeeded', 'failed', 'cancelled', 'skipped'];
 /** A step in these states renders nothing again in this run. */
@@ -76,4 +79,53 @@ export async function forgetMailText(session: TxSession, run: AutomationRunRow):
     );
   }
   return changed;
+}
+
+/**
+ * A turn's Hermes session told after the run's forgetting could see it (`finalize`): the runner reports a session at its
+ * first beat, so a mail run stopped or timed out before that ended its turn with none recorded, and the runner's own
+ * report afterwards finds the turn ended (or queued again, after a lost lease) and stores nothing. A session no turn
+ * names is forgotten at once (an automation's step never resumes one); one stored on a turn whose run has ended is
+ * forgotten with the run's others. Nothing for any other turn.
+ */
+export async function forgetLateMailSession(
+  session: TxSession,
+  dispatchId: string,
+  providerSessionId: string | undefined,
+): Promise<void> {
+  if (!providerSessionId?.startsWith(HERMES_SESSION)) return;
+  const tx = session.tx;
+  const [turn] = await tx.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+  if (turn?.trigger !== 'automation') return;
+  // The mail run whose step this turn is, or, for an earlier attempt of the step, the one whose thread it worked in.
+  const ownStep = sql`exists (select 1 from ${automationRunSteps} as s
+    where s.run_id = ${automationRuns.id} and s.dispatch_id = ${turn.id})`;
+  const [found] = await tx
+    .select({ id: automationRuns.id })
+    .from(automationRuns)
+    .where(
+      and(
+        eq(automationRuns.burrowId, turn.burrowId),
+        sql`${automationRuns.trigger} ->> 'kind' = 'mail'`,
+        or(
+          ownStep,
+          turn.threadRootId && turn.onBehalfOfAccountId === null
+            ? eq(automationRuns.threadRootId, turn.threadRootId)
+            : undefined,
+        ),
+      ),
+    )
+    .orderBy(desc(automationRuns.createdAt))
+    .limit(1);
+  if (!found) return;
+  if (turn.providerSessionId !== providerSessionId) {
+    const now = session.services.clock();
+    await dropSessions(
+      { tx, services: session.services, background: session.background.bind(session), now },
+      [{ home: homeOf(turn.onBehalfOfAccountId), session: providerSessionId.slice(HERMES_SESSION.length) }],
+    );
+    return;
+  }
+  const run = await loadRunRow(tx, found.id);
+  if (ENDED.includes(run.status)) await forgetMailText(session, run);
 }

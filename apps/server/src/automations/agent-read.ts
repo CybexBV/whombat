@@ -23,6 +23,7 @@ import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
 import { outsidersTurn } from '../runtime/person';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
+import { ACTION_AUTOMATIONS_LATER, MAIL_AUTOMATIONS_LATER } from './release-gate';
 import { loadAutomationRow, toAutomation } from './store';
 
 function summaryOf(a: Automation): AgentAutomationSummary {
@@ -79,6 +80,14 @@ async function mailConnectionsOf(db: Db, burrowId: string): Promise<AgentMailCon
   }));
 }
 
+/**
+ * The guide while automations the release before them can't run wait for the next update (release-gate.ts): what the
+ * person is told when they ask for one, before the rest. draft_automation refuses them with the same line.
+ */
+const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} Draft neither until then; when the person asks for one, tell them that line.
+
+${AUTOMATION_AUTHORING_GUIDE}`;
+
 export async function automationsForAgent(
   ctx: ToolContext,
   input: { automationId?: string | undefined },
@@ -115,6 +124,6 @@ export async function automationsForAgent(
     automations: list,
     trackerConnections: await trackerConnectionsOf(db, ctx.burrowId),
     mailConnections: await mailConnectionsOf(db, ctx.burrowId),
-    guide: AUTOMATION_AUTHORING_GUIDE,
+    guide: (await ctx.services.newerAutomations.ready()) ? AUTOMATION_AUTHORING_GUIDE : LATER_GUIDE,
   };
 }
