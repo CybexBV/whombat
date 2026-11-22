@@ -111,6 +111,22 @@ func TestApplyRepoRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 			w.State().ChannelPaused, w.State().Candidate, w.State().JournalSeq, seqBefore)
 	}
 
+	// Zero or missing channel role version must also be treated as stale once a version is recorded.
+	for _, badVer := range []int64{0, -1} {
+		zeroUnpaused := *repoUnpausedOld
+		zeroUnpaused.ChannelVersion = badVer
+		if res, err := d.applyRepo(ctx, &zeroUnpaused, true, true); err != nil || res.Result != controlapi.ResultNone {
+			t.Fatalf("version=%d applyRepo: %+v %v", badVer, res, err)
+		}
+		if res, err := d.applyRepo(ctx, &zeroUnpaused, false, false); err != nil || res.Result != controlapi.ResultNone {
+			t.Fatalf("version=%d pause-only applyRepo: %+v %v", badVer, res, err)
+		}
+		if !w.State().ChannelPaused || w.State().Candidate != nil || w.State().JournalSeq != seqBefore {
+			t.Fatalf("version=%d mutated state: paused=%v cand=%+v seq=%d (was %d)",
+				badVer, w.State().ChannelPaused, w.State().Candidate, w.State().JournalSeq, seqBefore)
+		}
+	}
+
 	// Metadata verified for another channel (development, unpaused) while the box follows production is ignored.
 	repoDevUnpaused, err := d.TUF.RefreshIn(ctx, trust.ChannelDevelopment)
 	if err != nil {

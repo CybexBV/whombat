@@ -731,10 +731,11 @@ func (e *Engine) channelRepoFresh(st *State, channel string, version int64) (boo
 			return false, "wrong channel"
 		}
 	}
-	if version > 0 {
-		if prev, ok := st.ChannelVersions[channel]; ok && version < prev {
-			return false, "stale channel metadata"
-		}
+	if version < 0 {
+		return false, "stale channel metadata"
+	}
+	if prev, ok := st.ChannelVersions[channel]; ok && prev > 0 && (version <= 0 || version < prev) {
+		return false, "stale channel metadata"
 	}
 	return true, ""
 }

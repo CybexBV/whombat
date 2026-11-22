@@ -585,4 +585,56 @@ func TestChannelPauseStopsUpdatesKeepsRollbackAndResumes(t *testing.T) {
 			t.Fatalf("stale offer after restart mutated state: seq=%d cand=%+v", after.JournalSeq, after.Candidate)
 		}
 	})
+
+	t.Run("zero or missing channel role version is stale once a version is recorded", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoPaused := w.Refresh()
+		if changed, applied, err := w.Engine.SyncChannelPause(repoPaused); err != nil || !changed || !applied {
+			t.Fatalf("SyncChannelPause(paused): changed=%v applied=%v err=%v", changed, applied, err)
+		}
+		if !w.State().ChannelPaused {
+			t.Fatal("expected ChannelPaused after SyncChannelPause")
+		}
+		// Resume in repo so an unpaused view exists, then zero/negate its ChannelVersion to simulate missing version metadata.
+		if _, err := w.Repo.ResumeChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoResumed := w.Refresh()
+		before := w.State()
+		for _, badVer := range []int64{0, -1} {
+			zeroRepo := *repoResumed
+			zeroRepo.ChannelVersion = badVer
+			if changed, applied, err := w.Engine.SyncChannelPause(&zeroRepo); err != nil || changed || applied {
+				t.Fatalf("SyncChannelPause(version=%d): changed=%v applied=%v err=%v", badVer, changed, applied, err)
+			}
+			if dec, why, o, err := w.Engine.OfferLatest(ctx, &zeroRepo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || why != "stale channel metadata" || o != nil {
+				t.Fatalf("OfferLatest(version=%d): dec=%s why=%q o=%+v err=%v", badVer, dec, why, o, err)
+			}
+			if dec, why, o, err := w.Engine.OfferLatestNow(ctx, &zeroRepo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || why != "stale channel metadata" || o != nil {
+				t.Fatalf("OfferLatestNow(version=%d): dec=%s why=%q o=%+v err=%v", badVer, dec, why, o, err)
+			}
+			after := w.State()
+			if !after.ChannelPaused || after.JournalSeq != before.JournalSeq || after.Candidate != nil {
+				t.Fatalf("version=%d mutated state: paused=%v seq=%d (was %d) cand=%+v", badVer, after.ChannelPaused, after.JournalSeq, before.JournalSeq, after.Candidate)
+			}
+		}
+		// After restart, version 0 is still rejected; the real resumed version clears the pause.
+		w.NewEngine()
+		zeroRepo := *repoResumed
+		zeroRepo.ChannelVersion = 0
+		if changed, applied, err := w.Engine.SyncChannelPause(&zeroRepo); err != nil || changed || applied || !w.State().ChannelPaused {
+			t.Fatalf("after restart version=0 cleared pause: changed=%v applied=%v paused=%v err=%v", changed, applied, w.State().ChannelPaused, err)
+		}
+		if changed, applied, err := w.Engine.SyncChannelPause(repoResumed); err != nil || !changed || !applied || w.State().ChannelPaused {
+			t.Fatalf("real resumed version failed: changed=%v applied=%v paused=%v err=%v", changed, applied, w.State().ChannelPaused, err)
+		}
+	})
 }

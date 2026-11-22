@@ -714,7 +714,10 @@ func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now boo
 			d.warnOnce("channel pause state not recorded", err)
 			return defaultRes, nil
 		}
-		if prev, ok := st.ChannelVersions[repo.Channel]; ok && repo.ChannelVersion > 0 && repo.ChannelVersion < prev {
+		if repo.ChannelVersion < 0 {
+			return defaultRes, nil
+		}
+		if prev, ok := st.ChannelVersions[repo.Channel]; ok && prev > 0 && (repo.ChannelVersion <= 0 || repo.ChannelVersion < prev) {
 			return defaultRes, nil
 		}
 		if repo.ChannelPaused {
