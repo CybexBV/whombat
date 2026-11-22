@@ -26,10 +26,11 @@ import (
 
 // Error codes returned in proto.DiskUsageResponse.Code.
 const (
-	CodeInvalid  = "invalid_request"
-	CodeSpunDown = "spun_down"
-	CodeBusy     = "busy"
-	CodeFailed   = "failed"
+	CodeInvalid        = "invalid_request"
+	CodeSpunDown       = "spun_down"
+	CodeStandbyUnknown = "standby_unknown"
+	CodeBusy           = "busy"
+	CodeFailed         = "failed"
 )
 
 // Default and maximum bounds for one measurement.
@@ -199,16 +200,15 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		sort.Strings(check.spun)
 		sort.Strings(check.unknown)
 		sort.Strings(check.unknownRotational)
-		skipped := unionSorted(check.spun, check.unknown, check.unknownRotational)
 		return proto.DiskUsageResponse{
-			Code:            CodeSpunDown,
-			Message:         formatStandbySkipMessage(mount, check.spun, check.unknown, check.unknownRotational, check.unknownBacking),
+			Code:            check.code(),
+			Message:         formatStandbySkipMessage(mount, check),
 			Mount:           mount,
 			FSType:          target.FSType,
 			Device:          target.Source,
 			MeasuredAt:      start,
 			DurationMs:      r.now().UTC().Sub(start).Milliseconds(),
-			SkippedSpunDown: skipped,
+			SkippedSpunDown: check.spun,
 		}
 	}
 
@@ -566,37 +566,42 @@ func formatDiskNames(disks []string) string {
 	}
 }
 
-func formatStandbySkipMessage(mount string, spun, unknown, unknownRotational []string, unknownBacking bool) string {
+func formatStandbySkipMessage(mount string, check standbyCheckResult) string {
 	var reasons []string
-	if len(spun) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%s spun down", formatDiskList(spun)))
+	if len(check.spun) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%s spun down", formatDiskList(check.spun)))
 	}
-	if len(unknown) > 0 {
-		reasons = append(reasons, fmt.Sprintf("the spin state of %s could not be checked", formatDiskNames(unknown)))
+	if len(check.unknown) > 0 {
+		reasons = append(reasons, fmt.Sprintf("the spin state of %s could not be checked", formatDiskNames(check.unknown)))
 	}
-	if len(unknownRotational) > 0 {
-		reasons = append(reasons, fmt.Sprintf("the disk type of %s could not be checked", formatDiskNames(unknownRotational)))
+	if len(check.unknownRotational) > 0 {
+		reasons = append(reasons, fmt.Sprintf("the disk type of %s could not be checked", formatDiskNames(check.unknownRotational)))
 	}
-	if len(reasons) == 0 && unknownBacking {
+	if check.partialBacking {
+		reasons = append(reasons, "not all of its backing disks could be identified")
+	} else if check.unknownBacking {
 		reasons = append(reasons, "its backing disks could not be identified")
 	}
+	if len(check.spun) > 0 {
+		return fmt.Sprintf("Skipped %s because %s; sleeping disks are not woken.", mount, strings.Join(reasons, " and "))
+	}
 	if len(reasons) == 0 {
-		return fmt.Sprintf("Skipped %s because %s spun down; sleeping disks are not woken.", mount, formatDiskList(spun))
+		return fmt.Sprintf("Skipped %s because Whombat cannot tell whether its backing disks are asleep.", mount)
 	}
-	return fmt.Sprintf("Skipped %s because %s; sleeping disks are not woken.", mount, strings.Join(reasons, " and "))
-}
-
-func unionSorted(lists ...[]string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, list := range lists {
-		for _, s := range list {
-			if !seen[s] {
-				seen[s] = true
-				out = append(out, s)
-			}
+	// Single-reason disk messages read more naturally with "it is" / "they are".
+	if len(reasons) == 1 && len(check.unknown) > 0 {
+		pronoun := "it is"
+		if len(check.unknown) > 1 {
+			pronoun = "they are"
 		}
+		return fmt.Sprintf("Skipped %s because %s, so Whombat cannot tell whether %s asleep.", mount, reasons[0], pronoun)
 	}
-	sort.Strings(out)
-	return out
+	if len(reasons) == 1 && len(check.unknownRotational) > 0 {
+		pronoun := "it is"
+		if len(check.unknownRotational) > 1 {
+			pronoun = "they are"
+		}
+		return fmt.Sprintf("Skipped %s because %s, so Whombat cannot tell whether %s asleep.", mount, reasons[0], pronoun)
+	}
+	return fmt.Sprintf("Skipped %s because %s, so Whombat cannot tell whether a disk is asleep.", mount, strings.Join(reasons, " and "))
 }

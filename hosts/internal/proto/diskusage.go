@@ -54,7 +54,7 @@ type DiskUsageFolder struct {
 type DiskUsageResponse struct {
 	// Code is empty when the measurement ran (even if Partial is true).
 	// Non-empty values: remote_control_disabled, unsupported, invalid_request,
-	// spun_down, busy, failed.
+	// spun_down, standby_unknown, busy, failed.
 	Code    string `cbor:"code,omitempty" json:"code,omitempty"`
 	Message string `cbor:"msg,omitempty" json:"message,omitempty"`
 
@@ -68,7 +68,7 @@ type DiskUsageResponse struct {
 	UsedBytes  uint64 `cbor:"used,omitempty" json:"used_bytes,omitempty"`
 	// Partial is true when the time limit, depth limit or entry cap cut the walk short.
 	Partial bool `cbor:"partial,omitempty" json:"partial,omitempty"`
-	// SkippedSpunDown lists disks that were asleep and therefore not touched.
+	// SkippedSpunDown lists disks confirmed asleep and therefore not touched.
 	SkippedSpunDown []string `cbor:"spun_down,omitempty" json:"skipped_spun_down,omitempty"`
 
 	Categories []DiskUsageCategory `cbor:"cats,omitempty" json:"categories,omitempty"`

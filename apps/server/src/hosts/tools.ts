@@ -851,11 +851,21 @@ const TOOLS: Adapter = {
         timeoutMs: 65_000,
       });
       const du = toHostDiskUsage(raw, s.call.services.clock());
+      const ok = du.ok !== false && !du.code;
+      const skipMessage =
+        du.message ??
+        (du.code === 'spun_down'
+          ? 'Skipped because a backing disk is asleep; sleeping disks aren’t woken.'
+          : du.code === 'standby_unknown'
+            ? 'Skipped because Whombat can’t tell whether the disk is asleep; sleeping disks aren’t woken.'
+            : !ok
+              ? 'Could not check what fills this disk.'
+              : undefined);
       return output({
         server: id,
-        ok: du.ok !== false,
+        ok,
         ...(du.code ? { code: du.code } : {}),
-        ...(du.message ? { message: du.message } : {}),
+        ...(skipMessage ? { message: skipMessage } : {}),
         mount: du.mount,
         ...(du.fsType ? { fsType: du.fsType } : {}),
         measuredAt: du.measuredAt,

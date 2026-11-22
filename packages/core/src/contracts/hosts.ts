@@ -481,7 +481,8 @@ export const hostsEndpoints = {
     id: 'hosts.diskUsage',
     method: 'POST',
     path: '/burrows/:burrow/hosts/servers/:serverId/disk-usage',
-    summary: 'Measure what fills one mounted filesystem on a server now, skipping spun-down disks.',
+    summary:
+      'Measure what fills one mounted filesystem on a server now, skipping sleeping disks or disks whose sleep state can’t be checked.',
     params: S,
     body: HostDiskUsageBody,
     response: HostDiskUsage,

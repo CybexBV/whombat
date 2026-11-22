@@ -98,6 +98,26 @@ function folderOverlapsCategories(
   return false;
 }
 
+/** Plain-English note when an on-request disk usage scan skipped without measuring; null when it ran. */
+export function diskUsageSkipNote(
+  usage: Pick<HostDiskUsage, 'ok' | 'code' | 'message' | 'skippedSpunDown'>,
+): string | null {
+  if (usage.ok !== false && !usage.code) return null;
+  const msg = usage.message?.trim();
+  if (msg) return msg;
+  if (usage.code === 'spun_down') {
+    const disks = usage.skippedSpunDown ?? [];
+    if (disks.length === 1) return `Skipped because ${disks[0]} is asleep; sleeping disks aren’t woken.`;
+    if (disks.length > 1)
+      return `Skipped because ${disks.slice(0, -1).join(', ')} and ${disks.at(-1)} are asleep; sleeping disks aren’t woken.`;
+    return 'Skipped because a backing disk is asleep; sleeping disks aren’t woken.';
+  }
+  if (usage.code === 'standby_unknown') {
+    return 'Skipped because Whombat can’t tell whether the disk is asleep; sleeping disks aren’t woken.';
+  }
+  return 'Could not check what fills this disk.';
+}
+
 /** Pick the freshest recent breakdown (preferring the matching mount when there is one volume). */
 export function recentDiskUsage(
   list: readonly HostDiskUsage[] | undefined,

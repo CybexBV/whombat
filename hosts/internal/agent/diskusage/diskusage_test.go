@@ -884,13 +884,13 @@ func TestFallbackBackingDisksPartitionLVMMdraidAndUnknownStandby(t *testing.T) {
 		t.Fatalf("statfs called on LVM/mdraid with sleeping member disk")
 	}
 
-	// 3. Unknown standby state on rotational disk -> skipped and says so, never walked.
+	// 3. Unknown standby state on rotational disk -> skipped as standby_unknown (not spun_down) and never walked.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unknown"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdd"}) {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 {
 		t.Fatalf("/srv/unknown: %+v", resp)
 	}
-	if !strings.Contains(resp.Message, "could not be checked") {
-		t.Errorf("unknown standby message = %q, want explanation that spin state could not be checked", resp.Message)
+	if !strings.Contains(resp.Message, "sdd") || !strings.Contains(resp.Message, "could not be checked") || strings.Contains(resp.Message, "spun down") {
+		t.Errorf("unknown standby message = %q, want truthful unknown-spin message without 'spun down'", resp.Message)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on rotational disk with unknown spin state")
@@ -941,33 +941,33 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 		return standbyAwake
 	}
 
-	// 1. ZFS mount with nil inventory: backing disks unknown -> skipped without touching mount.
+	// 1. ZFS mount with nil inventory: backing disks unknown -> skipped as standby_unknown without touching mount.
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs without inventory: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on ZFS mount without pool inventory")
 	}
 
-	// 2. ZFS mount with inventory that has no disks for that pool -> still skipped without touching mount.
+	// 2. ZFS mount with inventory that has no disks for that pool -> still skipped as standby_unknown without touching mount.
 	inv = &proto.Report{
 		Pools: []proto.Pool{{Name: "tank", Disks: nil}},
 	}
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs with empty pool disks: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on ZFS mount with empty pool disks")
 	}
 
-	// 3. ZFS mount with pool disks whose rotational state is missing -> skipped without touching mount.
+	// 3. ZFS mount with pool disks whose rotational state is missing -> skipped as standby_unknown without touching mount.
 	inv = &proto.Report{
 		Pools: []proto.Pool{{Name: "tank", Disks: []string{"sdc"}}},
 	}
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/tank/media"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sdc") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("zfs with unknown rotational disk: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
@@ -987,34 +987,34 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 	probed = nil
 	statfsCalled.Store(0)
 
-	// 5. Block device whose /sys/block/<dev>/queue/rotational cannot be read -> skipped without waking.
+	// 5. Block device whose /sys/block/<dev>/queue/rotational cannot be read -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/no-sysfs"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sda"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sda") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/no-sysfs: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
 		t.Fatalf("touched /srv/no-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
 	}
 
-	// 6. Malformed queue/rotational -> skipped without waking.
+	// 6. Malformed queue/rotational -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/bad-sysfs"})
-	if resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdb"}) || !strings.Contains(resp.Message, "disk type") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "sdb") || !strings.Contains(resp.Message, "disk type") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/bad-sysfs: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 || len(probed) != 0 {
 		t.Fatalf("touched /srv/bad-sysfs: statfs=%d probed=%v", statfsCalled.Load(), probed)
 	}
 
-	// 7. Stacked device (dm-9) with no resolvable slaves and no inventory -> skipped without waking.
+	// 7. Stacked device (dm-9) with no resolvable slaves and no inventory -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("/srv/unresolved-dm: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on unresolved dm-9")
 	}
 
-	// 7b. Multi-PV dm-10 spanning an NVMe partition AND an unresolved md9 -> skipped rather than passing blind on md9.
+	// 7b. Multi-PV dm-10 spanning an NVMe partition AND an unresolved md9 -> skipped as standby_unknown rather than passing blind on md9.
 	if err := os.MkdirAll(filepath.Join(root, "sys/class/block/dm-10/slaves"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1027,16 +1027,16 @@ func TestSkipsWhenBackingDisksOrRotationalStateUnknown(t *testing.T) {
 	rMixed := newTestRunner(t, root, []mountInfo{{ID: 7, MountPoint: "/srv/unresolved-dm", FSType: "xfs", Source: "/dev/dm-10"}}, nil)
 	rMixed.statfs = r.statfs
 	resp = rMixed.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/unresolved-dm"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "not all") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("multi-PV dm-10 with unresolved md9: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {
 		t.Fatalf("statfs called on multi-PV dm-10 with unresolved md9")
 	}
 
-	// 8. Unraid fuse.shfs without disks.ini or inventory -> skipped without waking.
+	// 8. Unraid fuse.shfs without disks.ini or inventory -> skipped as standby_unknown without waking.
 	resp = r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/user"})
-	if resp.Code != CodeSpunDown || !strings.Contains(resp.Message, "backing disks") {
+	if resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || !strings.Contains(resp.Message, "backing disks") || strings.Contains(resp.Message, "spun down") {
 		t.Fatalf("shfs without metadata: %+v", resp)
 	}
 	if statfsCalled.Load() != 0 {

@@ -35,10 +35,18 @@ type standbyCheckResult struct {
 	unknown           []string
 	unknownRotational []string
 	unknownBacking    bool
+	partialBacking    bool
 }
 
 func (c standbyCheckResult) shouldSkip() bool {
-	return len(c.spun) > 0 || len(c.unknown) > 0 || len(c.unknownRotational) > 0 || c.unknownBacking
+	return len(c.spun) > 0 || len(c.unknown) > 0 || len(c.unknownRotational) > 0 || c.unknownBacking || c.partialBacking
+}
+
+func (c standbyCheckResult) code() string {
+	if len(c.spun) > 0 {
+		return CodeSpunDown
+	}
+	return CodeStandbyUnknown
 }
 
 // spunDownDisksFor returns the names of any backing disks of mount that are
@@ -190,8 +198,10 @@ func (r *Runner) spunDownDisksFor(ctx context.Context, mount string, target moun
 			res.unknownRotational = append(res.unknownRotational, k)
 		}
 	}
-	if (!hasBacking || unresolvedBacking) && len(spun) == 0 && len(unknown) == 0 && len(unknownRotational) == 0 {
+	if !hasBacking {
 		res.unknownBacking = true
+	} else if unresolvedBacking {
+		res.partialBacking = true
 	}
 	return res
 }
