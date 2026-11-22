@@ -8,6 +8,7 @@ import { type AttachmentRow, lockBlob } from '../../files/service';
 import { loadConversationRow } from '../../read/conversations';
 import { outsidersRun } from '../runs';
 import type { AutomationRunRow } from '../store';
+import { outsidersStepFiles } from './scope';
 import { block, updateStep } from './state';
 import { placeFor } from './thread';
 import type { StepExecution } from './types';
@@ -106,7 +107,7 @@ export async function executePostMessage({
   const conversation = await loadConversationRow(tx, place.conversationId);
   if (!conversation) return block(ctx, run, idx, 'That conversation is gone.');
   const sourceIds = steps
-    .filter((s) => step.attachFrom.includes(s.stepId))
+    .filter((s) => step.attachFrom.includes(s.stepId) && !outsidersStepFiles(run, s))
     .flatMap((s) => {
       const ids = (s.output as JsonObject).attachmentIds;
       return Array.isArray(ids) ? ids.filter((a): a is string => typeof a === 'string') : [];
