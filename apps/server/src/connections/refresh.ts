@@ -1,8 +1,10 @@
 /**
  * Refreshing an OAuth connection's access token (CX-12…CX-15), for `credentials.ts` and the connect side's own checks:
  * - the stored access token is used while more than a minute is left (unless `force`: the service refused it);
- * - otherwise one refresh at a time per connection (single-flight), outside any caller's session command (CS-07),
- *   with the refresh token at the authorization server the connection signed in with (`resource` for MCP);
+ * - otherwise one refresh at a time per connection (single-flight, shared by callers bound alike: `sharedSignIn`),
+ *   outside any caller's session command (CS-07), with the refresh token at the authorization server the connection
+ *   signed in with (`resource` for MCP); work bound to where the connection went (`bound-targets.ts`) refreshes only
+ *   while the row it reads again still goes there, before it asks the server or writes anything;
  * - every write is conditional on the row still holding the refresh token that was used (IN-22): a reconnect that
  *   lands meanwhile wins, and the refresh starts over once with the new grant;
  * - `invalid_grant` (or a client the server no longer knows) marks the connection `needs_reauth`, tells whoever can
@@ -14,6 +16,7 @@ import { outsideCommandScope } from '../commit/scope';
 import { REFRESH_MARGIN_MS } from '../connectors/tokens';
 import { catalogConnections } from '../db/schema/index';
 import type { Services } from '../services';
+import { keepBoundRow, type SignInFlight, sharedSignIn } from './bound-targets';
 import { clientForRow, dropDeadRegistration, endpointsForRow } from './clients';
 import { markNeedsReauth } from './commands';
 import { openConnectionSecret, sealConnectionSecret } from './crypto';
@@ -25,15 +28,11 @@ export { REFRESH_MARGIN_MS };
 
 const NEEDS_REAUTH_TEXT = 'This connection needs you to sign in again.';
 
-const inflight = new WeakMap<
-  Services,
-  Map<string, Promise<{ accessToken: string; expiresAt: Date | null }>>
->();
+type Access = { accessToken: string; expiresAt: Date | null };
 
-function freshAccess(
-  services: Services,
-  row: CatalogConnectionRow,
-): { accessToken: string; expiresAt: Date | null } | null {
+const inflight = new WeakMap<Services, Map<string, SignInFlight<Access>>>();
+
+function freshAccess(services: Services, row: CatalogConnectionRow): Access | null {
   if (!row.accessTokenEnc) return null;
   const now = services.clock().getTime();
   // No expiry known: good until the service refuses it (then `force`).
@@ -48,7 +47,7 @@ export async function refreshConnectionAccess(
   services: Services,
   row: CatalogConnectionRow,
   opts: { force?: boolean } = {},
-): Promise<{ accessToken: string; expiresAt: Date | null }> {
+): Promise<Access> {
   if (row.status === 'needs_reauth') throw new ConnectionAuthError(NEEDS_REAUTH_TEXT);
   const fresh = opts.force ? null : freshAccess(services, row);
   if (fresh) return fresh;
@@ -57,26 +56,17 @@ export async function refreshConnectionAccess(
     map = new Map();
     inflight.set(services, map);
   }
-  let pending = map.get(row.id);
-  if (!pending) {
-    const m = map;
-    // Shared by every caller that joins it: it belongs to none of their session commands (CS-07).
-    pending = outsideCommandScope(() => refresh(services, row.id, opts.force ?? false)).finally(() =>
-      m.delete(row.id),
-    );
-    map.set(row.id, pending);
-  }
-  return pending;
+  // Shared by every caller that joins it: it belongs to none of their session commands (CS-07).
+  return sharedSignIn(map, row.id, () =>
+    outsideCommandScope(() => refresh(services, row.id, opts.force ?? false)),
+  );
 }
 
-async function refresh(
-  services: Services,
-  id: string,
-  force: boolean,
-  again = false,
-): Promise<{ accessToken: string; expiresAt: Date | null }> {
+async function refresh(services: Services, id: string, force: boolean, again = false): Promise<Access> {
   const [row] = await services.db.select().from(catalogConnections).where(eq(catalogConnections.id, id));
   if (!row || row.status === 'needs_reauth') throw new ConnectionAuthError(NEEDS_REAUTH_TEXT);
+  // Bound to where the connection went: one changed since asks its server nothing and writes nothing.
+  keepBoundRow(row);
   const fresh = force ? null : freshAccess(services, row);
   if (fresh) return fresh;
   if (!row.refreshTokenEnc) {

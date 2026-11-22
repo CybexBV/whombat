@@ -625,10 +625,10 @@ export async function executeConnectionCall(
       result = { kind: 'ok', output };
       outcome = output.isError ? 'error' : 'done';
       bytes = output.bytes;
-      if (output.httpStatus === 401) refused(services, row.id);
+      if (output.httpStatus === 401) refused(services, row.id, bound[row.id]);
     } catch (err) {
       if (err instanceof VaultCallError && err.status === 401 && err.message !== 'needs_reauth')
-        refused(services, row.id);
+        refused(services, row.id, bound[row.id]);
       // The service wants the person to allow more for this (step-up): asked on a card, or said to the agent.
       const needs = err instanceof ScopeNeededError && row.signIn === 'mcp_oauth' ? err.scopes : null;
       const failure = needs
@@ -705,12 +705,21 @@ export async function executeConnectionCall(
 
 /**
  * The service refused the connection's credential (401): the connect side checks it with the entry's check and marks it
- * `needs_reauth` when the check is refused too (`confirmRefusedCredential`), in the background.
+ * `needs_reauth` when the check is refused too (`confirmRefusedCredential`), in the background. A call bound to where
+ * the connection went (`target`) has it checked only there: one given another address, account or token since is
+ * neither asked nor marked for what the old one answered.
  */
-function refused(services: Services, connectionId: string): void {
+function refused(services: Services, connectionId: string, target: string | undefined): void {
   // Not part of the call's session command (CS-07): it signs its own change, if any.
   services.guides.track('connection refused', () =>
-    outsideCommandScope(() => confirmRefusedCredential(services, connectionId)),
+    outsideCommandScope(() =>
+      signingOnlyAs(target !== undefined ? { [connectionId]: target } : {}, () =>
+        confirmRefusedCredential(services, connectionId),
+      ).catch((err: unknown) => {
+        if (err instanceof ConnectionChangedError) return null;
+        throw err;
+      }),
+    ),
   );
 }
 

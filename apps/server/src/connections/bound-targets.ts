@@ -1,10 +1,12 @@
 /**
  * Which connections the work under way signs as, and only where and as whom it was checked on (`callTarget`): a
  * connection call binds its own connection and every other one it reaches (a Servers backup place on a TrueNAS), a
- * page's action and its Put it back the connection they run on. Every credential opened for a bound connection is
- * checked once it is in hand and before anything is signed with it, on the row it is opened from and on the connection
- * as it is stored then (`credentials.ts`, the NAS drivers' own sign-ins), since a refresh or a new sign-in reads the
- * connection again: a token, account or address replaced since sends nothing (`ConnectionChangedError`).
+ * page's action and its Put it back the connection they run on. A bound connection is checked before anything goes
+ * out as it, sign-ins included: before its credential is opened and once it is in hand (`credentials.ts`), on the row a
+ * refresh, a token exchange or a session sign-in reads again before it asks the service (`refresh.ts`,
+ * `client-credentials.ts`, `session.ts`), before a datagram or a line (`http.ts`) and in the NAS drivers' own
+ * sign-ins. A token, account or address replaced since sends nothing, not even a sign-in, and writes nothing to the
+ * connection (`ConnectionChangedError`).
  *
  * A refusal is remembered on the work, so its caller hears that the connection changed even where a transport turned
  * the refusal into words of its own (“Couldn’t reach it”).
@@ -57,6 +59,12 @@ export async function signingOnlyAs<T>(
   }
 }
 
+/** Remembers on the work under way, and every work it runs in, that `connectionId` was refused; then throws. */
+function refuse(binding: Binding, connectionId: string): never {
+  for (let b: Binding | null = binding; b; b = b.parent) b.refused ??= connectionId;
+  throw new ConnectionChangedError(connectionId);
+}
+
 /**
  * Throws `ConnectionChangedError` when the work under way is bound to another target for `row`'s connection than the
  * one `row`, and the connection as it is stored now, have. Nothing to check when it isn't bound.
@@ -72,8 +80,45 @@ export async function keepBoundTarget(services: Pick<Services, 'db'>, row: CallT
       .where(eq(catalogConnections.id, row.id));
     if (now && callTarget(now) === target) return;
   }
-  for (let b: Binding | null = binding; b; b = b.parent) b.refused ??= row.id;
-  throw new ConnectionChangedError(row.id);
+  refuse(binding, row.id);
+}
+
+/**
+ * Throws `ConnectionChangedError` when the work under way is bound to another target for `row`'s connection than the
+ * one `row` has: for a row just read again, before a sign-in or a refresh asks the service anything with it.
+ */
+export function keepBoundRow(row: CallTargetRow): void {
+  const binding = bindings.getStore();
+  const target = binding?.targets.get(row.id);
+  if (binding && target !== undefined && callTarget(row) !== target) refuse(binding, row.id);
+}
+
+/** One sign-in or refresh under way for a connection, and the binding it was started under. */
+export interface SignInFlight<T> {
+  readonly promise: Promise<T>;
+  readonly target: string | undefined;
+}
+
+/**
+ * One sign-in (a refresh, a token exchange, a session) at a time per connection, shared by every caller bound alike:
+ * work joins one started under the same binding for that connection (or none), and otherwise waits for it to end and
+ * starts its own, so one caller's refusal never becomes another's and no two run at once.
+ */
+export async function sharedSignIn<T>(
+  flights: Map<string, SignInFlight<T>>,
+  connectionId: string,
+  start: () => Promise<T>,
+): Promise<T> {
+  const target = boundTarget(connectionId);
+  for (let flight = flights.get(connectionId); flight; flight = flights.get(connectionId)) {
+    if (flight.target === target) return flight.promise;
+    await flight.promise.catch(() => undefined);
+  }
+  const promise: Promise<T> = start().finally(() => {
+    if (flights.get(connectionId)?.promise === promise) flights.delete(connectionId);
+  });
+  flights.set(connectionId, { promise, target });
+  return promise;
 }
 
 /**

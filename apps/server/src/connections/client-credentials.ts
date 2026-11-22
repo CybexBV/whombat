@@ -8,7 +8,8 @@
  * - The secret is the connection's sealed secret (AAD `catalog_connection:<id>:secret`); the token is kept sealed in the
  *   OAuth access-token columns with its expiry and used while more than a minute is left (`REFRESH_MARGIN_MS`), then
  *   exchanged again, one exchange at a time per connection (single-flight like an OAuth refresh, CX-D19), outside any
- *   caller's session command.
+ *   caller's session command; work bound to where the connection went exchanges only while the row it reads again
+ *   still goes there (`bound-targets.ts`).
  * - A secret the token endpoint refuses (400/401), or a level its client can't have (`invalid_scope`), marks the
  *   connection `needs_reauth` (`token_invalid`), as a refused pasted token does: Replace token fixes it.
  */
@@ -23,6 +24,7 @@ import { and, eq } from 'drizzle-orm';
 import { outsideCommandScope } from '../commit/scope';
 import { catalogConnections } from '../db/schema/index';
 import type { Services } from '../services';
+import { keepBoundRow, type SignInFlight, sharedSignIn } from './bound-targets';
 import { markNeedsReauth } from './commands';
 import { openConnectionSecret, sealConnectionSecret } from './crypto';
 import { connectionError } from './errors';
@@ -149,7 +151,7 @@ const REFUSED_TEXT = 'The service refused the client secret. Replace it in Setti
 
 const inflight = new WeakMap<
   Services,
-  Map<string, Promise<{ accessToken: string; expiresAt: Date | null }>>
+  Map<string, SignInFlight<{ accessToken: string; expiresAt: Date | null }>>
 >();
 
 function freshAccess(
@@ -182,16 +184,10 @@ export async function clientCredentialsAccess(
     map = new Map();
     inflight.set(services, map);
   }
-  let pending = map.get(row.id);
-  if (!pending) {
-    const m = map;
-    // Shared by every caller that joins it: it belongs to none of their session commands (CS-07).
-    pending = outsideCommandScope(() => exchangeAgain(services, row.id, opts.force ?? false)).finally(() =>
-      m.delete(row.id),
-    );
-    map.set(row.id, pending);
-  }
-  return pending;
+  // Shared by every caller bound alike that joins it: it belongs to none of their session commands (CS-07).
+  return sharedSignIn(map, row.id, () =>
+    outsideCommandScope(() => exchangeAgain(services, row.id, opts.force ?? false)),
+  );
 }
 
 async function currentRow(services: Services, id: string): Promise<CatalogConnectionRow | null> {
@@ -207,6 +203,8 @@ async function exchangeAgain(
 ): Promise<{ accessToken: string; expiresAt: Date | null }> {
   const row = await currentRow(services, id);
   if (!row) throw new ConnectionAuthError(NO_SECRET_TEXT);
+  // Bound to where the connection went: one changed since asks the service nothing and writes nothing.
+  keepBoundRow(row);
   const fresh = force ? null : freshAccess(services, row);
   if (fresh) return fresh;
   const entry = catalogEntry(row.catalogId);
