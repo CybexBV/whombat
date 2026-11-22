@@ -2,6 +2,7 @@ package ghpublish_test
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"net/http"
@@ -791,5 +792,500 @@ func TestChannelPauseAndResumePushOnlyMetadata(t *testing.T) {
 	}
 	if out, _ := exec.Command("git", "-C", e.dir, "status", "--porcelain", "--", "metadata").Output(); len(out) != 0 {
 		t.Fatalf("signed files left unpushed:\n%s", out)
+	}
+}
+
+// loadRemoteClone checks out origin/main into a temporary directory wired with e.dir's state.json
+// so tests can inspect the exact published metadata on the remote branch independently of e.dir.
+func loadRemoteClone(t *testing.T, e *env) *devtuf.Repo {
+	t.Helper()
+	tmp := t.TempDir()
+	if out, err := exec.Command("git", "clone", "-q", "-b", "main", e.origin, tmp).CombinedOutput(); err != nil {
+		t.Fatalf("clone remote: %v %s", err, out)
+	}
+	b, err := os.ReadFile(filepath.Join(e.dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "state.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := devtuf.Load(tmp, devtuf.Options{KeysDir: filepath.Join(e.dir, "keys")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func releaseIDs(t *testing.T, r *devtuf.Repo, channel string) []string {
+	t.Helper()
+	rs, err := r.ChannelReleases(channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(rs))
+	for _, x := range rs {
+		out = append(out, x.ID)
+	}
+	return out
+}
+
+// An active upload holding .publish.lock must not block an emergency pause on the same channel,
+// the pause must sign only from already-published metadata (never carrying the uploading release),
+// and when the upload finishes it must re-check published metadata and refuse to push its stale
+// signature so it cannot overwrite the pause or reuse a lower/equal version.
+func TestPauseDuringActiveUploadSameChannel(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		noOnlineKeys bool
+	}{
+		{name: "local-online-keys", noOnlineKeys: false},
+		{name: "workflow-online-keys", noOnlineKeys: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hook := &duringUpload{}
+			e := setupWith(t, 0, func(c *ghpublish.Config) { c.HTTP = &http.Client{Transport: hook} })
+			if tc.noOnlineKeys {
+				withClientsRole(t, e)
+			}
+			r1 := "whombat-dev-20261118.1"
+			if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+				t.Fatal(err)
+			}
+			beforeVer := loadRemoteClone(t, e).RoleVersions()[trust.ChannelDevelopment]
+
+			var (
+				pauseRes  *ghpublish.Result
+				pauseInfo *devtuf.ChannelPauseResult
+				pauseErr  error
+				repeatRes *ghpublish.Result
+				repeatInf *devtuf.ChannelPauseResult
+				repeatErr error
+			)
+			hook.f = func() {
+				// Runs while Publish(r2) holds .publish.lock and is uploading assets.
+				pauseRes, pauseInfo, pauseErr = e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+				repeatRes, repeatInf, repeatErr = e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+			}
+
+			r2 := "whombat-dev-20261118.2"
+			_, pubErr := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0))
+			if pauseErr != nil || pauseRes == nil || !pauseRes.MetadataPushed || pauseInfo == nil || !pauseInfo.Paused || pauseInfo.Already {
+				t.Fatalf("pause during upload: res=%+v info=%+v err=%v", pauseRes, pauseInfo, pauseErr)
+			}
+			if pauseInfo.Version != beforeVer+1 {
+				t.Fatalf("pause version = %d, want %d", pauseInfo.Version, beforeVer+1)
+			}
+			if repeatErr != nil || repeatRes == nil || repeatRes.MetadataPushed || repeatInf == nil || !repeatInf.Already {
+				t.Fatalf("repeat pause during upload: res=%+v info=%+v err=%v", repeatRes, repeatInf, repeatErr)
+			}
+			if pubErr == nil {
+				t.Fatal("in-flight publish succeeded after same-channel pause; expected refusal")
+			}
+
+			// Remote must stay paused at beforeVer+1 with ONLY r1 (never r2).
+			rem := loadRemoteClone(t, e)
+			if !rem.ChannelPaused(trust.ChannelDevelopment) {
+				t.Fatal("pause was overwritten on remote")
+			}
+			if got := rem.RoleVersions()[trust.ChannelDevelopment]; got != beforeVer+1 {
+				t.Fatalf("remote development version = %d, want %d", got, beforeVer+1)
+			}
+			if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 1 || ids[0] != r1 {
+				t.Fatalf("remote development releases = %v, want [%s]", ids, r1)
+			}
+			if _, err := os.Stat(filepath.Join(e.dir, ".publish-pending.json")); !os.IsNotExist(err) {
+				t.Fatalf("stale pending record still present: %v", err)
+			}
+
+			// Publishing r2 again now signs strictly above the pause version, preserves paused=true (UP-X50),
+			// and skips the assets already uploaded.
+			res2, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0))
+			if err != nil || !res2.MetadataPushed || len(res2.Uploaded) != 0 || res2.Present == 0 {
+				t.Fatalf("re-publish after pause: %+v %v", res2, err)
+			}
+			rem = loadRemoteClone(t, e)
+			if !rem.ChannelPaused(trust.ChannelDevelopment) {
+				t.Fatal("re-publish into paused channel cleared paused marker")
+			}
+			if got := rem.RoleVersions()[trust.ChannelDevelopment]; got != beforeVer+2 {
+				t.Fatalf("remote development version after re-publish = %d, want %d", got, beforeVer+2)
+			}
+			if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 2 || ids[1] != r2 {
+				t.Fatalf("remote development releases = %v, want [%s %s]", ids, r1, r2)
+			}
+
+			// Resume advances monotonically above the re-published version.
+			res3, pr3, err := e.pub.ResumeChannel(e.ctx, trust.ChannelDevelopment, nil)
+			if err != nil || !res3.MetadataPushed || pr3.Paused || pr3.Version != beforeVer+3 {
+				t.Fatalf("resume: res=%+v info=%+v err=%v", res3, pr3, err)
+			}
+			rem = loadRemoteClone(t, e)
+			if rem.ChannelPaused(trust.ChannelDevelopment) || rem.RoleVersions()[trust.ChannelDevelopment] != beforeVer+3 {
+				t.Fatalf("remote after resume: paused=%v ver=%d", rem.ChannelPaused(trust.ChannelDevelopment), rem.RoleVersions()[trust.ChannelDevelopment])
+			}
+		})
+	}
+}
+
+// A failed upload leaves .publish-pending.json and signed unpushed metadata on disk. Both gh-pause
+// and gh-resume must still succeed from published metadata, and retrying the unfinished publish
+// without re-signing must refuse rather than reuse a lower version or overwrite the pause.
+func TestPauseAndResumeWhileFailedPublishPendingSameChannel(t *testing.T) {
+	e := setup(t, 0)
+	r1, r2 := "whombat-dev-20261118.1", "whombat-dev-20261118.2"
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+		t.Fatal(err)
+	}
+	v1 := loadRemoteClone(t, e).RoleVersions()[trust.ChannelDevelopment]
+
+	bad, _ := ghpublish.New(ghpublish.Config{Dir: e.dir, Owner: "CybexBV", Repo: "whombat-releases", APIURL: e.gh.APIURL, Token: "wrong",
+		Backoff: time.Millisecond})
+	if _, err := bad.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0)); err == nil {
+		t.Fatal("published with bad token")
+	}
+
+	// Emergency pause succeeds even though r2 left .publish-pending.json and signed v1+1 on disk.
+	pres, pinfo, err := e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused || pinfo.Version != v1+1 {
+		t.Fatalf("pause with pending publish: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+	rem := loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) || len(releaseIDs(t, rem, trust.ChannelDevelopment)) != 1 {
+		t.Fatalf("remote after pause: paused=%v releases=%v", rem.ChannelPaused(trust.ChannelDevelopment), releaseIDs(t, rem, trust.ChannelDevelopment))
+	}
+
+	// Resume also succeeds while r2 is still pending, advancing remote to v1+2 (strictly above r2's signed v1+1).
+	rres, rinfo, err := e.pub.ResumeChannel(e.ctx, trust.ChannelDevelopment, nil)
+	if err != nil || !rres.MetadataPushed || rinfo.Paused || rinfo.Version != v1+2 {
+		t.Fatalf("resume with pending publish: res=%+v info=%+v err=%v", rres, rinfo, err)
+	}
+
+	// Retrying r2 with nil signer (attempting to push stale v1+1) must refuse and discard stale metadata.
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, nil); err == nil {
+		t.Fatal("resuming stale pre-pause signature succeeded; would reuse lower version")
+	}
+	rem = loadRemoteClone(t, e)
+	if got := rem.RoleVersions()[trust.ChannelDevelopment]; got != v1+2 {
+		t.Fatalf("remote development version = %d, want %d", got, v1+2)
+	}
+	if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 1 || ids[0] != r1 {
+		t.Fatalf("remote releases = %v, want [%s]", ids, r1)
+	}
+
+	// Running r2 again with a signer signs strictly above v1+2 (at v1+3) and succeeds.
+	res, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0))
+	if err != nil || !res.MetadataPushed {
+		t.Fatalf("re-publishing r2 with signer: %+v %v", res, err)
+	}
+	rem = loadRemoteClone(t, e)
+	if got := rem.RoleVersions()[trust.ChannelDevelopment]; got != v1+3 {
+		t.Fatalf("remote development version after re-publish = %d, want %d", got, v1+3)
+	}
+	if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 2 || ids[1] != r2 {
+		t.Fatalf("remote releases = %v, want [%s %s]", ids, r1, r2)
+	}
+}
+
+// Pausing one channel (e.g. production) while another channel (development) has an active or failed
+// upload must succeed immediately, and the other channel's publish must finish cleanly without
+// overwriting the pause or rolling back snapshot/timestamp versions — and without leaking an
+// unpushed clients role.
+func TestPauseOtherChannelWhilePublishPendingPreservesBoth(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		noOnlineKeys bool
+	}{
+		{name: "local-online-keys", noOnlineKeys: false},
+		{name: "workflow-online-keys-with-dirty-clients", noOnlineKeys: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hook := &duringUpload{}
+			e := setupWith(t, 0, func(c *ghpublish.Config) { c.HTTP = &http.Client{Transport: hook} })
+			if tc.noOnlineKeys {
+				withClientsRole(t, e)
+			}
+			r1, r2 := "whombat-dev-20261118.1", "whombat-dev-20261118.2"
+			if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+				t.Fatal(err)
+			}
+			var pauseErr error
+			hook.f = func() {
+				if tc.noOnlineKeys {
+					signClients(t, e.dir, `{"v":2}`)
+				}
+				_, _, pauseErr = e.pub.PauseChannel(e.ctx, trust.ChannelProduction, nil)
+			}
+			res, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0))
+			if pauseErr != nil {
+				t.Fatalf("pause production during development upload: %v", pauseErr)
+			}
+			if err != nil || !res.MetadataPushed {
+				t.Fatalf("development publish after production pause: %+v %v", res, err)
+			}
+			rem := loadRemoteClone(t, e)
+			if !rem.ChannelPaused(trust.ChannelProduction) {
+				t.Fatal("production pause was lost after development publish finished")
+			}
+			if rem.ChannelPaused(trust.ChannelDevelopment) {
+				t.Fatal("development should remain unpaused")
+			}
+			if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 2 || ids[1] != r2 {
+				t.Fatalf("development releases = %v, want [%s %s]", ids, r1, r2)
+			}
+			if tc.noOnlineKeys {
+				if got := pushedClientsRoles(t, e.dir); slicesContain(got, "2.clients.json") {
+					t.Fatalf("unpushed clients role leaked during interleaved pause+publish: %v", got)
+				}
+				if cres, err := e.pub.UploadClients(e.ctx); err != nil || !cres.MetadataPushed {
+					t.Fatalf("gh-clients afterwards: %+v %v", cres, err)
+				}
+				if got := pushedClientsRoles(t, e.dir); !slicesContain(got, "2.clients.json") {
+					t.Fatalf("clients role not pushed by gh-clients: %v", got)
+				}
+			}
+		})
+	}
+}
+
+// A publish that already committed locally before its push failed (HEAD ahead of origin/main) must
+// not leak into an emergency pause, and retrying that stale local commit without re-signing must
+// refuse and drop the stale commit rather than overwrite the pause.
+func TestPauseWhileLocalCommitPushFailedSameChannel(t *testing.T) {
+	e := setup(t, 0)
+	r1, r2 := "whombat-dev-20261118.1", "whombat-dev-20261118.2"
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+		t.Fatal(err)
+	}
+	v1 := loadRemoteClone(t, e).RoleVersions()[trust.ChannelDevelopment]
+
+	hook := filepath.Join(e.origin, "hooks", "pre-receive")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0)); err == nil {
+		t.Fatal("published although pre-receive refused push")
+	}
+	os.Remove(hook)
+
+	// Emergency pause signs from origin/main (r1 only, NOT the unpushed local commit of r2).
+	pres, pinfo, err := e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused || pinfo.Version != v1+1 {
+		t.Fatalf("pause with unpushed local commit: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+	rem := loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) || len(releaseIDs(t, rem, trust.ChannelDevelopment)) != 1 {
+		t.Fatalf("remote after pause: paused=%v releases=%v", rem.ChannelPaused(trust.ChannelDevelopment), releaseIDs(t, rem, trust.ChannelDevelopment))
+	}
+
+	// Retrying the stale local commit without re-signing must refuse and reset cleanly to remote.
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, nil); err == nil {
+		t.Fatal("retry pushed stale local commit over pause")
+	}
+	rem = loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) || rem.RoleVersions()[trust.ChannelDevelopment] != v1+1 {
+		t.Fatalf("remote after refused retry: paused=%v ver=%d", rem.ChannelPaused(trust.ChannelDevelopment), rem.RoleVersions()[trust.ChannelDevelopment])
+	}
+
+	// Re-publishing with a signer advances monotonically to v1+2 while keeping development paused.
+	res, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0))
+	if err != nil || !res.MetadataPushed {
+		t.Fatalf("re-publish after dropped stale commit: %+v %v", res, err)
+	}
+	rem = loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) || rem.RoleVersions()[trust.ChannelDevelopment] != v1+2 {
+		t.Fatalf("remote after re-publish: paused=%v ver=%d", rem.ChannelPaused(trust.ChannelDevelopment), rem.RoleVersions()[trust.ChannelDevelopment])
+	}
+}
+
+// Emergency pause must also work while gh-clients is actively uploading (holding .publish.lock) or
+// when an unpushed clients role sits dirty in metadata/, without pushing or losing that clients role.
+func TestPauseDuringClientsUpload(t *testing.T) {
+	hook := &duringUpload{}
+	e := setupWith(t, 0, func(c *ghpublish.Config) { c.HTTP = &http.Client{Transport: hook} })
+	withClientsRole(t, e)
+	signClients(t, e.dir, `{"v":2}`)
+
+	// Pause while dirty 2.clients.json sits unpushed on disk.
+	pres, pinfo, err := e.pub.PauseChannel(e.ctx, trust.ChannelProduction, nil)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused {
+		t.Fatalf("pause with dirty clients role: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+	if got := pushedClientsRoles(t, e.dir); slicesContain(got, "2.clients.json") {
+		t.Fatalf("pause pushed unpushed clients role: %v", got)
+	}
+
+	// Resume during an active gh-clients upload.
+	var resumeErr error
+	hook.f = func() {
+		_, _, resumeErr = e.pub.ResumeChannel(e.ctx, trust.ChannelProduction, nil)
+	}
+	cres, err := e.pub.UploadClients(e.ctx)
+	if resumeErr != nil {
+		t.Fatalf("resume during gh-clients upload: %v", resumeErr)
+	}
+	if err != nil || !cres.MetadataPushed {
+		t.Fatalf("gh-clients: %+v %v", cres, err)
+	}
+	rem := loadRemoteClone(t, e)
+	if rem.ChannelPaused(trust.ChannelProduction) {
+		t.Fatal("production resume was lost after gh-clients finished")
+	}
+	if got := pushedClientsRoles(t, e.dir); !slicesContain(got, "2.clients.json") {
+		t.Fatalf("clients role not pushed: %v", got)
+	}
+}
+
+// Even when a publish failed before recording BaseVersions or Files (or when an older release tool
+// wrote a minimal .publish-pending.json), a pre-pause signature must still be refused after a pause.
+func TestPauseInvalidatesMinimalPendingRecord(t *testing.T) {
+	e := setup(t, 0)
+	withClientsRole(t, e)
+	id := "whombat-dev-20261118.1"
+	pending := filepath.Join(e.dir, ".publish-pending.json")
+	if err := os.WriteFile(pending, []byte(`{"channel":"development","releaseId":"`+id+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := devtuf.Load(e.dir, devtuf.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fakeRelease(id, "26.05.1", "1.0.0", 0)(r); err != nil {
+		t.Fatal(err)
+	}
+	signClients(t, e.dir, `{"v":2}`)
+
+	// Emergency pause pushes v2 (paused, no releases) from origin/main.
+	pres, pinfo, err := e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused {
+		t.Fatalf("pause: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+	// Resuming the minimal pending record without re-signing must refuse and leave 2.clients.json intact.
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, id, nil); err == nil {
+		t.Fatal("minimal pending record pushed over pause")
+	}
+	rem := loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) || len(releaseIDs(t, rem, trust.ChannelDevelopment)) != 0 {
+		t.Fatalf("remote after refused minimal retry: paused=%v releases=%v", rem.ChannelPaused(trust.ChannelDevelopment), releaseIDs(t, rem, trust.ChannelDevelopment))
+	}
+	if got := pushedClientsRoles(t, e.dir); slicesContain(got, "2.clients.json") {
+		t.Fatalf("clients role leaked: %v", got)
+	}
+	if cres, err := e.pub.UploadClients(e.ctx); err != nil || !cres.MetadataPushed {
+		t.Fatalf("gh-clients after refused retry: %+v %v", cres, err)
+	}
+}
+
+// When a stalled publish (r2) is superseded by an emergency pause on the same channel, the operator
+// can immediately publish a different fix release (r3) into the paused channel without manual git
+// surgery, and r3 advances monotonically above the pause while keeping the channel paused (and
+// never carrying stalled r2).
+func TestFixReleaseCanPublishAfterPauseOverStalledUpload(t *testing.T) {
+	e := setup(t, 0)
+	r1, r2, r3 := "whombat-dev-20261118.1", "whombat-dev-20261118.2", "whombat-dev-20261118.3"
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+		t.Fatal(err)
+	}
+	v1 := loadRemoteClone(t, e).RoleVersions()[trust.ChannelDevelopment]
+
+	bad, _ := ghpublish.New(ghpublish.Config{Dir: e.dir, Owner: "CybexBV", Repo: "whombat-releases", APIURL: e.gh.APIURL, Token: "wrong",
+		Backoff: time.Millisecond})
+	if _, err := bad.Publish(e.ctx, trust.ChannelDevelopment, r2, fakeRelease(r2, "26.05.1", "1.1.0", 0)); err == nil {
+		t.Fatal("published with bad token")
+	}
+
+	pres, pinfo, err := e.pub.PauseChannel(e.ctx, trust.ChannelDevelopment, nil)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused || pinfo.Version != v1+1 {
+		t.Fatalf("pause: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+
+	res, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, r3, fakeRelease(r3, "26.05.1", "1.2.0", 0))
+	if err != nil || !res.MetadataPushed {
+		t.Fatalf("publish fix r3 after pause: %+v %v", res, err)
+	}
+	rem := loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelDevelopment) {
+		t.Fatal("fix release cleared paused marker")
+	}
+	if got := rem.RoleVersions()[trust.ChannelDevelopment]; got != v1+2 {
+		t.Fatalf("development version = %d, want %d", got, v1+2)
+	}
+	if ids := releaseIDs(t, rem, trust.ChannelDevelopment); len(ids) != 2 || ids[0] != r1 || ids[1] != r3 {
+		t.Fatalf("development releases = %v, want [%s %s] (must not include stalled %s)", ids, r1, r3, r2)
+	}
+}
+
+// Offline production key passed explicitly to PauseChannel works even when a promotion commit is
+// stuck unpushed locally, and retrying Promote afterwards signs strictly above the pause version
+// while preserving paused=true.
+func TestOfflineKeyPauseDuringPendingPromote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	base := t.TempDir()
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	dir := filepath.Join(base, "work")
+	r, err := devtuf.New(dir, devtuf.Options{Env: "local", Layout: devtuf.LayoutGitHub, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prodKey := devtuf.NewDevKey()
+	if err := r.AddChannelRoles(map[string]ed25519.PrivateKey{trust.ChannelProduction: prodKey},
+		map[string]bool{trust.ChannelDevelopment: true, trust.ChannelProduction: false}); err != nil {
+		t.Fatal(err)
+	}
+	origin := filepath.Join(base, "origin.git")
+	if out, err := exec.Command("git", "init", "-q", "--bare", "-b", "main", origin).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	gh := fakegithub.New("CybexBV", "whombat-releases", "tok", filepath.Join(base, "pages"))
+	defer gh.Close()
+	pub, err := ghpublish.New(ghpublish.Config{Dir: dir, Owner: "CybexBV", Repo: "whombat-releases", APIURL: gh.APIURL, Token: "tok", Backoff: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pub.InitClone(context.Background(), origin); err != nil {
+		t.Fatal(err)
+	}
+	e := &env{ctx: context.Background(), gh: gh, pub: pub, dir: dir, origin: origin}
+
+	r1 := "whombat-dev-20261118.1"
+	if _, err := pub.Publish(e.ctx, trust.ChannelDevelopment, r1, fakeRelease(r1, "26.05.1", "1.0.0", 0)); err != nil {
+		t.Fatal(err)
+	}
+	vProd := loadRemoteClone(t, e).RoleVersions()[trust.ChannelProduction]
+
+	hook := filepath.Join(origin, "hooks", "pre-receive")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pub.Promote(e.ctx, r1, prodKey); err == nil {
+		t.Fatal("promote succeeded despite failing pre-receive hook")
+	}
+	os.Remove(hook)
+
+	// Emergency pause with the offline production key succeeds and publishes vProd+1 (paused, no r1).
+	pres, pinfo, err := pub.PauseChannel(e.ctx, trust.ChannelProduction, prodKey)
+	if err != nil || !pres.MetadataPushed || !pinfo.Paused || pinfo.Version != vProd+1 {
+		t.Fatalf("pause production with offline key: res=%+v info=%+v err=%v", pres, pinfo, err)
+	}
+	rem := loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelProduction) || len(releaseIDs(t, rem, trust.ChannelProduction)) != 0 {
+		t.Fatalf("remote production after pause: paused=%v releases=%v", rem.ChannelPaused(trust.ChannelProduction), releaseIDs(t, rem, trust.ChannelProduction))
+	}
+
+	// Retrying Promote now discards the stale pre-pause commit, signs vProd+2 with paused=true, and pushes.
+	res, err := pub.Promote(e.ctx, r1, prodKey)
+	if err != nil || !res.MetadataPushed {
+		t.Fatalf("retry promote after pause: %+v %v", res, err)
+	}
+	rem = loadRemoteClone(t, e)
+	if !rem.ChannelPaused(trust.ChannelProduction) || rem.RoleVersions()[trust.ChannelProduction] != vProd+2 {
+		t.Fatalf("remote production after retry promote: paused=%v ver=%d", rem.ChannelPaused(trust.ChannelProduction), rem.RoleVersions()[trust.ChannelProduction])
+	}
+	if ids := releaseIDs(t, rem, trust.ChannelProduction); len(ids) != 1 || ids[0] != r1 {
+		t.Fatalf("remote production releases = %v, want [%s]", ids, r1)
 	}
 }

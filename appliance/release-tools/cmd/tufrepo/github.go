@@ -24,9 +24,11 @@ package main
 //	tufrepo gh-promote --dir D --release ID [--key-file F] promote and push (nothing is uploaded again); the production
 //	        key from F, else the repository's own (online since the key ceremony, ONE-05)
 //	tufrepo gh-pause --dir D [--channel production|development] [--key-file F]
-//	        pause the channel and push its signed role metadata (nothing is uploaded)
+//	        pause the channel from the already-published remote branch and push its signed role metadata (nothing is
+//	        uploaded; never blocked by an active upload or pending publish)
 //	tufrepo gh-resume --dir D [--channel production|development] [--key-file F]
-//	        resume the channel and push its signed role metadata (nothing is uploaded)
+//	        resume the channel from the already-published remote branch and push its signed role metadata (nothing is
+//	        uploaded; never blocked by an active upload or pending publish)
 //	tufrepo gh-rotate --dir D --offline-keys-dir O [--production-key-file F] [--local]
 //	        the key ceremony (ONE-05, devtuf/rotate.go): a new root signed by the current root keys and three new ones
 //	        (two of them sign the next), a new top-level targets key, the targets signed again; the new keys and a copy
@@ -49,14 +51,16 @@ package main
 // (https://api.github.com) --branch (main) and the token from the environment variable --token-env
 // (WHOMBAT_RELEASES_TOKEN).
 //
-// Operating note on channel role versions: boxes persist the highest verified signed role version per channel
-// (N.production.json, N.development.json) and quietly refuse any lower, zero, or missing version — for offers,
-// pauses and resumes alike. Never reset a channel role's version by rebuilding the repository from scratch,
+// Operating note on channel role versions and emergency pauses: boxes persist the highest verified signed role version
+// per channel (N.production.json, N.development.json) and quietly refuse any lower, zero, or missing version — for
+// offers, pauses and resumes alike. Never reset a channel role's version by rebuilding the repository from scratch,
 // restoring an older clone, or force-pushing whombat-releases; always pull and evolve the existing clone (which
-// gh-publish, gh-promote, gh-pause and gh-resume do automatically), keep branch protection against force-pushes
-// enabled, and if a repository is ever rebuilt for existing boxes, carry each channel role's version strictly
-// above the highest published version in snapshot.json (gh-continue --version-gap only shifts top-level targets,
-// snapshot and timestamp, not channel roles).
+// gh-publish and gh-promote do automatically, while gh-pause and gh-resume sign directly from the already-published
+// remote branch in an isolated checkout so an active or stalled upload never blocks an emergency stop, and any
+// unfinished publish re-checks published metadata before pushing so it cannot overwrite a pause or reuse a lower or
+// equal version), keep branch protection against force-pushes enabled, and if a repository is ever rebuilt for
+// existing boxes, carry each channel role's version strictly above the highest published version in snapshot.json
+// (gh-continue --version-gap only shifts top-level targets, snapshot and timestamp, not channel roles).
 
 import (
 	"context"

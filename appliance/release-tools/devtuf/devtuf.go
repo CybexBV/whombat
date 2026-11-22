@@ -672,6 +672,15 @@ func (r *Repo) AssignmentKey() ed25519.PrivateKey {
 	return r.assign[0]
 }
 
+// OnlineKeys returns the repository's local snapshot and timestamp signing keys when both are held locally
+// (a single key each; returns nil, nil on the GitHub layout when Actions secrets hold those keys).
+func (r *Repo) OnlineKeys() (snapshot, timestamp ed25519.PrivateKey) {
+	if len(r.keys[metadata.SNAPSHOT]) == 1 && len(r.keys[metadata.TIMESTAMP]) == 1 {
+		return r.keys[metadata.SNAPSHOT][0], r.keys[metadata.TIMESTAMP][0]
+	}
+	return nil, nil
+}
+
 // Versions returns the current role versions.
 func (r *Repo) Versions() map[string]int64 {
 	return map[string]int64{
