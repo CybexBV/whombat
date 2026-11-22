@@ -43,6 +43,7 @@ import {
 } from './commands';
 import { mailPrincipal } from './principal';
 import {
+  consumedMailText,
   hasMirroredMailItem,
   type ListenedMailbox,
   type ListenedMailEntry,
@@ -641,7 +642,7 @@ export class MailTriggerService {
     const burrows = await this.services.db
       .selectDistinct({ burrowId: mailTriggerItems.burrowId })
       .from(mailTriggerItems)
-      .where(lt(mailTriggerItems.mirroredAt, cutoff));
+      .where(or(lt(mailTriggerItems.mirroredAt, cutoff), consumedMailText()));
     let deleted = 0;
     for (const { burrowId } of burrows) {
       const actorId = await mailPrincipal.ensure(this.services, burrowId);

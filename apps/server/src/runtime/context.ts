@@ -45,7 +45,7 @@ import { agentBriefOf, withBrief } from '../domain/agent-brief';
 import { linkOfConversation } from '../domain/links';
 import { assessorBrowser } from '../feedback/browser';
 import { type FeedbackDispatchParts, feedbackDispatchParts, feedbackHandoffPart } from '../feedback/dispatch';
-import { outsidersFileIds, withOnlyFiles } from '../files/access';
+import { outsidersFileIds } from '../files/access';
 import { dispatchAttachments, dispatchFiles } from '../files/dispatch';
 import { ghContextFor } from '../github/agent-gh-context';
 import { undoRequestOf } from '../home/reports';
@@ -76,7 +76,7 @@ import { vaultContextFor } from '../vault/context';
 import { webSearchDispatch } from '../web-search/store';
 import { contextThreadCandidates, contextWindowCandidates } from './context-selection';
 import { notifyContextOf } from './job-notify';
-import { forOutsiders } from './outsiders-view';
+import { forOutsiders, forPersonTurn, hasOutsidersMessages } from './outsiders-view';
 import { dispatchPerson, outsidersTurn } from './person';
 import { sessionSince, turnSession } from './sessions';
 
@@ -162,6 +162,7 @@ export async function buildDispatchContext(
   route: { gateway?: GatewayDispatchContext | null } = {},
 ): Promise<DispatchContextType> {
   const db = services.db;
+  const outside = outsidersTurn(row);
   const now = services.clock();
   // The reads of a turn's claim go side by side on the pool (each its own query on its own connection; nothing here
   // runs in a transaction): only those that need another's answer wait for it, and what writes keeps its place. A few
@@ -216,6 +217,7 @@ export async function buildDispatchContext(
   let window: DispatchContextType['window'];
   let thread: DispatchContextType['thread'];
   let session: DispatchContextType['session'] = null;
+  let runnerRow = row;
   if (assessing) {
     trigger = assessing.trigger;
     window = [];
@@ -231,7 +233,12 @@ export async function buildDispatchContext(
     trigger = message ?? null;
     // The thread's Hermes session (HE-18, HE-40): a resumed one has the conversation already and gets only what is new
     // since its last turn — the request always — a new one the window.
-    const since = await sessionSince(db, row, trigger ? new Date(trigger.createdAt) : null);
+    const fresh =
+      !outside &&
+      (row.threadRootId || roomWindow) &&
+      (await hasOutsidersMessages(db, row.conversationId, row.threadRootId));
+    if (fresh) runnerRow = { ...row, providerSessionId: null };
+    const since = await sessionSince(db, runnerRow, trigger ? new Date(trigger.createdAt) : null);
     const shown = (m: MessageCandidate) =>
       m.id === trigger?.id ||
       !since ||
@@ -246,7 +253,7 @@ export async function buildDispatchContext(
     const selected = await hydrateMessageCandidates(db, [...selectedWindow, ...selectedReplies], agent.id);
     window = selected.slice(0, selectedWindow.length);
     thread = fullThread ? { root: fullThread.root, replies: selected.slice(selectedWindow.length) } : null;
-    session = turnSession(row, since);
+    session = turnSession(runnerRow, since);
   }
 
   // An automation's request reads one line in the conversation; the agent gets its step's instructions (CNR-08) —
@@ -277,41 +284,43 @@ export async function buildDispatchContext(
     }
   }
 
-  // An automation run's outsiders' turn sees only the files handed over from what started the run: a file someone
-  // added to its thread isn't named to it either.
-  const onlyFiles = assessing ? null : await outsidersFileIds(db, row);
-  if (onlyFiles) {
-    const keep = <M extends Pick<Message, 'attachments'>>(m: M): M => withOnlyFiles(m, onlyFiles);
-    trigger = trigger ? keep(trigger) : trigger;
-    window = window.map(keep);
-    if (thread) thread = { ...thread, root: keep(thread.root), replies: thread.replies.map(keep) };
-  }
-  // An outsiders' turn reads an approval card, and what a step told the person of the calls they approved, only as a
-  // line: never the names, paths, labels or answers the server read from the person's services for them.
-  if (outsidersTurn(row)) {
-    const shown = await forOutsiders(db, [
-      ...(trigger ? [trigger] : []),
-      ...window,
-      ...(thread ? [thread.root, ...thread.replies] : []),
-    ]);
-    let at = 0;
-    if (trigger) trigger = shown[at++] as Message;
-    window = shown.slice(at, at + window.length);
-    at += window.length;
-    if (thread) thread = { ...thread, root: shown[at++] as Message, replies: shown.slice(at) };
-  }
+  // Use the same view as read_conversation, including what the turn may learn about the messages’ files.
+  const shown = [
+    ...(trigger ? [trigger] : []),
+    ...window,
+    ...(thread ? [thread.root, ...thread.replies] : []),
+  ];
+  const projected = outside
+    ? await forOutsiders(db, shown, {
+        files: await outsidersFileIds(db, row),
+        reportRootId: assessing ? row.threadRootId : null,
+      })
+    : await forPersonTurn(db, shown);
+  let at = 0;
+  if (trigger) trigger = projected[at++] as Message;
+  window = projected.slice(at, at + window.length);
+  at += window.length;
+  if (thread) thread = { root: projected[at++] as Message, replies: projected.slice(at) };
 
   // Whombat's own signers are `system` (one-agent.md OA-17).
-  const principals: PrincipalLite[] = principalRows.map((p) => ({
-    id: p.id,
-    kind: p.kind === 'agent' && p.system ? 'system' : p.kind,
-    name: p.name,
-    handle: p.handle,
-    title: p.title ?? null,
-  }));
+  const shownAuthors = new Set([
+    row.agentId,
+    trigger?.authorId,
+    ...window.map((m) => m.authorId),
+    ...(thread ? [thread.root.authorId, ...thread.replies.map((m) => m.authorId)] : []),
+  ]);
+  const principals: PrincipalLite[] = principalRows
+    .filter((p) => !outside || shownAuthors.has(p.id))
+    .map((p) => ({
+      id: p.id,
+      kind: p.kind === 'agent' && p.system ? 'system' : p.kind,
+      name: p.name,
+      handle: outside ? '' : p.handle,
+      title: outside ? null : (p.title ?? null),
+    }));
 
   const runPart = side(async () => {
-    const run = row.runId ? ((await loadRun(db, row.runId)) ?? null) : null;
+    const run = !outside && row.runId ? ((await loadRun(db, row.runId)) ?? null) : null;
     // Whombat woke the agent because its last turn left the run live with nothing to wait on.
     const [stall] =
       run && row.trigger === 'run_control'
@@ -321,7 +330,7 @@ export async function buildDispatchContext(
   });
   const approvalPart = side(async () => {
     // The approval this turn carries on after.
-    const grantedApproval = assessing ? null : await grantedApprovalOf(db, row);
+    const grantedApproval = outside ? null : await grantedApprovalOf(db, row);
     // What the approved call returned, for the agent to tell in its own words.
     const grantedResult =
       grantedApproval && row.approvalId ? await grantedResultOf(db, services.custody, row.approvalId) : null;
@@ -388,30 +397,32 @@ export async function buildDispatchContext(
     browserPart,
     // The developer agent asked by an approved Feedback handoff: the report and the assessment as
     // data next to Whombat's fixed handoff message.
-    assessing ? null : side(async () => feedbackHandoffPart(db, row, trigger)),
-    assessing ? null : side(async () => planStepContext(db, row)),
-    side(async () => searchContext(services, row, burrowRow, now)),
+    outside ? null : side(async () => feedbackHandoffPart(db, row, trigger)),
+    outside ? null : side(async () => planStepContext(db, row)),
+    outside ? null : side(async () => searchContext(services, row, burrowRow, now)),
     // The failed turn a retry tries again.
-    assessing ? null : side(async () => retryOriginOf(db, row)),
+    outside ? null : side(async () => retryOriginOf(db, row)),
     // The server tasks it started that ended, for it to tell the person how they went.
-    assessing ? null : side(async () => taskFinishedOf(db, row)),
+    outside ? null : side(async () => taskFinishedOf(db, row)),
     // The T3 Code threads it handed work to that finished or ask something.
-    assessing ? null : side(async () => t3ThreadsOf(db, row)),
+    outside ? null : side(async () => t3ThreadsOf(db, row)),
     // The T3 Code threads this thread already handed work to: where a follow-up goes.
-    assessing ? null : side(async () => t3HandoffsOf(db, row)),
-    assessing ? null : side(async () => councilOfTurn(db, row)),
+    outside ? null : side(async () => t3HandoffsOf(db, row)),
+    outside ? null : side(async () => councilOfTurn(db, row)),
     // Tasks it handed to T3 Code that ended, or the delegation card of the thread the person writes in (delegate.md).
-    assessing ? null : side(async () => delegationOfTurn(db, row, now)),
+    outside ? null : side(async () => delegationOfTurn(db, row, now)),
     // A person's Undo of a change this agent reported, with its own note.
-    assessing ? null : side(async () => undoRequestOf(db, services, row, trigger)),
+    outside ? null : side(async () => undoRequestOf(db, services, row, trigger)),
     // What needs a look, or the step the person let it take on one.
-    assessing ? null : side(async () => lookContextOf(db, row)),
-    side(async () => burrowFacts(services, row.burrowId, principalRows)),
+    outside ? null : side(async () => lookContextOf(db, row)),
+    outside ? [] : side(async () => burrowFacts(services, row.burrowId, principalRows)),
     // A task chat tells the turn its title and what it is about (“This chat is about the server pve-02.”), a person's
     // Chat whose it is and what the thread is about; for the agent only.
-    side(async () => turnTopic(db, conversation, row.threadRootId)),
-    side(async () => linkOfConversation(db, conversation)),
-    assessing ? null : side(async () => onBehalfOfContext(db, person, principals)),
+    outside ? null : side(async () => turnTopic(db, conversation, row.threadRootId)),
+    outside
+      ? ({ type: 'chat', id: conversation.id } as const)
+      : side(async () => linkOfConversation(db, conversation)),
+    outside ? null : side(async () => onBehalfOfContext(db, person, principals)),
     side(async () =>
       dispatchAttachments(db, row, WINDOW_SIZE, [
         ...(trigger ? [trigger] : []),
@@ -446,13 +457,13 @@ export async function buildDispatchContext(
         )
       : null,
     // A turn the agent scheduled for itself: its prompt, when, runs and next run.
-    assessing ? null : side(async () => scheduleContextOf(db, row)),
+    outside ? null : side(async () => scheduleContextOf(db, row)),
   ]);
   // What a background job of the agent said, from its post (resourceful-agents.md RA-31).
-  const notify = assessing ? null : notifyContextOf(row, trigger);
+  const notify = outside ? null : notifyContextOf(row, trigger);
   // Whether this turn's messages to T3 Code get what the person wrote, so the preface can say the brief needn't.
   const t3PersonWords =
-    !assessing && connectionsOfTurn.connections?.some((c) => c.catalogId === 't3code')
+    !outside && connectionsOfTurn.connections?.some((c) => c.catalogId === 't3code')
       ? (await personWordsFor(db, { agentId: agentRow.id, dispatch: row, reportTurn: false })) !== null
       : false;
   // The turn's token, and a run's tracker report: which report, and for a step that
@@ -460,7 +471,7 @@ export async function buildDispatchContext(
   const token = await issueDispatchToken(services, row.id);
   const tracker = await trackerPart(services, row);
   const context: DispatchContextType = {
-    dispatch: toDispatch(row),
+    dispatch: toDispatch(runnerRow),
     burrow: { id: burrowRow.id, slug: burrowRow.slug, name: burrowRow.name, timeZone: burrowRow.timeZone },
     agent: {
       id: agent.id,
@@ -475,8 +486,8 @@ export async function buildDispatchContext(
     conversation: {
       id: conversation.id,
       kind: conversation.kind,
-      title: conversation.title,
-      topic: topic ?? conversation.topic,
+      title: outside ? '' : conversation.title,
+      topic: outside ? '' : (topic ?? conversation.topic),
       link,
     },
     trigger,
@@ -490,7 +501,7 @@ export async function buildDispatchContext(
     workspace,
     facts,
     // An outsiders' turn (one-person.md OP-17): the runner gives it a profile of its own, without the person's things.
-    outside: outsidersTurn(row),
+    outside,
     onBehalfOf,
     attachments,
     files,
@@ -528,7 +539,7 @@ export async function buildDispatchContext(
     ...(person ? { changeWindow: changeWindowOf(burrowRow) } : {}),
     // A question asked at the desk screen, spoken or typed there (desk-display-talk.md DK-T05): the runner asks for an
     // answer that reads well aloud; asked from a server's own screen, it also names that server (DK-85, DK-S89).
-    ...(assessing ? {} : deskContextPart(row, trigger, services)),
+    ...(outside ? {} : deskContextPart(row, trigger, services)),
     schedule,
     agentToken: { token: token.token, expiresAt: iso(token.expiresAt) },
     mcpPath: MCP_PATH,

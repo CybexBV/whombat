@@ -57,12 +57,14 @@ import { loadMessage, loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
+import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
 import {
   forOutsiders,
   OUTSIDERS_ACTIONS_LINE,
   OUTSIDERS_CARD_LINE,
   outsidersCardLine,
 } from '../runtime/outsiders-view';
+import { loadShareThread } from '../shares/snapshot';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
@@ -943,6 +945,22 @@ describe('mail-arrives automations', () => {
     // Once the run starts, the mirrored item's cached body and snippet are cleared; the run keeps the email's text only
     // while its agent step works on it (its prompt has the fenced body).
     await w.settle();
+    const [consumed] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(eq(mailTriggerItems.id, beforeRun?.id ?? ''));
+    expect(consumed).toMatchObject({ body: '', snippet: '', messageId: beforeRun?.messageId });
+    // Content left in a previously consumed row is also cleared, without losing deduplication.
+    await w.services.db
+      .update(mailTriggerItems)
+      .set({ body: 'legacy body', snippet: 'legacy snippet' })
+      .where(eq(mailTriggerItems.id, consumed?.id ?? ''));
+    await w.services.mailTriggers.pollOnce();
+    const [compacted] = await w.services.db
+      .select()
+      .from(mailTriggerItems)
+      .where(eq(mailTriggerItems.id, consumed?.id ?? ''));
+    expect(compacted).toMatchObject({ body: '', snippet: '', messageId: consumed?.messageId });
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
     expect(JSON.stringify(runs[0]?.scope)).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
@@ -2018,6 +2036,181 @@ describe('mail-arrives automations', () => {
     const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
     return { row, auth, context: await buildDispatchContext(w.services, row) };
   }
+
+  it('collects only its own dispatch after a person’s turn overtakes it in the same thread', async () => {
+    const automationId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'mail', connectionId, subjectContains: ['dispatch-boundary'] }],
+        steps: [{ id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.subject}}.' }],
+        limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
+      },
+      { name: 'Dispatch boundary' },
+    );
+    try {
+      await pollAndSettle();
+      const run = await deliverInvoice(automationId, 'dispatch-boundary', 'dispatch-boundary');
+      const step = run.steps[0];
+      const [outside] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, step?.dispatchId ?? ''));
+      if (!outside?.threadRootId) throw new Error('no outsiders’ thread');
+      const place = { conversationId: outside.conversationId, threadRootId: outside.threadRootId };
+      const {
+        dispatches: [asked],
+      } = await w.ok(IDS.mara, sendMessage, { ...place, text: 'Check my invoice.' });
+      const [person] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, asked?.dispatchId ?? ''));
+      if (!person?.onBehalfOfAccountId) throw new Error('no person’s turn');
+      const { messageId: cardId } = await runInDispatchScope(dispatchScopeOf(person), () =>
+        w.ok(IDS.dusty, postCard, {
+          ...place,
+          text: 'Private invoice 8829',
+          card: { kind: 'pill', text: 'Private', tone: 'ok' },
+        }),
+      );
+      await w.fakeAgentReply(person.id, 'Private invoice 8830');
+      // An old migration could mark an unlinked reply posted after the outsider was queued, before it claimed.
+      const personalReply = (await w.runThread(run.id)).find((m) => m.text === 'Private invoice 8830');
+      expect(personalReply?.dispatchId).toBe(person.id);
+      await w.services.db
+        .update(messages)
+        .set({ outsidersRun: true, dispatchId: null })
+        .where(eq(messages.id, personalReply?.id ?? ''));
+      expect(await loadMessageRow(w.services.db, cardId)).toMatchObject({
+        dispatchId: person.id,
+        outsidersRun: false,
+      });
+      const { id: before } = await runInDispatchScope(dispatchScopeOf(outside), () =>
+        w.ok(IDS.dusty, sendMessage, { ...place, text: 'Outside before claim' }),
+      );
+      await w.services.db.update(messages).set({ dispatchId: null }).where(eq(messages.id, before));
+
+      w.advance(1000);
+      const own = await claimedTurn(outside.id);
+      expect(JSON.stringify(own.context)).not.toContain('Private invoice');
+      const viewed = await callTool(w.services, own.auth, 'read_conversation', place);
+      expect(viewed.isError).not.toBe(true);
+      expect(JSON.stringify(viewed.content)).not.toContain('Private invoice');
+      expect(JSON.stringify(viewed.content)).toContain('Check my invoice.');
+
+      const refusedCard = await callTool(w.services, own.auth, 'post_card', {
+        conversationId: place.conversationId,
+        threadRootId: place.threadRootId,
+        text: 'Go ahead',
+        card: { kind: 'pill', text: 'Do it', tone: 'ok' },
+      });
+      expect(refusedCard.isError).toBe(true);
+
+      w.advance(10);
+      const { id: earlier } = await runInDispatchScope(dispatchScopeOf(own.row), () =>
+        w.ok(IDS.dusty, sendMessage, { ...place, text: 'Legacy outside answer' }),
+      );
+      await w.services.db
+        .update(messages)
+        .set({ dispatchId: null, attachmentIds: ['att_legacy'] })
+        .where(eq(messages.id, earlier));
+      await w.fakeAgentReply(outside.id, 'Outside final answer');
+      await w.settle();
+      const result = (await w.run(run.id)).steps[0]?.output;
+      expect(result).toMatchObject({
+        text: 'Legacy outside answer\n\nOutside final answer',
+        reply: 'Outside final answer',
+        attachmentIds: [],
+      });
+      expect(result?.messageIds).toHaveLength(2);
+      expect(result?.messageIds).not.toContain(cardId);
+      const personal = await buildDispatchContext(w.services, {
+        ...person,
+        providerSessionId: 'hermes:before-boundary',
+      });
+      expect(personal.dispatch.providerSessionId).toBeNull();
+      expect(personal.session?.resumed).toBe(false);
+      expect(personal.thread?.replies.find((m) => m.text.includes('Outside final answer'))?.text).toContain(
+        '[[untrusted',
+      );
+      expect(personal.attachments).toEqual([]);
+
+      // A share of this thread can contain the person's words, but also needs a title of their own.
+      await w.services.db
+        .update(messages)
+        .set({ text: 'Outside root title' })
+        .where(eq(messages.id, place.threadRootId));
+      const snapshot = await loadShareThread(w.services.db, w.burrowId, IDS.mara, {
+        rootId: place.threadRootId,
+      });
+      expect(snapshot.title).toBe('Check my invoice.');
+      expect(snapshot.shown.map((m) => m.row.text)).not.toContain('Outside root title');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId });
+    }
+  });
+
+  it('only accepts actions printed for this dispatch and gives uniform refusals for missing setup', async () => {
+    const ids: string[] = [];
+    const automationId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      subjectContains: ['offer-boundary'],
+    });
+    const connect = async (catalogId: string, handle: string, fields: Record<string, string>) => {
+      w.advance(10);
+      const id = await insertConnection(w.services, { catalogId, handle, fields, burrowId: w.burrowId });
+      ids.push(id);
+      await syncTools(w.services, id);
+      return id;
+    };
+    try {
+      await connect('moneybird', 'missing-books', {});
+      await connect('nextcloud', 'missing-drive', { url: 'https://drive.example.com' });
+      const ready = await connect('moneybird', 'turned-on-mid-turn', { administration: '12345' });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ access: 'read' })
+        .where(eq(catalogConnections.id, ready));
+      for (let i = 0; i < 12; i++) await connect('moneybird', `books-${i}`, { administration: '12345' });
+      await pollAndSettle();
+      const run = await deliverInvoice(automationId, 'offer-boundary', 'offer-boundary');
+      const turn = await claimedTurn(run.steps[0]?.dispatchId ?? '');
+      expect(turn.context.trigger?.text).toContain('- missing-books:');
+      expect(turn.context.trigger?.text).toContain('- missing-drive:');
+      expect(turn.context.trigger?.text).toContain('- books-0:');
+      expect(turn.context.trigger?.text).not.toContain('- books-11:');
+      expect(turn.context.trigger?.text).not.toContain('- turned-on-mid-turn:');
+      await w.services.db
+        .update(catalogConnections)
+        .set({ access: 'manage' })
+        .where(eq(catalogConnections.id, ready));
+
+      const propose = (connection: string, arguments_: Record<string, unknown>) =>
+        callTool(w.services, turn.auth, 'propose_connection_actions', {
+          actions: [{ connection, tool: 'request', summary: 'File this invoice', arguments: arguments_ }],
+        });
+      const invoice = {
+        method: 'POST',
+        path: '/documents/purchase_invoices.json',
+        body: { purchase_invoice: { reference: 'Invoice 5' } },
+      };
+      for (const handle of ['books-11', 'turned-on-mid-turn', 'missing-books', 'nonexistent']) {
+        const result = await propose(handle, invoice);
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(notOfferedText(handle));
+      }
+      const folder = await propose('missing-drive', { method: 'MKCOL', path: '/Invoices/' });
+      expect(folder.isError).toBe(true);
+      expect(JSON.stringify(folder.content)).toContain(notOfferedText('missing-drive'));
+      expect((await propose('books-0', invoice)).isError).not.toBe(true);
+      await w.fakeAgentReply(turn.row.id, 'I proposed filing the invoice.');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId });
+      for (const id of ids)
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, id));
+    }
+  });
 
   it('shows an outsiders’ turn the card and what the server read for it only as a line, and keeps two connections’ names apart', async () => {
     // Two Paperless-ngx connections whose tag 7 is a different tag, and a Moneybird with its own administration.
@@ -3125,7 +3318,7 @@ describe('mail-arrives automations', () => {
 
   it('settles connection_actions as uncertain on timeout or partial-batch failure, and failed on clean first-call error', async () => {
     const openResponses: ServerResponse[] = [];
-    let mode: 'timeout' | 'partial' | 'first_fail' | 'ok' = 'timeout';
+    let mode: 'timeout' | 'partial' | 'first_fail' | 'redirect' | 'ok' = 'timeout';
     let hitCount = 0;
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       req.resume();
@@ -3138,6 +3331,11 @@ describe('mail-arrives automations', () => {
         if (mode === 'ok' || (mode === 'partial' && hitCount === 1)) {
           res.writeHead(201, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ id: 'first-ok' }));
+          return;
+        }
+        if (mode === 'redirect') {
+          res.writeHead(302, { location: '/sign-in' });
+          res.end();
           return;
         }
         res.writeHead(422, { 'content-type': 'application/json' });
@@ -3250,6 +3448,28 @@ describe('mail-arrives automations', () => {
       ]);
       expect(cleanFailRun.steps[1]?.state).toBe('failed');
       expect(cleanFailRun.status).toBe('failed');
+
+      mode = 'redirect';
+      hitCount = 0;
+      const create = {
+        connection: 'moneybird',
+        tool: 'request',
+        summary: 'Draft redirected invoice',
+        arguments: {
+          method: 'POST',
+          path: '/documents/purchase_invoices.json',
+          body: { purchase_invoice: { reference: 'INV-REDIRECT' } },
+        },
+      };
+      const redirected = await runWithActions('msg_outcome_redirect', [
+        create,
+        { ...create, summary: 'Draft second invoice' },
+      ]);
+      expect(redirected.steps[1]).toMatchObject({
+        state: 'failed',
+        output: { ran: false, count: 0, results: [{ ok: false, status: 302 }] },
+      });
+      expect(hitCount).toBe(1);
 
       // 2. Timeout on a call settles as uncertain (needs_review), not failed.
       mode = 'timeout';

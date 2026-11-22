@@ -200,7 +200,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     scope?.agentId === actor.id &&
     scope.dispatchId !== null &&
     scope.onBehalfOfAccountId === null;
-  const outsidersRun = args.outsidersRun ?? outsidersAgentPost;
+  const outsidersRun = outsidersAgentPost || (args.outsidersRun ?? false);
+  const mayOffer = actor.kind === 'agent' && !outsidersRun && !args.provenance;
 
   await tx.insert(messages).values({
     id,
@@ -211,12 +212,12 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     text,
     mentions,
     card: args.card ?? null,
-    suggestions: actor.kind === 'agent' ? [...new Set(args.suggestions ?? [])] : [],
+    suggestions: mayOffer ? [...new Set(args.suggestions ?? [])] : [],
     more:
-      actor.kind === 'agent' && args.more?.trim()
+      mayOffer && args.more?.trim()
         ? { hint: unlinkLocalPaths(args.more.trim()), requestedById: null, requestedAt: null }
         : null,
-    asks: actor.kind === 'agent' && (args.asks ?? false),
+    asks: mayOffer && (args.asks ?? false),
     attachmentIds: args.attachmentIds ?? [],
     threadRootId: rootId,
     clientId: args.clientId ?? null,
@@ -227,9 +228,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     ...(args.subject && !rootId
       ? { subjectKind: args.subject.kind, subjectId: args.subject.id, subjectName: args.subject.name }
       : {}),
-    ...(ran ? { ranOn: ran.ranOn, dispatchId: ran.dispatchId } : {}),
-    // A question needs its asking turn even outside Chat or without a model display label.
-    ...(actor.kind === 'agent' && args.asks && scope?.agentId === actor.id && scope.dispatchId
+    ...(ran ? { ranOn: ran } : {}),
+    ...(actor.kind === 'agent' && scope?.agentId === actor.id && scope.dispatchId
       ? { dispatchId: scope.dispatchId }
       : {}),
   });
@@ -301,8 +301,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
   const posted: PostedMessage = { id, dispatches: [] };
   const services = ctx.services;
   const authorKind = actor.kind;
-  const dispatchWanted = args.dispatch ?? true;
-  const notifyMentions = args.notifyMentions ?? true;
+  const dispatchWanted = !outsidersRun && (args.dispatch ?? true);
+  const notifyMentions = !outsidersRun && (args.notifyMentions ?? true);
   const trigger = args.dispatchTrigger;
   // A person's top-level message in a channel, or in their Chat or Feedback room in the assistant shell (CHT-02).
   const opensThread = authorKind === 'person' && !rootId && threadedRoom(conv);

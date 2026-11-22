@@ -134,7 +134,8 @@ export const requestMore = defineCommand({
     const row = await loadMessageRow(tx, input.messageId);
     if (!row || row.burrowId !== ctx.burrow.id) throw notFound('Message');
     if (ctx.actor.kind !== 'person') throw forbidden('Only you can ask for more detail.');
-    if (!row.more) throw badRequest('There is no more detail to this message.');
+    if (row.outsidersRun || row.provenance || !row.more)
+      throw badRequest('There is no more detail to this message.');
     const author = await loadPrincipalRow(tx, row.authorId);
     if (author?.kind !== 'agent') throw badRequest('There is no more detail to this message.');
     const load = async () => {

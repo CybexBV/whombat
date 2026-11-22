@@ -49,7 +49,7 @@ import { gatewayConnectionOf, gatewayName } from '../gateway/store';
 import { ApiError, forbidden, notFound } from '../lib/errors';
 import { iso } from '../lib/time';
 import { loadConversationRow } from '../read/conversations';
-import { loadMessages } from '../read/messages';
+import { loadMessageRow, loadMessages } from '../read/messages';
 import { accountInBurrow, loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { publishDispatch } from './activity';
 import type { DispatchRow } from './context';
@@ -57,8 +57,10 @@ import { claudeExtraUsageText } from './failure-text';
 import { outsidersTurn } from './person';
 
 /** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
-export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode'>): boolean {
-  return row.trigger !== 'feedback' && row.trigger !== 'automation' && row.mode !== 'answer';
+export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode' | 'onBehalfOfAccountId'>): boolean {
+  return (
+    !outsidersTurn(row) && row.trigger !== 'feedback' && row.trigger !== 'automation' && row.mode !== 'answer'
+  );
 }
 
 /** The failure as the runner reported it, else classified from what the server has (EA-08). */
@@ -364,7 +366,8 @@ export const retryDispatch = defineCommand({
     if (row.failure?.retryDispatchId) return { dispatchId: row.failure.retryDispatchId };
     if (row.state !== 'failed' || !row.failure)
       throw new ApiError('conflict', 'Only a reply that failed can be tried again.');
-    if (!retryable(row))
+    const source = row.messageId ? await loadMessageRow(tx, row.messageId) : null;
+    if (!retryable(row) || source?.outsidersRun || source?.provenance)
       throw new ApiError('conflict', 'This one is tried again by the part of Whombat that started it.');
     if (!turnFailureRetryable(row.failure.code))
       throw new ApiError(

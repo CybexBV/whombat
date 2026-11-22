@@ -5,7 +5,14 @@ import type { AutomationDefinition, ConnectorProvider, MailTrigger } from '@whom
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { normalizeRfcMessageId } from '../connectors/types';
 import type { Db, Tx } from '../db/client';
-import { automations, automationVersions, connections, mailTriggerItems } from '../db/schema/index';
+import {
+  automationCursors,
+  automations,
+  automationVersions,
+  connections,
+  events,
+  mailTriggerItems,
+} from '../db/schema/index';
 import { thePersonAccountId } from '../domain/the-person';
 import type { MirroredMailItem } from './items';
 
@@ -156,4 +163,16 @@ export async function mirroredMailItem(db: Db | Tx, rowId: string): Promise<Mirr
     attachmentIds: row.attachmentIds ?? [],
     receivedAt: row.receivedAt,
   };
+}
+
+/** A mail event behind the automation cursor can never supply text to a new run again. */
+export function consumedMailText() {
+  return sql`(${mailTriggerItems.body} <> '' or ${mailTriggerItems.snippet} <> '') and exists (
+    select 1 from ${events} as e
+    inner join ${automationCursors} as c on c.burrow_id = e.burrow_id
+    where e.burrow_id = ${mailTriggerItems.burrowId}
+      and e.type = 'mail.received'
+      and e.seq <= c.seq
+      and e.payload->>'rowId' = ${mailTriggerItems.id}
+  )`;
 }

@@ -213,18 +213,17 @@ export async function scanBurrow(
         });
         if (runId) created++;
       }
-      // Once the run has started and the trigger cursor moves past this mail event, drop the cached body and snippet
-      // while keeping the row for deduplication.
-      if (event.type === 'mail.received') {
-        const mailRowId = (event.payload as { rowId?: unknown }).rowId;
-        if (typeof mailRowId === 'string') {
-          await tx
-            .update(mailTriggerItems)
-            .set({ body: '', snippet: '' })
-            .where(eq(mailTriggerItems.id, mailRowId));
-        }
-      }
     }
+    // Every run that matched has its own scope. Clear the mail cache as the cursor consumes the event, even
+    // when the automation was switched off, hit a limit, or otherwise started no run.
+    const mailRows = batch.flatMap(({ type, payload }) =>
+      type === 'mail.received' && typeof payload.rowId === 'string' ? [payload.rowId] : [],
+    );
+    if (mailRows.length)
+      await tx
+        .update(mailTriggerItems)
+        .set({ body: '', snippet: '' })
+        .where(and(eq(mailTriggerItems.burrowId, burrowId), inArray(mailTriggerItems.id, mailRows)));
     const last = batch[batch.length - 1];
     if (last)
       await tx

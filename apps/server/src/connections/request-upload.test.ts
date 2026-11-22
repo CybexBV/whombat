@@ -8,11 +8,12 @@ import type { CatalogConnectionRow } from './types';
 
 // What goes on the wire: the request `runRequest` hands to the connection's signed fetch.
 const sent: ConnectionRequest[] = [];
+let status = 200;
 vi.mock('./http', () => ({
   signedConnectionFetch: vi.fn(async (_services: unknown, _row: unknown, req: ConnectionRequest) => {
     sent.push(req);
     return {
-      status: 200,
+      status,
       headers: { 'content-type': 'application/json' },
       body: Buffer.from('{}'),
       truncated: false,
@@ -63,9 +64,26 @@ function settled(id: string, args: Record<string, unknown>, fields: Record<strin
 
 beforeEach(() => {
   sent.length = 0;
+  status = 200;
 });
 
 describe('what a listed action sends on the wire', () => {
+  it('returns a read redirect but treats the same answer to a write as an error', async () => {
+    status = 302;
+    const fields = { administration: '12345' };
+    const entry = entryOf('moneybird');
+    const connection = row('moneybird', 'https://moneybird.example.com/api/v2', fields);
+    const path = '/12345/documents/purchase_invoices.json';
+    await expect(runRequest(services, connection, entry, { method: 'GET', path })).resolves.toMatchObject({
+      httpStatus: 302,
+      isError: false,
+    });
+    await expect(
+      runRequest(services, connection, entry, { method: 'POST', path, body: {} }),
+    ).resolves.toMatchObject({ httpStatus: 302, isError: true });
+    expect(sent).toHaveLength(2);
+  });
+
   it('uploads the email’s file to Dropbox as the whole body, with mode add', async () => {
     const args = settled('dropbox', {
       method: 'POST',

@@ -1,7 +1,7 @@
 import { catalogEntry } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { ConnectionToolRow } from '../connections/types';
-import { listedHowTo, listedThere } from './listed-actions';
+import { listedOffers, listedThere } from './listed-actions';
 import { isProposableEntry, notOfferedText, outsidersCall } from './proposed-actions';
 import { describePlannedAction, proposalCard } from './proposed-card';
 
@@ -631,7 +631,9 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
       { name: 'request', origin: 'request' as const },
       { name: 'files_write', origin: 'adapter' as const },
     ];
-    const how = [...listedHowTo('moneybird', tools), ...listedHowTo('nextcloud', tools)].join('\n');
+    const how = [...listedOffers('moneybird', tools), ...listedOffers('nextcloud', tools)]
+      .map((offer) => offer.how)
+      .join('\n');
     expect(how).toContain('POST /documents/purchase_invoices.json');
     expect(how).toContain('PUT /<folder>/<name>');
     expect(how).not.toMatch(/<administration>|<user id>|remote\.php|files_write/);

@@ -567,12 +567,16 @@ Automations. Code finds it by kind
   tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). An automation
   run's turn (mail, a tracker report) is shown and reads only the files the server handed over from what started the
   run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
-  readable or fetched by its runner. What Whombat posted in its thread for the person it reads, in its context and
-  through `read_conversation`, only as a line (`runtime/outsiders-view.ts`): an approval card says that the person was
-  asked and what they answered, any other card (a plan, a run, a job's result; not the outsider's own Feedback report)
-  only what kind of card it was, and what a `connection_actions` step told the person in any attempt (its “Done:” line,
-  a notice about how its calls went: a step's messages are only added to) says only that Whombat told them; templates
-  read such a step only as its state, whether it ran and how many (`automations/steps/scope.ts`). It is served a
+  readable or fetched by its runner. The context and `read_conversation` use the same field allowlist
+  (`runtime/outsiders-view.ts`). They include the person's words posted directly in that thread, marked outsiders'
+  text and fixed lines for private assistant messages and cards. Only the run's own approval line includes the
+  person's answer. A Feedback assessment also gets its own report and screenshots. A connection-action result or
+  notice reads as a fixed line, including after a retry. Templates read it as state, whether it ran and how many
+  (`automations/steps/scope.ts`). Agent posts carry their dispatch id, so the step collects just its own replies.
+  Outsiders' results carry no attachment ids. For older rows without a dispatch id, collection uses only marked
+  posts within the claim. The thread's marked posts offer no shortcuts into the person's turns and create no link
+  previews. The person can start a new turn by replying directly. That turn starts a fresh session in the thread and
+  sees marked posts as quoted data. The person still sees the full posts in Chat. It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
@@ -818,7 +822,7 @@ published automation details read their definition and publisher from one versio
   after three failed attempts with a plain-English problem so a mailbox never stalls; attachment metadata is capped at
   100 per email (recording how many were left out) and attachments that cannot be handed over (too large, unknown type,
   download failed, too many) are marked on the run scope so both the prompt and the run page say they didn't come along. High-water marks (`mail_cursors`) and deduplicated matched items (`mail_trigger_items`, whose
-  cached body and snippet are cleared once the run starts and whose rows are pruned after 30 days) commit through the
+  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows and rows skipped by the cursor, and whose rows are pruned after 30 days) commit through the
   pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
   nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
   runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail
@@ -840,7 +844,8 @@ published automation details read their definition and publisher from one versio
   ids (Moneybird's from `/documents/`, Nextcloud's from the root of the person's files; one that names them is refused
   with the same words, right or wrong) and the server writes the connection's administration or WebDAV user in; only an
   action whose body is JSON reads JSON text. The prompt lists the
-  listed actions by connection handle, never the person's labels or account ids. An
+  listed actions by connection handle. The step saves exactly the actions printed with that dispatch and checks the
+  saved list before looking up any connection. An
   upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
   first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
   exact `actionsHash`, which also binds where each call goes and as whom (`connections/call-target.ts`), regardless of
@@ -853,10 +858,11 @@ published automation details read their definition and publisher from one versio
   (`automations/card-names.ts`), once per connection and path, and kept on the step by connection and where its calls go;
   an id the service doesn't have shows as it is with a line that says so, never a refusal, so a later step can't tell
   from the step whether it exists. While proposing, the turn hears one sentence that names nothing of the person's for
-  any action it wasn't offered (a handle nobody has, a connection signed out or looking only, a tool missing or off);
+  any action it wasn't offered (a handle nobody has, a connection signed out, looking only or missing account setup, a tool missing or off);
   only problems with a listed action's own arguments are said as they are. `connection_actions` runs them after a yes, sending each only while
   its connection still goes where it did then (else nothing is sent and a fresh card asks again, its names read again
-  from the new place, “… changed since you said yes.”), settling as `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
+  from the new place, “… changed since you said yes.”). An HTTP write needs a 2xx response to count as done, with an
+  explicit Nextcloud folder-already-there exception. Timeouts and partial-batch failures settle as `uncertain`. Any other automation card asks its title as a question unless a
   `request_approval` step's details start with its own question. A session below protocol
   minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
   an automation without its definition (`automations/older-apps.ts`).

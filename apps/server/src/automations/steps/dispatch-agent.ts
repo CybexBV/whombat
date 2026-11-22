@@ -7,7 +7,7 @@ import {
   missingAttachmentsText,
   newId,
 } from '@whombat/core';
-import { and, asc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
 import type { Db, Tx } from '../../db/client';
@@ -19,9 +19,10 @@ import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
+import { outsidersTurn } from '../../runtime/person';
 import { automationAgent } from '../authority';
 import { turnThreadsOf } from '../mail-text';
-import { proposableConnectionsNote } from '../proposed-actions';
+import { proposableConnections } from '../proposed-actions';
 import {
   type ReusableAssessment,
   reusableAssessment,
@@ -141,8 +142,8 @@ export async function executeDispatchAgent({
     workspace = resolved.workspace;
   }
   const basePrompt = stepInstructions(run.definition, idx, scope);
-  const connectionsNote = step.proposeActions ? await proposableConnectionsNote(tx, run.burrowId) : '';
-  const prompt = connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt;
+  const offers = step.proposeActions ? await proposableConnections(tx, run.burrowId) : null;
+  const prompt = offers?.note ? `${basePrompt}\n\n${offers.note}` : basePrompt;
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
   const reusable = await reusableAssessment(tx, run, step, agent.id, workspace, prompt, ctx.now);
   if (reusable) return reuseAssessment(ctx, run, idx, step, agent, base, prompt, reusable);
@@ -294,6 +295,7 @@ export async function executeDispatchAgent({
       output: {
         agentId: agent.id,
         instructions: prompt,
+        ...(offers ? { offeredActions: offers.offeredActions } : {}),
         ...(triggerFileIds ? { triggerFileIds } : {}),
         turnThreads: [...new Set([...turnThreadsOf(previous), threadRootId])],
         ...(workspace ? { workspace: { ...workspace } } : {}),
@@ -497,9 +499,8 @@ async function tokensToday(tx: Tx, automationId: string, now: Date): Promise<num
 }
 
 /**
- * What a finished dispatch produced: the messages its agent posted in the prompt's thread after the prompt and before
- * the dispatch ended (BP-C40). Nothing the agent said elsewhere — at the top of the room, in another thread, after
- * its turn — counts, so a reply to someone else can't become a step's result or its verdict.
+ * A step reads what its own dispatch posted inside the prompt’s thread. Older outsiders’ replies without a
+ * dispatch id must carry the outsiders’ mark and fall inside the claim. Files never leave an outsiders’ step.
  */
 export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: string) {
   const none = {
@@ -513,10 +514,25 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
   const prompt = await loadMessageRow(tx, step.promptMessageId);
   if (!prompt) return none;
   const [dispatch] = await tx
-    .select({ agentId: dispatches.agentId, finishedAt: dispatches.finishedAt })
+    .select({
+      agentId: dispatches.agentId,
+      claimedAt: dispatches.claimedAt,
+      finishedAt: dispatches.finishedAt,
+      onBehalfOfAccountId: dispatches.onBehalfOfAccountId,
+    })
     .from(dispatches)
     .where(eq(dispatches.id, step.dispatchId));
   if (dispatch?.agentId !== agentId) return none;
+  const outside = outsidersTurn(dispatch);
+  const own = eq(messages.dispatchId, step.dispatchId);
+  const legacy =
+    outside && dispatch.claimedAt
+      ? and(
+          isNull(messages.dispatchId),
+          eq(messages.outsidersRun, true),
+          gt(messages.createdAt, dispatch.claimedAt),
+        )
+      : undefined;
   const root = prompt.threadRootId ?? prompt.id;
   // After a handed wait, only what the step's newest turn said.
   const after = Math.max(prompt.ord, handedWaitOf(step.output)?.afterOrd ?? 0);
@@ -529,6 +545,7 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
         eq(messages.authorId, agentId),
         gt(messages.ord, after),
         eq(messages.threadRootId, root),
+        or(own, legacy),
         ...(dispatch.finishedAt ? [lte(messages.createdAt, dispatch.finishedAt)] : []),
       ),
     )
@@ -543,7 +560,7 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
     /** Its last message only (`{{steps.<id>.reply}}`, CT-322): what a recipe comments on GitHub, without a first line. */
     reply: keepEnds(rows.at(-1)?.text ?? '', 8000),
     messageIds: rows.map((m) => m.id),
-    attachmentIds: rows.flatMap((m) => m.attachmentIds ?? []).slice(0, 10),
+    attachmentIds: outside ? [] : rows.flatMap((m) => m.attachmentIds ?? []).slice(0, 10),
     /** Each message on its own (a verdict is read from the reply that starts with one). */
     messageTexts: rows.map((m) => m.text),
   };

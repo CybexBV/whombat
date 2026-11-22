@@ -18,7 +18,7 @@
  *   assessment, a search answer or an outsiders' turn: they are the person's files.
  * Everything else is “not found”, so nobody can probe for ids.
  */
-import type { AttachmentRef, Message } from '@whombat/core';
+import type { AttachmentRef } from '@whombat/core';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { stepTurnFileIds } from '../automations/handed-files';
 import type { Db } from '../db/client';
@@ -148,19 +148,26 @@ async function handoffRootId(db: Db, row: DispatchLike): Promise<string | null> 
 }
 
 /**
- * Leaves out a website visitor's screenshots (the files on a Whombat Feedback report's root message, FB-F3-12): only
- * the report's assessment (above) and the approved handoff's developer get them, where the prompt marks the report
- * as untrusted data. Any other agent in the channel or thread — a person's “@Dusty thoughts?” — doesn't.
+ * A Feedback report's screenshots go to its assessment and approved handoff. A person's turn sees none of the
+ * attachments on outsiders' posts in its automatic context. A person can explicitly save one to Files.
  */
-async function withoutVisitorFiles(db: Db, row: DispatchLike, ids: string[]): Promise<string[]> {
+async function withoutOutsideFiles(db: Db, row: DispatchLike, ids: string[]): Promise<string[]> {
   if (row.trigger === 'feedback' || !ids.length) return ids;
   const roots = await db
-    .select({ id: messages.id })
+    .select({ id: messages.id, outside: messages.outsidersRun })
     .from(messages)
-    .where(and(inArray(messages.id, ids), sql`${messages.card}->>'kind' = 'report'`));
+    .where(
+      and(
+        inArray(messages.id, ids),
+        or(
+          sql`${messages.card}->>'kind' = 'report'`,
+          outsidersTurn(row) ? undefined : eq(messages.outsidersRun, true),
+        ),
+      ),
+    );
   if (!roots.length) return ids;
   const allowed = await handoffRootId(db, row);
-  const drop = new Set(roots.map((r) => r.id).filter((id) => id !== allowed));
+  const drop = new Set(roots.filter((r) => r.outside || r.id !== allowed).map((r) => r.id));
   return ids.filter((id) => !drop.has(id));
 }
 
@@ -177,15 +184,6 @@ export async function outsidersFileIds(
   return new Set(row.trigger === 'automation' ? await stepTurnFileIds(db, row.id) : []);
 }
 
-/** `message` as `only` lets a turn see it: without the files it may not use (all of it when `only` is null). */
-export function withOnlyFiles<M extends Pick<Message, 'attachments'>>(
-  message: M,
-  only: ReadonlySet<string> | null,
-): M {
-  if (!only || message.attachments.every((a) => only.has(a.id))) return message;
-  return { ...message, attachments: message.attachments.filter((a) => only.has(a.id)) };
-}
-
 /** The ready attachments a dispatch's agent may use now, oldest message first. */
 export async function dispatchAttachmentRows(
   db: Db,
@@ -195,7 +193,7 @@ export async function dispatchAttachmentRows(
   if (row.search) return [];
   const only = await outsidersFileIds(db, row);
   if (only?.size === 0) return [];
-  const ids = await withoutVisitorFiles(db, row, await dispatchMessageIds(db, row, windowSize));
+  const ids = await withoutOutsideFiles(db, row, await dispatchMessageIds(db, row, windowSize));
   if (!ids.length) return [];
   const rows = await db
     .select({ attachment: attachments, createdAt: messages.createdAt, ord: messages.ord })

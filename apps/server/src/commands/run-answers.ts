@@ -56,10 +56,22 @@ export const awaitAnswer = defineCommand({
     if (!row || row.burrowId !== ctx.burrow.id || row.agentId !== ctx.actor.id || row.status !== 'live')
       return { attention: null };
     const [question] = await tx
-      .select({ authorId: messages.authorId, asks: messages.asks, text: messages.text })
+      .select({
+        authorId: messages.authorId,
+        asks: messages.asks,
+        text: messages.text,
+        outsidersRun: messages.outsidersRun,
+        provenance: messages.provenance,
+      })
       .from(messages)
       .where(eq(messages.id, input.messageId));
-    if (!question || question.authorId !== ctx.actor.id || !question.asks)
+    if (
+      !question ||
+      question.authorId !== ctx.actor.id ||
+      !question.asks ||
+      question.outsidersRun ||
+      question.provenance
+    )
       return { attention: row.attention };
     const attention = questionAttention(question.text);
     if (!attention || attention === row.attention) return { attention: row.attention };

@@ -64,6 +64,9 @@ interface ListedAction {
 /** Why a listed action's arguments can't be used, in words the agent can act on. */
 class ListedArgumentError extends Error {}
 
+/** Why a listed action can’t use the connection’s stored settings. */
+class ListedSetupError extends Error {}
+
 /* Values ----------------------------------------------------------------------------------------- */
 
 /** The longest text a value of a listed action holds: a note, a task's description, a text file. */
@@ -274,7 +277,7 @@ const fieldText = (fields: Fields, id: string) => {
 
 /** A path the server made from the connection's own fields, refused (without saying it) when it can't be sent. */
 function ownPath(path: string, problem: string): string {
-  if (vaultPathProblem(path)) throw new ListedArgumentError(problem);
+  if (vaultPathProblem(path)) throw new ListedSetupError(problem);
   return path;
 }
 
@@ -333,7 +336,7 @@ const moneybirdDocument = (due: boolean) =>
 function moneybirdPath(path: string, fields: Fields, settled: boolean): string {
   const administration = fieldText(fields, 'administration');
   if (!administration)
-    throw new ListedArgumentError(
+    throw new ListedSetupError(
       'This Moneybird connection has no administration chosen yet, so nothing can be added to it.',
     );
   const m = /^\/(?:([^/]+)\/)?(documents\/.+)$/.exec(path);
@@ -457,7 +460,7 @@ function nextcloudPath(path: string, fields: Fields, folder: boolean, settled: b
   const users = nextcloudUsers(fields);
   const user = users[0];
   if (!user)
-    throw new ListedArgumentError(
+    throw new ListedSetupError(
       'This Nextcloud connection doesn’t know its user yet, so nothing can be saved in it.',
     );
   const dav = NEXTCLOUD_DAV_FILES.exec(path);
@@ -777,10 +780,15 @@ export function listedWords(input: {
  * The listed actions a connection offers, as the agent proposes them: “upload … : tool request, POST …”. Never the
  * connection's own fields: the paths leave out the person's account ids, which the server fills in.
  */
-export function listedHowTo(catalogId: string, tools: readonly Tool[]): string[] {
+export function listedOffers(catalogId: string, tools: readonly Tool[]) {
   return LISTED.filter(
     (a) => a.catalogId === catalogId && tools.some((t) => t.name === a.tool && t.origin === a.origin),
-  ).map((a) => `${a.can}: ${a.how}`);
+  ).map(({ tool, origin, can, how }) => ({ tool, origin, action: can, how: `${can}: ${how}` }));
+}
+
+/** Match an offered action using only the call's arguments and the public catalog. */
+export function listedActionName(catalogId: string, tool: Tool, args: Readonly<Args>): string | undefined {
+  return listedFor(catalogId, tool, args)?.can;
 }
 
 /** The ids a proposed action's arguments name, which its card shows by name (none when it isn't listed). */
@@ -928,6 +936,7 @@ export function settleListed(
   try {
     return { ok: true, args: listed.settle({ ...args }, fields, settled) };
   } catch (err) {
+    if (err instanceof ListedSetupError) return { ok: false, listed: false, reason: err.message };
     if (err instanceof ListedArgumentError || err instanceof ConnectionArgumentError)
       return { ok: false, listed: true, reason: err.message };
     throw err;

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { automationRunSteps, automationRuns } from '../../db/schema/index';
 import { notFound } from '../../lib/errors';
+import { outsidersRun } from '../runs';
 import type { AutomationRunRow, AutomationStepRow } from '../store';
 
 /** Default and ceiling minutes per step kind (a definition may shorten, never exceed, the ceiling). */
@@ -45,9 +46,21 @@ export function runScope(
   steps: readonly AutomationStepRow[],
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const s of steps)
-    out[s.stepId] =
-      s.kind === 'connection_actions' ? actionsScope(s) : { ...(s.output as JsonObject), state: s.state };
+  const outside = outsidersRun(run.trigger);
+  for (const s of steps) {
+    const { offeredActions: _offered, resultDispatchId, ...output } = s.output as JsonObject;
+    if (outside && s.kind === 'dispatch_agent') {
+      // An older step may have collected another turn's reply. Without attribution its saved result cannot be reused.
+      if (s.dispatchId && resultDispatchId !== s.dispatchId) {
+        delete output.text;
+        delete output.reply;
+        delete output.messageIds;
+        delete output.verdict;
+      }
+      delete output.attachmentIds;
+    }
+    out[s.stepId] = s.kind === 'connection_actions' ? actionsScope(s) : { ...output, state: s.state };
+  }
   return { trigger: run.scope, steps: out, run: { number: run.number, id: run.id, test: run.test } };
 }
 
