@@ -998,7 +998,7 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
   });
 });
 
-describe('a report’s turn uses no file someone adds to its thread (outsiders-turns.md OT-05)', () => {
+describe('a report’s turn uses no file someone adds to its thread', () => {
   it('neither names nor gives it the person’s file, by any way, also for a run started before the handover was kept', async () => {
     const id = await recipe();
     await poll();

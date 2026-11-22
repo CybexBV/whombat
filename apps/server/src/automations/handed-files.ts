@@ -1,6 +1,6 @@
 /**
- * The files the server handed over from what started an automation run (docs/decisions/automation-recipes.md AR-72):
- * the email's for a mail run, copied onto the prompt of its first agent turn and kept on that step by id
+ * The files the server handed over from what started an automation run (docs/decisions/automation-recipes.md): the
+ * email's for a mail run, copied onto the prompt of its first agent turn and kept on that step by id
  * (`triggerFileIds`); none for a tracker report's run, whose report reaches the turn only as text. An outsiders' turn of
  * the run is shown and may read only these (`files/access.ts`): a file the person or anyone else adds to the run's
  * thread stays theirs.

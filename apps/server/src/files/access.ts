@@ -165,7 +165,7 @@ async function withoutVisitorFiles(db: Db, row: DispatchLike, ids: string[]): Pr
 }
 
 /**
- * The only files an outsiders' turn other than a feedback assessment may be shown and use (OP-17): those the server
+ * The only files an outsiders' turn other than a feedback assessment may be shown and use: those the server
  * handed over from what started the automation run whose step queued it (the email's; none for a tracker report).
  * Any other such turn has none. Null for every other dispatch, which the rules above decide alone.
  */
