@@ -20,12 +20,19 @@ export function Bubble({
   );
 }
 
-/** A sentence with one value set off, e.g. `fill((v) => \`Type ${v} to confirm\`, <b>sda</b>)`. */
-export function fill(template: (v: string) => string, value: ReactNode): ReactNode[] {
+const MARK = 0xe000;
+
+/**
+ * A sentence with its values set off, e.g. `fill((v) => \`Type ${v} to confirm\`, <b>sda</b>)`; a template of two
+ * values takes two, in order.
+ */
+export function fill(template: (...v: string[]) => string, ...values: ReactNode[]): ReactNode[] {
+  // Each value's place is marked by a private-use character of its own, which no sentence contains.
+  const text = template(...values.map((_, i) => String.fromCharCode(MARK + i)));
   return (
-    template('\u0000')
-      .split('\u0000')
+    text
+      .split(/([\uE000-\uE007])/)
       // biome-ignore lint/suspicious/noArrayIndexKey: the parts of a fixed sentence
-      .flatMap((part, i) => (i === 0 ? [part] : [<span key={i}>{value}</span>, part]))
+      .map((part, i) => (i % 2 === 1 ? <span key={i}>{values[part.charCodeAt(0) - MARK]}</span> : part))
   );
 }

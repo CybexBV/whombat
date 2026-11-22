@@ -30,14 +30,17 @@ const (
 
 // Screen is a validated state, ready to render.
 type Screen struct {
-	State   string
-	Code    string    // claimable only, display form LL-NNNN-LL
-	URL     string    // without the scheme, e.g. dev.whombat.com/claim
-	RetryAt time.Time // backoff only
-	Burrows *Burrows  // claimed only, when the runtime sent it (CT-116); the text console doesn't show it
-	SignIn  *SignIn   // claimed only: a device waiting to sign in at this screen (BX-06); see LiveSignIn
-	Alert   *Alert    // any state: a warning over every screen (contracts 4.3, own_address_foreign)
-	Reach   *Reach    // any state: Whombat Link and Tailscale (contracts 4.4); see LinkStarting
+	State string
+	Code  string // claimable only, display form LL-NNNN-LL
+	URL   string // without the scheme, e.g. dev.whombat.com/claim
+	// ClaimHref is the claim link as a phone opens it (“https://…”), for the graphical console's QR code: "" unless the
+	// file's url is https, as a plain-HTTP address opens nothing a phone could use.
+	ClaimHref string
+	RetryAt   time.Time // backoff only
+	Burrows   *Burrows  // claimed only, when the runtime sent it (CT-116); the text console doesn't show it
+	SignIn    *SignIn   // claimed only: a device waiting to sign in at this screen (BX-06); see LiveSignIn
+	Alert     *Alert    // any state: a warning over every screen (contracts 4.3, own_address_foreign)
+	Reach     *Reach    // any state: Whombat Link and Tailscale (contracts 4.4); see LinkStarting
 	// Start is why the first start can't finish (CG-409): from the provisioning unit's file, not the runtime's (the
 	// caller sets it, source.LoadStart); shown on the starting screen only (StartShown).
 	Start *Start
@@ -109,6 +112,7 @@ func Parse(data []byte) (Screen, error) {
 		return Screen{}, err
 	}
 	sc.Openable = openable(st.URL, sc.URL)
+	sc.ClaimHref = httpsHref(st.URL, sc.URL)
 	if !sc.Openable {
 		sc.InApp = inApp(st.URL, sc.URL)
 		// Never beside an address the app can take: then there is a way in to show.
@@ -226,6 +230,16 @@ func displayURLMax(u string, limit int) (string, error) {
 		return "", errors.New("state file: invalid url")
 	}
 	return d, nil
+}
+
+// httpsHref is shown (an address as the screen shows it, already checked) as a phone opens it, "https://…", when raw
+// (the address as the file gave it) is https; "" otherwise. Built from the checked form, so a QR code holds nothing the
+// screen doesn't show in words.
+func httpsHref(raw, shown string) string {
+	if shown == "" || !strings.HasPrefix(raw, "https://") {
+		return ""
+	}
+	return "https://" + shown
 }
 
 // openable reports whether raw (the file's url; shown, the same without its scheme) serves a page a person can open:

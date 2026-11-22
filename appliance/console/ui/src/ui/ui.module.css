@@ -254,3 +254,18 @@
     transform: translate(var(--drift), 110vh) rotate(calc(var(--spin) + 540deg));
   }
 }
+
+/* A QR code: fixed light and dark, so every phone reads it in either theme (the README's “fixed colours” exception). */
+.qr {
+  display: block;
+  flex: none;
+  border-radius: var(--radius-small);
+}
+
+.qrLight {
+  fill: var(--knob);
+}
+
+.qrDark {
+  fill: var(--avatar-ink);
+}

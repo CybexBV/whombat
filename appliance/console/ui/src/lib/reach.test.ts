@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { type ConsoleState, parseState } from './api';
-import { linkScreen, linkShown, liveLinkCode, noAddressLine, reachNotes } from './console';
+import { DEMO_QR } from '../demo/qr';
+import { type ConsoleState, parseState, qrRows } from './api';
+import { linkScreen, linkShown, liveLinkCode, noAddressLine, reachNotes, waitingInApp } from './console';
 import type { DeskState } from './desk';
 import { deskActive } from './deskScene';
 
@@ -41,7 +42,32 @@ describe('the reach from the server (CG-404)', () => {
       code: 'ABCD-EFGH',
       url: 'app.whombat.com/link',
     });
-    expect(s.reach?.tailscale).toEqual({ loginUrl: 'login.tailscale.com/a/abc123', needsHttps: true });
+    expect(s.reach?.tailscale).toEqual({
+      loginUrl: 'login.tailscale.com/a/abc123',
+      needsHttps: true,
+      loginQr: [],
+      first: false,
+    });
+  });
+
+  it('reads the QR codes the server drew, and nothing else as one', () => {
+    const qr = DEMO_QR['https://login.tailscale.com/a/1a2b3c4d5e6f7a'] ?? [];
+    const s = con('claimable', {
+      link: { ...CODE, qr: DEMO_QR['https://app.whombat.com/link?code=KXQM-TRVW'] },
+      tailscale: { loginUrl: 'login.tailscale.com/a/abc123', loginQr: qr, first: true },
+    });
+    expect(s.reach?.link?.qr.length).toBe(29);
+    expect(s.reach?.tailscale).toMatchObject({ loginQr: qr, first: true });
+    // Not square, a size no QR code has, or other characters: no QR code, the words stay.
+    for (const bad of [qr.slice(1), [...qr, qr[0]], qr.map((r) => r.replace('#', 'x')), 'qr', [1, 2]]) {
+      expect(qrRows(bad)).toEqual([]);
+    }
+    expect(qrRows(qr)).toBe(qr);
+    // A Link code that isn't live, or no sign-in link: no QR code either.
+    expect(con('claimable', { link: { state: 'starting', qr } }).reach?.link?.qr).toEqual([]);
+    expect(
+      con('claimable', { tailscale: { needsHttps: true, loginQr: qr } }).reach?.tailscale?.loginQr,
+    ).toEqual([]);
   });
 
   it('drops what it can’t show, part by part, and keeps the claim', () => {
@@ -113,10 +139,18 @@ describe('the notes above every claim screen', () => {
       tailscale: { loginUrl: 'login.tailscale.com/a/abc123', needsHttps: true },
     });
     expect(reachNotes(s)).toEqual([
-      { kind: 'tailscaleLogin', url: 'login.tailscale.com/a/abc123' },
-      { kind: 'tailscaleHttps' },
+      { kind: 'tailscaleLogin', url: 'login.tailscale.com/a/abc123', qr: [], first: false },
+      { kind: 'tailscaleHttps', first: false },
       { kind: 'linkGrace', day: '25 November' },
     ]);
+    // The first of two steps: only Tailscale's first note says “1 · ”.
+    const first = (t: object) => reachNotes(con('claimable', { tailscale: { ...t, first: true } }));
+    expect(
+      first({ loginUrl: 'login.tailscale.com/a/abc123', needsHttps: true }).map(
+        (n) => 'first' in n && n.first,
+      ),
+    ).toEqual([true, false]);
+    expect(first({ needsHttps: true })).toEqual([{ kind: 'tailscaleHttps', first: true }]);
     expect(reachNotes(con('claimed', { link: { state: 'ended' } }))).toEqual([{ kind: 'linkEnded' }]);
     expect(reachNotes(con('claimed', { link: { state: 'grace' } }))).toEqual([]);
     expect(reachNotes(con('claimed', undefined))).toEqual([]);
@@ -131,5 +165,52 @@ describe('the claim line without an address to open', () => {
     expect(noAddressLine(con('claimable', { tailscale: { needsHttps: true } }))).toBe('claimAfterHttps');
     expect(noAddressLine(con('claimable', { link: { state: 'off' } }))).toBe('claimNoAddress');
     expect(noAddressLine(con('claimable', undefined))).toBe('claimNoAddress');
+  });
+});
+
+describe('Link on, the web address still coming', () => {
+  /** A box with Link on and no address to open yet: the claim in the app on this network. */
+  const onWaiting = (claim: object, reach: unknown = { link: { state: 'on', waitingForAddress: true } }) => {
+    const s = parseState({
+      mode: 'console',
+      now: '2026-09-27T12:00:00Z',
+      footer: '',
+      claim: { state: 'claimable', code: 'EQMX', claimUrl: '', appUrl: '', inApp: '10.100.0.10', ...claim },
+      desk: null,
+      reach,
+    });
+    if (s?.mode !== 'console') throw new Error('not a console state');
+    return s;
+  };
+
+  it('shows the wait in place of the claim, the app on this network under it', () => {
+    const s = onWaiting({});
+    expect(linkShown(s)).toBe(true);
+    expect(linkScreen(s, NOW)).toBe('waiting');
+    expect(waitingInApp(s)).toEqual({ address: '10.100.0.10', letters: 'EQMX' });
+    // The same under Link's own wait for an address.
+    expect(waitingInApp(onWaiting({}, { link: { state: 'starting', waitingForAddress: true } }))).toEqual({
+      address: '10.100.0.10',
+      letters: 'EQMX',
+    });
+  });
+
+  it('names no other way without an address for the app or letters, and leaves other screens alone', () => {
+    expect(waitingInApp(onWaiting({ inApp: undefined }))).toBeNull();
+    expect(waitingInApp(onWaiting({ code: '' }))).toBeNull();
+    expect(waitingInApp(onWaiting({}, { link: { state: 'starting' } }))).toBeNull();
+    // `on` without the wait, or on a box that isn't claimable: the claim's own screen.
+    expect(linkShown(onWaiting({}, { link: { state: 'on' } }))).toBe(false);
+    expect(linkShown(onWaiting({ state: 'backoff', retryAt: '2026-09-27T12:05:00Z' }))).toBe(false);
+  });
+});
+
+describe('the claim as the second step', () => {
+  it('is read on a claim screen only', () => {
+    const second = (state: string) =>
+      parseState({ mode: 'console', now: '', footer: '', claim: { state, code: 'WADA', second: true } });
+    expect(second('claimable')).toMatchObject({ claim: { second: true } });
+    expect(second('claimed')).not.toHaveProperty('claim.second');
+    expect(second('backoff')).not.toHaveProperty('claim.second');
   });
 });

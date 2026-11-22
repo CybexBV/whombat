@@ -25,6 +25,7 @@ import {
   linkScreen,
   noAddressLine,
   reachNotes,
+  waitingInApp,
 } from '../lib/console';
 import { deskActive } from '../lib/deskScene';
 import { useLastInput, useNow } from '../ui/hooks';
@@ -144,6 +145,11 @@ function ClaimScreens({
   // Whombat Link starting takes the claim's place; the notes sit above every claim screen (CG-404).
   const link = linkScreen(state, serverNow);
   const notes = reachNotes(state);
+  const noteQr = notes.some((n) => n.kind === 'tailscaleLogin' && n.qr.length > 0);
+  const headQr = link
+    ? link === 'code' && (state.reach?.link?.qr.length ?? 0) > 0
+    : scene === 'claimable' && (claim?.qr?.length ?? 0) > 0;
+  const tight = noteQr || (notes.length > 0 && headQr);
   // The chips' touch areas reach past their words: a separator between them, as on the desk's top bar.
   const bluetoothChip = useBluetoothChip();
   const remoteChip = useRemoteHelpChip();
@@ -165,10 +171,15 @@ function ClaimScreens({
             </span>
           )}
         </header>
-        <main className={styles.main} data-notes={notes.length || undefined}>
+        <main
+          className={styles.main}
+          data-notes={notes.length || undefined}
+          // A QR code makes a note or the title taller: the sign gets a little smaller so all of it fits.
+          data-tight={tight || undefined}
+        >
           {!celebrating && <ReachNotes notes={notes} />}
           {link && state.reach?.link ? (
-            <LinkStarting screen={link} link={state.reach.link} now={serverNow} />
+            <LinkStarting screen={link} link={state.reach.link} now={serverNow} inApp={waitingInApp(state)} />
           ) : (
             <>
               {(scene === 'starting' || scene === 'waiting') && <Waking scene={scene} start={claim?.start} />}

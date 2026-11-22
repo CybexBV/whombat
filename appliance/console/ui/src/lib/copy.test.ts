@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CONSOLE, GUIDE, GUIDE_LABEL, INSTALLER, WORD } from './copy';
+import type { Disk } from './api';
+import { CONSOLE, checkNote, diskNote, GUIDE, GUIDE_LABEL, INSTALLER, WORD } from './copy';
 
 // The console's words must stay those of the text console (CG-07): every WORD is a string literal in
 // console/internal/screen, with %s / %d where the page fills in a value.
@@ -10,8 +11,10 @@ const go = ['render.go', 'start.go']
 
 describe('WORD', () => {
   it.each(Object.entries(WORD))('%s is verbatim from the text console', (_, w) => {
-    const text = typeof w === 'function' ? (w as (v: never) => string)('\u0000' as never) : w;
-    const literal = text.replace('\u0000', typeof w === 'function' && /min\.$/.test(text) ? '%d' : '%s');
+    // Each value the page fills in is a %s (a count of minutes: %d), in order.
+    const values = typeof w === 'function' ? Array.from({ length: w.length }, () => '\u0000') : [];
+    const text = typeof w === 'function' ? (w as (...v: never[]) => string)(...(values as never[])) : w;
+    const literal = text.replaceAll('\u0000', typeof w === 'function' && /min\.$/.test(text) ? '%d' : '%s');
     expect(go).toContain(`"${literal}"`);
   });
 });
@@ -42,5 +45,41 @@ describe('the start problem (CG-409)', () => {
     expect(startWords({ problem: 'release-missing', release: '' })).toBe(WORD.startReleaseMissingNoId);
     expect(startWords({ problem: 'offline', release: '' })).toBe(WORD.startOffline);
     expect(startWords({ problem: 'failed', release: 'x' })).toBe(WORD.startFailed);
+  });
+});
+
+// The disk check says what stops each disk, not one sentence for every reason.
+describe('the disk check', () => {
+  const GiB = 1024 ** 3;
+  const disk = (name: string, reason: Disk['reason'], gib = 128): Disk => ({
+    path: `/dev/${name}`,
+    name,
+    model: '',
+    sizeBytes: gib * GiB,
+    eligible: reason === '',
+    reason,
+  });
+  it('names each disk and its reason', () => {
+    const small = diskNote([disk('sda', 'too-small', 64)]);
+    expect(small).toContain('sda');
+    expect(small).toContain('64 GiB');
+    expect(small).toContain('110 GiB');
+    const all = diskNote([disk('sdb', 'installer-medium'), disk('sdc', 'in-use'), disk('sdd', 'usb')]);
+    for (const w of ['sdb', 'installer', 'sdc', 'in use', 'sdd', 'USB']) expect(all).toContain(w);
+    expect(all).not.toContain('110 GiB');
+  });
+  it('says when it found no disk at all', () => {
+    expect(diskNote([])).toContain('No disk found');
+    expect(checkNote('disk', 'fail', '', [])).toBe(diskNote([]));
+    expect(checkNote('disk', 'fail', '', [disk('sda', 'usb')])).toContain('sda');
+    expect(checkNote('disk', 'ok', 'sda', [disk('sda', '')])).toBeNull();
+  });
+});
+
+// After the installer, the screen shows a Link code or Tailscale's sign-in first, not always a claim code.
+describe('the installer’s promise', () => {
+  it('doesn’t promise a claim code', () => {
+    expect(INSTALLER.welcomeNext).not.toMatch(/claim/i);
+    expect(INSTALLER.doneSub).not.toMatch(/claim/i);
   });
 });
