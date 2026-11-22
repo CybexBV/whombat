@@ -34,6 +34,8 @@ export interface ApprovalDraft {
   involvedIds?: string[];
   /** Text of the approval card message the requester posts. */
   cardText?: string;
+  /** The thread of the conversation the card goes in (an earlier card's, when it asks again); absent: its turn's. */
+  threadRootId?: string | null;
 }
 
 /** What a command needs from the keys engine. */
@@ -72,6 +74,8 @@ export interface RequirementContext {
   services: Services;
   burrow: BurrowRow;
   actor: ActorInfo;
+  /** Set when an approved request is being executed (its card was saved and said yes to before). */
+  approvalId?: string | null;
 }
 
 /** Fields of an event the command writes; the pipeline fills id, burrow, actor, time and on-behalf-of. */

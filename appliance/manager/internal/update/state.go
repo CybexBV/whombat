@@ -263,6 +263,11 @@ type State struct {
 	Quarantine map[string]Quarantine `json:"quarantine,omitempty"`
 	Lock       *Lock                 `json:"lock,omitempty"`
 	Hold       bool                  `json:"hold"`
+	// ChannelPaused records whether the box's update channel currently carries the signed TUF pause marker.
+	ChannelPaused bool `json:"channelPaused,omitempty"`
+	// ChannelVersions records the highest verified TUF channel role version applied per channel, so an older refresh
+	// can neither offer a stale release nor overwrite a newer pause state.
+	ChannelVersions map[string]int64 `json:"channelVersions,omitempty"`
 	// AskFirst is the owner's “Ask before updating”: every candidate waits (Waiting "owner") until the owner approves
 	// that release. Approved is the release the owner approved, while it is the candidate; it ends when that candidate
 	// is installed, rolled back or dropped, so a later offer of the same release asks again (Whombat

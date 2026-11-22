@@ -5,25 +5,47 @@
  */
 import type { VoiceModelState } from '@whombat/control-contracts/local';
 import {
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
   VOICE_STT_MODELS,
   VOICE_TYPING_MAX_SECONDS,
+  type VoiceDownloadModel,
+  type VoiceDutchVoice,
   type VoiceLanguage,
   type VoiceModelChoice,
   type VoiceSttModel,
   type VoiceTyping,
   type VoiceTypingModel,
 } from '@whombat/core/domain';
+import { VOICE_REMOVING_MINOR } from '@whombat/protocol/session';
 import type { VoiceAbility } from './speech';
 
-/** The box's voice typing settings (`voice_typing`). */
+/** The box's voice typing and Dutch voice settings (`voice_typing`). */
 export interface VoiceTypingSettings {
   on: boolean;
   model: VoiceModelChoice;
   language: VoiceLanguage;
+  dutchVoice: boolean;
+  dutchVoiceAgreedBy: string | null;
+  dutchVoiceAgreedAt: Date | null;
+  dutchVoiceLicenceVersion: string | null;
 }
 
-/** Until the person changes them: on, Automatic and Automatic. */
-export const DEFAULT_VOICE_TYPING: VoiceTypingSettings = { on: true, model: 'auto', language: 'auto' };
+/** Until the person changes them: voice typing on, Automatic and Automatic; Dutch voice off. */
+export const DEFAULT_VOICE_TYPING: VoiceTypingSettings = {
+  on: true,
+  model: 'auto',
+  language: 'auto',
+  dutchVoice: false,
+  dutchVoiceAgreedBy: null,
+  dutchVoiceAgreedAt: null,
+  dutchVoiceLicenceVersion: null,
+};
+
+/** Whether the person has opted into the Dutch voice under the current licence version. */
+export function wantsDutchVoice(settings: VoiceTypingSettings): boolean {
+  return settings.dutchVoice && settings.dutchVoiceLicenceVersion === DUTCH_VOICE_LICENCE_VERSION;
+}
 
 export interface VoiceFacts {
   settings: VoiceTypingSettings;
@@ -35,6 +57,12 @@ export interface VoiceFacts {
   fetched: readonly VoiceModelState[] | null;
   /** The box has a model fetcher (`WHOMBAT_VOICE_MODELS_SOCKET`): its speech service is one that takes recordings. */
   hasFetcher: boolean;
+  /** Last known total sizes of voice models from the fetcher, kept across brief fetcher outages. */
+  knownModelSizes?: Partial<Record<VoiceDownloadModel, number | null>>;
+  /** Last known total size of the Dutch voice model when the fetcher is temporarily unreachable. */
+  knownDutchSize?: number | null;
+  /** True while turning Dutch voice off has not yet completed at the fetcher. */
+  dutchRemovePending?: boolean;
 }
 
 /**
@@ -88,20 +116,89 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
   // voice typing or the desk's Talk hears.
   const needed = wantedModels(settings, facts.deskTalk, gpu !== null);
   if (uses && (settings.on || facts.deskTalk)) needed.add(uses);
-  // Without a fetcher (or while it doesn't answer) the models are the ones the service runs.
-  const listed: readonly Omit<VoiceTypingModel, 'inUse'>[] =
-    facts.fetched ?? [...running].map((id) => ({ id, state: 'ready' as const, size: 0, received: 0 }));
-  const models = [...listed]
-    .filter((m) => VOICE_STT_MODELS.includes(m.id))
+  const knownSize = (id: VoiceDownloadModel): number => {
+    const last =
+      id === 'supertonic'
+        ? (facts.knownDutchSize ?? facts.knownModelSizes?.supertonic)
+        : facts.knownModelSizes?.[id];
+    return last !== undefined && last !== null && last > 0 ? last : VOICE_MODEL_SIZES[id];
+  };
+  // Without a fetcher (or while it doesn't answer) the models are the ones the service runs, using their
+  // last observed or pinned catalog total size so ready rows never drop to 0 bytes.
+  const listed: readonly VoiceModelState[] =
+    facts.fetched ??
+    [...running].map((id) => {
+      const size = knownSize(id);
+      return { id, state: 'ready' as const, size, received: size };
+    });
+  const isSttModel = (m: VoiceModelState): m is VoiceModelState & { id: VoiceSttModel } =>
+    (VOICE_STT_MODELS as readonly string[]).includes(m.id);
+  const models: VoiceTypingModel[] = listed
+    .filter(isSttModel)
     .sort((a, b) => VOICE_STT_MODELS.indexOf(a.id) - VOICE_STT_MODELS.indexOf(b.id))
     .map((m) => ({
       id: m.id,
       state: m.state,
       size: m.size,
-      received: Math.min(m.received, m.size),
+      received: m.state === 'removing' ? m.received : Math.min(m.received, m.size),
       ...(m.problem && (m.state === 'waiting' || m.state === 'failed') ? { problem: m.problem } : {}),
       inUse: needed.has(m.id),
     }));
+  const dutchOn = wantsDutchVoice(settings);
+  const fetchedDutch = available ? (facts.fetched?.find((m) => m.id === 'supertonic') ?? null) : null;
+  const hasKnownDutchSize = (facts.knownDutchSize ?? facts.knownModelSizes?.supertonic ?? null) !== null;
+  const dutchReady = health?.languages?.includes('nl') === true;
+  const dutchSize = knownSize('supertonic');
+  // When the box has a fetcher configured that is temporarily unreachable (e.g. restarting), keep reporting
+  // the saved Dutch voice state instead of hiding the row so turning it on or off shows its saved state.
+  const dutchEntry: VoiceModelState | null =
+    fetchedDutch ??
+    (available &&
+    facts.hasFetcher &&
+    facts.fetched === null &&
+    (dutchOn || facts.dutchRemovePending === true || dutchReady || hasKnownDutchSize)
+      ? {
+          id: 'supertonic',
+          state: dutchOn
+            ? dutchReady
+              ? 'ready'
+              : 'waiting'
+            : facts.dutchRemovePending || dutchReady
+              ? 'removing'
+              : 'absent',
+          size: dutchSize,
+          received: dutchReady ? dutchSize : 0,
+        }
+      : null);
+  let dutchVoice: VoiceDutchVoice | null = null;
+  if (dutchEntry) {
+    const dutchFilesLeft = !dutchOn && (dutchEntry.state !== 'absent' || dutchEntry.received > 0);
+    // While Dutch voice is on and the fetcher hasn't accepted the download yet ('absent'), show 'waiting'
+    // so the app reflects that the setting is saved and the server is retrying the download.
+    const dutchState = dutchOn
+      ? dutchEntry.state === 'absent'
+        ? 'waiting'
+        : dutchEntry.state
+      : dutchFilesLeft
+        ? 'removing'
+        : 'absent';
+    dutchVoice = {
+      on: dutchOn,
+      state: dutchState,
+      size: dutchEntry.size,
+      received:
+        dutchState === 'removing'
+          ? dutchEntry.received
+          : dutchOn
+            ? Math.min(dutchEntry.received, dutchEntry.size)
+            : 0,
+      ...(dutchOn && dutchEntry.problem && (dutchState === 'waiting' || dutchState === 'failed')
+        ? { problem: dutchEntry.problem }
+        : {}),
+      agreedAt: dutchOn && settings.dutchVoiceAgreedAt ? settings.dutchVoiceAgreedAt.toISOString() : null,
+      licenceVersion: dutchOn ? settings.dutchVoiceLicenceVersion : null,
+    };
+  }
   return {
     available,
     on: settings.on,
@@ -112,5 +209,22 @@ export function voiceTypingView(facts: VoiceFacts): VoiceTyping {
     gpu,
     models,
     maxSeconds: VOICE_TYPING_MAX_SECONDS,
+    dutchVoice,
+  };
+}
+
+/**
+ * Shapes `VoiceTyping` for an older app whose `VoiceModelState` predates `'removing'`
+ * (below `VOICE_REMOVING_MINOR`): maps `'removing'` to `'absent'` with 0 bytes so its parser accepts the response.
+ */
+export function voiceTypingForMinor(view: VoiceTyping, minor: number | undefined): VoiceTyping {
+  if (minor === undefined || minor >= VOICE_REMOVING_MINOR) return view;
+  return {
+    ...view,
+    models: view.models.map((m) => (m.state === 'removing' ? { ...m, state: 'absent', received: 0 } : m)),
+    dutchVoice:
+      view.dutchVoice && view.dutchVoice.state === 'removing'
+        ? { ...view.dutchVoice, state: 'absent', received: 0 }
+        : view.dutchVoice,
   };
 }

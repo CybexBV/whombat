@@ -243,9 +243,12 @@ type fakeAgent struct {
 	hubMoves  []string           // MsgHubMove URLs received
 	manages   []proto.ManageRequest
 	// manage answers manage requests (nil: fakeManage).
-	manage    func(proto.ManageRequest) proto.ManageResponse
-	diagnoses []proto.DiagnoseRequest
-	execs     []proto.ExecRequest
+	manage     func(proto.ManageRequest) proto.ManageResponse
+	diagnoses  []proto.DiagnoseRequest
+	diskUsages []proto.DiskUsageRequest
+	execs      []proto.ExecRequest
+	// diskUsageAnswer overrides StreamDiskUsage answers (nil: default breakdown).
+	diskUsageAnswer func(proto.DiskUsageRequest) proto.DiskUsageResponse
 	// updateAnswer and execAnswer answer those streams (nil: OK, and a
 	// SMART line).
 	updateAnswer func(proto.UpdateRequest) proto.UpdateResponse
@@ -511,6 +514,34 @@ func (a *fakeAgent) handle(st *yamux.Stream) {
 			return
 		}
 		wire.WriteMsg(st, proto.DiagnoseResponse{Commands: []string{"cat /proc/mdstat"}, Output: "mdState=STARTED\nrdevStatus.3=DISK_DSBL\n"})
+	case proto.StreamDiskUsage:
+		var req proto.DiskUsageRequest
+		wire.ReadMsg(st, &req)
+		a.mu.Lock()
+		a.diskUsages = append(a.diskUsages, req)
+		answer := a.diskUsageAnswer
+		a.mu.Unlock()
+		resp := proto.DiskUsageResponse{
+			Mount:      req.Mount,
+			FSType:     "ext4",
+			Device:     "/dev/nvme0n1p2",
+			MeasuredAt: time.Now().UTC(),
+			DurationMs: 120,
+			TotalBytes: 200 << 30,
+			UsedBytes:  140 << 30,
+			Categories: []proto.DiskUsageCategory{
+				{Key: proto.DiskCatContainerImages, Label: "Container images", Bytes: 28 << 30, ReclaimableBytes: 6 << 30, Detail: "10 images, 2 unused"},
+				{Key: proto.DiskCatJournal, Label: "System journal", Bytes: 4 << 30},
+			},
+			Folders: []proto.DiskUsageFolder{
+				{Path: "/var/lib/docker", Bytes: 42 << 30},
+				{Path: "/var/log/journal", Bytes: 4 << 30},
+			},
+		}
+		if answer != nil {
+			resp = answer(req)
+		}
+		wire.WriteMsg(st, resp)
 	case proto.StreamExec:
 		var req proto.ExecRequest
 		wire.ReadMsg(st, &req)

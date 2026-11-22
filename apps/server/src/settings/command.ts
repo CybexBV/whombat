@@ -15,16 +15,26 @@ import {
 } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { askAgainThread, askAgainTier, askedAgain, askedAgainError } from '../approvals/ask-again';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { defineCommand, type KeyRequirement } from '../commit/types';
+import { changedSince, heldChanged, signingOnlyAs } from '../connections/bound-targets';
+import {
+  ChangedWhileAskedError,
+  ConnectionChangedError,
+  changedJustNowText,
+  changedSinceYesText,
+} from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, approvals, principals } from '../db/schema/index';
-import { conflict } from '../lib/errors';
+import { type ApiError, conflict } from '../lib/errors';
+import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import { loadConversationRow } from '../read/conversations';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
+import { askThingAction, namedTitle, type ThingActionAsk, thingActionConnectionId } from '../things/actions';
 
 /** The key every settings change needs. */
 export const SETTINGS_KEY = 'settings.change' as const;
@@ -88,20 +98,40 @@ const Input = z.object({
   lines: z.array(z.string().max(120)).max(PREVIEW_LINES).optional(),
   /** The card's title in Whombat's words for this change (“Change a Plex setting”), in place of the map's. */
   title: z.string().min(1).max(160).optional(),
+  /**
+   * Where each connection the change signs as goes and as whom when it was asked for, by id (`callTarget`; a page
+   * action's, `askThingAction`, from the same read as the card's words): the card is saved only while each still goes
+   * there, the yes is bound to it, and the change runs only while each still goes there.
+   */
+  targets: z
+    .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
+    .refine((t) => Object.keys(t).length <= 8)
+    .optional(),
+  /** The earlier approval this card asks again for, saved before its yes was bound (`approvals/ask-again.ts`). */
+  askAgainOf: z.string().min(1).max(64).optional(),
 });
 
 export const changeSetting = defineCommand({
   name: 'change_setting',
   schema: Input,
-  async requiredKey(input, { db, actor }): Promise<KeyRequirement> {
+  async requiredKey(input, { db, actor, approvalId }): Promise<KeyRequirement> {
+    // Saved only while each connection it is bound to is still the one its card was made from (held until this
+    // commits); an approved change is checked again when it runs (`runApprovedChange`).
+    if (input.targets && !approvalId) {
+      const changed = await heldChanged(db, input.targets);
+      if (changed) throw new ChangedWhileAskedError(changed.id, changed.label);
+    }
     const e = assistantSetting(input.op);
     const words = input.title ?? e.words ?? input.op;
     const where = pageWords((e.page ?? 'you.profile') as SettingsPageId, actor.shortName).where;
     const held = (await loadGrants(db, actor.id)).find((g) => g.keyId === SETTINGS_KEY)?.tier ?? null;
+    const tier = changeTier(held, input.op, input.input);
     const grants: Grant[] = [
-      { agentId: actor.id, keyId: SETTINGS_KEY, tier: changeTier(held, input.op, input.input) },
+      { agentId: actor.id, keyId: SETTINGS_KEY, tier: input.askAgainOf ? askAgainTier(tier) : tier },
     ];
     const conversation = input.conversationId ? await loadConversationRow(db, input.conversationId) : null;
+    const thread =
+      input.askAgainOf && conversation ? await askAgainThread(db, input.askAgainOf, conversation.id) : {};
     const lower = words.charAt(0).toLowerCase() + words.slice(1);
     return {
       keyId: SETTINGS_KEY,
@@ -122,12 +152,31 @@ export const changeSetting = defineCommand({
           ? `${actor.shortName} always asks before this change. If you approve, it runs once, as you.`
           : `${actor.shortName} asks before changing your settings. If you approve, it runs once, as you.`,
         cardText: `I need your yes before I change this: ${lower}.`,
+        ...thread,
       },
     };
   },
   async apply(_tx, ctx, input) {
     const access = assistantAccessFor(input.op, input.input);
     if (access !== 'change' && access !== 'ask') throw conflict(`${input.op} isn’t a setting to change.`);
+    if (ctx.approvalId && !input.targets && thingActionConnectionId(input.op, input.input)) {
+      // Said yes to on a card the previous release saved without binding it to its connection: nothing runs; a fresh
+      // card asks again, and this approval ends saying so.
+      const services = ctx.services;
+      const again = {
+        burrowId: ctx.burrow.id,
+        agentId: ctx.actor.id,
+        approvalId: ctx.approvalId,
+        op: input.op,
+        input: input.input,
+        conversationId: input.conversationId,
+        timeZone: ctx.burrow.timeZone,
+      };
+      ctx.complete(async () => {
+        throw await askChangeAgain(services, again);
+      });
+      return { deferred: true };
+    }
     await ctx.emit({
       type: 'setting.changed',
       kind: 'System',
@@ -146,6 +195,7 @@ export const changeSetting = defineCommand({
         op: input.op,
         input: input.input,
         conversationId: input.conversationId,
+        ...(input.targets ? { targets: input.targets } : {}),
       };
       ctx.after(() => runApprovedChange(services, call));
     }
@@ -173,13 +223,20 @@ export async function runApprovedChange(
     op: string;
     input: Record<string, unknown>;
     conversationId: string | null;
+    /** Where each connection it signs as went when it was asked for (`changeSetting`'s `targets`). */
+    targets?: Readonly<Record<string, string>>;
   },
 ): Promise<void> {
   const account = await approverAccount(services.db, call.approvalId);
   const dispatcher = sessionDispatcherOf(services);
+  // A page action is always bound (one asked before binding asks again instead, `changeSetting`); other settings sign
+  // as no connection.
+  const targets = call.targets ?? {};
   const answer =
     account && dispatcher
-      ? await dispatcher.runForAssistant(account, call.agentId, call.op, call.input)
+      ? await runBound(services, targets, changedSinceYesText, () =>
+          dispatcher.runForAssistant(account, call.agentId, call.op, call.input),
+        )
       : ({ type: 'error', message: 'This Whombat can’t run its settings now.' } as const);
   const result =
     answer.type === 'result'
@@ -204,6 +261,83 @@ export async function runApprovedChange(
       'could not answer an approved settings change',
     ),
   );
+}
+
+/**
+ * Runs a settings op signing as each connection in `targets` only where, and as whom, it went when the change was asked
+ * for: a connection given another address, account or token since answers `changed(label)` and nothing runs; one that
+ * changes while the op runs sends nothing (`bound-targets.ts`).
+ */
+export async function runBound(
+  services: Services,
+  targets: Readonly<Record<string, string>>,
+  changed: (label: string) => string,
+  run: () => Promise<RequestAnswer>,
+): Promise<RequestAnswer> {
+  const refused = (message: string): RequestAnswer => ({
+    type: 'error',
+    code: 'conflict',
+    message,
+    retryable: false,
+    replayed: false,
+  });
+  const label = await changedSince(services, targets);
+  if (label) return refused(changed(label));
+  try {
+    return (await signingOnlyAs(targets, run)).value;
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) return refused(err.message);
+    throw err;
+  }
+}
+
+/** A card's own words for a page action (`askThingAction`): the kind's, else the map's, naming its connection. */
+export function thingCardWords(ask: ThingActionAsk, op: string): { title?: string; lines?: string[] } {
+  if (ask.said) return { title: ask.said.title, lines: ask.said.lines.slice(0, PREVIEW_LINES) };
+  if (!ask.label) return {};
+  return { title: namedTitle(assistantSetting(op).words ?? op, ask.label) };
+}
+
+/**
+ * A page action said yes to on a card saved before its yes was bound: a fresh card for it, bound to where its connection
+ * goes now and worded from that same read, in the earlier card's thread (once). The error the earlier approval ends
+ * with.
+ */
+async function askChangeAgain(
+  services: Services,
+  call: {
+    burrowId: string;
+    agentId: string;
+    approvalId: string;
+    op: string;
+    input: Record<string, unknown>;
+    conversationId: string | null;
+    timeZone: string;
+  },
+): Promise<ApiError> {
+  if (await askedAgain(services.db, call.burrowId, call.approvalId)) return askedAgainError();
+  const ask = await askThingAction(services, call.burrowId, call.op, call.input, call.timeZone);
+  if (!ask.label) return conflict('That connection isn’t here any more, so nothing was changed.');
+  if (ask.changed) return conflict(changedJustNowText(ask.changed));
+  try {
+    const res = await services.pipeline.commit(
+      changeSetting,
+      {
+        op: call.op,
+        input: call.input,
+        conversationId: call.conversationId,
+        ...thingCardWords(ask, call.op),
+        targets: ask.targets,
+        askAgainOf: call.approvalId,
+      },
+      { burrowId: call.burrowId, actorId: call.agentId },
+    );
+    if (res.status === 'blocked') return conflict(res.message);
+  } catch (err) {
+    if (err instanceof ChangedWhileAskedError) return conflict(changedJustNowText(err.label));
+    throw err;
+  }
+  return askedAgainError();
 }
 
 export const SETTINGS_COMMANDS = [changeSetting];

@@ -43,10 +43,11 @@ export async function runProvider(
   const { ctx, deps, id, stop, session, reply, verdict, readings, ran, progress, checkout } = turn;
   const { input, live, model, credential, activity } = ready;
   // The model a refused one falls back to: none named (the CLI's own default), or on Hermes's own loop the list's
-  // default, which has to be named (HE-S48); null: no other model to run on.
+  // default or the configured Custom default, which has to be named (HE-S48); null: no other model to run on.
+  const canFallback = live !== null || ready.provider.kind === 'local';
   const fallbackModel = (): string | null | undefined => {
     const fallback = loopDefault(input, ready.provider.kind, deps.registry);
-    return fallback === input.model ? null : fallback;
+    return fallback === input.model?.trim() ? null : fallback;
   };
   let started = false;
   // A model the tool refuses before the turn did anything (no tool call, no message): the same turn once more on the
@@ -114,7 +115,7 @@ export async function runProvider(
             !input.replyOnly &&
             !acted &&
             !reply.posted &&
-            live &&
+            canFallback &&
             input.model &&
             !ev.credentialState &&
             modelRefused(ev, input.model) &&
@@ -149,7 +150,7 @@ export async function runProvider(
     const fallback = fallbackModel();
     delete input.model;
     if (fallback) input.model = fallback;
-    model.apply(input);
+    if (live) model.apply(input);
     delete input.steering;
     session.id = sessionBefore;
     reply.discardFinal();

@@ -1,7 +1,7 @@
 /** The agent (Whombat one-agent.md OA-09): Settings → Agent reads and changes the one agent. */
 import { z } from 'zod';
 import { CommandAllowance } from '../commands/schemas.js';
-import { AgentFace, AgentModelRuntime, AgentName } from '../domain/agent.js';
+import { AgentFace, AgentModelRuntimeUpdate, AgentName } from '../domain/agent.js';
 import { Count, Timestamp } from '../domain/common.js';
 import { Grant, GrantInput } from '../domain/grant.js';
 import { LinkRef } from '../domain/links.js';
@@ -55,7 +55,7 @@ export const UpdateAgentBody = z.object({
   /** Its face (OA-08). A rename never changes it. */
   face: AgentFace.optional(),
   /** The model (it runs on the person's own sign-in for its provider, OP-09). */
-  runtime: AgentModelRuntime.optional(),
+  runtime: AgentModelRuntimeUpdate.optional(),
 });
 export type UpdateAgentBody = z.input<typeof UpdateAgentBody>;
 

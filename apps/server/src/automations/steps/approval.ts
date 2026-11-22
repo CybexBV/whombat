@@ -1,12 +1,12 @@
 import type { AutomationStep, JsonObject, KeyId } from '@whombat/core';
 import { eq } from 'drizzle-orm';
-import { createApproval } from '../../approvals/create';
+import { asQuestion, createApproval } from '../../approvals/create';
 import type { ApplyContext } from '../../commit/types';
 import { automations, messages } from '../../db/schema/index';
 import { notFound } from '../../lib/errors';
 import { loadConversationRow } from '../../read/conversations';
 import { loadPrincipalRow, shortName } from '../../read/principals';
-import { runPersonOf } from '../runs';
+import { outsidersRun, runPersonOf } from '../runs';
 import type { AutomationRunRow } from '../store';
 import { stepBinding } from './binding';
 import { startsRunThread } from './thread';
@@ -23,7 +23,21 @@ export async function requestStepApproval(
   attempt: number,
   scope: Record<string, unknown>,
   command: { name: string; input: JsonObject },
-  copy: { title: string; details: string; keyId: KeyId; cardText?: string },
+  copy: {
+    title: string;
+    details: string;
+    keyId: KeyId;
+    cardText?: string;
+    /**
+     * The card's question when it is the step's own words (a definition's “Ship it?”, Whombat's “Fix this bug?”, AR-D07);
+     * else the title as a question. Never found in details that hold someone else's words.
+     */
+    question?: string | null;
+    /** WHAT HAPPENS line by line, when the step wrote every line itself; else made from the details. */
+    whatHappens?: string[];
+    /** The short summary (mobile); else the start of the details. */
+    summary?: string;
+  },
 ) {
   const [automation] = await ctx.tx.select().from(automations).where(eq(automations.id, run.automationId));
   const conversation = await loadConversationRow(ctx.tx, run.conversationId);
@@ -43,14 +57,16 @@ export async function requestStepApproval(
     },
     decision: null,
     title: copy.title.slice(0, 160),
-    ...approvalWords(copy.title, copy.details),
+    ...(copy.whatHappens
+      ? { question: copy.question ?? asQuestion(copy.title.slice(0, 198)), whatHappens: copy.whatHappens }
+      : approvalWords(copy.title, copy.details, copy.question ?? null)),
     target: `${name} · run #${run.number}`.slice(0, 120),
     explainer:
       `“${name}” is an automation${publisher ? ` ${shortName(publisher)} published` : ''}. It waits here until a person says yes; if you decline, it stops.`.slice(
         0,
         600,
       ),
-    summary: copy.details.slice(0, 600),
+    summary: (copy.summary ?? copy.details).slice(0, 600),
     conditions: [],
     involvedIds: [],
     conversation,
@@ -61,6 +77,7 @@ export async function requestStepApproval(
     where: null,
     // What it continues is the run's work: the person's, or apart for outsiders' input (OP-17).
     onBehalfOfAccountId: await runPersonOf(ctx.tx, run),
+    outsidersRun: outsidersRun(run.trigger),
     command,
     binding,
   });

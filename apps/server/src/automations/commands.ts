@@ -20,6 +20,7 @@ import {
   definitionHash,
   type JsonObject,
   JsonObject as JsonObjectSchema,
+  mailDefinitionProblems,
   NewAutomationSource,
   NumberParam,
   newId,
@@ -61,6 +62,7 @@ import { postMessage } from '../domain/messages';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { checkOutboundUrl } from '../lib/outbound';
 import { newSecret } from '../lib/secrets';
+import { mailConnectionRow } from '../mail-triggers/index';
 import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
@@ -73,6 +75,7 @@ import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-it
 import { postRunNotice } from './notice';
 import { republishPlanCards } from './plan-cards';
 import { createAutomationPrincipal } from './principal';
+import { proposeConnectionActions } from './proposed-actions';
 import { createRun } from './runs';
 import {
   ACTIVE_RUN_STATUSES,
@@ -147,12 +150,15 @@ export async function referenceProblems(
   def: AutomationDefinition,
   forPublish: boolean,
 ): Promise<string[]> {
-  const problems: string[] = [];
+  const problems: string[] = [...mailDefinitionProblems(def)];
   if (hasWebhookTrigger(def)) problems.push(NO_WEBHOOK_TRIGGER_TEXT);
-  // A tracker trigger listens to one of the burrow's tracker connections (report-trackers.md TA-04).
-  for (const t of def.triggers)
+  // A tracker trigger listens to one of the burrow's tracker connections; a mail trigger to one of the person's mailboxes.
+  for (const t of def.triggers) {
     if (t.kind === 'tracker' && !(await trackerConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
       problems.push(`There is no tracker connection ${t.connectionId} on this Whombat.`);
+    if (t.kind === 'mail' && !(await mailConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
+      problems.push(`There is no connected mailbox ${t.connectionId} on this Whombat.`);
+  }
   for (const id of definitionConversations(def))
     if (!(await inBurrow(ctx.tx, ctx.burrow.id, id)))
       problems.push(`There is no conversation ${id} on this Whombat.`);
@@ -229,6 +235,7 @@ export async function storeDraft(
   patch: { name?: string; description?: string; definition: JsonObject | null },
 ) {
   refuseWebhookTrigger(patch.definition);
+  await ctx.services.newerAutomations.refuse(patch.definition);
   await ctx.tx
     .update(automations)
     .set({
@@ -248,6 +255,7 @@ export async function insertAutomation(
   args: { name: string; description: string; draft: JsonObject | null },
 ): Promise<string> {
   refuseWebhookTrigger(args.draft);
+  await ctx.services.newerAutomations.refuse(args.draft);
   const id = newId('automation');
   const principalId = await createAutomationPrincipal(ctx, { name: args.name, createdAt: ctx.now });
   await ctx.tx.insert(automations).values({
@@ -374,6 +382,13 @@ export async function recipeFile(
     connection = row.label;
     words = recipeWordsOf(driver);
   }
+  if (input.when.kind === 'mail') {
+    const row = await mailConnectionRow(tx, ctx.burrow.id, input.when.connectionId);
+    if (!row) throw badRequest('Connect a mail account in Settings → Connections first.');
+    if (row.status !== 'active')
+      throw badRequest(`${row.email} needs you to sign in again in Settings → Connections first.`);
+    connection = row.email;
+  }
   let recipe = input.when.kind === 'tracker' && words ? { ...input, when: { ...input.when, words } } : input;
   const named = input.when.kind === 'github' ? input.when.repo : input.repo;
   if (named) {
@@ -465,7 +480,38 @@ export async function publishVersion(
   def: AutomationDefinition,
   enable: boolean,
 ): Promise<number> {
+  await ctx.services.newerAutomations.refuse(def);
   const tx = ctx.tx;
+  const [currentAuto] = await tx
+    .select({ status: automations.status, mailActiveAt: automations.mailActiveAt })
+    .from(automations)
+    .where(eq(automations.id, row.id));
+  const prevDef =
+    row.currentVersion !== null
+      ? (
+          await tx
+            .select({ definition: automationVersions.definition })
+            .from(automationVersions)
+            .where(
+              and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)),
+            )
+        )[0]?.definition
+      : undefined;
+  const prevMailConnections = new Set(
+    (prevDef?.triggers ?? []).flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : [])),
+  );
+  const nextMailConnections = def.triggers.flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : []));
+  const prevHadMail = prevMailConnections.size > 0;
+  const nextHasMail = nextMailConnections.length > 0;
+  // Keep an active mail trigger's activation time across edits to steps/wording while staying enabled on the same
+  // mailbox(es); record a fresh activation time when turning on, adding mail, or switching to a new mailbox.
+  const sameLiveMail =
+    enable &&
+    nextHasMail &&
+    currentAuto?.status === 'published' &&
+    currentAuto.mailActiveAt !== null &&
+    nextMailConnections.every((c) => prevMailConnections.has(c));
+  const mailActiveAt = !enable || !nextHasMail ? null : sameLiveMail ? currentAuto.mailActiveAt : ctx.now;
   const n = (row.currentVersion ?? 0) + 1;
   const hash = definitionHash(def);
   await tx.insert(automationVersions).values({
@@ -492,6 +538,7 @@ export async function publishVersion(
       draftUpdatedAt: ctx.now,
       draftUpdatedById: ctx.actor.id,
       scheduleAnchor: ctx.now,
+      mailActiveAt,
       nextFireAt: enable ? scheduleNext(def, ctx.now, ctx.now) : null,
       updatedAt: ctx.now,
     })
@@ -510,7 +557,11 @@ export async function publishVersion(
     },
   });
   const services = ctx.services;
-  ctx.after(async () => services.automations.nudge());
+  const touchesMail = prevHadMail || def.triggers.some((t) => t.kind === 'mail');
+  ctx.after(async () => {
+    services.automations.nudge();
+    if (touchesMail) services.mailTriggers.nudge();
+  });
   return n;
 }
 
@@ -840,6 +891,8 @@ export const setAutomationEnabled = defineCommand({
       .where(and(eq(automationVersions.automationId, row.id), eq(automationVersions.n, row.currentVersion)));
     if (!current) throw notFound('Automation version');
     const def = current.definition;
+    if (input.enabled) await ctx.services.newerAutomations.refuse(def);
+    const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
     // new version of the same definition, checked and signed the way publishing is.
@@ -861,6 +914,7 @@ export const setAutomationEnabled = defineCommand({
           currentVersion: n,
           status: 'published',
           scheduleAnchor: ctx.now,
+          mailActiveAt: watchesMail ? ctx.now : null,
           nextFireAt: scheduleNext(def, ctx.now, ctx.now),
           updatedAt: ctx.now,
         })
@@ -882,14 +936,24 @@ export const setAutomationEnabled = defineCommand({
       });
       await publishAutomation(ctx, ctx.burrow.id, row.id);
       const services = ctx.services;
-      ctx.after(async () => services.automations.nudge());
+      ctx.after(async () => {
+        services.automations.nudge();
+        if (watchesMail) services.mailTriggers.nudge();
+      });
       return { automationId: row.id };
     }
+    const nextMailActiveAt =
+      !input.enabled || !watchesMail
+        ? null
+        : row.status === 'published' && row.mailActiveAt
+          ? row.mailActiveAt
+          : ctx.now;
     await tx
       .update(automations)
       .set({
         status: input.enabled ? 'published' : 'disabled',
         scheduleAnchor: input.enabled ? ctx.now : row.scheduleAnchor,
+        mailActiveAt: nextMailActiveAt,
         nextFireAt: input.enabled ? scheduleNext(def, ctx.now, ctx.now) : null,
         updatedAt: ctx.now,
       })
@@ -904,9 +968,12 @@ export const setAutomationEnabled = defineCommand({
     });
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
-    if (input.enabled) {
-      const services = ctx.services;
-      ctx.after(async () => services.automations.nudge());
+    const services = ctx.services;
+    if (input.enabled || watchesMail) {
+      ctx.after(async () => {
+        if (input.enabled) services.automations.nudge();
+        if (watchesMail) services.mailTriggers.nudge();
+      });
     }
     return { automationId: row.id };
   },
@@ -1022,6 +1089,7 @@ export const runAutomationNow = defineCommand({
       if (!input.test && !def.triggers.some((t) => t.kind === 'manual'))
         throw conflict('This automation starts on its own. Try it with a test run instead.');
     }
+    await ctx.services.newerAutomations.refuse(def);
     // A run acts in the rooms its definition names: each must still be the burrow's (BP-C19).
     await requireRoomsHere(ctx, def);
     // A test run on a sample (“Try it on …”): `trigger.*` as a real event about that issue or pull request fills it,
@@ -1220,6 +1288,7 @@ export async function removeAutomation(
     .set({
       deletedAt: ctx.now,
       status: row.status === 'published' ? 'disabled' : row.status,
+      mailActiveAt: null,
       nextFireAt: null,
       webhookEnabled: false,
       webhookSecretEnc: null,
@@ -1237,6 +1306,8 @@ export async function removeAutomation(
   });
   ctx.publish(topics.burrow(ctx.burrow.id), { type: 'automation.deleted', automationId: row.id });
   await republishPlanCards(ctx, row.id);
+  const services = ctx.services;
+  ctx.after(async () => services.mailTriggers.nudge());
   return active.length;
 }
 
@@ -1361,4 +1432,5 @@ export const AUTOMATION_COMMANDS = [
   runAutomationNow,
   controlAutomationRun,
   reviewAutomationStep,
+  proposeConnectionActions,
 ];

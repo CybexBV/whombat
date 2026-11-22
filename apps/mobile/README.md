@@ -25,7 +25,7 @@ scripts/                 build-android.mjs (local Gradle build), publish-apk.mjs
 plugins/                 Android config plugins: the dark window background, plain sockets to the Whombat's direct
                          routes (network security config), English resources only, no contrast film over the
                          navigation bar
-modules/whombat-live/    live activities: Android Live Update notifications + FCM service, iOS ActivityKit
+modules/whombat-live/    live activities and home-screen status widget: Android Live Update notifications + FCM + RemoteViews widget, iOS ActivityKit + WidgetKit
 modules/whombat-crypto/  ChaCha20-Poly1305 and SHA-256 from the phone (javax.crypto, CryptoKit) for the session, sealed files, downloads
 modules/whombat-updater/ Android only: the app downloads, checks and installs its own updates
 modules/whombat-passkeys/ passkeys through Credential Manager (Android) and AuthenticationServices (iOS)
@@ -51,7 +51,7 @@ src/
                          and the tabs down the side on a wide or folding screen (SplitStack.tsx, splitRouter.ts)
   push/                  iOS taps (expo-notifications), the permission card (prompt.ts), read notifications
                          leaving the shade (shade.ts); the push handle itself is `managed/push.ts`'s
-  live/                  in-app live activities from run.updated / approval.updated, reconciled on pushes
+  live/                  in-app live activities from run.updated / approval.updated, reconciled on pushes; home-screen status widget sync (`StatusWidgetBridge`)
   screens/               Chat, Thread, Approval, Run, a branch room (Conversation), the assistant's page and the
                          parts it and Advanced share (agent/), Connections and things
   settings/              the Settings tab in the web's groups (list.ts, groups.ts): You (profile, notifications,
@@ -256,7 +256,11 @@ xcrun simctl install <simulator udid> build/dd/Build/Products/Release-iphonesimu
 ```
 
 1. Signing & Capabilities: pick the team for **Whombat** and **WhombatLiveWidget**; the app target needs
-   Push Notifications (its entitlement is generated) — the widget extension needs no capability.
+   Push Notifications (its entitlement is generated) — the widget extension needs no capability until
+   `IOS_APP_GROUP_ENABLED` in `app.config.cjs` is turned on. Whenever you flip `IOS_APP_GROUP_ENABLED` (on or off),
+   run `npx expo prebuild --platform ios --clean` so the `WhombatLiveWidget` target, App Group entitlements and
+   Share Extension are regenerated cleanly (an incremental prebuild refuses when the existing target's wiring does not
+   match the flag).
 2. Build and run on an iPhone (iOS 16.4+; push-to-start needs 17.2+). Live Activities must be allowed in
    Settings → Whombat.
 3. Server: set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_ID=com.whombat.mobile`.

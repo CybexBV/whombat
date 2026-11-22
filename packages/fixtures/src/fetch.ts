@@ -48,6 +48,7 @@ import {
   groupCommentThreads,
   mergeBlock,
   prStatus,
+  resolveAgentModelRuntime,
   searchFilterOf,
   shortNameOf,
 } from '@whombat/core/domain';
@@ -274,13 +275,16 @@ function createWorld() {
       return { grants: after, events };
     },
     /** `agent.update` (owners): the name, the face or the model; one Keys event when anything changed. */
-    update(body: { name?: string; face?: Agent['face']; runtime?: Partial<Agent['runtime']> }) {
+    update(body: UpdateAgentBody) {
       const before = currentAgent;
+      const nextRuntime: Agent['runtime'] | undefined = body.runtime
+        ? resolveAgentModelRuntime(body.runtime, before.runtime)
+        : undefined;
       const updated: Agent = {
         ...before,
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.face !== undefined ? { face: body.face } : {}),
-        ...(body.runtime ? { runtime: { ...before.runtime, ...body.runtime } } : {}),
+        ...(nextRuntime ? { runtime: nextRuntime } : {}),
       };
       const changed =
         updated.name !== before.name ||

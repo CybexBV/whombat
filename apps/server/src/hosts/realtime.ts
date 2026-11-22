@@ -83,6 +83,7 @@ export class HostsRealtime {
     try {
       switch (c.kind) {
         case 'server':
+          if (c.event === 'server.disk_usage') this.#sent.delete(c.serverId);
           this.#dirty.add(c.serverId);
           this.#schedule();
           return;

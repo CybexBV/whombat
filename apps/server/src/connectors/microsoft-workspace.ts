@@ -16,7 +16,19 @@ import { badRequest } from '../lib/errors';
 import { attachmentDigest, boundedBytes, checkAttachmentTotal } from './binary';
 import { graphRecurrence } from './microsoft-recurrence';
 import { htmlToText } from './mime';
-import { GoogleApiError, type GoogleWorkspace, type InboxUnread } from './types';
+import {
+  GoogleApiError,
+  type GoogleWorkspace,
+  type InboxUnread,
+  MAIL_SINCE_SKEW_MS,
+  type MailChangesOptions,
+  type MailChangesResult,
+  type MailHeader,
+  type MailHeaderAttachment,
+  type MailProviderCursor,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
+} from './types';
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
@@ -34,24 +46,46 @@ const textBody = (v: unknown) => {
 };
 const query = (values: Record<string, string>) => new URLSearchParams(values).toString();
 const GRAPH = 'https://graph.microsoft.com/v1.0';
+/** Maximum delta pages fetched per poll before persisting `@odata.nextLink` for the next poll. */
+const MICROSOFT_DELTA_MAX_PAGES = 20;
 const unsupported = (): never => {
   throw badRequest(
     'Microsoft native Word and Excel editing is not connected. Download the file and use your document tools.',
   );
 };
 
+function safeWebUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2048) return undefined;
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeTimestamp(raw: unknown): string {
+  if (typeof raw === 'string') {
+    const ms = Date.parse(raw);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
 function mail(m: Obj) {
+  const msgId = str(m.id).slice(0, 200);
+  const webUrl = safeWebUrl(m.webLink);
   return MailSummary.parse({
-    id: m.id,
-    threadId: m.conversationId ?? m.id,
-    from: address(m.from),
-    to: addresses(m.toRecipients),
+    id: msgId,
+    threadId: (str(m.conversationId) || msgId).slice(0, 200),
+    from: address(m.from).slice(0, 500),
+    to: addresses(m.toRecipients).map((a) => a.slice(0, 500)),
     subject: str(m.subject).slice(0, 1000),
     snippet: str(m.bodyPreview).slice(0, 500),
-    date: m.receivedDateTime ?? m.createdDateTime,
+    date: safeTimestamp(m.receivedDateTime ?? m.createdDateTime),
     unread: m.isRead === false,
-    labels: strings(m.categories),
-    ...(m.webLink ? { webUrl: m.webLink } : {}),
+    labels: strings(m.categories).map((c) => c.slice(0, 200)),
+    ...(webUrl ? { webUrl } : {}),
   });
 }
 function file(f: Obj) {
@@ -152,14 +186,26 @@ function eventBody(input: CalendarEventPatch): Obj {
 /** Delegated Graph adapter. Tokens go only to graph.microsoft.com; downloaded file redirects receive no token. */
 export class MicrosoftWorkspace implements GoogleWorkspace {
   constructor(private readonly fetchImpl: typeof fetch = (url, init) => fetch(url, init)) {}
-  private async request(token: string, path: string, method = 'GET', body?: unknown): Promise<Response> {
+  private async request(
+    token: string,
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    extraPrefer?: string,
+  ): Promise<Response> {
     if (!path.startsWith('/') || path.startsWith('//')) throw badRequest('Invalid Microsoft resource path.');
+    const prefer = [
+      'outlook.body-content-type="text"',
+      'outlook.timezone="UTC"',
+      'IdType="ImmutableId"',
+      ...(extraPrefer ? [extraPrefer] : []),
+    ].join(', ');
     const response = await this.fetchImpl(`${GRAPH}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': typeof body === 'string' ? 'text/plain; charset=utf-8' : 'application/json',
-        prefer: 'outlook.body-content-type="text", outlook.timezone="UTC", IdType="ImmutableId"',
+        prefer,
       },
       ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
       redirect: 'manual',
@@ -183,8 +229,14 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     }
     return response;
   }
-  private async call(token: string, path: string, method = 'GET', body?: unknown): Promise<Obj> {
-    const response = await this.request(token, path, method, body);
+  private async call(
+    token: string,
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    extraPrefer?: string,
+  ): Promise<Obj> {
+    const response = await this.request(token, path, method, body, extraPrefer);
     if (response.status === 204 || response.status === 202) {
       await response.body?.cancel();
       return {};
@@ -206,6 +258,20 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       path = next.slice(GRAPH.length);
     }
     throw badRequest('Microsoft collection has too many pages to read completely. Narrow the request.');
+  }
+  /** Reads up to `cap` items across up to 10 pages without throwing when an incoming message exceeds `cap`. */
+  private async collectionBounded(token: string, path: string, cap: number): Promise<Obj[]> {
+    const values: Obj[] = [];
+    for (let page = 0; page < 10; page++) {
+      const result = await this.call(token, path);
+      values.push(...arr(result.value));
+      if (values.length >= cap) return values.slice(0, cap);
+      const next = result['@odata.nextLink'];
+      if (!next) return values;
+      if (typeof next !== 'string' || !next.startsWith(`${GRAPH}/`)) return values;
+      path = next.slice(GRAPH.length);
+    }
+    return values.slice(0, cap);
   }
   async checkService(token: string, service: ConnectorService, scopes: readonly string[]) {
     if (!microsoftServicesGranted(scopes).includes(service))
@@ -261,6 +327,208 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
       }),
     };
   }
+  private async toMailHeaders(
+    token: string,
+    rawItems: readonly Obj[],
+    options: MailChangesOptions,
+  ): Promise<MailHeader[]> {
+    const seenIds = new Set<string>();
+    const headers: MailHeader[] = [];
+    for (const m of rawItems) {
+      if ('@removed' in m || m.isDraft === true) continue;
+      const msgId = str(m.id);
+      if (!msgId || seenIds.has(msgId)) continue;
+      seenIds.add(msgId);
+      const dateStr = str(m.receivedDateTime) || str(m.createdDateTime);
+      const receivedMs = Date.parse(dateStr);
+      if (Number.isFinite(receivedMs) && !receivedAtOrAfter(receivedMs, options.since)) continue;
+      const fromAddr = address(m.from);
+      const fromName = str(obj(obj(m.from).emailAddress).name);
+      const from = fromName && fromName !== fromAddr ? `${fromName} <${fromAddr}>` : fromAddr;
+      const hasAttachments = Boolean(m.hasAttachments);
+      let attachments: MailHeaderAttachment[] | null = hasAttachments ? null : [];
+      if (hasAttachments && options.needAttachmentTypes) {
+        let list: Obj[];
+        try {
+          list = await this.collectionBounded(
+            token,
+            `/me/messages/${id(msgId)}/attachments?$select=id,name,contentType,size&$top=100`,
+            500,
+          );
+        } catch (err) {
+          if (err instanceof GoogleApiError && err.status === 404) continue;
+          throw err;
+        }
+        attachments = list.map((a) => ({
+          ...(str(a.id) ? { id: str(a.id).slice(0, 2048) } : {}),
+          name: str(a.name).slice(0, 500),
+          mimeType: (str(a.contentType) || 'application/octet-stream').slice(0, 200),
+          size: Math.max(0, Math.trunc(Number(a.size) || 0)),
+        }));
+      }
+      headers.push({
+        id: msgId,
+        threadId: str(m.conversationId) || msgId,
+        messageId: normalizeRfcMessageId(str(m.internetMessageId)),
+        from: from.slice(0, 500),
+        to: addresses(m.toRecipients).map((a) => a.slice(0, 500)),
+        subject: str(m.subject).slice(0, 1000),
+        snippet: str(m.bodyPreview).slice(0, 500),
+        date: Number.isFinite(receivedMs) ? new Date(receivedMs).toISOString() : new Date().toISOString(),
+        hasAttachments,
+        attachments,
+      });
+    }
+    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return headers;
+  }
+  private async fetchMailBaselinePages(
+    token: string,
+    options: MailChangesOptions,
+    useFilter: boolean,
+  ): Promise<{ cursor: MailProviderCursor; kept: Obj[]; more?: boolean }> {
+    // Documented Graph message-delta flow: limit the initial delta to messages received since `options.since`
+    // (minus the 5-second skew margin) via `$filter=receivedDateTime ge ...` when supported, and keep the
+    // `@odata.nextLink` paging position across polls if a very large delta exceeds one poll's page cap.
+    const select =
+      'id,conversationId,internetMessageId,from,toRecipients,subject,bodyPreview,receivedDateTime,hasAttachments,isDraft';
+    const params: Record<string, string> = { $select: select };
+    if (options.since && useFilter) {
+      const cutoffMs = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) * 1000);
+      const cutoffIso = new Date(cutoffMs).toISOString().replace(/\.000Z$/, 'Z');
+      params.$filter = `receivedDateTime ge ${cutoffIso}`;
+    }
+    let path = `/me/mailFolders/inbox/messages/delta?${query(params)}`;
+    let lastNext: string | null = null;
+    const kept: Obj[] = [];
+    const seenUrls = new Set<string>();
+    for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
+      const currentUrl = `${GRAPH}${path}`;
+      seenUrls.add(currentUrl);
+      lastNext = null;
+      const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
+      if (options.since) {
+        for (const item of arr(res.value)) {
+          if ('@removed' in item || item.isDraft === true) continue;
+          const dateStr = str(item.receivedDateTime) || str(item.createdDateTime);
+          const receivedMs = Date.parse(dateStr);
+          if (!Number.isFinite(receivedMs) || receivedAtOrAfter(receivedMs, options.since)) kept.push(item);
+        }
+      }
+      const delta = res['@odata.deltaLink'];
+      if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
+        return { cursor: { kind: 'microsoft', deltaLink: delta }, kept };
+      }
+      const next = res['@odata.nextLink'];
+      if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && !seenUrls.has(next)) {
+        lastNext = next;
+        path = next.slice(GRAPH.length);
+        continue;
+      }
+      break;
+    }
+    if (lastNext) {
+      return {
+        cursor: {
+          kind: 'microsoft',
+          deltaLink: lastNext,
+          paging: options.since ? { sinceMs: options.since.getTime() } : { dropHeaders: true },
+        },
+        kept,
+        more: true,
+      };
+    }
+    throw badRequest('Microsoft did not return a delta link for the inbox.');
+  }
+  async mailBaseline(token: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    let result: { cursor: MailProviderCursor; kept: Obj[]; more?: boolean };
+    if (!options.since) {
+      result = await this.fetchMailBaselinePages(token, options, false);
+    } else {
+      try {
+        result = await this.fetchMailBaselinePages(token, options, true);
+      } catch (err) {
+        // Some Graph mailboxes reject `$filter=receivedDateTime ge ...` on message delta with HTTP 400: retry once
+        // without the filter and rely on the client-side `receivedAtOrAfter` check to drop older mail.
+        if (err instanceof GoogleApiError && err.status === 400) {
+          result = await this.fetchMailBaselinePages(token, options, false);
+        } else {
+          throw err;
+        }
+      }
+    }
+    const headers = result.kept.length ? await this.toMailHeaders(token, result.kept, options) : [];
+    return {
+      cursor: result.cursor,
+      headers,
+      ...(result.more ? { more: true } : {}),
+    };
+  }
+  async mailChanges(
+    token: string,
+    cursor: MailProviderCursor,
+    options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    const resyncSince = options.resyncSince ?? options.since ?? null;
+    if (cursor.kind !== 'microsoft' || !cursor.deltaLink.startsWith(`${GRAPH}/`)) {
+      const resynced = await this.mailBaseline(token, { ...options, since: resyncSince });
+      return { ...resynced, reset: true };
+    }
+    const dropHeaders = cursor.paging?.dropHeaders === true;
+    const effectiveSince =
+      cursor.paging?.sinceMs !== undefined ? new Date(cursor.paging.sinceMs) : options.since;
+    let path = cursor.deltaLink.slice(GRAPH.length);
+    let nextDelta: string | null = null;
+    let reachedDelta = false;
+    let hasMore = false;
+    const rawItems: Obj[] = [];
+    const seenUrls = new Set<string>();
+    try {
+      for (let page = 0; page < MICROSOFT_DELTA_MAX_PAGES; page++) {
+        const currentUrl = `${GRAPH}${path}`;
+        seenUrls.add(currentUrl);
+        nextDelta = null;
+        const res = await this.call(token, path, 'GET', undefined, 'odata.maxpagesize=200');
+        if (!dropHeaders) rawItems.push(...arr(res.value));
+        const delta = res['@odata.deltaLink'];
+        if (typeof delta === 'string' && delta.startsWith(`${GRAPH}/`)) {
+          nextDelta = delta;
+          reachedDelta = true;
+          break;
+        }
+        const next = res['@odata.nextLink'];
+        if (typeof next === 'string' && next.startsWith(`${GRAPH}/`) && !seenUrls.has(next)) {
+          nextDelta = next;
+          path = next.slice(GRAPH.length);
+          if (page === MICROSOFT_DELTA_MAX_PAGES - 1) hasMore = true;
+          continue;
+        }
+        break;
+      }
+    } catch (err) {
+      // Sync state expired (410 Gone) or invalid (400/404): resync via documented inbox delta from last successful poll.
+      if (err instanceof GoogleApiError && (err.status === 410 || err.status === 404 || err.status === 400)) {
+        const resynced = await this.mailBaseline(token, {
+          ...options,
+          since: cursor.paging?.sinceMs !== undefined ? new Date(cursor.paging.sinceMs) : resyncSince,
+        });
+        return { ...resynced, reset: true };
+      }
+      throw err;
+    }
+    if (!nextDelta) {
+      throw badRequest('Microsoft did not return a delta link for the inbox.');
+    }
+    const headers = dropHeaders
+      ? []
+      : await this.toMailHeaders(token, rawItems, { ...options, since: effectiveSince });
+    const nextCursor: MailProviderCursor = {
+      kind: 'microsoft',
+      deltaLink: nextDelta,
+      ...(!reachedDelta && cursor.paging ? { paging: cursor.paging } : {}),
+    };
+    return { cursor: nextCursor, headers, ...(hasMore ? { more: true } : {}) };
+  }
   async mailRead(token: string, input: { messageId?: string; threadId?: string }) {
     const messages = input.messageId
       ? [await this.call(token, `/me/messages/${id(input.messageId)}`)]
@@ -272,23 +540,23 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
     return Promise.all(
       messages.map(async (m) => {
         const attachments = m.hasAttachments
-          ? await this.collection(
+          ? await this.collectionBounded(
               token,
-              `/me/messages/${id(str(m.id))}/attachments?$select=id,name,contentType,size`,
-              100,
+              `/me/messages/${id(str(m.id))}/attachments?$select=id,name,contentType,size&$top=100`,
+              500,
             )
           : [];
         const body = textBody(m.body);
         return MailMessage.parse({
           ...mail(m),
-          cc: addresses(m.ccRecipients),
+          cc: addresses(m.ccRecipients).map((a) => a.slice(0, 500)),
           body: body.slice(0, MAIL_BODY_CAP),
           bodyTruncated: body.length > MAIL_BODY_CAP,
           attachments: attachments.map((a) => ({
-            id: a.id,
-            name: a.name,
-            mimeType: a.contentType ?? 'application/octet-stream',
-            size: a.size ?? 0,
+            ...(str(a.id) ? { id: str(a.id).slice(0, 2048) } : {}),
+            name: str(a.name).slice(0, 500),
+            mimeType: (str(a.contentType) || 'application/octet-stream').slice(0, 200),
+            size: Math.max(0, Math.trunc(Number(a.size) || 0)),
           })),
         });
       }),

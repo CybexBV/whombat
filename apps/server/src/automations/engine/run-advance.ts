@@ -9,7 +9,10 @@ import { and, asc, eq, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { automationRuns, automations } from '../../db/schema/index';
 import type { Services } from '../../services';
+import { readCardNames } from '../card-names';
 import { type GateFacts, gateFacts, readsGateFacts } from '../github-items';
+import { newerRun } from '../release-gate';
+import { runDeadline } from '../runs';
 import { automationStep, definitionStep, type StepOp } from '../steps';
 import {
   type AutomationRunRow,
@@ -62,6 +65,12 @@ export class RunAdvancer {
 
   /** Moves a run as far as it can go now (bounded), one committed transition at a time. */
   async advance(runId: string): Promise<void> {
+    // A run of an automation the release the box would go back to can't run waits, kept as it is, until it may.
+    if (
+      !(await this.services.newerAutomations.ready()) &&
+      newerRun(await loadRunRow(this.services.db, runId))
+    )
+      return;
     const fence = await this.claim(runId);
     if (fence === null) return;
     for (let guard = 0; guard < 40; guard++) {
@@ -77,7 +86,7 @@ export class RunAdvancer {
         await this.commit(run, fence, { op: 'start' });
         continue;
       }
-      if (now > run.deadlineAt) {
+      if (now > runDeadline(run)) {
         await this.commit(run, fence, {
           op: 'finish',
           status: 'failed',
@@ -136,12 +145,25 @@ export class RunAdvancer {
         // A condition about who opened the issue, who is assigned and which pull requests link it reads them from
         // GitHub now, outside the transaction (AR-28): the auto-fix gate never decides on what it was at the start.
         const facts = step.kind === 'condition' ? await this.gateFacts(run, step.if) : null;
+        // A card of proposed connection actions shows the ids they name by name: read from the services now, outside
+        // the transaction, until the person approved it (then the card's own, kept on the step, stay).
+        const names =
+          step.kind === 'connection_actions' &&
+          typeof (row.output as { actionsApprovalId?: unknown } | null)?.actionsApprovalId !== 'string'
+            ? await readCardNames(this.services, run, step)
+            : null;
         // An external step comes back `running`: this process then does its effect right away (`external.ts`). A merge
         // step waits for its checks first (AR-46): it is marked running only when it merges (`merging`).
         await this.marking(
           run,
           row,
-          () => this.commit(run, fence, { op: 'execute', idx: row.idx, ...(facts ? { facts } : {}) }),
+          () =>
+            this.commit(run, fence, {
+              op: 'execute',
+              idx: row.idx,
+              ...(facts ? { facts } : {}),
+              ...(names ? { names } : {}),
+            }),
           () => EXTERNAL_STEP_KINDS.includes(step.kind) && step.kind !== 'merge_pull_request',
         );
         return true;
@@ -213,6 +235,7 @@ export class RunAdvancer {
           op: 'finish',
           status: 'failed',
           error: `Step “${row.name}” failed${row.error ? `: ${row.error}` : '.'}`.slice(0, 1000),
+          idx: row.idx,
         });
         return false;
       }
@@ -221,6 +244,7 @@ export class RunAdvancer {
           op: 'finish',
           status: 'failed',
           error: (row.error ?? `Step “${row.name}” was refused.`).slice(0, 1000),
+          idx: row.idx,
         });
         return false;
       }

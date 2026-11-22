@@ -224,6 +224,8 @@ async function questionItems(ctx: SourceCtx, viewer: PrincipalRow, chats: Viewer
           inArray(messages.conversationId, chatIds),
           eq(messages.authorId, agentId),
           eq(messages.asks, true),
+          eq(messages.outsidersRun, false),
+          isNull(messages.provenance),
           isNull(messages.deletedAt),
           unanswered,
         ),

@@ -37,13 +37,13 @@ export function savedText(name: string, what: string): string {
 export function modelSavedText(
   name: string,
   before: Pick<ModelRuntimeDraft, 'provider'>,
-  after: Pick<ModelRuntimeDraft, 'provider' | 'model' | 'effort'>,
+  after: Pick<ModelRuntimeDraft, 'provider' | 'model' | 'backgroundModel' | 'effort'>,
 ): string {
   const moved = before.provider !== after.provider;
-  // A model on the network has no effort (hermes-engine-app.md AP-5042): “model” alone.
+  // A custom AI model has no effort: “model” alone.
   const local = after.provider === 'local';
   if (!moved) return savedText(name, local ? 'model' : MODEL_EFFORT_COPY.saved);
-  if (!after.model && !after.effort) return savedText(name, 'AI provider');
+  if (!after.model && !after.backgroundModel && !after.effort) return savedText(name, 'AI provider');
   return savedText(name, local ? 'AI provider and model' : `AI provider, ${MODEL_EFFORT_COPY.saved}`);
 }
 

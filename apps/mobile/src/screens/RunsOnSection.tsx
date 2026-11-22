@@ -12,14 +12,15 @@
  * AP-2731). On Local, MODEL's sheet also takes another model by its name (AP-5001), and EFFORT and FAST REPLIES don't
  * show (it has neither).
  */
-import { gatewayRunsOn, localModelOf, problemText } from '@whombat/client';
-import { useAgentSetup, useSetAgentModel } from '@whombat/client/react';
+import { gatewayRunsOn, localModelOf, modelRuntimeSaved, problemText, providerModels } from '@whombat/client';
+import { useAgentSetup, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import {
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProfile,
   CHAT_RUNTIME_COPY,
   MODEL_EFFORT_COPY,
 } from '@whombat/core';
+import { BACKGROUND_MODEL_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
@@ -47,9 +48,11 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   // Where the Whombat says which providers are ready (`host.agents`); hidden where it doesn't answer.
   const { data: status } = useAgentSetup({ params: { burrow: slug } }, { retry: false });
   const update = useSetAgentModel(slug);
+  const protocol = useSessionProtocol();
+  const canPickBackgroundModel = protocolAtLeast(protocol, BACKGROUND_MODEL_MINOR);
   const [error, setError] = useState<string | null>(null);
   const [fastError, setFastError] = useState<string | null>(null);
-  const [picking, setPicking] = useState<'model' | 'effort' | null>(null);
+  const [picking, setPicking] = useState<'model' | 'backgroundModel' | 'effort' | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const localModel = localModelOf(bootstrap.burrow);
   // Its tool goes through the burrow's AI gateway (AIG-17): said first, whatever else the section shows.
@@ -78,7 +81,15 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   if (!status) return bare;
   const model = runsOnModel(agent.runtime, status, { agentName: agent.name, localModel });
 
-  const choices = modelEffortView(agent, status, true, profile.modelFallback, true, localModel);
+  const choices = modelEffortView(
+    agent,
+    status,
+    true,
+    profile.modelFallback,
+    true,
+    localModel,
+    canPickBackgroundModel,
+  );
   const fast = choices?.fast ?? null;
   /** Fast replies switched: saved at once, the whole model runtime (CR-10, AP-2730). */
   const switchFast = (on: boolean) => {
@@ -86,7 +97,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     setFastError(null);
     save(fast.runtime(on), { done: () => {}, refused: setFastError });
   };
-  const open = (which: 'model' | 'effort') => {
+  const open = (which: 'model' | 'backgroundModel' | 'effort') => {
     setPickError(null);
     setPicking(which);
   };
@@ -99,15 +110,31 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
       refused: (text) => setPickError(text),
     });
   };
-  const save = (runtime: AgentModelRuntime, then: { done: () => void; refused: (text: string) => void }) =>
+  const save = (
+    runtime: AgentModelRuntimeUpdate,
+    then: { done: () => void; refused: (text: string) => void },
+  ) =>
     update.mutate(
       { params: { burrow: slug }, body: { runtime } },
       {
         onSuccess: (r) => {
-          if (r.status === 'ok') {
-            then.done();
+          if (r.status !== 'ok') {
+            then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
+            return;
+          }
+          if (
+            !modelRuntimeSaved(
+              runtime,
+              r.data.agent.runtime,
+              providerModels(status, runtime.provider, localModel),
+            )
+          ) {
             onChanged();
-          } else then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
+            then.refused(MODEL_EFFORT_COPY.notSaved);
+            return;
+          }
+          then.done();
+          onChanged();
         },
         onError: (e) => then.refused(problemText(e)),
       },
@@ -127,7 +154,14 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     ]);
   };
 
-  const sheet = picking && choices ? (picking === 'model' ? choices.model : choices.effort) : null;
+  const sheet =
+    picking && choices
+      ? picking === 'model'
+        ? choices.model
+        : picking === 'backgroundModel'
+          ? choices.backgroundModel
+          : choices.effort
+      : null;
   const editable = !update.isPending;
   return (
     <>
@@ -164,6 +198,18 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             accessibilityLabel={`${agent.name}’s model: ${choices.model.label}, tap to change`}
           />
           {choices.fallback ? <Note>{choices.fallback}</Note> : null}
+        </Section>
+      ) : null}
+      {choices?.backgroundModel ? (
+        <Section title={MODEL_EFFORT_COPY.backgroundModelSection}>
+          <ListRow
+            title={choices.backgroundModel.label}
+            body={choices.backgroundModel.hint}
+            bodyLines={3}
+            trailing="›"
+            onPress={editable ? () => open('backgroundModel') : undefined}
+            accessibilityLabel={`${agent.name}’s background model: ${choices.backgroundModel.label}. ${choices.backgroundModel.hint}, tap to change`}
+          />
         </Section>
       ) : null}
       {choices?.effort ? (
@@ -207,12 +253,26 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             sheet
               ? picking === 'model'
                 ? MODEL_EFFORT_COPY.modelSection
-                : MODEL_EFFORT_COPY.effortSection
+                : picking === 'backgroundModel'
+                  ? MODEL_EFFORT_COPY.backgroundModelSection
+                  : MODEL_EFFORT_COPY.effortSection
               : null
           }
-          label={picking === 'effort' ? `${agent.name}’s effort` : `${agent.name}’s model`}
+          label={
+            picking === 'effort'
+              ? `${agent.name}’s effort`
+              : picking === 'backgroundModel'
+                ? `${agent.name}’s background model`
+                : `${agent.name}’s model`
+          }
           choices={sheet?.choices ?? []}
-          note={picking === 'effort' ? choices.fixedHint : null}
+          note={
+            picking === 'effort'
+              ? choices.fixedHint
+              : picking === 'backgroundModel'
+                ? MODEL_EFFORT_COPY.backgroundModelHint
+                : null
+          }
           another={picking === 'model' ? choices.another : null}
           onAnother={(runtime) => {
             setPickError(null);

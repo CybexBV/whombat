@@ -7,9 +7,17 @@
  */
 import { createHash } from 'node:crypto';
 import { topics } from '@whombat/core';
-import { VOICE_TYPING_MAX_BYTES, VoiceTyping } from '@whombat/core/domain';
+import {
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
+  VOICE_STT_MODELS,
+  VOICE_TYPING_MAX_BYTES,
+  type VoiceDownloadModel,
+  type VoiceSttModel,
+  VoiceTyping,
+} from '@whombat/core/domain';
 import { and, asc, eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { events, voiceTyping } from '../db/schema/index';
 import { setDeskScreen } from '../desk/store';
 import { loadAgentRow } from '../read/principals';
@@ -17,7 +25,7 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { useManagedRuntime } from '../test/managed';
 import { setVoiceModelsFor } from './models';
 import { setVoiceTypingFor, VoiceTypingService } from './service';
-import { setVoiceFor, VoiceCallError } from './speech';
+import { setVoiceFor, VoiceCallError, voiceHealth } from './speech';
 import { FakeVoiceModels } from './testing/fake-models';
 import { FAKE_TRANSCRIPT, FakeVoice, fakeRecording } from './testing/fake-voice';
 
@@ -35,14 +43,20 @@ beforeAll(async () => {
 });
 
 /** A speech service and a fetcher of their own, and voice typing with short timings (not started). */
-function fresh(options: { ready?: ('parakeet' | 'whisper')[]; fetcher?: boolean } = {}) {
+function fresh(options: { ready?: VoiceDownloadModel[]; fetcher?: boolean } = {}) {
   fetcher = new FakeVoiceModels({
     downloadMs: 30,
     stepMs: 10,
     ...(options.ready ? { ready: options.ready } : {}),
   });
   const models = fetcher;
-  voice = new FakeVoice({ models: () => models.ready() });
+  voice = new FakeVoice({
+    models: () =>
+      models
+        .ready()
+        .filter((id): id is VoiceSttModel => (VOICE_STT_MODELS as readonly string[]).includes(id)),
+    languages: () => (models.ready().includes('supertonic') ? ['en', 'nl'] : ['en']),
+  });
   setVoiceModelsFor(m.t.services, options.fetcher === false ? null : fetcher);
   setVoiceFor(m.t.services, voice);
   typing = new VoiceTypingService(m.t.services, { pollMs: 10, announceMs: 10, startRetryMs: 20 });
@@ -225,7 +239,566 @@ describe('voice typing’s settings and models', () => {
       code: 'not_implemented',
     });
     setVoiceFor(m.t.services, null);
-    expect(await view(c)).toMatchObject({ available: false, ready: false, uses: null });
+    expect(await view(c)).toMatchObject({ available: false, ready: false, uses: null, dutchVoice: null });
+  });
+
+  it('requires licence agreement for Dutch voice, records it via the commit pipeline, downloads it, and removes files when turned off', async () => {
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+
+    // Off by default: Dutch not in health, and downloading supertonic without agreeing is refused.
+    expect((await view(c)).dutchVoice).toMatchObject({
+      on: false,
+      state: 'absent',
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+    expect(await c.request('voice.fetchModel', { model: 'supertonic' })).toMatchObject({
+      t: 'error',
+      code: 'forbidden',
+    });
+
+    // Wrong licence version is refused at schema validation.
+    expect(
+      await c.request('voice.setDutchVoice', { on: true, licenceVersion: 'wrong-version' }),
+    ).toMatchObject({ t: 'error', code: 'validation_failed' });
+
+    // Agreeing records who, when and licence version in DB and the signed audit log, and downloads Supertonic.
+    const agreed = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreed).toMatchObject({ t: 'result' });
+    const [row] = await m.t.services.db.select().from(voiceTyping);
+    expect(row).toMatchObject({
+      dutchVoice: true,
+      dutchVoiceAgreedBy: IDS.mara,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(row?.dutchVoiceAgreedAt).toBeInstanceOf(Date);
+    const signedAgree = await m.t.services.db
+      .select({ actorId: events.actorId, payload: events.payload })
+      .from(events)
+      .where(and(eq(events.burrowId, TEST_BURROW_ID), eq(events.type, 'voice.dutch_agreed')))
+      .orderBy(asc(events.seq));
+    expect(signedAgree.at(-1)).toMatchObject({
+      actorId: IDS.mara,
+      payload: {
+        on: true,
+        agreedBy: IDS.mara,
+        licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+      },
+    });
+
+    const ready = await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(ready.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    // Voice health refreshed and now speaks Dutch.
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+    // Can't remove directly while on.
+    expect(await c.request('voice.removeModel', { model: 'supertonic' })).toMatchObject({
+      t: 'error',
+      code: 'conflict',
+      details: { code: 'in_use' },
+    });
+
+    // Turning it off clears agreement, signs the event, removes the files and falls back to English only.
+    const offRes = await c.request('voice.setDutchVoice', { on: false });
+    expect(offRes).toMatchObject({ t: 'result' });
+    const offView = VoiceTyping.parse((offRes as { output: unknown }).output);
+    expect(offView.dutchVoice).toMatchObject({
+      on: false,
+      state: 'absent',
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    const [afterRow] = await m.t.services.db.select().from(voiceTyping);
+    expect(afterRow).toMatchObject({
+      dutchVoice: false,
+      dutchVoiceAgreedBy: null,
+      dutchVoiceAgreedAt: null,
+      dutchVoiceLicenceVersion: null,
+    });
+    const signedOff = await m.t.services.db
+      .select({ actorId: events.actorId, payload: events.payload })
+      .from(events)
+      .where(and(eq(events.burrowId, TEST_BURROW_ID), eq(events.type, 'voice.dutch_disabled')))
+      .orderBy(asc(events.seq));
+    expect(signedOff.at(-1)).toMatchObject({ actorId: IDS.mara, payload: { on: false } });
+    expect(fetcher.calls).toContainEqual({ kind: 'remove', model: 'supertonic' });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+
+    // Failed download can be retried once agreed.
+    fetcher.failNext.supertonic = 'no_room';
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    const failed = await until(c, (v) => v.dutchVoice?.state === 'failed');
+    expect(failed.dutchVoice?.problem).toBe('no_room');
+    expect(await c.request('voice.fetchModel', { model: 'supertonic' })).toMatchObject({ t: 'result' });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    // Clean up back to off for subsequent tests.
+    await c.request('voice.setDutchVoice', { on: false });
+  });
+
+  it('retries removing Dutch voice until it succeeds, including partial files on an absent state', async () => {
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+
+    // Turn Dutch voice off while remove fails twice: setting turns off immediately, reports removing while files remain,
+    // and removal retries until it succeeds.
+    fetcher.failNextRemove.supertonic = 2;
+    const offRes = await c.request('voice.setDutchVoice', { on: false });
+    expect(offRes).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+    });
+    expect(
+      VoiceTyping.parse((offRes as { output: unknown }).output).dutchVoice?.received ?? 0,
+    ).toBeGreaterThan(0);
+
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+
+    // After a restart (fresh VoiceTypingService with no in-memory retry flag), if the fetcher still reports leftover
+    // files ("removing", bytes left) because startup cleanup failed too, the server exposes "removing" to current apps
+    // (and "absent" to older apps below minor 3) and keeps retrying removal until deletion succeeds.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('supertonic', 65_536);
+    fetcher.setRemoving('whisper', 32_768);
+    const older = await m.client(mara, { minor: 2 });
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'removing', received: 65_536 });
+    expect((await view(c)).models.find((x) => x.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      received: 32_768,
+    });
+    expect((await view(older)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+    expect((await view(older)).models.find((x) => x.id === 'whisper')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+    fetcher.failNextRemove.supertonic = 2;
+    fetcher.failNextRemove.whisper = 1;
+    typing.start();
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        expect(s.models.find((x) => x.id === 'supertonic')).toMatchObject({ state: 'absent', received: 0 });
+        expect(s.models.find((x) => x.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(2);
+    expect((await view(c)).dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+
+    // An explicit removeModel('whisper') whose deletion fails leaves whisper in 'removing' and retries until gone.
+    fresh({ ready: ['parakeet', 'whisper'] });
+    fetcher.failNextRemove.whisper = 1;
+    expect(await c.request('voice.removeModel', { model: 'whisper' })).toMatchObject({
+      t: 'error',
+      code: 'unknown_outcome',
+    });
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        expect(s.models.find((x) => x.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(2);
+
+    // Leftover partial files (state 'absent' with received > 0) while Dutch voice is off are also removed and retried.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setPartial('supertonic', 65_536);
+    fetcher.failNextRemove.supertonic = 1;
+    typing.start();
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'remove' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(2);
+
+    // A wanted model stuck in 'removing' keeps reporting its remaining bytes until trash clears, then downloads.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('whisper', 49_152);
+    fetcher.failNextRemove.whisper = 2;
+    const wantedRemoving = await settings(c, { on: true, model: 'whisper', language: 'auto' });
+    expect(state(wantedRemoving, 'whisper')).toMatchObject({ state: 'removing', received: 49_152 });
+    const whisperReady = await until(c, (v) => state(v, 'whisper')?.state === 'ready');
+    expect(state(whisperReady, 'whisper')?.state).toBe('ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'whisper').length,
+    ).toBeGreaterThanOrEqual(3);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+
+    // Fetcher completely unreachable when turning Dutch voice off, then comes back online: returns saved off/removing
+    // state and retries removal until gone.
+    fresh({ ready: ['parakeet'] });
+    await c.request('voice.setDutchVoice', { on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    fetcher.unreachable = true;
+    const offWhileDown = await c.request('voice.setDutchVoice', { on: false });
+    expect(offWhileDown).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((offWhileDown as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+    });
+    fetcher.unreachable = false;
+    await vi.waitFor(
+      async () => {
+        const s = await fetcher.state();
+        const sup = s.models.find((x) => x.id === 'supertonic');
+        expect(sup).toMatchObject({ state: 'absent', received: 0 });
+      },
+      { interval: 10, timeout: 3000 },
+    );
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
+  });
+
+  it('keeps saved state and retries automatically when the fetcher is restarting or fails a fetch', async () => {
+    // 1. Turning Dutch voice on while whombat-voice-models is restarting (unreachable):
+    // commits consent, returns saved on/waiting state (no error), and retries until the download finishes.
+    fresh({ ready: ['parakeet'] });
+    const c = await m.client(mara);
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+    // Read once while reachable so the service has seen supertonic's size (as Settings always does).
+    const before = await view(c);
+    expect(before.dutchVoice?.size).toBeGreaterThan(0);
+
+    fetcher.unreachable = true;
+    const agreedWhileDown = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedWhileDown).toMatchObject({ t: 'result' });
+    const savedWhileDown = VoiceTyping.parse((agreedWhileDown as { output: unknown }).output);
+    expect(savedWhileDown.dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+      size: before.dutchVoice?.size,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const [rowDown] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowDown).toMatchObject({
+      dutchVoice: true,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+
+    fetcher.unreachable = false;
+    const readyAfterRestart = await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(readyAfterRestart.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect((await voiceHealth(m.t.services)).languages).toEqual(['en', 'nl']);
+
+    // 1b. After a server restart (fresh VoiceTypingService with no cached model sizes) while the fetcher is
+    // unreachable, ready models use their catalog total sizes instead of reporting 0 bytes.
+    fresh({ ready: ['parakeet', 'supertonic'] });
+    fetcher.unreachable = true;
+    const restartedView = await view(c);
+    expect(restartedView.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(state(restartedView, 'parakeet')).toMatchObject({
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.parakeet,
+      received: VOICE_MODEL_SIZES.parakeet,
+    });
+    fetcher.unreachable = false;
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 2. Turning Dutch voice on when fetch() fails transiently while state() answers 'absent':
+    // returns saved on/waiting state and retries until accepted.
+    fresh({ ready: ['parakeet'] });
+    fetcher.failNextFetch.supertonic = 2;
+    const agreedTransient = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedTransient).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((agreedTransient as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+    });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 3. Turning Dutch voice on while leftover .removing-* trash is still undeletable:
+    // returns saved on/removing state with remaining bytes, retries until trash clears, then downloads.
+    fresh({ ready: ['parakeet'] });
+    fetcher.setRemoving('supertonic', 65_536);
+    fetcher.failNextRemove.supertonic = 2;
+    const agreedRemoving = await c.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    expect(agreedRemoving).toMatchObject({ t: 'result' });
+    expect(VoiceTyping.parse((agreedRemoving as { output: unknown }).output).dutchVoice).toMatchObject({
+      on: true,
+      state: 'removing',
+      received: 65_536,
+    });
+    await until(c, (v) => v.dutchVoice?.state === 'ready');
+    expect(
+      fetcher.calls.filter((x) => x.kind === 'fetch' && x.model === 'supertonic').length,
+    ).toBeGreaterThanOrEqual(3);
+    await c.request('voice.setDutchVoice', { on: false });
+
+    // 4. Changing speech model (voice.update) while fetcher is restarting also retries once fetcher answers.
+    fresh({ ready: ['parakeet'] });
+    fetcher.unreachable = true;
+    await settings(c, { on: true, model: 'whisper', language: 'auto' });
+    fetcher.unreachable = false;
+    await until(c, (v) => state(v, 'whisper')?.state === 'ready');
+    await settings(c, { on: true, model: 'auto', language: 'auto' });
+  });
+
+  it('serialises Dutch voice consent checks, setting changes and fetcher calls across interleaved devices', async () => {
+    fresh({ ready: ['parakeet'] });
+    const deviceA = await m.client(mara);
+    const deviceB = await m.client(mara);
+    await settings(deviceA, { on: true, model: 'auto', language: 'auto' });
+
+    // Start with Dutch voice enabled whose download failed so device B can press Try again.
+    fetcher.failNext.supertonic = 'no_room';
+    await deviceA.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    await until(deviceA, (v) => v.dutchVoice?.state === 'failed');
+    fetcher.calls.length = 0;
+
+    // Interleaving 1: device A starts turning Dutch voice off and pauses right before committing (DB still has
+    // dutchVoice = true). Device B simultaneously retries supertonic. Because both run in one serial queue, device B
+    // must check consent after device A finishes and be refused rather than downloading after removal.
+    let commitEntered!: () => void;
+    const atCommit = new Promise<void>((resolve) => {
+      commitEntered = resolve;
+    });
+    let releaseCommit!: () => void;
+    const commitGate = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    const origCommit = m.t.services.pipeline.commit.bind(m.t.services.pipeline);
+    let gatedOnce = false;
+    const commitSpy = vi.spyOn(m.t.services.pipeline, 'commit').mockImplementation((async (
+      cmd: Parameters<typeof origCommit>[0],
+      input: Parameters<typeof origCommit>[1],
+      ctx: Parameters<typeof origCommit>[2],
+    ) => {
+      if (!gatedOnce && (typeof cmd === 'string' ? cmd : cmd.name) === 'set_dutch_voice') {
+        gatedOnce = true;
+        commitEntered();
+        await commitGate;
+      }
+      return origCommit(cmd, input, ctx);
+    }) as typeof origCommit);
+
+    let retryQueued!: () => void;
+    const atRetryQueued = new Promise<void>((resolve) => {
+      retryQueued = resolve;
+    });
+    const origFetchModel = typing.fetchModel.bind(typing);
+    const fetchModelSpy = vi.spyOn(typing, 'fetchModel').mockImplementation((principal, model) => {
+      const p = origFetchModel(principal, model);
+      retryQueued();
+      return p;
+    });
+
+    try {
+      const offP = deviceA.request('voice.setDutchVoice', { on: false });
+      await atCommit;
+      const retryP = deviceB.request('voice.fetchModel', { model: 'supertonic' });
+      await atRetryQueued;
+      releaseCommit();
+
+      const [offRes, retryRes] = await Promise.all([offP, retryP]);
+      expect(offRes).toMatchObject({ t: 'result' });
+      expect(retryRes).toMatchObject({ t: 'error', code: 'forbidden' });
+    } finally {
+      fetchModelSpy.mockRestore();
+      commitSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [rowAfterOff] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowAfterOff?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+
+    // Interleaving 2: retry enters fetcher.fetch first while device A turns Dutch voice off concurrently.
+    // Turning off waits behind the retry in the serial queue, then commits false and removes the download.
+    fetcher.failNext.supertonic = 'no_room';
+    await deviceA.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    await until(deviceA, (v) => v.dutchVoice?.state === 'failed');
+    fetcher.calls.length = 0;
+
+    let fetchEntered!: () => void;
+    const atFetch = new Promise<void>((resolve) => {
+      fetchEntered = resolve;
+    });
+    let releaseFetch!: () => void;
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    const origFetch = fetcher.fetch.bind(fetcher);
+    const fetchSpy = vi.spyOn(fetcher, 'fetch').mockImplementation(async (model) => {
+      if (model === 'supertonic') {
+        fetchEntered();
+        await fetchGate;
+      }
+      return origFetch(model);
+    });
+
+    let offQueued!: () => void;
+    const atOffQueued = new Promise<void>((resolve) => {
+      offQueued = resolve;
+    });
+    const origSetDutch = typing.setDutchVoice.bind(typing);
+    const setDutchSpy = vi.spyOn(typing, 'setDutchVoice').mockImplementation((principal, input) => {
+      const p = origSetDutch(principal, input);
+      offQueued();
+      return p;
+    });
+
+    try {
+      const retryP = deviceB.request('voice.fetchModel', { model: 'supertonic' });
+      await atFetch;
+      const offP = deviceA.request('voice.setDutchVoice', { on: false });
+      await atOffQueued;
+      releaseFetch();
+
+      const [retryRes, offRes] = await Promise.all([retryP, offP]);
+      expect(retryRes).toMatchObject({ t: 'result' });
+      expect(offRes).toMatchObject({ t: 'result' });
+    } finally {
+      setDutchSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'fetch', model: 'supertonic' },
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [rowAfterBoth] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowAfterBoth?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+
+    // Interleaving 3: toggling on on device A and off on device B concurrently keeps DB and fetcher state aligned.
+    fetcher.calls.length = 0;
+    let onCommitEntered!: () => void;
+    const atOnCommit = new Promise<void>((resolve) => {
+      onCommitEntered = resolve;
+    });
+    let releaseOnCommit!: () => void;
+    const onCommitGate = new Promise<void>((resolve) => {
+      releaseOnCommit = resolve;
+    });
+    let gatedOnOnce = false;
+    const onCommitSpy = vi.spyOn(m.t.services.pipeline, 'commit').mockImplementation((async (
+      cmd: Parameters<typeof origCommit>[0],
+      input: Parameters<typeof origCommit>[1],
+      ctx: Parameters<typeof origCommit>[2],
+    ) => {
+      if (!gatedOnOnce && (typeof cmd === 'string' ? cmd : cmd.name) === 'set_dutch_voice') {
+        gatedOnOnce = true;
+        onCommitEntered();
+        await onCommitGate;
+      }
+      return origCommit(cmd, input, ctx);
+    }) as typeof origCommit);
+
+    let secondToggleQueued!: () => void;
+    const atSecondToggleQueued = new Promise<void>((resolve) => {
+      secondToggleQueued = resolve;
+    });
+    let toggleCalls = 0;
+    const toggleSpy = vi.spyOn(typing, 'setDutchVoice').mockImplementation((principal, input) => {
+      const p = origSetDutch(principal, input);
+      toggleCalls += 1;
+      if (toggleCalls === 2) secondToggleQueued();
+      return p;
+    });
+
+    try {
+      const onP = deviceA.request('voice.setDutchVoice', {
+        on: true,
+        licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+      });
+      await atOnCommit;
+      const offP = deviceB.request('voice.setDutchVoice', { on: false });
+      await atSecondToggleQueued;
+      releaseOnCommit();
+
+      const [onRes, offRes] = await Promise.all([onP, offP]);
+      expect(onRes).toMatchObject({ t: 'result' });
+      expect(offRes).toMatchObject({ t: 'result' });
+    } finally {
+      toggleSpy.mockRestore();
+      onCommitSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'fetch', model: 'supertonic' },
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [finalRow] = await m.t.services.db.select().from(voiceTyping);
+    expect(finalRow?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
   });
 });
 

@@ -8,6 +8,7 @@ import {
   localModelOf,
   localModelProblems,
   localModelRow,
+  localModelSaved,
   localModelSetBody,
   localModelTestBody,
 } from './localModel';
@@ -101,5 +102,18 @@ describe('a model on your network (HE-32, CT-1170…CT-1175)', () => {
       meta: 'http://192.168.1.20:11434/v1',
     });
     expect(LOCAL_MODEL_FIELDS.map((f) => f.field)).toEqual(['baseUrl', 'model', 'label', 'apiKey']);
+  });
+
+  it('confirms a custom AI model save against what the box returned', () => {
+    const view = saved();
+    const req = localModelSetBody(localModelDraft(view), view);
+    expect(localModelSaved(req, view)).toBe(true);
+    expect(localModelSaved(req, null)).toBe(false);
+    expect(localModelSaved(req, saved({ model: 'other' }))).toBe(false);
+    expect(localModelSaved(req, saved({ baseUrl: 'https://other.example/v1' }))).toBe(false);
+    expect(localModelSaved(req, saved({ label: null }))).toBe(false);
+    expect(localModelSaved({ ...req, apiKey: 'sk-new' }, saved({ hasApiKey: false }))).toBe(false);
+    expect(localModelSaved({ ...req, apiKey: null }, saved({ hasApiKey: true }))).toBe(false);
+    expect(localModelSaved({ ...req, apiKey: null }, saved({ hasApiKey: false }))).toBe(true);
   });
 });

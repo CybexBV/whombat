@@ -1,8 +1,10 @@
 /**
- * Plex's settings that matter (docs/decisions/service-settings.md SST-07): read from `/:/prefs`, written with
- * `PUT /:/prefs?<id>=<value>`, in four groups — watching away from home, converting video, libraries, upkeep. Emptying
- * the trash and updates stay in Plex (SST-05): the first can drop a whole library when a drive is away for a moment,
- * the second restarts the server.
+ * Plex's settings that matter: read from `/:/prefs`, written with field-only `PUT /:/prefs?<id>=<value>`, in four
+ * groups — watching away from home, converting video, libraries, upkeep. Remote access, secure connections, emptying
+ * the trash and updates stay in Plex: turning remote access off cuts off access from outside the home, requiring
+ * encryption immediately refuses plain HTTP on port 32400 (cutting off plain-HTTP local access and Whombat's default
+ * HTTP connection), emptying the trash can drop a library when a drive is briefly away, and installing an update
+ * restarts the server.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -14,7 +16,7 @@ import {
   type SettingChoice,
   type SettingSpec,
   type SettingValue,
-  sameValue,
+  withCurrent,
 } from '../settings';
 
 /** Plex's prefs by id, as Plex types them (booleans, numbers, words). */
@@ -58,16 +60,6 @@ const bit = (v: SettingValue) => (asBool(v) ? '1' : '0');
 export function mbps(kbps: number): string {
   const m = kbps / 1000;
   return `${Number.isInteger(m) ? m : Math.round(m * 10) / 10} Mbps`;
-}
-
-/** Choices with the current value added when it is none of them (set in Plex itself). */
-function withCurrent(
-  choices: SettingChoice[],
-  current: SettingValue | undefined,
-  label: (v: SettingValue) => string,
-) {
-  if (current === undefined || choices.some((c) => sameValue(c.value, current))) return choices;
-  return [...choices, { value: current, label: label(current) }];
 }
 
 const QUALITY: SettingChoice[] = [
@@ -127,12 +119,11 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     id: 'remote_access',
     group: 'away',
     label: 'Remote access',
-    help: 'People can watch outside your home.',
-    kind: 'switch',
+    // Turning remote access off cuts off people reaching Plex from outside the home in one click.
+    help: 'People can watch outside your home. Turning it off can cut off access from outside, so it stays in Plex.',
+    kind: 'elsewhere',
     read: (p) => prefBool(p, 'PublishServerOnPlexOnlineKey'),
-    write: (v) => put({ PublishServerOnPlexOnlineKey: bit(v) }),
-    sentence: (v) =>
-      asBool(v) ? 'People can now watch Plex outside your home.' : 'Plex is now only for your home.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
   },
   {
     id: 'remote_quality',
@@ -161,25 +152,12 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     id: 'secure_connections',
     group: 'away',
     label: 'Secure connections',
-    help: 'Whether Plex only accepts encrypted connections.',
-    kind: 'choice',
+    // Requiring encryption (`secureConnections=0`) makes Plex refuse plain HTTP on port 32400 from non-localhost
+    // addresses, cutting off plain-HTTP LAN access and Whombat's default HTTP connection before Undo can run.
+    help: 'Whether Plex only accepts encrypted connections. Requiring encryption stops plain HTTP access on port 32400, so it stays in Plex.',
+    kind: 'elsewhere',
     read: (p) => prefNum(p, 'secureConnections'),
-    // Off is never offered: it can only make Plex less safe.
-    choices: (p) =>
-      withCurrent(
-        [
-          { value: 0, label: 'Required', note: 'only encrypted connections' },
-          { value: 1, label: 'Preferred', note: 'encrypted when the player can' },
-        ],
-        prefNum(p, 'secureConnections'),
-        (v) => SECURE_WORDS[String(v)] ?? String(v),
-      ),
     words: (v) => SECURE_WORDS[String(v)] ?? String(v),
-    sentence: (v) =>
-      Number(v) === 0
-        ? 'Plex now only accepts encrypted connections.'
-        : 'Plex now prefers encrypted connections.',
-    write: (v) => put({ secureConnections: String(Number(v)) }),
   },
   {
     id: 'graphics_chip',
@@ -278,7 +256,6 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     help: 'Removed files leave Plex at once. It stays in Plex: a drive away for a moment could empty a library.',
     kind: 'elsewhere',
     read: (p) => prefBool(p, 'autoEmptyTrash'),
-    elsewhere: (base) => `${base}/web/index.html#!/settings/server`,
   },
   {
     id: 'quiet_hours',
@@ -312,12 +289,12 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     // Plex's own “update my server automatically”, else only that Plex tells you.
     read: (p) => prefBool(p, 'ButlerTaskUpdateVersion') ?? 'tells',
     words: (v) => (v === 'tells' ? 'Plex tells you' : asBool(v) ? 'Automatic' : 'Ask me'),
-    elsewhere: (base) => `${base}/web/index.html#!/settings/server`,
   },
 ];
 
 export const PLEX_SETTINGS: DeclaredSettings<PlexPrefs> = {
   name: 'Plex',
+  url: (base) => `${base}/web/index.html#!/settings/server`,
   groups: [
     {
       id: 'away',

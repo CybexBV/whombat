@@ -24,11 +24,11 @@ import {
   REMOTE_HELP_DURATION_S,
   REMOTE_HELP_LIMITS,
   REMOTE_HELP_UNIT_RE,
+  VOICE_DOWNLOAD_MODELS,
   VOICE_LANGUAGES,
   VOICE_MODEL_CHOICES,
   VOICE_MODEL_PROBLEMS,
   VOICE_MODEL_STATES,
-  VOICE_STT_MODELS,
   VOICE_TYPING_MAX_BYTES,
   VOICE_TYPING_MAX_SECONDS,
   VOICE_TYPING_TEXT_MAX,
@@ -182,13 +182,14 @@ function constants(pkg: GoPackage): string {
     num('VoiceTypingTextMax', VOICE_TYPING_TEXT_MAX);
     num('VoiceTextPartMax', local.VOICE_TEXT_PART_MAX);
     num('VoiceTextPartsMax', local.VOICE_TEXT_PARTS_MAX);
-    for (const m of VOICE_STT_MODELS) str(`VoiceModel${goName(m)}`, m);
+    for (const m of VOICE_DOWNLOAD_MODELS) str(`VoiceModel${goName(m)}`, m);
     for (const c of VOICE_MODEL_CHOICES) str(`VoiceChoice${goName(c)}`, c);
     for (const l of VOICE_LANGUAGES) str(`VoiceLanguage${goName(l)}`, l);
     block('Voice models socket (3.1).');
     str('VoiceModelsSocketEnv', local.VOICE_MODELS_SOCKET_ENV);
     str('VoiceModelsSocketDefault', local.VOICE_MODELS_SOCKET_DEFAULT);
     for (const [k, v] of Object.entries(local.VOICE_MODELS_PATHS)) str(`VoiceModelsPath${goName(k)}`, v);
+    str('VoiceModelsIncludeParam', local.VOICE_MODELS_INCLUDE_PARAM);
     num('VoiceModelMaxBytes', local.VOICE_MODEL_MAX_BYTES);
     for (const st of VOICE_MODEL_STATES) str(`VoiceModelState${goName(st)}`, st);
     for (const pr of VOICE_MODEL_PROBLEMS) str(`VoiceModelProblem${goName(pr)}`, pr);

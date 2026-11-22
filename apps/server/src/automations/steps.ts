@@ -7,7 +7,7 @@
  * `uncertain` for a person) if the process dies in between.
  */
 
-import { type JsonObject, renderTemplate, trackerAccessAsked } from '@whombat/core';
+import { type JsonObject, mailStepProblem, renderTemplate, trackerAccessAsked } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { openPr } from '../commands/agent-tools';
@@ -29,8 +29,11 @@ import { replyLine } from '../trackers/reply';
 import { assessmentOutput, assessmentReported } from './assessment';
 import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
+import { type CardNames, CardNamesInput } from './proposed-card';
+import { outsidersRun } from './runs';
 import { CONTINUE_STEP } from './steps/approval';
 import { stepRoomsCheck } from './steps/checks';
+import { executeConnectionActions } from './steps/connection-actions';
 import { executeCondition, executeRequestApproval, executeWait } from './steps/control';
 import { executeDispatchAgent, resumeDispatchAgent } from './steps/dispatch-agent';
 import { executeGitHubComment } from './steps/github-comment';
@@ -45,7 +48,7 @@ import {
 } from './steps/open-pull-request';
 import { executePostMessage } from './steps/post-message';
 import { definitionStep, GateFactsInput, retryBackoffMs, stepScope, stepTimeoutMs } from './steps/scope';
-import { block, lockRun, revokeTrackerAccessAfter, stopRun, updateStep } from './steps/state';
+import { block, lockRun, noticeOnStep, revokeTrackerAccessAfter, stopRun, updateStep } from './steps/state';
 import { placeFor, postInRunThread } from './steps/thread';
 import { executeTrackerDecision, executeTrackerReply, executeTrackerUpdate } from './steps/tracker';
 import { queuedNoteOf, queuedSummary } from './steps/turn-words';
@@ -78,6 +81,7 @@ export {
   checkoutWords,
   clipWords,
   leadingQuestion,
+  ownQuestion,
   requestLine,
   stepInstructions,
   whatHappensOf,
@@ -94,6 +98,8 @@ export const StepOp = z.discriminatedUnion('op', [
     idx: z.number().int().nonnegative(),
     /** A condition that reads `trigger.trusted`/`assigned`/`linkedPr`: them as GitHub has them now (AR-28). */
     facts: GateFactsInput.optional(),
+    /** A `connection_actions` step: the names of the ids its actions name, as the services have them now. */
+    names: CardNamesInput.optional(),
   }),
   z.object({
     op: z.literal('settle'),
@@ -123,6 +129,8 @@ export const StepOp = z.discriminatedUnion('op', [
     error: z.string().max(1000).nullable(),
     /** A person said no to its card (automation-recipes.md AR-52): the run page says so, the thread hears nothing more. */
     quiet: z.boolean().optional(),
+    /** The step it stopped at (`stopRun`'s `noticeOn`): its notice is kept with that step's messages. */
+    idx: z.number().int().nonnegative().optional(),
   }),
   /**
    * A `merge_pull_request` step (automation-recipes.md AR-46, AR-47): from waiting for its checks to `running` when they
@@ -199,7 +207,10 @@ export const automationStep = defineCommand({
         return { status: 'running' };
       }
       case 'finish': {
-        await stopRun(ctx, run, input.status, input.error, { quiet: input.quiet === true });
+        await stopRun(ctx, run, input.status, input.error, {
+          quiet: input.quiet === true,
+          ...(input.idx !== undefined ? noticeOnStep(run, input.idx) : {}),
+        });
         await publishRun(ctx, run.id);
         return { status: input.status };
       }
@@ -288,19 +299,27 @@ export const automationStep = defineCommand({
             step.kind === 'github_comment' ||
             step.kind === 'tracker_update' ||
             step.kind === 'tracker_reply' ||
-            step.kind === 'merge_pull_request')
+            step.kind === 'merge_pull_request' ||
+            step.kind === 'connection_actions')
         ) {
           await executeStep(ctx, run, steps, input.idx, row.attempt + 1);
         } else if (input.state === 'pending') {
           // A note that its turn waited goes with the attempt.
           const noted = queuedNoteOf(row.output);
           const { queuedBehind: _noted, ...kept } = row.output as JsonObject;
+          // A card of proposed connection actions tried again starts fresh: no earlier yes, and its names read again
+          // from where the calls go now; only what the caller says (which connections changed since the yes) stays.
+          const fresh = step.kind === 'connection_actions';
           await updateStep(
             tx,
             run.id,
             input.idx,
             {
-              ...(noted ? { inputSummary: noted.asked, output: kept } : {}),
+              ...(fresh
+                ? { output: (input.output ?? {}) as JsonObject }
+                : noted
+                  ? { inputSummary: noted.asked, output: kept }
+                  : {}),
               state: 'pending',
               attempt: row.attempt + 1,
               error: input.error ?? null,
@@ -344,6 +363,16 @@ export const automationStep = defineCommand({
             if (said) output.announced = true;
           }
           if (
+            step.kind === 'connection_actions' &&
+            input.state === 'succeeded' &&
+            output.ran === true &&
+            typeof output.summary === 'string' &&
+            !output.announced
+          ) {
+            said = await postInRunThread(ctx, run, output.summary.slice(0, 2000));
+            if (said) output.announced = true;
+          }
+          if (
             step.kind === 'open_pull_request' &&
             input.state === 'succeeded' &&
             output.opened === true &&
@@ -377,16 +406,17 @@ export const automationStep = defineCommand({
                     ? { inputSummary: noted.asked }
                     : {}),
               finishedAt: input.state === 'uncertain' ? null : ctx.now,
-              ...(Array.isArray(input.output?.messageIds)
-                ? { messageIds: input.output.messageIds as string[] }
-                : said
-                  ? { messageIds: [said] }
-                  : {}),
+              // Added to the step's messages, never in their place (`updateStep`).
+              messageIds: [
+                ...(Array.isArray(input.output?.messageIds) ? (input.output.messageIds as string[]) : []),
+                ...(said ? [said] : []),
+              ],
               ...(typeof input.output?.prNumber === 'number' ? { prNumber: input.output.prNumber } : {}),
             },
             ctx.now,
           );
-          if (input.state === 'uncertain') await stopRun(ctx, run, 'needs_review', input.error ?? null);
+          if (input.state === 'uncertain')
+            await stopRun(ctx, run, 'needs_review', input.error ?? null, noticeOnStep(run, input.idx));
           // A no that lets it go on puts the run back among those that take a place, as a yes does (`continueStep`,
           // AR-56); a no that stops it ends it instead.
           if (
@@ -466,7 +496,7 @@ export const automationStep = defineCommand({
         const row = steps[input.idx];
         if (row?.state !== 'pending') return { status: 'unchanged' };
         if (row.wakeAt && row.wakeAt > ctx.now) return { status: 'pending' };
-        await executeStep(ctx, run, steps, input.idx, row.attempt, input.facts);
+        await executeStep(ctx, run, steps, input.idx, row.attempt, input.facts, input.names);
         await publishRun(ctx, run.id);
         return { status: 'executed' };
       }
@@ -482,6 +512,7 @@ export async function executeStep(
   idx: number,
   attempt: number,
   facts?: z.infer<typeof GateFactsInput>,
+  names?: CardNames,
 ): Promise<void> {
   const tx = ctx.tx;
   const step = definitionStep(run.definition, idx);
@@ -499,6 +530,10 @@ export async function executeStep(
   const publisher = who.publisher;
   const inRooms = await stepRoomsCheck(tx, run, idx, publisher);
   if (!inRooms.ok) return block(ctx, run, idx, inRooms.reason);
+  if (run.trigger.kind === 'mail' || run.definition.triggers.some((t) => t.kind === 'mail')) {
+    const unsafe = mailStepProblem(step);
+    if (unsafe) return block(ctx, run, idx, unsafe);
+  }
   const execution = { ctx, run, steps, idx, attempt, scope, publisher, base };
   switch (step.kind) {
     case 'dispatch_agent':
@@ -525,6 +560,8 @@ export async function executeStep(
       return executeMergePullRequest({ ...execution, step });
     case 'http_callback':
       return executeHttpCallback({ ...execution, step });
+    case 'connection_actions':
+      return executeConnectionActions({ ...execution, step, ...(names ? { names } : {}) });
   }
 }
 
@@ -538,6 +575,7 @@ export const continueStep = defineCommand({
     stepId: z.string(),
     attempt: z.number().int().nonnegative(),
     proposal: z.object({ title: z.string(), details: z.string() }),
+    actionsHash: z.string().optional(),
   }),
   async apply(tx, ctx, input) {
     if (!ctx.approvalId) throw conflict('Only an approval continues an automation.');
@@ -621,6 +659,22 @@ export const continueStep = defineCommand({
           output: {
             ...(step.output as JsonObject),
             commentApprovalId: ctx.approvalId,
+            decidedById: approval?.decidedById ?? null,
+          },
+        },
+        ctx.now,
+      );
+    } else if (kind === 'connection_actions') {
+      // A person approved the proposed connection actions on the card: the step now moves to running.
+      await updateStep(
+        tx,
+        run.id,
+        step.idx,
+        {
+          state: 'pending',
+          output: {
+            ...(step.output as JsonObject),
+            actionsApprovalId: ctx.approvalId,
             decidedById: approval?.decidedById ?? null,
           },
         },
@@ -844,6 +898,7 @@ export const mergePrStep = defineCommand({
           threadRootId: place.threadRootId,
           mentions: [],
           dispatch: false,
+          outsidersRun: outsidersRun(run.trigger),
         })
       : null;
     if (posted && place.startsThread)

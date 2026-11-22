@@ -32,6 +32,7 @@ function apiOf(voice: FakeVoice): VoiceApi {
     update: (patch) => call('voice.update', patch),
     fetchModel: (model) => call('voice.fetchModel', { model }),
     removeModel: (model) => call('voice.removeModel', { model }),
+    setDutchVoice: (input) => call('voice.setDutchVoice', input),
     transcribe: async ({ wav }) => {
       try {
         return await voice.dictate(wav);

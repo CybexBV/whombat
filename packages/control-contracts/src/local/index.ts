@@ -350,6 +350,8 @@ export const UpdateStatusResponse = z.object({
   failure: ident().optional(),
   /** Control's assignment is `hold`. */
   hold: z.boolean(),
+  /** The box's update channel is paused by its release key; absent when not paused. */
+  paused: z.boolean().optional(),
   /** The known-good release can only read the database (a newer release migrated). */
   readOnly: z.boolean(),
 });
@@ -1010,6 +1012,8 @@ export const UpdateFacts = z.object({
    * before it installs. Absent from a manager that can't hold updates for the owner, so the app offers no switch.
    */
   askFirst: z.boolean().optional(),
+  /** The box's update channel is paused by its release key; absent when not paused. */
+  paused: z.boolean().optional(),
 });
 export type UpdateFacts = z.infer<typeof UpdateFacts>;
 

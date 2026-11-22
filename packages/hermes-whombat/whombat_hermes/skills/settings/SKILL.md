@@ -85,15 +85,15 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `connections` Settings → Connections: your accounts (Google, Microsoft, mail), apps and services, and what needs you there
 - `overview` Overview: every server and service with its own page: how it is doing, what Whombat watches, its settings
 
-### This Whombat (the box) — `references/this-whombat.md` (114 settings)
+### This Whombat (the box) — `references/this-whombat.md` (115 settings)
 - `appliance.overview` Settings → This Whombat → Overview: how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail
 - `appliance.backups` Settings → This Whombat → Backups: where the box backs up, when, and backup files
 - `appliance.screen` Settings → This Whombat → Screen: the box’s screen and other screens: what they show, the lock, night and Talk
 - `appliance.about` Settings → This Whombat → About: versions and updates, when updates may happen, remote help and the licence
 
 ### Advanced — `references/advanced.md` (58 settings)
-- `advanced.model` Settings → Advanced → Model and effort: the model (your name) uses and how hard it thinks
-- `advanced.ai` Settings → Advanced → AI on this Whombat: the AI programs, the AI gateway, a model on your network and web search (a Brave Search key)
+- `advanced.model` Settings → Advanced → Model and effort: the main and background models (your name) uses and how hard it thinks
+- `advanced.ai` Settings → Advanced → AI on this Whombat: the AI programs, the AI gateway, a custom AI model (an OpenAI-compatible service over https like OpenRouter or Google Gemini, or a model server on your network) and web search (a Brave Search key)
 - `advanced.spend` Settings → Advanced → Spend: what the AI costs, by day and week
 - `advanced.keys` Settings → (your name) → What (your name) may do → Keys: every key (your name) holds and, folded under them, the commands it may always run
 - `advanced.network` Settings → (your name) → What (your name) may do → Local network: whether (your name) reaches your local network and, while it doesn’t, which home networks it may

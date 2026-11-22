@@ -16,7 +16,6 @@ import {
   type TurnEvent,
   type TurnInput,
 } from '@whombat/agent-runtime';
-import { newId } from '@whombat/core';
 import {
   createRunnerApi,
   type ProviderRegistry,
@@ -28,7 +27,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startRun } from '../commands/agent-runs';
 import { sendMessage } from '../commands/messages';
-import { dispatches, events, prCommits, prFiles, principals, pullRequests } from '../db/schema/index';
+import { events, prCommits, prFiles, principals, pullRequests } from '../db/schema/index';
 import { IDS } from '../seed/test-world';
 import { connectGitHubAs, fakeOf, signInsEnv, syncGitHub } from '../test/github';
 import { useTestServer } from '../test/harness';
@@ -102,21 +101,13 @@ describe('a coding turn', () => {
     // Mara asked for it in billing-v2: Dusty started the run in the turn her message woke him for.
     const asked = await t.commit(IDS.mara, sendMessage, {
       conversationId: IDS.billing,
-      text: 'Credit-note PDFs next, please.',
+      text: '@Dusty Credit-note PDFs next, please.',
     });
     if (asked.status !== 'ok') throw new Error('send failed');
-    const turn = newId('dispatch');
-    await t.services.db.insert(dispatches).values({
-      id: turn,
-      burrowId: t.burrowId,
-      agentId: IDS.dusty,
-      trigger: 'mention',
-      mode: 'reply',
-      conversationId: IDS.billing,
-      messageId: asked.result.id,
-      state: 'done',
-      createdAt: new Date(),
-    });
+    const turn = asked.result.dispatches.find((job) => job.agentId === IDS.dusty)?.dispatchId;
+    if (!turn) throw new Error('Mara’s message did not wake Dusty');
+    await t.services.runtime.finalize(turn, { outcome: 'done' });
+
     const started = await t.commit(IDS.dusty, startRun, {
       conversationId: IDS.billing,
       title: 'Add credit-note PDFs',

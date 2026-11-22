@@ -1,5 +1,7 @@
 import {
   ApiError,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -14,11 +16,13 @@ import {
   modelFallbackNote,
   modelRuntimeBody,
   modelRuntimeDraft,
+  modelRuntimeSaved,
   providerModels,
 } from '@whombat/client';
-import { useBootstrap, useSetAgentModel } from '@whombat/client/react';
+import { useBootstrap, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import { type AgentEffort, PROVIDER_LABELS } from '@whombat/core/domain';
 import { MODEL_EFFORT_COPY } from '@whombat/core/text';
+import { BACKGROUND_MODEL_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useEffect, useId, useState } from 'react';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { SegmentedControl } from '../../../components/SegmentedControl';
@@ -62,14 +66,19 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
   const localModel = localModelOf(bootstrap?.burrow);
   const form = useDraft<ModelRuntimeDraft>(modelRuntimeDraft(agent.runtime));
   const update = useSetAgentModel(burrow);
+  const protocol = useSessionProtocol();
+  const canPickBackgroundModel = protocolAtLeast(protocol, BACKGROUND_MODEL_MINOR);
   const toast = useToast();
   const [notice, setNotice] = useState<string | null>(null);
-  const ids = { model: useId(), effortHint: useId() };
+  const ids = { model: useId(), backgroundModel: useId(), backgroundHint: useId(), effortHint: useId() };
   useEffect(() => onDirtyChange(form.dirty), [form.dirty, onDirtyChange]);
   if (!form.draft) return null;
   const { draft } = form;
   const local = draft.provider === 'local';
   const models = providerModels(setup, draft.provider, localModel);
+  const backgroundModels = canPickBackgroundModel
+    ? backgroundModelChoices(models, draft.backgroundModel)
+    : [];
   const efforts = effortChoices(models, draft.model, draft.effort);
   // Fast replies (chat-runtime.md CR-10, AP-2700): only where the picked model offers them, on a runtime with them.
   const fast = fastChoice(draft, models);
@@ -83,7 +92,7 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
     if (!form.draft || !form.base) return;
     setNotice(null);
     const before = form.base;
-    const body = modelRuntimeBody(form.draft);
+    const body = modelRuntimeBody(form.draft, { backgroundModel: canPickBackgroundModel });
     let result: Awaited<ReturnType<typeof update.mutateAsync>>;
     try {
       result = await update.mutateAsync({ params: { burrow }, body: { runtime: body } });
@@ -92,11 +101,18 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
       if (refusal === null) throw err;
       return setNotice(refusal);
     }
-    const refused = outcomeNotice(result);
-    if (refused) return setNotice(refused);
-    const next = modelRuntimeDraft(body);
+    if (result.status !== 'ok') {
+      const refused = outcomeNotice(result);
+      if (refused) return setNotice(refused);
+      return;
+    }
+    const saved = result.data.agent.runtime;
+    const next = modelRuntimeDraft(saved);
     form.saved(() => next);
     form.edit(() => next);
+    if (!modelRuntimeSaved(body, saved, models)) {
+      return setNotice(MODEL_EFFORT_COPY.notSaved);
+    }
     toast.show(modelSavedText(agent.name, before, next));
   }
 
@@ -153,6 +169,48 @@ export function ModelTab({ burrow, profile, onDirtyChange }: SettingsTabProps) {
           </p>
         ) : null}
       </div>
+      {backgroundModels.length > 1 ? (
+        <div className={styles.group}>
+          <SectionLabel>{MODEL_EFFORT_COPY.backgroundModelSection}</SectionLabel>
+          <div
+            role="radiogroup"
+            aria-label={sentence(MODEL_EFFORT_COPY.backgroundModelSection)}
+            aria-describedby={ids.backgroundHint}
+            className={styles.choices}
+          >
+            {backgroundModels.map((choice) => (
+              <label key={choice.id ?? ''} className={styles.choice}>
+                <input
+                  type="radio"
+                  name={ids.backgroundModel}
+                  className={styles.choiceRadio}
+                  value={choice.id ?? ''}
+                  checked={choice.id === (draft.backgroundModel ?? null)}
+                  onChange={() =>
+                    form.edit((d) => {
+                      const next = draftWithBackgroundModel(d, choice.id);
+                      if (choice.id === null && !form.base?.backgroundModel) {
+                        const { backgroundModel: _bg, ...rest } = next;
+                        return rest;
+                      }
+                      return next;
+                    })
+                  }
+                />
+                <span className={styles.choiceText}>
+                  <span className={styles.choiceLabel}>{choice.label}</span>
+                  {choice.description ? (
+                    <span className={styles.choiceDescription}>{choice.description}</span>
+                  ) : null}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p id={ids.backgroundHint} className={styles.fallback}>
+            {MODEL_EFFORT_COPY.backgroundModelHint}
+          </p>
+        </div>
+      ) : null}
       {efforts.length > 0 ? (
         <div className={styles.group}>
           <SectionLabel>{MODEL_EFFORT_COPY.effortSection}</SectionLabel>

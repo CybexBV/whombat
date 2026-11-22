@@ -5,6 +5,7 @@
  */
 import { type DispatchContext, HANDOFFS_MAX, type Handoff, T3_HANDOFFS_MAX, topics } from '@whombat/core';
 import { and, desc, eq, gt, isNull, ne, or } from 'drizzle-orm';
+import { reportTurnWatch } from '../connections/report-turn';
 import type { Db, Tx } from '../db/client';
 import { catalogConnections, t3Watches } from '../db/schema/index';
 import { iso } from '../lib/time';
@@ -62,6 +63,7 @@ export function handoffStateOf(row: { state: string; status: string | null }): '
 export async function t3HandoffsOf(
   db: Db | Tx,
   row: { burrowId: string; agentId: string; conversationId: string; threadRootId: string | null },
+  reportTurn: boolean,
 ): Promise<DispatchContext['t3Handoffs']> {
   const rows = await db
     .select({
@@ -81,7 +83,9 @@ export async function t3HandoffsOf(
         row.threadRootId ? eq(t3Watches.threadRootId, row.threadRootId) : isNull(t3Watches.threadRootId),
         isNull(t3Watches.councilId),
         isNull(t3Watches.delegationTaskId),
+        eq(catalogConnections.catalogId, 't3code'),
         eq(catalogConnections.status, 'active'),
+        reportTurn ? reportTurnWatch() : undefined,
         ne(catalogConnections.access, 'read'),
       ),
     )

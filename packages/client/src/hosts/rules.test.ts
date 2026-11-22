@@ -172,6 +172,16 @@ describe('refusals', () => {
       memory: ['At least 16.'],
     });
     expect(hostErrorInfo(fields).fields).toEqual({ memory: 'At least 16.' });
+    const unknownOp = new ApiError(
+      404,
+      'unknown',
+      'Unknown op.',
+      { error: { code: 'unknown_op', message: 'Unknown op.' } },
+      'hosts.diskUsage',
+      {},
+    );
+    expect(hostErrorInfo(unknownOp)).toMatchObject({ code: 'unknown_op' });
+    expect(hostErrorInfo(unknownOp).message).toMatch(/Update this Whombat/i);
   });
 });
 

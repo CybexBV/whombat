@@ -219,6 +219,38 @@ export const TrackerTrigger = z
   .strict();
 export type TrackerTrigger = z.infer<typeof TrackerTrigger>;
 
+/** An attachment type filter on a mail trigger: file extension (`pdf`, `csv`) or MIME type (`application/pdf`, `image/*`). */
+export const MailAttachmentType = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(100)
+  .refine((v) => !/[\r\n]/.test(v), 'Attachment type must be a single line.');
+export type MailAttachmentType = z.infer<typeof MailAttachmentType>;
+
+/**
+ * A matching email arriving in one of the person's connected mailboxes (Google, Microsoft 365 or Email/IMAP):
+ * only emails that arrive after the automation starts listening fire, and every sender-controlled field reaches
+ * the agent fenced as outsider content.
+ */
+export const MailTrigger = z
+  .object({
+    kind: z.literal('mail'),
+    /** The connected mailbox (Settings → Connections) to watch for new mail. */
+    connectionId: ConnectionId,
+    /** Sender email address (`billing@example.com`) or domain (`example.com`, `@example.com`), case-insensitive. */
+    from: z.string().trim().min(1).max(320).optional(),
+    /** Words or phrases in the subject (case-insensitive; any one matches). */
+    subjectContains: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+    /** Require at least one attachment (implied when `attachmentTypes` is set). */
+    hasAttachment: z.boolean().optional(),
+    /** Require at least one attachment matching any listed extension (`pdf`) or MIME type (`application/pdf`). */
+    attachmentTypes: z.array(MailAttachmentType).max(10).optional(),
+  })
+  .strict();
+export type MailTrigger = z.infer<typeof MailTrigger>;
+
 /** An authenticated inbound webhook (off until an owner turns it on and a secret exists). */
 export const WebhookTrigger = z.object({ kind: z.literal('webhook') }).strict();
 
@@ -233,6 +265,7 @@ export const AutomationTrigger = z.discriminatedUnion('kind', [
   WebhookTrigger,
   ManualTrigger,
   TrackerTrigger,
+  MailTrigger,
 ]);
 export type AutomationTrigger = z.infer<typeof AutomationTrigger>;
 export type AutomationTriggerInput = z.input<typeof AutomationTrigger>;
@@ -434,6 +467,29 @@ export const ReportAssessmentInput = AutomationAssessment.extend({
 });
 export type ReportAssessmentInput = z.input<typeof ReportAssessmentInput>;
 
+/** One proposed call on a person's catalog connection, queued for approval on a card before running. */
+export const ProposedConnectionAction = z
+  .object({
+    /** Handle of the person's catalog connection (e.g. `paperless`, `moneybird`). */
+    connection: z.string().trim().min(1).max(40),
+    /** Tool to call on that connection (e.g. `request`). */
+    tool: z.string().trim().min(1).max(200),
+    /** Tool arguments. For `request`, `upload: { attachmentId, field?, fields? }` sends a file that came with this run's email. */
+    arguments: z.record(z.string(), z.unknown()).default({}),
+    /** Short plain-English summary shown to the person on the approval card. */
+    summary: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export type ProposedConnectionAction = z.infer<typeof ProposedConnectionAction>;
+
+export const ProposeConnectionActionsInput = z
+  .object({
+    /** Proposed actions to run on the person's connections after they approve on a card (empty list clears earlier proposals). */
+    actions: z.array(ProposedConnectionAction).max(10),
+  })
+  .strict();
+export type ProposeConnectionActionsInput = z.infer<typeof ProposeConnectionActionsInput>;
+
 export const DispatchAgentStep = z
   .object({
     ...StepBase,
@@ -459,6 +515,12 @@ export const DispatchAgentStep = z
      * Without a report the assessment is `unclear`. Not together with `verdict`.
      */
     assessment: z.boolean().optional(),
+    /**
+     * The agent proposes calls on the person's connections with `propose_connection_actions` (used by mail-triggered
+     * outsiders' turns): `steps.<id>.proposedActions`, which a follow-up `connection_actions` step puts to the person
+     * on an approval card before running. Not together with `verdict` or `assessment`.
+     */
+    proposeActions: z.boolean().optional(),
   })
   .strict();
 
@@ -673,6 +735,22 @@ export const MergePullRequestStep = z
   })
   .strict();
 
+/**
+ * Run actions proposed by an earlier `dispatch_agent` step with `proposeActions: true` (such as a mail-triggered
+ * outsiders' turn). Every non-empty set of proposed actions ALWAYS asks the person on an approval card first,
+ * regardless of standing connection or key settings, and runs only after they approve.
+ */
+export const ConnectionActionsStep = z
+  .object({
+    ...StepBase,
+    kind: z.literal('connection_actions'),
+    /** Earlier `dispatch_agent` step with `proposeActions: true` whose proposed actions are reviewed and run. */
+    from: AutomationStepId,
+    /** When declined or blocked: `skip` the step (the run goes on) or `fail` the run. */
+    otherwise: z.enum(['skip', 'fail']).default('skip'),
+  })
+  .strict();
+
 export const AutomationStep = z.discriminatedUnion('kind', [
   DispatchAgentStep,
   PostMessageStep,
@@ -686,6 +764,7 @@ export const AutomationStep = z.discriminatedUnion('kind', [
   MergePullRequestStep,
   TrackerReplyStep,
   TrackerDecisionStep,
+  ConnectionActionsStep,
 ]);
 export type AutomationStep = z.infer<typeof AutomationStep>;
 export type AutomationStepKind = AutomationStep['kind'];
@@ -701,6 +780,7 @@ export const EXTERNAL_STEP_KINDS: readonly AutomationStepKind[] = [
   'tracker_update',
   'merge_pull_request',
   'tracker_reply',
+  'connection_actions',
 ];
 
 /**
@@ -788,6 +868,21 @@ export const RecipeWhen = z.discriminatedUnion('kind', [
       itemKinds: z.array(TrackerItemKind).min(1).max(2).default(['bug', 'feature']),
       /** The tracker's words, as its driver gave them when the automation was made (the server fills them in). */
       words: TrackerRecipeWords.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('mail'),
+      /** The connected mailbox (Settings → Connections) whose new mail starts it. */
+      connectionId: ConnectionId,
+      /** Sender email address (`billing@example.com`) or domain (`example.com`, `@example.com`), case-insensitive. */
+      from: z.string().trim().min(1).max(320).optional(),
+      /** Words or phrases in the subject (case-insensitive; any one matches). */
+      subjectContains: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+      /** Require at least one attachment (implied when `attachmentTypes` is set). */
+      hasAttachment: z.boolean().optional(),
+      /** Require at least one attachment matching any listed extension (`pdf`) or MIME type (`application/pdf`). */
+      attachmentTypes: z.array(MailAttachmentType).max(10).optional(),
     })
     .strict(),
 ]);
@@ -1023,6 +1118,7 @@ export const AUTOMATION_RECENT_RUNS = 10;
 export const AutomationSource = z.enum([
   'github',
   'tracker',
+  'mail',
   'schedule',
   'message',
   'reaction',
@@ -1186,7 +1282,16 @@ export const AutomationStepState = z.enum([
 export type AutomationStepState = z.infer<typeof AutomationStepState>;
 
 export const AutomationTriggerInfo = z.object({
-  kind: z.enum(['message_posted', 'reaction_added', 'schedule', 'github', 'webhook', 'manual', 'tracker']),
+  kind: z.enum([
+    'message_posted',
+    'reaction_added',
+    'schedule',
+    'github',
+    'webhook',
+    'manual',
+    'tracker',
+    'mail',
+  ]),
   /** “Mara in #bugs”, “Every day at 09:00”, “Webhook delivery 7f3c…”. */
   summary: z.string().max(200),
   actorId: PrincipalId.nullable(),
@@ -1215,6 +1320,7 @@ export const AutomationRunStep = z.object({
       // 0.75.1 (CT-331): 0.75.0 added the step kind but not here, so a run with a reply didn't parse.
       'tracker_reply',
       'tracker_decision',
+      'connection_actions',
       // A kind this version doesn't know (a finished run of an older version's step): shown as an earlier step.
       'unknown',
     ])
@@ -1240,6 +1346,20 @@ export const AutomationRunStep = z.object({
 });
 export type AutomationRunStep = z.infer<typeof AutomationRunStep>;
 
+export const MissingMailAttachmentReason = z.enum([
+  'too_large',
+  'unsupported_type',
+  'download_failed',
+  'too_many',
+]);
+export type MissingMailAttachmentReason = z.infer<typeof MissingMailAttachmentReason>;
+
+export const MissingMailAttachment = z.object({
+  name: z.string().min(1).max(255),
+  reason: MissingMailAttachmentReason,
+});
+export type MissingMailAttachment = z.infer<typeof MissingMailAttachment>;
+
 export const AutomationRun = z.object({
   id: AutomationRunId,
   number: z.number().int().positive(),
@@ -1263,6 +1383,10 @@ export const AutomationRun = z.object({
   error: z.string().max(1000).nullable(),
   /** Tokens agents reported in this run's dispatches (null: nobody reported usage). */
   tokens: z.number().int().nonnegative().nullable(),
+  /** Incoming-mail attachments that couldn't be handed over to this run (too large, unknown type, download failed, too many). */
+  missingAttachments: z.array(MissingMailAttachment).max(20).optional(),
+  /** Additional missing incoming-mail attachments left out past `missingAttachments` (e.g. beyond the 20-item or 100-metadata cap). */
+  missingAttachmentsOmitted: z.number().int().positive().optional(),
   steps: z.array(AutomationRunStep),
 });
 export type AutomationRun = z.infer<typeof AutomationRun>;
@@ -1285,6 +1409,7 @@ export const STEP_KIND_LABELS: Record<AutomationStepKind, string> = {
   merge_pull_request: 'Merge a pull request',
   tracker_reply: 'Reply to the customer',
   tracker_decision: 'Ask you about a feature request',
+  connection_actions: 'Run approved actions',
 };
 
 /** What a step kind is called; a kind this version doesn't know (an older version's) is “An earlier step”. */
@@ -1300,4 +1425,5 @@ export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {
   webhook: 'A webhook is called',
   manual: 'Only when started by hand',
   tracker: 'A report arrives in a tracker',
+  mail: 'Matching mail arrives',
 };

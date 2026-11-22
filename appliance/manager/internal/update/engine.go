@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,6 +192,8 @@ func retry[T any](f func() (T, error)) (T, error) {
 // steps (SR-13).
 type foreign struct {
 	Hold              bool
+	ChannelPaused     bool
+	ChannelVersions   map[string]int64
 	AskFirst          bool
 	Approved          string
 	Lock              *Lock
@@ -205,7 +208,8 @@ type foreign struct {
 }
 
 func foreignOf(st *State) foreign {
-	f := foreign{Hold: st.Hold, AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
+	f := foreign{Hold: st.Hold, ChannelPaused: st.ChannelPaused, ChannelVersions: maps.Clone(st.ChannelVersions),
+		AskFirst: st.AskFirst, Approved: st.Approved, Lock: st.Lock, Pending: st.Pending,
 		LastAssignmentSeq: st.LastAssignmentSeq, LastOffer: st.LastOffer, TimeFloor: st.TimeFloor}
 	if c := st.Candidate; c != nil {
 		f.AssignmentSeq, f.NotBefore, f.AssignmentRaw = c.AssignmentSeq, c.NotBefore, c.AssignmentRaw
@@ -214,7 +218,8 @@ func foreignOf(st *State) foreign {
 }
 
 func setForeign(st *State, f foreign) {
-	st.Hold, st.AskFirst, st.Approved = f.Hold, f.AskFirst, f.Approved
+	st.Hold, st.ChannelPaused, st.ChannelVersions = f.Hold, f.ChannelPaused, maps.Clone(f.ChannelVersions)
+	st.AskFirst, st.Approved = f.AskFirst, f.Approved
 	st.Lock, st.Pending, st.LastAssignmentSeq, st.TimeFloor = f.Lock, f.Pending, f.LastAssignmentSeq, f.TimeFloor
 	st.LastOffer = f.LastOffer
 	if c := st.Candidate; c != nil {
@@ -489,6 +494,8 @@ type Offered struct {
 	// Channel is the channel whose newest release this is (OfferLatest); "" for control's assignments and a
 	// community box's offers.
 	Channel string
+	// ChannelVersion is the verified TUF role version of Channel (OfferLatest); 0 when none.
+	ChannelVersion int64
 }
 
 // Decision is the outcome of Offer.
@@ -544,7 +551,11 @@ func (e *Engine) offer(ctx context.Context, o Offered) (Decision, string, error)
 	rel := o.Release
 	id := rel.Tuple.ReleaseID
 	if o.Channel != "" {
+		if ok, why := e.channelRepoFresh(st, o.Channel, o.ChannelVersion); !ok {
+			return DecisionNoop, why, nil
+		}
 		st.LastOffer = offerKey(o.Channel, rel.Digest)
+		recordChannelVersion(st, o.Channel, o.ChannelVersion)
 	}
 	if q, ok := st.Quarantine[id]; ok && q.Digest == rel.Digest {
 		st.LastAssignmentSeq = p.Sequence
@@ -689,6 +700,182 @@ func (e *Engine) setHold(hold bool) error {
 	return e.persist(st, st.Phase, fmt.Sprintf("hold=%v", hold))
 }
 
+// SetChannelPaused records whether the box's update channel currently carries the signed TUF pause marker.
+func (e *Engine) SetChannelPaused(paused bool) error {
+	_, err := retry(func() (struct{}, error) { return struct{}{}, e.setChannelPaused(paused) })
+	return err
+}
+
+func (e *Engine) setChannelPaused(paused bool) error {
+	st, err := e.Load()
+	if err != nil {
+		return err
+	}
+	if st.ChannelPaused == paused {
+		return nil
+	}
+	st.ChannelPaused = paused
+	note := "channel resumed"
+	if paused {
+		note = "channel paused"
+	}
+	return e.persist(st, st.Phase, note)
+}
+
+func (e *Engine) channelRepoFresh(st *State, channel string, version int64) (bool, string) {
+	if channel == "" {
+		return true, ""
+	}
+	if e.Channel != nil {
+		if cur := e.Channel(); cur == "" || channel != cur {
+			return false, "wrong channel"
+		}
+	}
+	if version < 0 {
+		return false, "stale channel metadata"
+	}
+	if prev, ok := st.ChannelVersions[channel]; ok && prev > 0 && (version <= 0 || version < prev) {
+		return false, "stale channel metadata"
+	}
+	return true, ""
+}
+
+func recordChannelVersion(st *State, channel string, version int64) {
+	if channel == "" || version <= 0 {
+		return
+	}
+	if st.ChannelVersions == nil {
+		st.ChannelVersions = map[string]int64{}
+	}
+	if version > st.ChannelVersions[channel] {
+		st.ChannelVersions[channel] = version
+	}
+}
+
+// SyncChannelPause applies the verified channel pause flag and role version for repo's channel, ignoring metadata for
+// another channel or an older role version than already applied for that channel.
+func (e *Engine) SyncChannelPause(repo *trust.Repo) (changed bool, applied bool, err error) {
+	type res struct{ changed, applied bool }
+	r, err := retry(func() (res, error) {
+		c, a, err := e.syncChannelPause(repo)
+		return res{c, a}, err
+	})
+	return r.changed, r.applied, err
+}
+
+func (e *Engine) syncChannelPause(repo *trust.Repo) (changed bool, applied bool, err error) {
+	if repo == nil || repo.Channel == "" {
+		return false, false, nil
+	}
+	st, err := e.Load()
+	if err != nil {
+		return false, false, err
+	}
+	if ok, _ := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+		return false, false, nil
+	}
+	prevPaused := st.ChannelPaused
+	prevVer := st.ChannelVersions[repo.Channel]
+	st.ChannelPaused = repo.ChannelPaused
+	recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+	if prevPaused == st.ChannelPaused && prevVer == st.ChannelVersions[repo.Channel] {
+		return false, true, nil
+	}
+	note := "channel metadata"
+	if prevPaused != st.ChannelPaused {
+		if repo.ChannelPaused {
+			note = "channel paused"
+		} else {
+			note = "channel resumed"
+		}
+	}
+	if err := e.persist(st, st.Phase, note); err != nil {
+		return false, false, err
+	}
+	return prevPaused != st.ChannelPaused, true, nil
+}
+
+// RetireWithdrawn retires any pre-activation candidate or queued assignment from repo's channel (or an unsigned
+// community offer when repo.Channel is empty) that no longer matches offeredDigest. Called before clearing
+// ChannelPaused on resume and whenever an unpaused refresh leaves an existing candidate unreplaced, so a withdrawn
+// release never drains or activates once a pause lifts or an owner approves it. Activations already under way
+// (Activating, Verifying, ForwardRepairRequired) are untouched.
+func (e *Engine) RetireWithdrawn(ctx context.Context, repo *trust.Repo, offeredDigest string) (bool, error) {
+	return retry(func() (bool, error) { return e.retireWithdrawn(ctx, repo, offeredDigest) })
+}
+
+func (e *Engine) retireWithdrawn(ctx context.Context, repo *trust.Repo, offeredDigest string) (bool, error) {
+	if repo == nil || repo.ChannelPaused {
+		return false, nil
+	}
+	st, err := e.Load()
+	if err != nil {
+		return false, err
+	}
+	if repo.Channel != "" {
+		if ok, _ := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+			return false, nil
+		}
+	}
+	belongsToRepo := func(channel string, assignmentRaw []byte) bool {
+		if repo.Channel != "" {
+			return channel == repo.Channel
+		}
+		return channel == "" && len(assignmentRaw) == 0
+	}
+	pendingCleared := false
+	if p := st.Pending; p != nil && belongsToRepo(p.Channel, p.Raw) && (offeredDigest == "" || p.Release.Digest != offeredDigest) {
+		st.Pending = nil
+		pendingCleared = true
+	}
+	if c := st.Candidate; c != nil && belongsToRepo(c.Channel, c.AssignmentRaw) && (offeredDigest == "" || c.Tuple.Digest != offeredDigest) {
+		switch st.Phase {
+		case Assigned, Downloading, Verified, Staged, WaitingForSafeBoundary, Failed:
+			if st.Phase == Failed && c.Failure != nil && c.Failure.Blocked {
+				break // already retired; nothing retries it
+			}
+			if st.Approved == c.Tuple.ReleaseID {
+				st.Approved = ""
+			}
+			if repo.Channel != "" && st.LastOffer == offerKey(repo.Channel, c.Tuple.Digest) {
+				st.LastOffer = ""
+			}
+			if c.Deferral != nil && c.Deferral.Draining && e.Runtime != nil {
+				if err := e.Runtime.Resume(ctx, c.DrainRequestID); err == nil {
+					c.Deferral.Draining = false
+				}
+			}
+			draining := c.Deferral != nil && c.Deferral.Draining
+			recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+			msg := fmt.Sprintf("%s is no longer offered by the %s channel, so it isn't installed", c.Tuple.ReleaseID, repo.Channel)
+			if repo.Channel == "" {
+				msg = fmt.Sprintf("%s is no longer offered by the update repository, so it isn't installed", c.Tuple.ReleaseID)
+			}
+			return true, e.fail(st, &Failure{Stage: st.Phase, Code: "not_assigned", Message: msg, Blocked: true, ResumeRequired: draining})
+		case RolledBack:
+			if st.Approved == c.Tuple.ReleaseID {
+				st.Approved = ""
+			}
+			if repo.Channel != "" && st.LastOffer == offerKey(repo.Channel, c.Tuple.Digest) {
+				st.LastOffer = ""
+			}
+			st.Candidate = nil
+			recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+			return true, e.persist(st, RolledBack, "withdrawn release retired")
+		}
+	}
+	if pendingCleared {
+		recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+		return true, e.persist(st, st.Phase, "withdrawn queued release")
+	}
+	return false, nil
+}
+
+// channelPaused reports whether a candidate belongs to a channel that is currently paused.
+func channelPaused(st *State, c *Candidate) bool {
+	return st.ChannelPaused && c != nil && c.Channel != ""
+}
+
 // SetAskFirst turns the owner's “Ask before updating” on or off (the runtime, for the owner: Whombat
 // ask-before-updating.md). On, every candidate waits for the owner's approval before it activates; off, one that
 // waits goes ahead at its next step, as any update does.
@@ -726,7 +913,7 @@ func (e *Engine) approve(id string) error {
 		return err
 	}
 	c := st.Candidate
-	if c == nil || c.Deferral == nil || c.Deferral.Waiting != "owner" || (st.Phase != Staged && st.Phase != WaitingForSafeBoundary) {
+	if channelPaused(st, c) || c == nil || c.Deferral == nil || c.Deferral.Waiting != "owner" || (st.Phase != Staged && st.Phase != WaitingForSafeBoundary) {
 		return ErrNotWaiting
 	}
 	if c.Tuple.ReleaseID != id {
@@ -925,7 +1112,7 @@ func (e *Engine) steady(ctx context.Context, st *State) (time.Duration, error) {
 			return 0, e.quarantine(ctx, st, c.Failure.Code, fmt.Sprintf("%s after %d attempts: %s", c.Failure.Code, c.Attempts, c.Failure.Message))
 		}
 		if st.Pending == nil {
-			if st.Hold {
+			if st.Hold || channelPaused(st, c) {
 				return e.Policy.IdleInterval, nil
 			}
 			if wait := c.Failure.NextRetry.Sub(e.now()); wait > 0 {
@@ -937,6 +1124,9 @@ func (e *Engine) steady(ctx context.Context, st *State) (time.Duration, error) {
 	}
 	if st.Pending != nil {
 		p := st.Pending
+		if st.ChannelPaused && p.Channel != "" {
+			return e.Policy.IdleInterval, nil
+		}
 		if q, ok := st.Quarantine[p.Release.Tuple.ReleaseID]; ok && q.Digest == p.Release.Digest {
 			st.Pending = nil
 			st.LastRefusal = "queued assignment names a quarantined release"
@@ -1031,7 +1221,7 @@ func (e *Engine) afterVerificationFailure(ctx context.Context, st *State) (bool,
 		c.AssignmentRaw = p.Raw
 		return true, 0, e.persist(st, RolledBack, "control assigned "+id+" again")
 	}
-	if !c.Reassigned || st.Hold {
+	if !c.Reassigned || st.Hold || channelPaused(st, c) {
 		return true, e.Policy.IdleInterval, nil // control decides; it holds such a device
 	}
 	if wait := c.Failure.At.Add(e.Policy.VerifyRetryDelay).Sub(e.now()); wait > 0 {
@@ -1043,6 +1233,9 @@ func (e *Engine) afterVerificationFailure(ctx context.Context, st *State) (bool,
 
 func (e *Engine) assigned(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	arts, _, err := e.plan(ctx, c)
 	if err != nil {
 		if failed, ferr := e.planFailure(st, Assigned, err); failed {
@@ -1062,6 +1255,9 @@ func (e *Engine) assigned(ctx context.Context, st *State) (time.Duration, error)
 // downloading plans again (idempotent: what is staged or already in the store is skipped) and downloads what is left.
 func (e *Engine) downloading(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	arts, plans, err := e.plan(ctx, c)
 	if err != nil {
 		if failed, ferr := e.planFailure(st, Downloading, err); failed {
@@ -1136,6 +1332,9 @@ func (e *Engine) retryHelper(ctx context.Context, err error) time.Duration {
 
 func (e *Engine) verified(ctx context.Context, st *State) (time.Duration, error) {
 	c := st.Candidate
+	if channelPaused(st, c) {
+		return e.Policy.IdleInterval, nil
+	}
 	op := proto.OpStageRuntime
 	if c.Class == ClassHost {
 		op = proto.OpStageHost
@@ -1312,7 +1511,7 @@ func (e *Engine) retireOffChannel(st *State) (bool, error) {
 // maintenance lock, or the assignment's notBefore (maintenance window). Only a candidate on its way to activation asks:
 // a rollback to known-good and an activation already under way never come here.
 func (e *Engine) blocked(st *State) (string, time.Duration) {
-	if st.Hold {
+	if st.Hold || channelPaused(st, st.Candidate) {
 		return "hold", e.Policy.IdleInterval
 	}
 	if st.AskFirst && st.Approved != st.Candidate.Tuple.ReleaseID {
@@ -1330,6 +1529,9 @@ func (e *Engine) blocked(st *State) (string, time.Duration) {
 func (e *Engine) explainWait(st *State, why string) string {
 	switch why {
 	case "hold":
+		if channelPaused(st, st.Candidate) {
+			return "Updates are paused for now."
+		}
 		return "Update staged; the rollout is on hold (pause or emergency stop). The installed release keeps running."
 	case "owner":
 		return "Update staged; it waits for the owner to approve it (ask before updating is on). The installed release keeps running."
@@ -1480,6 +1682,11 @@ func (e *Engine) atBoundary(ctx context.Context, st *State) (time.Duration, erro
 			d.Explanation = fmt.Sprintf("Update metadata could not be refreshed (%v); the installed release keeps running and the update retries at the next window.", err)
 			d.WindowStart = e.now().Add(-e.Policy.DrainWindow)
 			return e.endWindowIfDue(ctx, st, true)
+		}
+		if cur, lerr := e.Load(); lerr == nil && channelPaused(cur, c) {
+			// Fresh metadata paused this channel right before activation: release the drain and let waiting() record the pause hold.
+			_ = e.Runtime.Resume(ctx, c.DrainRequestID)
+			return 0, nil
 		}
 	}
 	if s := c.Schema; s != nil && s.NeedsMigration && len(s.NeedsCheckpoint) > 0 && !e.checkpointFresh(c) {
@@ -2140,7 +2347,7 @@ func (e *Engine) failed(ctx context.Context, st *State) (time.Duration, error) {
 	if f.CountsAttempt && c.Attempts >= e.Policy.MaxAttempts && !release.IsRetryableUpdateFailure(f.Code) {
 		return 0, e.quarantine(ctx, st, f.Code, fmt.Sprintf("%s after %d attempts: %s", f.Code, c.Attempts, f.Message))
 	}
-	if st.Hold {
+	if st.Hold || channelPaused(st, c) {
 		return e.Policy.IdleInterval, nil
 	}
 	if wait := f.NextRetry.Sub(now); wait > 0 {

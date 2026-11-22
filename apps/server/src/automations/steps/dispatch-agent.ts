@@ -1,5 +1,14 @@
-import { type AutomationStep, blockedEventFields, type JsonObject, keyLabel, newId } from '@whombat/core';
-import { and, asc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
+import {
+  type AutomationStep,
+  blockedEventFields,
+  type JsonObject,
+  keyLabel,
+  MissingMailAttachment,
+  missingAttachmentsText,
+  newId,
+} from '@whombat/core';
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
 import type { Db, Tx } from '../../db/client';
 import { automationRunSteps, automationRuns, dispatches, messages } from '../../db/schema/index';
@@ -8,8 +17,12 @@ import { billedTokensSum } from '../../domain/turn-usage';
 import { linkAttachments } from '../../files/commands';
 import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
+import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
+import { outsidersTurn } from '../../runtime/person';
 import { automationAgent } from '../authority';
+import { turnThreadsOf } from '../mail-text';
+import { proposableConnections } from '../proposed-actions';
 import {
   type ReusableAssessment,
   reusableAssessment,
@@ -17,7 +30,7 @@ import {
   reusedOutput,
   reusedSummary,
 } from '../reuse';
-import { runPersonOf } from '../runs';
+import { outsidersRun, runPersonOf } from '../runs';
 import {
   type AutomationRunRow,
   type AutomationStepRow,
@@ -39,6 +52,28 @@ import { block, updateStep } from './state';
 import { placeFor } from './thread';
 import type { StepExecution } from './types';
 import { checkoutWords, requestLine, stepInstructions } from './words';
+
+/**
+ * Whether this step's prompt is the run's first agent turn, which carries the files of what started the run: no agent
+ * step of the run (this one in an earlier attempt included) posted a prompt yet. Otherwise the ids this step kept from
+ * an earlier attempt, if any.
+ */
+export function handoverOf(
+  run: Pick<AutomationRunRow, 'definition'>,
+  steps: readonly Pick<AutomationStepRow, 'idx' | 'promptMessageId' | 'output'>[],
+  idx: number,
+): { first: true } | { first: false; kept: string[] | null } {
+  const turned = steps.some(
+    (s) => !!s.promptMessageId && run.definition.steps[s.idx]?.kind === 'dispatch_agent',
+  );
+  if (!turned) return { first: true };
+  const kept = (steps.find((s) => s.idx === idx)?.output as { triggerFileIds?: unknown } | undefined)
+    ?.triggerFileIds;
+  return {
+    first: false,
+    kept: Array.isArray(kept) ? kept.filter((x): x is string => typeof x === 'string') : null,
+  };
+}
 
 export async function executeDispatchAgent({
   ctx,
@@ -106,7 +141,9 @@ export async function executeDispatchAgent({
     if (!resolved.ok) return block(ctx, run, idx, resolved.reason);
     workspace = resolved.workspace;
   }
-  const prompt = stepInstructions(run.definition, idx, scope);
+  const basePrompt = stepInstructions(run.definition, idx, scope);
+  const offers = step.proposeActions ? await proposableConnections(tx, run.burrowId) : null;
+  const prompt = offers?.note ? `${basePrompt}\n\n${offers.note}` : basePrompt;
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
   const reusable = await reusableAssessment(tx, run, step, agent.id, workspace, prompt, ctx.now);
   if (reusable) return reuseAssessment(ctx, run, idx, step, agent, base, prompt, reusable);
@@ -149,7 +186,11 @@ export async function executeDispatchAgent({
           approvalId: approval.id,
           dispatchId: null,
           inputSummary: `Asked you to let ${agent.name} work on ${workspace.branch}`,
-          output: { agentId: agent.id, workspace: { ...workspace } },
+          output: {
+            agentId: agent.id,
+            workspace: { ...workspace },
+            ...(turnThreadsOf(previous).length ? { turnThreads: turnThreadsOf(previous) } : {}),
+          },
         },
         ctx.now,
       );
@@ -160,8 +201,12 @@ export async function executeDispatchAgent({
       return;
     }
   }
-  // The prompt that starts the run's thread carries the files of the message that started the run (OA-S101).
-  const files = place.startsThread ? await triggerFileCopies(ctx, run, conversation.id) : [];
+  // The run's first agent prompt carries the files of what started the run (OA-S101; the email's, for a mail run), once,
+  // whatever step came before it (a posted message may have started the thread). Their ids are kept on the step: only
+  // those files may be uploaded by what the run proposes. A later turn, or this step tried again, gets none.
+  const handover = handoverOf(run, steps, idx);
+  const files = handover.first ? await triggerFileCopies(ctx, run, conversation.id) : [];
+  const triggerFileIds = handover.first ? files.map((f) => f.id) : handover.kept;
   // People see one line (“@Dusty Assess it: #5 “…””); the instructions go to the agent with its turn (CNR-08).
   const posted = await postMessage(ctx, {
     conversation,
@@ -169,6 +214,7 @@ export async function executeDispatchAgent({
     threadRootId: place.threadRootId,
     mentions: [agent.id],
     dispatch: false,
+    outsidersRun: outsidersRun(run.trigger),
     ...(files.length ? { attachmentIds: files.map((f) => f.id) } : {}),
   });
   if (files.length) await linkAttachments(tx, ctx, posted.id, files);
@@ -180,16 +226,18 @@ export async function executeDispatchAgent({
     await tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));
   // The dispatch is created with the step's new state (outbox-style): a crash leaves both or neither.
   const dispatchId = newId('dispatch');
+  const runtime = automationDispatchRuntime(agentRuntimeOf(agent.runtime), run.trigger.kind);
   const [queuedTurn] = await tx
     .insert(dispatches)
     .values({
       id: dispatchId,
       burrowId: run.burrowId,
       agentId: agent.id,
-      // An automation's work is the person's; a run started by outsiders' input stays apart (OP-17).
+      // An automation's work is the person's; a run started by outsiders' input stays apart.
       onBehalfOfAccountId: await runPersonOf(tx, run),
       trigger: 'automation',
       mode: 'reply',
+      runtime,
       conversationId: conversation.id,
       messageId: posted.id,
       threadRootId,
@@ -213,6 +261,27 @@ export async function executeDispatchAgent({
       runId: run.id,
     },
   });
+  const runScope = run.scope as {
+    missingAttachments?: unknown;
+    missingAttachmentsOmitted?: unknown;
+  } | null;
+  const missingParsed = MissingMailAttachment.array().max(20).safeParse(runScope?.missingAttachments);
+  const missingOmitted =
+    typeof runScope?.missingAttachmentsOmitted === 'number' &&
+    Number.isInteger(runScope.missingAttachmentsOmitted) &&
+    runScope.missingAttachmentsOmitted > 0
+      ? runScope.missingAttachmentsOmitted
+      : 0;
+  const missingList = missingParsed.success ? missingParsed.data : [];
+  const missingNote =
+    missingList.length > 0 || missingOmitted > 0
+      ? missingAttachmentsText(missingList, missingOmitted, 3)
+      : '';
+  const stepInputSummary = workspace
+    ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
+    : missingNote
+      ? `Asked ${agent.name} · ${missingNote}`
+      : `Asked ${agent.name}`;
   await updateStep(
     tx,
     run.id,
@@ -222,10 +291,13 @@ export async function executeDispatchAgent({
       state: 'waiting',
       dispatchId,
       promptMessageId: posted.id,
-      inputSummary: workspace ? `Asked ${agent.name} · ${checkoutWords(workspace)}` : `Asked ${agent.name}`,
+      inputSummary: stepInputSummary,
       output: {
         agentId: agent.id,
         instructions: prompt,
+        ...(offers ? { offeredActions: offers.offeredActions } : {}),
+        ...(triggerFileIds ? { triggerFileIds } : {}),
+        turnThreads: [...new Set([...turnThreadsOf(previous), threadRootId])],
         ...(workspace ? { workspace: { ...workspace } } : {}),
         ...(branchApprovalId ? { branchApprovalId } : {}),
       },
@@ -274,6 +346,7 @@ export async function resumeDispatchAgent(
       onBehalfOfAccountId: handed.onBehalfOfAccountId,
       trigger: 'automation',
       mode: 'reply',
+      runtime: handed.runtime,
       conversationId: handed.conversationId,
       messageId: handed.messageId,
       threadRootId: handed.threadRootId,
@@ -343,6 +416,7 @@ async function reuseAssessment(
     threadRootId: place.threadRootId,
     mentions: [],
     dispatch: false,
+    outsidersRun: outsidersRun(run.trigger),
   });
   if (place.startsThread)
     await tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));
@@ -425,9 +499,8 @@ async function tokensToday(tx: Tx, automationId: string, now: Date): Promise<num
 }
 
 /**
- * What a finished dispatch produced: the messages its agent posted in the prompt's thread after the prompt and before
- * the dispatch ended (BP-C40). Nothing the agent said elsewhere — at the top of the room, in another thread, after
- * its turn — counts, so a reply to someone else can't become a step's result or its verdict.
+ * A step reads what its own dispatch posted inside the prompt’s thread. Older outsiders’ replies without a
+ * dispatch id must carry the outsiders’ mark and fall inside the claim. Files never leave an outsiders’ step.
  */
 export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: string) {
   const none = {
@@ -441,10 +514,25 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
   const prompt = await loadMessageRow(tx, step.promptMessageId);
   if (!prompt) return none;
   const [dispatch] = await tx
-    .select({ agentId: dispatches.agentId, finishedAt: dispatches.finishedAt })
+    .select({
+      agentId: dispatches.agentId,
+      claimedAt: dispatches.claimedAt,
+      finishedAt: dispatches.finishedAt,
+      onBehalfOfAccountId: dispatches.onBehalfOfAccountId,
+    })
     .from(dispatches)
     .where(eq(dispatches.id, step.dispatchId));
   if (dispatch?.agentId !== agentId) return none;
+  const outside = outsidersTurn(dispatch);
+  const own = eq(messages.dispatchId, step.dispatchId);
+  const legacy =
+    outside && dispatch.claimedAt
+      ? and(
+          isNull(messages.dispatchId),
+          eq(messages.outsidersRun, true),
+          gt(messages.createdAt, dispatch.claimedAt),
+        )
+      : undefined;
   const root = prompt.threadRootId ?? prompt.id;
   // After a handed wait, only what the step's newest turn said.
   const after = Math.max(prompt.ord, handedWaitOf(step.output)?.afterOrd ?? 0);
@@ -457,6 +545,7 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
         eq(messages.authorId, agentId),
         gt(messages.ord, after),
         eq(messages.threadRootId, root),
+        or(own, legacy),
         ...(dispatch.finishedAt ? [lte(messages.createdAt, dispatch.finishedAt)] : []),
       ),
     )
@@ -471,7 +560,7 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
     /** Its last message only (`{{steps.<id>.reply}}`, CT-322): what a recipe comments on GitHub, without a first line. */
     reply: keepEnds(rows.at(-1)?.text ?? '', 8000),
     messageIds: rows.map((m) => m.id),
-    attachmentIds: rows.flatMap((m) => m.attachmentIds ?? []).slice(0, 10),
+    attachmentIds: outside ? [] : rows.flatMap((m) => m.attachmentIds ?? []).slice(0, 10),
     /** Each message on its own (a verdict is read from the reply that starts with one). */
     messageTexts: rows.map((m) => m.text),
   };

@@ -6,7 +6,7 @@
  */
 import type { SearchObject } from 'imapflow';
 import type { ParsedMail } from 'mailparser';
-import { parseMail } from './compose';
+import { attachmentsOf, parseMail } from './compose';
 import { MailError } from './errors';
 import type {
   ImapConnectOptions,
@@ -58,10 +58,15 @@ export class MemoryMailServer {
   capabilities: Set<string>;
   /** Every session opened, for tests that count them. */
   connections = 0;
+  /** Number of `source()` calls (full message body downloads), for tests checking headers-only matching. */
+  sourceReads = 0;
   private validity = 1000;
+  private readonly idleListeners = new Map<string, Set<() => void>>();
 
   constructor(readonly options: MemoryMailOptions) {
-    this.capabilities = new Set(options.capabilities ?? ['IMAP4REV1', 'MOVE', 'UIDPLUS', 'SPECIAL-USE']);
+    this.capabilities = new Set(
+      options.capabilities ?? ['IMAP4REV1', 'IDLE', 'MOVE', 'UIDPLUS', 'SPECIAL-USE'],
+    );
     this.addFolder('INBOX', '\\Inbox');
     for (const f of options.folders ?? DEFAULT_FOLDERS) this.addFolder(f.path, f.specialUse);
   }
@@ -84,7 +89,7 @@ export class MemoryMailServer {
     return f;
   }
 
-  /** Puts a message in a folder; its UID. */
+  /** Puts a message in a folder; its UID. Notifies any active IMAP IDLE sessions on that folder. */
   add(path: string, raw: string | Buffer, options: { flags?: string[]; date?: Date } = {}): number {
     const f = this.folder(path);
     const uid = f.nextUid++;
@@ -94,7 +99,23 @@ export class MemoryMailServer {
       flags: new Set(options.flags ?? []),
       internalDate: options.date ?? new Date(),
     });
+    const listeners = this.idleListeners.get(f.path);
+    if (listeners) for (const fn of [...listeners]) fn();
     return uid;
+  }
+
+  /** Internal: registers a callback for new mail arriving in `path` while idling. */
+  onFolderExists(path: string, fn: () => void): () => void {
+    let set = this.idleListeners.get(path);
+    if (!set) {
+      set = new Set();
+      this.idleListeners.set(path, set);
+    }
+    set.add(fn);
+    return () => {
+      set?.delete(fn);
+      if (set?.size === 0) this.idleListeners.delete(path);
+    };
   }
 
   /** A new UIDVALIDITY for a folder (the server renumbered it). */
@@ -163,9 +184,20 @@ async function matches(m: StoredMessage, c: SearchObject): Promise<boolean> {
       case 'before':
         check(day(m.internalDate) < day(new Date(value as string)));
         break;
-      case 'uid':
-        check(String(value).split(',').map(Number).includes(m.uid));
+      case 'uid': {
+        const parts = String(value).split(',');
+        const matched = parts.some((part) => {
+          if (part.includes(':')) {
+            const [a, b] = part.split(':');
+            const lo = Number(a);
+            const hi = b === '*' ? Number.POSITIVE_INFINITY : Number(b);
+            return Number.isFinite(lo) && m.uid >= lo && m.uid <= hi;
+          }
+          return Number(part) === m.uid;
+        });
+        check(matched);
         break;
+      }
       case 'header':
         for (const [name, v] of Object.entries(value as Record<string, string | boolean>))
           check(
@@ -214,7 +246,7 @@ class MemorySession implements ImapSession {
   async open(path: string): Promise<OpenedFolder> {
     const f = this.server.folder(path);
     this.current = f;
-    return { path: f.path, uidValidity: f.uidValidity, exists: f.messages.length };
+    return { path: f.path, uidValidity: f.uidValidity, exists: f.messages.length, uidNext: f.nextUid };
   }
 
   async unseen(path: string): Promise<number> {
@@ -254,12 +286,14 @@ class MemorySession implements ImapSession {
         cc: list(p.cc),
         bcc: list(p.bcc),
         prefix: options.prefixBytes ? m.raw.subarray(0, options.prefixBytes) : null,
+        ...(options.bodyStructure ? { attachments: attachmentsOf(p) } : {}),
       });
     }
     return out;
   }
 
   async source(uid: number, maxBytes: number): Promise<Buffer | null> {
+    this.server.sourceReads++;
     const m = this.here().messages.find((x) => x.uid === uid);
     return m && m.raw.length <= maxBytes ? m.raw : null;
   }
@@ -299,6 +333,23 @@ class MemorySession implements ImapSession {
 
   async create(path: string): Promise<void> {
     if (!this.server.folders.has(path)) this.server.addFolder(path);
+  }
+
+  async idle(onExists: () => void, signal: AbortSignal): Promise<void> {
+    const folder = this.here();
+    if (signal.aborted || this.closed) return;
+    await new Promise<void>((resolve) => {
+      const off = this.server.onFolderExists(folder.path, onExists);
+      const done = () => {
+        off();
+        resolve();
+      };
+      if (signal.aborted || this.closed) {
+        done();
+        return;
+      }
+      signal.addEventListener('abort', done, { once: true });
+    });
   }
 
   async close(): Promise<void> {

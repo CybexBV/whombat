@@ -190,6 +190,34 @@ export async function resolveGuest(s: CallScope, serverId: string, raw: string):
   throw new ConnectionArgumentError(`There’s no guest “${raw}” on ${serverId}. guests_list lists them.`);
 }
 
+/**
+ * `input` with where its call went kept on its Undo recipe (`destination`, the Servers connection's `callTarget` when
+ * the call ran, and `otherDestinations`, each other connection's it acted through): the inverse goes only there
+ * (`undo.ts`).
+ */
+export function withDestination<C extends Pick<HostsChangeInput, 'change'>>(s: CallScope, input: C): C {
+  const undo = input.change?.undo;
+  const payload = undo?.payload;
+  if (
+    !input.change ||
+    !undo ||
+    !s.call.target ||
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload)
+  )
+    return input;
+  const others =
+    s.call.others && Object.keys(s.call.others).length ? { otherDestinations: s.call.others } : {};
+  return {
+    ...input,
+    change: {
+      ...input.change,
+      undo: { ...undo, payload: { ...payload, destination: s.call.target, ...others } },
+    },
+  };
+}
+
 /** Records a change the tool made (signed as the Whombat, for its person). */
 export async function record(
   s: CallScope,
@@ -200,7 +228,7 @@ export async function record(
     .commit(
       recordHostsChange,
       {
-        ...input,
+        ...withDestination(s, input),
         forPersonId: s.personId,
         conversationId: s.call.conversationId,
         undoes: undoes ?? null,
@@ -253,7 +281,12 @@ export async function follow(
           approvalId: s.call.approvalId ?? null,
           words,
           change: change
-            ? { ...change, forPersonId: s.personId, conversationId, undoes: undoes ?? null }
+            ? {
+                ...withDestination(s, change),
+                forPersonId: s.personId,
+                conversationId,
+                undoes: undoes ?? null,
+              }
             : null,
         })
       : null;

@@ -13,11 +13,12 @@
  */
 import {
   LocalError,
+  VOICE_MODELS_INCLUDE_PARAM,
   VOICE_MODELS_PATHS,
   VoiceModelRequest,
   VoiceModelsState,
 } from '@whombat/control-contracts/local';
-import type { VoiceSttModel } from '@whombat/core/domain';
+import type { VoiceDownloadModel } from '@whombat/core/domain';
 import { requestUnixHttp, UnixHttpError } from '@whombat/node-io/http';
 import type { Config } from '../config';
 import { FakeVoiceModels } from './testing/fake-models';
@@ -26,9 +27,9 @@ import { FakeVoiceModels } from './testing/fake-models';
 export interface VoiceModelsPort {
   state(): Promise<VoiceModelsState>;
   /** *Download* and *Try again*: a model there or on its way stays as it is. */
-  fetch(model: VoiceSttModel): Promise<VoiceModelsState>;
+  fetch(model: VoiceDownloadModel): Promise<VoiceModelsState>;
   /** *Remove*: stops its download and deletes it. */
-  remove(model: VoiceSttModel): Promise<VoiceModelsState>;
+  remove(model: VoiceDownloadModel): Promise<VoiceModelsState>;
 }
 
 /** A call the fetcher refused (its status and `LocalError` code), or one it didn't answer (status 0). */
@@ -87,16 +88,20 @@ export class VoiceModelsSocketClient implements VoiceModelsPort {
     }
   }
 
+  private withInclude(path: string): string {
+    return `${path}?${VOICE_MODELS_INCLUDE_PARAM}=supertonic`;
+  }
+
   state(): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.state);
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.state));
   }
 
-  fetch(model: VoiceSttModel): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.fetch, { v: 1, model });
+  fetch(model: VoiceDownloadModel): Promise<VoiceModelsState> {
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.fetch), { v: 1, model });
   }
 
-  remove(model: VoiceSttModel): Promise<VoiceModelsState> {
-    return this.call(VOICE_MODELS_PATHS.remove, { v: 1, model });
+  remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
+    return this.call(this.withInclude(VOICE_MODELS_PATHS.remove), { v: 1, model });
   }
 }
 

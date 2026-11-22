@@ -14,18 +14,25 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  VOICE_MODELS_INCLUDE_PARAM,
   VOICE_MODELS_PATHS,
   VoiceModelRequest,
   type VoiceModelState,
   type VoiceModelsState,
 } from '@whombat/control-contracts/local';
-import { VOICE_STT_MODELS, type VoiceModelProblem, type VoiceSttModel } from '@whombat/core/domain';
-import type { VoiceModelsPort } from '../models';
+import {
+  VOICE_DOWNLOAD_MODELS,
+  VOICE_STT_MODELS,
+  type VoiceDownloadModel,
+  type VoiceModelProblem,
+} from '@whombat/core/domain';
+import { VoiceModelsCallError, type VoiceModelsPort } from '../models';
 
-/** The downloads' sizes, as the release pins them (dictation.md). */
-export const FAKE_MODEL_SIZES: Readonly<Record<VoiceSttModel, number>> = {
+/** The downloads' sizes, as the release pins them (Parakeet, Whisper, Supertonic 3). */
+export const FAKE_MODEL_SIZES: Readonly<Record<VoiceDownloadModel, number>> = {
   parakeet: 669_000_000,
   whisper: 574_000_000,
+  supertonic: 145_310_775,
 };
 
 export interface FakeVoiceModelsOptions {
@@ -33,19 +40,25 @@ export interface FakeVoiceModelsOptions {
   downloadMs?: number;
   stepMs?: number;
   /** Models there from the start. */
-  ready?: readonly VoiceSttModel[];
+  ready?: readonly VoiceDownloadModel[];
 }
 
-export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceSttModel };
+export type FakeVoiceModelsCall = { kind: 'fetch' | 'remove'; model: VoiceDownloadModel };
 
 export class FakeVoiceModels implements VoiceModelsPort {
   /** The next download of that model fails with this problem (once). */
-  readonly failNext: Partial<Record<VoiceSttModel, VoiceModelProblem>> = {};
+  readonly failNext: Partial<Record<VoiceDownloadModel, VoiceModelProblem>> = {};
+  /** Fail the next N `fetch(model)` calls as if the fetcher returned an error. */
+  readonly failNextFetch: Partial<Record<VoiceDownloadModel, number>> = {};
+  /** Fail the next N `remove(model)` calls as if the fetcher were temporarily unreachable. */
+  readonly failNextRemove: Partial<Record<VoiceDownloadModel, number>> = {};
+  /** When true, `state()` throws as if the fetcher were temporarily unreachable. */
+  unreachable = false;
   /** What it was asked, in order. */
   readonly calls: FakeVoiceModelsCall[] = [];
-  readonly #models = new Map<VoiceSttModel, VoiceModelState>();
+  readonly #models = new Map<VoiceDownloadModel, VoiceModelState>();
   /** Asked for and not started yet, in order. */
-  readonly #queue: VoiceSttModel[] = [];
+  readonly #queue: VoiceDownloadModel[] = [];
   #timer: NodeJS.Timeout | null = null;
   readonly #listeners = new Set<() => void>();
   readonly #downloadMs: number;
@@ -54,7 +67,7 @@ export class FakeVoiceModels implements VoiceModelsPort {
   constructor(options: FakeVoiceModelsOptions = {}) {
     this.#downloadMs = options.downloadMs ?? 6_000;
     this.#stepMs = options.stepMs ?? 250;
-    for (const id of VOICE_STT_MODELS) {
+    for (const id of VOICE_DOWNLOAD_MODELS) {
       const size = FAKE_MODEL_SIZES[id];
       const there = options.ready?.includes(id) ?? false;
       this.#models.set(id, { id, state: there ? 'ready' : 'absent', size, received: there ? size : 0 });
@@ -81,11 +94,24 @@ export class FakeVoiceModels implements VoiceModelsPort {
   }
 
   /** The models downloaded (the fake voice's health). */
-  ready(): VoiceSttModel[] {
+  ready(): VoiceDownloadModel[] {
     return [...this.#models.values()].filter((m) => m.state === 'ready').map((m) => m.id);
   }
 
+  /** Sets leftover partial bytes on an absent model (e.g. an interrupted opt-in download after restart). */
+  setPartial(model: VoiceDownloadModel, received: number): void {
+    const m = this.#model(model);
+    this.#set(model, { id: model, state: 'absent', size: m.size, received });
+  }
+
+  /** Sets leftover files still being removed (e.g. after a failed deletion and fetcher restart). */
+  setRemoving(model: VoiceDownloadModel, received: number): void {
+    const m = this.#model(model);
+    this.#set(model, { id: model, state: 'removing', size: m.size, received });
+  }
+
   async state(): Promise<VoiceModelsState> {
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     return {
       v: 1,
       models: [...this.#models.values()].map((m) => ({ ...m })),
@@ -93,24 +119,52 @@ export class FakeVoiceModels implements VoiceModelsPort {
     };
   }
 
-  async fetch(model: VoiceSttModel): Promise<VoiceModelsState> {
+  async fetch(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'fetch', model });
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     const m = this.#model(model);
-    if (m.state === 'absent' || m.state === 'failed') {
-      this.#set(model, { id: model, state: 'waiting', size: m.size, received: m.received });
+    if (m.state === 'removing') {
+      const failCount = this.failNextRemove[model] ?? 0;
+      if (failCount > 0) {
+        this.failNextRemove[model] = failCount - 1;
+        throw new VoiceModelsCallError(500, 'bad_request', `${model}: previous files not removed yet`);
+      }
+    }
+    const failFetchCount = this.failNextFetch[model] ?? 0;
+    if (failFetchCount > 0) {
+      this.failNextFetch[model] = failFetchCount - 1;
+      throw new VoiceModelsCallError(500, 'bad_request', `${model}: fetch failed`);
+    }
+    if (m.state === 'absent' || m.state === 'failed' || m.state === 'removing') {
+      this.#set(model, {
+        id: model,
+        state: 'waiting',
+        size: m.size,
+        received: m.state === 'removing' ? 0 : m.received,
+      });
       this.#queue.push(model);
       this.#next();
     }
     return this.state();
   }
 
-  async remove(model: VoiceSttModel): Promise<VoiceModelsState> {
+  async remove(model: VoiceDownloadModel): Promise<VoiceModelsState> {
     this.calls.push({ kind: 'remove', model });
+    if (this.unreachable) throw new VoiceModelsCallError(0, 'unavailable', 'fetcher unreachable');
     const m = this.#model(model);
     const queued = this.#queue.indexOf(model);
     if (queued >= 0) this.#queue.splice(queued, 1);
-    this.#set(model, { id: model, state: 'absent', size: m.size, received: 0 });
     if (m.state === 'downloading') this.#stop();
+    const failCount = this.failNextRemove[model] ?? 0;
+    if (failCount > 0) {
+      this.failNextRemove[model] = failCount - 1;
+      if (m.state !== 'absent' || m.received > 0) {
+        this.#set(model, { id: model, state: 'removing', size: m.size, received: m.received });
+      }
+      this.#next();
+      throw new VoiceModelsCallError(500, 'bad_request', `${model}: not removed yet`);
+    }
+    this.#set(model, { id: model, state: 'absent', size: m.size, received: 0 });
     this.#next();
     return this.state();
   }
@@ -120,12 +174,12 @@ export class FakeVoiceModels implements VoiceModelsPort {
     this.#stop();
   }
 
-  #set(id: VoiceSttModel, state: VoiceModelState): void {
+  #set(id: VoiceDownloadModel, state: VoiceModelState): void {
     this.#models.set(id, state);
     for (const listener of this.#listeners) listener();
   }
 
-  #model(id: VoiceSttModel): VoiceModelState {
+  #model(id: VoiceDownloadModel): VoiceModelState {
     const m = this.#models.get(id);
     if (!m) throw new Error(`fake voice models: no ${id}`);
     return m;
@@ -217,11 +271,36 @@ function fail(res: ServerResponse, status: number, code: string, message: string
   if (!res.headersSent) send(res, status, { error: { code, message } });
 }
 
+function filterModelsState(state: VoiceModelsState, include: ReadonlySet<string>): VoiceModelsState {
+  const defaultModels: readonly string[] = VOICE_STT_MODELS;
+  const supportsRemoving = include.size > 0;
+  return {
+    ...state,
+    models: state.models
+      .filter((m) => defaultModels.includes(m.id) || include.has(m.id))
+      .map((m) => (!supportsRemoving && m.state === 'removing' ? { ...m, state: 'absent', received: 0 } : m)),
+  };
+}
+
+function requestedIncludes(url: URL, extra?: string): Set<string> {
+  const out = new Set<string>();
+  const defaultModels: readonly string[] = VOICE_STT_MODELS;
+  for (const raw of url.searchParams.getAll(VOICE_MODELS_INCLUDE_PARAM)) {
+    for (const part of raw.split(',')) {
+      const id = part.trim();
+      if (id) out.add(id);
+    }
+  }
+  if (extra && !defaultModels.includes(extra)) out.add(extra);
+  return out;
+}
+
 async function serve(models: FakeVoiceModels, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (req.method === 'GET' && req.url === VOICE_MODELS_PATHS.state)
-    return send(res, 200, await models.state());
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  if (req.method === 'GET' && url.pathname === VOICE_MODELS_PATHS.state)
+    return send(res, 200, filterModelsState(await models.state(), requestedIncludes(url)));
   const post = req.method === 'POST';
-  if (!post || (req.url !== VOICE_MODELS_PATHS.fetch && req.url !== VOICE_MODELS_PATHS.remove))
+  if (!post || (url.pathname !== VOICE_MODELS_PATHS.fetch && url.pathname !== VOICE_MODELS_PATHS.remove))
     return fail(res, 400, 'bad_request', 'no such route');
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -232,6 +311,8 @@ async function serve(models: FakeVoiceModels, req: IncomingMessage, res: ServerR
     return fail(res, 400, 'bad_request', 'bad request');
   }
   const answer =
-    req.url === VOICE_MODELS_PATHS.fetch ? await models.fetch(body.model) : await models.remove(body.model);
-  send(res, 200, answer);
+    url.pathname === VOICE_MODELS_PATHS.fetch
+      ? await models.fetch(body.model)
+      : await models.remove(body.model);
+  send(res, 200, filterModelsState(answer, requestedIncludes(url, body.model)));
 }

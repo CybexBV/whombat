@@ -183,6 +183,108 @@ export interface InboxUnread {
   newest: MailSummary[];
 }
 
+/** Lightweight attachment metadata read from headers or IMAP BODYSTRUCTURE without downloading attachment bytes. */
+export interface MailHeaderAttachment {
+  id?: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
+/** Clock-skew margin subtracted from an automation's activation or resync time across all mail providers (5 s). */
+export const MAIL_SINCE_SKEW_MS = 5_000;
+
+/** Normalizes an RFC 5322 Message-ID header for deduplication across moves and UID renumbering. */
+export function normalizeRfcMessageId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return null;
+  const match = /<([^<>\s]+)>/.exec(trimmed);
+  const inner = (match ? match[1] : trimmed) ?? '';
+  const clean = inner.replace(/[\r\n\s]+/g, '').slice(0, 498);
+  return clean ? `<${clean}>` : null;
+}
+
+/** Whether a message received at `receivedAt` is at or after `since` (allowing `MAIL_SINCE_SKEW_MS` of clock skew). */
+export function receivedAtOrAfter(
+  receivedAt: string | number | Date,
+  since: Date | null | undefined,
+): boolean {
+  if (!since) return true;
+  const ms =
+    typeof receivedAt === 'number'
+      ? receivedAt
+      : receivedAt instanceof Date
+        ? receivedAt.getTime()
+        : Date.parse(receivedAt);
+  if (!Number.isFinite(ms)) return true;
+  return ms >= since.getTime() - MAIL_SINCE_SKEW_MS;
+}
+
+/**
+ * Headers and attachment metadata of a newly arrived inbox message (never the body or attachment bytes).
+ * Checked against mail triggers before fetching a message in full.
+ */
+export interface MailHeader {
+  id: string;
+  threadId: string;
+  /** Normalized RFC 5322 Message-ID when the provider reports it (deduplicates moves across folders/UIDs). */
+  messageId?: string | null;
+  from: string;
+  to: string[];
+  subject: string;
+  snippet: string;
+  date: string;
+  hasAttachments: boolean;
+  /** Attachment metadata when fetched; empty when there are none; null when deferred until needed. */
+  attachments: MailHeaderAttachment[] | null;
+}
+
+/** Provider-specific high-water mark stored in `mail_cursors.cursor`. */
+export type MailProviderCursor =
+  | {
+      kind: 'gmail';
+      historyId: string;
+      /** Resumable `messages.list` backfill position until every eligible page since activation/resync is processed. */
+      backfill?: { pageToken: string; afterSeconds: number; sinceMs: number };
+      /** Resumable `history.list` page position for `startHistoryId` when a poll hits the page or batch cap. */
+      paging?: { startHistoryId: string; pageToken: string };
+    }
+  | {
+      kind: 'microsoft';
+      deltaLink: string;
+      /** Resumable `@odata.nextLink` paging state when an initial or resync delta spans more than one poll's page cap. */
+      paging?: { sinceMs?: number; dropHeaders?: boolean };
+    }
+  | {
+      kind: 'imap';
+      mailbox: string;
+      uidValidity: string;
+      lastUid: number;
+      /** Resumable backfill window (`lastUid` advances per batch until every eligible UID up to `untilUid` is processed). */
+      backfill?: { sinceMs: number; untilUid: number };
+    }
+  | { kind: 'fake'; seq: number };
+
+export interface MailChangesOptions {
+  /** True when at least one trigger on this mailbox checks `attachmentTypes` (fetches attachment metadata only when needed). */
+  needAttachmentTypes?: boolean;
+  /** Earliest activation time: every provider drops messages received before `since - 5 s`. */
+  since?: Date | null;
+  /** Last successful poll time to backfill from when a provider cursor expires (falls back to `since`). */
+  resyncSince?: Date | null;
+}
+
+export interface MailChangesResult {
+  cursor: MailProviderCursor;
+  /** New inbox messages arrived since the previous cursor, oldest first (headers and attachment metadata only). */
+  headers: MailHeader[];
+  /** True when an expired or renumbered provider cursor was re-synced from `resyncSince`/`since`. */
+  reset?: boolean;
+  /** True when more backfill or catch-up batches remain before this mailbox is caught up. */
+  more?: boolean;
+}
+
 export interface MailOrganizeInput {
   messageIds: string[];
   addLabels: string[];
@@ -236,6 +338,17 @@ export interface GoogleWorkspace {
    * of the newest unread (only read when there are any). Opens nothing, marks nothing read.
    */
   inboxUnread(accessToken: string, input?: { newest?: number }): Promise<InboxUnread>;
+  /**
+   * Initial inbox sync (or backfill from `options.since`): returns a provider high-water mark plus any inbox
+   * messages received at or after `options.since` (with a 5-second skew margin). Without `since`, emits no headers.
+   */
+  mailBaseline(accessToken: string, options?: MailChangesOptions): Promise<MailChangesResult>;
+  /** New inbox messages since `cursor` (headers and attachment metadata only; bodies are fetched only after a match). */
+  mailChanges(
+    accessToken: string,
+    cursor: MailProviderCursor,
+    options?: MailChangesOptions,
+  ): Promise<MailChangesResult>;
   /** One message, or every message of a thread (bodies as text, capped at `MAIL_BODY_CAP`). */
   mailRead(accessToken: string, input: { messageId?: string; threadId?: string }): Promise<MailMessage[]>;
   mailDraft(accessToken: string, input: MailDraftInput): Promise<{ draftId: string }>;

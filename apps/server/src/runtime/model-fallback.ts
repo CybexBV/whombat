@@ -5,10 +5,10 @@
  * conversation. Where: the AI gateway the turn went through, the person whose sign-in it ran on, or the organization's
  * key. A later completed turn that ran on the agent's model clears it, and so does a change of model (`update_agent`).
  */
-import type { ModelFallbackReport, ModelFallbackWhere } from '@whombat/core';
+import { localModelName, type ModelFallbackReport, type ModelFallbackWhere } from '@whombat/core';
 import { and, eq, isNotNull } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
-import { principals, type StoredModelFallback } from '../db/schema/index';
+import { burrows, principals, type StoredModelFallback } from '../db/schema/index';
 import { gatewayName, isGatewayCatalogId, switchedGateway } from '../gateway/store';
 import { signInPerson } from '../managed/providers/credential-owner';
 import { agentRuntimeOf, loadPrincipalRow, type PrincipalRow } from '../read/principals';
@@ -33,6 +33,14 @@ export async function fallbackWhere(
       name: connection && isGatewayCatalogId(connection.catalogId) ? gatewayName(connection) : null,
     };
   }
+  if (agentRuntimeOf(agent.runtime).provider === 'local') {
+    const [burrow] = await db
+      .select({ localModel: burrows.localModel })
+      .from(burrows)
+      .where(eq(burrows.id, row.burrowId));
+    const name = burrow?.localModel ? localModelName(burrow.localModel).slice(0, NAME_MAX) : null;
+    return { kind: 'local', name };
+  }
   // The person's sign-in (one-person.md OP-S09).
   const person = await signInPerson(db, agent.burrowId);
   return { kind: 'account', name: person ? person.name.slice(0, NAME_MAX) : null };
@@ -40,22 +48,36 @@ export async function fallbackWhere(
 
 /**
  * What a completed turn says about its agent's model (in the completion's transaction): a fallback is kept (only while
- * the agent still has that model), a turn that finished on the agent's own model clears the last one. Returns the stored
- * fallback, if one was kept.
+ * the agent still has that model), a turn that finished on the agent's own model clears the last one. Turns running on
+ * a thread override or background model (`row.runtime`) and background Look turns never set or clear the agent's
+ * main-model fallback warning. Returns the stored fallback, if one was kept.
  */
 export async function noteModelFallback(
   tx: Tx,
-  row: Pick<DispatchRow, 'agentId' | 'burrowId' | 'gatewayProvider' | 'onBehalfOfAccountId'>,
-  body: { outcome: string; modelFallback?: ModelFallbackReport | undefined },
+  row: Pick<DispatchRow, 'agentId' | 'burrowId' | 'gatewayProvider' | 'onBehalfOfAccountId'> &
+    Partial<Pick<DispatchRow, 'runtime' | 'trigger'>>,
+  body: {
+    outcome: string;
+    modelFallback?: ModelFallbackReport | undefined;
+    ran?: { model?: string | null } | undefined;
+  },
   now: Date,
 ): Promise<StoredModelFallback | null> {
+  if (row.runtime) return null;
   const report = body.modelFallback;
   if (!report) {
-    if (body.outcome === 'done')
+    if (body.outcome === 'done') {
+      if (row.trigger === 'look') return null;
+      if (body.ran && body.ran.model !== undefined) {
+        const agent = await loadPrincipalRow(tx, row.agentId);
+        if (agent?.kind !== 'agent') return null;
+        if ((agentRuntimeOf(agent.runtime).model ?? null) !== (body.ran.model ?? null)) return null;
+      }
       await tx
         .update(principals)
         .set({ modelFallback: null })
         .where(and(eq(principals.id, row.agentId), isNotNull(principals.modelFallback)));
+    }
     return null;
   }
   const agent = await loadPrincipalRow(tx, row.agentId);

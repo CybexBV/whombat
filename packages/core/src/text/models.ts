@@ -16,13 +16,19 @@ export const EFFORT_LABELS: Readonly<Record<AgentEffort, string>> = {
 
 export const MODEL_EFFORT_COPY = {
   modelSection: 'MODEL',
+  backgroundModelSection: 'BACKGROUND MODEL',
   effortSection: 'EFFORT',
   defaultModel: 'Default',
+  backgroundModelSame: 'Same as the main model',
+  backgroundModelHint:
+    'Used for automatic checks, care plans and scheduled automations. Chats and plans you start keep the main model.',
   automatic: 'Automatic',
   automaticHint: 'Medium for conversations, high for code work.',
   effortHint: 'Every reply and task uses this. Higher thinks longer: slower replies and more usage.',
   /** The toast's “Saved Banjo’s …”. */
   saved: 'model and effort',
+  /** Shown when the box answered ok without keeping what the app asked to save (e.g. an older box stripped a field). */
+  notSaved: 'This Whombat didn’t save that change. Update this Whombat to use every setting.',
 } as const;
 
 /** “Default (Opus)” — the tool's default model by name when the list says which — else “Default”. */
@@ -37,6 +43,15 @@ export function modelLabel(
   id: string | null | undefined,
 ): string {
   if (!id) return defaultModelLabel(models);
+  return modelOf(models, id)?.label ?? id;
+}
+
+/** The agent's background model by name: its label in the list, else its id; “Same as the main model” when none. */
+export function backgroundModelLabel(
+  models: readonly ProviderModel[] | null | undefined,
+  id: string | null | undefined,
+): string {
+  if (!id) return MODEL_EFFORT_COPY.backgroundModelSame;
   return modelOf(models, id)?.label ?? id;
 }
 
@@ -67,6 +82,11 @@ export function agentModelChangeText(agentName: string, label: string): string {
   return `Set ${agentName}’s model to ${label}`;
 }
 
+/** The Keys line of a background model change: “Set Banjo’s background model to Haiku”, “… to Same as the main model”. */
+export function agentBackgroundModelChangeText(agentName: string, label: string): string {
+  return `Set ${agentName}’s background model to ${label}`;
+}
+
 /** The Keys line of an effort change: “Set Banjo’s effort to High”, “… to Automatic”. */
 export function agentEffortChangeText(agentName: string, effort: AgentEffort | null | undefined): string {
   return `Set ${agentName}’s effort to ${effortLabel(effort)}`;
@@ -88,7 +108,7 @@ export function modelFallbackText(agentName: string, modelName: string, where: M
       : where.kind === 'org'
         ? 'on the organization’s key'
         : where.kind === 'local'
-          ? 'on the model server on your network'
+          ? 'on the custom AI model'
           : `on ${where.name ? `${where.name}’s` : 'that person’s'} sign-in`;
   return `${modelName} wasn’t available ${on}, so ${agentName} used the default model for that reply.`;
 }

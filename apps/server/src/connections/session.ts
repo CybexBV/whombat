@@ -13,7 +13,8 @@
  *   QNAP answer 200), else the status as before, each with the person's words.
  * - The server keeps the session sealed in the OAuth access-token columns with its expiry (as `client_credentials` does,
  *   CS-12) and uses it while more than a minute is left, else signs in again: one sign-in at a time per connection,
- *   outside any caller's session command. A 401 or 403, or a 2xx answer the entry's `stale` rules read as a session
+ *   outside any caller's session command; work bound to where the connection went (`bound-targets.ts`) signs in only
+ *   while the row it reads again still goes there. A 401 or 403, or a 2xx answer the entry's `stale` rules read as a session
  *   that ended (NS-03), is tried once more with a fresh session (`http.ts`).
  * - A password the service refuses (400/401/403) marks the connection `needs_reauth` (`token_invalid`, “Needs a new
  *   password”), as a refused pasted token does; a replaced session is signed out (`logout`, best effort, so Pi-hole's
@@ -45,6 +46,7 @@ import { outsideCommandScope } from '../commit/scope';
 import { catalogConnections } from '../db/schema/index';
 import type { OutboundInit, OutboundResponse } from '../lib/outbound';
 import type { Services } from '../services';
+import { keepBoundRow, type SignInFlight, sharedSignIn } from './bound-targets';
 import { markNeedsReauth } from './commands';
 import { openConnectionSecret, sealConnectionSecret } from './crypto';
 import { connectionFetch, jsonOf, pinOf } from './http';
@@ -175,7 +177,7 @@ export async function signInSession(
   if (res.status === 404) throw new SessionError('missing', res.status, 'There is no sign-in there.');
   if (res.status < 200 || res.status >= 300)
     throw new SessionError('other', res.status, `The sign-in answered ${res.status}.`);
-  const token = sessionAnswerToken(input.auth, text);
+  const token = sessionAnswerToken(input.auth, text, res.headers['set-cookie']);
   if (!token || /[\r\n]/.test(token))
     throw asksTwoStep(jsonOf(res))
       ? new SessionError('two_step', res.status, 'The account asks for a second factor.')
@@ -290,7 +292,7 @@ export function sessionRefusalText(
   }
 }
 
-const inflight = new WeakMap<Services, Map<string, Promise<SessionToken>>>();
+const inflight = new WeakMap<Services, Map<string, SignInFlight<SessionToken>>>();
 
 function freshSession(services: Services, row: CatalogConnectionRow): SessionToken | null {
   if (!row.accessTokenEnc || !row.accessExpiresAt) return null;
@@ -318,16 +320,10 @@ export async function sessionAccess(
     map = new Map();
     inflight.set(services, map);
   }
-  let pending = map.get(row.id);
-  if (!pending) {
-    const m = map;
-    // Shared by every caller that joins it: it belongs to none of their session commands (CS-07).
-    pending = outsideCommandScope(() => signInAgain(services, row.id, opts.force ?? false)).finally(() =>
-      m.delete(row.id),
-    );
-    map.set(row.id, pending);
-  }
-  return pending;
+  // Shared by every caller bound alike that joins it: it belongs to none of their session commands (CS-07).
+  return sharedSignIn(map, row.id, () =>
+    outsideCommandScope(() => signInAgain(services, row.id, opts.force ?? false)),
+  );
 }
 
 async function currentRow(services: Services, id: string): Promise<CatalogConnectionRow | null> {
@@ -343,6 +339,8 @@ async function signInAgain(
 ): Promise<SessionToken> {
   const row = await currentRow(services, id);
   if (!row?.secretEnc) throw new ConnectionAuthError('This connection has no password.');
+  // Bound to where the connection went: one changed since signs in nowhere and writes nothing.
+  keepBoundRow(row);
   const fresh = force ? null : freshSession(services, row);
   if (fresh) return fresh;
   const auth = sessionAuthOf(row.auth);

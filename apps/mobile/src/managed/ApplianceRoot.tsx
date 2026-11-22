@@ -72,6 +72,7 @@ import { createNoteSender, noteLine } from '../errors/errorNotes';
 import { errorNotes, noteListenerError } from '../errors/nativeErrorNotes';
 import { sharedFiles } from '../lib/sharedCache';
 import { LiveActivityBridge } from '../live/LiveActivityBridge';
+import { StatusWidgetBridge } from '../live/StatusWidgetBridge';
 import { RootNavigator } from '../navigation/RootNavigator';
 import { prefetchNavigation } from '../navigation/useNavigationPersistence';
 import { phoneNotifications } from '../push/phoneNotifications';
@@ -200,6 +201,7 @@ function createSetup(input: {
     { clear: () => clearResourceFiles(expoFileApi) },
     { clear: () => sharedFiles.clear() },
     { clear: () => phoneNotifications.endAll() },
+    { clear: () => WhombatLive.clearStatusWidget(input.appliance.device) },
     { clear: () => deviceBox().wipe() },
     // A share waiting to be sent, and its copies in the cache (MX-07).
     { clear: () => wipeShares() },
@@ -662,6 +664,7 @@ function ManagedBurrow({ orgName, children }: { orgName: string | null; children
         )}
       >
         <LiveActivityBridge />
+        <StatusWidgetBridge />
         {children}
       </BurrowProvider>
     </BurrowSwitchContext.Provider>

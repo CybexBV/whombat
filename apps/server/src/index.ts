@@ -18,6 +18,7 @@ import { startHosts } from './hosts/index';
 import { emailDigestFor } from './mail/digest';
 import { type ManagedBoot, startManaged } from './managed/boot';
 import { withStandIns } from './managed/dev-standins';
+import { reconcileOutsidersMarks } from './runtime/outsiders-marks';
 import { schedulesFor } from './schedules/ticker';
 import { consoleLogger, createServices } from './services';
 import { t3WatcherFor } from './t3code/watch';
@@ -70,6 +71,13 @@ else {
   const drained = await services.pipeline.drainOutbox();
   if (drained.deleted) app.log.info(drained, 'outbox rows older than a day removed');
   services.housekeeping.add('outbox prune', 3_600_000, () => services.pipeline.drainOutbox());
+  // What outsiders' input wrote that the previous release or an earlier build left unmarked gets the mark, before any
+  // device, runner or automation reads it (docs/decisions/outsiders-turns.md).
+  const marked = await reconcileOutsidersMarks(services).catch((err: unknown) => {
+    app.log.warn({ err: String(err) }, 'outsiders’ marks could not be brought up to date');
+    return 0;
+  });
+  if (marked) app.log.info({ messages: marked }, 'outsiders’ messages marked');
 }
 // The appliance opens exactly the home network list for this server (vault.md VT-59): written at every boot.
 if (
@@ -92,6 +100,7 @@ const shutdown = async (signal: string) => {
   stopWatchdog();
   await notify?.stopping();
   await managed?.close();
+  await services.mailTriggers.stop();
   await (await aiClients(services).catch(() => null))?.stop();
   await standIns.manager?.close();
   await app.close();
@@ -158,6 +167,8 @@ if (!readOnly) {
   services.feedback.start();
   // Report trackers through automations (docs/decisions/report-trackers.md TA-05): the connections automations read.
   services.tracker.start();
+  // Connected mailboxes watched by live mail-triggered automations.
+  services.mailTriggers.start();
   // The AI gateway (docs/decisions/ai-gateway.md AIG-11): each gateway connection read every minute, alerts to the
   // person.
   services.gateway.start();

@@ -84,6 +84,21 @@ describe('merged Undo', () => {
     expect(merged.guestName).toBe('web3');
   });
 
+  it('a guest’s merged configuration goes back only where the first save went', () => {
+    const save = (destination?: string) => ({
+      serverId: 's',
+      guestId: '101',
+      guestName: 'web',
+      set: { name: 'web' },
+      delete: [],
+      expect: { name: 'web2' },
+      ...(destination ? { destination } : {}),
+    });
+    expect(mergeConfigUndo(save('a'), save('b')).destination).toBe('a');
+    expect(mergeConfigUndo(save(), save('b')).destination).toBe('b');
+    expect(mergeConfigUndo(save(), save())).not.toHaveProperty('destination');
+  });
+
   it('the details show each key once, from the first old value to the last new one', () => {
     expect(mergeDetailLines('name: web → web2', 'name: web2 → web3\nmemory: 1024 → 2048')).toBe(
       'name: web → web3\nmemory: 1024 → 2048',

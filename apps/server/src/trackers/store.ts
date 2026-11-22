@@ -5,7 +5,13 @@
 import type { AutomationDefinition, TrackerTrigger } from '@whombat/core';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
-import { automations, automationVersions, catalogConnections, trackerItems } from '../db/schema/index';
+import {
+  automations,
+  automationVersions,
+  catalogConnections,
+  connections,
+  trackerItems,
+} from '../db/schema/index';
 import { addressHost, itemKindOf, type TrackerRunItem } from './items';
 
 /** A mirrored report as a run's item (TA-08), with its connection's label and handle; null when it is gone. */
@@ -66,7 +72,7 @@ export function trackerTriggers(definition: AutomationDefinition | null | undefi
 }
 
 /**
- * The connection ids a definition names: its tracker triggers' and its `tracker_update`, `tracker_reply` and
+ * The connection ids a definition names: its tracker and mail triggers' and its `tracker_update`, `tracker_reply` and
  * `tracker_decision` steps'.
  */
 export function definitionConnections(definition: AutomationDefinition | null | undefined): string[] {
@@ -74,6 +80,7 @@ export function definitionConnections(definition: AutomationDefinition | null | 
   return [
     ...new Set([
       ...trackerTriggers(definition).map((t) => t.connectionId),
+      ...definition.triggers.flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : [])),
       ...definition.steps.flatMap((s) =>
         s.kind === 'tracker_update' || s.kind === 'tracker_reply' || s.kind === 'tracker_decision'
           ? [s.connectionId]
@@ -83,14 +90,23 @@ export function definitionConnections(definition: AutomationDefinition | null | 
   ];
 }
 
-/** Labels of these connections, by id (“Acme Desk dev”). */
+/** Labels of these connections, by id (“Acme Desk dev” for trackers, the mailbox address for mail accounts). */
 export async function connectionLabels(db: Db | Tx, ids: readonly string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map();
-  const rows = await db
-    .select({ id: catalogConnections.id, label: catalogConnections.label })
-    .from(catalogConnections)
-    .where(inArray(catalogConnections.id, [...new Set(ids)]));
-  return new Map(rows.map((r) => [r.id, r.label]));
+  const unique = [...new Set(ids)];
+  const [catalogRows, mailRows] = await Promise.all([
+    db
+      .select({ id: catalogConnections.id, label: catalogConnections.label })
+      .from(catalogConnections)
+      .where(inArray(catalogConnections.id, unique)),
+    db
+      .select({ id: connections.id, email: connections.email })
+      .from(connections)
+      .where(inArray(connections.id, unique)),
+  ]);
+  const map = new Map(catalogRows.map((r) => [r.id, r.label]));
+  for (const r of mailRows) if (!map.has(r.id)) map.set(r.id, r.email);
+  return map;
 }
 
 /**

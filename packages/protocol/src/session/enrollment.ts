@@ -781,6 +781,8 @@ export const UpdateStatus = z.object({
    * `owner`). Absent when the box's manager can't hold updates for the owner: no switch then.
    */
   askFirst: z.boolean().optional(),
+  /** The box's update channel is paused by its release key; absent when not paused. */
+  paused: z.boolean().optional(),
 });
 export type UpdateStatus = z.infer<typeof UpdateStatus>;
 

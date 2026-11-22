@@ -3,15 +3,17 @@
  * early, what the 5-minute health pass keeps from it (the card's figures, the sidebar dot and points, SD-05, SD-S06),
  * what always asks first, and its buttons (SD-07, SD-S04). `page.ts`, `home/health.ts` and `actions.ts` read only this.
  */
+import type { ThingPageTab } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
 import { colours } from '../quiet/glance';
+import type { ThingQuiet } from '../quiet/store';
 import type { KindCheck, KindNotice } from '../quiet/types';
 import type { MachineFigures } from '../runs-on';
 import type { PageRange } from '../series';
-import type { KindPage, KindView } from './types';
+import type { KindCtx, KindPage, KindView } from './types';
 
 /** What the health pass keeps from a kind's read: the card's glance and the points to store (DS-11). */
 export interface KindSeen {
@@ -59,6 +61,8 @@ export interface KindActionResult {
   everyday?: boolean;
   /** Nothing changed (the setting already had that value): no change is recorded. */
   unchanged?: boolean;
+  /** The change was sent, but Whombat couldn't confirm it took: recorded without Undo and does not finish an undo. */
+  uncertain?: boolean;
   /** The change's kind after `thing.` in place of the action's (`setting.remote_quality`, SST-03). */
   changeKind?: string;
   /** The change's detail: the old value in words (“4 Mbps”), for “… changed this yesterday from 4 Mbps.”. */
@@ -79,15 +83,31 @@ export interface KindActionWords {
  */
 export type KindAction = (ctx: KindActionCtx, input: KindActionInput) => Promise<KindActionResult>;
 
+/** A kind's declared settings: its tab, its `setting` action, and the approval card's words. */
+export interface KindSettings {
+  name: string;
+  tab: (ctx: KindCtx) => Promise<ThingPageTab>;
+  action: KindAction;
+  describe: (ctx: KindActionCtx, input: KindActionInput) => Promise<KindActionWords | null>;
+}
+
 export interface KindModule {
   page: KindPage;
   /** Started before what the connection runs on is known; the page part finds it in the cache. */
   prefetch?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<unknown>;
   /** The health pass's look (SD-05); usually `seenFromView` of a page-less read. */
-  seen?: (services: Services, row: CatalogConnectionRow, now: Date, timeZone: string) => Promise<KindSeen>;
+  seen?: (
+    services: Services,
+    row: CatalogConnectionRow,
+    now: Date,
+    timeZone: string,
+    quiet?: ThingQuiet,
+  ) => Promise<KindSeen>;
   /** “… · locks and alarms ask first” in the head's access line. */
   asksFirst?: string;
   actions?: Record<string, KindAction>;
+  /** The service's declared settings, wired into the page's tab, `setting` action, and approval card. */
+  settings?: KindSettings;
   /** An action in Whombat's words before it runs (the assistant's approval card, SST-04); null: the generic words. */
   describe?: (ctx: KindActionCtx, action: string, input: KindActionInput) => Promise<KindActionWords | null>;
   /**

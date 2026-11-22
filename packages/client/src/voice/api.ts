@@ -5,10 +5,11 @@
  */
 import {
   DictationOutput,
-  type VoiceSttModel,
+  type VoiceDownloadModel,
   type VoiceTyping,
   type VoiceTypingPatch,
 } from '@whombat/core/domain';
+import type { VoiceDutchInput } from '@whombat/protocol/session';
 import { sessionOps } from '../session/managed-ops';
 import { type ApplianceSession, type ChunkSource, StreamError } from '../session/types';
 
@@ -16,9 +17,11 @@ export interface VoiceApi {
   get(): Promise<VoiceTyping>;
   update(patch: VoiceTypingPatch): Promise<VoiceTyping>;
   /** *Download* and *Try again*. */
-  fetchModel(model: VoiceSttModel): Promise<VoiceTyping>;
+  fetchModel(model: VoiceDownloadModel): Promise<VoiceTyping>;
   /** *Remove*. */
-  removeModel(model: VoiceSttModel): Promise<VoiceTyping>;
+  removeModel(model: VoiceDownloadModel): Promise<VoiceTyping>;
+  /** Turn the opt-in Dutch voice on (with licence agreement) or off (removes its files). */
+  setDutchVoice(input: VoiceDutchInput): Promise<VoiceTyping>;
   /**
    * A 16 kHz mono 16-bit WAV to text. A refusal is a `StreamError` with the box's reason in `details.code`
    * (`DictationErrorCode`).
@@ -46,6 +49,7 @@ export function voiceApi(session: ApplianceSession): VoiceApi {
     update: (patch) => sessionOps.voiceUpdate(session, patch),
     fetchModel: (model) => sessionOps.voiceFetchModel(session, { model }),
     removeModel: (model) => sessionOps.voiceRemoveModel(session, { model }),
+    setDutchVoice: (input) => sessionOps.voiceSetDutchVoice(session, input),
     async transcribe({ burrow, wav }, options = {}) {
       const output = await session.upload(
         { type: 'dictation', burrow },

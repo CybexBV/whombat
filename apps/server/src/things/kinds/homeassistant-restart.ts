@@ -4,11 +4,13 @@
  * the central checks in `things/actions.ts`; recorded as “Restarted Home Assistant” (kind `thing.restart`, no Undo).
  */
 import { externalEffect } from '../../commit/scope';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { signedConnectionFetch } from '../../connections/http';
 import { ConnectionAuthError } from '../../connections/types';
 import { ApiError, conflict, forbidden } from '../../lib/errors';
 import { VaultCallError } from '../../vault/net';
 import { displayName } from '../part-of';
+import { writeDone } from './act';
 import type { KindAction } from './registry';
 
 export const RESTARTING_TEXT = 'Restarting Home Assistant. It’s back in about a minute.';
@@ -31,7 +33,7 @@ export const restartHomeAssistant: KindAction = async ({ services, row }) => {
           },
           { deadlineMs: 15_000 },
         ),
-      { refused: (err) => err instanceof ConnectionAuthError },
+      { refused: (err) => err instanceof ConnectionAuthError || err instanceof ConnectionChangedError },
     );
     status = res.status;
   } catch (err) {
@@ -48,5 +50,8 @@ export const restartHomeAssistant: KindAction = async ({ services, row }) => {
     throw forbidden('Home Assistant refused: Whombat’s account there isn’t an administrator.');
   if (status >= 400)
     throw new ApiError('unavailable', 'Home Assistant answered with an error and didn’t restart.');
+  // A redirect (a sign-in page in front of it, say) doesn't say it restarts.
+  if (!writeDone(status))
+    throw new ApiError('unavailable', 'Home Assistant didn’t confirm the restart. Look again in a minute.');
   return { message: RESTARTING_TEXT, title: `Restarted ${displayName(row)}` };
 };

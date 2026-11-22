@@ -89,6 +89,11 @@ export interface PostMessageArgs {
   onBehalfOfAccountId?: string | null;
   /** Where the text came from when it isn't simply the author's own (core `MessageProvenance`). */
   provenance?: MessageProvenance | null;
+  /**
+   * Posted by a run outsiders' input started (`messages.outsiders_run`). Absent: when an agent posts it in an outsiders'
+   * turn (queued for nobody).
+   */
+  outsidersRun?: boolean;
   /** The message hands a plan step to its agent owner (work-supervision WS-04): its dispatch is linked to the step. */
   planStep?: { planId: string; stepId: string; agentId: string };
   /** The message is the result of a job handed to T3 Code (`Message.jobResult`): its text is T3 Code's report. */
@@ -190,6 +195,13 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
   // What answered the assistant's reply in its person's Chat (chat-runtime.md CR-07, chat-runtime-server.md CR-S06).
   const ran = await ranOnForPost(ctx, conv, args.card);
   const scope = currentDispatchScope();
+  const outsidersAgentPost =
+    actor.kind === 'agent' &&
+    scope?.agentId === actor.id &&
+    scope.dispatchId !== null &&
+    scope.onBehalfOfAccountId === null;
+  const outsidersRun = outsidersAgentPost || (args.outsidersRun ?? false);
+  const mayOffer = actor.kind === 'agent' && !outsidersRun && !args.provenance;
 
   await tx.insert(messages).values({
     id,
@@ -200,24 +212,24 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     text,
     mentions,
     card: args.card ?? null,
-    suggestions: actor.kind === 'agent' ? [...new Set(args.suggestions ?? [])] : [],
+    suggestions: mayOffer ? [...new Set(args.suggestions ?? [])] : [],
     more:
-      actor.kind === 'agent' && args.more?.trim()
+      mayOffer && args.more?.trim()
         ? { hint: unlinkLocalPaths(args.more.trim()), requestedById: null, requestedAt: null }
         : null,
-    asks: actor.kind === 'agent' && (args.asks ?? false),
+    asks: mayOffer && (args.asks ?? false),
     attachmentIds: args.attachmentIds ?? [],
     threadRootId: rootId,
     clientId: args.clientId ?? null,
     provenance: args.provenance ?? null,
+    outsidersRun,
     jobResult: args.jobResult ?? null,
     // A thread's subject is on its first message only (CHT-05).
     ...(args.subject && !rootId
       ? { subjectKind: args.subject.kind, subjectId: args.subject.id, subjectName: args.subject.name }
       : {}),
-    ...(ran ? { ranOn: ran.ranOn, dispatchId: ran.dispatchId } : {}),
-    // A question needs its asking turn even outside Chat or without a model display label.
-    ...(actor.kind === 'agent' && args.asks && scope?.agentId === actor.id && scope.dispatchId
+    ...(ran ? { ranOn: ran } : {}),
+    ...(actor.kind === 'agent' && scope?.agentId === actor.id && scope.dispatchId
       ? { dispatchId: scope.dispatchId }
       : {}),
   });
@@ -289,8 +301,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
   const posted: PostedMessage = { id, dispatches: [] };
   const services = ctx.services;
   const authorKind = actor.kind;
-  const dispatchWanted = args.dispatch ?? true;
-  const notifyMentions = args.notifyMentions ?? true;
+  const dispatchWanted = !outsidersRun && (args.dispatch ?? true);
+  const notifyMentions = !outsidersRun && (args.notifyMentions ?? true);
   const trigger = args.dispatchTrigger;
   // A person's top-level message in a channel, or in their Chat or Feedback room in the assistant shell (CHT-02).
   const opensThread = authorKind === 'person' && !rootId && threadedRoom(conv);

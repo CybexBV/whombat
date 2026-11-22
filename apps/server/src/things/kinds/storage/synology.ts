@@ -1117,6 +1117,70 @@ function diskRows(input: SynologyInput): ThingPageRow[] {
   });
 }
 
+/** Questions for the Storage card. */
+export function synologyStorageQuestions(s: SynologySnapshot): string[] {
+  const out: string[] = [];
+  const unhealthy =
+    (s.storage?.pools ?? []).some((p) => healthOf(p.status) !== 'ok') ||
+    (s.storage?.volumes ?? []).some((v) => healthOf(v.status) !== 'ok');
+  if (unhealthy) out.push('Why isn’t my Synology storage healthy?');
+  out.push('Which shared folders take the most space?', 'How fast is my Synology filling up?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Hyper Backup card. */
+export function synologyBackupQuestions(s: SynologySnapshot, now: Date): string[] {
+  const out: string[] = [];
+  const bad = (s.backups ?? []).find((b) => b.result === 'failed' || lateBackup(b, now));
+  if (bad) out.push(clip(`Why did Hyper Backup ${bad.name} have a problem?`, 200));
+  out.push('When did my last Hyper Backup finish?', 'What is backed up by Hyper Backup?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the Disks card. */
+export function synologyDiskQuestions(s: SynologySnapshot): string[] {
+  const out: string[] = [];
+  if ((s.storage?.disks ?? []).some((d) => healthOf(d.status) !== 'ok'))
+    out.push('Which Synology drive needs attention?');
+  out.push('Are all my Synology drives healthy?', 'How warm are the drives running?');
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while Synology has no active problem. */
+export function synologyVerdict(s: SynologySnapshot, now: Date): string {
+  const pools = s.storage?.pools ?? [];
+  const vols = s.storage?.volumes ?? [];
+  const badPool = pools.find((p) => healthOf(p.status) === 'bad' || healthOf(p.status) === 'warn');
+  if (badPool) return clip(`${badPool.label} is ${healthWord(badPool.status).toLowerCase()}.`, 200);
+  const badVol = vols.find((v) => healthOf(v.status) === 'bad' || healthOf(v.status) === 'warn');
+  if (badVol) return clip(`${badVol.label} is ${healthWord(badVol.status).toLowerCase()}.`, 200);
+  const failed = (s.backups ?? []).filter((b) => b.result === 'failed').length;
+  if (failed > 0) return clip(`${plural(failed, 'Hyper Backup task')} failed.`, 200);
+  const late = (s.backups ?? []).filter((b) => lateBackup(b, now)).length;
+  if (late > 0)
+    return clip(`${plural(late, 'Hyper Backup task')} ${late === 1 ? 'is' : 'are'} running late.`, 200);
+  const space = synologySpace(s);
+  const backingUp = (s.backups ?? []).some((b) => b.result === 'running');
+  const lead =
+    vols.length === 1
+      ? `${vols[0]?.label} is healthy`
+      : vols.length > 1
+        ? `All ${vols.length} volumes are healthy`
+        : pools.length === 1
+          ? `${pools[0]?.label} is healthy`
+          : pools.length > 1
+            ? `All ${pools.length} storage pools are healthy`
+            : null;
+  if (lead) {
+    if (backingUp) return clip(`${lead} and a backup is running now.`, 200);
+    if (space) return clip(`${lead}, with ${bytes(Math.max(0, space.total - space.used))} free.`, 200);
+    return clip(`${lead}.`, 200);
+  }
+  if (backingUp) return 'Synology is fine: a backup is running now.';
+  if (s.backups?.length) return 'Synology is fine: backups are up to date.';
+  return 'Synology is running fine.';
+}
+
 /**
  * The page's Synology part (SD-52), in slots: Live “Hyper Backup” (storage work running now, then each task), Inventory
  * “Storage” (each volume, then the disks), the Trend of space added a day from Whombat's readings, DSM's lines in the
@@ -1132,6 +1196,7 @@ export function synologyView(input: SynologyInput): KindView {
       id: 'disks',
       title: 'Disks',
       meta: plural(disks.length, 'disk'),
+      ask: { questions: synologyDiskQuestions(s) },
       columns: [
         { key: 'disk', label: 'Disk' },
         { key: 'health', label: 'Health' },
@@ -1151,6 +1216,7 @@ export function synologyView(input: SynologyInput): KindView {
           id: 'backups',
           title: 'Hyper Backup',
           ...(meta ? { meta } : {}),
+          ask: { questions: synologyBackupQuestions(s, input.now) },
           shape: 'square',
           items: live,
           empty: 'No backup task is set up in Hyper Backup.',
@@ -1161,6 +1227,7 @@ export function synologyView(input: SynologyInput): KindView {
           id: 'storage',
           title: 'Storage',
           ...(space ? { meta: usedOf(space.used, space.total) } : {}),
+          ask: { questions: synologyStorageQuestions(s) },
           items: lines,
         })
       : null,
@@ -1198,6 +1265,7 @@ export function synologyView(input: SynologyInput): KindView {
     open: { label: 'Open DSM', url },
     actions: [],
     readAt: s.readAt,
+    verdict: synologyVerdict(s, input.now),
     suggestions: ['Biggest shared folders', 'Hyper Backup history', 'Disk temperatures this week'],
   };
 }

@@ -40423,6 +40423,126 @@
       }
     },
     {
+      "schema": "VoiceModelState",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "id": "parakeet",
+        "state": "ready",
+        "size": 668757119,
+        "received": 668757119
+      }
+    },
+    {
+      "schema": "VoiceModelState",
+      "name": "supertonic downloading",
+      "valid": true,
+      "value": {
+        "id": "supertonic",
+        "state": "downloading",
+        "size": 145310775,
+        "received": 50000000
+      }
+    },
+    {
+      "schema": "VoiceModelState",
+      "name": "supertonic removing",
+      "valid": true,
+      "value": {
+        "id": "supertonic",
+        "state": "removing",
+        "size": 145310775,
+        "received": 65536
+      }
+    },
+    {
+      "schema": "VoiceModelState",
+      "name": "unknown model",
+      "valid": false,
+      "value": {
+        "id": "canary",
+        "state": "absent",
+        "size": 100,
+        "received": 0
+      }
+    },
+    {
+      "schema": "VoiceModelsState",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "models": [
+          {
+            "id": "parakeet",
+            "state": "ready",
+            "size": 668757119,
+            "received": 668757119
+          },
+          {
+            "id": "supertonic",
+            "state": "absent",
+            "size": 145310775,
+            "received": 0
+          }
+        ],
+        "free": 50000000000
+      }
+    },
+    {
+      "schema": "VoiceModelsState",
+      "name": "unknown model",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "models": [
+          {
+            "id": "canary",
+            "state": "absent",
+            "size": 1,
+            "received": 0
+          }
+        ]
+      }
+    },
+    {
+      "schema": "VoiceModelRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "model": "parakeet"
+      }
+    },
+    {
+      "schema": "VoiceModelRequest",
+      "name": "supertonic",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "model": "supertonic"
+      }
+    },
+    {
+      "schema": "VoiceModelRequest",
+      "name": "unknown model",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "model": "canary"
+      }
+    },
+    {
+      "schema": "VoiceModelRequest",
+      "name": "extra member",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "model": "supertonic",
+        "url": "https://example.com"
+      }
+    },
+    {
       "schema": "PresenceHealth",
       "name": "base",
       "valid": true,

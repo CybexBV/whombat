@@ -63,6 +63,16 @@ function versionCodeOf(version) {
 const BG = { light: '#fbf9f5', dark: '#1c1815' };
 /** tokens `brandColors`: the Ink icon tile, and cocoa for the notification accent. */
 const BRAND = { ink: '#2b221d', cocoa: '#7d6353' };
+/**
+ * App Group shared by the iPhone app, the Share Extension and the home-screen status widget. Apple signs those
+ * extensions only once this group is registered on developer.apple.com (Identifiers → App Groups) and ticked on the
+ * App IDs (`com.whombat.mobile`, `com.whombat.mobile.share-extension`, `com.whombat.mobile.WhombatLiveWidget`); no
+ * API registers one. Switch `IOS_APP_GROUP_ENABLED` to `true` once the group exists to turn both on together, then run
+ * a clean iOS prebuild (`npx expo prebuild --platform ios --clean`) — incremental prebuilds refuse when the existing
+ * `WhombatLiveWidget` target's App Group wiring does not match this flag.
+ */
+const IOS_APP_GROUP = 'group.com.whombat.mobile';
+const IOS_APP_GROUP_ENABLED = false;
 
 module.exports = {
   name: 'Whombat',
@@ -162,6 +172,21 @@ module.exports = {
       // The share sheet's Save Image, on a picture's Download: iOS ends an app that saves to Photos without it.
       NSPhotoLibraryAddUsageDescription: PHOTO_SAVE_TEXT,
     },
+    // Declare App Group UserDefaults (`1C8F.1`) on the main app's own PrivacyInfo.xcprivacy when extensions are on,
+    // which also registers `Whombat/PrivacyInfo.xcprivacy` before `pod install` so RN aggregates into the app's
+    // manifest rather than picking up an extension's manifest.
+    ...(IOS_APP_GROUP_ENABLED
+      ? {
+          privacyManifests: {
+            NSPrivacyAccessedAPITypes: [
+              {
+                NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+                NSPrivacyAccessedAPITypeReasons: ['CA92.1', '1C8F.1'],
+              },
+            ],
+          },
+        }
+      : {}),
   },
   plugins: [
     ['expo-secure-store', { faceIDPermission: false }],
@@ -206,7 +231,6 @@ module.exports = {
         color: BRAND.cocoa,
       },
     ],
-    './modules/whombat-live/app.plugin.cjs',
     // Attachments (docs/decisions/bp-attachments.md): photos from the system picker (no library permission), the camera
     // for “Take photo” (AP-714); iOS asks with these texts. Documents through the system file picker. The microphone is
     // voice typing's: `false` here would remove its text on iOS and block RECORD_AUDIO on Android.
@@ -222,13 +246,12 @@ module.exports = {
     'expo-document-picker',
     // Share to Whombat (AP-715, AP-6322): the share sheet offers the app for text, links, photos and any file, one or
     // several. On Android the activity stays singleTask, so a share while the app runs reaches it as a new intent; on
-    // iPhone a share extension keeps the share in the app group (`group.com.whombat.mobile`) and opens the app. Apple
-    // signs the extension only once that group is registered on its developer site (no API registers one): until then
-    // the iPhone build leaves it out.
+    // iPhone a share extension keeps the share in the app group (`IOS_APP_GROUP`) and opens the app. Waits on
+    // `IOS_APP_GROUP_ENABLED` together with the iPhone home-screen widget below.
     [
       'expo-share-intent',
       {
-        disableIOS: true,
+        disableIOS: !IOS_APP_GROUP_ENABLED,
         iosShareExtensionDisplayName: 'Whombat',
         iosActivationRules: {
           NSExtensionActivationSupportsText: true,
@@ -242,6 +265,11 @@ module.exports = {
         androidMultiIntentFilters: ['image/*', '*/*'],
         androidMainActivityAttributes: { 'android:launchMode': 'singleTask' },
       },
+    ],
+    // Placed after expo-share-intent so the app-group entitlement deduplicates cleanly once `IOS_APP_GROUP_ENABLED` is true.
+    [
+      './modules/whombat-live/app.plugin.cjs',
+      { iosStatusWidget: IOS_APP_GROUP_ENABLED, iosAppGroup: IOS_APP_GROUP },
     ],
     [
       'expo-camera',

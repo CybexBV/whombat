@@ -199,6 +199,7 @@ func (s *Store) DeleteServer(ctx context.Context, id string) error {
 	}
 	for _, q := range []string{
 		`DELETE FROM server_reports WHERE server_id = ?`,
+		`DELETE FROM server_disk_usage WHERE server_id = ?`,
 		`DELETE FROM alerts WHERE server_id = ?`,
 		`DELETE FROM series WHERE server_id = ?`,
 	} {

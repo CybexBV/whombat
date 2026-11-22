@@ -86,13 +86,35 @@ export function resolveThreadRuntime(
 }
 
 /**
- * The runtime a turn runs on (CR-02; CR-S03): its agent's, with provider, model, effort and fast taken from the
- * dispatch's resolved runtime (absent there: the tool's default, automatic, the model's own speed); the rest (its
- * credential source) stays the agent's.
+ * The runtime a background turn runs on (automatic Looks, care plans and scheduled automation steps): the agent's
+ * `backgroundModel` on the same provider, with automatic effort and without fast replies. Null when no background
+ * model is set, so the turn keeps the agent's main model.
+ */
+export function backgroundTurnRuntime(
+  agent: Pick<AgentModelRuntime, 'provider' | 'backgroundModel'>,
+): ChatRuntime | null {
+  if (!agent.backgroundModel || !isChatProvider(agent.provider)) return null;
+  return { provider: agent.provider, model: agent.backgroundModel };
+}
+
+/**
+ * The runtime for an automation step's turn: scheduled runs use the agent's background model when one is set; manual,
+ * test, GitHub, message and tracker runs keep the main model.
+ */
+export function automationDispatchRuntime(
+  agent: Pick<AgentModelRuntime, 'provider' | 'backgroundModel'>,
+  triggerKind: string,
+): ChatRuntime | null {
+  return triggerKind === 'schedule' ? backgroundTurnRuntime(agent) : null;
+}
+
+/**
+ * The runtime a turn runs on: its agent's, with provider, model, effort and fast taken from the dispatch's resolved
+ * runtime (absent there: the tool's default, automatic, the model's own speed).
  */
 export function turnRuntimeOf<R extends AgentRuntime>(agent: R, resolved: ChatRuntime | null | undefined): R {
   if (!resolved) return agent;
-  const { model: _model, effort: _effort, fast: _fast, ...host } = agent;
+  const { model: _model, backgroundModel: _bg, effort: _effort, fast: _fast, ...host } = agent;
   return {
     ...host,
     provider: resolved.provider,

@@ -27,8 +27,11 @@ import {
   callTier,
   executeConnectionCall,
   newCallId,
+  otherTargetsOf,
 } from '../connections/call';
+import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
+import { currentRow } from '../connections/http';
 import { catalogConnections, connectionTools } from '../db/schema/index';
 import { assistantCalled } from '../home/assistant-name';
 import { type RecordedChange, recordChange, registerUndoer, type UndoResult } from '../home/registry';
@@ -100,6 +103,8 @@ export interface ConfigUndo {
   delete: string[];
   /** What the change made them: Undo runs only while they still are. */
   expect: Record<string, string | null>;
+  /** Where an assistant's change went (`tools-shared.ts` `withDestination`): its inverse goes only there. */
+  destination?: string;
 }
 
 const masked = (v: string | undefined) => v !== undefined && /^\*{4,}$/.test(v);
@@ -194,6 +199,16 @@ export function takePendingUndo(callId: string): { changeId: string; byId: strin
   return { changeId: hit.changeId, byId: hit.byId };
 }
 
+/** The other connections' destinations a change kept (`otherDestinations`), by id; none when it kept none. */
+export function keptDestinations(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      (e): e is [string, string] => typeof e[1] === 'string' && /^[0-9a-f]{64}$/.test(e[1]),
+    ),
+  );
+}
+
 /** The tool vocabulary of a hub power action, or null when the tool can't (a restart, Ctrl+Alt+Del). */
 export function toolPowerAction(
   hubAction: string,
@@ -233,6 +248,18 @@ async function undoAsAssistant(
   const who = assistantCalled((await loadPrincipalRow(services.db, agentId))?.name);
   const row = await serversConnection(services, change.burrowId);
   if (row?.status !== 'active') return { ok: false, reason: HOSTS_TEXT.down };
+  // Where the change's call went (`destination`, kept when it was made), and each other connection it acted through
+  // (`otherDestinations`): the inverse goes only there.
+  const payload = change.undo.payload as { destination?: unknown; otherDestinations?: unknown } | null;
+  const destination = payload?.destination;
+  if (!undoGoesWhereChangeWent(row, destination))
+    return { ok: false, reason: changedSinceChangeText(row.label) };
+  const keptOthers = keptDestinations(payload?.otherDestinations);
+  for (const [id, went] of Object.entries(keptOthers)) {
+    const other = await currentRow(services, id);
+    if (!other || other.burrowId !== row.burrowId || !undoGoesWhereChangeWent(other, went))
+      return { ok: false, reason: changedSinceChangeText(other?.label ?? row.label) };
+  }
   const [toolRow] = await services.db
     .select()
     .from(connectionTools)
@@ -260,6 +287,10 @@ async function undoAsAssistant(
   pendingUndo.set(callId, { changeId: change.id, byId: actor.id, at: Date.now() });
   for (const [k, v] of pendingUndo) if (Date.now() - v.at > 24 * 3600_000) pendingUndo.delete(k);
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));
+  // Where the change went, and as whom: a yes to the inverse is bound to that, as any call's is; another connection the
+  // inverse acts through that the change didn't keep, to where it goes now.
+  const target = typeof destination === 'string' ? destination : callTarget(row);
+  const others = { ...(await otherTargetsOf(services, row, tool, args)), ...keptOthers };
   const burrowId = change.burrowId;
   const conversationId = change.conversationId;
   // What the inverse says, and a task it starts, goes in the thread the change was made in (task-feedback.md TF-S11).
@@ -276,6 +307,8 @@ async function undoAsAssistant(
           callId,
           argsEnc,
           ...(conversationId ? { conversationId } : {}),
+          target,
+          others,
         },
         { burrowId, actorId: agentId, onBehalfOf: { principalId: change.personId ?? actor.id } },
       );
@@ -292,6 +325,8 @@ async function undoAsAssistant(
         conversationId,
         threadRootId,
         personId: change.personId ?? actor.id,
+        target,
+        others,
       });
     } catch (err) {
       pendingUndo.delete(callId);

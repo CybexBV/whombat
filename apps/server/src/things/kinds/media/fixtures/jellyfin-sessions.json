@@ -1,0 +1,36 @@
+[
+  {
+    "Id": "sess-1",
+    "UserId": "u1",
+    "UserName": "Anna",
+    "Client": "Jellyfin Android TV",
+    "DeviceName": "Living room TV",
+    "NowPlayingItem": {
+      "Name": "Dune: Part Two",
+      "Id": "mov693134",
+      "Type": "Movie",
+      "ProductionYear": 2024,
+      "RunTimeTicks": 99600000000,
+      "ImageTags": { "Primary": "def456" },
+      "MediaStreams": [{ "Type": "Video", "Height": 2160, "Codec": "hevc" }]
+    },
+    "PlayState": {
+      "PositionTicks": 42120000000,
+      "IsPaused": false,
+      "PlayMethod": "Transcode"
+    },
+    "TranscodingInfo": {
+      "AudioCodec": "aac",
+      "VideoCodec": "h264",
+      "IsVideoDirect": false,
+      "Bitrate": 18400000
+    }
+  },
+  {
+    "Id": "sess-idle",
+    "UserId": "u2",
+    "UserName": "John",
+    "Client": "Jellyfin Web",
+    "DeviceName": "Firefox"
+  }
+]

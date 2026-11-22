@@ -80,7 +80,7 @@ export const entry = {
   tools: [],
   request: { prefixes: ['/api/'] },
   guide:
-    'Pi-hole 6’s API under /api/ (JSON); Whombat signs in with the app password and sends the session itself. GET /api/stats/summary (queries, blocked, percent_blocked, clients, gravity), /api/stats/top_domains?blocked=true&count=10, /api/stats/top_clients, /api/history. Queries: GET /api/queries?length=100&domain=…&client_ip=…&status=… (from and until in Unix time; pass the answer’s cursor to page on). Blocking: GET /api/dns/blocking; POST /api/dns/blocking {"blocking": true}, or {"blocking": false, "timer": 300} to pause it for 5 minutes. Allow and deny lists: GET or POST /api/domains/{allow|deny}/{exact|regex} {"domain", "comment", "groups"}; PUT or DELETE /api/domains/{type}/{kind}/{domain}. Blocklists: /api/lists (?type=block|allow; POST {"address", "comment"}); POST /api/action/gravity updates them (plain text, takes minutes). Also /api/groups, /api/clients, /api/dhcp/leases, /api/network/devices, /api/info/version, /api/info/system, /api/logs/dnsmasq and GET /api/search/{domain}. Settings: GET /api/config/{element} (dns/upstreams); PATCH /api/config {"config": {…}} changes them, which an app password may only do with webserver.api.app_sudo on (403 “read-only” otherwise). Errors are {"error": {"key", "message", "hint"}}. Turning blocking off, restoring a Teleporter backup, emptying logs, passwords and API settings, and deleting always ask a person.',
+    'Pi-hole 6’s API under /api/ (JSON); Whombat signs in with the app password and sends the session itself. GET /api/stats/summary (queries, blocked, percent_blocked, clients, gravity), /api/stats/top_domains?blocked=true&count=10, /api/stats/top_clients, /api/history. Queries: GET /api/queries?length=100&domain=…&client_ip=…&status=… (from and until in Unix time; pass the answer’s cursor to page on). Blocking: GET /api/dns/blocking; POST /api/dns/blocking {"blocking": true}, or {"blocking": false, "timer": 300} to pause it for 5 minutes. Allow and deny lists: GET or POST /api/domains/{allow|deny}/{exact|regex} {"domain", "comment", "groups"}; PUT or DELETE /api/domains/{type}/{kind}/{domain}. Blocklists: /api/lists (?type=block|allow; POST {"address", "comment"}); POST /api/action/gravity updates them (plain text, takes minutes). Also /api/groups, /api/clients, /api/dhcp/leases, /api/network/devices, /api/info/version, /api/info/system, /api/logs/dnsmasq and GET /api/search/{domain}. Settings: GET /api/config/{element} (dns/upstreams); PATCH /api/config {"config": {…}} changes them, which an app password may only do with webserver.api.app_sudo on (403 “read-only” otherwise). Errors are {"error": {"key", "message", "hint"}}. Turning blocking off, exporting or restoring a Teleporter backup, emptying logs, passwords and API settings, and deleting always ask a person.',
   sensitive: [
     DELETES_ASK,
     {
@@ -98,9 +98,14 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
-      methods: ['POST', 'PUT'],
-      path: '^/api/teleporter/?$',
-      reason: 'Restores a backup over Pi-hole’s settings',
+      path: '^/api/teleporter(/|$)',
+      reason: 'Exports or restores a Pi-hole backup, which holds password hashes and the two-step secret',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['GET', 'HEAD'],
+      path: '^/api/config/?$',
+      reason: 'Reads all of Pi-hole’s settings, including its webserver password hashes',
     },
     {
       tools: [REQUEST_TOOL_NAME],
@@ -111,15 +116,27 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
-      methods: ['PUT', 'PATCH', 'POST'],
       path: '^/api/config/webserver(/|$)',
-      reason: 'Changes Pi-hole’s passwords, its web server or who may use its API',
+      reason: 'Reads or changes Pi-hole’s passwords, its web server or who may use its API',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/auth/(app|totp)(/|$)',
+      reason: 'Generates a new Pi-hole app password or two-step secret',
     },
     {
       tools: [REQUEST_TOOL_NAME],
       methods: ['POST'],
       path: '^/api/action/flush/',
       reason: 'Empties the query log or the network table',
+    },
+  ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['PUT', 'PATCH', 'POST'],
+      path: '^/api/config(/|$)',
+      reason: 'Changes Pi-hole’s settings, such as its DNS servers or DHCP',
     },
   ],
   docsUrl: 'https://docs.pi-hole.net/api/',

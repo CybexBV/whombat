@@ -185,3 +185,24 @@ describe('the iPhone app’s associated domains (own-address.md)', () => {
     }
   });
 });
+
+describe('the iPhone App Group flag for the Share Extension and home-screen widget', () => {
+  it('keeps both gated off together until Apple has group.com.whombat.mobile registered', () => {
+    const plugins = (config as unknown as { plugins: unknown[] }).plugins;
+    const share = plugins.find((p) => Array.isArray(p) && p[0] === 'expo-share-intent') as
+      | [string, { disableIOS?: boolean }]
+      | undefined;
+    const live = plugins.find((p) => Array.isArray(p) && p[0] === './modules/whombat-live/app.plugin.cjs') as
+      | [string, { iosStatusWidget?: boolean; iosAppGroup?: string }]
+      | undefined;
+    expect(share?.[1]?.disableIOS).toBe(true);
+    expect(live?.[1]?.iosStatusWidget).toBe(false);
+    expect(live?.[1]?.iosAppGroup).toBe('group.com.whombat.mobile');
+    // whombat-live runs after expo-share-intent so the App Group entitlement deduplicates when both turn on.
+    expect(plugins.indexOf(live)).toBeGreaterThan(plugins.indexOf(share));
+    // Privacy manifest entry for App Group UserDefaults (`1C8F.1`) stays gated on the same flag.
+    expect((config.ios as { privacyManifests?: unknown }).privacyManifests).toBeUndefined();
+    const rawConfig = readFileSync(require.resolve('../../app.config.cjs'), 'utf8');
+    expect(rawConfig).toContain("'1C8F.1'");
+  });
+});

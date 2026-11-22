@@ -216,19 +216,19 @@ describe('Saving the model runtime (AP-1129)', () => {
   });
 });
 
-describe('Settings → Advanced → Model and effort on Local (hermes-engine-app.md AP-5041, AP-5043)', () => {
-  it('offers Local only with a model on the network', async () => {
+describe('Settings → Advanced → Model and effort on Custom', () => {
+  it('offers Custom only when a custom AI model is set up', async () => {
     renderApp(MODEL, mockedServices(server().fetch));
     await modelGroup();
-    expect(screen.queryByRole('radio', { name: 'Local' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Custom' })).toBeNull();
   });
 
   it('lists the burrow’s models and takes another by name; no effort, fast replies or sign-in', async () => {
     const { fetch, writes } = server({ localModel: true });
     const user = userEvent.setup();
     renderApp(MODEL, mockedServices(fetch));
-    await user.click(await screen.findByRole('radio', { name: 'Local' }));
-    expect(screen.getByText('Llama on the NAS, on your network. It answers.')).toBeTruthy();
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    expect(screen.getByText('Llama on the NAS. It answers.')).toBeTruthy();
     const models = await modelGroup();
     expect(
       within(models)
@@ -246,5 +246,115 @@ describe('Settings → Advanced → Model and effort on Local (hermes-engine-app
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]?.body).toEqual({ runtime: { provider: 'local', model: 'gemma3:27b' } });
     expect(await screen.findByText(`Updated ${ASSISTANT_NAME}’s AI provider and model.`)).toBeTruthy();
+  });
+
+  it('warns when an older box strips the Custom AI model id', async () => {
+    const base = createWebFixtureFetch({ models: true, localModel: true });
+    const { fetch, writes } = server({
+      localModel: true,
+      respond: (w) => {
+        if (w.method !== 'PATCH' || w.path !== '/burrows/burrow-hq/agent') return undefined;
+        // Simulate an older runtime that strips `model` for `local`.
+        return base(
+          new Request('http://whombat.test/api/v1/burrows/burrow-hq/agent', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runtime: { provider: 'local' } }),
+          }),
+        ) as unknown as Response;
+      },
+    });
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    await user.type(screen.getByLabelText('Another model'), 'gemma3:27b');
+    await user.click(screen.getByRole('button', { name: 'Use' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(await screen.findByText(/Update this Whombat/i)).toBeTruthy();
+  });
+});
+
+describe('Settings → Advanced → Model and effort background model', () => {
+  it('defaults to “Same as the main model”, lists only the chosen provider’s models, saves and clears on provider switch', async () => {
+    const { fetch, writes } = server();
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await modelGroup();
+    const bgGroup = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(bgGroup)).toEqual(['Same as the main model']);
+    expect(
+      within(bgGroup)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.querySelector('span > span')?.textContent),
+    ).toEqual(['Same as the main model', 'Opus', 'Fable', 'Sonnet', 'Haiku']);
+
+    await user.click(within(bgGroup).getByRole('radio', { name: /^Haiku/ }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.body).toEqual({
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: 'haiku', effort: 'high' },
+    });
+
+    // Picking “Same as the main model” sends explicit null so the server clears it.
+    await user.click(within(bgGroup).getByRole('radio', { name: 'Same as the main model' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1]?.body).toEqual({
+      runtime: { provider: 'claude', model: 'fable', backgroundModel: null, effort: 'high' },
+    });
+
+    // Switching provider resets the background model and offers only the new provider's models.
+    await user.click(screen.getByRole('radio', { name: 'ChatGPT' }));
+    const codexBg = screen.getByRole('radiogroup', { name: 'Background model' });
+    expect(checked(codexBg)).toEqual(['Same as the main model']);
+    expect(within(codexBg).queryByRole('radio', { name: /^Haiku/ })).toBeNull();
+    expect(within(codexBg).getByRole('radio', { name: /^GPT-6\.1-Sol/ })).toBeTruthy();
+  });
+
+  it('hides the background model picker on an older box (protocol minor 2) and omits it when saving', async () => {
+    const { fetch, writes } = server();
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch, { protocolMinor: 2 }));
+    await modelGroup();
+    expect(screen.queryByRole('radiogroup', { name: 'Background model' })).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: 'Max' }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.body).toEqual({ runtime: { provider: 'claude', model: 'fable', effort: 'max' } });
+    expect((await screen.findByRole('status')).textContent).toBe(
+      `Updated ${ASSISTANT_NAME}’s model and effort.`,
+    );
+  });
+
+  it('confirms saves from the box’s response: warns and never toasts saved when the box strips backgroundModel', async () => {
+    const base = createWebFixtureFetch({ models: true });
+    const { fetch, writes } = server({
+      respond: (w) => {
+        if (w.method !== 'PATCH' || w.path !== '/burrows/burrow-hq/agent') return undefined;
+        // Simulate an older runtime stripping `backgroundModel` and answering 200 OK without it.
+        const body = w.body as { runtime?: Record<string, unknown> };
+        const { backgroundModel: _dropped, ...kept } = body.runtime ?? {};
+        return base(
+          new Request('http://whombat.test/api/v1/burrows/burrow-hq/agent', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runtime: kept }),
+          }),
+        ) as unknown as Response;
+      },
+    });
+    const user = userEvent.setup();
+    renderApp(MODEL, mockedServices(fetch));
+    await modelGroup();
+    const bgGroup = screen.getByRole('radiogroup', { name: 'Background model' });
+    await user.click(within(bgGroup).getByRole('radio', { name: /^Haiku/ }));
+    await user.click(within(saveBar()).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(await screen.findByText(/Update this Whombat/i)).toBeTruthy();
+    expect(screen.queryByText(`Updated ${ASSISTANT_NAME}’s model and effort.`)).toBeNull();
+    // Picker reflects what the box actually kept, not the stripped request.
+    expect(checked(bgGroup)).toEqual(['Same as the main model']);
   });
 });

@@ -503,6 +503,56 @@ regular expression and the lines' timestamps (syslog files have no
 priority; the answer says so). `smart` uses `smartctl -x -n standby`: a
 disk in standby is not woken up.
 
+**Disk usage** (`disk_usage` stream, hub → agent): `DiskUsageRequest{mount,
+max_depth, timeout_s}` → `DiskUsageResponse`, controlled by `Policy.Diagnose`
+(same read-only switch as `diagnose`). Runs only on request (never scheduled),
+one scan at a time (`busy` otherwise). Validates that `mount` is a local
+mounted filesystem (rejecting remote and virtual mounts, except Unraid's
+`/var/log` tmpfs). Before touching the mount, resolves every backing physical
+disk from RAM/metadata (Unraid's `/var/local/emhttp/disks.ini`, macOS
+inventory/`diskutil` plist for APFS containers and slices, Linux
+`/sys/fs/btrfs/<fsid>/devices/`, `/sys/fs/bcachefs/<uuid>/dev-*/block`,
+`dm-*`/`md*` `slaves/`, ZFS pool inventory) and checks spin state for
+rotational physical disks via cached `Standby` state, Linux kernel sysfs
+(`device/power/runtime_status` and `device/state`), and — only for confirmed
+ATA/SAT disks (direct `libata`, SAS HBA SATL with vendor `ATA`, or legacy
+IDE) — `hdparm -C` or `smartctl -d <sat|ata> -n standby,3,5 -i` (treating an
+unsupported `CHECK POWER MODE` as unknown; USB bridges, native SCSI/SAS,
+hardware RAID volumes, and macOS rotational drives are never probed and return
+`standby_unknown`; hypervisor virtual guest disks such as `vd*`, `xvd*` and
+QEMU/VMware/VBOX/Hyper-V disks and non-rotational NVMe/SSD/MMC devices cannot
+spin down, while passed-through physical HDDs in a VM are still checked). If any backing disk
+is confirmed asleep it returns `code: "spun_down"` with `skipped_spun_down`; if
+the backing disks, disk type or spin state cannot be confirmed (for example
+LXC `loop*` mounts, ZFS without visible pool disks, missing Btrfs/bcachefs
+sysfs, ZFS zvols or union/pooled FUSE mounts such as mergerfs) it returns
+`code: "standby_unknown"` without doing I/O on the mount. Walks on a
+low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`; macOS
+`PRIO_DARWIN_BG`), anchors the scan to one open directory descriptor of the
+target mount root (on Linux resolved strictly from kernel cache via
+`openat2(O_PATH, RESOLVE_CACHED | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS)`
+so neither intermediate nor final components can trigger an automount or wake a
+disk, verified via `/proc/self/fdinfo/<fd>` mount ID before `statx`, `fstatfs`,
+or readable open; on macOS verified via `fgetattrlist(ATTR_CMN_FSID)` before
+`fstat`), and resolves every subsequent step relative to its open parent
+descriptor: on Linux via `openat2` with
+`RESOLVE_NO_XDEV | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (pinning entries
+with `O_PATH` and verifying `/proc/self/fdinfo/<fd>` before `statx`, refusing
+newly mounted filesystems and bind mounts with `EXDEV`, rejecting automount
+triggers before any readable open, and reading raw `getdents64` entries so
+`DT_UNKNOWN` entries on XFS without `ftype=1` or FUSE never trigger a hidden
+`lstatat`); Linux kernels lacking `openat2` or `RESOLVE_CACHED` (`ENOSYS` /
+`EINVAL`), seccomp profiles blocking `openat2`/`statx`, unsupported macOS
+volumes lacking `ATTR_DIR_MOUNTSTATUS`, and other OSes refuse cleanly with
+`code: "unsupported"`; on macOS via batched `getattrlistbulk(2)` (skipping
+mount points, automount triggers, and APFS firmlinks before `openat`). Never
+follows symlinks, deduplicates hardlinks,
+and bounds depth (default 6, max 12), entries (250,000) and time (default 20 s,
+max 45 s; sets `partial: true` when cut short). Reports recognised categories on
+that mount (container images, build cache, volumes and logs, systemd journal,
+package caches, VM disks and snapshots where known) and up to 15 largest
+non-overlapping folders.
+
 **Exec** (`exec` stream, hub → agent): `ExecRequest{cmd, timeout}` →
 `ExecResponse`, needs `Policy.HostShell`. The command (at most 16 KiB, no
 NUL) runs with `/bin/sh -c` as root, stdin `/dev/null`, a clean environment

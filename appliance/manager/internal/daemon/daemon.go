@@ -124,6 +124,10 @@ type Daemon struct {
 	factsMu sync.Mutex
 	// backupSent is the backupKey of the backup status the runtime was last handed (guarded by factsMu).
 	backupSent string
+	// channelMetaMu serializes applying a verified TUF metadata set (followed-channel check, non-decreasing role
+	// version check, newest-release offer and pause state) as one decision, so a stale refresh never replaces a newly
+	// offered fix or clears a newer pause.
+	channelMetaMu sync.Mutex
 	// lease is the claim-code lookup lease (MG-28, claimlease.go).
 	lease claimLease
 	// lic is the licence loop's state (MG-34, licence.go); nil without licence.keysFile.
@@ -220,7 +224,7 @@ func New(cfg *config.Config, recovery bool, log *slog.Logger) (*Daemon, error) {
 		Host:           hostinfo.Host{BootIDPath: cfg.Host.BootIDPath, CurrentSystemLink: cfg.Host.CurrentSystem},
 		Staging:        &tufclient.Downloader{StagingDir: cfg.StagingDir, Source: tufclient.HTTPSource{BaseURL: cfg.TUF.TargetsURL, Client: &http.Client{Timeout: 2 * time.Hour}, Layout: cfg.TUF.TargetsLayout}, Space: tufclient.StatfsSpace{}, ReserveBytes: cfg.ReserveBytes},
 		AssignmentPath: cfg.AssignmentPath, Policy: update.DefaultPolicy(), RecoveryMode: recovery, Log: log,
-		Refresh:      func(ctx context.Context) error { _, err := d.TUF.Refresh(ctx); return err },
+		Refresh:      func(ctx context.Context) error { _, err := d.refreshTUF(ctx); return err },
 		OnTransition: func(st update.State) { d.onTransition(st) },
 		Channel:      d.Channel.Current,
 	}
@@ -296,7 +300,7 @@ func New(cfg *config.Config, recovery bool, log *slog.Logger) (*Daemon, error) {
 					return r, nil
 				}
 			}
-			return d.TUF.Refresh(ctx)
+			return d.refreshTUF(ctx)
 		}
 		src := tufclient.HTTPSource{BaseURL: cfg.TUF.TargetsURL, Client: &http.Client{Timeout: time.Hour}, Layout: cfg.TUF.TargetsLayout}
 		d.Clients, err = clients.New(clients.Config{Root: cfg.Clients.Root, StateDir: cfg.Clients.StateDir, KeysFile: cfg.Clients.ChannelKeys,
@@ -660,13 +664,135 @@ func (d *Daemon) engineLoop(ctx context.Context) {
 	}
 }
 
+// refreshTUF refreshes TUF metadata and immediately records a channel pause in the journal so pre-activation work stops
+// right away. Clearing a pause waits until the newest release has been offered (tufLoop, CheckNow), so a held bad
+// release cannot be driven into drain or activation before a fix replaces it. A failed refresh (wrong key, expired
+// metadata, outage) leaves the previous state untouched.
+func (d *Daemon) refreshTUF(ctx context.Context) (*trust.Repo, error) {
+	repo, err := d.TUF.Refresh(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if repo.ChannelPaused {
+		_, _ = d.applyRepo(ctx, repo, false, false)
+	}
+	return repo, nil
+}
+
+func (d *Daemon) currentChannel() string {
+	if d.Channel == nil {
+		return ""
+	}
+	return d.Channel.Current()
+}
+
+// applyRepo applies one verified TUF metadata set to the engine as a single serialized decision: when the box follows a
+// channel, it verifies the metadata belongs to the followed channel with a non-decreasing role version before either
+// offering a release, retiring a withdrawn candidate, or changing ChannelPaused. On resume it offers the newest release
+// (or retires any pre-activation candidate the channel no longer offers) before clearing ChannelPaused.
+func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now bool) (*broker.CheckResult, error) {
+	defaultRes := &broker.CheckResult{
+		Result:     controlapi.ResultNone,
+		NextCheckS: int64(config.Seconds(d.Cfg.RefreshSec, time.Hour) / time.Second),
+	}
+	if repo == nil || d.Engine == nil {
+		return defaultRes, nil
+	}
+	d.channelMetaMu.Lock()
+	defer d.channelMetaMu.Unlock()
+
+	cur := d.currentChannel()
+	if cur != "" || repo.Channel != "" {
+		if cur == "" || repo.Channel != cur {
+			return defaultRes, nil
+		}
+		st, err := d.Engine.Load()
+		if err != nil {
+			if offer {
+				return nil, err
+			}
+			d.warnOnce("channel pause state not recorded", err)
+			return defaultRes, nil
+		}
+		if repo.ChannelVersion < 0 {
+			return defaultRes, nil
+		}
+		if prev, ok := st.ChannelVersions[repo.Channel]; ok && prev > 0 && (repo.ChannelVersion <= 0 || repo.ChannelVersion < prev) {
+			return defaultRes, nil
+		}
+		if repo.ChannelPaused {
+			changed, _, err := d.Engine.SyncChannelPause(repo)
+			if err != nil {
+				d.warnOnce("channel pause state not recorded", err)
+				if offer {
+					return nil, err
+				}
+				return defaultRes, nil
+			}
+			if changed {
+				d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", true)
+				d.wakeEngine()
+			}
+			if offer {
+				d.mu.Lock()
+				d.lastChecked = time.Now()
+				d.mu.Unlock()
+			}
+			return defaultRes, nil
+		}
+		res := defaultRes
+		if offer {
+			var err error
+			res, err = d.offerLatest(ctx, repo, now)
+			if err != nil {
+				return nil, err
+			}
+			if after, lerr := d.Engine.Load(); lerr == nil && after.Phase == update.Failed &&
+				after.Candidate != nil && after.Candidate.Failure != nil && after.Candidate.Failure.ResumeRequired {
+				d.wakeEngine()
+			}
+		} else {
+			offeredDigest := ""
+			if o, err := update.LatestOffer(repo, st, d.Dev.DeviceID, d.Dev.Env); err != nil {
+				d.warnOnce("withdrawn release check failed", err)
+				return defaultRes, nil
+			} else if o != nil {
+				offeredDigest = o.Release.Digest
+			}
+			retired, err := d.Engine.RetireWithdrawn(ctx, repo, offeredDigest)
+			if err != nil {
+				d.warnOnce("withdrawn release not retired", err)
+				return defaultRes, nil
+			}
+			if retired {
+				d.wakeEngine()
+			}
+		}
+		changed, _, err := d.Engine.SyncChannelPause(repo)
+		if err != nil {
+			d.warnOnce("channel pause state not recorded", err)
+			return res, nil
+		}
+		if changed {
+			d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", false)
+			d.wakeEngine()
+		}
+		return res, nil
+	}
+
+	if offer {
+		return d.offerLatest(ctx, repo, now)
+	}
+	return defaultRes, nil
+}
+
 // tufLoop refreshes metadata periodically. Failures never touch the installed release.
 func (d *Daemon) tufLoop(ctx context.Context) {
 	every := config.Seconds(d.Cfg.RefreshSec, time.Hour)
 	bo := &Backoff{Base: time.Minute, Max: every}
 	for ctx.Err() == nil {
 		wait := jitter(every)
-		if repo, err := d.TUF.Refresh(ctx); err != nil {
+		if repo, err := d.refreshTUF(ctx); err != nil {
 			d.warnOnce("TUF refresh failed; the installed release keeps running", err)
 			wait = bo.Next()
 		} else {
@@ -675,13 +801,10 @@ func (d *Daemon) tufLoop(ctx context.Context) {
 			if d.Clients != nil {
 				d.Clients.Poke() // a new client channel is picked up with the metadata (MG-33)
 			}
-			if d.newestUpdates() {
-				// A community box, or one with a channel, takes the newest release of what it just verified (MG-136, LNK-20).
-				if _, err := d.offerLatest(ctx, repo, false); err != nil {
-					d.warnOnce("newest release not offered; the installed release keeps running", err)
-				} else {
-					d.clearErr("newest release not offered; the installed release keeps running")
-				}
+			if _, err := d.applyRepo(ctx, repo, d.newestUpdates(), false); err != nil {
+				d.warnOnce("newest release not offered; the installed release keeps running", err)
+			} else {
+				d.clearErr("newest release not offered; the installed release keeps running")
 			}
 		}
 		select {
@@ -749,12 +872,12 @@ type checkReply struct {
 // assignment is verified and offered to the engine as at any poll, and the engine takes it at once (MG-68).
 func (d *Daemon) CheckNow(ctx context.Context) (*broker.CheckResult, error) {
 	if d.newestUpdates() {
-		// A community box (MG-136): its own repository, refreshed now, and its newest release offered.
-		repo, err := d.TUF.Refresh(ctx)
+		// A community box or channel-tracked box: refresh its repository and apply offer + pause state together.
+		repo, err := d.refreshTUF(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("the update repository: %w", err)
 		}
-		return d.offerLatest(ctx, repo, true)
+		return d.applyRepo(ctx, repo, true, true)
 	}
 	if d.Control == nil {
 		// No channel and no control this start: nobody assigns this box a release (newestUpdates).

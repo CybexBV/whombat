@@ -11,6 +11,7 @@ import { ApprovalEngine } from './approvals/engine';
 import { registerApprovalExecutors } from './approvals/executors';
 import { grantKeyExecutor } from './approvals/grant-key';
 import { AutomationEngine, type EngineOptions } from './automations/engine';
+import { knownRelease, NewerAutomationsGate } from './automations/release-gate';
 import { CollabService, type CollabTimings } from './collab/service';
 import { registerCommands } from './commands/index';
 import { Pipeline } from './commit/pipeline';
@@ -42,6 +43,7 @@ import { LicenceGate, MaintenanceGate } from './lib/maintenance';
 import { type Clock, systemClock } from './lib/time';
 import { BoxMail } from './mail/box';
 import { createMailer, type Mailer } from './mail/mailer';
+import { MailTriggerService } from './mail-triggers/index';
 import { LinkPreviewService } from './previews/service';
 import { PushSender } from './push/sender';
 import { RealtimeBus } from './realtime/bus';
@@ -116,6 +118,8 @@ export interface Services {
    * live automation listens to, and the drivers the steps, tools and people's actions talk to each tracker through.
    */
   tracker: TrackerService;
+  /** Watches connected mailboxes for live mail-triggered automations (IMAP IDLE or provider change feeds). */
+  mailTriggers: MailTriggerService;
   /**
    * The AI gateway (docs/decisions/ai-gateway.md): the watcher that reads each gateway connection's pool every minute,
    * stores it, publishes changes and alerts the person.
@@ -155,6 +159,11 @@ export interface Services {
   links: { managedBase: string | null };
   /** The agent's services: containers it keeps up (docs/decisions/one-person.md OP-19). */
   agentServices: AgentServices;
+  /**
+   * Whether automations the release before them can't run (started by mail, changing connected services) may be made,
+   * turned on and run: only once the release the box would go back to knows them (automations/release-gate.ts).
+   */
+  newerAutomations: NewerAutomationsGate;
 }
 
 export interface ServiceDeps {
@@ -194,6 +203,7 @@ export function createServices(deps: ServiceDeps): Services {
     housekeeping: new Housekeeping(() => services.log),
     licence: new LicenceGate(),
     links: { managedBase: null },
+    newerAutomations: new NewerAutomationsGate(deps.config, (id) => knownRelease(services.db, id)),
   } as Services;
   // The app swaps in its own logger later; mail resolves it when sending.
   // The person's own mail server (HE-61, HE-S225) takes the box's mail when one is set.
@@ -235,6 +245,7 @@ export function createServices(deps: ServiceDeps): Services {
   services.automations = new AutomationEngine(services, deps.automations);
   services.feedback = new FeedbackService(services);
   services.tracker = new TrackerService(services);
+  services.mailTriggers = new MailTriggerService(services);
   services.gateway = new GatewayService(services);
   services.guides = new GuideService(services);
   services.usage = new UsageService(services);

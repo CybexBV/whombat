@@ -27,6 +27,7 @@ import type {
   AutomationPlanState,
   AutomationPlanView,
 } from '../domain/automation-plan.js';
+import { mailTriggerDetail, mailWhenText } from './mail.js';
 import { RECIPE_FIX_IMPORTANCE, recipeOf, trackerItemNoun, UNKNOWN_TRACKER_CONNECTION } from './recipes.js';
 import { describeSchedule } from './schedule.js';
 
@@ -177,6 +178,10 @@ function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
       return t.event === 'reporter_replied'
         ? line(`A customer writes back in ${connection(t.connectionId)}`)
         : line(`A new ${trackerItemNoun(t.itemKinds)} in ${connection(t.connectionId)}`);
+    case 'mail': {
+      const mailbox = names.connectionLabel?.(t.connectionId);
+      return line(mailWhenText(t, mailbox), mailTriggerDetail(mailbox));
+    }
     case 'webhook':
       return line('Someone calls its webhook');
     case 'manual':
@@ -242,6 +247,7 @@ function threadLine(definition: AutomationDefinition, names: PlanNames): string 
     return `One thread per ${item} in ${room}`;
   }
   if (kinds.has('tracker') && kinds.size === 1) return `One thread per report in ${room}`;
+  if (kinds.has('mail') && kinds.size === 1) return `One thread per email in ${room}`;
   if ([...kinds].every((k) => k === 'message_posted' || k === 'reaction_added'))
     return 'In a thread under the message';
   return `A thread in ${room} each time it runs`;
@@ -273,6 +279,9 @@ function postsLines(definition: AutomationDefinition, names: PlanNames): Automat
         break;
       case 'tracker_reply':
         outside.push(line(`Replies to the customer in ${connection(step.connectionId)}`));
+        break;
+      case 'connection_actions':
+        outside.push(line('Runs proposed actions on your connections', 'After you approve them'));
         break;
       case 'http_callback': {
         // Core has no URL class (it stays free of platform APIs): the host is what follows the scheme.
@@ -332,6 +341,8 @@ function asksLines(
       lines.push(approvalLine(step, recipe?.fix, recipe?.when.kind === 'tracker'));
     // A feature request is the person's to decide (3.12, TA-44, TA-45).
     if (step.kind === 'tracker_decision') lines.push(decisionLine(step));
+    if (step.kind === 'connection_actions')
+      lines.push(line('Before it changes anything in your connections', 'Always asks you on a card first'));
   }
   const said = new Set<string>();
   for (const g of grants) {
@@ -614,6 +625,8 @@ export function automationFlow(
         return 'Replies to the customer';
       case 'tracker_decision':
         return 'Asks you about a feature request';
+      case 'connection_actions':
+        return 'Runs approved actions';
       default:
         return doesLine(step, names)?.text ?? step.name ?? STEP_KIND_LABELS[step.kind];
     }
@@ -725,6 +738,14 @@ export function automationFlow(
           icon: 'ask',
           details: [stop(decisionLine(step).text), stop(decisionLine(step).detail ?? '')],
           marks: [],
+        });
+        break;
+      case 'connection_actions':
+        items.push({
+          ...base,
+          icon: 'ask',
+          details: ['Only after you approve them on a card.'],
+          marks: [asking],
         });
         break;
       case 'http_callback': {

@@ -150,6 +150,8 @@ export const WORK_SETTINGS = {
   'hosts.createConsole': NONE,
   'hosts.createEnrollment': NONE,
   'hosts.createMaintenance': change('overview', 'Mute server alerts for a while'),
+  // On-request disk breakdown: the assistant has its own tool (server_disk_usage).
+  'hosts.diskUsage': NONE,
   'hosts.fleet': read('overview', 'Read all servers and how they are doing'),
   'hosts.getGuest': read('overview', 'Read a virtual machine or container'),
   'hosts.getInstall': NONE,

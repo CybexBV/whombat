@@ -21,12 +21,29 @@ let
   modelsSocket = "/run/whombat-voice-models/models.sock";
   model = pkgs.voice-test-whisper;
   file = "ggml-tiny.en-q5_1.bin";
-  source = pkgs.linkFarm "voice-model-source" [
-    {
-      name = file;
-      path = model;
-    }
+  supertonicStub = pkgs.writeText "supertonic-stub" "model";
+  supertonicNames = [
+    "duration_predictor.int8.onnx"
+    "text_encoder.int8.onnx"
+    "vector_estimator.int8.onnx"
+    "vocoder.int8.onnx"
+    "tts.json"
+    "unicode_indexer.bin"
+    "voice.bin"
+    "LICENSE"
   ];
+  source = pkgs.linkFarm "voice-model-source" (
+    [
+      {
+        name = file;
+        path = model;
+      }
+    ]
+    ++ map (name: {
+      name = "supertonic/${name}";
+      path = supertonicStub;
+    }) supertonicNames
+  );
   manifest = pkgs.writeText "voice-test-models.json" (
     builtins.toJSON {
       models = [
@@ -36,6 +53,16 @@ let
           url = "http://127.0.0.1:8099/${file}";
           size = 32166155;
           sha256 = "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b";
+        }
+        {
+          id = "supertonic";
+          dir = "supertonic-3-int8";
+          files = map (name: {
+            inherit name;
+            url = "http://127.0.0.1:8099/supertonic/${name}";
+            size = 5;
+            sha256 = "9372c470eeadd5ecd9c3c74c2b3cb633f8e2f2fad799250a0f70d652b6b825e4";
+          }) supertonicNames;
         }
       ];
     }
@@ -113,10 +140,13 @@ in
     msock = "${modelsSocket}"
     health = f"curl -sS --unix-socket {sock} http://voice/v1/voice/health"
     state = f"curl -sS --unix-socket {msock} http://models/v1/voice-models"
-    def ask(path):
-        return f"curl -sS --fail-with-body --unix-socket {msock} -d '{{\"v\":1,\"model\":\"whisper\"}}' http://models/v1/voice-models/{path}"
-    def model_state():
-        return json.loads(machine.succeed(f"runuser -u whombat -- {state}"))["models"][0]
+    state_all = f"curl -sS --unix-socket {msock} 'http://models/v1/voice-models?include=supertonic'"
+    def ask(path, model="whisper"):
+        return f"curl -sS --fail-with-body --unix-socket {msock} -d '{{\"v\":1,\"model\":\"{model}\"}}' http://models/v1/voice-models/{path}"
+    def model_state(model="whisper"):
+        cmd = state_all if model == "supertonic" else state
+        ms = json.loads(machine.succeed(f"runuser -u whombat -- {cmd}"))["models"]
+        return next(m for m in ms if m["id"] == model)
 
     machine.wait_for_unit("sockets.target")
     machine.wait_for_unit("whombat-voice.socket")
@@ -131,8 +161,8 @@ in
         machine.wait_for_unit("wireplumber.service")
         machine.wait_until_succeeds("fuser -s /dev/snd/controlC0", timeout=60)
         h = json.loads(machine.succeed(f"runuser -u whombat -- {health}"))
-        # No speech model in the image: no speech to text until one is downloaded; no graphics chip in the VM.
-        t.assertEqual([h["v"], h["stt"], h["tts"], h["microphone"], h["speaker"]], [1, False, True, True, True])
+        # No speech model in the image: no speech to text until one is downloaded; English only until Dutch is downloaded.
+        t.assertEqual([h["v"], h["stt"], h["tts"], h["microphone"], h["speaker"], h["languages"]], [1, False, True, True, True, ["en"]])
         assert "models" not in h and "gpu" not in h, h
         machine.succeed("systemctl is-active whombat-voice.service")
         for s in (health, state):
@@ -177,6 +207,30 @@ in
         print(journal)
         assert "stt:" in journal and "transcribe:" in journal and "tts:" in journal, journal
         assert "pve" not in journal.lower() and "okay" not in journal.lower(), journal
+
+    with subtest("multi-file Dutch model downloads into its directory, activates Dutch dynamically, and removes cleanly"):
+        # Plain v1 state keeps speech-recognition models only so a rolled-back runtime still parses it.
+        plain_ids = [m["id"] for m in json.loads(machine.succeed(f"runuser -u whombat -- {state}"))["models"]]
+        t.assertEqual(plain_ids, ["whisper"])
+        t.assertEqual(model_state("supertonic")["state"], "absent")
+        machine.succeed(f"runuser -u whombat -- {ask('fetch', 'supertonic')}")
+        machine.wait_until_succeeds(
+            f"runuser -u whombat -- {state_all} | jq -e '.models[] | select(.id == \"supertonic\") | .state == \"ready\"'",
+            timeout=120,
+        )
+        t.assertEqual(
+            machine.succeed("stat -c '%a %U %G %s' /persist/voice-models/supertonic-3-int8/LICENSE").strip(),
+            "640 whombat-voice-models whombat-voice 5",
+        )
+        pid = machine.succeed("systemctl show -P MainPID whombat-voice").strip()
+        machine.succeed(f"nsenter -t {pid} -m -S 966 -G 966 test -r /persist/voice-models/supertonic-3-int8/LICENSE")
+        h = json.loads(machine.succeed(f"runuser -u whombat -- {health}"))
+        t.assertEqual(h["languages"], ["en", "nl"])
+        t.assertEqual(h["models"], ["whisper"])
+        machine.succeed(f"runuser -u whombat -- {ask('remove', 'supertonic')}")
+        machine.fail("test -e /persist/voice-models/supertonic-3-int8")
+        h = json.loads(machine.succeed(f"runuser -u whombat -- {health}"))
+        t.assertEqual(h["languages"], ["en"])
 
     with subtest("Remove deletes it; a download that can't reach its source waits, and carries on after a restart"):
         machine.succeed(f"runuser -u whombat -- {ask('remove')}")

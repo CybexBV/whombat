@@ -15,6 +15,7 @@ import {
   AutomationGrant,
   AutomationId,
   AutomationKey,
+  ProposeConnectionActionsInput,
   ReportAssessmentInput,
 } from '../domain/automation.js';
 import {
@@ -26,7 +27,7 @@ import { Canvas, CanvasCommentThread } from '../domain/canvas.js';
 import { PostableCard } from '../domain/cards.js';
 import { CareStepId } from '../domain/care-plan.js';
 import { DiffStat, FileChange, JsonObject } from '../domain/common.js';
-import type { ConnectorService } from '../domain/connectors.js';
+import { ConnectorProvider, type ConnectorService } from '../domain/connectors.js';
 import { ConversationKind } from '../domain/conversation.js';
 import {
   LOOK_FIX_LABEL_MAX,
@@ -168,6 +169,17 @@ export const AgentTrackerConnection = z.object({
   working: z.boolean(),
 });
 export type AgentTrackerConnection = z.infer<typeof AgentTrackerConnection>;
+
+/** A connected mailbox (Google, Microsoft 365 or Email/IMAP) a mail trigger can listen to. */
+export const AgentMailConnection = z.object({
+  connectionId: ConnectionId,
+  provider: ConnectorProvider,
+  email: z.string(),
+  label: z.string(),
+  /** False while it needs the person to sign in again: a recipe on it is refused until reconnected. */
+  working: z.boolean(),
+});
+export type AgentMailConnection = z.infer<typeof AgentMailConnection>;
 
 /**
  * `look_report`'s input (3.5; Whombat look-research.md LR-05…LR-07): strict, and a fixed look offers no step. Whombat
@@ -718,12 +730,13 @@ export const MCP_TOOLS = {
     name: 'automation_read',
     title: 'Read automations',
     description:
-      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
+      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
     input: z.object({ automationId: AutomationId.optional() }),
     output: z.object({
       automations: z.array(AgentAutomationSummary).optional(),
       automation: AgentAutomationDetail.optional(),
       trackerConnections: z.array(AgentTrackerConnection).optional(),
+      mailConnections: z.array(AgentMailConnection).optional(),
       guide: z.string().optional(),
     }),
     requiredKey: null,
@@ -737,6 +750,16 @@ export const MCP_TOOLS = {
     // `recommends` required since 0.71 (CT-327, AR-51); the stored assessment keeps it optional for older reports.
     input: ReportAssessmentInput,
     output: commitOutcome({ line: z.string() }),
+    requiredKey: null,
+    readOnly: false,
+  }),
+  propose_connection_actions: tool({
+    name: 'propose_connection_actions',
+    title: 'Propose actions for approval',
+    description:
+      'Only in a turn where an automation asks you to propose actions on the person’s connections (for example, after an incoming email): record the calls you want to make. Nothing runs until the person approves them on a card. Each action names connection (its handle), tool (such as request), arguments, and a short plain-English summary the person reads on the card. Only the actions your instructions list can be proposed, in the shape they show; to send a file attached to this message, pass upload with its attachmentId. Call again to replace your list; the last call counts.',
+    input: ProposeConnectionActionsInput,
+    output: commitOutcome({ count: z.number().int().nonnegative() }),
     requiredKey: null,
     readOnly: false,
   }),

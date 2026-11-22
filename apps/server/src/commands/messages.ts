@@ -26,6 +26,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors';
 import { loadConversationRow, unreadCounts } from '../read/conversations';
 import { aggregateReactions, loadMessageRow, loadMessages, type MessageRow } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
+import { outsidersWrote } from '../runtime/outsiders-marks';
 import type { Services } from '../services';
 
 export const sendMessage = defineCommand({
@@ -134,7 +135,9 @@ export const requestMore = defineCommand({
     const row = await loadMessageRow(tx, input.messageId);
     if (!row || row.burrowId !== ctx.burrow.id) throw notFound('Message');
     if (ctx.actor.kind !== 'person') throw forbidden('Only you can ask for more detail.');
-    if (!row.more) throw badRequest('There is no more detail to this message.');
+    // Outsiders' input wrote it (also one the mark missed: `outsidersWrote`): its offer never reaches a person's turn.
+    if (row.outsidersRun || row.provenance || !row.more || (await outsidersWrote(tx, row.id)))
+      throw badRequest('There is no more detail to this message.');
     const author = await loadPrincipalRow(tx, row.authorId);
     if (author?.kind !== 'agent') throw badRequest('There is no more detail to this message.');
     const load = async () => {

@@ -3,7 +3,7 @@
  * provider its turns run on. There are no roles, no hiring and no other agents; the agent is created with the Whombat.
  */
 import { z } from 'zod';
-import { AgentEffort } from './models.js';
+import { AgentEffort, modelFast, type ProviderModel } from './models.js';
 
 /* Name and face (OA-08) ------------------------------------------------------------------------------------------ */
 
@@ -112,10 +112,15 @@ export const AgentModelRuntime = z.object({
   provider: AgentProvider,
   /**
    * One of the tool's models (`ProviderModel.id`, 0.77 CT-333); absent: the tool's default. With `local` (CT-1173) any
-   * model the server on the person's network serves, typed or picked from `localProviderModels`; absent: the burrow's
+   * model the custom AI endpoint serves, typed or picked from `localProviderModels`; absent: the burrow's
    * own (`LocalModelView.model`).
    */
   model: z.string().min(1).optional(),
+  /**
+   * Optional model of the same provider used for background work (automatic Looks, care plans and scheduled automation
+   * steps); absent: uses the agent's main model.
+   */
+  backgroundModel: z.string().min(1).optional(),
   /**
    * How hard it thinks in every turn (0.77, CT-333; Whombat model-effort.md ME-02); absent: automatic, `high` for code
    * work and `medium` for conversation (`turnEffort`). A `local` model takes none, so none is sent.
@@ -130,6 +135,15 @@ export const AgentModelRuntime = z.object({
 export type AgentModelRuntime = z.infer<typeof AgentModelRuntime>;
 
 /**
+ * `agent.update`'s `runtime` input: omitting `backgroundModel` keeps the current one on the same provider (so an
+ * older app never erases it); explicit `null` clears it back to “Same as the main model”.
+ */
+export const AgentModelRuntimeUpdate = AgentModelRuntime.extend({
+  backgroundModel: z.string().min(1).nullable().optional(),
+});
+export type AgentModelRuntimeUpdate = z.infer<typeof AgentModelRuntimeUpdate>;
+
+/**
  * What the agent's turns run on (Whombat one-person.md OP-09, contracts 3.0, CT-1503): the model part. There is no
  * credential source to pick: every turn runs on the person's own sign-in for the provider, which is a subscription or
  * an API key the person added, in the one credential home per provider. Every turn runs on the person's Whombat
@@ -140,3 +154,63 @@ export type AgentRuntime = z.infer<typeof AgentRuntime>;
 
 /** The agent's model when the Whombat is created: Claude Code. */
 export const DEFAULT_AGENT_RUNTIME: AgentRuntime = { provider: 'claude' };
+
+/** The providers whose effort and fast replies an agent may pick: Claude Code and ChatGPT (custom AI models have neither). */
+export function providerHasModelEffort(provider: AgentProvider): provider is 'claude' | 'codex' {
+  return provider === 'claude' || provider === 'codex';
+}
+
+/**
+ * Normalises an `agent.update` runtime into the `AgentModelRuntime` the box keeps: main `model` and `backgroundModel`
+ * for every provider (trimmed; omitting `backgroundModel` keeps the previous one on the same provider, `null` or a
+ * provider switch clears it), and `effort`/`fast` only for Claude Code and ChatGPT.
+ */
+export function resolveAgentModelRuntime(
+  input: AgentModelRuntimeUpdate,
+  before?: Pick<AgentModelRuntime, 'provider' | 'backgroundModel'> | null,
+): AgentModelRuntime {
+  const own = providerHasModelEffort(input.provider);
+  const model = input.model?.trim();
+  const backgroundModel =
+    input.backgroundModel === undefined
+      ? before && input.provider === before.provider
+        ? before.backgroundModel?.trim()
+        : undefined
+      : input.backgroundModel?.trim();
+  return {
+    provider: input.provider,
+    ...(model ? { model } : {}),
+    ...(backgroundModel ? { backgroundModel } : {}),
+    ...(own && input.effort ? { effort: input.effort } : {}),
+    ...(own && input.fast !== undefined ? { fast: input.fast } : {}),
+  };
+}
+
+/**
+ * Whether the box's returned `agent.runtime` kept every setting `agent.update` asked to save.
+ * Compares only the fields the box keeps for the provider (every provider keeps `model` and `backgroundModel`;
+ * only Claude Code and ChatGPT keep `effort` and `fast`, and `fast: false` is dropped where the model offers none).
+ * Catches older runtimes that silently strip a newer field (such as `backgroundModel`, or `model` on `local`) while
+ * answering 200 OK.
+ */
+export function modelRuntimeSaved(
+  requested: AgentModelRuntimeUpdate,
+  returned: Pick<AgentModelRuntime, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
+  models?: readonly ProviderModel[] | null,
+): boolean {
+  if (returned.provider !== requested.provider) return false;
+  if ((returned.model?.trim() || null) !== (requested.model?.trim() || null)) return false;
+  if (
+    requested.backgroundModel !== undefined &&
+    (returned.backgroundModel?.trim() || null) !== (requested.backgroundModel?.trim() || null)
+  )
+    return false;
+  if (!providerHasModelEffort(requested.provider)) return true;
+  if ((returned.effort ?? null) !== (requested.effort ?? null)) return false;
+  const expectedFast =
+    requested.fast === false && models?.length && !modelFast(models, requested.model)
+      ? undefined
+      : requested.fast;
+  if ((returned.fast ?? undefined) !== (expectedFast ?? undefined)) return false;
+  return true;
+}

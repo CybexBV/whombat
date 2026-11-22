@@ -57,9 +57,16 @@ import {
   type GoogleWorkspace,
   type InboxUnread,
   isGoogleUrl,
+  MAIL_SINCE_SKEW_MS,
+  type MailChangesOptions,
+  type MailChangesResult,
   type MailDraftView,
+  type MailHeader,
   type MailOrganizeInput,
+  type MailProviderCursor,
   type MailSearchInput,
+  normalizeRfcMessageId,
+  receivedAtOrAfter,
 } from './types';
 
 export const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -133,9 +140,10 @@ function isoFromMs(ms: string | undefined): string {
 
 function mailSummary(m: GmailMessage, labels: Map<string, string>): MailSummary {
   const ids = m.labelIds ?? [];
+  const msgId = clip(m.id, 200);
   return {
-    id: m.id,
-    threadId: m.threadId,
+    id: msgId,
+    threadId: clip(m.threadId || m.id, 200),
     from: clip(headerOf(m.payload, 'From') ?? '', 500),
     to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
     subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
@@ -155,10 +163,10 @@ function mailMessage(m: GmailMessage, labels: Map<string, string>): MailMessage 
     body: capped.text,
     bodyTruncated: capped.truncated,
     attachments: body.attachments.map((a) => ({
-      ...(a.id !== undefined ? { id: a.id } : {}),
+      ...(a.id !== undefined ? { id: clip(a.id, 2048) } : {}),
       name: clip(a.name, 500),
       mimeType: clip(a.mimeType, 200),
-      size: a.size,
+      size: Math.max(0, Math.trunc(a.size)),
     })),
   };
 }
@@ -451,6 +459,224 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
         ? await this.mailSearch(accessToken, { query: 'is:unread in:inbox', limit: input.newest ?? 0 })
         : [];
     return { count, newest };
+  }
+
+  private async fetchGmailHeaders(
+    accessToken: string,
+    ids: readonly string[],
+    since?: Date | null,
+  ): Promise<MailHeader[]> {
+    if (ids.length === 0) return [];
+    // Partial response omits body.data so Gmail sends only headers, snippet and attachment metadata.
+    const partFields = 'partId,mimeType,filename,body/size,body/attachmentId';
+    const fields = `id,threadId,internalDate,labelIds,snippet,payload(headers,${partFields},parts(${partFields},parts(${partFields},parts(${partFields}))))`;
+    const fetched = await mapLimit(ids, FETCH_CONCURRENCY, async (id) => {
+      try {
+        return await this.json<GmailMessage>(accessToken, 'GET', `${GMAIL_API}/messages/${enc(id)}`, {
+          query: { format: 'full', fields },
+        });
+      } catch (err) {
+        if (err instanceof GoogleApiError && err.status === 404) return null;
+        throw err;
+      }
+    });
+    const headers: MailHeader[] = [];
+    for (const m of fetched) {
+      if (!m) continue;
+      const ids = m.labelIds ?? [];
+      if (!ids.includes('INBOX') || ids.includes('DRAFT') || ids.includes('TRASH') || ids.includes('SPAM'))
+        continue;
+      const dateIso = isoFromMs(m.internalDate);
+      if (!receivedAtOrAfter(dateIso, since)) continue;
+      const attachments = extractBody(m.payload).attachments.map((a) => ({
+        ...(a.id !== undefined ? { id: a.id } : {}),
+        name: clip(a.name, 500),
+        mimeType: clip(a.mimeType, 200),
+        size: a.size,
+      }));
+      headers.push({
+        id: m.id,
+        threadId: m.threadId,
+        messageId: normalizeRfcMessageId(headerOf(m.payload, 'Message-ID')),
+        from: clip(headerOf(m.payload, 'From') ?? '', 500),
+        to: splitAddressHeader(headerOf(m.payload, 'To')).map((a) => clip(a, 500)),
+        subject: clip(headerOf(m.payload, 'Subject') ?? '', 1000),
+        snippet: clip(decodeEntities(m.snippet ?? ''), 500),
+        date: dateIso,
+        hasAttachments: attachments.length > 0,
+        attachments,
+      });
+    }
+    headers.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    return headers;
+  }
+
+  private async gmailBackfillPage(
+    accessToken: string,
+    historyId: string,
+    afterSeconds: number,
+    sinceMs: number,
+    pageToken?: string,
+  ): Promise<MailChangesResult> {
+    const list = await this.json<{ messages?: { id: string }[]; nextPageToken?: string }>(
+      accessToken,
+      'GET',
+      `${GMAIL_API}/messages`,
+      {
+        query: {
+          labelIds: 'INBOX',
+          q: `after:${afterSeconds}`,
+          maxResults: 50,
+          ...(pageToken ? { pageToken } : {}),
+        },
+      },
+    );
+    const ids = (list.messages ?? []).map((m) => m.id);
+    const headers = await this.fetchGmailHeaders(accessToken, ids, new Date(sinceMs));
+    const nextToken = list.nextPageToken?.trim() || undefined;
+    if (nextToken && nextToken !== pageToken) {
+      return {
+        cursor: {
+          kind: 'gmail',
+          historyId,
+          backfill: { pageToken: nextToken, afterSeconds, sinceMs },
+        },
+        headers,
+        more: true,
+      };
+    }
+    return { cursor: { kind: 'gmail', historyId }, headers };
+  }
+
+  async mailBaseline(accessToken: string, options: MailChangesOptions = {}): Promise<MailChangesResult> {
+    // Capture the current historyId first so mail arriving during backfill is still caught by the next history poll.
+    const profile = await this.json<{ historyId?: string | number }>(
+      accessToken,
+      'GET',
+      `${GMAIL_API}/profile`,
+      { query: { fields: 'historyId' } },
+    );
+    const historyId = String(profile.historyId ?? '0');
+    if (!options.since) return { cursor: { kind: 'gmail', historyId }, headers: [] };
+    // Pad Gmail's whole-second `after:` search slightly and enforce the exact 5 s skew margin on `internalDate`.
+    const afterSeconds = Math.max(0, Math.floor((options.since.getTime() - MAIL_SINCE_SKEW_MS) / 1000) - 60);
+    return this.gmailBackfillPage(accessToken, historyId, afterSeconds, options.since.getTime());
+  }
+
+  async mailChanges(
+    accessToken: string,
+    cursor: MailProviderCursor,
+    options: MailChangesOptions = {},
+  ): Promise<MailChangesResult> {
+    const resyncSince = options.resyncSince ?? options.since ?? null;
+    if (cursor.kind !== 'gmail') {
+      return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
+    }
+    if (cursor.backfill) {
+      const { pageToken, afterSeconds, sinceMs } = cursor.backfill;
+      try {
+        return await this.gmailBackfillPage(accessToken, cursor.historyId, afterSeconds, sinceMs, pageToken);
+      } catch (err) {
+        // Stale or invalid backfill pageTokens return HTTP 400 (and 404/410 on expired state): restart backfill
+        // from `sinceMs`; message deduplication makes re-scanning safe. Other statuses propagate without looping.
+        if (
+          err instanceof GoogleApiError &&
+          (err.status === 400 || err.status === 404 || err.status === 410)
+        ) {
+          return {
+            ...(await this.mailBaseline(accessToken, { ...options, since: new Date(sinceMs) })),
+            reset: true,
+          };
+        }
+        throw err;
+      }
+    }
+    const startHistoryId = cursor.paging?.startHistoryId ?? cursor.historyId;
+    const addedIds: string[] = [];
+    const seen = new Set<string>();
+    let nextHistoryId = cursor.historyId;
+    let lastIncludedHistoryId: string | null = null;
+    let truncated = false;
+    let pageToken: string | undefined = cursor.paging?.pageToken;
+    let nextPageTokenForResume: string | undefined;
+    const seenTokens = new Set<string>(pageToken ? [pageToken] : []);
+    try {
+      for (let page = 0; page < 5; page++) {
+        const res = await this.json<{
+          historyId?: string | number;
+          nextPageToken?: string;
+          history?: {
+            id?: string | number;
+            messagesAdded?: { message?: { id?: string; labelIds?: string[] } }[];
+          }[];
+        }>(accessToken, 'GET', `${GMAIL_API}/history`, {
+          query: {
+            startHistoryId,
+            historyTypes: 'messageAdded',
+            labelId: 'INBOX',
+            maxResults: 100,
+            ...(pageToken ? { pageToken } : {}),
+          },
+        });
+        if (res.historyId !== undefined) nextHistoryId = String(res.historyId);
+        let brokeMidPage = false;
+        for (const h of res.history ?? []) {
+          if (
+            addedIds.length >= 50 &&
+            lastIncludedHistoryId !== null &&
+            lastIncludedHistoryId !== startHistoryId &&
+            lastIncludedHistoryId !== cursor.historyId
+          ) {
+            truncated = true;
+            brokeMidPage = true;
+            break;
+          }
+          for (const added of h.messagesAdded ?? []) {
+            const msg = added.message;
+            if (!msg?.id || seen.has(msg.id)) continue;
+            const labels = msg.labelIds ?? [];
+            if (labels.includes('DRAFT') || labels.includes('TRASH') || labels.includes('SPAM')) continue;
+            seen.add(msg.id);
+            addedIds.push(msg.id);
+          }
+          if (h.id !== undefined) lastIncludedHistoryId = String(h.id);
+        }
+        if (brokeMidPage) break;
+        const candidateNext = res.nextPageToken?.trim() || undefined;
+        if (!candidateNext || seenTokens.has(candidateNext)) break;
+        seenTokens.add(candidateNext);
+        if (page === 4 || addedIds.length >= 50) {
+          truncated = true;
+          nextPageTokenForResume = candidateNext;
+          break;
+        }
+        pageToken = candidateNext;
+      }
+    } catch (err) {
+      // History IDs or pageTokens expire/become invalid (HTTP 404/400/410): resync from last successful poll time.
+      if (err instanceof GoogleApiError && (err.status === 404 || err.status === 400 || err.status === 410)) {
+        return { ...(await this.mailBaseline(accessToken, { ...options, since: resyncSince })), reset: true };
+      }
+      throw err;
+    }
+    const headers = await this.fetchGmailHeaders(accessToken, addedIds, options.since);
+    if (nextPageTokenForResume) {
+      return {
+        cursor: {
+          kind: 'gmail',
+          historyId: lastIncludedHistoryId ?? cursor.historyId,
+          paging: { startHistoryId, pageToken: nextPageTokenForResume },
+        },
+        headers,
+        more: true,
+      };
+    }
+    const finalHistoryId = truncated ? (lastIncludedHistoryId ?? cursor.historyId) : nextHistoryId;
+    return {
+      cursor: { kind: 'gmail', historyId: finalHistoryId },
+      headers,
+      ...(truncated && finalHistoryId !== cursor.historyId ? { more: true } : {}),
+    };
   }
 
   async mailRead(

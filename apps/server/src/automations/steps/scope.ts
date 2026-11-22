@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { automationRunSteps, automationRuns } from '../../db/schema/index';
 import { notFound } from '../../lib/errors';
+import { outsidersRun } from '../runs';
 import type { AutomationRunRow, AutomationStepRow } from '../store';
 
 /** Default and ceiling minutes per step kind (a definition may shorten, never exceed, the ceiling). */
@@ -22,6 +23,8 @@ const STEP_TIMEOUTS: Record<AutomationStep['kind'], { default: number; max: numb
   tracker_decision: { default: 30 * 24 * 60, max: 30 * 24 * 60 },
   // How long a person may take to say yes when its key asks; the checks have their own wait (`waitMinutes`, AR-46).
   merge_pull_request: { default: 7 * 24 * 60, max: 30 * 24 * 60 },
+  // Waiting for a person to approve proposed connection actions on a card.
+  connection_actions: { default: 7 * 24 * 60, max: 30 * 24 * 60 },
 };
 
 export function stepTimeoutMs(step: AutomationStep): number {
@@ -35,16 +38,58 @@ export const retryBackoffMs = (attempt: number) => 30_000 * 4 ** Math.max(0, att
 
 /**
  * What templates and conditions read: `trigger.*`, `steps.<id>.*` (outputs + state: an agent step's `text` is all it
- * posted in its turn, `reply` its last message, an assessment step's `assessment`), `run.*` (`number`, `id`, `test`;
- * `today` comes from `stepScope`).
+ * posted in its turn, `reply` its last message, an assessment step's `assessment`; a `connection_actions` step's only
+ * `state`, `ran` and `count`), `run.*` (`number`, `id`, `test`; `today` comes from `stepScope`).
  */
 export function runScope(
   run: AutomationRunRow,
   steps: readonly AutomationStepRow[],
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const s of steps) out[s.stepId] = { ...(s.output as JsonObject), state: s.state };
+  const outside = outsidersRun(run.trigger);
+  for (const s of steps) {
+    const { offeredActions: _offered, resultDispatchId, ...output } = s.output as JsonObject;
+    if (outside && s.kind === 'dispatch_agent') {
+      // A result this release collected says which turn it came from: one that isn't the step's turn any more is
+      // dropped. A step the previous release finished keeps the result it collected then (it names no turn).
+      if (typeof resultDispatchId === 'string' && resultDispatchId !== s.dispatchId) {
+        delete output.text;
+        delete output.reply;
+        delete output.messageIds;
+        delete output.verdict;
+      }
+      // Files never leave an outsiders' step, however it was collected (`outsidersStepFiles`).
+      delete output.attachmentIds;
+    }
+    out[s.stepId] = s.kind === 'connection_actions' ? actionsScope(s) : { ...output, state: s.state };
+  }
   return { trigger: run.scope, steps: out, run: { number: run.number, id: run.id, test: run.test } };
+}
+
+/**
+ * Whether `step`'s files stay where they are: an agent step of an outsiders' run carries none onwards, also one the
+ * previous release saved with the files its turn collected then (which could be another turn's).
+ */
+export function outsidersStepFiles(
+  run: Pick<AutomationRunRow, 'trigger'>,
+  step: Pick<AutomationStepRow, 'kind'>,
+): boolean {
+  return outsidersRun(run.trigger) && step.kind === 'dispatch_agent';
+}
+
+/**
+ * A `connection_actions` step as templates and conditions read it: its state, whether its actions ran and how many.
+ * Never its card's names, the paths with the person's account ids, the connections' labels, why it was refused or what
+ * the services answered: those are what the server read from the person's services, and a template would carry them
+ * into a later outsiders' turn or a message it reads.
+ */
+function actionsScope(s: AutomationStepRow): JsonObject {
+  const o = (s.output ?? {}) as JsonObject;
+  return {
+    ...(typeof o.ran === 'boolean' ? { ran: o.ran } : {}),
+    ...(typeof o.count === 'number' ? { count: o.count } : {}),
+    state: s.state,
+  };
 }
 
 /**

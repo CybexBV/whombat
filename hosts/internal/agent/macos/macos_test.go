@@ -245,6 +245,30 @@ func TestPickVolumes(t *testing.T) {
 		*out[1].UsedBytes != 5 || out[1].Role != "/Volumes/STICK" || out[2].UsedBytes != nil || out[2].Role != "" {
 		t.Errorf("disks %+v", out)
 	}
+
+	volsWithShare := append(slices.Clone(vols),
+		volume{container: "disk4", Filesystem: proto.Filesystem{Mount: "/Volumes/AppDMG"}},
+		volume{Filesystem: proto.Filesystem{Mount: "/Volumes/media", Remote: true}},
+	)
+	fss := FilesystemsWithDisks(volsWithShare, list, disks)
+	if len(fss) != 4 || !slices.Equal(fss[0].Disks, []string{"disk0"}) || !slices.Equal(fss[1].Disks, []string{"disk9"}) ||
+		len(fss[2].Disks) != 0 || len(fss[3].Disks) != 0 {
+		t.Errorf("filesystems with disks %+v", fss)
+	}
+	// DiskInfo parses APFS physical stores and keeps unknown SolidState distinct from HDD.
+	di3, err := ParseDiskutilInfo(read(t, "diskutil_info_disk3.plist"))
+	if err != nil || !slices.Equal(di3.APFSPhysicalStores, []string{"disk0"}) || di3.APFSContainer != "disk3" {
+		t.Errorf("disk3 info %+v %v", di3, err)
+	}
+	unknownUSB, err := ParseDiskutilInfo([]byte(`<?xml version="1.0"?><plist version="1.0"><dict>
+		<key>DeviceIdentifier</key><string>disk9</string>
+		<key>BusProtocol</key><string>USB</string>
+		<key>Internal</key><false/>
+		<key>TotalSize</key><integer>1000000000</integer>
+	</dict></plist>`))
+	if err != nil || unknownUSB.SolidStateKnown || unknownUSB.Disk().Type != "" {
+		t.Errorf("unknown SolidState disk %+v (%+v) %v", unknownUSB, unknownUSB.Disk(), err)
+	}
 }
 
 func TestLaunchctlList(t *testing.T) {

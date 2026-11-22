@@ -123,6 +123,10 @@ export function mergeConfigUndo(earlier: ConfigUndo, later: ConfigUndo): ConfigU
     set,
     delete: del,
     expect: { ...earlier.expect, ...later.expect },
+    // Where the first save went: a later one that went elsewhere leaves an Undo that refuses there.
+    ...((earlier.destination ?? later.destination)
+      ? { destination: (earlier.destination ?? later.destination) as string }
+      : {}),
   };
 }
 

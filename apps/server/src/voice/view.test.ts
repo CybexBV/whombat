@@ -3,16 +3,29 @@
  * settings want downloaded, and the view from the settings, the desk's Talk, the speech service and the downloads.
  */
 import type { VoiceModelState } from '@whombat/control-contracts/local';
-import { VoiceTyping } from '@whombat/core/domain';
+import {
+  DUTCH_VOICE_LICENCE_VERSION,
+  VOICE_MODEL_SIZES,
+  type VoiceDownloadModel,
+  VoiceTyping,
+} from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import type { VoiceAbility } from './speech';
-import { DEFAULT_VOICE_TYPING, modelFor, type VoiceFacts, voiceTypingView, wantedModels } from './view';
+import {
+  DEFAULT_VOICE_TYPING,
+  modelFor,
+  type VoiceFacts,
+  voiceTypingForMinor,
+  voiceTypingView,
+  wantedModels,
+  wantsDutchVoice,
+} from './view';
 
 const ready = (...ids: ('parakeet' | 'whisper')[]) => new Set(ids);
 
 const HEALTH: VoiceAbility = { stt: true, tts: true, microphone: true, speaker: true, models: [] };
 
-function model(id: 'parakeet' | 'whisper', state: VoiceModelState['state'], extra = {}): VoiceModelState {
+function model(id: VoiceDownloadModel, state: VoiceModelState['state'], extra = {}): VoiceModelState {
   return { id, state, size: 1000, received: state === 'ready' ? 1000 : 0, ...extra };
 }
 
@@ -142,10 +155,44 @@ describe('the view', () => {
     expect(view.models.map((m) => [m.id, m.state, m.inUse])).toEqual([['parakeet', 'downloading', true]]);
   });
 
-  it('shows the models the service runs when there is no fetcher to ask', () => {
-    const view = voiceTypingView(facts({ health: { ...HEALTH, models: ['parakeet'] }, fetched: null }));
-    expect(view.models).toEqual([{ id: 'parakeet', state: 'ready', size: 0, received: 0, inUse: true }]);
+  it('shows the models the service runs with catalog or last-known sizes when there is no fetcher answer', () => {
+    const view = voiceTypingView(
+      facts({ health: { ...HEALTH, models: ['parakeet'] }, fetched: null, hasFetcher: false }),
+    );
+    expect(view.models).toEqual([
+      {
+        id: 'parakeet',
+        state: 'ready',
+        size: VOICE_MODEL_SIZES.parakeet,
+        received: VOICE_MODEL_SIZES.parakeet,
+        inUse: true,
+      },
+    ]);
     expect(view.ready).toBe(true);
+
+    const observed = voiceTypingView(
+      facts({
+        health: { ...HEALTH, models: ['parakeet', 'whisper'] },
+        fetched: null,
+        knownModelSizes: { whisper: 32_000_000 },
+      }),
+    );
+    expect(observed.models).toEqual([
+      {
+        id: 'parakeet',
+        state: 'ready',
+        size: VOICE_MODEL_SIZES.parakeet,
+        received: VOICE_MODEL_SIZES.parakeet,
+        inUse: true,
+      },
+      {
+        id: 'whisper',
+        state: 'ready',
+        size: 32_000_000,
+        received: 32_000_000,
+        inUse: false,
+      },
+    ]);
   });
 
   it('shows a download’s progress and why one waits', () => {
@@ -161,5 +208,211 @@ describe('the view', () => {
       { id: 'parakeet', state: 'downloading', received: 400, size: 1000 },
       { id: 'whisper', state: 'waiting', problem: 'no_network' },
     ]);
+  });
+
+  it('tracks the opt-in Dutch voice separately from dictation models and requires the current licence version', () => {
+    const agreedAt = new Date('2026-11-21T20:00:00.000Z');
+    const fetchedClean = [
+      model('parakeet', 'ready'),
+      model('whisper', 'absent'),
+      model('supertonic', 'absent', { size: 145_310_775, received: 0 }),
+    ];
+    // Off and no files on disk: state stays absent and supertonic isn't listed in dictation models.
+    const cleanOff = voiceTypingView(facts({ fetched: fetchedClean }));
+    expect(cleanOff.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
+    expect(cleanOff.dutchVoice).toEqual({
+      on: false,
+      state: 'absent',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    expect(wantsDutchVoice(DEFAULT_VOICE_TYPING)).toBe(false);
+
+    // Off while leftover files remain (removing, downloading, or partial bytes): reports removing with bytes left.
+    const fetched = [
+      model('parakeet', 'ready'),
+      model('whisper', 'absent'),
+      model('supertonic', 'downloading', { size: 145_310_775, received: 50_000_000 }),
+    ];
+    const offWithFiles = voiceTypingView(facts({ fetched }));
+    expect(VoiceTyping.parse(offWithFiles)).toEqual(offWithFiles);
+    expect(offWithFiles.dutchVoice).toEqual({
+      on: false,
+      state: 'removing',
+      size: 145_310_775,
+      received: 50_000_000,
+      agreedAt: null,
+      licenceVersion: null,
+    });
+    const offRemoving = voiceTypingView(
+      facts({
+        fetched: [
+          model('parakeet', 'ready'),
+          model('whisper', 'removing', { size: 1000, received: 400 }),
+          model('supertonic', 'removing', { size: 145_310_775, received: 65_536 }),
+        ],
+      }),
+    );
+    expect(offRemoving.dutchVoice).toMatchObject({ on: false, state: 'removing', received: 65_536 });
+    expect(offRemoving.models.find((m) => m.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      received: 400,
+    });
+    // Older phone apps (protocol minor < 3) get 'absent'/0 instead of 'removing' so their parser accepts the response.
+    const forOlder = voiceTypingForMinor(offRemoving, 2);
+    expect(forOlder.models.find((m) => m.id === 'whisper')).toMatchObject({ state: 'absent', received: 0 });
+    expect(forOlder.dutchVoice).toMatchObject({ on: false, state: 'absent', received: 0 });
+    expect(voiceTypingForMinor(offRemoving, 3)).toEqual(offRemoving);
+
+    // Agreed under an outdated licence version: still treated as off.
+    const stale = {
+      ...DEFAULT_VOICE_TYPING,
+      dutchVoice: true,
+      dutchVoiceAgreedBy: 'prn_mara',
+      dutchVoiceAgreedAt: agreedAt,
+      dutchVoiceLicenceVersion: 'old-version',
+    };
+    expect(wantsDutchVoice(stale)).toBe(false);
+    expect(voiceTypingView(facts({ settings: stale, fetched })).dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      received: 50_000_000,
+    });
+
+    // Agreed under the current licence version: exposes progress and agreement metadata.
+    const on = {
+      ...DEFAULT_VOICE_TYPING,
+      dutchVoice: true,
+      dutchVoiceAgreedBy: 'prn_mara',
+      dutchVoiceAgreedAt: agreedAt,
+      dutchVoiceLicenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    };
+    expect(wantsDutchVoice(on)).toBe(true);
+    const active = voiceTypingView(facts({ settings: on, fetched }));
+    expect(VoiceTyping.parse(active)).toEqual(active);
+    expect(active.dutchVoice).toEqual({
+      on: true,
+      state: 'downloading',
+      size: 145_310_775,
+      received: 50_000_000,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+
+    // Agreed while the fetcher hasn't accepted the download yet ('absent') or is restarting (fetched: null):
+    // reports 'waiting' with the saved agreement instead of 'absent' or null.
+    const onBeforeAccepted = voiceTypingView(facts({ settings: on, fetched: fetchedClean }));
+    expect(onBeforeAccepted.dutchVoice).toEqual({
+      on: true,
+      state: 'waiting',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onWhileFetcherDown = voiceTypingView(
+      facts({ settings: on, fetched: null, knownDutchSize: 145_310_775 }),
+    );
+    expect(onWhileFetcherDown.dutchVoice).toEqual({
+      on: true,
+      state: 'waiting',
+      size: 145_310_775,
+      received: 0,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onReadyWhileFetcherDown = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: 145_310_775,
+      }),
+    );
+    expect(onReadyWhileFetcherDown.dutchVoice).toMatchObject({
+      on: true,
+      state: 'ready',
+      size: 145_310_775,
+      received: 145_310_775,
+    });
+    // Right after a server restart before the fetcher has ever answered (knownDutchSize is null/unknown),
+    // fall back to the catalog's total size so ready/waiting/removing rows never report 0 bytes.
+    const onReadyAfterRestart = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: null,
+      }),
+    );
+    expect(onReadyAfterRestart.dutchVoice).toEqual({
+      on: true,
+      state: 'ready',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
+      agreedAt: agreedAt.toISOString(),
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    const onWaitingAfterRestart = voiceTypingView(
+      facts({
+        settings: on,
+        health: { ...HEALTH, languages: ['en'] },
+        fetched: null,
+      }),
+    );
+    expect(onWaitingAfterRestart.dutchVoice).toMatchObject({
+      on: true,
+      state: 'waiting',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: 0,
+    });
+    const offRemovingAfterRestart = voiceTypingView(
+      facts({
+        settings: DEFAULT_VOICE_TYPING,
+        health: { ...HEALTH, languages: ['en', 'nl'] },
+        fetched: null,
+        knownDutchSize: null,
+      }),
+    );
+    expect(offRemovingAfterRestart.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      size: VOICE_MODEL_SIZES.supertonic,
+      received: VOICE_MODEL_SIZES.supertonic,
+    });
+    // Agreed while old removal trash is still on disk: keeps reporting 'removing' and bytes left.
+    const onWhileRemoving = voiceTypingView(
+      facts({
+        settings: on,
+        fetched: [
+          model('parakeet', 'ready'),
+          model('whisper', 'absent'),
+          model('supertonic', 'removing', { size: 145_310_775, received: 150_000_000 }),
+        ],
+      }),
+    );
+    expect(onWhileRemoving.dutchVoice).toMatchObject({
+      on: true,
+      state: 'removing',
+      received: 150_000_000,
+    });
+    // Turned off while fetcher is restarting with pending removal: reports off + removing rather than null.
+    const offWhileFetcherDown = voiceTypingView(
+      facts({
+        settings: DEFAULT_VOICE_TYPING,
+        fetched: null,
+        knownDutchSize: 145_310_775,
+        dutchRemovePending: true,
+      }),
+    );
+    expect(offWhileFetcherDown.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      size: 145_310_775,
+      agreedAt: null,
+      licenceVersion: null,
+    });
   });
 });

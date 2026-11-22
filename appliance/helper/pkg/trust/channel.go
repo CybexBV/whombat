@@ -20,7 +20,68 @@ const (
 	ChannelDevelopment = string(release.UpdateChannelDevelopment)
 	// DefaultChannel is the channel of a box nobody moved (LNK-21).
 	DefaultChannel = release.DefaultUpdateChannel
+	// ChannelPausedKey is the boolean key under CustomKey in a channel role's signed TUF metadata.
+	ChannelPausedKey = "paused"
 )
+
+// SetChannelPaused sets or clears the pause marker in a channel role's signed TUF metadata.
+// Clearing removes the custom key when empty so unpaused channel metadata stays identical to before.
+func SetChannelPaused(md *metadata.Metadata[metadata.TargetsType], paused bool) {
+	if md == nil {
+		return
+	}
+	var whombat map[string]any
+	if md.Signed.UnrecognizedFields != nil {
+		if existing, ok := md.Signed.UnrecognizedFields[CustomKey].(map[string]any); ok {
+			whombat = existing
+		}
+	}
+	if paused {
+		if md.Signed.UnrecognizedFields == nil {
+			md.Signed.UnrecognizedFields = map[string]any{}
+		}
+		if whombat == nil {
+			whombat = map[string]any{}
+		}
+		whombat[ChannelPausedKey] = true
+		md.Signed.UnrecognizedFields[CustomKey] = whombat
+		return
+	}
+	if whombat == nil {
+		return
+	}
+	delete(whombat, ChannelPausedKey)
+	if len(whombat) == 0 {
+		delete(md.Signed.UnrecognizedFields, CustomKey)
+		if len(md.Signed.UnrecognizedFields) == 0 {
+			md.Signed.UnrecognizedFields = nil
+		}
+	}
+}
+
+// IsChannelPaused reports whether a verified channel role carries the pause marker in its signed metadata.
+func IsChannelPaused(md *metadata.Metadata[metadata.TargetsType]) (bool, error) {
+	if md == nil || len(md.Signed.UnrecognizedFields) == 0 {
+		return false, nil
+	}
+	raw, ok := md.Signed.UnrecognizedFields[CustomKey]
+	if !ok || raw == nil {
+		return false, nil
+	}
+	obj, ok := raw.(map[string]any)
+	if !ok {
+		return false, fmt.Errorf("%w: channel %s metadata is not an object", ErrInvalidMetadata, CustomKey)
+	}
+	v, ok := obj[ChannelPausedKey]
+	if !ok || v == nil {
+		return false, nil
+	}
+	paused, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: channel %s.%s is not a boolean", ErrInvalidMetadata, CustomKey, ChannelPausedKey)
+	}
+	return paused, nil
+}
 
 // Channels are the update channels, in the order a person reads them.
 var Channels = []string{ChannelProduction, ChannelDevelopment}
@@ -59,7 +120,7 @@ func loadChannel(up *updater.Updater, channel string) (map[string]*metadata.Targ
 	top := set.Targets[metadata.TARGETS]
 	if md == nil || top == nil || top.Signed.Delegations == nil {
 		if probeErr != nil && !strings.Contains(probeErr.Error(), "not found") {
-			return nil, nil, fmt.Errorf("%w: %s: %v", ErrChannelUnavailable, channel, classify(probeErr))
+			return nil, nil, fmt.Errorf("%w: %s: %w", ErrChannelUnavailable, channel, classify(probeErr))
 		}
 		return nil, nil, fmt.Errorf("%w: the repository delegates no %s role", ErrChannelUnavailable, channel)
 	}

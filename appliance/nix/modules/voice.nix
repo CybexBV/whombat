@@ -93,7 +93,7 @@ in
         type = types.path;
         default = pkgs.voice-models-manifest;
         defaultText = lib.literalExpression "pkgs.voice-models-manifest";
-        description = "The speech-to-text models the box downloads: id, file, source, size and sha256 (NX-473).";
+        description = "The speech and optional Dutch voice models the box downloads: ids, files, sources, sizes and sha256.";
       };
       dir = mkOption {
         type = types.str;
@@ -136,14 +136,13 @@ in
     supertonic = {
       model = mkOption {
         type = types.nullOr types.package;
-        # Off in the image: its licence's use restrictions must be agreed to by the person who uses it, and nothing on
-        # the box asks for that yet (docs/decisions/nixos.md).
+        # Off in the image: Supertonic 3 weights stay out of the image and are downloaded into /persist/voice-models
+        # only after the person agrees to Open RAIL-M in Settings.
         default = null;
         description = ''
-          Supertonic 3 (int8, sherpa-onnx's packing; `pkgs.voice-supertonic-model`, NX-476, NX-477), the box's Dutch:
-          `bin/supertonic-speak` of the Kokoro package says it. null (the default): the box speaks English only
-          (the health's `languages` is ["en"]). Whoever sets it also takes on the model's Open RAIL-M use restrictions
-          for the people who use the box.
+          Optional pre-bundled Supertonic 3 model directory (int8, sherpa-onnx packing). null (the default): the image
+          carries only `bin/supertonic-speak`, and Dutch turns on dynamically once the fetcher downloads Supertonic 3
+          into `/persist/voice-models` after the person agrees to Open RAIL-M in Settings.
         '';
       };
       speakers = {
@@ -359,6 +358,10 @@ in
                 "${cfg.kokoro.model}"
                 "--kokoro-voices"
                 (lib.concatMapStringsSep "," voiceFlag kokoroVoices)
+                "--supertonic"
+                "${cfg.kokoro.package}/bin/supertonic-speak"
+                "--supertonic-speakers"
+                "${toString cfg.supertonic.speakers.woman},${toString cfg.supertonic.speakers.man}"
                 "--allow-uid"
                 "0,${toString ids.whombat}"
                 "--tmp"
@@ -375,12 +378,8 @@ in
                 (lib.concatStringsSep "," programEnv)
               ]
               ++ lib.optionals (cfg.supertonic.model != null) [
-                "--supertonic"
-                "${cfg.kokoro.package}/bin/supertonic-speak"
                 "--supertonic-model"
                 "${cfg.supertonic.model}"
-                "--supertonic-speakers"
-                "${toString cfg.supertonic.speakers.woman},${toString cfg.supertonic.speakers.man}"
               ]
               ++ lib.optionals (cfg.threads > 0) [
                 "--threads"

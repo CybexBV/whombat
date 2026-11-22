@@ -21,7 +21,25 @@ export const BACKUP_PLACE_TOOL_ARGS: Readonly<Record<string, readonly string[]>>
   proxmox_storage_add: ['server', 'storage', 'nfs_server', 'export'],
 };
 
-/** `backup_place_nfs` on a TrueNAS connection: a dataset shared over NFS with exactly those addresses. */
+/**
+ * The TrueNAS connection `backup_place_nfs` shares on, by id, when its `server` names one (`connection:<id>`): the call
+ * acts through that connection too, so a yes is bound to where it goes as well (`callReaches`).
+ */
+export function trueNasOf(args: Readonly<Record<string, unknown>>): string | null {
+  const server = typeof args.server === 'string' ? args.server.trim() : '';
+  return server.startsWith('connection:') ? server.slice('connection:'.length) : null;
+}
+
+/** The other connections a Servers call acts through (`callReaches`). */
+export function serversReach(tool: string, args: Readonly<Record<string, unknown>>): string[] {
+  const id = tool === 'backup_place_nfs' ? trueNasOf(args) : null;
+  return id ? [id] : [];
+}
+
+/**
+ * `backup_place_nfs` on a TrueNAS connection: a dataset shared over NFS with exactly those addresses, signed in only as
+ * the connection the call was checked on (`bound-targets.ts`; the caller binds it).
+ */
 async function trueNasNfs(
   call: AdapterCall,
   connectionId: string,
@@ -61,10 +79,11 @@ export const BACKUP_PLACE_TOOLS: Adapter = {
       );
     // A TrueNAS connected with Manage shares it through its own API (the care plan names it `connection:<id>`); the
     // hosts service isn't needed for it.
-    if (server.startsWith('connection:')) {
+    const trueNas = trueNasOf(args);
+    if (trueNas !== null) {
       if (!ctx.call)
         throw new ConnectionArgumentError('This connection’s tools run only in an assistant’s turn.');
-      return trueNasNfs(ctx.call, server.slice('connection:'.length), name, clients);
+      return trueNasNfs(ctx.call, trueNas, name, clients);
     }
     const s = await scope(ctx);
     return call(

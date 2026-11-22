@@ -1,7 +1,11 @@
+import { api, buildPath } from '@whombat/core/contracts';
 import type { AgentModelFallback, ProviderModel } from '@whombat/core/domain';
+import { createFixtureFetch } from '@whombat/fixtures/fetch';
 import { describe, expect, it } from 'vitest';
 import {
   agentModelLine,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -14,6 +18,7 @@ import {
   modelFallbackNote,
   modelRuntimeBody,
   modelRuntimeDraft,
+  modelRuntimeSaved,
   providerModels,
 } from './modelEffort';
 
@@ -143,11 +148,13 @@ describe('the pickers’ choices and words (ME-06)', () => {
     expect(modelEffortLabels({ model: 'sonnet', effort: 'xhigh' }, CLAUDE)).toEqual({
       model: 'Sonnet',
       description: 'Sonnet 5 · Fast and capable',
+      backgroundModel: 'Same as the main model',
       effort: 'Extra high',
     });
     expect(modelEffortLabels({ model: null, effort: null }, CLAUDE)).toEqual({
       model: 'Default (Opus)',
       description: null,
+      backgroundModel: 'Same as the main model',
       effort: 'Automatic',
     });
   });
@@ -233,6 +240,15 @@ describe('fast replies in Configure → Model (CR-10, AP-2700)', () => {
     expect(draftWithModel(d, 'sonnet', FAST).fast).toBeUndefined();
     expect(draftWithModel(d, 'opus', FAST).fast).toBe(true);
     expect(draftWithModel(d, 'claude-new', FAST).fast).toBe(true);
+    // `fast: false` is dropped for an unknown model when the provider's list is known (matching the server),
+    // kept while the list is unknown, and always dropped on custom AI models.
+    expect(draftWithModel(draft({ fast: false }), 'claude-new', FAST).fast).toBeUndefined();
+    expect(draftWithModel(draft({ fast: false }), 'sonnet', FAST).fast).toBeUndefined();
+    expect(draftWithModel(draft({ fast: false }), 'opus', FAST).fast).toBe(false);
+    expect(draftWithModel(draft({ fast: false }), 'claude-new', undefined).fast).toBe(false);
+    expect(
+      draftWithModel({ provider: 'local', model: null, effort: 'high', fast: true }, 'gemma3:27b', []),
+    ).toEqual({ provider: 'local', model: 'gemma3:27b', effort: null });
     expect(draftWithProvider(d, 'codex').fast).toBeUndefined();
     expect(modelRuntimeDraft({ provider: 'local', fast: true }).fast).toBeUndefined();
   });
@@ -256,5 +272,160 @@ describe('fast replies in Configure → Model (CR-10, AP-2700)', () => {
 
   it('adds “· Fast” to the profile’s line', () => {
     expect(agentModelLine({ provider: 'claude', fast: true }, FAST, true)).toBe('Default model · Fast');
+  });
+});
+
+describe('background model in Configure → Model', () => {
+  it('carries backgroundModel through draft and body, and clears it when switching provider', () => {
+    const d = draft({ model: 'opus', backgroundModel: 'haiku', effort: 'high' });
+    expect(d.backgroundModel).toBe('haiku');
+    expect(modelRuntimeBody(d)).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: 'haiku',
+      effort: 'high',
+    });
+    expect(draftWithModel(d, 'sonnet', CLAUDE).backgroundModel).toBe('haiku');
+    expect(draftWithEffort(d, 'low').backgroundModel).toBe('haiku');
+    expect(draftWithBackgroundModel(d, 'sonnet').backgroundModel).toBe('sonnet');
+    expect(draftWithBackgroundModel(d, null).backgroundModel).toBeNull();
+    expect(modelRuntimeBody(draftWithBackgroundModel(d, null))).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      backgroundModel: null,
+      effort: 'high',
+    });
+    expect(draftWithProvider(d, 'codex')).toEqual({ provider: 'codex', model: null, effort: null });
+  });
+
+  it('offers “Same as the main model” first, followed only by models the provider lists', () => {
+    expect(backgroundModelChoices(CLAUDE, null).map((c) => [c.id, c.label])).toEqual([
+      [null, 'Same as the main model'],
+      ['opus', 'Opus'],
+      ['fable', 'Fable'],
+      ['sonnet', 'Sonnet'],
+      ['haiku', 'Haiku'],
+    ]);
+    expect(backgroundModelChoices(undefined, null)).toEqual([
+      { id: null, label: 'Same as the main model', description: null },
+    ]);
+    expect(backgroundModelChoices(CLAUDE, 'haiku-old').at(-1)).toEqual({
+      id: 'haiku-old',
+      label: 'haiku-old',
+      description: null,
+    });
+    expect(modelEffortLabels(draft({ backgroundModel: 'haiku' }), CLAUDE).backgroundModel).toBe('Haiku');
+    expect(modelEffortLabels(draft(), CLAUDE).backgroundModel).toBe('Same as the main model');
+  });
+
+  it('omits backgroundModel when building a body for an older box and verifies saves from the response', () => {
+    const withBg = draft({ model: 'opus', backgroundModel: 'haiku', effort: 'high' });
+    expect(modelRuntimeBody(withBg, { backgroundModel: false })).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      effort: 'high',
+    });
+    expect(modelRuntimeBody(draftWithBackgroundModel(withBg, null), { backgroundModel: false })).toEqual({
+      provider: 'claude',
+      model: 'opus',
+      effort: 'high',
+    });
+
+    const requested = modelRuntimeBody(withBg);
+    expect(
+      modelRuntimeSaved(requested, {
+        provider: 'claude',
+        model: 'opus',
+        backgroundModel: 'haiku',
+        effort: 'high',
+      }),
+    ).toBe(true);
+    // Older box silently stripped backgroundModel.
+    expect(modelRuntimeSaved(requested, { provider: 'claude', model: 'opus', effort: 'high' })).toBe(false);
+    // Explicit null clear must come back without backgroundModel.
+    const cleared = modelRuntimeBody(draftWithBackgroundModel(withBg, null));
+    expect(modelRuntimeSaved(cleared, { provider: 'claude', model: 'opus', effort: 'high' })).toBe(true);
+    expect(
+      modelRuntimeSaved(cleared, {
+        provider: 'claude',
+        model: 'opus',
+        backgroundModel: 'haiku',
+        effort: 'high',
+      }),
+    ).toBe(false);
+    // Omitted backgroundModel on the same provider keeps whatever the box already stored.
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'opus', effort: 'max' },
+        { provider: 'claude', model: 'opus', backgroundModel: 'haiku', effort: 'max' },
+      ),
+    ).toBe(true);
+    // Dropped model, effort or fast also fails confirmation.
+    expect(modelRuntimeSaved({ provider: 'claude', model: 'sonnet' }, { provider: 'claude' })).toBe(false);
+    expect(modelRuntimeSaved({ provider: 'claude', effort: 'max' }, { provider: 'claude' })).toBe(false);
+    expect(modelRuntimeSaved({ provider: 'claude', fast: true }, { provider: 'claude' })).toBe(false);
+
+    // Custom AI model keeps model & backgroundModel and ignores effort/fast stripped by the server.
+    expect(
+      modelRuntimeSaved(
+        { provider: 'local', model: 'gemma3:27b', effort: 'high', fast: true },
+        { provider: 'local', model: 'gemma3:27b' },
+      ),
+    ).toBe(true);
+    // An older box that strips `model` for `local` fails save confirmation.
+    expect(modelRuntimeSaved({ provider: 'local', model: 'gemma3:27b' }, { provider: 'local' })).toBe(false);
+
+    // Server drops `fast: false` for models that don't offer fast replies (including unknown models in a known list),
+    // but must keep `fast: false` when the model offers fast replies.
+    const fastList: ProviderModel[] = CLAUDE.map((m) => (m.id === 'opus' ? { ...m, fast: 'on' } : m));
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'claude-legacy', fast: false },
+        { provider: 'claude', model: 'claude-legacy' },
+        fastList,
+      ),
+    ).toBe(true);
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'sonnet', fast: false },
+        { provider: 'claude', model: 'sonnet' },
+        fastList,
+      ),
+    ).toBe(true);
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'opus', fast: false },
+        { provider: 'claude', model: 'opus' },
+        fastList,
+      ),
+    ).toBe(false);
+  });
+
+  it('matches the fixture fetch agent.update response for Custom AI model and provider switches', async () => {
+    const fetchFn = createFixtureFetch();
+    const url = `http://fixtures.local${api.agent.update.base}${buildPath(api.agent.update.path, { burrow: 'burrow-hq' })}`;
+    const patch = async (runtime: Parameters<typeof modelRuntimeSaved>[0]) => {
+      const res = await fetchFn(url, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ runtime }),
+      });
+      expect(res.status).toBe(200);
+      return api.agent.update.response.parse(await res.json()).agent.runtime;
+    };
+    const localReq = modelRuntimeBody({
+      provider: 'local',
+      model: 'gemma3:27b',
+      backgroundModel: 'qwen3:32b',
+      effort: null,
+    });
+    const localSaved = await patch({ ...localReq, effort: 'high', fast: true });
+    expect(localSaved).toEqual({ provider: 'local', model: 'gemma3:27b', backgroundModel: 'qwen3:32b' });
+    expect(modelRuntimeSaved(localReq, localSaved)).toBe(true);
+
+    // Switching back to Claude clears local's model and backgroundModel.
+    const claudeSaved = await patch({ provider: 'claude' });
+    expect(claudeSaved).toEqual({ provider: 'claude' });
+    expect(modelRuntimeSaved({ provider: 'claude' }, claudeSaved)).toBe(true);
   });
 });

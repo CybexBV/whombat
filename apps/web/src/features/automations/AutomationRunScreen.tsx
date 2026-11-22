@@ -19,6 +19,7 @@ import {
   chatThreadHref,
   formatClock,
   formatRecent,
+  missingAttachmentsText,
   stepKindLabel,
   type TrackerWords,
   UNKNOWN_TRACKER_WORDS,
@@ -206,6 +207,10 @@ export function stepOutcome(
     case 'tracker_decision':
       // 3.12: what the person decided, that it waits for them, or why it was skipped.
       return trackerDecisionOutcome(step);
+    case 'connection_actions':
+      if (typeof o.summary === 'string' && o.summary) return o.summary;
+      if (typeof o.reason === 'string' && o.reason) return o.reason;
+      return null;
     case 'dispatch_agent': {
       // Coding work and reviews (bp-automations BP-C26, BP-C27).
       const ws = o.workspace as { branch?: string } | undefined;
@@ -407,6 +412,11 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
             {run.error}
           </p>
         )}
+        {run.missingAttachments?.length || run.missingAttachmentsOmitted ? (
+          <p className={`${styles.note} ${styles.noteWarn}`} data-missing-attachments="">
+            {missingAttachmentsText(run.missingAttachments ?? [], run.missingAttachmentsOmitted ?? 0)}
+          </p>
+        ) : null}
 
         {fromTrackerItem(run) && (
           <TrackerItemSection burrow={burrow} runId={run.id} timeZone={viewer.timeZone} words={words} />

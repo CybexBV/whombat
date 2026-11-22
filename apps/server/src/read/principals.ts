@@ -55,6 +55,8 @@ export function agentRuntimeOf(stored: AgentRuntime | null | undefined): AgentRu
   const provider = AgentRuntime.shape.provider.safeParse(stored?.provider);
   if (provider.success) runtime.provider = provider.data;
   if (typeof stored?.model === 'string' && stored.model) runtime.model = stored.model;
+  if (typeof stored?.backgroundModel === 'string' && stored.backgroundModel)
+    runtime.backgroundModel = stored.backgroundModel;
   const effort = AgentRuntime.shape.effort.safeParse(stored?.effort);
   if (effort.success && effort.data) runtime.effort = effort.data;
   if (typeof stored?.fast === 'boolean') runtime.fast = stored.fast;

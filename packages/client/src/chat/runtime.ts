@@ -27,6 +27,7 @@ import {
   type Message,
   modelOf,
   type ProviderModel,
+  providerHasModelEffort,
   type RanOn,
 } from '@whombat/core/domain';
 import {
@@ -435,11 +436,13 @@ export function chatMakeDefaultShown(
 
 /** `agents.update`'s `runtime` for “Make this <Name>’s default”: the whole choice, fast replies too (CR-03, ME-01). */
 export function chatDefaultBody(runtime: ChatRuntime): AgentModelRuntime {
+  const own = providerHasModelEffort(runtime.provider);
+  const model = runtime.model?.trim();
   return {
     provider: runtime.provider,
-    ...(runtime.model ? { model: runtime.model } : {}),
-    ...(runtime.effort ? { effort: runtime.effort } : {}),
-    ...(runtime.fast !== undefined ? { fast: runtime.fast } : {}),
+    ...(model ? { model } : {}),
+    ...(own && runtime.effort ? { effort: runtime.effort } : {}),
+    ...(own && runtime.fast !== undefined ? { fast: runtime.fast } : {}),
   };
 }
 

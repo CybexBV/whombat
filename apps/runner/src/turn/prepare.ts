@@ -146,16 +146,16 @@ async function localModelEndpoint(
   const local = ctx.localModel;
   if (!local)
     throw new TurnRefusal(
-      'I can’t reply yet: the model on your network isn’t set up. Set it up in Settings → AI, then ask me again.',
+      'I can’t reply yet: the custom AI model isn’t set up. Set it up in Settings → AI, then ask me again.',
       'local_model_missing',
     );
   const allowance = await endpointAllowance(local.baseUrl);
   if (!allowance) {
-    deps.log('warn', `${ctx.agent.name} · the model on the network can’t be reached at ${local.baseUrl}`, {
+    deps.log('warn', `${ctx.agent.name} · the custom AI model can’t be reached at ${local.baseUrl}`, {
       dispatchId: id,
     });
     throw new TurnRefusal(
-      'I can’t reach the model on your network at the address it was set up with. You can check it under Settings → AI.',
+      'I can’t reach the custom AI model at the address it was set up with. You can check it under Settings → AI.',
       'local_model_unreachable',
     );
   }
@@ -217,21 +217,22 @@ function joinAllowances(a: EgressAllowance | null, b: EgressAllowance | null): E
  * else the CLI's own default from the runner's list. A CLI turn without a model runs on the CLI's own default.
  */
 function loopModel(input: TurnInput, kind: AgentProvider['kind'], registry: TurnDeps['registry']): void {
-  if (input.model) return;
+  if (kind === 'local' || input.model) return;
   const fallback = loopDefault(input, kind, registry);
   if (fallback) input.model = fallback;
 }
 
 /**
- * The model a turn on Hermes's own loop names when it names none (HE-S48): the CLI's default from the runner's list.
- * Undefined for a turn that runs on the CLI's own default (no model named); null when the list doesn't say.
+ * The model a turn on Hermes's own loop names when it names none or falls back (HE-S48): the CLI's default from the
+ * runner's list, or the burrow's configured Custom AI model default for `local`. Undefined for a turn that runs on the
+ * CLI's own default (no model named); null when the list or Custom config doesn't say.
  */
 export function loopDefault(
-  input: Pick<TurnInput, 'gateway' | 'credential'>,
+  input: Pick<TurnInput, 'gateway' | 'credential' | 'context'>,
   kind: AgentProvider['kind'],
   registry: TurnDeps['registry'],
 ): string | null | undefined {
-  if (kind === 'local') return undefined;
+  if (kind === 'local') return input.context.localModel?.defaultModel?.trim() || null;
   if (!input.gateway && input.credential?.authMode !== 'api_key') return undefined;
   const models = registry.models?.(kind) ?? null;
   return models?.find((m) => m.isDefault)?.id ?? models?.[0]?.id ?? null;

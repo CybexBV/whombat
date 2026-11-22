@@ -5,7 +5,7 @@
  * once; a refusal shows in the sheet, read out, and the sheet stays open. On Local the model sheet ends with “Another
  * model”: a field and Use, which saves a model the list doesn't name (hermes-engine-app.md AP-5001, AP-5121).
  */
-import type { AgentModelRuntime } from '@whombat/core';
+import type { AgentModelRuntimeUpdate } from '@whombat/core';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import type { ModelEffortChoice, ModelEffortView } from '../data/runsOn';
@@ -33,7 +33,7 @@ export interface ModelEffortSheetProps {
   /** Local's “Another model” (AP-5001); absent or null for the tools' lists and for EFFORT. */
   another?: ModelEffortView['another'];
   /** A typed model's whole runtime, to save. */
-  onAnother?: (runtime: AgentModelRuntime) => void;
+  onAnother?: (runtime: AgentModelRuntimeUpdate) => void;
 }
 
 export function ModelEffortSheet({

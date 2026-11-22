@@ -68,6 +68,8 @@ export async function runWaitsOn(
         eq(messages.burrowId, run.burrowId),
         eq(messages.authorId, run.agentId),
         eq(messages.asks, true),
+        eq(messages.outsidersRun, false),
+        isNull(messages.provenance),
         gte(messages.createdAt, turn.claimedAt ?? turn.createdAt),
         or(
           eq(messages.dispatchId, turn.id),

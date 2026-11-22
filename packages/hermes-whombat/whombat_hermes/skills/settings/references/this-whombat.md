@@ -36,6 +36,7 @@ How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing 
 - Download the voice typing model — `voice.fetchModel` · change
 - Read the voice typing settings — `voice.get` · read
 - Delete the voice typing model — `voice.removeModel` · change, always asks
+- Turn the Dutch voice on or off (you must agree to its licence yourself) — `voice.setDutchVoice` · theirs: send them there
 - Change the voice typing settings — `voice.update` · change
 
 ## Settings → This Whombat → Backups (`appliance.backups`)

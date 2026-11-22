@@ -14,6 +14,7 @@ import {
   definitionHash,
   EXTERNAL_STEP_KINDS,
   type JsonObject,
+  MissingMailAttachment,
   nextFireAfter,
   topics,
   validateDefinition,
@@ -40,6 +41,7 @@ import { notFound } from '../lib/errors';
 import { iso, isoOrNull } from '../lib/time';
 import { groupRows } from '../read/group';
 import { connectionLabels, definitionConnections } from '../trackers/store';
+import { forgetMailText } from './mail-text';
 import { planFactsOf } from './plan-store';
 import { agentNameIn, definitionRooms, describeAs, glanceAs, roomTitles, summaryAs } from './visibility';
 
@@ -371,33 +373,46 @@ export async function toRuns(db: Db, rows: readonly AutomationRunRow[]): Promise
   const runsByDispatch = groupRows(runRows, (r) => r.dispatchId);
   const approvalNumbers = new Map(approvalRows.map((a) => [a.id, a.number]));
   const automationNames = new Map(names.map((a) => [a.id, a.name]));
-  return rows.map((row) => ({
-    id: row.id,
-    number: row.number,
-    burrowId: row.burrowId,
-    automationId: row.automationId,
-    automationName: automationNames.get(row.automationId) ?? 'Automation',
-    version: row.version,
-    status: row.status,
-    trigger: row.trigger,
-    conversationId: row.conversationId,
-    threadRootId: row.threadRootId,
-    causalDepth: row.causalDepth,
-    startedById: row.startedById,
-    test: row.test,
-    createdAt: iso(row.createdAt),
-    startedAt: isoOrNull(row.startedAt),
-    finishedAt: isoOrNull(row.finishedAt),
-    error: row.error,
-    tokens: tokens.get(row.id) ?? null,
-    steps: (stepsByRun.get(row.id) ?? []).map((s) =>
-      toStep(
-        s,
-        (runsByDispatch.get(s.dispatchId) ?? []).map((r) => r.number),
-        s.approvalId ? (approvalNumbers.get(s.approvalId) ?? null) : null,
+  return rows.map((row) => {
+    const scope = row.scope as { missingAttachments?: unknown; missingAttachmentsOmitted?: unknown } | null;
+    const missingParsed = MissingMailAttachment.array().max(20).safeParse(scope?.missingAttachments);
+    const missingAttachments =
+      missingParsed.success && missingParsed.data.length > 0 ? missingParsed.data : undefined;
+    const rawOmitted = scope?.missingAttachmentsOmitted;
+    const missingAttachmentsOmitted =
+      typeof rawOmitted === 'number' && Number.isInteger(rawOmitted) && rawOmitted > 0
+        ? rawOmitted
+        : undefined;
+    return {
+      id: row.id,
+      number: row.number,
+      burrowId: row.burrowId,
+      automationId: row.automationId,
+      automationName: automationNames.get(row.automationId) ?? 'Automation',
+      version: row.version,
+      status: row.status,
+      trigger: row.trigger,
+      conversationId: row.conversationId,
+      threadRootId: row.threadRootId,
+      causalDepth: row.causalDepth,
+      startedById: row.startedById,
+      test: row.test,
+      createdAt: iso(row.createdAt),
+      startedAt: isoOrNull(row.startedAt),
+      finishedAt: isoOrNull(row.finishedAt),
+      error: row.error,
+      tokens: tokens.get(row.id) ?? null,
+      ...(missingAttachments ? { missingAttachments } : {}),
+      ...(missingAttachmentsOmitted ? { missingAttachmentsOmitted } : {}),
+      steps: (stepsByRun.get(row.id) ?? []).map((s) =>
+        toStep(
+          s,
+          (runsByDispatch.get(s.dispatchId) ?? []).map((r) => r.number),
+          s.approvalId ? (approvalNumbers.get(s.approvalId) ?? null) : null,
+        ),
       ),
-    ),
-  }));
+    };
+  });
 }
 
 export async function loadRunRow(db: Db, runId: string): Promise<AutomationRunRow> {
@@ -421,7 +436,9 @@ export async function publishAutomation(session: TxSession, burrowId: string, au
  * OP-S69).
  */
 export async function publishRun(session: TxSession, runId: string) {
-  const row = await loadRunRow(session.tx, runId);
+  let row = await loadRunRow(session.tx, runId);
+  // What a mail run no longer needs of the email goes in the commit that made it so (`mail-text.ts`).
+  if (await forgetMailText(session, row)) row = await loadRunRow(session.tx, runId);
   // Its AUTOMATION search document and the plan steps that follow it, in the same commit (WS-05, WS-24).
   await indexAutomationRun(session.tx, runId);
   const burrow = await loadBurrowRow(session.tx, row.burrowId);
@@ -490,7 +507,7 @@ export async function activeRunCount(db: Db, automationId: string, exceptRunId?:
 }
 
 /** Trigger kinds that read the signed events after the burrow's cursor (BP-C07). */
-export const EVENT_TRIGGER_KINDS = ['message_posted', 'reaction_added', 'github', 'tracker'] as const;
+export const EVENT_TRIGGER_KINDS = ['message_posted', 'reaction_added', 'github', 'tracker', 'mail'] as const;
 
 /** Whether a trigger reads the events (the engine scans a burrow only while a live automation has one, SV-03). */
 export function readsEvents(trigger: { kind: string }): boolean {

@@ -10,6 +10,7 @@ import type { AddressInfo } from 'node:net';
 import { agentDefaultGrants, type DeviceProfileInput, type DeviceSkillCard } from '@whombat/core';
 import { and, desc, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { ConnectionChangedError } from '../connections/call-target';
 import {
   approvals,
   catalogConnections,
@@ -18,8 +19,10 @@ import {
   deviceSkills,
   events,
   messages,
+  principals,
   vaultNetworks,
 } from '../db/schema/index';
+import { undoChange } from '../home/changes';
 import { openChange } from '../home/registry';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
@@ -35,6 +38,7 @@ import {
   startDeviceReader,
   stopDeviceReader,
 } from './home';
+import { runDeviceTool } from './run';
 import { type FakeModbus, startFakeModbus } from './testing/fake-modbus';
 import { undoDeviceChange } from './undo';
 
@@ -447,6 +451,41 @@ describe('using it within the limits', () => {
     await mcp.close();
   });
 
+  it('a write never goes to another device than the one its connection was checked for', async () => {
+    const [row] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    if (!row) throw new Error('no connection');
+    const before = writes().length;
+    // The connection as a call checked it before another skill (another device at that address) was switched on, or
+    // before the device was given another address: the skill read again now isn't that one, so nothing is sent.
+    const since: Record<string, string>[] = [
+      { skillId: 'dsk_switched_since' },
+      { host: '192.168.91.43' },
+      { port: '5020' },
+    ];
+    for (const fields of since) {
+      await expect(
+        runDeviceTool(
+          t.services,
+          { ...row, fields: { ...row.fields, ...fields } },
+          { name: `${slug}_room_setpoint` },
+          {
+            value: 21,
+          },
+          {
+            burrowId: t.burrowId,
+            agentId: whombat.agentId,
+            callId: `call_device_changed_${Object.keys(fields)[0]}`,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+    }
+    expect(writes()).toHaveLength(before);
+    expect(fake.tables.holding[100]).toBe(215);
+  });
+
   it('a write outside the limits is refused before anything is signed or sent', async () => {
     const before = writes().length;
     const signed = (await t.services.db.select().from(events)).length;
@@ -611,6 +650,60 @@ describe('using it within the limits', () => {
     expect(said?.text).toBe(
       'The heat pump’s room temperature was changed again since, so I left it as it is.',
     );
+  });
+
+  it('Undo puts the old value back only where the change went', async () => {
+    fake.tables.holding[100] = 200;
+    const { mcp } = await turn(whombat.agentId, whombat.dmId);
+    await mcp.call('connection_call', {
+      connection: 'heat-pump',
+      tool: `${slug}_room_setpoint`,
+      arguments: { value: 23 },
+    });
+    await mcp.close();
+    expect(fake.tables.holding[100]).toBe(230);
+    const [row] = await t.services.db
+      .select()
+      .from(changes)
+      .where(eq(changes.title, 'Set the heat pump’s room temperature to 23.0 °C'));
+    const change = row ? openChange(t.services.custody, row) : null;
+    if (!row || !change) throw new Error('no change');
+    expect(change.undo.payload).toMatchObject({ connectionId, destination: expect.any(String) });
+    const [conn] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, connectionId));
+    if (!conn) throw new Error('no connection');
+    // The connection goes elsewhere since (another address, another device's skill): Undo refuses, nothing is sent.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ baseUrl: `${conn.baseUrl}/elsewhere` })
+      .where(eq(catalogConnections.id, connectionId));
+    try {
+      const sent = writes().length;
+      const [mara] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
+      if (!mara) throw new Error('no person');
+      await expect(undoChange(t.services, mara, row.id)).rejects.toMatchObject({
+        code: 'conflict',
+        message: expect.stringContaining('changed since, so this can’t be undone here'),
+      });
+      // The Undo already under way when it changed says so in the chat, and sends nothing either.
+      await undoDeviceChange(t.services, change, IDS.mara);
+      const [said] = await t.services.db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, whombat.dmId))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      expect(said?.text).toContain('changed since, so this can’t be undone here');
+      expect(writes()).toHaveLength(sent);
+      expect(fake.tables.holding[100]).toBe(230);
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ baseUrl: conn.baseUrl })
+        .where(eq(catalogConnections.id, connectionId));
+    }
   });
 
   it('the person narrows the limits through REST, and the next call keeps to them', async () => {

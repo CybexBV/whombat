@@ -123,9 +123,18 @@ describe('a choice of what answers (CT-459)', () => {
       provider: 'claude',
       model: 'sonnet',
     });
-    // A model the list doesn't have keeps both.
+    // A model the list doesn't have keeps effort and fast: true, but drops fast: false when the list is known.
     expect(chatRuntimeWithModel(runtime, 'fable', claude)).toEqual({ ...runtime, model: 'fable' });
     expect(chatRuntimeWithModel(runtime, 'fable', undefined)).toEqual({ ...runtime, model: 'fable' });
+    expect(chatRuntimeWithModel({ provider: 'claude', fast: false }, 'fable', claude)).toEqual({
+      provider: 'claude',
+      model: 'fable',
+    });
+    expect(chatRuntimeWithModel({ provider: 'claude', fast: false }, 'fable', undefined)).toEqual({
+      provider: 'claude',
+      model: 'fable',
+      fast: false,
+    });
   });
 
   it('compares choices, absent and null alike', () => {

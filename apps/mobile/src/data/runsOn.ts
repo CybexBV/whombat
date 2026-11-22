@@ -9,6 +9,8 @@
  */
 import {
   agentModelLine,
+  backgroundModelChoices,
+  draftWithBackgroundModel,
   draftWithEffort,
   draftWithFast,
   draftWithModel,
@@ -26,7 +28,7 @@ import {
 import { SOURCE_TEXT } from '@whombat/client/signins';
 import {
   type AgentModelFallback,
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProvider,
   type AgentRuntime,
   type AgentSetupStatus,
@@ -62,7 +64,7 @@ export interface RunsOnModel {
 }
 
 /** Local's line when the agent is on it and the burrow has none (the agent's own reply says the same, CT-1170). */
-export const LOCAL_NOT_SET_UP = 'The model on your network isn’t set up yet. Set it up in Settings → AI.';
+export const LOCAL_NOT_SET_UP = 'The custom AI model isn’t set up yet. Set it up in Settings → AI.';
 
 export function runsOnModel(
   runtime: AgentRuntime,
@@ -107,11 +109,13 @@ export interface ModelEffortChoice {
   /** The model's own line, or what Automatic does. */
   detail: string | null;
   checked: boolean;
-  runtime: AgentModelRuntime;
+  runtime: AgentModelRuntimeUpdate;
 }
 
 export interface ModelEffortView {
   model: { label: string; description: string | null; choices: ModelEffortChoice[] };
+  /** Optional model for background work; null when the provider lists no models and none is set. */
+  backgroundModel: { label: string; hint: string; choices: ModelEffortChoice[] } | null;
   /** Null when the model takes no effort. */
   effort: { label: string; hint: string; choices: ModelEffortChoice[] } | null;
   /**
@@ -122,7 +126,7 @@ export interface ModelEffortView {
     on: boolean;
     label: string;
     hint: string;
-    runtime: (on: boolean) => AgentModelRuntime;
+    runtime: (on: boolean) => AgentModelRuntimeUpdate;
   } | null;
   /** RUNS ON's line under the provider it is on (AP-2731): “Opus · High effort · Fast”; null for the defaults. */
   summary: string | null;
@@ -134,7 +138,12 @@ export interface ModelEffortView {
    * Local only (AP-5001): the model sheet's “Another model” field — its words and the whole model runtime a typed name
    * saves; null for Claude Code and ChatGPT.
    */
-  another: { label: string; hint: string; use: string; runtime: (name: string) => AgentModelRuntime } | null;
+  another: {
+    label: string;
+    hint: string;
+    use: string;
+    runtime: (name: string) => AgentModelRuntimeUpdate;
+  } | null;
 }
 
 /**
@@ -151,17 +160,28 @@ export function modelEffortView(
   fallback: AgentModelFallback | null | undefined,
   fastFeature = false,
   localModel: LocalModelView | null = null,
+  backgroundModelFeature = true,
 ): ModelEffortView | null {
   if (!feature) return null;
   const models = providerModels(status, agent.runtime.provider, localModel);
   const draft = modelRuntimeDraft(agent.runtime);
   const labels = modelEffortLabels(draft, models);
+  const bodyOptions = { backgroundModel: backgroundModelFeature };
+  const bgChoices = backgroundModelFeature
+    ? backgroundModelChoices(models, draft.backgroundModel).map((c) => ({
+        key: c.id ?? 'same',
+        label: c.label,
+        detail: c.description,
+        checked: c.id === (draft.backgroundModel ?? null),
+        runtime: modelRuntimeBody(draftWithBackgroundModel(draft, c.id)),
+      }))
+    : [];
   const efforts = effortChoices(models, draft.model, draft.effort).map((c) => ({
     key: c.value ?? 'automatic',
     label: c.label,
     detail: c.value ? null : MODEL_EFFORT_COPY.automaticHint,
     checked: c.value === draft.effort,
-    runtime: modelRuntimeBody(draftWithEffort(draft, c.value)),
+    runtime: modelRuntimeBody(draftWithEffort(draft, c.value), bodyOptions),
   }));
   return {
     model: {
@@ -172,9 +192,13 @@ export function modelEffortView(
         label: c.label,
         detail: c.description,
         checked: c.id === draft.model,
-        runtime: modelRuntimeBody(draftWithModel(draft, c.id, models)),
+        runtime: modelRuntimeBody(draftWithModel(draft, c.id, models), bodyOptions),
       })),
     },
+    backgroundModel:
+      bgChoices.length > 1
+        ? { label: labels.backgroundModel, hint: MODEL_EFFORT_COPY.backgroundModelHint, choices: bgChoices }
+        : null,
     effort: efforts.length
       ? { label: labels.effort, hint: effortHint(draft.effort), choices: efforts }
       : null,
@@ -188,7 +212,8 @@ export function modelEffortView(
             label: LOCAL_MODEL_TEXT.another,
             hint: LOCAL_MODEL_TEXT.anotherHint,
             use: LOCAL_MODEL_TEXT.use,
-            runtime: (name) => modelRuntimeBody(draftWithModel(draft, name.trim() || null, models)),
+            runtime: (name) =>
+              modelRuntimeBody(draftWithModel(draft, name.trim() || null, models), bodyOptions),
           }
         : null,
   };
@@ -196,7 +221,7 @@ export function modelEffortView(
   function fastOf(): ModelEffortView['fast'] {
     const fast = fastFeature ? fastChoice(draft, models) : null;
     if (!fast) return null;
-    return { ...fast, runtime: (on) => modelRuntimeBody(draftWithFast(draft, on, models)) };
+    return { ...fast, runtime: (on) => modelRuntimeBody(draftWithFast(draft, on, models), bodyOptions) };
   }
 }
 

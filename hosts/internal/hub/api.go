@@ -171,6 +171,8 @@ func (h *Hub) dataRoutes(handle func(pattern, role string, f handlerFunc)) {
 	// Diagnostics and commands (docs/WHOMBAT.md; role and switches inside).
 	handle("GET /api/v1/servers/{id}/diagnose", viewer, h.apiDiagnoseList)
 	handle("POST /api/v1/servers/{id}/diagnose", viewer, h.apiDiagnose)
+	handle("GET /api/v1/servers/{id}/disk-usage", viewer, h.apiDiskUsageList)
+	handle("POST /api/v1/servers/{id}/disk-usage", viewer, h.apiDiskUsage)
 	handle("POST /api/v1/servers/{id}/exec", viewer, h.apiExec)
 	handle("POST /api/v1/servers/{id}/screen", viewer, h.apiScreen)
 	handle("GET /api/v1/checks", viewer, h.apiChecks)

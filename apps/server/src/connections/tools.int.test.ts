@@ -13,6 +13,7 @@ import type { DispatchContext } from '@whombat/core';
 import { turnPrompt } from '@whombat/runner';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { approvalThread } from '../approvals/wake';
 import { startChat } from '../chats/commands';
 import { decideApproval } from '../commands/approvals';
 import {
@@ -35,8 +36,15 @@ import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, type TestDispatchOptions } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { signingOnlyAs } from './bound-targets';
+import { callArgsAad, callConnectionTool, newCallId } from './call';
+import { ConnectionChangedError, callTarget } from './call-target';
 import { visibleConnections } from './context';
+import { credentialFor } from './credentials';
+import { sealConnectionSecret } from './crypto';
+import { currentRow, signedConnectionFetch } from './http';
 import { connectionsFor } from './pool';
+import { refreshConnectionAccess } from './refresh';
 import { syncTools } from './sync';
 import {
   type DavStub,
@@ -56,6 +64,8 @@ const HOSTS: Record<string, string> = {
   'ha2.home.test': '192.168.90.11',
   'oauth.home.test': '192.168.90.12',
   'cloud.home.test': '192.168.90.13',
+  // Another address for the same stub: where a connection is repointed while a call bound to the first one waits.
+  'oauth-other.home.test': '192.168.90.14',
 };
 
 let home: HomeStub;
@@ -393,6 +403,251 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
       expect(seenFor('hall-lamp')).toBe(0);
     });
 
+    it('sends nothing when the connection was signed in again after it asked, and wakes the agent to ask again', async () => {
+      const row = await askToTurnOn('attic-lamp');
+      // The person gives the connection a new token while the card waits: where its calls go, and as whom, changed.
+      const [before] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, ha));
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: (before?.credentialVersion ?? 1) + 1 })
+        .where(eq(catalogConnections.id, ha));
+      try {
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(row.id))?.error).toContain('changed since you said yes');
+        expect(seenFor('attic-lamp')).toBe(0);
+        // The agent hears it, so it can ask again on a fresh card.
+        await expect
+          .poll(
+            async () =>
+              (
+                await t.services.db
+                  .select({ id: dispatches.id })
+                  .from(dispatches)
+                  .where(and(eq(dispatches.approvalId, row.id), eq(dispatches.trigger, 'approval_granted')))
+              )[0]?.id ?? null,
+            { timeout: 10_000 },
+          )
+          .not.toBeNull();
+        const [wake] = await t.services.db
+          .select()
+          .from(dispatches)
+          .where(and(eq(dispatches.approvalId, row.id), eq(dispatches.trigger, 'approval_granted')));
+        const context = await contextOf(wake?.id as string);
+        expect(context.grantedResult).toMatchObject({ outcome: 'failed' });
+        expect(context.grantedResult?.text).toContain('changed since you said yes');
+        // Asked again, the call is bound to the connection as it is now and runs after the yes.
+        const again = await askToTurnOn('attic-lamp');
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: again.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect
+          .poll(async () => (await executionOf(again.id))?.state, { timeout: 10_000 })
+          .toBe('succeeded');
+        expect(seenFor('attic-lamp')).toBe(1);
+      } finally {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ credentialVersion: before?.credentialVersion ?? 1 })
+          .where(eq(catalogConnections.id, ha));
+      }
+    });
+
+    it('asks again on a fresh card, bound now, for a yes to a card the previous release saved unbound', async () => {
+      await askToTurnOn('pantry-lamp');
+      const [tool] = await t.services.db
+        .select()
+        .from(connectionTools)
+        .where(and(eq(connectionTools.connectionId, ha), eq(connectionTools.name, 'HassTurnOn')));
+      if (!tool) throw new Error('no tool');
+      // As the previous release saved it: no target.
+      const callId = newCallId();
+      const asked = await t.commit(IDS.dusty, callConnectionTool, {
+        connectionId: ha,
+        handle: 'homeassistant',
+        tool: 'HassTurnOn',
+        toolHash: tool.hash,
+        callId,
+        argsEnc: t.services.custody.seal(callArgsAad(callId), JSON.stringify({ name: 'pantry-lamp' })),
+        conversationId: IDS.billing,
+      });
+      if (asked.status !== 'pending_approval') throw new Error(asked.status);
+      const [old] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+      if (!old) throw new Error('no approval');
+      const [before] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, ha));
+      // Pointed elsewhere while the card waited.
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: (before?.credentialVersion ?? 1) + 1 })
+        .where(eq(catalogConnections.id, ha));
+      try {
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: old.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect.poll(async () => (await executionOf(old.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(old.id))?.error).toContain('asks you again');
+        expect(seenFor('pantry-lamp')).toBe(0);
+        const fresh = await t.services.db
+          .select()
+          .from(approvals)
+          .where(sql`${approvals.command} -> 'input' ->> 'askAgainOf' = ${old.id}`);
+        expect(fresh).toHaveLength(1);
+        const [again] = fresh;
+        const now = await currentRow(t.services, ha);
+        expect(again).toMatchObject({ state: 'pending', conversationId: IDS.billing });
+        expect(again?.command?.input).toMatchObject({ target: callTarget(now as NonNullable<typeof now>) });
+        // In the earlier card's place (its thread, in a threaded room).
+        const [freshCard] = await t.services.db
+          .select({ threadRootId: messages.threadRootId })
+          .from(messages)
+          .where(eq(messages.id, again?.messageId as string));
+        expect(freshCard?.threadRootId ?? null).toBe(
+          await approvalThread(t.services.db, old.id, IDS.billing),
+        );
+        // The person's yes to the fresh card runs it, once, where the connection goes now.
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: again?.number as number, decision: 'approve' }))
+            .status,
+        ).toBe('ok');
+        await expect
+          .poll(async () => (await executionOf(again?.id as string))?.state, { timeout: 10_000 })
+          .toBe('succeeded');
+        expect(seenFor('pantry-lamp')).toBe(1);
+      } finally {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ credentialVersion: before?.credentialVersion ?? 1 })
+          .where(eq(catalogConnections.id, ha));
+      }
+    });
+
+    /** The person pastes another account's token on the same Home Assistant; returns what puts the first back. */
+    async function replaceToken(token: string) {
+      const before = await currentRow(t.services, ha);
+      if (!before) throw new Error('no connection');
+      await t.services.db
+        .update(catalogConnections)
+        .set({
+          secretEnc: sealConnectionSecret(t.services.custody, ha, 'secret', token),
+          credentialVersion: before.credentialVersion + 1,
+        })
+        .where(eq(catalogConnections.id, ha));
+      return async () => {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ secretEnc: before.secretEnc, credentialVersion: before.credentialVersion })
+          .where(eq(catalogConnections.id, ha));
+        await connectionsFor(t.services).evict(ha);
+      };
+    }
+    const signedWith = (token: string) =>
+      home.seen.filter((s) => s.headers.authorization === `Bearer ${token}`).length;
+
+    it('sends nothing when the token is replaced after the approved call was checked, and drops the session opened before', async () => {
+      const service = connectionsFor(t.services);
+      // A session is open already, from a call made before the token changes.
+      const first = await askToTurnOn('stair-lamp');
+      await t.commit(IDS.mara, decideApproval, { number: first.number, decision: 'approve' });
+      await expect
+        .poll(async () => (await executionOf(first.id))?.state, { timeout: 10_000 })
+        .toBe('succeeded');
+      expect(service.pool.size).toBe(1);
+
+      const row = await askToTurnOn('cellar-lamp');
+      const other = 'ha-llat-Other7Account2Rp4';
+      let restore: (() => Promise<void>) | null = null;
+      const pooled = service.pool.call.bind(service.pool);
+      // Between the call's check of the connection and its signing, the token is replaced (no eviction yet).
+      const race = vi.spyOn(service.pool, 'call').mockImplementationOnce(async (target, tool, args) => {
+        restore = await replaceToken(other);
+        return pooled(target, tool, args);
+      });
+      try {
+        await t.commit(IDS.mara, decideApproval, { number: row.number, decision: 'approve' });
+        await expect.poll(async () => (await executionOf(row.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(row.id))?.error).toContain('changed since you said yes');
+        expect(seenFor('cellar-lamp')).toBe(0);
+        expect(signedWith(other)).toBe(0);
+        // The session opened as the token before is closed: the next call opens its own.
+        expect(service.pool.size).toBe(0);
+      } finally {
+        race.mockRestore();
+        await (restore as (() => Promise<void>) | null)?.();
+      }
+    });
+
+    it('never signs a request with a connection that changed since its call was checked', async () => {
+      const row = await currentRow(t.services, ha);
+      if (!row) throw new Error('no connection');
+      const checked = callTarget(row);
+      const url = `http://ha.home.test:${home.port}/api/`;
+      // While it is the same, the request goes.
+      expect(
+        (await signedConnectionFetch(t.services, row, { method: 'GET', url }, { target: checked })).status,
+      ).toBe(200);
+      const other = 'ha-llat-Other7Account2Rp5';
+      const restore = await replaceToken(other);
+      try {
+        const sent = home.seen.length;
+        // The row it was checked on, or the row as it is now: neither is signed while the stored one differs.
+        await expect(
+          signedConnectionFetch(t.services, row, { method: 'GET', url }, { target: checked }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        const now = await currentRow(t.services, ha);
+        if (!now) throw new Error('no connection');
+        await expect(
+          signedConnectionFetch(t.services, now, { method: 'GET', url }, { target: checked }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        // A pooled MCP session made for the connection as it was sends nothing either.
+        const service = connectionsFor(t.services);
+        await expect(
+          service.pool.call(service.target(row, `http://ha.home.test:${home.port}/api/mcp`), 'HassTurnOn', {
+            name: 'shed-lamp',
+          }),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+        expect(home.seen.length).toBe(sent);
+      } finally {
+        await restore();
+      }
+    });
+
+    it('asks nothing when the connection changes between the call’s read and its card', async () => {
+      const dusty = await turn(IDS.dusty, IDS.billing);
+      const count = async () =>
+        (await t.services.db.select({ n: sql<number>`count(*)::int` }).from(approvals))[0]?.n ?? 0;
+      const asked = await count();
+      const commit = t.services.pipeline.commit.bind(t.services.pipeline);
+      let restore: (() => Promise<void>) | null = null;
+      // The token is replaced after the call read the connection and just before its card is saved.
+      const race = vi.spyOn(t.services.pipeline, 'commit').mockImplementation(async (def, input, options) => {
+        if (def === callConnectionTool && !restore) restore = await replaceToken('ha-llat-Other7Account2Rp6');
+        return commit(def, input, options);
+      });
+      try {
+        const res = await call(dusty.mcp, 'connection_call', {
+          connection: 'homeassistant',
+          tool: 'HassTurnOn',
+          arguments: { name: 'loft-lamp' },
+        });
+        expect(res.body).toMatchObject({ status: 'failed', reason: 'destination_refused' });
+        expect(String(res.body.message)).toContain('changed while this call started');
+        expect(await count()).toBe(asked);
+        expect(seenFor('loft-lamp')).toBe(0);
+      } finally {
+        race.mockRestore();
+        await (restore as (() => Promise<void>) | null)?.();
+        await dusty.mcp.close();
+      }
+    });
+
     it('runs a call a crash stopped before it was recorded once on recovery', async () => {
       const row = await askToTurnOn('porch-lamp');
       // The yes and the start committed, then the process stopped before the call's own commit.
@@ -444,6 +699,8 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
       .select()
       .from(approvals)
       .where(sql`${approvals.action}->>'type' = 'connection_call'`)
+      // The first one asked for (the kitchen lamp): without an order Postgres may hand back a later one.
+      .orderBy(approvals.number)
       .limit(1);
     const viewer = await loadPrincipalRow(db, IDS.mara);
     if (!source || !viewer) throw new Error('no connection approval or viewer');
@@ -772,6 +1029,68 @@ describe('OAuth connections (CX-12…CX-15, CX-32)', () => {
     });
     expect(found.body).toMatchObject({ status: 'ok', content: 'Found 2 pages.' });
     await dusty.mcp.close();
+  });
+});
+
+describe('a sign-in for a call bound to where its connection went', () => {
+  it('reaches nothing, and writes nothing, once the connection was given another address', async () => {
+    const id = await insertConnection(t.services, {
+      catalogId: 'custom_mcp',
+      burrowId: t.burrowId,
+      label: 'Notes',
+      handle: 'notes',
+      signIn: 'mcp_oauth',
+      auth: null,
+      fields: { url: `http://oauth.home.test:${oauth.port}/mcp` },
+      accessToken: 'stale-token',
+      // Due: the next credential asks the authorization server for a new token.
+      accessExpiresAt: new Date(t.services.clock().getTime() - 1000),
+      refreshToken: 'refresh-1',
+      issuer: `http://oauth.home.test:${oauth.port}`,
+      clientId: 'https://whombat.test/api/v1/connections/oauth/client.json',
+      resource: `http://oauth.home.test:${oauth.port}/mcp`,
+    });
+    const asked = await currentRow(t.services, id);
+    if (!asked) throw new Error('no connection');
+    const checked = callTarget(asked);
+    // Signed in again at another address while a call bound to the first waits.
+    const other = `http://oauth-other.home.test:${oauth.port}`;
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        baseUrl: `${other}/mcp`,
+        fields: { url: `${other}/mcp` },
+        issuer: other,
+        resource: `${other}/mcp`,
+        credentialVersion: asked.credentialVersion + 1,
+      })
+      .where(eq(catalogConnections.id, id));
+    const moved = await currentRow(t.services, id);
+    if (!moved) throw new Error('no connection');
+    const sent = oauth.seen.length;
+    const refreshes = oauth.refreshes;
+    // The row it was asked with or the row as it is now: neither refreshes, discovers or signs anything.
+    for (const row of [asked, moved])
+      await expect(
+        signingOnlyAs({ [id]: checked }, () => credentialFor(t.services, row)),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+    // The refresh itself reads the connection again and refuses before it asks.
+    await expect(
+      signingOnlyAs({ [id]: checked }, () => refreshConnectionAccess(t.services, asked, { force: true })),
+    ).rejects.toBeInstanceOf(ConnectionChangedError);
+    expect(oauth.seen.length).toBe(sent);
+    expect(oauth.refreshes).toBe(refreshes);
+    expect(await currentRow(t.services, id)).toMatchObject({
+      status: 'active',
+      accessTokenEnc: moved.accessTokenEnc,
+      refreshTokenEnc: moved.refreshTokenEnc,
+    });
+    // Not bound to the old address, the connection refreshes where it goes now.
+    await credentialFor(t.services, moved);
+    expect(oauth.refreshes).toBe(refreshes + 1);
+    expect(oauth.seen.slice(sent).every((s) => s.headers.host?.startsWith('oauth-other.home.test'))).toBe(
+      true,
+    );
   });
 });
 

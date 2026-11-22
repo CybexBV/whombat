@@ -20,9 +20,12 @@ import {
 } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { ConnectionGlance } from '../../home/types';
+import { sideBySide } from '../../lib/side-by-side';
 import type { Services } from '../../services';
 import { within } from '../part-of';
+import { checkWatched } from '../quiet/defaults';
 import { shortHash, someNames } from '../quiet/items';
+import type { ThingQuiet } from '../quiet/store';
 import type { KindCheck, KindNotice } from '../quiet/types';
 import { addressIndex, hostsServing } from '../runs-on';
 import {
@@ -535,7 +538,87 @@ export const HETZNER_CHECKS: readonly KindCheck[] = [
     perItem: false,
     startsOn: false,
   },
+  {
+    check: 'hetzner.idle',
+    name: 'Paid servers that look idle',
+    nature: 'you',
+    perItem: true,
+    startsOn: false,
+  },
 ];
+
+/** Two weeks of hourly samples, with near-zero processor and network use, mark a paid server as idle. */
+export const IDLE_DAYS = 14;
+export const IDLE_MIN_SPAN_DAYS = 13;
+export const IDLE_MIN_SAMPLES = 260;
+export const IDLE_MAX_AVG_CPU = 1;
+export const IDLE_MAX_P95_CPU = 5;
+export const IDLE_MAX_AVG_NET_BPS = 120;
+
+/** One server's hourly processor and network activity over the last two weeks. */
+export interface HetznerServerActivity {
+  serverId: string;
+  /** Average processor use across all vCPUs (0..100 %). */
+  cpu: RawPoint[];
+  /** Inbound traffic in bytes/s. */
+  netIn: RawPoint[];
+  /** Outbound traffic in bytes/s. */
+  netOut: RawPoint[];
+}
+
+function validSeries(points: readonly RawPoint[]): { values: number[]; spanMs: number } {
+  let first = Infinity;
+  let last = -Infinity;
+  const values: number[] = [];
+  for (const p of points) {
+    if (p.value === null || !Number.isFinite(p.value)) continue;
+    const t = p.at.getTime();
+    if (t < first) first = t;
+    if (t > last) last = t;
+    values.push(p.value);
+  }
+  return { values, spanMs: values.length >= 2 ? last - first : 0 };
+}
+
+function mean(values: readonly number[]): number {
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function percentile(values: readonly number[], q: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)));
+  return sorted[idx] ?? 0;
+}
+
+/** True when a running paid server is at least 14 days old and shows near-zero CPU and network use over that window. */
+export function isIdlePaidServer(
+  server: HetznerServer,
+  activity: HetznerServerActivity | undefined,
+  now: Date,
+): boolean {
+  if (server.status !== 'running') return false;
+  if (server.monthlyEur === null || server.monthlyEur <= 0) return false;
+  if (server.createdAt && now.getTime() - server.createdAt.getTime() < IDLE_DAYS * DAY_MS) return false;
+  if (!activity) return false;
+  const cpu = validSeries(activity.cpu);
+  const netIn = validSeries(activity.netIn);
+  const netOut = validSeries(activity.netOut);
+  const minSpan = IDLE_MIN_SPAN_DAYS * DAY_MS;
+  if (
+    cpu.values.length < IDLE_MIN_SAMPLES ||
+    netIn.values.length < IDLE_MIN_SAMPLES ||
+    netOut.values.length < IDLE_MIN_SAMPLES ||
+    cpu.spanMs < minSpan ||
+    netIn.spanMs < minSpan ||
+    netOut.spanMs < minSpan
+  )
+    return false;
+  return (
+    mean(cpu.values) < IDLE_MAX_AVG_CPU &&
+    percentile(cpu.values, 0.95) < IDLE_MAX_P95_CPU &&
+    mean(netIn.values) + mean(netOut.values) < IDLE_MAX_AVG_NET_BPS
+  );
+}
 
 /** On their way somewhere (QN-04): a server starting, stopping, rebuilt or moved isn't “not running”. */
 const UNDER_WAY = new Set(['initializing', 'starting', 'stopping', 'migrating', 'rebuilding', 'deleting']);
@@ -555,7 +638,11 @@ const serverSubject = (x: HetznerServer) => ({
  * moves; traffic past what's included a problem, at 80 % a heads-up until next month; no Hetzner backups and delete
  * protection off heads-ups per server (standing choices: many back up another way).
  */
-export function hetznerNotices(s: HetznerSnapshot, now = s.readAt): KindNotice[] {
+export function hetznerNotices(
+  s: HetznerSnapshot,
+  now = s.readAt,
+  activity?: ReadonlyMap<string, HetznerServerActivity> | null,
+): KindNotice[] {
   const out: KindNotice[] = [];
   const names = (xs: readonly HetznerServer[]) => clip(xs.map((x) => x.name).join(' · '), 200);
   const stopped = s.servers.filter((x) => x.status !== 'running' && !UNDER_WAY.has(x.status));
@@ -677,23 +764,113 @@ export function hetznerNotices(s: HetznerSnapshot, now = s.readAt): KindNotice[]
       ignore: { lifts: 'newer', words: 'Until another server has it off.' },
       episode: shortHash(unprotected.map((x) => serverSubject(x).id)),
     });
+  const idle = activity ? s.servers.filter((x) => isIdlePaidServer(x, activity.get(x.id), now)) : [];
+  out.push(
+    ...itemLines(
+      idle,
+      (x) => serverSubject(x).id,
+      (x) => {
+        const title = clip(`${x.name} looks idle`, 120);
+        return {
+          id: lineId('idle', x.id),
+          tone: 'info',
+          icon: 'money',
+          title,
+          detail: clip(
+            `Almost no processor or network use for 14 days while costing ${euros(x.monthlyEur as number)} a month. Check whether you still need it, or stop and delete it in Hetzner.`,
+            200,
+          ),
+          link: { kind: 'url', label: 'Open Hetzner', url: 'https://console.hetzner.cloud/' },
+          nature: 'you',
+          check: 'hetzner.idle',
+          subject: serverSubject(x),
+          ignore: { lifts: 'fixed', words: 'Until it gets busy again.' },
+          badge: title.length <= 40 ? title : 'A paid server looks idle',
+        };
+      },
+      (more, subject, episode) => ({
+        id: 'idle-more',
+        tone: 'info',
+        icon: 'money',
+        title: `${plural(more.length, 'more paid server')} look idle`,
+        detail: names(more),
+        link: { kind: 'url', label: 'Open Hetzner', url: 'https://console.hetzner.cloud/' },
+        nature: 'you',
+        check: 'hetzner.idle',
+        subject,
+        ignore: { lifts: 'newer', words: 'Until the list changes.' },
+        episode,
+        badge: 'Paid servers look idle',
+      }),
+    ),
+  );
   return out;
 }
 
-/** The checks this read couldn't fully see: every one when the list of servers was capped. */
-export function hetznerSkipped(s: HetznerSnapshot): string[] {
-  return s.serversCapped ? HETZNER_CHECKS.map((c) => c.check) : [];
+/** Maximum concurrent 14-day metrics requests when checking paid servers for idleness. */
+export const IDLE_BATCH_CONCURRENCY = 4;
+
+/** Running paid servers old enough to be checked for 14-day idleness. */
+export function idleEligibleServers(s: HetznerSnapshot, now: Date): HetznerServer[] {
+  return s.servers.filter(
+    (x) =>
+      x.status === 'running' &&
+      x.monthlyEur !== null &&
+      x.monthlyEur > 0 &&
+      (!x.createdAt || now.getTime() - x.createdAt.getTime() >= IDLE_DAYS * DAY_MS),
+  );
 }
 
-/** The health pass's look (SD-05, QN-S24): the card and Worth a look's lines as the page shows them. */
+/** The checks this read couldn't fully see: every one when the list of servers was capped, or idle when activity wasn't read for every running paid server. */
+export function hetznerSkipped(
+  s: HetznerSnapshot,
+  activity?: ReadonlyMap<string, HetznerServerActivity> | null,
+): string[] {
+  if (s.serversCapped) return HETZNER_CHECKS.map((c) => c.check);
+  if (activity !== undefined) {
+    const eligible = idleEligibleServers(s, s.readAt);
+    if (eligible.some((x) => !activity?.has(x.id))) return ['hetzner.idle'];
+  }
+  return [];
+}
+
+/** Reads 14-day hourly activity for servers in bounded batches (cached 1 h), indexed by server id. */
+async function readAllActivity(
+  services: Services,
+  row: CatalogConnectionRow,
+  servers: readonly HetznerServer[],
+  now: Date,
+): Promise<Map<string, HetznerServerActivity>> {
+  const map = new Map<string, HetznerServerActivity>();
+  await sideBySide(servers, IDLE_BATCH_CONCURRENCY, async (x) => {
+    const a = await readHetznerActivity(services, row, x, now);
+    if (a) map.set(a.serverId, a);
+  });
+  return map;
+}
+
+/** The health pass's look: the card and Worth a look's lines as the page shows them. */
 export async function hetznerSeen(
   services: Services,
   row: CatalogConnectionRow,
   now: Date,
+  quiet?: ThingQuiet,
 ): Promise<KindSeen> {
   const s = await hetznerSnapshot(services, row, now);
-  const notices = hetznerNotices(s, now);
-  return { glance: hetznerGlanceOf(s, notices), points: {}, notices, skipped: hetznerSkipped(s) };
+  const watchIdle = quiet ? checkWatched(quiet, 'hetzner.idle') : false;
+  const eligible = watchIdle ? idleEligibleServers(s, now) : [];
+  const activity = watchIdle
+    ? eligible.length
+      ? await readAllActivity(services, row, eligible, now)
+      : new Map<string, HetznerServerActivity>()
+    : undefined;
+  const notices = hetznerNotices(s, now, activity);
+  return {
+    glance: hetznerGlanceOf(s, notices),
+    points: {},
+    notices,
+    skipped: hetznerSkipped(s, activity),
+  };
 }
 
 const STATUS_WORDS: Record<string, string> = {
@@ -862,6 +1039,46 @@ export function sentPoints(raw: unknown): RawPoint[] {
   return seriesPoints(rec(rec(rec(raw).metrics).time_series), 'network.0.bandwidth.out', (v) => v);
 }
 
+/** One server's hourly CPU (% of all vCPUs) and inbound/outbound network (bytes/s) from Hetzner's `cpu,network` answer. */
+export function activityPoints(
+  raw: unknown,
+  server: Pick<HetznerServer, 'id' | 'cores'>,
+): HetznerServerActivity {
+  const ts = rec(rec(rec(raw).metrics).time_series);
+  const cores = server.cores && server.cores > 0 ? server.cores : 1;
+  return {
+    serverId: server.id,
+    cpu: seriesPoints(ts, 'cpu', (v) => v / cores),
+    netIn: seriesPoints(ts, 'network.0.bandwidth.in', (v) => v),
+    netOut: seriesPoints(ts, 'network.0.bandwidth.out', (v) => v),
+  };
+}
+
+/** One server's hourly CPU and network over the last two weeks, kept an hour; null when it can't be read. */
+export function readHetznerActivity(
+  services: Services,
+  row: CatalogConnectionRow,
+  server: HetznerServer,
+  now: Date,
+): Promise<HetznerServerActivity | null> {
+  return cachedRead(
+    services,
+    `hetzner-activity:${row.id}:${server.id}`,
+    row,
+    async () =>
+      activityPoints(
+        await getJson(services, row, NAME, `/v1/servers/${encodeURIComponent(server.id)}/metrics`, {
+          type: 'cpu,network',
+          start: new Date(now.getTime() - TRAFFIC_DAYS * 86_400_000).toISOString(),
+          end: now.toISOString(),
+          step: String(TRAFFIC_STEP_S),
+        }),
+        server,
+      ),
+    TRAFFIC_CACHE_MS,
+  ).catch(() => null);
+}
+
 /** One server's traffic out per hour over the last two weeks, kept an hour; null when it can't be read. */
 export function readHetznerTraffic(
   services: Services,
@@ -869,21 +1086,7 @@ export function readHetznerTraffic(
   server: HetznerServer,
   now: Date,
 ): Promise<RawPoint[] | null> {
-  return cachedRead(
-    services,
-    `hetzner-traffic:${row.id}:${server.id}`,
-    row,
-    async () =>
-      sentPoints(
-        await getJson(services, row, NAME, `/v1/servers/${encodeURIComponent(server.id)}/metrics`, {
-          type: 'network',
-          start: new Date(now.getTime() - TRAFFIC_DAYS * 86_400_000).toISOString(),
-          end: now.toISOString(),
-          step: String(TRAFFIC_STEP_S),
-        }),
-      ),
-    TRAFFIC_CACHE_MS,
-  ).catch(() => null);
+  return readHetznerActivity(services, row, server, now).then((a) => a?.netOut ?? null);
 }
 
 /**
@@ -920,6 +1123,8 @@ export interface HetznerInput {
   snapshots: HetznerImages | null;
   /** Each read server's hourly traffic out over two weeks; null when none could be read. */
   sent: { points: RawPoint[][]; read: number } | null;
+  /** Optional 14-day hourly CPU and network activity per server id, for the idle server check. */
+  activity?: ReadonlyMap<string, HetznerServerActivity> | null;
   now: Date;
   timeZone: string;
 }
@@ -1149,7 +1354,7 @@ export function hetznerView(input: HetznerInput): Omit<KindView, 'open' | 'sugge
     // In slots its figures are in Servers now and In this project; the card keeps its own (`hetznerGlanceOf`).
     kpis: [],
     charts: [],
-    notices: hetznerNotices(s, input.now),
+    notices: hetznerNotices(s, input.now, input.activity),
     ...hetznerSlots(input),
     tabs: [
       {
@@ -1222,14 +1427,27 @@ export async function hetznerPage(ctx: KindCtx): Promise<KindView> {
     };
   const s = latest.value;
   const servers = metricsServers(s);
-  const [metrics, machines, snapshots, sent] = await Promise.all([
+  const watchIdle = ctx.quiet ? checkWatched(ctx.quiet, 'hetzner.idle') : false;
+  const chartIds = new Set(servers.map((x) => x.id));
+  const extraIdle = watchIdle ? idleEligibleServers(s, ctx.now).filter((x) => !chartIds.has(x.id)) : [];
+  const [metrics, machines, snapshots, activities, extraActivity] = await Promise.all([
     Promise.all(servers.map((x) => readHetznerMetrics(ctx.services, ctx.row, x, ctx.range, ctx.now))),
     within(watched(ctx), 5_000, []),
     readHetznerSnapshots(ctx.services, ctx.row),
-    Promise.all(servers.map((x) => readHetznerTraffic(ctx.services, ctx.row, x, ctx.now))),
+    Promise.all(servers.map((x) => readHetznerActivity(ctx.services, ctx.row, x, ctx.now))),
+    extraIdle.length
+      ? readAllActivity(ctx.services, ctx.row, extraIdle, ctx.now)
+      : Promise.resolve(new Map<string, HetznerServerActivity>()),
   ]);
   const read = metrics.map((m) => m.metrics).filter((m): m is HetznerMetrics => m !== null);
-  const points = sent.filter((p): p is RawPoint[] => p !== null);
+  const readActivity = activities.filter((a): a is HetznerServerActivity => a !== null);
+  const points = readActivity.map((a) => a.netOut);
+  const activity = watchIdle
+    ? new Map<string, HetznerServerActivity>([
+        ...readActivity.map((a) => [a.serverId, a] as const),
+        ...extraActivity.entries(),
+      ])
+    : undefined;
   return {
     ...base,
     ...hetznerView({
@@ -1238,6 +1456,7 @@ export async function hetznerPage(ctx: KindCtx): Promise<KindView> {
       whombat: whombatServers(s, machines),
       snapshots,
       sent: points.length ? { points, read: points.length } : null,
+      activity,
       now: ctx.now,
       timeZone: ctx.timeZone,
     }),

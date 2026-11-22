@@ -190,6 +190,57 @@ describe('a tracker automation’s tile', () => {
   });
 });
 
+describe('a mail-triggered automation', () => {
+  const mailNames = {
+    ...names,
+    connectionLabel: (id: string) => (id === 'con_mail' ? 'you@example.com' : names.connectionLabel(id)),
+  };
+  const mailDef = AutomationDefinition.parse(
+    recipeDefinition({
+      when: {
+        kind: 'mail',
+        connectionId: 'con_mail',
+        from: 'example.com',
+        attachmentTypes: ['pdf'],
+      },
+      job: 'custom',
+      instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
+      conversationId: 'cnv_chat',
+    }),
+  );
+
+  it('shows the mail tile, plain-English trigger sentence and mailbox details on list and page views', () => {
+    const item = automation({
+      id: 'aut_mail',
+      name: 'Handle mail from example.com',
+      definition: mailDef,
+      grants: definitionGrants(mailDef),
+      triggerSummary: 'When mail from example.com with a PDF arrives in your inbox',
+      summary: 'When mail from example.com with a PDF arrives in your inbox, Dusty runs it in Chat.',
+    });
+    const row = automationListRow(item, now, zone, mailNames);
+    expect(row.tile).toMatchObject({ source: 'mail', label: 'Mail' });
+    expect(row.when).toBe('When mail from example.com with a PDF arrives in your inbox');
+    expect(row.state.next).toBe('Next run on a matching email');
+
+    const page = automationPage(item, {
+      now,
+      timeZone: zone,
+      names: mailNames,
+      viewer: { id: 'prn_mara', kind: 'person' },
+      deletes: true,
+    });
+    expect(page.flow?.[0]).toMatchObject({
+      kind: 'when',
+      text: 'When mail from example.com with a PDF arrives in your inbox',
+    });
+    if (page.flow?.[0]?.kind === 'when') {
+      expect(page.flow[0].details).toContain('In you@example.com');
+      expect(page.flow[0].details).toContain('One thread per email in Chat');
+    }
+  });
+});
+
 describe('an automation’s page (automation-page.md AP-6331…AP-6335)', () => {
   const you = { id: 'prn_mara', kind: 'person' as const };
 

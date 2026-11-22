@@ -157,12 +157,14 @@ function setup() {
     },
   };
   let hasVoice = true;
+  const state = { dutchVoice: false };
   const talks = createDeskTalkWith({
     host,
     chat,
     voice: () => (hasVoice ? voice : null),
     health: () => voice.health(),
     voiceSettings: async () => ({ model: 'whisper', language: 'nl' }),
+    dutchVoiceOn: async () => state.dutchVoice,
     timers,
     timings: DESK_TALK_TIMINGS,
     log: silentLogger,
@@ -173,6 +175,7 @@ function setup() {
     voice,
     host,
     timers,
+    state,
     noVoice: () => {
       hasVoice = false;
     },
@@ -276,7 +279,7 @@ describe('a typed question (DK-06)', () => {
     expect(voices).toEqual(['default', 'george', 'default', 'default']);
   });
 
-  it('is said in Dutch, written out, when it is Dutch and the box speaks Dutch (DK-T22, DK-T23)', async () => {
+  it('is said in Dutch, written out, only when the saved Dutch voice setting is on and the box speaks Dutch (DK-T22, DK-T23, DK-T26)', async () => {
     const s = setup();
     s.host.chosen = 'george';
     const ask = async (text: string) => {
@@ -284,6 +287,12 @@ describe('a typed question (DK-06)', () => {
       const { id } = await s.talks.start({ text: 'Hoe gaat het?', continue: false });
       return reaches(s, id, 'answered');
     };
+    // Files present (health lists 'nl'), but the saved setting is off: must NOT use Dutch voice.
+    const whileOff = await ask('Ja, alles draait nog prima.');
+    expect(whileOff?.audio).toBe(true);
+
+    // With the saved setting on, Dutch answers are written out and spoken in Dutch.
+    s.state.dutchVoice = true;
     const dutch = await ask('Ja, **pve-02** draait prima: de back-up was om 03:00 klaar.');
     // The screen shows the answer as written; the voice gets it as it is said.
     expect(dutch?.answer).toBe('Ja, pve-02 draait prima: de back-up was om 03:00 klaar.');
@@ -292,12 +301,19 @@ describe('a typed question (DK-06)', () => {
     // A voice service from before 3.4 speaks English only: the Dutch answer goes as it is, without a language.
     s.voice.ability = { ...s.voice.ability, languages: undefined };
     await ask('Ja, alles draait.');
+    // If Dutch TTS fails after health listed it (e.g. model removed mid-flight), fall back to English.
+    s.voice.ability = { ...s.voice.ability, languages: ['en', 'nl'] };
+    s.voice.failNext.tts = new VoiceCallError('error', 'no such language');
+    const fallback = await ask('Het gaat goed met alles.');
+    expect(fallback?.audio).toBe(true);
     const said = s.voice.calls.filter((c) => c.kind === 'tts');
-    expect(said[0]).toMatchObject({ voice: 'george', language: 'nl' });
-    expect(said[0]?.kind === 'tts' && said[0].text).toContain('P V E nul twee');
-    expect(said[0]?.kind === 'tts' && said[0].text).toContain('drie uur');
-    expect(said[1]).toEqual({ kind: 'tts', text: 'Yes, pve-02 is fine.', voice: 'george' });
-    expect(said[2]).toEqual({ kind: 'tts', text: 'Ja, alles draait.', voice: 'george' });
+    expect(said[0]).toEqual({ kind: 'tts', text: 'Ja, alles draait nog prima.', voice: 'george' });
+    expect(said[1]).toMatchObject({ voice: 'george', language: 'nl' });
+    expect(said[1]?.kind === 'tts' && said[1].text).toContain('P V E nul twee');
+    expect(said[1]?.kind === 'tts' && said[1].text).toContain('drie uur');
+    expect(said[2]).toEqual({ kind: 'tts', text: 'Yes, pve-02 is fine.', voice: 'george' });
+    expect(said[3]).toEqual({ kind: 'tts', text: 'Ja, alles draait.', voice: 'george' });
+    expect(said[4]).toEqual({ kind: 'tts', text: 'Het gaat goed met alles.', voice: 'george' });
   });
 
   it('is still working after 90 s (slow), or couldn’t be asked (failed)', async () => {

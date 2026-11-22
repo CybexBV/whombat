@@ -354,7 +354,7 @@ release's commit carries the release's id as a tag.
 | `apps/agent-net` | `@whombat/agent-net` | The commands' network proxy and its control socket. |
 | `apps/cli` | `@whombat/cli` | The bundle's `whombat` binary (`schema-check`, `migrate`, `version`) and the release library (`@whombat/cli/release`). |
 | `apps/web` | `@whombat/web` | The web app: the box's own page, the hosted UI (app/dev.whombat.com), the visual harness's journeys. Its `package.json` carries the app's version (the APK's too). |
-| `apps/mobile` | `@whombat/mobile` | The Android (and iOS) app: Expo/React Native with a native module for live activities. |
+| `apps/mobile` | `@whombat/mobile` | The Android (and iOS) app: Expo/React Native with a native module for live activities and the home-screen status widget. |
 | `apps/widget` | `@whombat/widget` | The embeddable feedback widget and its embed tree. |
 | `packages/core` | `@whombat/core` | The contracts: domain types, Zod schemas for every operation and frame, the keys engine, approvals and automations logic, message parsing, formatters. Pure: no I/O. |
 | `packages/protocol`, `packages/secure-channel` | | The session protocol (frames, claim, tickets, licence) and the Noise XX channel it runs over. |
@@ -510,7 +510,10 @@ answer is lost retain the redacted-result behavior.
   or fails as uncertain what a dead process left running; nothing runs twice.
 - An approved connection call runs after its deferred command's commit (which records `connection.tool_called`) as a
   required continuation: the approval succeeds, fails in plain words or is uncertain as the call did, and after a crash
-  the call's own events say whether it never ran (it runs once), finished, or may have reached the service.
+  the call's own events say whether it never ran (it runs once), finished, or may have reached the service. The command
+  carries where the call goes and as whom when it was asked (`connections/call-target.ts`: the connection's base
+  address, settings, sign-in, sealed secrets and credential version), so the yes is bound to it; the call is sent only
+  while the connection row the request is made with still has it, and otherwise nothing is sent and the agent hears why.
 - Approvals retain their asking dispatch and run. A yes wakes the agent that asked in the card's thread with the
   approval in its context; a decline tells it too. A live run continues in run mode; a pause or take over holds the
   continuation. Approval changes advance linked activity revisions and publish their derived state to open feeds.
@@ -561,12 +564,28 @@ Automations. Code finds it by kind
 - **An outsiders' turn** — a Feedback assessment, what a tracker customer's report or reply starts, incoming mail —
   is queued for nobody (`runtime/person.ts`). Its room is usually the person's Chat or Feedback room, so it works in
   its own thread there: it gets its request and that thread but never the room's recent messages or Files, and its
-  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). It is served a
-  short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
-  check its own work, and its automation step's own tools (the assessment, the tracker's report, a pull request from the
-  branch its step checked out); a Feedback assessment has its own five. It gets no mail, calendar, files, Vault,
-  connections, notes or memory, and runs in Hermes's separate `_feedback` profile, so instructions hidden in what
-  strangers send reach none of the person's things. One Hermes holds that profile at a time, so outsiders' turns run
+  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). An automation
+  run's turn (mail, a tracker report) is shown and reads only the files the server handed over from what started the
+  run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
+  readable or fetched by its runner. The context and `read_conversation` use the same field allowlist
+  (`runtime/outsiders-view.ts`). They include the person's words posted directly in that thread, marked outsiders'
+  text and fixed lines for private assistant messages and cards. Only the run's own approval line includes the
+  person's answer. A Feedback assessment also gets its own report and screenshots. A connection-action result or
+  notice reads as a fixed line, including after a retry. Templates read it as state, whether it ran and how many
+  (`automations/steps/scope.ts`). Agent posts carry their dispatch id, so the step collects just its own replies.
+  Outsiders' results carry no attachment ids, and no later step copies files from them. For older rows without a
+  dispatch id, collection uses only marked posts within the claim. A result names its turn; templates drop one that
+  names another turn, and a result the previous release saved (no turn named) is read as it was. The thread's marked
+  posts offer no shortcuts into the person's turns and create no link previews. Every start marks what outsiders'
+  input wrote and the mark missed (a step's own thread, what the previous release wrote after a rollback), and More
+  detail, Try again and the claim read the turn that wrote a message, not only its mark
+  (`runtime/outsiders-marks.ts`). The person can start a new turn by replying directly. That turn starts a fresh
+  session in the thread and sees marked posts as quoted data. The person still sees the full posts in Chat. It is
+  served a short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
+  check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
+  tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
+  gets no mail, calendar, files, Vault, connections, notes or memory, and runs in Hermes's separate `_feedback` profile,
+  so instructions hidden in what strangers send reach none of the person's things. One Hermes holds that profile at a time, so outsiders' turns run
   one at a time: the claim keeps the next one queued, oldest first, while another holds its place, a person's turn
   never waits for them, and one that still finds the profile busy on the runner is queued again rather than failed
   (`runtime/service.ts`, [outsiders-turns.md](docs/decisions/outsiders-turns.md)). An automation step's turn that waits
@@ -579,7 +598,8 @@ Automations. Code finds it by kind
   The one exception is T3 Code: a turn on a tracker's report sees the
   T3 Code connection and nothing else (`connections/context.ts`), and hands looking into the code to a T3 Code thread,
   which runs with full access on the person's computer. There it may only list projects, start a thread in a new
-  worktree and follow the threads started from its own thread; the person's other threads, schedules, environments
+  worktree and follow its report’s own hand-overs. The turn’s context lists those hand-overs, and the same ownership
+  checks apply to every call. The person's threads, schedules, environments
   and projects are refused before T3 Code is asked (`connections/report-turn.ts`).
 
 - **Settings for the person** (`apps/server/src/settings/`): in the person's own turns (never an automation's step or an
@@ -610,7 +630,7 @@ Automations. Code finds it by kind
   plugin ship in the runtime release, so a new Hermes is a runtime update that the box checks (ACP answers, the plugin
   and its providers load) and goes back from by itself; the appliance's latest-tested job checks for a new Hermes
   release daily, has an agent review it against Whombat's use of Hermes, installs and uses it in a test, and when it
-  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta, and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
+  passes pins it on `main` (the runtime's pin and the appliance's in one commit) and brings it to Beta (Production gets it only inside a promoted release), and This Whombat shows the version ([hermes-updates.md](docs/decisions/hermes-updates.md)). The person's Hermes
   home is `$WHOMBAT_HERMES_ROOT` itself, Hermes's default profile (`config.yaml`, `memories/`, `sessions/`,
   `skills/`, the ChatGPT login); `profiles/_feedback` beside it holds every outsiders' turn. Before a session starts
   the runner writes the profile's `config.yaml`, `SOUL.md` (who the agent is, how its face talks, and that a reply is
@@ -626,8 +646,11 @@ Automations. Code finds it by kind
   its tool calls run in. An outsiders' turn gets a sandbox and a Hermes of its own instead.
 - **Where the model runs**, always on Hermes's own loop: Claude subscriptions through Nous's DirectSDK provider (the
   unmodified Claude Code as its model client, [claude-directsdk.md](docs/decisions/claude-directsdk.md)); ChatGPT
-  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a model on the
-  person's network through Hermes's API clients.
+  through Hermes's `openai-codex` on Hermes's own login; an API key, the burrow's AI gateway or a custom OpenAI-compatible AI model (an internet service over HTTPS or a server on the person's network) through Hermes's API clients.
+  When the agent has an optional `backgroundModel` set ([model-effort.md](docs/decisions/model-effort.md)), automatic
+  Looks, care plans and scheduled automation steps resolve their dispatch runtime to that model of the same provider
+  with automatic effort and without fast replies, while chats and person-started work keep the main model or thread
+  choice.
 - **Sessions**: one Chat thread is one Hermes session, resumed on its own provider and model; a turn sends only what
   is new since the session's last turn, a new session gets the window (the thread's first message and last 60 replies,
   in a channel after the room's last 30 top-level messages; a flat room's last 30 messages), and a failed resume is
@@ -768,7 +791,7 @@ published automation details read their definition and publisher from one versio
 
 - **Made by talking to the agent** (`automations/plans.ts`): in the person's Chat the agent proposes an automation, or a
   change to one, with `draft_automation` (a recipe or a definition; `automation_read` lists the person's automations, the
-  tracker connections a trigger can name and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
+  tracker connections and connected mailboxes a trigger can name, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
   `automation_plan` card (`automation_plans`, one waiting per automation; a newer plan replaces it). The card's sections
   are written from the definition by core's `planSections`, and a change lists what differs from the live version.
   Turning a plan on publishes exactly its definition with the keys its steps need (`definitionGrants`); Not now sets it
@@ -787,18 +810,88 @@ published automation details read their definition and publisher from one versio
 - **Recipes**: `AutomationRecipe` makes an ordinary definition with the tested steps (assess, fix, review, pull request,
   merge); the agent proposes one when it fits.
 - **Triggers** read the signed `events` table after a durable cursor (messages, reactions, mirrored pull requests
-  and issues of watched repositories, report trackers' reports), plus schedules (cron in a time zone) and Run now. Webhook
-  triggers are refused: nothing from outside reaches the box. Runs are deduplicated by automation, version and
-  trigger; an automation-caused event carries a causal depth and deep chains start nothing.
+  and issues of watched repositories, report trackers' reports, matched incoming emails of watched mailboxes), plus
+  schedules (cron in a time zone) and Run now. Webhook triggers are refused: nothing from outside reaches the box. Runs
+  are deduplicated by automation, version and trigger; an automation-caused event carries a causal depth and deep chains
+  start nothing.
   Cron catch-up parses once per call, reuses at most three days' computed instants and searches them by position,
   retaining each trigger's daylight-saving policies and the bounded search.
+- **Mail triggers** (`apps/server/src/mail-triggers/`): `MailTriggerService` watches only connected mailboxes
+  (`connections` with `mail`) that have a live `mail` automation — via Gmail History API, Microsoft Graph inbox message
+  delta or IMAP IDLE (with a multi-minute socket timeout) paired with `UIDVALIDITY`/`lastUid` + `BODYSTRUCTURE` and a
+  60 s safety poll. It reads headers and attachment metadata first, drops mail received before the automation's
+  activation time (5 s skew margin), deduplicates by provider id and RFC 5322 Message-ID, backfills from activation on
+  the first poll and resyncs expired cursors from the last successful poll time. It fetches full bodies and hands over
+  matched email attachments only when a message matches a live trigger (`from` address or domain, `subjectContains`,
+  `hasAttachment`, `attachmentTypes`), skipping gone messages immediately and unreadable or commit-invalid messages
+  after three failed attempts with a plain-English problem so a mailbox never stalls; attachment metadata is capped at
+  100 per email (recording how many were left out) and attachments that cannot be handed over (too large, unknown type,
+  download failed, too many) are marked on the run scope so both the prompt and the run page say they didn't come along. High-water marks (`mail_cursors`) and deduplicated matched items (`mail_trigger_items`, whose
+  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows, rows skipped by the cursor and the rows of a mailbox no live rule watches any more, and whose rows are pruned after 30 days) commit through the
+  pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
+  nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
+  runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail
+  definitions may not use repository workspaces or external steps other than `connection_actions`, sender-controlled
+  fields reach the agent only inside
+  defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
+  email's files attached to the run's first agent prompt (`read_attachment`). A run keeps the email's text (`body`,
+  `snippet`, `text` in `automation_runs.scope`) only while a step that reads the trigger may still render it; then, and whenever
+  the run ends, it goes from the scope, from what settled steps stored (their fenced copies become a short note) and
+  from the Hermes sessions the run's turns ran in (`automations/mail-text.ts`), while sender, subject and attachment
+  metadata stay.
+  Proposed writes (`propose_connection_actions`) are only the listed, create-only actions a mail automation needs
+  (`automations/listed-actions.ts`): upload a file of the email to Paperless-ngx, add a purchase invoice or receipt to
+  Moneybird, save a new file in Dropbox or Nextcloud (or make a folder in Nextcloud), add a task to Todoist, show a
+  notification in Home Assistant. Each has a strict schema; Whombat sets what keeps it create-only (`If-None-Match: *` on
+  a WebDAV PUT, Dropbox's `mode: add`, `overwrite: false`) and the `Content-Type`, and refuses any other header, a
+  header name given twice in different case and any value named like a password or key; everything else is refused with
+  what a mail automation can do instead. The agent can't look anything up, so its paths leave out the person's account
+  ids (Moneybird's from `/documents/`, Nextcloud's from the root of the person's files; one that names them is refused
+  with the same words, right or wrong) and the server writes the connection's administration or WebDAV user in; only an
+  action whose body is JSON reads JSON text. The prompt lists the
+  listed actions by connection handle. The step saves exactly the actions printed with that dispatch and checks the
+  saved list before looking up any connection. An
+  upload sends only a file the server handed over from the run's email, by id: those files are copied onto the run's
+  first agent prompt, whatever step comes before it. The proposals always ask the person on an approval card bound to the
+  exact `actionsHash`, which also binds where each call goes and as whom (`connections/call-target.ts`), regardless of
+  standing settings, built only by the server (`automations/proposed-card.ts`): the
+  listed action's words as its title, question, message and “Done:” line, what else it does (the folder Dropbox makes on
+  the way), then every line that decides what happens — method and path as sent or tool, base, the email's file by name,
+  type and size, every argument and header, nothing hidden, a long value in numbered parts, an id by its name — or the
+  proposal is refused when that doesn't fit on one card. The names (a Paperless-ngx tag, a Moneybird contact) are read
+  by the run engine as the connection just before the card is made, outside the transaction and bounded
+  (`automations/card-names.ts`), once per connection and path, and kept on the step by connection and where its calls go;
+  an id the service doesn't have shows as it is with a line that says so, never a refusal, so a later step can't tell
+  from the step whether it exists. While proposing, the turn hears one sentence that names nothing of the person's for
+  any action it wasn't offered (a handle nobody has, a connection signed out, looking only or missing account setup, a tool missing or off);
+  only problems with a listed action's own arguments are said as they are. `connection_actions` runs them after a yes, sending each only while
+  its connection still goes where it did then (else nothing is sent and a fresh card asks again, its names read again
+  from the new place, “… changed since you said yes.”). An HTTP write needs a 2xx response to count as done, with an
+  explicit Nextcloud folder-already-there exception. Timeouts and partial-batch failures settle as `uncertain`. Any other automation card asks its title as a question unless a
+  `request_approval` step's details start with its own question. A session below protocol
+  minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
+  an automation without its definition (`automations/older-apps.ts`).
+  A box makes, turns on and runs automations started by mail, or that change things in connected services, only while
+  the release it would go back to after a failed update knows them (`automations/release-gate.ts`): from the manager's
+  update facts, the box's current release while this one is being tried, else the release its own last update came
+  from, looked up in `runtime_releases`, where each release records itself at its first start on a managed box. Until
+  then they wait, kept as they are: no mailbox is read, their runs don't start or move on (a run's time counts from when
+  it first starts, and its email's files stay while it hasn't ended), and making, turning on or
+  running one, or the assistant's `draft_automation`, answers “Mail automations come with the next update.” (or the same
+  about connected services), as `automation_read`'s guide says. Development boxes, tests, a box that never updated and
+  a production runtime no update helper started (it names no release, and no manager rolls it back) have them on. A
+  server that started before the box's release was recorded (offline at its first start) is restarted once it is, so it
+  knows its release (`provisioning.nix`).
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
   agent step's time counts from its first turn's claim (a turn after a handed T3 Code wait keeps it): while the turn is
   queued only the run's own deadline bounds it, and a step queued behind another outsiders' turn says so in its summary (“Waiting for another customer report to finish”). A
   failed turn's step says why when the turn does (“Dusty couldn’t finish because it took too long.”,
-  `steps/turn-words.ts`).
+  `steps/turn-words.ts`). A run started by incoming mail, or one with a `connection_actions` step, is stored with
+  `deadline_at` at the epoch: the release before mail triggers checks a started run's deadline before any step, so after
+  a rollback it fails such a run instead of asking the agent as the person; here its deadline is its own time limit after
+  it first started (`runDeadline`, docs/decisions/automation-recipes.md).
 - **Identity**: each automation signs as its own system principal, with authority = its grants ∩ the publisher's
   current authority, checked before every step and inside approval execution; the rooms a step uses must still be the
   burrow's. The agent can only draft until the
@@ -947,20 +1040,39 @@ Setup and operation: `docs/github.md`.
 
 - **Catalog definitions** (`packages/core/src/domain/connections-catalog/`) are pure data in one file per service,
   assembled in order by the original public module. Adapters and dashboard kinds use their existing registries.
-  Bundled tool definitions refresh on use when their hashes differ from the stored tools, preserving the person’s
-  tiers; remote MCP discovery keeps its hourly refresh.
+  Session-authenticated catalog connections (`connections/session.ts`) support both header/query tokens and HTTP
+  cookie sessions (`tokenCookie` extracted from `Set-Cookie`, applied as `Cookie: <name>=<value>`, with optional
+  `bodyPattern` login-failure matching). Bundled tool definitions refresh on use when their hashes differ from the
+  stored tools, preserving the person’s tiers; remote MCP discovery keeps its hourly refresh.
 - **Catalog connections** (`apps/server/src/connections/`): services the person connects (Home Assistant, Proxmox,
   UniFi, Plex, mail over IMAP/SMTP and many more), each the burrow's, at most 50, every change signed. The agent
-  calls them in the person's turns through `connection_call` under its keys; calls that change things ask. Each
+  calls them in the person's turns through `connection_call` under its keys; calls that change things ask, and a yes
+  is bound to where the call goes and as whom (`connections/call-target.ts`), and to where every other connection it
+  acts through goes (a Servers backup place on a TrueNAS). Every request is signed only as the connection it was
+  checked on: a call, a page's button or setting, its Put it back and a page change the assistant asked for run bound to
+  their connections' call targets (`connections/bound-targets.ts`), and every credential opened for a bound connection
+  is checked against the stored connection before it is opened and again once it is in hand, before anything is
+  signed; a refresh, a client secret exchange or a session sign-in checks the row it reads again before it asks the
+  service, so a connection changed before it gets none. Each transport checks its call's own target too
+  (datagrams and lines included), and pooled MCP sessions are kept per call target (`connections/pool.ts`). A card's
+  words and the target its yes is bound to come from one read of the connection, and the card is saved only while the
+  connection is still stored so (`heldChanged`, held until the card commits); a page change's card names the
+  connection by its label. A yes to a card saved without its binding (by the previous release) runs nothing: a fresh
+  card bound now asks again in its place (`approvals/ask-again.ts`). A write, a call's or a page button's, is done only
+  on a 2xx answer, never on a redirect (`things/kinds/act.ts` `writeDone`). A write that worked
+  is recorded for Done recently with its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per
   pass, and Home hears of a change only when what a connection's glance shows changed. A kind may declare the settings
-  of its service that matter (`things/kinds/settings.ts`, Plex's in `kinds/media/plex-settings.ts`): they are a tab of
-  their own, and a switch, a sheet's choice and the assistant's approved card all run the kind's `setting` action, which
-  reads the setting back from the service before it says done and records the change with how to put it back (undo kind
-  `thing.action`). The settings tools give that card Whombat's words through the kind's `describe`, and the dispatcher
-  marks an op run for the assistant (`managed/acting-assistant.ts`) so the change names it
-  ([service-settings.md](docs/decisions/service-settings.md)). A kind that sets `slots` (Plex, Seerr, SABnzbd, Home Assistant, Pi-hole…) lays its Summary out
+  of its service that matter through `KindModule.settings` (`declaredSettings` in `things/kinds/settings.ts` — Plex,
+  AdGuard Home, Pi-hole, Sonarr, Radarr and Immich): `connectionPage` adds their `service-settings` tab right after
+  Summary, and a switch, a sheet's choice and the assistant's approved card all run the kind's `setting` action through
+  `actions.ts`, using only single-field or conditional writes (`If-Match`, refusing `412` conflicts) for settings that
+  delete or replace nothing already stored and cannot cut the person off (recording the change with undo kind
+  `thing.action` only when read-back matches; whole-object or whole-section, destructive and cut-off settings stay
+  read-only “In {Service}”, so Sonarr, Radarr and Immich show read-only tabs). The settings tools give that card Whombat's words through
+  `kind.settings.describe`, and the dispatcher marks an op run for the assistant (`managed/acting-assistant.ts`) so the
+  change names it ([service-settings.md](docs/decisions/service-settings.md)). A kind that sets `slots` (Plex, Seerr, SABnzbd, Home Assistant, Pi-hole…) lays its Summary out
   in the slots every screen shares: Worth a look as a strip on top, then rows of three columns by `span` (Live rows,
   Inventory counts, a Shelf, Trend, People) and the machine as one card after them (`things/machine.ts` `machineCard`;
   without a known machine the service's own figures, else its lines alone as “<name> itself”), with no row of figures,
@@ -1270,7 +1382,10 @@ Setup and operation: `docs/github.md`.
   sentence from Worth a look's own lines, at most four tiles in words, the busiest machines or apps, and one closed
   Technical details fold with its versions, address, Whombat's helper, storage and pools; temporary machines (Incus
   projects other than `default`, CI jobs, leased sandboxes, Whombat's own `whombat.service=1` containers) stay out of
-  its lists and counts until asked for. Every page's head is Ask {assistant}, the service's own page, then ⋯ with the
+  its lists and counts until asked for. On a server's Storage tab, What uses the space shows each machine's and app's
+  disk and replaces “Everything else” with a recent on-request disk breakdown (`server_disk_usage` / `hosts.diskUsage`,
+  kept for 24 hours by the hosts service and measured at low priority without waking sleeping or unknown-state disks) together with when
+  it was measured. Every page's head is Ask {assistant}, the service's own page, then ⋯ with the
   rest. [server-pages.md](docs/decisions/server-pages.md) A Mac's page has a Screen tab (`macScreenView`): the screen
   live on the web (the host's `vnc` console), a picture of it on demand on the phone, Unlock, the Mac's password sent
   once to the Mac (sealed in the step's mutation, so no cache keeps it), and Whombat Helper with its Accessibility.
@@ -1363,7 +1478,9 @@ Setup and operation: `docs/github.md`.
 - **Search** (`read/search.ts`): Postgres full-text search over `search_documents` (English stems and the words as
   written), kept in sync by the pipeline and paged by a keyset cursor. What the asker may open is part of the query
   and every row is re-checked: the person sees every room, the agent every room but the branch rooms of switched-off
-  repositories; an outsiders' turn searches nothing.
+  repositories; an outsiders' turn searches nothing. What outsiders can steer is never indexed: an assessor's
+  output, what an outsiders' run posted (`messages.outsiders_run`), an approval asked on such a run's card, and such a
+  run's error.
 - **Canvas**: Hocuspocus in the server, one Yjs document per canvas persisted to Postgres, reached through the
   session's collaboration stream; the agent edits server-side with `canvas_edit`.
 - **Files** (`apps/server/src/files/`): an upload is reserved for one conversation, sent over a resumable session
@@ -1371,20 +1488,27 @@ Setup and operation: `docs/github.md`.
   message is the burrow's. Signed events carry ids, sizes and hashes, never names or bytes.
 - **Voice typing** (`apps/server/src/voice/`, [dictation.md](docs/decisions/dictation.md)): the person speaks in a
   composer and the box turns the recording into text with its own speech models. The settings (on, speech model,
-  language) are the box's one `voice_typing` row, changed in one signed commit by `voice.update`. The speech service
-  (`whombat-voice`, `WHOMBAT_VOICE_SOCKET`) says in its health which models it runs and on which graphics chip; the
-  model fetcher (`whombat-voice-models`, `WHOMBAT_VOICE_MODELS_SOCKET`) downloads them. The server asks the fetcher for
-  what the settings and the desk's Talk want at start and after every change, never removes anything by itself, and
-  while a model downloads reads it every 2 s and tells the person with `voice.changed`. A recording is a `dictation`
-  upload: kept in memory, checked like any upload, sent to the speech service with the model, the language and (for
-  Whisper) the names the person may say, and answered in `stream_done` as text; the audio and the text are never
-  stored or logged. The desk's Talk mic is voice typing too: the desk socket's `hear` turns its recording into text
-  the same way (allowed by Talk's own switch) for Talk's box, and the person sends the words as a question. Talk says
-  its answers aloud with the speech service (Kokoro in the voice the person chose); an answer in Dutch, told by its
-  words, is written out as it is said (numbers, times, names like pve-02) and said in the service's Dutch voice
-  (Supertonic 3) of the same kind, when the service's health lists Dutch (the image has no Dutch voice: the
-  appliance's nixos.md NX-528)
-  ([desk-display-talk.md](docs/decisions/desk-display-talk.md)). `WHOMBAT_VOICE=fake` brings a fake speech service and a fake fetcher whose downloads take a few seconds.
+  language, and the opt-in Dutch voice agreement — who agreed, when, and the Open RAIL-M licence version) are the box's
+  one `voice_typing` row, changed in signed commits by `voice.update` and `voice.setDutchVoice` (which is blocked from
+  the assistant). The speech service (`whombat-voice`, `WHOMBAT_VOICE_SOCKET`) says in its health which speech-to-text
+  models and speech languages it runs and on which graphics chip; the model fetcher (`whombat-voice-models`,
+  `WHOMBAT_VOICE_MODELS_SOCKET`) downloads both single-file speech-to-text models and the multi-file Supertonic 3 Dutch
+  voice (pinned URLs, per-file SHA-256, resumable, with its `LICENSE`) into `/persist/voice-models`. The server asks
+  the fetcher for what the settings and the desk's Talk want at start and after every change — fetching `supertonic`
+  only after the person agrees in Settings, returning the saved state and retrying with backoff if the fetcher is
+  restarting or refuses a fetch, removing `supertonic` when Dutch voice is off, retrying removal across restarts while
+  the fetcher reports leftover files (`removing`, with bytes left, even if a wanted model is fetched again while
+  removal trash stays on disk), and never removing speech-to-text models by itself unless leftover files remain from
+  an earlier removal — and while a model downloads reads it every 2 s and tells the person with `voice.changed`. A
+  recording is a `dictation` upload: kept in memory, checked like any upload, sent to the speech service with the
+  model, the language and (for Whisper) the names the person may say, and answered in `stream_done` as text; the audio
+  and the text are never stored or logged. The desk's Talk mic is voice typing too: the desk socket's `hear` turns its
+  recording into text the same way (allowed by Talk's own switch) for Talk's box, and the person sends the words as a
+  question. Talk says its answers aloud with the speech service (Kokoro in the voice the person chose); an answer in
+  Dutch, told by its words, is written out as it is said (numbers, times, names like pve-02) and said in the service's
+  Dutch voice (Supertonic 3) of the same kind when installed, falling back to English Kokoro when absent or if Dutch
+  synthesis fails ([desk-display-talk.md](docs/decisions/desk-display-talk.md), appliance `nixos.md` NX-529).
+  `WHOMBAT_VOICE=fake` brings a fake speech service and a fake fetcher whose downloads take a few seconds.
 - **Notifications** (`domain/message-notify.ts`): one rule decides what notifies the person, at their level for the
   room; the agent and Whombat's signers are never notified. Do not disturb and quiet hours hold push back.
 - **Home** (`apps/server/src/home/`): `home.overview` (the things, Done recently with Undo, widgets, health, and the
@@ -1502,9 +1626,8 @@ compact menu (`modules/whombat-menu`, `ui/nativeMenu.tsx`), a message's words ar
 ([ios-message-menu.md](docs/app/decisions/ios-message-menu.md), [ios-native.md](docs/app/decisions/ios-native.md)).
 Both phones open the hosted UI's links and use its passkeys: Android through App Links and Credential Manager
 (`apps/web/public/.well-known/assetlinks.json`), the iPhone through Universal Links and AuthenticationServices
-(`apple-app-site-association` beside it). Android takes shares from other apps; the iPhone's share extension, which
-hands a share over through the app group, is built once Apple has that group
-([ios-parity.md](docs/app/decisions/ios-parity.md)).
+(`apple-app-site-association` beside it). Android takes shares from other apps and offers a small home-screen status widget (`modules/whombat-live`, RemoteViews) showing the box's name, its last calm status (`homeWidgetStatus` in `packages/client/src/home/greeting.ts`, never naming threads or services) and its saved timestamp formatted at draw time (“as of 14:05” today, “as of yesterday 23:50”, or “as of 21 Nov” older, rolling at midnight without background fetches), updated by the app (`StatusWidgetBridge`) and cleared on sign-out or box removal; the iPhone's share extension and matching WidgetKit home-screen widget both use the app group `group.com.whombat.mobile` and stay gated behind one flag in `apps/mobile/app.config.cjs` until Apple has that group
+([ios-parity.md](docs/app/decisions/ios-parity.md), [mobile-live.md](docs/decisions/mobile-live.md)).
 Connections' title is one status sentence true to the worst state (`homeStatus` in
 `packages/client/src/home/greeting.ts`, with what the assistant fixed from Home's `doneToday`). What needs the person is
 the Inbox's (the phone's Inbox tab) alone: Chat carries no status line of its own, and its head has Files

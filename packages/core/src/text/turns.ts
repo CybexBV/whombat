@@ -12,7 +12,7 @@ import { formatResetTime } from './usage.js';
 const PROVIDER_NAMES: Record<string, string> = {
   claude: 'Claude',
   codex: 'ChatGPT',
-  local: 'the model on your network',
+  local: 'the custom AI model',
 };
 
 export interface TurnFailureTextOptions {

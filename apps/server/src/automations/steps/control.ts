@@ -15,6 +15,7 @@ import { CONTINUE_STEP, requestStepApproval } from './approval';
 import type { GateFacts } from './scope';
 import { updateStep } from './state';
 import type { StepExecution } from './types';
+import { ownQuestion } from './words';
 
 export async function executeCondition({
   ctx,
@@ -138,7 +139,7 @@ export async function executeRequestApproval({
       name: CONTINUE_STEP,
       input: { runId: run.id, stepId: step.id, attempt, proposal: { title, details } },
     },
-    { title, details, keyId: 'approvals.decide' },
+    { title, details, keyId: 'approvals.decide', question: ownQuestion(step.details, details) },
   );
   await updateStep(
     tx,

@@ -16,8 +16,24 @@ import type {
   LiveColors,
   ShadeNotification,
 } from './src/content';
+import {
+  type ClearStatusWidgetFilter,
+  createStatusWidgetQueue,
+  type StatusWidgetClearListener,
+  type StatusWidgetPayload,
+  type StatusWidgetSource,
+} from './src/statusWidget';
 
 export * from './src/content';
+export {
+  type ClearStatusWidgetFilter,
+  createStatusWidgetQueue,
+  type NativeStatusWidgetStore,
+  type StatusWidgetClearListener,
+  type StatusWidgetPayload,
+  type StatusWidgetSource,
+  shouldClearStatusWidget,
+} from './src/statusWidget';
 
 /** The native module's surface (`WhombatLiveModule` on Android and iOS). */
 interface NativeWhombatLive {
@@ -28,6 +44,10 @@ interface NativeWhombatLive {
   /** End; with a last display the activity keeps showing it (dismissible), without it it goes. */
   end(key: string, lastJson: string | null, burrow: string): Promise<void>;
   endAll(): Promise<void>;
+  /** Save the latest calm status for the home-screen widget and refresh it. */
+  setStatusWidget?(snapshotJson: string): Promise<void>;
+  /** Clear the home-screen widget back to its signed-out state (optionally only for `applianceId` and/or `source`). */
+  clearStatusWidget?(applianceId: string | null, source?: StatusWidgetSource | null): Promise<void>;
   active(): Promise<ActiveActivity[]>;
   /** Android: keys of the activities shown in the last 24 hours, on screen or not (MN-02). */
   recent?(): Promise<string[]>;
@@ -49,6 +69,8 @@ interface NativeWhombatLive {
 }
 
 const native = requireOptionalNativeModule<NativeWhombatLive>('WhombatLive');
+
+const statusWidget = createStatusWidgetQueue(() => native);
 
 function on(event: string, listener: (e: Record<string, string>) => void): () => void {
   if (!native) return () => {};
@@ -89,6 +111,21 @@ export const WhombatLive = {
   /** Dismiss every Whombat activity and notification (sign-out). */
   async endAll(): Promise<void> {
     await native?.endAll();
+  },
+
+  /** Save the latest calm status for the home-screen widget (never gated on Live Activities permission). */
+  setStatusWidget(payload: StatusWidgetPayload): Promise<void> {
+    return statusWidget.setStatusWidget(payload);
+  },
+
+  /** Forget the saved home-screen widget status (on switch, sign-out, revocation or box removal). */
+  clearStatusWidget(filter?: string | ClearStatusWidgetFilter): Promise<void> {
+    return statusWidget.clearStatusWidget(filter);
+  },
+
+  /** Notified synchronously whenever `clearStatusWidget` is called so upstream write queues drop stale entries. */
+  onClearStatusWidget(listener: StatusWidgetClearListener): () => void {
+    return statusWidget.onClearStatusWidget(listener);
   },
 
   /** Ongoing activities on screen. */

@@ -206,6 +206,7 @@ export type BackupDirectoryEntry = z.infer<typeof BackupDirectoryEntry>;
 export const BackupAgentRuntime = z.object({
   provider: AgentProvider,
   model: z.string().min(1).max(200).nullable().default(null),
+  backgroundModel: z.string().min(1).max(200).nullable().default(null),
   effort: AgentEffort.nullable().default(null),
   /** Fast replies (0.117, CT-904): null as the model says. */
   fast: z.boolean().nullable().default(null),
@@ -795,6 +796,11 @@ export const BackupMessageRecord = rec('message', {
   /** A deleted thread root kept for its replies (text and files gone). */
   deleted: z.boolean().default(false),
   provenance: MessageProvenance.nullable().default(null),
+  /**
+   * Posted by a run outsiders' input started (`messages.outsiders_run` on the server). A release before it drops the
+   * key, as every record drops a member it doesn't know.
+   */
+  outsidersRun: z.boolean().default(false),
   /** Link previews as shown (`LinkPreview[]`). */
   previews: z.array(JsonObject).max(3).nullable().default(null),
   /** What a Chat thread is about (0.117, CT-904): its first message's subject chip. */

@@ -3,6 +3,7 @@ import type { ApplyContext } from '../../commit/types';
 import { automationRuns } from '../../db/schema/index';
 import { postMessage } from '../../domain/messages';
 import { loadConversationRow } from '../../read/conversations';
+import { outsidersRun } from '../runs';
 import type { AutomationRunRow } from '../store';
 
 /**
@@ -51,6 +52,7 @@ export async function postInRunThread(
     threadRootId: place.threadRootId,
     mentions: [],
     dispatch: false,
+    outsidersRun: outsidersRun(run.trigger),
   });
   if (place.startsThread)
     await ctx.tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));

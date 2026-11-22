@@ -23,6 +23,7 @@
 import { catalogEntry, sessionCredential, type TokenAuth, tokenCredential } from '@whombat/core';
 import type { Services } from '../services';
 import type { SecretForms } from '../vault/scrub';
+import { keepBoundTarget } from './bound-targets';
 import { clientCredentialsAccess } from './client-credentials';
 import { openConnectionSecret } from './crypto';
 import { refreshConnectionAccess } from './refresh';
@@ -48,11 +49,28 @@ export interface CredentialOptions {
   evenIfNeedsReauth?: boolean;
 }
 
-/** The credential and the secret forms an answer is checked against (VT-42: an echo is withheld). */
+/**
+ * The credential and the secret forms an answer is checked against (VT-42: an echo is withheld). Work bound to where a
+ * connection's calls go (`bound-targets.ts`: an approved call, a page's action) gets it only while `row` and the
+ * connection as it is stored still go there, checked before the credential is opened and again once it is in hand: a
+ * refresh, a token exchange or a session sign-in asks the service and may write to the connection, so one that changed
+ * throws `ConnectionChangedError` before any of that, and a change that lands while it runs before anything is signed.
+ */
 export async function resolveCredential(
   services: Services,
   row: CatalogConnectionRow,
   opts: CredentialOptions = {},
+): Promise<{ credential: ConnectionCredential; forms: SecretForms[] }> {
+  await keepBoundTarget(services, row);
+  const resolved = await credentialOf(services, row, opts);
+  await keepBoundTarget(services, row);
+  return resolved;
+}
+
+async function credentialOf(
+  services: Services,
+  row: CatalogConnectionRow,
+  opts: CredentialOptions,
 ): Promise<{ credential: ConnectionCredential; forms: SecretForms[] }> {
   if (row.status === 'needs_reauth' && !(opts.evenIfNeedsReauth && !OAUTH_KINDS.has(row.signIn)))
     throw new ConnectionAuthError('This connection needs you to sign in again.');

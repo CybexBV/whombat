@@ -17,6 +17,7 @@ import type {
   RecipeGitHubEvent,
   RecipeJob,
 } from '../domain/automation.js';
+import { mailWhenText } from './mail.js';
 import { mergesFix, recipeOf, repliesToCustomer, trackerItemNoun, writesBack } from './recipes.js';
 import { describeSchedule } from './schedule.js';
 import { triggerSummary } from './validate.js';
@@ -88,6 +89,7 @@ const GITHUB_EVENT_SHORT: Record<RecipeGitHubEvent, string> = {
 const SOURCES: Record<AutomationTrigger['kind'], AutomationSource> = {
   github: 'github',
   tracker: 'tracker',
+  mail: 'mail',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
@@ -176,6 +178,13 @@ function recipeGlance(recipe: AutomationRecipe, names: GlanceNames): AutomationG
       };
     case 'manual':
       return { source: 'manual', repo: null, trigger: 'Started by hand', ...base };
+    case 'mail':
+      return {
+        source: 'mail',
+        repo: null,
+        trigger: clip(mailWhenText(when, names.connectionLabel?.(when.connectionId)), 160),
+        ...base,
+      };
   }
 }
 
@@ -197,6 +206,7 @@ function stepDoes(step: AutomationStep): AutomationDoes | null {
       return 'reply';
     // It asks the person (3.12, TA-44), as an approval does.
     case 'tracker_decision':
+    case 'connection_actions':
       return 'approval';
     case 'http_callback':
       return 'callback';

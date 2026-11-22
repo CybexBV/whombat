@@ -46,6 +46,13 @@ export interface AdapterCall {
   personId: string | null;
   /** The approval whose yes runs the call; absent or null: it didn't ask (task-feedback.md TF-10). */
   approvalId?: string | null;
+  /** Where the call goes and as whom (`callTarget` of the connection it runs on): a change it records keeps it. */
+  target?: string;
+  /**
+   * Where each other connection the call acts through goes and as whom, by id (`callReaches`): the call signs as each
+   * only there, and a change it records keeps them.
+   */
+  others?: Readonly<Record<string, string>>;
 }
 
 export type AdapterTool = (

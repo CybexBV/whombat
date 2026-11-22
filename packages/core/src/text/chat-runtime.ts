@@ -8,13 +8,13 @@ import { type FastSkippedReason, modelOf, type ProviderModel } from '../domain/m
 import { EFFORT_LABELS, effortLabel, MODEL_EFFORT_COPY } from './models.js';
 
 /**
- * Providers named for the sign-in (CR-04), with the Claude and OpenAI marks; the burrow's model on its network is
- * “Local” (CT-1174), its model by the name owners gave it (`localModelName`).
+ * Providers named for the sign-in, with the Claude and OpenAI marks; the custom OpenAI-compatible AI model (`local`) is
+ * “Custom”, its model by the name the person gave it (`localModelName`).
  */
 export const CHAT_PROVIDER_LABELS: Readonly<Record<ChatProvider, string>> = {
   claude: 'Claude',
   codex: 'ChatGPT',
-  local: 'Local',
+  local: 'Custom',
 };
 
 /** The popover's and sheet's words (CR-01, CR-04, CR-05, CR-06). */

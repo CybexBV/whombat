@@ -1,14 +1,20 @@
 /** Cloudflare's page from documented API v4 answers (service-dashboards.md SD-43, SD-S16). Pure. */
 import { ThingPageKpi, ThingPageNotice, ThingPagePanel } from '@whombat/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Services } from '../../../services';
+import type { ThingQuiet } from '../../quiet/store';
+import { rowOf } from '../media/testing';
 import { slotProblems } from '../slots';
+import type { KindCtx } from '../types';
 import {
   type CfSnapshot,
   type CfZone,
   CLOUDFLARE_CHECKS,
+  CLOUDFLARE_KIND,
   cloudflareCardView,
   cloudflareKpis,
   cloudflareNotices,
+  cloudflarePage,
   cloudflareSkipped,
   cloudflareStatus,
   cloudflareView,
@@ -26,6 +32,48 @@ import {
   viaToken,
   zoneRows,
 } from './cloudflare';
+
+const io = vi.hoisted(() => ({
+  rdapCalls: [] as string[],
+  rdapHandler: null as
+    | ((url: string) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>)
+    | null,
+}));
+
+vi.mock('../../../connections/http', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../connections/http')>();
+  return {
+    ...real,
+    signedConnectionFetch: async (_s: unknown, _r: unknown, req: { url: string }) => {
+      const path = new URL(req.url).pathname;
+      const json = path.endsWith('/zones')
+        ? CF_ZONES
+        : path.endsWith('/accounts')
+          ? { success: true, result: [{ id: ACCOUNT }] }
+          : path.endsWith('/cfd_tunnel')
+            ? CF_TUNNELS
+            : path.endsWith('/connections')
+              ? CF_CONNECTIONS
+              : path.endsWith('/ssl/certificate_packs')
+                ? CF_CERTIFICATE_PACKS
+                : CF_GRAPHQL_HOURLY;
+      return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(json)) };
+    },
+  };
+});
+
+vi.mock('../../../lib/outbound', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../lib/outbound')>();
+  return {
+    ...real,
+    outboundRequest: async (url: string) => {
+      io.rdapCalls.push(url);
+      if (io.rdapHandler) return io.rdapHandler(url);
+      throw new Error('RDAP disabled in test');
+    },
+  };
+});
+
 import {
   CF_CERTIFICATE_PACKS,
   CF_CONNECTIONS,
@@ -146,14 +194,65 @@ describe('cloudflare page', () => {
   it('says which checks it couldn’t read', () => {
     const s = snapshot();
     expect(cloudflareSkipped(s)).toEqual([]);
+    expect(cloudflareSkipped({ ...s, domainExpirations: null })).toEqual(['cloudflare.domain_expiring']);
+    expect(cloudflareSkipped({ ...s, domainExpirationsPartial: true })).toEqual([
+      'cloudflare.domain_expiring',
+    ]);
     expect(cloudflareSkipped({ ...s, tunnels: null, certificatesPartial: true, zonesTotal: 40 })).toEqual([
       'cloudflare.tunnel_down',
       'cloudflare.tunnel_degraded',
       'cloudflare.cert',
       'cloudflare.cert',
+      'cloudflare.domain_expiring',
       'cloudflare.zone',
       'cloudflare.paused',
     ]);
+  });
+
+  it('warns when a domain registration is expiring via RDAP and starts off by default', () => {
+    const check = CLOUDFLARE_CHECKS.find((c) => c.check === 'cloudflare.domain_expiring');
+    expect(check).toMatchObject({ nature: 'you', perItem: true, startsOn: false });
+
+    const s = snapshot();
+    const soon = new Date(NOW.getTime() + 12 * 86_400_000);
+    const expired = new Date(NOW.getTime() - 2 * 86_400_000);
+    const far = new Date(NOW.getTime() + 90 * 86_400_000);
+
+    const warnNotices = cloudflareNotices(
+      {
+        ...s,
+        domainExpirations: new Map([
+          ['example.com', soon],
+          ['example.org', far],
+        ]),
+      },
+      NOW,
+    ).filter((n) => n.check === 'cloudflare.domain_expiring');
+    expect(warnNotices).toHaveLength(1);
+    for (const n of warnNotices) ThingPageNotice.parse(n);
+    expect(warnNotices[0]).toMatchObject({
+      tone: 'warn',
+      nature: 'you',
+      subject: { id: `site:${ZONE}`, name: 'example.com' },
+      episode: soon.toISOString(),
+      ignore: { lifts: 'newer' },
+    });
+    expect(warnNotices[0]?.title).toContain('example.com');
+    expect(warnNotices[0]?.detail).toContain('registrar');
+
+    const badNotices = cloudflareNotices(
+      { ...s, domainExpirations: new Map([['example.com', expired]]) },
+      NOW,
+    ).filter((n) => n.check === 'cloudflare.domain_expiring');
+    expect(badNotices[0]).toMatchObject({ tone: 'bad', check: 'cloudflare.domain_expiring' });
+
+    // Moved zones are skipped.
+    const moved = { ...s, zones: s.zones.map((z) => ({ ...z, status: 'moved' })) };
+    expect(
+      cloudflareNotices({ ...moved, domainExpirations: new Map([['example.com', soon]]) }, NOW).filter(
+        (n) => n.check === 'cloudflare.domain_expiring',
+      ),
+    ).toEqual([]);
   });
 
   it('has Clear cache✱ per site', () => {
@@ -257,5 +356,100 @@ describe('cloudflare page', () => {
       link: { kind: 'tab', tab: 'settings' },
     });
     expect(view.problem).toBeUndefined();
+  });
+
+  it('skips RDAP when domain_expiring is off, runs it in seen when on, and never blocks or fails page reads', async () => {
+    const emptyQuiet: ThingQuiet = { quiets: [], offs: [], ons: [] };
+    const onQuiet: ThingQuiet = {
+      quiets: [],
+      offs: [],
+      ons: [
+        {
+          checkId: 'cloudflare.domain_expiring',
+          at: NOW,
+          byId: null,
+          ownerId: 'brw_1',
+          thingId: 'connection:con_cf',
+        },
+      ],
+    };
+    const makeCtx = (services: Services, id: string, quiet: ThingQuiet): KindCtx => ({
+      services,
+      row: rowOf('cloudflare', { id, signIn: 'token', baseUrl: 'https://api.cloudflare.com' }),
+      entry: {} as KindCtx['entry'],
+      now: NOW,
+      timeZone: 'UTC',
+      machine: null,
+      range: '24h',
+      burrowId: 'brw_1',
+      disk: { pct: [], gb: [] },
+      quiet,
+    });
+
+    // Off by default: neither seen nor page touches RDAP.
+    io.rdapCalls = [];
+    io.rdapHandler = null;
+    const servicesOff = {} as Services;
+    const rowOff = rowOf('cloudflare', {
+      id: 'con_cf_off',
+      signIn: 'token',
+      baseUrl: 'https://api.cloudflare.com',
+    });
+    await CLOUDFLARE_KIND.seen?.(servicesOff, rowOff, NOW, 'UTC', emptyQuiet);
+    await cloudflarePage(makeCtx(servicesOff, 'con_cf_off', emptyQuiet));
+    expect(io.rdapCalls).toEqual([]);
+
+    // On, with RDAP hanging/failing: cloudflarePage returns immediately with panels intact and no error.
+    io.rdapCalls = [];
+    let releaseHang!: () => void;
+    io.rdapHandler = () =>
+      new Promise((_resolve, reject) => {
+        releaseHang = () => reject(new Error('registry down'));
+      });
+    const servicesHang = {} as Services;
+    const t0 = Date.now();
+    const view = await cloudflarePage(makeCtx(servicesHang, 'con_cf_hang', onQuiet));
+    expect(Date.now() - t0).toBeLessThan(150);
+    expect(view.problem).toBeUndefined();
+    expect(view.panels.length).toBeGreaterThan(0);
+    releaseHang();
+
+    // On, in seen: RDAP runs and surfaces an expiring domain notice.
+    io.rdapCalls = [];
+    const soonIso = new Date(NOW.getTime() + 10 * 86_400_000).toISOString();
+    io.rdapHandler = async (url) => {
+      if (url.includes('data.iana.org')) {
+        return {
+          status: 200,
+          headers: {},
+          body: Buffer.from(
+            JSON.stringify({
+              services: [
+                [['com'], ['https://rdap.verisign.com/com/v1/']],
+                [['org'], ['https://rdap.publicinterestregistry.org/rdap/']],
+              ],
+            }),
+          ),
+        };
+      }
+      if (url.endsWith('/domain/example.com')) {
+        return {
+          status: 200,
+          headers: {},
+          body: Buffer.from(JSON.stringify({ events: [{ eventAction: 'expiration', eventDate: soonIso }] })),
+        };
+      }
+      return { status: 404, headers: {}, body: Buffer.alloc(0) };
+    };
+    const servicesOn = {} as Services;
+    const rowOn = rowOf('cloudflare', {
+      id: 'con_cf_on',
+      signIn: 'token',
+      baseUrl: 'https://api.cloudflare.com',
+    });
+    const seen = await CLOUDFLARE_KIND.seen?.(servicesOn, rowOn, NOW, 'UTC', onQuiet);
+    expect(io.rdapCalls.length).toBeGreaterThan(0);
+    expect(seen?.notices?.some((n) => n.check === 'cloudflare.domain_expiring')).toBe(true);
+    io.rdapHandler = null;
   });
 });

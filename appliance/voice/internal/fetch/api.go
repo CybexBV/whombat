@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/CybexBV/whombat/appliance/helper/pkg/peercred"
 	"github.com/CybexBV/whombat/contracts/go/local"
@@ -35,7 +36,7 @@ func (s *Server) Handler() http.Handler {
 			fail(w, http.StatusMethodNotAllowed, local.VoiceErrorBadRequest, "GET only")
 			return
 		}
-		reply(w, s.Fetcher.State())
+		reply(w, s.Fetcher.StateFor(requestedIncludes(r)))
 	})
 	mux.HandleFunc(local.VoiceModelsPathFetch, s.change(s.Fetcher.Fetch))
 	mux.HandleFunc(local.VoiceModelsPathRemove, s.change(s.Fetcher.Remove))
@@ -79,8 +80,25 @@ func (s *Server) change(do func(id string) error) http.HandlerFunc {
 			fail(w, status, local.VoiceErrorBadRequest, fmt.Sprint(err))
 			return
 		}
-		reply(w, s.Fetcher.State())
+		reply(w, s.Fetcher.StateFor(requestedIncludes(r, req.Model)))
 	}
+}
+
+func requestedIncludes(r *http.Request, extra ...string) []string {
+	var out []string
+	for _, v := range r.URL.Query()[local.VoiceModelsIncludeParam] {
+		for _, part := range strings.Split(v, ",") {
+			if id := strings.TrimSpace(part); id != "" {
+				out = append(out, id)
+			}
+		}
+	}
+	for _, id := range extra {
+		if id != "" && !isDefaultV1Model(id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func reply(w http.ResponseWriter, v any) {

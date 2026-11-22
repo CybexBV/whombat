@@ -34,8 +34,11 @@ import { mcpClient, type TestMcp } from '../test/mcp';
 import { SELF_SIGNED_CERT_A, SELF_SIGNED_KEY_A } from '../test/self-signed';
 import { accountOf, agentTokenFor, sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { signingOnlyAs } from './bound-targets';
+import { ConnectionChangedError, callTarget } from './call-target';
+import { clientCredentialsAccess } from './client-credentials';
 import { credentialFor } from './credentials';
-import { openConnectionSecret } from './crypto';
+import { openConnectionSecret, sealConnectionSecret } from './crypto';
 import { useProvisionerForTests } from './provision/index';
 import { type ProvisionRunInput, runProvisioner } from './provision/run';
 import { needSecondFactor, type Provisioner, refuseSignIn } from './provision/types';
@@ -843,6 +846,45 @@ describe('an OAuth client’s secret (CS-12)', () => {
     expect(openConnectionSecret(t.services.custody, tsId, 'access', stored.accessTokenEnc as string)).toBe(
       `ts-access-${issued + 1}`,
     );
+  });
+
+  it('exchanges nothing, and writes nothing, for a call bound to it before its secret was replaced', async () => {
+    const asked = await rowOf(tsId);
+    const checked = callTarget(asked);
+    // Another client's secret is pasted while a call bound to the first waits, and the token is due.
+    await t.services.db
+      .update(catalogConnections)
+      .set({
+        secretEnc: sealConnectionSecret(t.services.custody, tsId, 'secret', 'tskey-client-another'),
+        credentialVersion: asked.credentialVersion + 1,
+        accessExpiresAt: new Date(Date.now() - 1000),
+      })
+      .where(eq(catalogConnections.id, tsId));
+    try {
+      const replaced = await rowOf(tsId);
+      const sent = tailscale.seen.length;
+      const issued = tailscale.knobs.issued;
+      for (const row of [asked, replaced])
+        await expect(
+          signingOnlyAs({ [tsId]: checked }, () => credentialFor(t.services, row)),
+        ).rejects.toBeInstanceOf(ConnectionChangedError);
+      // The exchange itself reads the connection again and refuses before it asks.
+      await expect(
+        signingOnlyAs({ [tsId]: checked }, () => clientCredentialsAccess(t.services, asked, { force: true })),
+      ).rejects.toBeInstanceOf(ConnectionChangedError);
+      expect(tailscale.seen.length).toBe(sent);
+      expect(tailscale.knobs.issued).toBe(issued);
+      expect(await rowOf(tsId)).toMatchObject({ status: 'active', accessTokenEnc: replaced.accessTokenEnc });
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({
+          secretEnc: asked.secretEnc,
+          credentialVersion: asked.credentialVersion,
+          accessExpiresAt: asked.accessExpiresAt,
+        })
+        .where(eq(catalogConnections.id, tsId));
+    }
   });
 
   it('an agent’s call reads through it with the token', async () => {

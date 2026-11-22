@@ -19,6 +19,8 @@ import {
   HostConsoleCreateBody,
   HostConsoleSession,
   HostCreateEnrollmentBody,
+  HostDiskUsage,
+  HostDiskUsageBody,
   HostEnrollment,
   HostFleet,
   HostGuestActionBody,
@@ -474,6 +476,16 @@ export const hostsEndpoints = {
     summary: 'Ask the server now for its processes, listening ports, services or pending updates.',
     params: S.extend({ kind: HostInspectKind }),
     response: HostInspectResult,
+  }),
+  diskUsage: endpoint({
+    id: 'hosts.diskUsage',
+    method: 'POST',
+    path: '/burrows/:burrow/hosts/servers/:serverId/disk-usage',
+    summary:
+      'Measure what fills one mounted filesystem on a server now, skipping sleeping disks or disks whose sleep state can’t be checked.',
+    params: S,
+    body: HostDiskUsageBody,
+    response: HostDiskUsage,
   }),
   addressChange: endpoint({
     id: 'hosts.addressChange',

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CybexBV/whombat/appliance/helper/pkg/trust"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
 	"github.com/CybexBV/whombat/appliance/manager/internal/update"
 	"github.com/CybexBV/whombat/appliance/release-tools/devtuf"
@@ -368,6 +369,350 @@ func TestOnceFailedReleaseTriedAgain(t *testing.T) {
 		w.Run(400, testworld.PhaseIs(update.Healthy, update.Quarantined))
 		if st := w.State(); st.Phase != update.Healthy || st.Current.ReleaseID != id {
 			t.Fatalf("phase %s current %s", st.Phase, st.Current.ReleaseID)
+		}
+	})
+}
+
+func TestChannelPauseStopsUpdatesKeepsRollbackAndResumes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("paused offers nothing, never downgrades, resumes cleanly", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "1.2.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("initial offer: %s %q %v", dec, why, err)
+		}
+		run(t, w, 300, testworld.PhaseIs(update.Healthy))
+		if _, err := w.Repo.Promote("whombat-20261121.2", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repo := w.Refresh()
+		if !repo.ChannelPaused {
+			t.Fatal("expected paused repo view")
+		}
+		if err := w.Engine.SetChannelPaused(true); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("paused OfferLatest: %s %q %+v %v", dec, why, o, err)
+		}
+		if dec, why, o, err := w.Engine.OfferLatestNow(ctx, repo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("paused OfferLatestNow: %s %q %+v %v", dec, why, o, err)
+		}
+		if st := w.State(); st.Phase != update.Healthy || st.Current.ReleaseID != "whombat-20261121.1" {
+			t.Fatalf("box changed while paused: phase=%s current=%s", st.Phase, st.Current.ReleaseID)
+		}
+		// Resume: now .2 is offered and installed.
+		if _, err := w.Repo.ResumeChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repo = w.Refresh()
+		if repo.ChannelPaused {
+			t.Fatal("expected resumed repo view")
+		}
+		if err := w.Engine.SetChannelPaused(false); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repo, "dev-1", "dev"); err != nil || dec != update.DecisionStarted || o == nil || o.Release.ID() != "whombat-20261121.2" {
+			t.Fatalf("resumed OfferLatest: %s %q %+v %v", dec, why, o, err)
+		}
+		run(t, w, 300, testworld.PhaseIs(update.Healthy))
+		if st := w.State(); st.Current.ReleaseID != "whombat-20261121.2" {
+			t.Fatalf("current %s", st.Current.ReleaseID)
+		}
+		// Pausing after installing .2 never downgrades back to .1.
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, _, o, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("pause after .2 offered %s %+v %v", dec, o, err)
+		}
+		if st := w.State(); st.Phase != update.Healthy || st.Current.ReleaseID != "whombat-20261121.2" {
+			t.Fatalf("box downgraded on pause: phase=%s current=%s", st.Phase, st.Current.ReleaseID)
+		}
+	})
+
+	t.Run("staged candidate is held while paused and proceeds after resume", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		askFirst(t, w, true)
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("offer: %s %q %v", dec, why, err)
+		}
+		run(t, w, 300, waitsForOwner("whombat-20261121.1"))
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		w.Refresh()
+		if err := w.Engine.SetChannelPaused(true); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Engine.Step(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if st := w.State(); st.Candidate == nil || st.Candidate.Deferral == nil || st.Candidate.Deferral.Waiting != "hold" {
+			t.Fatalf("expected candidate held on pause: %+v", st.Candidate)
+		}
+		if err := w.Engine.Approve("whombat-20261121.1"); !errors.Is(err, update.ErrNotWaiting) {
+			t.Fatalf("approved paused candidate: %v", err)
+		}
+		// Resume: candidate returns to waiting for the owner, then installs on approval.
+		if _, err := w.Repo.ResumeChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		w.Refresh()
+		if err := w.Engine.SetChannelPaused(false); err != nil {
+			t.Fatal(err)
+		}
+		run(t, w, 50, waitsForOwner("whombat-20261121.1"))
+		approve(t, w, "whombat-20261121.1")
+		run(t, w, 300, testworld.PhaseIs(update.Healthy))
+		if st := w.State(); st.Current.ReleaseID != "whombat-20261121.1" {
+			t.Fatalf("current %s", st.Current.ReleaseID)
+		}
+	})
+
+	t.Run("rollback to the release before still works while paused", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("first offer: %s %q %v", dec, why, err)
+		}
+		run(t, w, 300, testworld.PhaseIs(update.Healthy))
+		bad := devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "1.2.0-bad")
+		bad.RuntimeHealth = "bad"
+		publishIn(t, w, "development", bad)
+		if _, err := w.Repo.Promote("whombat-20261121.2", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("bad offer: %s %q %v", dec, why, err)
+		}
+		// Let activation start, then pause the channel before verification finishes: rollback to .1 must still succeed.
+		run(t, w, 300, testworld.PhaseIs(update.Verifying))
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		w.Refresh()
+		if err := w.Engine.SetChannelPaused(true); err != nil {
+			t.Fatal(err)
+		}
+		run(t, w, 500, testworld.PhaseIs(update.RolledBack))
+		if st := w.State(); st.Current.ReleaseID != "whombat-20261121.1" || !st.ChannelPaused {
+			t.Fatalf("after rollback while paused: current=%s paused=%v", st.Current.ReleaseID, st.ChannelPaused)
+		}
+	})
+
+	t.Run("older channel role version or wrong channel never replaces a newer offer, even after restart", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoOld := w.Refresh()
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, repoOld, "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("offer .1: %s %q %v", dec, why, err)
+		}
+
+		// Publish and offer newer fix .2 at a higher channel role version.
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "1.2.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.2", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoNew := w.Refresh()
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repoNew, "dev-1", "dev"); err != nil || dec != update.DecisionStarted || o == nil || o.Release.ID() != "whombat-20261121.2" {
+			t.Fatalf("offer .2: %s %q %+v %v", dec, why, o, err)
+		}
+		before := w.State()
+
+		// Re-offering the older verified repo (both OfferLatest and OfferLatestNow) changes nothing.
+		for _, nowOffer := range []bool{false, true} {
+			var (
+				dec update.Decision
+				why string
+				o   *update.Offered
+				err error
+			)
+			if nowOffer {
+				dec, why, o, err = w.Engine.OfferLatestNow(ctx, repoOld, "dev-1", "dev")
+			} else {
+				dec, why, o, err = w.Engine.OfferLatest(ctx, repoOld, "dev-1", "dev")
+			}
+			if err != nil || dec != update.DecisionNoop || o != nil {
+				t.Fatalf("stale offer (now=%v): dec=%s why=%q o=%+v err=%v", nowOffer, dec, why, o, err)
+			}
+			after := w.State()
+			if after.JournalSeq != before.JournalSeq || after.Candidate == nil || after.Candidate.Tuple.ReleaseID != "whombat-20261121.2" {
+				t.Fatalf("stale offer mutated state (now=%v): seq=%d (was %d) cand=%+v", nowOffer, after.JournalSeq, before.JournalSeq, after.Candidate)
+			}
+		}
+
+		// Metadata from another channel (development) is refused while following production.
+		repoDev, err := w.TUF.RefreshIn(ctx, "development")
+		if err != nil {
+			t.Fatalf("refresh development: %v", err)
+		}
+		if dec, why, o, err := w.Engine.OfferLatestNow(ctx, repoDev, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("wrong-channel offer: dec=%s why=%q o=%+v err=%v", dec, why, o, err)
+		}
+		if after := w.State(); after.JournalSeq != before.JournalSeq {
+			t.Fatalf("wrong-channel offer mutated journal seq %d -> %d", before.JournalSeq, after.JournalSeq)
+		}
+
+		// After reloading the Engine from the journal (simulated manager restart), the stale role version is still rejected.
+		w.NewEngine()
+		if dec, why, o, err := w.Engine.OfferLatestNow(ctx, repoOld, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("stale offer after restart: dec=%s why=%q o=%+v err=%v", dec, why, o, err)
+		}
+		if after := w.State(); after.JournalSeq != before.JournalSeq || after.Candidate.Tuple.ReleaseID != "whombat-20261121.2" {
+			t.Fatalf("stale offer after restart mutated state: seq=%d cand=%+v", after.JournalSeq, after.Candidate)
+		}
+	})
+
+	t.Run("zero or missing channel role version is stale once a version is recorded", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Repo.PauseChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoPaused := w.Refresh()
+		if changed, applied, err := w.Engine.SyncChannelPause(repoPaused); err != nil || !changed || !applied {
+			t.Fatalf("SyncChannelPause(paused): changed=%v applied=%v err=%v", changed, applied, err)
+		}
+		if !w.State().ChannelPaused {
+			t.Fatal("expected ChannelPaused after SyncChannelPause")
+		}
+		// Resume in repo so an unpaused view exists, then zero/negate its ChannelVersion to simulate missing version metadata.
+		if _, err := w.Repo.ResumeChannel("production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoResumed := w.Refresh()
+		before := w.State()
+		for _, badVer := range []int64{0, -1} {
+			zeroRepo := *repoResumed
+			zeroRepo.ChannelVersion = badVer
+			if changed, applied, err := w.Engine.SyncChannelPause(&zeroRepo); err != nil || changed || applied {
+				t.Fatalf("SyncChannelPause(version=%d): changed=%v applied=%v err=%v", badVer, changed, applied, err)
+			}
+			if dec, why, o, err := w.Engine.OfferLatest(ctx, &zeroRepo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || why != "stale channel metadata" || o != nil {
+				t.Fatalf("OfferLatest(version=%d): dec=%s why=%q o=%+v err=%v", badVer, dec, why, o, err)
+			}
+			if dec, why, o, err := w.Engine.OfferLatestNow(ctx, &zeroRepo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || why != "stale channel metadata" || o != nil {
+				t.Fatalf("OfferLatestNow(version=%d): dec=%s why=%q o=%+v err=%v", badVer, dec, why, o, err)
+			}
+			after := w.State()
+			if !after.ChannelPaused || after.JournalSeq != before.JournalSeq || after.Candidate != nil {
+				t.Fatalf("version=%d mutated state: paused=%v seq=%d (was %d) cand=%+v", badVer, after.ChannelPaused, after.JournalSeq, before.JournalSeq, after.Candidate)
+			}
+		}
+		// After restart, version 0 is still rejected; the real resumed version clears the pause.
+		w.NewEngine()
+		zeroRepo := *repoResumed
+		zeroRepo.ChannelVersion = 0
+		if changed, applied, err := w.Engine.SyncChannelPause(&zeroRepo); err != nil || changed || applied || !w.State().ChannelPaused {
+			t.Fatalf("after restart version=0 cleared pause: changed=%v applied=%v paused=%v err=%v", changed, applied, w.State().ChannelPaused, err)
+		}
+		if changed, applied, err := w.Engine.SyncChannelPause(repoResumed); err != nil || !changed || !applied || w.State().ChannelPaused {
+			t.Fatalf("real resumed version failed: changed=%v applied=%v paused=%v err=%v", changed, applied, w.State().ChannelPaused, err)
+		}
+	})
+
+	t.Run("withdrawing a candidate without pausing retires waiting, retryable failed, and queued releases", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		askFirst(t, w, true)
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("offer .1: %s %q %v", dec, why, err)
+		}
+		run(t, w, 300, waitsForOwner("whombat-20261121.1"))
+		approve(t, w, "whombat-20261121.1")
+		run(t, w, 300, testworld.PhaseIs(update.Healthy))
+
+		// Promote .2, let it stage and wait for owner approval.
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "1.2.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.2", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, w.Refresh(), "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("offer .2: %s %q %v", dec, why, err)
+		}
+		run(t, w, 300, waitsForOwner("whombat-20261121.2"))
+
+		// Withdraw .2 without pausing. Next refresh retires .2 immediately with zero drains.
+		drainsBefore, _ := w.Runtime.Calls()
+		if err := w.Repo.InChannel("production"); err != nil {
+			t.Fatal(err)
+		}
+		w.Repo.RemoveTarget(trust.ReleaseTarget("whombat-20261121.2"))
+		if err := w.Repo.Publish(); err != nil {
+			t.Fatal(err)
+		}
+		_ = w.Repo.InChannel("")
+
+		repo := w.Refresh()
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("OfferLatest after withdrawal: %s %q %+v %v", dec, why, o, err)
+		}
+		st := w.State()
+		if st.Phase != update.Failed || st.Candidate == nil || st.Candidate.Failure == nil ||
+			!st.Candidate.Failure.Blocked || st.Candidate.Failure.Code != "not_assigned" {
+			t.Fatalf("expected retired withdrawn .2: phase=%s cand=%+v", st.Phase, st.Candidate)
+		}
+		if err := w.Engine.Approve("whombat-20261121.2"); !errors.Is(err, update.ErrNotWaiting) {
+			t.Fatalf("approved withdrawn candidate: %v", err)
+		}
+		idle(t, w, time.Hour)
+		if drainsAfter, _ := w.Runtime.Calls(); drainsAfter != drainsBefore {
+			t.Fatalf("withdrawn .2 drained %d time(s)", drainsAfter-drainsBefore)
+		}
+		// Calling OfferLatest again is idempotent (no extra journal write).
+		seqAfter := w.State().JournalSeq
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repo, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("second OfferLatest: %s %q %+v %v", dec, why, o, err)
+		}
+		if w.State().JournalSeq != seqAfter {
+			t.Fatalf("repeated OfferLatest wrote journal: %d -> %d", seqAfter, w.State().JournalSeq)
+		}
+
+		// Also verify a retryable Failed candidate and a queued Pending release are retired when withdrawn.
+		st = w.State()
+		st.Candidate.Failure = &update.Failure{Stage: update.Downloading, Code: "no_space", Message: "retryable", Blocked: false, NextRetry: w.Clock.Now()}
+		st.Pending = &update.PendingAssignment{Channel: "production", Release: st.Candidate.Release}
+		if err := w.Engine.J.Save(st); err != nil {
+			t.Fatal(err)
+		}
+		if retired, err := w.Engine.RetireWithdrawn(ctx, repo, ""); err != nil || !retired {
+			t.Fatalf("RetireWithdrawn(retryable Failed + Pending): retired=%v err=%v", retired, err)
+		}
+		st = w.State()
+		if st.Pending != nil || st.Phase != update.Failed || !st.Candidate.Failure.Blocked || st.Candidate.Failure.Code != "not_assigned" {
+			t.Fatalf("expected retryable Failed and Pending retired: pending=%+v phase=%s fail=%+v", st.Pending, st.Phase, st.Candidate.Failure)
 		}
 	})
 }

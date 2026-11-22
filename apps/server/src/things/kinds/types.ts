@@ -21,6 +21,7 @@ import type { ConnectionViewer } from '../../connections/store';
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
+import type { ThingQuiet } from '../quiet/store';
 import type { KindNotice } from '../quiet/types';
 import type { MachineFigures, ResolvedMachine } from '../runs-on';
 import type { PageRange, RawPoint } from '../series';
@@ -44,6 +45,8 @@ export interface KindCtx {
   disk: { pct: RawPoint[]; gb: RawPoint[] };
   /** Who reads the page (`siblingThing`: only connections they see, SD-S08); absent in pure tests. */
   viewer?: ConnectionViewer;
+  /** Which checks are on or off for this thing, so opt-in checks don't fetch while off; absent in pure tests. */
+  quiet?: ThingQuiet;
 }
 
 export interface KindView {

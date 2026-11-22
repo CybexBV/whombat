@@ -47,6 +47,7 @@ import {
   haSeenNotices,
   haSkipped,
   haSlots,
+  haVerdict,
   haView,
   healthDone,
   homeAssistantGlance,
@@ -716,5 +717,24 @@ describe('Home Assistant’s Summary in slots', () => {
     expect(addedThisWeek([new Date('2026-10-20T00:00:00Z'), new Date('2026-09-01T00:00:00Z')], now)).toBe(1);
     expect(addedThisWeek([null, null], now)).toBeNull();
     expect(addedThisWeek([], now)).toBeNull();
+  });
+
+  it('gives a calm verdict and contextual Ask chips on key cards', async () => {
+    const s = await read(fakeHaState());
+    const parts = houseParts();
+    const view = haView(s, ct131, ctxOf({ now: HOUSE_NOW }), parts);
+    expect(view.verdict).toContain('integration');
+    expect(view.panels.find((p) => p.id === 'inventory')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(view.panels.find((p) => p.id === 'controls')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+    expect(view.panels.find((p) => p.id === 'backups')?.ask?.questions.length).toBeGreaterThanOrEqual(2);
+
+    const healthy = {
+      ...s,
+      entries: (s.entries ?? []).map((e) => ({ ...e, state: 'loaded' })),
+    };
+    const calm = haVerdict(healthy, parts.house);
+    expect(calm).toContain('171');
+    expect(calm).toContain('1 person is home');
+    expect(haVerdict({ ...healthy, recoveryMode: true }, null)).toContain('recovery mode');
   });
 });

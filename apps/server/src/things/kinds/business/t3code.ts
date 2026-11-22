@@ -24,6 +24,7 @@ import {
   type ThingPageRow,
 } from '@whombat/core';
 import { externalEffect } from '../../../commit/scope';
+import { ConnectionChangedError } from '../../../connections/call-target';
 import { connectionsFor } from '../../../connections/pool';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { ApiError, conflict, forbidden } from '../../../lib/errors';
@@ -643,7 +644,9 @@ export async function callT3(
   const res = await externalEffect(
     label,
     () => service.pool.call(service.target(row, url), tool, args),
-    label === 'things.read' ? { idempotent: true } : { refused: signedOut },
+    label === 'things.read'
+      ? { idempotent: true }
+      : { refused: (err) => signedOut(err) || err instanceof ConnectionChangedError },
   );
   if (res.isError) throw failureOf(res.text);
   if (res.structured) return res.structured;

@@ -5,7 +5,7 @@
  * failed.** I’m looking into it.” Pure; web and phone share it.
  */
 import type { DoneTodayItem, HomeChat, HomeOverview, NeedsYouItem, ThingSummary } from '@whombat/core';
-import { zonedParts } from '@whombat/core/text';
+import { daysAgo, formatClock, formatDate, zonedParts } from '@whombat/core/text';
 
 /** By the local hour: morning from 05:00, afternoon from 12:00, evening from 18:00 (and through the night). */
 export function greetingFor(now: Date | number, timeZone: string): string {
@@ -61,6 +61,49 @@ export type StatusInput = Pick<HomeOverview, 'summary'> & {
   doneToday?: readonly Pick<DoneTodayItem, 'at' | 'fixed'>[] | undefined;
 };
 
+const ALL_GOOD_WORD = 'All good';
+
+function needsYouPhrase(count: number): string {
+  return `${count} ${count === 1 ? 'thing needs' : 'things need'} you`;
+}
+
+function offlinePhrase(count: number): string {
+  return `${count} ${count === 1 ? 'thing is' : 'things are'} offline`;
+}
+
+function notWorkingPhrase(count: number): string {
+  return `${count} ${count === 1 ? 'thing isn’t' : 'things aren’t'} working`;
+}
+
+function keepingAnEyePhrase(count: number): string {
+  return `keeping an eye on ${count} ${count === 1 ? 'thing' : 'things'}`;
+}
+
+interface StatusClassification {
+  needsYou: number;
+  problems: number;
+  serious: NonNullable<StatusInput['needsYou']>[number] | undefined;
+  offline: Pick<ThingSummary, 'name' | 'status'>[];
+  broken: Pick<ThingSummary, 'name' | 'status'>[];
+  tone: StatusTone;
+}
+
+/** Shared severity classification behind both `homeStatus` and `homeWidgetStatus` so the two never disagree. */
+function classifyStatus(overview: StatusInput): StatusClassification {
+  const needsYou = Math.max(0, overview.summary.needsYou);
+  const problems = Math.max(0, overview.summary.problems);
+  const serious = overview.needsYou?.find(
+    (i) =>
+      i.severity === 'bad' && i.kind !== 'approval' && i.kind !== 'question' && i.research?.state !== 'fixed',
+  );
+  const things = overview.things ?? [];
+  const offline = things.filter((t) => t.status === 'offline');
+  const broken = things.filter((t) => t.status === 'bad');
+  const tone: StatusTone =
+    serious || offline.length || broken.length ? 'bad' : needsYou > 0 || problems > 0 ? 'warn' : 'ok';
+  return { needsYou, problems, serious, offline, broken, tone };
+}
+
 /**
  * The first screen's answer to “Is everything OK, and do you need me?” (status-line.md), true to the worst state:
  *
@@ -75,14 +118,10 @@ export type StatusInput = Pick<HomeOverview, 'summary'> & {
  * `timeZone` tells a night's fix (before 07:00) from the day's.
  */
 export function homeStatus(overview: StatusInput, options: { timeZone?: string } = {}): HomeStatus {
-  const { needsYou, problems } = overview.summary;
+  const { needsYou, problems, serious, offline, broken, tone } = classifyStatus(overview);
   // The default chat's title is the assistant's own name: “I’m working on Neo” says nothing.
   const title = overview.chats?.find((c) => c.state === 'working' && !c.default)?.title;
   const doing = title ? workingPhrase(title) : null;
-  const serious = overview.needsYou?.find(
-    (i) =>
-      i.severity === 'bad' && i.kind !== 'approval' && i.kind !== 'question' && i.research?.state !== 'fixed',
-  );
   if (serious) {
     const research = serious.research;
     // Once it found out, its words say what is wrong better than the alert's (look-research.md LR-09).
@@ -94,31 +133,28 @@ export function homeStatus(overview: StatusInput, options: { timeZone?: string }
     if (research?.state === 'looking') parts.push({ text: ' I’m looking into it.' });
     if (research?.state === 'fixing') parts.push({ text: ' I’m fixing it.' });
     parts.push(...needYou(needsYou - 1, 'other'));
-    return { parts, tone: 'bad', ...(serious.id ? { itemId: serious.id } : {}) };
+    return { parts, tone, ...(serious.id ? { itemId: serious.id } : {}) };
   }
-  const things = overview.things ?? [];
-  const offline = things.filter((t) => t.status === 'offline');
-  const broken = things.filter((t) => t.status === 'bad');
   if (offline.length || broken.length) {
     const text = offline.length
       ? offline.length === 1
         ? `${offline[0]?.name} is offline.`
-        : `${offline.length} things are offline.`
+        : `${offlinePhrase(offline.length)}.`
       : broken.length === 1
         ? `Something’s wrong with ${broken[0]?.name}.`
         : `Something’s wrong with ${broken.length} things.`;
-    return { parts: [{ text, strong: true }, ...needYou(needsYou)], tone: 'bad' };
+    return { parts: [{ text, strong: true }, ...needYou(needsYou)], tone };
   }
   if (needsYou > 0) {
-    const count = `${needsYou} ${needsYou === 1 ? 'thing needs' : 'things need'} you`;
+    const count = needsYouPhrase(needsYou);
     return {
       parts: [{ text: count, strong: true }, { text: doing ? `, and ${lowerFirst(doing)}.` : '.' }],
-      tone: 'warn',
+      tone,
     };
   }
   if (problems > 0) {
-    const watched = `I’m keeping an eye on ${problems} ${problems === 1 ? 'thing' : 'things'}.`;
-    return { parts: [{ text: `Nothing needs you. ${watched}` }], tone: 'warn' };
+    const watched = `I’m ${keepingAnEyePhrase(problems)}.`;
+    return { parts: [{ text: `Nothing needs you. ${watched}` }], tone };
   }
   const fixes = (overview.doneToday ?? []).filter((d) => d.fixed);
   const said = [
@@ -128,9 +164,96 @@ export function homeStatus(overview: StatusInput, options: { timeZone?: string }
     doing ? `${doing}.` : null,
   ].filter(Boolean);
   return {
-    parts: [{ text: `All good. ${said.length ? said.join(' ') : 'Nothing needs you.'}` }],
-    tone: 'ok',
+    parts: [{ text: `${ALL_GOOD_WORD}. ${said.length ? said.join(' ') : 'Nothing needs you.'}` }],
+    tone,
   };
+}
+
+/** Default words the home-screen widget shows before the app has saved a status, or after sign-out. */
+export const WIDGET_EMPTY_COPY = {
+  boxName: 'Whombat',
+  status: 'Open Whombat',
+  asOf: 'Tap to see status',
+} as const;
+
+/**
+ * Calm status for the phone's home-screen widget, built from the same rules as `homeStatus` so the two never disagree.
+ * Shows nothing private beyond the box's name and the count: no thread titles, alert titles or service names.
+ */
+export interface HomeWidgetStatus {
+  /** The Whombat's name (“Home”), or “Whombat” when it has none. */
+  boxName: string;
+  /** Short plain status without private names: “All good”, “1 thing needs you”, … */
+  status: string;
+  /** Same tone as `homeStatus`. */
+  tone: StatusTone;
+  /** IANA time zone used when formatting `updatedAt` at draw time. */
+  timeZone: string;
+  /** Epoch ms of when the app last had this status (formatted on draw, never stored as a label). */
+  updatedAt: number;
+}
+
+export interface WidgetStatusOptions {
+  /** The Whombat's name; falls back to “Whombat”. */
+  boxName?: string | null;
+  /** IANA time zone for formatting `updatedAt`. */
+  timeZone: string;
+  /** When the status was taken (`overview.generatedAt`, else `now`). */
+  at?: Date | string | number | null;
+  /** Fallback clock when `at` and `overview.generatedAt` are missing or invalid. */
+  now?: Date | number;
+}
+
+function resolveWidgetDate(input: Date | string | number | null | undefined, fallback: Date): Date {
+  if (input == null) return fallback;
+  const date = input instanceof Date ? input : new Date(input);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+function capitalizeFirst(text: string): string {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+export function homeWidgetStatus(
+  overview: StatusInput & { generatedAt?: string },
+  options: WidgetStatusOptions,
+): HomeWidgetStatus {
+  const { needsYou, problems, offline, broken, tone } = classifyStatus(overview);
+  let status: string;
+  if (tone === 'bad') {
+    if (needsYou > 0) status = needsYouPhrase(needsYou);
+    else if (offline.length > 0) status = offlinePhrase(offline.length);
+    else status = notWorkingPhrase(Math.max(1, broken.length));
+  } else if (tone === 'warn') {
+    if (needsYou > 0) status = needsYouPhrase(needsYou);
+    else status = capitalizeFirst(keepingAnEyePhrase(problems));
+  } else {
+    status = ALL_GOOD_WORD;
+  }
+  const nowDate = resolveWidgetDate(options.now, new Date());
+  const atDate = resolveWidgetDate(options.at ?? overview.generatedAt, nowDate);
+  const boxName = options.boxName?.replace(/\s+/g, ' ').trim() || WIDGET_EMPTY_COPY.boxName;
+  return {
+    boxName,
+    status,
+    tone,
+    timeZone: options.timeZone,
+    updatedAt: atDate.getTime(),
+  };
+}
+
+/**
+ * Formats a saved widget status time at draw time: “as of 14:05” today, “as of yesterday 23:50” on the
+ * next calendar day, or “as of 21 Nov” (with the year when it differs) on any other day.
+ */
+export function widgetAsOfLabel(
+  widget: Pick<HomeWidgetStatus, 'updatedAt' | 'timeZone'>,
+  now: Date | number,
+): string {
+  const diff = daysAgo(widget.updatedAt, now, widget.timeZone);
+  if (diff === 0) return `as of ${formatClock(widget.updatedAt, widget.timeZone)}`;
+  if (diff === 1) return `as of yesterday ${formatClock(widget.updatedAt, widget.timeZone)}`;
+  return `as of ${formatDate(widget.updatedAt, widget.timeZone, { now })}`;
 }
 
 /**

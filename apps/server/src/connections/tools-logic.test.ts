@@ -392,6 +392,39 @@ describe('the tier of a call (CX-20, CX-31)', () => {
       'can',
     );
   });
+
+  it('asks for secret-returning reads even on Look only connections, while ordinary reads stay allowed', () => {
+    const req = tool('request', 'can', 'write', 'request');
+    const cases: [string, string][] = [
+      ['qbittorrent', '/api/v2/app/preferences'],
+      ['qbittorrent', '/api/v2/app/cookies'],
+      ['jellyfin', '/System/Configuration/Network'],
+      ['jellyfin', '/Plugins/p1/Configuration'],
+      ['frigate', '/api/config'],
+      ['frigate', '/api/ffprobe'],
+      ['immich', '/api/system-config'],
+      ['immich', '/api/admin/database-backups/dump.sql.gz'],
+      ['pihole', '/api/teleporter'],
+      ['pihole', '/api/config'],
+      ['pihole', '/api/auth/app'],
+      ['adguard', '/control/tls/status'],
+      ['plex', '/:/prefs'],
+      ['nginx_proxy_manager', '/api/nginx/certificates/1/download'],
+      ['opnsense', '/api/core/backup/download/this'],
+      ['cloudflare', '/client/v4/accounts/a1/cfd_tunnel/t1/token'],
+    ];
+    for (const [id, path] of cases) {
+      for (const level of ['read', 'manage'] as const) {
+        expect(
+          callTier(entry(id), req, { method: 'GET', path }, 'can', level),
+          `${id} ${level} GET ${path}`,
+        ).toMatchObject({ access: 'read', sensitive: true, tier: 'ask', lookOnly: false });
+      }
+    }
+    expect(
+      callTier(entry('qbittorrent'), req, { method: 'GET', path: '/api/v2/sync/maindata' }, 'can', 'read'),
+    ).toMatchObject({ access: 'read', sensitive: false, tier: 'can', lookOnly: false });
+  });
 });
 
 describe('a call’s answer as the agent reads it', () => {

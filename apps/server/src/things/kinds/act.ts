@@ -5,6 +5,7 @@
  * reads go through `read.ts`. Never to delete anything, update or restart the service, or change its settings (SD-02).
  */
 import { externalEffect } from '../../commit/scope';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { signedConnectionFetch } from '../../connections/http';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../../connections/types';
 import { ApiError, conflict, forbidden } from '../../lib/errors';
@@ -36,8 +37,24 @@ export interface ActAnswer {
 }
 
 /**
+ * Whether a write's answer says it was done: a 2xx only. A redirect (to a sign-in page, say, never followed) or any other
+ * answer doesn't, as for a connection's `request` (approved-connection-calls.md APC-01).
+ */
+export function writeDone(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+/** A write `name` answered without saying it was done (a redirect): it may or may not have happened. */
+export function notConfirmed(name: string): ApiError {
+  return new ApiError(
+    'unavailable',
+    `${name} didn’t confirm it. Look again in a moment: it may not have happened.`,
+  );
+}
+
+/**
  * Makes one call as the connection for a button; a refusal or failure is an `ApiError` about `name` (“SABnzbd”) in plain
- * words: needs connecting again (409), refused (403), didn't answer or answered with an error (503).
+ * words: needs connecting again (409), refused (403), didn't answer, answered with an error or didn't confirm it (503).
  */
 export async function actAs(
   services: Services,
@@ -72,7 +89,8 @@ export async function actAs(
             deadlineMs: Math.min(ACT_DEADLINE_MAX_MS, Math.max(1_000, call.deadlineMs ?? ACT_DEADLINE_MS)),
           },
         ),
-      { refused: (err) => err instanceof ConnectionAuthError },
+      // Refused sign-ins and a connection that changed since it was checked send nothing: the action didn't act.
+      { refused: (err) => err instanceof ConnectionAuthError || err instanceof ConnectionChangedError },
     );
   } catch (err) {
     if (err instanceof ConnectionAuthError) throw conflict(`${name} needs you to sign in again first.`);
@@ -87,8 +105,13 @@ export async function actAs(
   }
   if (res.status === 401 || res.status === 403)
     throw forbidden(`${name} refused: Whombat’s account there may not do that.`);
+  if (res.status === 412)
+    throw conflict(
+      `Something else changed in ${name} at the same time, so Whombat didn’t save it. Try again.`,
+    );
   if (res.status >= 400)
     throw new ApiError('unavailable', `${name} answered with an error and didn’t do it.`);
+  if (!writeDone(res.status)) throw notConfirmed(name);
   let json: unknown = null;
   const text = res.body.toString('utf8');
   if (text.trim()) {

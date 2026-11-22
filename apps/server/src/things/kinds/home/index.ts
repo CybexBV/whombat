@@ -8,6 +8,7 @@ import type { KindModule } from '../registry';
 import { ACCESS_KIND } from './access';
 import { ADGUARD_KIND, PIHOLE_KIND } from './dns';
 import { ESPHOME_KIND } from './esphome';
+import { FRIGATE_KIND } from './frigate';
 import { CONTROLS_LIVE_S, HA_CONTROL_ACTIONS } from './ha-controls';
 import { PROTECT_KIND } from './protect';
 
@@ -19,6 +20,7 @@ export const HOME_KINDS: Record<string, KindModule> = {
     liveS: CONTROLS_LIVE_S,
   },
   esphome: ESPHOME_KIND,
+  frigate: FRIGATE_KIND,
   unifi_protect: PROTECT_KIND,
   unifi_access: ACCESS_KIND,
   // Their history is the services' own last 24 hours (SD-S21).

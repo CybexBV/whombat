@@ -891,6 +891,62 @@ export function checkItem(c: PaperlessCheck, now: Date): ThingPageItem {
   };
 }
 
+/** Questions for the In the inbox card. */
+export function paperlessInboxQuestions(s: PaperlessSnapshot): string[] {
+  const out: string[] = [];
+  if (s.failed.some((f) => !duplicate(f))) out.push('Why did those imports fail in Paperless-ngx?');
+  if ((s.inboxCount ?? 0) > 0) out.push('What is waiting in my Paperless inbox?');
+  out.push('What documents came in this week?', 'Which documents have no correspondent yet?');
+  return out.slice(0, 3);
+}
+
+/** Questions for the In Paperless card. */
+export function paperlessLibraryQuestions(): string[] {
+  return [
+    'Who sent me the most documents?',
+    'Which tags are used the most?',
+    'How much space do my documents take?',
+  ];
+}
+
+/** Questions for Paperless’s checks card. */
+export function paperlessChecksQuestions(s: PaperlessSnapshot): string[] {
+  const out: string[] = [];
+  if ((s.checks ?? []).some((c) => c.status === 'ERROR'))
+    out.push('How do I fix Paperless-ngx’s failing check?');
+  out.push('When did the sanity check last run?', 'Is Paperless-ngx’s classifier working?');
+  return out.slice(0, 3);
+}
+
+/** One calm sentence for the head while Paperless-ngx has no active problem. */
+export function paperlessVerdict(s: PaperlessSnapshot): string {
+  const badCheck = (s.checks ?? []).find((c) => c.status === 'ERROR' && c.key !== 'classifier');
+  if (badCheck)
+    return clip(`Paperless-ngx’s ${CHECK_LABEL[badCheck.key].toLowerCase()} check has a problem.`, 200);
+  const realFailed = s.failed.filter((f) => !duplicate(f)).length;
+  if (realFailed > 0) return clip(`${plural(realFailed, 'import')} failed in Paperless-ngx.`, 200);
+  if (s.inboxCount !== null && s.total !== null) {
+    if (s.inboxCount === 0)
+      return clip(
+        `Paperless-ngx is fine: ${plural(s.total, 'document')} filed and nothing waiting in the inbox.`,
+        200,
+      );
+    return clip(
+      `Paperless-ngx is fine: ${plural(s.inboxCount, 'document')} in the inbox and ${plural(s.total, 'document')} in all.`,
+      200,
+    );
+  }
+  if (s.inboxCount !== null)
+    return clip(
+      s.inboxCount === 0
+        ? 'Paperless-ngx is fine: nothing is waiting in the inbox.'
+        : `Paperless-ngx is fine: ${plural(s.inboxCount, 'document')} waiting in the inbox.`,
+      200,
+    );
+  if (s.total !== null) return clip(`Paperless-ngx is fine: ${plural(s.total, 'document')} filed.`, 200);
+  return 'Paperless-ngx is running fine.';
+}
+
 /** In the inbox (Live): what waits for the person to sort, newest first, with how many and what is importing. */
 function inboxLive(input: PaperlessInput) {
   const { snapshot: s, url, now } = input;
@@ -906,6 +962,7 @@ function inboxLive(input: PaperlessInput) {
     id: 'inbox',
     title: 'In the inbox',
     ...(meta.length ? { meta: meta.join(' · ') } : {}),
+    ask: { questions: paperlessInboxQuestions(s) },
     // Small thumbnails: a document's page says little at a row's size.
     shape: 'square',
     link: { kind: 'url', label: 'Open the inbox', url: `${url}/documents?sort=added&reverse=1` },
@@ -945,7 +1002,12 @@ function holdings(input: PaperlessInput, week: number | null) {
     items.push(countLine({ id: key, title, icon, value: thousands(n), url: `${url}/${path}` }));
   }
   if (!items.length) return null;
-  return inventory({ id: 'library', title: 'In Paperless', items });
+  return inventory({
+    id: 'library',
+    title: 'In Paperless',
+    ask: { questions: paperlessLibraryQuestions() },
+    items,
+  });
 }
 
 /** Documents added per day this week, from what was added in the last 15 days; the change once both weeks were read. */
@@ -1054,6 +1116,7 @@ export function paperlessView(input: PaperlessInput): KindView {
       place: 'main',
       title: 'Paperless’s checks',
       ...(s.version ? { meta: `Version ${s.version}` } : {}),
+      ask: { questions: paperlessChecksQuestions(s) },
       buttons: [sanityButton(input.buttons)],
       items: s.checks.map((c) => checkItem(c, input.now)),
     });
@@ -1096,6 +1159,7 @@ export function paperlessView(input: PaperlessInput): KindView {
     open: { label: 'Open Paperless-ngx', url },
     actions: [],
     readAt: s.readAt,
+    verdict: paperlessVerdict(s),
     suggestions: [
       'Documents added this month',
       'Documents without a correspondent',

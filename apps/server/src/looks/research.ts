@@ -444,6 +444,7 @@ export const startResearch = defineCommand({
       coalesce: false,
       own: true,
       messageId: posted.id,
+      background: true,
     });
     // Nobody to look into it for here: nothing is posted either (the commit rolls back).
     if (!woken) throw notFound('Chat');
@@ -886,6 +887,7 @@ export const retryResearch = defineCommand({
       coalesce: false,
       own: true,
       messageId: opening?.id ?? row.threadRootId,
+      background: !row.askedById,
     });
     if (!woken) return null;
     await tx

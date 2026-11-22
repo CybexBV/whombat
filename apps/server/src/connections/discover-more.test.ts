@@ -36,6 +36,19 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
       },
     },
   },
+  qbittorrent: {
+    port: 8080,
+    answers: {
+      '/': {
+        status: 200,
+        body: '<!DOCTYPE html><html><head><title>qBittorrent Web UI</title></head><body></body></html>',
+      },
+      '/api/v2/app/version': {
+        status: 403,
+        body: 'Forbidden',
+      },
+    },
+  },
   nzbhydra: {
     port: 5076,
     answers: {
@@ -53,6 +66,17 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
         status: 200,
         headers: { 'x-plex-protocol': '1.0', 'content-type': 'text/xml;charset=utf-8' },
         body: '<?xml version="1.0" encoding="UTF-8"?>\n<MediaContainer size="0" claimed="1" machineIdentifier="3f9c2a7d1e" version="1.41.3.9314-a0bfb8370">\n</MediaContainer>',
+      },
+    },
+  },
+  jellyfin: {
+    port: 8096,
+    version: '10.10.3',
+    answers: {
+      '/System/Info/Public': {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: '{"LocalAddress":"http://10.100.0.20:8096","ServerName":"Home Jellyfin","Version":"10.10.3","ProductName":"Jellyfin Server","OperatingSystem":"","Id":"8a1e2f3d4c5b6a708192a3b4c5d6e7f8","StartupWizardCompleted":true}',
       },
     },
   },
@@ -102,6 +126,21 @@ const SERVICES: Record<string, { port: number; answers: Record<string, Answer>; 
     port: 6052,
     version: '2026.6.5',
     answers: { '/version': { status: 200, body: '{"version":"2026.6.5"}' } },
+  },
+  frigate: {
+    port: 5000,
+    version: '0.15.0-6cb5cfb',
+    answers: {
+      '/': {
+        status: 200,
+        body: '<!doctype html><html><head><title>Frigate</title></head><body></body></html>',
+      },
+      '/api/stats': {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: '{"cameras":{},"detectors":{},"service":{"version":"0.15.0-6cb5cfb"}}',
+      },
+    },
   },
   pterodactyl: {
     port: 443,

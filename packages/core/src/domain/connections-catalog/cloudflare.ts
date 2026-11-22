@@ -97,7 +97,7 @@ export const entry = {
     readPaths: [{ method: 'POST', path: '^/client/v4/graphql/?$' }],
   },
   guide:
-    'Cloudflare. Signed in with Cloudflare, use its own tools (they search and call the whole API). With a token, API v4 under /client/v4/. Answers are {success, errors[], messages[], result, result_info}; lists page with ?page=&per_page= (result_info.total_count), a few use ?cursor=. Find ids first: GET /client/v4/accounts, GET /client/v4/zones?name=example.com. Zone: /zones/{zone_id}/dns_records (GET, POST, PATCH /{id}), /settings, /rulesets, POST /purge_cache {"files":[…]} or {"purge_everything":true}. Account: /accounts/{account_id}/workers/scripts, /pages/projects/{name}/deployments, /r2/buckets, /storage/kv/namespaces, /d1/database, /cfd_tunnel, /members, /access/apps. Analytics: POST /client/v4/graphql, read-only GraphQL (viewer { zones(filter:{zoneTag:…}) { httpRequestsAdaptiveGroups(…) } }), 300 queries per 5 min. Overall 1 200 requests per 5 min; after a 429 wait 5 minutes. 403 (code 9109 or 10000) means the token lacks that permission or that zone or account: ask the person to add it to the token. Account tokens (cfat_) can’t use /user/…; check one with GET /accounts/{account_id}/tokens/verify, a user token with GET /user/tokens/verify. Always asks a person: deleting anything, creating, changing or rolling API tokens, adding or changing account members, Zero Trust Access apps, policies, groups, service tokens and identity providers, and creating tunnels or changing what they expose.',
+    'Cloudflare. Signed in with Cloudflare, use its own tools (they search and call the whole API). With a token, API v4 under /client/v4/. Answers are {success, errors[], messages[], result, result_info}; lists page with ?page=&per_page= (result_info.total_count), a few use ?cursor=. Find ids first: GET /client/v4/accounts, GET /client/v4/zones?name=example.com. Zone: /zones/{zone_id}/dns_records (GET, POST, PATCH /{id}), /settings, /rulesets, POST /purge_cache {"files":[…]} or {"purge_everything":true}. Account: /accounts/{account_id}/workers/scripts, /pages/projects/{name}/deployments, /r2/buckets, /storage/kv/namespaces, /d1/database, /cfd_tunnel, /members, /access/apps. Analytics: POST /client/v4/graphql, read-only GraphQL (viewer { zones(filter:{zoneTag:…}) { httpRequestsAdaptiveGroups(…) } }), 300 queries per 5 min. Overall 1 200 requests per 5 min; after a 429 wait 5 minutes. 403 (code 9109 or 10000) means the token lacks that permission or that zone or account: ask the person to add it to the token. Account tokens (cfat_) can’t use /user/…; check one with GET /accounts/{account_id}/tokens/verify, a user token with GET /user/tokens/verify. Always asks a person: deleting anything, creating, changing or rolling API tokens, adding or changing account members, Zero Trust Access apps, policies, groups, service tokens and identity providers, and creating tunnels, reading their connector tokens or changing what they expose.',
   sensitive: [
     DELETES_ASK,
     {
@@ -123,6 +123,25 @@ export const entry = {
       methods: ['POST', 'PUT', 'PATCH'],
       path: '^/client/v4/accounts/[^/]+/(cfd_tunnel(/[^/]+(/configurations)?)?|teamnet/routes(/.*)?)/?$',
       reason: 'Creates a tunnel or changes what it exposes',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/client/v4/accounts/[^/]+/cfd_tunnel/[^/]+/token/?$',
+      reason: 'Reads a Cloudflare Tunnel’s secret connector token',
+    },
+  ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/client/v4/zones/[^/]+/(dns_records|dnssec)(/|$)',
+      reason: 'Changes your domain’s DNS, which decides where its websites and mail go',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/client/v4/zones/[^/]+/settings(/|$)',
+      reason: 'Changes how Cloudflare serves your domain',
     },
   ],
   docsUrl: 'https://developers.cloudflare.com/api/',

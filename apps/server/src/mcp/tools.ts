@@ -16,6 +16,11 @@ import type { z } from 'zod';
 import { automationsForAgent } from '../automations/agent-read';
 import { assessesInTurn, NOT_AN_ASSESSMENT, reportAssessment } from '../automations/assessment';
 import { proposeAutomationPlan } from '../automations/plans';
+import {
+  NOT_PROPOSING_ACTIONS,
+  proposeConnectionActions,
+  proposesInTurn,
+} from '../automations/proposed-actions';
 import { automationOpensPrText, automationOwnsPullRequest } from '../automations/workspace';
 import { backupBringBackTool } from '../backups/look/tool';
 import { BROWSER_TOOL_HANDLERS } from '../browser/preview-tool';
@@ -48,6 +53,7 @@ import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
+import { outsidersFileIds } from '../files/access';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
 import { startGuide } from '../guides/commands';
 import { doneInputFor, reportDoneCommand } from '../home/done';
@@ -67,6 +73,7 @@ import { canvasDetail, readableCanvas } from '../read/work-views';
 import { checkoutBlocker, startRunRefusalText } from '../runtime/checkout-access';
 import { completionEvidence } from '../runtime/completion-evidence';
 import { type DispatchRow, dispatchCheckout } from '../runtime/context';
+import { forOutsiders, forPersonTurn } from '../runtime/outsiders-view';
 import { outsidersTurn } from '../runtime/person';
 import { scheduleTool } from '../schedules/tool';
 import type { Services } from '../services';
@@ -291,6 +298,12 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     // An assessor replies only in its report's thread, inert (docs/decisions/feedback.md FB-21).
     if (ctx.dispatch.trigger === 'feedback') return assessorReplyTool(ctx, input);
     const root = await loadMessageRow(ctx.services.db, input.messageId);
+    if (outsidersTurn(ctx.dispatch))
+      keepInTurn(
+        ctx,
+        root?.conversationId ?? ctx.dispatch.conversationId,
+        root?.threadRootId ?? root?.id ?? null,
+      );
     if (!root || root.burrowId !== ctx.burrowId) throw notFound('Message');
     keepInTurn(ctx, root.conversationId, root.threadRootId ?? root.id);
     // It can't upload, so a file it names could only be one it didn't make here.
@@ -319,8 +332,11 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
 
   read_conversation: async (ctx, input) => {
     // A thread named with the wrong room: the answer names the right one.
-    if (input.threadRootId) await refuseThreadElsewhere(ctx, input.conversationId, input.threadRootId);
+    const outside = outsidersTurn(ctx.dispatch);
+    if (input.threadRootId && !outside)
+      await refuseThreadElsewhere(ctx, input.conversationId, input.threadRootId);
     const root = input.threadRootId ? await loadMessageRow(ctx.services.db, input.threadRootId) : null;
+    if (outside) keepInTurn(ctx, input.conversationId, root?.threadRootId ?? root?.id ?? null);
     const conversation = await readableBy(
       ctx,
       input.conversationId,
@@ -340,13 +356,21 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
         })
       ).messages;
     }
+    // An automation run's outsiders' turn is told only of the files handed over from what started its run, and reads an
+    // approval card, and what a step told the person of the calls they approved, only as a line.
+    if (outside)
+      messages = await forOutsiders(ctx.services.db, messages, {
+        files: await outsidersFileIds(ctx.services.db, ctx.dispatch),
+        reportRootId: ctx.dispatch.trigger === 'feedback' ? ctx.dispatch.threadRootId : null,
+      });
+    else messages = await forPersonTurn(ctx.services.db, messages, true);
     return {
       status: 'ok',
       conversation: {
         id: conversation.id,
         kind: conversation.kind,
-        title: conversation.title,
-        topic: conversation.topic,
+        title: outside ? '' : conversation.title,
+        topic: outside ? '' : conversation.topic,
       },
       messages,
     };
@@ -552,6 +576,13 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
       line: r.line,
     }));
   },
+  propose_connection_actions: async (ctx, input) => {
+    if (!(await proposesInTurn(ctx.services.db, ctx.agentId, ctx.dispatch.id)))
+      throw forbidden(NOT_PROPOSING_ACTIONS);
+    return run(ctx, proposeConnectionActions, { dispatchId: ctx.dispatch.id, input }, (r) => ({
+      count: r.count,
+    }));
+  },
   // Whombat Feedback's assessor (feedback/tools.ts, docs/decisions/feedback.md FB-21).
   submit_assessment: submitAssessmentTool,
   feedback_similar_reports: similarReportsTool,
@@ -668,8 +699,8 @@ export async function onBehalfOf(
   }
   if (!principalId || principalId === dispatch.agentId) return {};
   const who = await loadPrincipalRow(db, principalId);
-  const conversation = await loadConversationRow(db, conversationId);
   if (!who) return {};
+  const conversation = await loadConversationRow(db, conversationId);
   // The person's Chat (their `dm` conversation without a task); one with a task (the Feedback room) goes by its title.
   const where = !conversation
     ? null

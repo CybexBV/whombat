@@ -58,6 +58,12 @@ export function notWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons'>) {
   return { offs: quiet.offs, unwatched: unwatchedIn(quiet) };
 }
 
+/** Whether a check is currently watched for this thing (starts on unless switched off, or starts off and turned on). */
+export function checkWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons'>, check: string): boolean {
+  if (unwatchedIn(quiet)(check)) return false;
+  return !quiet.offs.some((o) => o.checkId === check && o.subject === '');
+}
+
 /**
  * Whether a line is quiet now by its rows alone (no line to compare: a message about it, QN-S19): its check starts off
  * and nobody turned it on, an off of the check or of the item, or an Ignore or snooze of the item still in its time.

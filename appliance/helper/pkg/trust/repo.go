@@ -72,10 +72,11 @@ type Repo struct {
 	TargetsExpires   time.Time
 	RefTime          time.Time
 	// Channel is the channel role the view reads ("" the top-level targets); ChannelVersion and ChannelExpires are
-	// its metadata's.
+	// its metadata's; ChannelPaused is true when the verified channel role carries the pause marker.
 	Channel        string
 	ChannelVersion int64
 	ChannelExpires time.Time
+	ChannelPaused  bool
 	// RoleVersions are the versions of the delegated channel roles this refresh verified (the manager's mirror
 	// publishes them for its helper).
 	RoleVersions map[string]int64
@@ -171,7 +172,11 @@ func Refresh(cfg Config) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		r.Channel, r.ChannelVersion, r.ChannelExpires, r.targets = cfg.Channel, md.Signed.Version, md.Signed.Expires, targets
+		paused, err := IsChannelPaused(md)
+		if err != nil {
+			return nil, err
+		}
+		r.Channel, r.ChannelVersion, r.ChannelExpires, r.ChannelPaused, r.targets = cfg.Channel, md.Signed.Version, md.Signed.Expires, paused, targets
 		r.RoleVersions[cfg.Channel] = md.Signed.Version
 	}
 	for _, c := range cfg.LoadChannels {

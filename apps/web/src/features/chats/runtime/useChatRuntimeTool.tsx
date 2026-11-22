@@ -1,14 +1,17 @@
 import {
+  chatDefaultBody,
   chatMadeDefaultText,
+  chatModelsOf,
   chatRuntimeInEffect,
   chatRuntimeRefusalText,
   chatRuntimeShown,
   chatStartRuntime,
   chatThreadChoice,
   chatThreadState,
+  modelRuntimeSaved,
 } from '@whombat/client';
 import { useChatRuntime, useMakeChatDefault, useSetThreadRuntime, useTheAgent } from '@whombat/client/react';
-import type { ChatRuntime, ChatRuntimeView, Message } from '@whombat/core';
+import { type ChatRuntime, type ChatRuntimeView, type Message, MODEL_EFFORT_COPY } from '@whombat/core';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { useToast } from '../../../components/Toast';
 import { ChatRuntimeButton } from './ChatRuntimeButton';
@@ -20,10 +23,14 @@ function useMakeDefault(burrow: string, view: ChatRuntimeView | undefined, after
   const make = useMakeChatDefault(burrow);
   if (!view || !assistant) return undefined;
   return (runtime: ChatRuntime) => {
+    const body = chatDefaultBody(runtime);
     make.make(runtime).then(
       (result) => {
         if (result.status !== 'ok') return void toast.show(chatRuntimeRefusalText(result));
-        toast.show(chatMadeDefaultText(view, runtime));
+        const saved = result.data.agent.runtime;
+        if (!modelRuntimeSaved(body, saved, chatModelsOf(view, runtime.provider)))
+          return void toast.show(MODEL_EFFORT_COPY.notSaved);
+        toast.show(chatMadeDefaultText(view, saved));
         after?.();
       },
       (error) => toast.show(chatRuntimeRefusalText(error)),

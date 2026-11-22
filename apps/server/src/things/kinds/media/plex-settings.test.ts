@@ -89,8 +89,7 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
     const by = (id: string) => r.find((x) => x.id === id);
     expect(by('remote_access')).toMatchObject({
       value: 'On',
-      on: true,
-      toggle: { action: 'setting', target: 'remote_access' },
+      elsewhere: { label: 'In Plex' },
     });
     expect(by('remote_quality')).toMatchObject({ value: 'Up to 8 Mbps', choose: { current: 8000 } });
     expect(by('remote_quality')?.changed).toMatchObject({
@@ -98,18 +97,25 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
       changeId: 'chg_1',
     });
     expect(by('remote_quality')?.changed?.text).toContain('4 Mbps');
+    expect(by('scan_on_change')).toMatchObject({
+      value: 'On',
+      on: true,
+      toggle: { action: 'setting', target: 'scan_on_change' },
+    });
     expect(by('scan_schedule')?.value).toBe('Every 6 hours');
     expect(by('quiet_hours')?.value).toBe('02:00 – 05:00');
     // Left out: the graphics chip, which this Plex doesn't report.
     expect(by('graphics_chip')).toBeUndefined();
-    // Emptying the trash and updates stay in Plex: no switch, no Change.
-    for (const id of ['empty_trash', 'updates']) {
+    // Remote access, secure connections, emptying the trash and updates stay in Plex: no switch, no Change.
+    for (const id of ['remote_access', 'secure_connections', 'empty_trash', 'updates']) {
       expect(by(id)?.elsewhere?.label).toBe('In Plex');
       expect(by(id)?.toggle).toBeUndefined();
       expect(by(id)?.choose).toBeUndefined();
     }
-    // Secure connections never offers Off.
-    expect(by('secure_connections')?.choose?.choices.map((c) => c.value)).toEqual([0, 1]);
+    expect(by('secure_connections')?.value).toBe('Required');
+    expect(by('empty_trash')?.value).toBe('Off');
+    plex.prefs.set('autoEmptyTrash', true);
+    expect(rows().find((x) => x.id === 'empty_trash')?.value).toBe('On');
   });
 
   it('draws them disabled with the reason on Look only', () => {
@@ -117,7 +123,7 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
     const look = settingsPanels({
       declared: PLEX_SETTINGS,
       settings: parsePrefs({
-        MediaContainer: { Setting: [{ id: 'PublishServerOnPlexOnlineKey', value: true }] },
+        MediaContainer: { Setting: [{ id: 'FSEventLibraryUpdatesEnabled', value: true }] },
       }),
       who: { row: rowOf('plex', { access: 'read' }) },
       url: 'http://x.test/',
@@ -155,11 +161,18 @@ describe('changing one (SST-02, SST-03)', () => {
     await expect(act(ctx, { target: 'remote_quality', value: 20000 })).rejects.toThrow(/didn’t take/);
   });
 
-  it('takes only a choice it offers, and changes nothing when it already is', async () => {
+  it('takes only a choice it offers, refuses elsewhere settings, and changes nothing when it already is', async () => {
     reset();
     await expect(act(ctx, { target: 'remote_quality', value: 123 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'remote_access', value: false })).rejects.toThrow();
+    await expect(act(ctx, { target: 'remote_access', value: true })).rejects.toThrow();
+    expect(await describeSetting(PLEX_SETTINGS, ctx, { target: 'remote_access', value: false })).toBeNull();
+    await expect(act(ctx, { target: 'secure_connections', value: 0 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'secure_connections', value: 1 })).rejects.toThrow();
     await expect(act(ctx, { target: 'secure_connections', value: 2 })).rejects.toThrow();
+    expect(await describeSetting(PLEX_SETTINGS, ctx, { target: 'secure_connections', value: 1 })).toBeNull();
     await expect(act(ctx, { target: 'empty_trash', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'updates', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
     plex.calls = [];
     const same = await act(ctx, { target: 'remote_quality', value: 8000 });
@@ -167,14 +180,25 @@ describe('changing one (SST-02, SST-03)', () => {
     expect(plex.calls.some((c) => c.method === 'PUT')).toBe(false);
   });
 
-  it('flips a switch and sets two prefs for a schedule', async () => {
+  it('writes only the targeted preference(s) for each writable Plex setting', async () => {
     reset();
-    await act(ctx, { target: 'remote_access', value: false });
-    expect(plex.prefs.get('PublishServerOnPlexOnlineKey')).toBe(false);
-    await act(ctx, { target: 'scan_schedule', value: 0 });
-    expect(plex.prefs.get('ScheduledLibraryUpdatesEnabled')).toBe(false);
-    await act(ctx, { target: 'scan_schedule', value: 3600 });
-    expect(plex.prefs.get('ScheduledLibraryUpdateInterval')).toBe(3600);
+    plex.prefs.set('HardwareAcceleratedCodecs', true);
+    const cases: [string, string | number | boolean, string][] = [
+      ['remote_quality', 12000, '?WanPerStreamMaxUploadRate=12000'],
+      ['graphics_chip', false, '?HardwareAcceleratedCodecs=0'],
+      ['conversion_quality', 2, '?TranscoderQuality=2'],
+      ['conversions_at_once', 2, '?TranscodeCountLimit=2'],
+      ['scan_on_change', false, '?FSEventLibraryUpdatesEnabled=0'],
+      ['scan_schedule', 0, '?ScheduledLibraryUpdatesEnabled=0'],
+      ['scan_schedule', 3600, '?ScheduledLibraryUpdatesEnabled=1&ScheduledLibraryUpdateInterval=3600'],
+      ['quiet_hours', '3-6', '?ButlerStartHour=3&ButlerEndHour=6'],
+    ];
+    for (const [target, value, query] of cases) {
+      plex.calls = [];
+      const done = await act(ctx, { target, value });
+      expect(done.message).toContain('Checked with Plex');
+      expect(plex.calls.filter((c) => c.method === 'PUT').map((c) => c.query)).toEqual([query]);
+    }
   });
 
   it('puts it back only while it still has the value Whombat set', async () => {
@@ -186,6 +210,32 @@ describe('changing one (SST-02, SST-03)', () => {
     plex.prefs.set('WanPerStreamMaxUploadRate', 20000);
     await act(ctx, back);
     expect(plex.prefs.get('WanPerStreamMaxUploadRate')).toBe(8000);
+  });
+
+  it('preserves concurrent changes to other Plex preferences between read and field-only PUT', async () => {
+    reset();
+    let reads = 0;
+    const declared = {
+      ...PLEX_SETTINGS,
+      read: async (services: Services, r: typeof row) => {
+        const snap = await PLEX_SETTINGS.read(services, r);
+        reads += 1;
+        // Another actor changes unrelated Plex preferences right after Whombat reads and before it writes.
+        if (reads === 1) {
+          plex.prefs.set('autoEmptyTrash', true);
+          plex.prefs.set('PublishServerOnPlexOnlineKey', false);
+          plex.prefs.set('TranscoderQuality', 2);
+        }
+        return snap;
+      },
+    };
+    const done = await settingAction(declared)(ctx, { target: 'remote_quality', value: 20000 });
+    expect(done.uncertain).toBeUndefined();
+    expect(done.message).toContain('Checked with Plex');
+    expect(plex.prefs.get('WanPerStreamMaxUploadRate')).toBe(20000);
+    expect(plex.prefs.get('autoEmptyTrash')).toBe(true);
+    expect(plex.prefs.get('PublishServerOnPlexOnlineKey')).toBe(false);
+    expect(plex.prefs.get('TranscoderQuality')).toBe(2);
   });
 });
 

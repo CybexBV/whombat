@@ -37,6 +37,7 @@ import {
   VoiceTtsRequest,
 } from '@whombat/control-contracts/local';
 import {
+  VOICE_STT_MODELS,
   VOICE_TYPING_MAX_SECONDS,
   type VoiceLanguage,
   type VoiceModelChoice,
@@ -428,7 +429,10 @@ export function voiceFor(services: { config: VoiceConfig }): VoicePort | null {
     mode === 'off'
       ? null
       : mode === 'fake'
-        ? new FakeVoice({ models: () => fakeModelsOf(services) })
+        ? new FakeVoice({
+            models: () => fakeModelsOf(services),
+            languages: () => fakeLanguagesOf(services),
+          })
         : socket
           ? new VoiceSocketClient(socket)
           : null;
@@ -442,10 +446,19 @@ export function setVoiceFor(services: object, port: VoicePort | null): void {
   healths.delete(services);
 }
 
-/** The models the fake model fetcher of these services has downloaded (the fake voice's `models`). */
+/** The speech-to-text models the fake model fetcher of these services has downloaded (the fake voice's `models`). */
 function fakeModelsOf(services: { config: VoiceConfig }): readonly VoiceSttModel[] {
   const fetcher = voiceModelsFor(services);
-  return fetcher instanceof FakeVoiceModels ? fetcher.ready() : [];
+  if (!(fetcher instanceof FakeVoiceModels)) return [];
+  return fetcher
+    .ready()
+    .filter((id): id is VoiceSttModel => (VOICE_STT_MODELS as readonly string[]).includes(id));
+}
+
+/** The spoken languages the fake voice has ready: Dutch only once Supertonic is downloaded. */
+function fakeLanguagesOf(services: { config: VoiceConfig }): readonly VoiceSpeechLanguage[] {
+  const fetcher = voiceModelsFor(services);
+  return fetcher instanceof FakeVoiceModels && fetcher.ready().includes('supertonic') ? ['en', 'nl'] : ['en'];
 }
 
 /** How long a health answer is kept: a minute, a failure 15 s (the service may just be starting). */

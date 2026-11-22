@@ -15,6 +15,27 @@ export const VOICE_STT_MODELS = ['parakeet', 'whisper'] as const;
 export const VoiceSttModel = z.enum(VOICE_STT_MODELS);
 export type VoiceSttModel = z.infer<typeof VoiceSttModel>;
 
+/** Every downloadable voice model on the box: speech-to-text and the opt-in Dutch voice (Supertonic 3). */
+export const VOICE_DOWNLOAD_MODELS = ['parakeet', 'whisper', 'supertonic'] as const;
+export const VoiceDownloadModel = z.enum(VOICE_DOWNLOAD_MODELS);
+export type VoiceDownloadModel = z.infer<typeof VoiceDownloadModel>;
+
+/**
+ * Pinned total download sizes in bytes of each downloadable voice model
+ * (`appliance/nix/packages/voice-models/default.nix`).
+ */
+export const VOICE_MODEL_SIZES: Readonly<Record<VoiceDownloadModel, number>> = {
+  parakeet: 668_757_119,
+  whisper: 574_041_195,
+  supertonic: 145_310_775,
+};
+
+/** Supertonic 3's licence (BigScience Open RAIL-M, dated August 18, 2022), agreed to before download. */
+export const DUTCH_VOICE_LICENCE_VERSION = 'open-rail-m-2022-08-18';
+export const DUTCH_VOICE_LICENCE_NAME = 'BigScience Open RAIL-M License (August 18, 2022)';
+export const DUTCH_VOICE_LICENCE_URL =
+  'https://huggingface.co/Supertone/supertonic-3/blob/3cadd1ee6394adea1bd021217a0e650ede09a323/LICENSE';
+
 /** *Speech model*: one of the models, or `auto` (Whisper on a usable graphics chip, else Parakeet). */
 export const VOICE_MODEL_CHOICES = ['auto', 'parakeet', 'whisper'] as const;
 export const VoiceModelChoice = z.enum(VOICE_MODEL_CHOICES);
@@ -27,9 +48,17 @@ export type VoiceLanguage = z.infer<typeof VoiceLanguage>;
 
 /**
  * A model's download on the box: `absent` (not there), `downloading` (`received` of `size` bytes), `waiting` (it will try
- * again by itself, `problem` says why), `ready`, `failed` (needs *Try again*, `problem` says why).
+ * again by itself, `problem` says why), `ready`, `failed` (needs *Try again*, `problem` says why), `removing` (files are
+ * still being removed from disk; `received` is the bytes left).
  */
-export const VOICE_MODEL_STATES = ['absent', 'downloading', 'waiting', 'ready', 'failed'] as const;
+export const VOICE_MODEL_STATES = [
+  'absent',
+  'downloading',
+  'waiting',
+  'ready',
+  'failed',
+  'removing',
+] as const;
 export const VoiceModelState = z.enum(VOICE_MODEL_STATES);
 export type VoiceModelState = z.infer<typeof VoiceModelState>;
 
@@ -56,7 +85,29 @@ export const VoiceTypingModel = z.object({
 });
 export type VoiceTypingModel = z.infer<typeof VoiceTypingModel>;
 
-/** `voice.get` and every `voice.*` change: voice typing as Settings and the composers see it. */
+/**
+ * The opt-in Dutch speaking voice (Supertonic 3, BigScience Open RAIL-M): off until the person agrees to its licence,
+ * then downloaded onto the box; turning it off removes its files.
+ */
+export const VoiceDutchVoice = z.object({
+  /** Whether the person has turned *Dutch voice* on (agreed to its licence). */
+  on: z.boolean(),
+  /** Download state of the Dutch voice model on the box (`absent` when off and gone, `removing` while files remain). */
+  state: VoiceModelState,
+  /** Total download size in bytes across all files of the model. */
+  size: z.number().int().min(0),
+  /** Bytes downloaded so far, or bytes left on disk while removing. */
+  received: z.number().int().min(0),
+  /** Why a download waits or failed. */
+  problem: VoiceModelProblem.optional(),
+  /** When the person agreed to the licence (ISO timestamp), or null when off. */
+  agreedAt: z.string().datetime().nullable(),
+  /** The licence version agreed to, or null when off. */
+  licenceVersion: z.string().min(1).max(64).nullable(),
+});
+export type VoiceDutchVoice = z.infer<typeof VoiceDutchVoice>;
+
+/** `voice.get` and every `voice.*` change: voice typing and the opt-in Dutch voice as Settings and the composers see them. */
 export const VoiceTyping = z.object({
   /** This Whombat can turn speech into text at all (it has the speech service); false: no mic, no section. */
   available: z.boolean(),
@@ -73,6 +124,8 @@ export const VoiceTyping = z.object({
   models: z.array(VoiceTypingModel).max(8),
   /** The longest recording in seconds (`VOICE_TYPING_MAX_SECONDS`). */
   maxSeconds: z.number().int().min(1).max(VOICE_TYPING_MAX_SECONDS),
+  /** Opt-in Dutch speaking voice (Supertonic 3); null or absent when the box doesn't offer it. */
+  dutchVoice: VoiceDutchVoice.nullable().optional(),
 });
 export type VoiceTyping = z.infer<typeof VoiceTyping>;
 
@@ -129,12 +182,31 @@ export const VOICE_WORDS = {
     parakeet: { name: 'Fast', about: 'Parakeet. Quick on the processor, English and Dutch.' },
     whisper: { name: 'Most accurate', about: 'Whisper. Best with Dutch, quick with a graphics chip.' },
   },
+  dutchVoice: {
+    label: 'Dutch voice',
+    meta: 'Speak Dutch answers in a Dutch voice instead of an English one (Supertonic 3, {size}).',
+    removing: 'Still removing the Dutch voice.',
+    dialog: {
+      title: 'Download the Dutch voice?',
+      intro:
+        'Whombat downloads Supertonic 3 ({size}) onto this Whombat. It uses the BigScience Open RAIL-M licence, which allows personal and business use with a few restrictions. By turning this on, you agree not to use it:',
+      restrictions: [
+        'to break the law, harm minors, harass or defame others, or spread harmful falsehoods or personal data;',
+        'to impersonate someone without their consent, or publish generated audio without saying it is AI-generated;',
+        'for discrimination, exploiting vulnerable groups, automated legal decisions, justice or immigration profiling, or medical advice.',
+      ],
+      licenceLink: 'Read the full Open RAIL-M licence',
+      agree: 'Agree and download',
+      cancel: 'Cancel',
+    },
+  },
   states: {
     absent: 'Not downloaded',
     downloading: 'Downloading · {percent}%',
     waiting: 'Waiting to download',
     ready: 'Ready',
     failed: 'Couldn’t download',
+    removing: 'Removing…',
   },
   problems: {
     no_network: 'No internet right now. It tries again by itself.',

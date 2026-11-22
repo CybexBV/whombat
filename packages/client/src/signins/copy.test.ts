@@ -9,7 +9,7 @@ describe('ChatGPT is a provider people sign in to, not a client (chatgpt-no-clie
       claude: 'Claude Code',
       codex: 'ChatGPT',
     });
-    expect(PROVIDER_LABELS.local).toMatch(/network/);
+    expect(PROVIDER_LABELS.local).toBe('Custom AI model');
     expect(ANY_PROVIDER).toBe('Claude Code or ChatGPT');
   });
 

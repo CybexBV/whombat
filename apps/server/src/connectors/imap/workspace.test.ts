@@ -5,10 +5,12 @@ import { MAIL_CERT } from '../../test/self-signed';
 import { ConnectionUnavailableError } from '../types';
 import { parseMessageId } from './ids';
 import { MemoryMailServer } from './memory';
+import { MAIL_IDLE_REFRESH_MS, MAIL_IDLE_SOCKET_TIMEOUT_MS, MAIL_TIMEOUTS } from './session';
 import { nodemailerSmtp, type SmtpConnectOptions } from './smtp';
 import {
   IMAP_ONLY_MAIL_TEXT,
   type ImapAccount,
+  type ImapOpenOptions,
   ImapWorkspace,
   type MailConnector,
   MESSAGE_GONE_TEXT,
@@ -412,5 +414,276 @@ describe('Email (IMAP) behind the mail tools', () => {
     expect(check.side).toBe('smtp');
     expect(refused).toEqual([]);
     await expect(ws.calendarEvents()).rejects.toThrow(IMAP_ONLY_MAIL_TEXT);
+  });
+
+  it('tracks new inbox mail via UIDVALIDITY/lastUid and BODYSTRUCTURE without reading message bodies', async () => {
+    const baseline = await ws.mailBaseline(TOKEN);
+    expect(baseline.cursor).toMatchObject({ kind: 'imap', mailbox: 'INBOX', lastUid: 3 });
+
+    const beforeReads = server.sourceReads;
+    const empty = await ws.mailChanges(TOKEN, baseline.cursor);
+    expect(empty.headers).toEqual([]);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    const newInvoice = [
+      'From: Billing <billing@example.com>',
+      'To: jo@home.test',
+      'Subject: October Invoice',
+      'Date: Mon, 19 Oct 2026 10:00:00 +0000',
+      'Message-ID: <inv-oct@example.com>',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="invb"',
+      '',
+      '--invb',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Please find attached your invoice.',
+      '--invb',
+      'Content-Type: application/pdf',
+      'Content-Transfer-Encoding: base64',
+      'Content-Disposition: attachment; filename="october.pdf"',
+      '',
+      Buffer.from('%PDF-1.4 october').toString('base64'),
+      '--invb--',
+      '',
+    ].join('\r\n');
+    server.add('INBOX', newInvoice, { date: new Date('2026-10-19T10:00:00Z') });
+
+    const delta = await ws.mailChanges(TOKEN, baseline.cursor, { needAttachmentTypes: true });
+    expect(delta.headers).toHaveLength(1);
+    expect(delta.headers[0]).toMatchObject({
+      messageId: '<inv-oct@example.com>',
+      from: 'Billing <billing@example.com>',
+      subject: 'October Invoice',
+      hasAttachments: true,
+      attachments: [expect.objectContaining({ name: 'october.pdf', mimeType: 'application/pdf' })],
+    });
+    // Headers + BODYSTRUCTURE only: zero full message sources downloaded.
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // Polling again with the advanced cursor sees nothing twice.
+    const again = await ws.mailChanges(TOKEN, delta.cursor);
+    expect(again.headers).toEqual([]);
+
+    // Old message moved back into INBOX (gets a brand-new UID) is dropped by `since` (5 s skew margin).
+    const activation = new Date('2026-10-19T09:50:00Z');
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Old <old@example.com>',
+        subject: 'Moved back from Archive',
+        body: 'Ancient email',
+        id: '<ancient@example.com>',
+      }),
+      { date: new Date('2026-10-18T12:00:00Z') },
+    );
+    const moved = await ws.mailChanges(TOKEN, delta.cursor, { since: activation });
+    expect(moved.headers).toEqual([]);
+
+    // First poll with `since` backfills post-activation mail and drops older mail without reading bodies.
+    const backfilled = await ws.mailBaseline(TOKEN, { since: activation });
+    expect(backfilled.headers.map((h) => h.messageId)).toEqual(['<inv-oct@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // UIDVALIDITY renumbering resyncs from resyncSince (last successful poll time) instead of losing mail.
+    server.renumber('INBOX');
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Arrived during renumber',
+        body: 'Fresh after renumber',
+        id: '<after-renum@example.com>',
+      }),
+      { date: new Date('2026-10-19T10:30:00Z') },
+    );
+    const reset = await ws.mailChanges(TOKEN, moved.cursor, {
+      since: activation,
+      resyncSince: new Date('2026-10-19T10:15:00Z'),
+    });
+    expect(reset.reset).toBe(true);
+    expect(reset.headers.map((h) => h.messageId)).toEqual(['<after-renum@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+  });
+
+  it('resumes IMAP backfill across UID batches when more than 50 messages arrive before baseline or renumber', async () => {
+    const activation = new Date('2026-10-22T10:00:00Z');
+    // Put an invoice right after activation, followed by 114 newer messages (115 total post-activation).
+    const total = 115;
+    for (let i = 1; i <= total; i++) {
+      server.add(
+        'INBOX',
+        mail({
+          from: i === 1 ? 'Billing <billing@example.com>' : 'News <news@example.com>',
+          subject: i === 1 ? 'Invoice #1' : `Update ${i}`,
+          body: `Body ${i}`,
+          id: `<burst-${i}@example.com>`,
+        }),
+        { date: new Date(activation.getTime() + i * 1_000) },
+      );
+    }
+    const beforeReads = server.sourceReads;
+
+    // Initial baseline processes 50-UID batches without losing <burst-1@example.com> or reading bodies.
+    const seen = new Set<string>();
+    const b1 = await ws.mailBaseline(TOKEN, { since: activation });
+    expect(b1.more).toBe(true);
+    expect(b1.cursor.kind).toBe('imap');
+    if (b1.cursor.kind === 'imap') expect(b1.cursor.backfill).toBeDefined();
+    expect(b1.headers).toHaveLength(50);
+    for (const h of b1.headers) if (h.messageId) seen.add(h.messageId);
+    expect(seen.has('<burst-1@example.com>')).toBe(true);
+
+    // One more message arrives while backfill is mid-way.
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Invoice during backfill',
+        body: 'Arrived mid-backfill',
+        id: '<mid-backfill@example.com>',
+      }),
+      { date: new Date(activation.getTime() + 200_000) },
+    );
+
+    const b2 = await ws.mailChanges(TOKEN, b1.cursor, { since: activation });
+    expect(b2.more).toBe(true);
+    expect(b2.headers).toHaveLength(50);
+    for (const h of b2.headers) if (h.messageId) seen.add(h.messageId);
+
+    const b3 = await ws.mailChanges(TOKEN, b2.cursor, { since: activation });
+    // Backfill window finished (no backfill property left), and `more` flags the mid-backfill arrival.
+    if (b3.cursor.kind === 'imap') expect(b3.cursor.backfill).toBeUndefined();
+    expect(b3.headers).toHaveLength(15);
+    for (const h of b3.headers) if (h.messageId) seen.add(h.messageId);
+    expect(seen.size).toBe(total);
+    expect(seen.has('<burst-1@example.com>')).toBe(true);
+
+    const steady = await ws.mailChanges(TOKEN, b3.cursor, { since: activation });
+    expect(steady.headers.map((h) => h.messageId)).toEqual(['<mid-backfill@example.com>']);
+    expect(server.sourceReads).toBe(beforeReads);
+
+    // UIDVALIDITY renumber with >50 eligible messages also backfills every batch without skipping any.
+    server.renumber('INBOX');
+    const resyncSeen = new Set<string>();
+    let step = await ws.mailChanges(TOKEN, steady.cursor, { since: activation, resyncSince: activation });
+    expect(step.reset).toBe(true);
+    expect(step.more).toBe(true);
+    for (const h of step.headers) if (h.messageId) resyncSeen.add(h.messageId);
+    while (step.more) {
+      step = await ws.mailChanges(TOKEN, step.cursor, { since: activation, resyncSince: activation });
+      for (const h of step.headers) if (h.messageId) resyncSeen.add(h.messageId);
+    }
+    expect(resyncSeen.size).toBe(total + 1);
+    expect(resyncSeen.has('<burst-1@example.com>')).toBe(true);
+    expect(resyncSeen.has('<mid-backfill@example.com>')).toBe(true);
+    expect(server.sourceReads).toBe(beforeReads);
+  });
+
+  it('wakes on IMAP IDLE when new mail arrives, uses a multi-minute socket timeout, and reports unsupported when IDLE is absent', async () => {
+    const openOpts: (ImapOpenOptions | undefined)[] = [];
+    const baseImap = connector.imap;
+    connector.imap = (a, opts) => {
+      openOpts.push(opts);
+      return baseImap(a, opts);
+    };
+    const ac = new AbortController();
+    let woke!: () => void;
+    const woken = new Promise<void>((resolve) => {
+      woke = resolve;
+    });
+    const watching = ws.watchInbox(
+      TOKEN,
+      () => {
+        woke();
+        ac.abort();
+      },
+      ac.signal,
+    );
+    // Let IDLE attach to INBOX before adding a message.
+    await new Promise((r) => setTimeout(r, 15));
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Alert <alerts@example.com>',
+        subject: 'Wake up',
+        body: 'New arrival',
+        id: '<wake@example.com>',
+      }),
+    );
+    await woken;
+    expect(await watching).toBe('idle');
+    expect(openOpts[0]?.timeouts?.socketMs).toBe(MAIL_IDLE_SOCKET_TIMEOUT_MS);
+    expect(openOpts[0]?.timeouts?.socketMs).toBeGreaterThan(MAIL_TIMEOUTS.socketMs);
+    expect(openOpts[0]?.maxIdleTimeMs).toBe(MAIL_IDLE_REFRESH_MS);
+
+    await ws.mailBaseline(TOKEN);
+    expect(openOpts[1]).toBeUndefined();
+
+    server.capabilities = new Set(['IMAP4REV1']);
+    expect(await ws.watchInbox(TOKEN, () => {}, new AbortController().signal)).toBe('unsupported');
+  });
+
+  it('clips oversized subjects and long folder labels so one email never fails MailSummary/MailMessage parsing', async () => {
+    const longFolder = `Archive/${'f'.repeat(240)}`;
+    server.addFolder(longFolder);
+    server.add(
+      longFolder,
+      mail({
+        from: 'Alert <alerts@example.com>',
+        subject: 'X'.repeat(1500),
+        body: 'Oversized subject body',
+        id: `<${'i'.repeat(550)}@example.com>`,
+      }),
+    );
+    const found = await ws.mailSearch(TOKEN, { query: `in:"${longFolder}"`, limit: 5 });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.subject.length).toBe(1000);
+    expect(found[0]?.labels.every((l) => l.length <= 200)).toBe(true);
+
+    const [read] = await ws.mailRead(TOKEN, { messageId: found[0]?.id ?? '' });
+    expect(read?.subject.length).toBe(1000);
+    expect(read?.labels.every((l) => l.length <= 200)).toBe(true);
+  });
+
+  it('advances IMAP lastUid with more: true when a 50-UID steady-state batch has zero included messages', async () => {
+    const activation = new Date('2026-10-25T10:00:00Z');
+    const baseline = await ws.mailBaseline(TOKEN);
+
+    // Add 55 pre-activation messages moved into INBOX (all filtered out by `since`), followed by 1 fresh invoice.
+    for (let i = 1; i <= 55; i++) {
+      server.add(
+        'INBOX',
+        mail({
+          from: 'Archive <old@example.com>',
+          subject: `Moved old mail ${i}`,
+          body: 'Old',
+          id: `<moved-old-${i}@example.com>`,
+        }),
+        { date: new Date('2026-10-20T10:00:00Z') },
+      );
+    }
+    server.add(
+      'INBOX',
+      mail({
+        from: 'Billing <billing@example.com>',
+        subject: 'Fresh invoice after 55 moved old mails',
+        body: 'Fresh',
+        id: '<fresh-after-55@example.com>',
+      }),
+      { date: new Date('2026-10-25T10:05:00Z') },
+    );
+
+    const p1 = await ws.mailChanges(TOKEN, baseline.cursor, { since: activation });
+    expect(p1.headers).toEqual([]);
+    expect(p1.more).toBe(true);
+    expect(p1.cursor.kind).toBe('imap');
+    if (p1.cursor.kind === 'imap' && baseline.cursor.kind === 'imap') {
+      expect(p1.cursor.lastUid).toBe(baseline.cursor.lastUid + 50);
+    }
+
+    const p2 = await ws.mailChanges(TOKEN, p1.cursor, { since: activation });
+    expect(p2.more).toBeUndefined();
+    expect(p2.headers.map((h) => h.messageId)).toEqual(['<fresh-after-55@example.com>']);
   });
 });

@@ -819,4 +819,233 @@ const esphome: FixtureServicePage = {
   },
 };
 
-export const HOME_PAGES: FixtureServicePage[] = [protect, access, esphome];
+/* Frigate ------------------------------------------------------------------------------------------------------------ */
+
+const FRIGATE = 'connection:con_frigate';
+const FRIGATE_URL = 'http://10.100.0.40:5000';
+
+/** Mara's Frigate cameras: id, name, live fps (0 = offline). */
+const FRIGATE_CAMERAS: [string, string, number][] = [
+  ['front_door', 'Front door', 15],
+  ['driveway', 'Driveway', 10],
+  ['garden', 'Garden', 10],
+  ['garage', 'Garage', 0],
+];
+
+/** Detections per day over the last 7 days, today last. */
+const FRIGATE_WEEK = [24, 31, 19, 28, 35, 29, 22];
+
+const frigate: FixtureServicePage = {
+  thing: FRIGATE,
+  catalogId: 'frigate',
+  name: 'Frigate',
+  fields: { url: FRIGATE_URL },
+  make: (ctx) => {
+    const { notice, clock, week, head, summary } = kit(ctx);
+    const page = (): ThingPage => {
+      const detections: ThingPageItem[] = [
+        ['Person seen at Front door', 'Porch', 4 * MIN],
+        ['Car seen at Driveway', 'Driveway', 19 * MIN],
+        ['Dog seen at Garden', undefined, 52 * MIN],
+        ['Person seen at Front door', 'Walkway', 2 * HOUR],
+        ['Package seen at Front door', 'Porch', 3 * HOUR],
+      ].map(([title, detail, ago], i) => ({
+        id: `frigate-evt-${i + 1}`,
+        title: title as string,
+        ...(detail ? { detail: detail as string } : {}),
+        at: ctx.ago(ago as number),
+        icon: 'camera' as const,
+      }));
+      const total = FRIGATE_WEEK.reduce((a, b) => a + b, 0);
+      const machine: ThingPageBar[] = [
+        { id: 'frigate-version', label: 'Frigate', value: '0.16.2', pct: null, sub: 'Up 9 days' },
+        {
+          id: 'detector-coral',
+          label: 'Detector (coral)',
+          value: '11 ms',
+          pct: null,
+          sub: 'Fast',
+          subTone: 'ok',
+        },
+        {
+          id: 'frigate-storage',
+          label: 'Recordings disk',
+          value: '420 GB of 1 TB',
+          pct: 0.42,
+          sub: '580 GB free',
+        },
+      ];
+      return {
+        ...head({
+          id: FRIGATE,
+          catalogId: 'frigate',
+          name: 'Frigate',
+          status: 'warn',
+          badge: 'Garage is offline',
+          facts: [strong('Frigate ', '0.16.2'), strong('', '4 cameras')],
+          address: '10.100.0.40:5000',
+          open: FRIGATE_URL,
+        }),
+        verdict: 'Frigate is fine: 3 of 4 cameras are online.',
+        buttons: [],
+        refreshS: 10,
+        tabs: summary([
+          {
+            kind: 'notices',
+            id: 'worth',
+            place: 'top',
+            title: 'Worth a look',
+            items: [
+              notice(
+                {
+                  id: 'camera-offline-garage',
+                  tone: 'warn',
+                  icon: 'camera',
+                  title: 'Garage is offline',
+                  detail: `No frames received since ${clock(2 * HOUR)}. Check the camera’s power and network.`,
+                  link: {
+                    kind: 'ask',
+                    label: 'Look into it',
+                    question: 'Why is my camera Garage offline in Frigate?',
+                  },
+                },
+                'problem',
+                'frigate.camera_offline',
+                { lifts: 'fixed', words: 'Until it’s back online.' },
+                { id: 'camera:garage', name: 'Garage' },
+              ),
+            ],
+          },
+          {
+            kind: 'list',
+            id: 'detections',
+            place: 'chart',
+            span: 2,
+            title: 'Today',
+            meta: '22 detections',
+            ask: { questions: ['What was detected today?', 'Which camera saw the most this week?'] },
+            items: detections,
+            empty: 'Nothing seen today.',
+          },
+          {
+            kind: 'list',
+            id: 'inventory',
+            place: 'chart',
+            span: 1,
+            look: 'counts',
+            title: 'In Frigate',
+            items: [
+              {
+                id: 'cameras',
+                title: 'Cameras',
+                icon: 'camera',
+                right: '4',
+                figure: { value: '4', note: '1 offline', tone: 'warn' },
+                url: FRIGATE_URL,
+              },
+              {
+                id: 'detections-today',
+                title: 'Detections today',
+                icon: 'camera',
+                detail: 'Most at Front door',
+                right: '22',
+                figure: { value: '22' },
+              },
+              {
+                id: 'detectors',
+                title: 'Detector',
+                icon: 'device',
+                detail: 'coral',
+                right: '11 ms',
+                figure: { value: '11 ms', note: 'Healthy', tone: 'ok' },
+              },
+              {
+                id: 'storage',
+                title: 'Recordings',
+                icon: 'disk',
+                detail: '580 GB free of 1 TB',
+                right: '42 %',
+                figure: { value: '42 %' },
+              },
+            ],
+          },
+          {
+            kind: 'gallery',
+            id: 'cameras',
+            place: 'chart',
+            span: 3,
+            look: 'shelf',
+            title: 'Cameras',
+            meta: '3 of 4 online',
+            shape: 'wide',
+            items: FRIGATE_CAMERAS.map(([id, name, fps]): ThingGalleryItem => {
+              const offline = fps === 0;
+              return {
+                id,
+                title: name,
+                ...(offline
+                  ? {
+                      sub: `Offline since ${clock(2 * HOUR)}`,
+                      badge: { text: 'Offline', tone: 'warn' as const },
+                      muted: true,
+                    }
+                  : {
+                      image: fixtureImage('wide', `frigate-${id}`, name),
+                      sub: `${fps} fps`,
+                    }),
+                url: FRIGATE_URL,
+              };
+            }),
+            empty: 'No cameras in Frigate yet.',
+          },
+          {
+            kind: 'chart',
+            id: 'week',
+            place: 'chart',
+            span: 1,
+            title: 'This week',
+            meta: 'Detections per day',
+            style: 'bars',
+            ...week(),
+            series: [{ key: 'values', label: 'Detections', values: FRIGATE_WEEK, color: 'violet' }],
+            figure: { value: String(total), rest: 'detections' },
+            stats: [[{ text: '+8 %', strong: true }, { text: ' on last week' }]],
+            axis: { min: 0 },
+          },
+          {
+            kind: 'bars',
+            id: 'machine',
+            place: 'chart',
+            span: 2,
+            title: 'Frigate itself',
+            items: machine,
+          },
+        ]),
+      };
+    };
+    return {
+      page,
+      row: () => ({
+        line: '4 cameras',
+        facts: [
+          { label: 'Cameras', value: '3 of 4' },
+          { label: 'Detections today', value: '22' },
+        ],
+        reason: 'Garage is offline',
+      }),
+      checks: [
+        { check: 'frigate.camera_offline', name: 'Cameras going offline', nature: 'problem', perItem: true },
+        {
+          check: 'frigate.storage_full',
+          name: 'Recordings disk filling up',
+          nature: 'problem',
+          perItem: false,
+        },
+        { check: 'frigate.detector_slow', name: 'Slow object detector', nature: 'fyi', perItem: true },
+        { check: 'frigate.skipped_fps', name: 'Cameras dropping frames', nature: 'fyi', perItem: true },
+      ],
+    };
+  },
+};
+
+export const HOME_PAGES: FixtureServicePage[] = [protect, access, esphome, frigate];

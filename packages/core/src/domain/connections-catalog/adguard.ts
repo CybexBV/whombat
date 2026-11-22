@@ -93,6 +93,12 @@ export const entry = {
     },
     {
       tools: [REQUEST_TOOL_NAME],
+      methods: ['GET', 'HEAD'],
+      path: '^/control/tls/status/?$',
+      reason: 'Reads AdGuard Home’s TLS settings, which may include the private key on older versions',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
       methods: ['POST'],
       path: '^/control/(access/set|tls/configure)$',
       reason: 'Changes who may use AdGuard Home, or its certificate',
@@ -102,6 +108,38 @@ export const entry = {
       methods: ['POST'],
       path: '^/control/update$',
       reason: 'Updates AdGuard Home, which restarts it',
+    },
+  ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/control/dns_config$',
+      reason: 'Changes where AdGuard Home sends DNS queries and how it answers them',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT'],
+      path: '^/control/rewrite/(add|update)$',
+      reason: 'Points a name at another address for every device',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/control/dhcp/set_config$',
+      reason: 'Changes AdGuard Home’s DHCP server; a mistake can cut devices off',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/control/filtering/set_rules$',
+      reason: 'Replaces all of your own blocking rules',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT'],
+      path: '^/control/blocked_services/(update|set)$',
+      reason: 'Replaces the list of blocked services',
     },
   ],
   docsUrl: 'https://github.com/AdguardTeam/AdGuardHome/tree/master/openapi',

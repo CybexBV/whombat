@@ -390,7 +390,7 @@ against this, and auditing the clients cannot rule it out.**
 | Threshold signing of releases | **not in place**: one online key per channel (above) |
 | Separation between the update signers and the cloud service | in place: the cloud service holds no update key and has no part in choosing updates |
 | The client channel (Claude Code) | signed by one online key limited to those files. The box downloads the unmodified binary from Anthropic's site and installs it only when it matches the SHA-256 Whombat recorded. Upstream vendor signatures are not checked. |
-| Beta before Production | in place; no staged rollout or emergency stop within a channel |
+| Beta before Production | in place; emergency stop (pause/resume) per channel in its signed TUF role metadata, no staged rollout |
 | Reproducible appliance builds | partial: the contracts npm packages rebuild byte for byte; other artifacts are not verified |
 | Customer approval of each update | in place, off by default (*Ask before updating*, above) |
 | Transparency log, signed build attestations | **not in place** |

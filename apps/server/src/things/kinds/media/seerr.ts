@@ -1181,9 +1181,9 @@ export function seerrUrl(row: Pick<CatalogConnectionRow, 'fields' | 'baseUrl'>):
 export async function seerrPage(ctx: KindCtx): Promise<KindView> {
   const { services, row, now } = ctx;
   const url = seerrUrl(row);
-  const [read, sab, recent] = await Promise.all([
+  const [read, downloader, recent] = await Promise.all([
     seerrLatest(services, row, now),
-    siblingRow(ctx, ['sabnzbd']).catch(() => null),
+    siblingRow(ctx, ['sabnzbd', 'qbittorrent']).catch(() => null),
     seerrRecent(services, row, now),
   ]);
   if (!read.ok)
@@ -1208,7 +1208,7 @@ export async function seerrPage(ctx: KindCtx): Promise<KindView> {
       timeZone: ctx.timeZone,
       who: { row },
       url,
-      sabnzbd: sab ? { href: sab.href, name: sab.name } : null,
+      sabnzbd: downloader ? { href: downloader.href, name: downloader.name } : null,
       recent,
     },
     ctx,

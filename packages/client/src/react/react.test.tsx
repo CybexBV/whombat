@@ -15,7 +15,7 @@ import { OutcomeRedactedError } from '../session/types';
 import { approval, BURROW, bootstrap, message, t } from '../test/fixtures';
 import { drivenRealtime, fakeClient } from '../test/session';
 import { useSetThreadRuntime } from './chatRuntime';
-import { WhombatClientProvider } from './context';
+import { useSessionProtocol, WhombatClientProvider } from './context';
 import { useSaveMessageFile } from './files';
 import { useDecideApproval, useGuideAct, useReaction, useSendMessage } from './mutations';
 import { useAgentNow, useRealtimeStatus, useSubscription, useTyping } from './realtime';
@@ -483,5 +483,34 @@ describe('a Chat thread’s choice (CR-02, AP-2682)', () => {
     );
     await waitFor(() => expect(refused).toHaveBeenCalledWith('ChatGPT isn’t set up on this Whombat.'));
     expect(thread(queryClient)).toBeNull();
+  });
+});
+
+describe('useSessionProtocol', () => {
+  it('follows the negotiated welcome version and updates when a box rolls back', async () => {
+    const { session, appliance } = createFakeSession({
+      account: { id: 'acc_mara', name: 'Mara' },
+      handle: async () => ({ status: 200, body: {} }),
+      session: { backoff: { initialMs: 2, maxMs: 5 } },
+    });
+    const client = createClient({ session, validateResponses: false });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <WhombatClientProvider client={client} queryClient={queryClient} connect={false}>
+        {children}
+      </WhombatClientProvider>
+    );
+    const { result } = renderHook(() => useSessionProtocol(), { wrapper });
+    expect(result.current).toBeNull();
+
+    act(() => session.connect());
+    await waitFor(() => expect(result.current).toEqual({ major: 5, minor: 3 }));
+
+    // Simulate a rollback to minor 2: reconnect picks up the older welcome version.
+    appliance.faults.protocolMinor(2);
+    appliance.faults.restart();
+    await waitFor(() => expect(result.current).toEqual({ major: 5, minor: 2 }));
+
+    session.close();
   });
 });

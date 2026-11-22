@@ -58,25 +58,27 @@ describe('a service’s settings (SST-01…SST-10)', () => {
 
   it('flips a switch at once, says what Plex says, and puts it back from the toast', async () => {
     renderApp(SETTINGS, world());
-    const away = await card('Watching away from home');
+    const convert = await card('Converting video');
     const user = userEvent.setup();
-    const remote = within(row(away, 'remote_access')).getByRole('switch', { name: 'Remote access' });
-    expect(remote.getAttribute('aria-checked')).toBe('true');
-    await user.click(remote);
-    expect(remote.getAttribute('aria-checked')).toBe('false');
-    expect(within(row(away, 'remote_access')).getByText('Off')).toBeTruthy();
-    expect(await screen.findByText('Plex is now only for your home. Checked with Plex.')).toBeTruthy();
+    const chip = within(row(convert, 'graphics_chip')).getByRole('switch', { name: 'Use the graphics chip' });
+    expect(chip.getAttribute('aria-checked')).toBe('true');
+    await user.click(chip);
+    expect(chip.getAttribute('aria-checked')).toBe('false');
+    expect(within(row(convert, 'graphics_chip')).getByText('Off')).toBeTruthy();
+    expect(
+      await screen.findByText('Plex now converts video on the processor. Checked with Plex.'),
+    ).toBeTruthy();
     // The row says who changed it, with Put it back, once the page is read again.
     await waitFor(() =>
-      expect(within(row(away, 'remote_access')).getByText(/^You changed this today/)).toBeTruthy(),
+      expect(within(row(convert, 'graphics_chip')).getByText(/^You changed this today/)).toBeTruthy(),
     );
 
     await user.click(screen.getByRole('button', { name: 'Put it back' }));
     expect(await screen.findByText('Put back.')).toBeTruthy();
     await waitFor(() =>
       expect(
-        within(row(away, 'remote_access'))
-          .getByRole('switch', { name: 'Remote access' })
+        within(row(convert, 'graphics_chip'))
+          .getByRole('switch', { name: 'Use the graphics chip' })
           .getAttribute('aria-checked'),
       ).toBe('true'),
     );
@@ -160,6 +162,16 @@ describe('a service’s settings (SST-01…SST-10)', () => {
 
   it('shows a setting changed in Plex itself as a link there, and Something else? asks Neo', async () => {
     renderApp(SETTINGS, world());
+    const away = await card('Watching away from home');
+    expect(
+      within(row(away, 'remote_access')).getByRole('link', { name: /^Remote access: change it in Plex/ })
+        .textContent,
+    ).toBe('In Plex');
+    expect(
+      within(row(away, 'secure_connections')).getByRole('link', {
+        name: /^Secure connections: change it in Plex/,
+      }).textContent,
+    ).toBe('In Plex');
     const upkeep = await card('Upkeep');
     const updates = within(row(upkeep, 'updates')).getByRole('link', { name: /^Updates: change it in Plex/ });
     expect([updates.textContent, updates.getAttribute('target')]).toEqual(['In Plex', '_blank']);

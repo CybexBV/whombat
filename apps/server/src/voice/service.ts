@@ -22,10 +22,11 @@ import {
   VOICE_TYPING_MAX_SECONDS,
   VOICE_TYPING_TEXT_MAX,
   VOICE_WORDS,
-  type VoiceSttModel,
+  type VoiceDownloadModel,
   type VoiceTyping,
   type VoiceTypingPatch,
 } from '@whombat/core/domain';
+import type { VoiceDutchInput } from '@whombat/protocol/session';
 import { asc } from 'drizzle-orm';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
 import { burrows } from '../db/schema/index';
@@ -46,8 +47,8 @@ import {
   WavError,
   wavPeak,
 } from './speech';
-import { loadVoiceSettings, updateVoiceTyping } from './store';
-import { type VoiceFacts, voiceTypingView, wantedModels } from './view';
+import { loadVoiceSettings, setDutchVoice, updateVoiceTyping } from './store';
+import { type VoiceFacts, voiceTypingView, wantedModels, wantsDutchVoice } from './view';
 
 export interface VoiceTypingTimings {
   /** How often the fetcher is asked while a model downloads or waits. */
@@ -104,21 +105,54 @@ function fetcherDown(err: unknown): never {
   throw err;
 }
 
+/** Whether the fetcher still holds any complete, partial or removing files for the opt-in Dutch voice model. */
+function dutchHasFiles(fetched: readonly VoiceModelState[] | null): boolean {
+  const m = fetched?.find((x) => x.id === 'supertonic');
+  return m !== undefined && (m.state !== 'absent' || m.received > 0);
+}
+
+/** Whether any wanted download or pending removal still needs a retry against the fetcher. */
+function needsModelSyncRetry(facts: VoiceFacts, dutchRemovePending: boolean): boolean {
+  const gpu = voiceTypingView(facts).gpu !== null;
+  const want = new Set<VoiceDownloadModel>(wantedModels(facts.settings, facts.deskTalk, gpu));
+  const dutchWanted = wantsDutchVoice(facts.settings);
+  if (dutchWanted) want.add('supertonic');
+  if (!dutchWanted && (dutchRemovePending || dutchHasFiles(facts.fetched))) return true;
+  if (facts.fetched === null) {
+    for (const id of want) {
+      const ready =
+        id === 'supertonic'
+          ? facts.health?.languages?.includes('nl') === true
+          : facts.health?.models?.includes(id) === true;
+      if (!ready) return true;
+    }
+    return false;
+  }
+  return facts.fetched.some((m) => m.state === 'removing' || (want.has(m.id) && m.state === 'absent'));
+}
+
 export class VoiceTypingService {
   readonly #services: Services;
   readonly #timings: VoiceTypingTimings;
   /** Failed downloads asked for again by themselves since this start: once each. */
-  readonly #retried = new Set<VoiceSttModel>();
+  readonly #retried = new Set<VoiceDownloadModel>();
   /** Checks and the person's changes run one at a time. */
   #tail: Promise<unknown> = Promise.resolve();
   /** The models the fetcher had ready when last asked (null: not asked yet). */
   #readyKey: string | null = null;
+  /** Last known total size of each voice model from the fetcher, kept across brief fetcher restarts. */
+  readonly #lastModelSizes: Partial<Record<VoiceDownloadModel, number>> = {};
   /** What `voice.changed` last told (the view as JSON; null: nothing yet). */
   #told: string | null = null;
   #toldAt = 0;
   #tellTimer: NodeJS.Timeout | null = null;
   #pollTimer: NodeJS.Timeout | null = null;
   #startTimer: NodeJS.Timeout | null = null;
+  #syncTimer: NodeJS.Timeout | null = null;
+  /** Set when Dutch voice was turned off but removal has not yet succeeded at the fetcher. */
+  #dutchRemovePending = false;
+  /** Next wait before retrying a pending download or removal (pollMs, doubled up to five minutes). */
+  #syncWait = 0;
   /** The start's next check: `startRetryMs`, doubled each time up to five minutes. */
   #startWait = 0;
   #offBus: (() => void) | null = null;
@@ -153,8 +187,9 @@ export class VoiceTypingService {
     this.#closed = true;
     this.#offBus?.();
     this.#offBus = null;
-    for (const timer of [this.#tellTimer, this.#pollTimer, this.#startTimer]) if (timer) clearTimeout(timer);
-    this.#tellTimer = this.#pollTimer = this.#startTimer = null;
+    for (const timer of [this.#tellTimer, this.#pollTimer, this.#startTimer, this.#syncTimer])
+      if (timer) clearTimeout(timer);
+    this.#tellTimer = this.#pollTimer = this.#startTimer = this.#syncTimer = null;
   }
 
   /** `voice.get`. */
@@ -169,23 +204,77 @@ export class VoiceTypingService {
 
   /** `voice.update`: the person's settings in one commit, then what they want downloaded. */
   async update(principal: SessionPrincipal, patch: VoiceTypingPatch): Promise<VoiceTyping> {
-    const person = await this.#person(principal);
+    requirePerson(principal);
     const changes = Object.keys(patch).length > 0;
-    if (changes) {
-      const res = await this.#services.pipeline.commit(updateVoiceTyping, patch, {
+    return this.#serial(async () => {
+      const person = await this.#person(principal);
+      if (changes) {
+        const res = await this.#services.pipeline.commit(updateVoiceTyping, patch, {
+          burrowId: person.burrowId,
+          actorId: person.id,
+        });
+        if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
+        this.#resetSyncBackoff();
+      }
+      return this.#check(changes ? 'now' : 'changed');
+    });
+  }
+
+  /** `voice.setDutchVoice`: record the person's agreement and start downloading, or turn off and remove the files. */
+  async setDutchVoice(principal: SessionPrincipal, input: VoiceDutchInput): Promise<VoiceTyping> {
+    requirePerson(principal);
+    return this.#serial(async () => {
+      const person = await this.#person(principal);
+      // Turning on requires a configured model fetcher so we never record consent on a box that cannot download models.
+      const fetcher = input.on ? this.#fetcher() : voiceModelsFor(this.#services);
+      const res = await this.#services.pipeline.commit(setDutchVoice, input, {
         burrowId: person.burrowId,
         actorId: person.id,
       });
       if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
-    }
-    return this.#serial(() => this.#check(changes ? 'now' : 'changed'));
+      this.#resetSyncBackoff();
+      if (input.on) {
+        this.#dutchRemovePending = false;
+        try {
+          await externalEffect(
+            'voice.fetch_model',
+            () => (fetcher as NonNullable<typeof fetcher>).fetch('supertonic'),
+            { idempotent: true },
+          );
+        } catch (err: unknown) {
+          this.#services.log.warn(
+            { err: String(err) },
+            'voice: Dutch voice download wasn’t started yet; will retry until the fetcher accepts it',
+          );
+        }
+      } else if (fetcher) {
+        try {
+          await externalEffect('voice.remove_model', () => fetcher.remove('supertonic'));
+          this.#dutchRemovePending = false;
+          forgetVoiceHealth(this.#services);
+        } catch (err: unknown) {
+          this.#dutchRemovePending = true;
+          this.#services.log.warn(
+            { err: String(err) },
+            'voice: Dutch voice files weren’t removed yet; will retry until removal succeeds',
+          );
+        }
+      }
+      return this.#check('now', { ensure: false });
+    });
   }
 
   /** `voice.fetchModel`: *Download* and *Try again*. */
-  async fetchModel(principal: SessionPrincipal, model: VoiceSttModel): Promise<VoiceTyping> {
-    await this.#person(principal);
-    const fetcher = this.#fetcher();
+  async fetchModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
+    requirePerson(principal);
     return this.#serial(async () => {
+      await this.#person(principal);
+      if (model === 'supertonic') {
+        const settings = await loadVoiceSettings(this.#services.db);
+        if (!wantsDutchVoice(settings))
+          throw forbidden('Agree to the Dutch voice licence before downloading it.');
+      }
+      const fetcher = this.#fetcher();
       // A download asked twice is one download (the fetcher leaves one on its way as it is).
       await externalEffect('voice.fetch_model', () => fetcher.fetch(model), { idempotent: true }).catch(
         fetcherDown,
@@ -195,16 +284,32 @@ export class VoiceTypingService {
   }
 
   /** `voice.removeModel`: *Remove*, only for a model the settings don't need. */
-  async removeModel(principal: SessionPrincipal, model: VoiceSttModel): Promise<VoiceTyping> {
-    await this.#person(principal);
-    const fetcher = this.#fetcher();
+  async removeModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
+    requirePerson(principal);
     return this.#serial(async () => {
-      const view = voiceTypingView(await this.#facts());
-      if (view.models.find((m) => m.id === model)?.inUse)
-        throw new ApiError('conflict', 'Voice typing needs this speech model now.', {
-          details: { code: 'in_use' },
-        });
-      await externalEffect('voice.remove_model', () => fetcher.remove(model)).catch(fetcherDown);
+      await this.#person(principal);
+      const fetcher = this.#fetcher();
+      const facts = await this.#facts();
+      if (model === 'supertonic') {
+        if (wantsDutchVoice(facts.settings))
+          throw new ApiError('conflict', 'Turn Dutch voice off to remove it.', {
+            details: { code: 'in_use' },
+          });
+      } else {
+        const view = voiceTypingView(facts);
+        if (view.models.find((m) => m.id === model)?.inUse)
+          throw new ApiError('conflict', 'Voice typing needs this speech model now.', {
+            details: { code: 'in_use' },
+          });
+      }
+      try {
+        await externalEffect('voice.remove_model', () => fetcher.remove(model));
+      } catch (err: unknown) {
+        const after = await this.#facts();
+        this.#follow(after);
+        this.#tell(voiceTypingView(after), 'now');
+        fetcherDown(err);
+      }
       forgetVoiceHealth(this.#services);
       return this.#check('now', { ensure: false });
     });
@@ -296,9 +401,10 @@ export class VoiceTypingService {
     try {
       const facts = await this.#serial(async () => {
         let facts = await this.#facts();
-        if (await this.#ask(facts)) facts = await this.#facts();
+        const asked = await this.#ask(facts);
+        if (asked) facts = await this.#facts();
         this.#follow(facts);
-        this.#tell(voiceTypingView(facts), 'changed');
+        this.#tell(voiceTypingView(facts), asked ? 'now' : 'changed');
         return facts;
       });
       answered =
@@ -334,25 +440,66 @@ export class VoiceTypingService {
   }
 
   /**
-   * Asks the fetcher for the wanted models that aren't there, and (with `retry`) once per start for a failed one; true
-   * when it asked for any.
+   * Asks the fetcher for the wanted models that aren't there, and (with `retry`) once per start for a failed one; also
+   * finishes removing the opt-in Dutch voice model while off and any non-wanted model left in `removing`. True when the
+   * fetcher state may have changed.
    */
   async #ask(facts: VoiceFacts, retry = true): Promise<boolean> {
     const fetcher = voiceModelsFor(this.#services);
     if (!fetcher || !facts.fetched) return false;
     const gpu = voiceTypingView(facts).gpu !== null;
-    const want = wantedModels(facts.settings, facts.deskTalk, gpu);
+    const want = new Set<VoiceDownloadModel>(wantedModels(facts.settings, facts.deskTalk, gpu));
+    const dutchWanted = wantsDutchVoice(facts.settings);
+    if (dutchWanted) want.add('supertonic');
     let asked = false;
     for (const model of facts.fetched) {
-      if (!want.has(model.id)) continue;
+      if (model.id === 'supertonic' && !dutchWanted) {
+        // Turning Dutch voice off removes all files, including leftover removing or partial files,
+        // and retries until removal succeeds.
+        if (model.state !== 'absent' || model.received > 0 || this.#dutchRemovePending) {
+          try {
+            await externalEffect('voice.remove_model', () => fetcher.remove('supertonic'));
+            this.#dutchRemovePending = false;
+            forgetVoiceHealth(this.#services);
+            this.#services.log.info({ model: model.id }, 'voice: removed disabled Dutch voice model');
+            asked = true;
+          } catch (err) {
+            this.#dutchRemovePending = true;
+            if (!(err instanceof VoiceModelsCallError && err.status === 0)) asked = true;
+            this.#services.log.warn(
+              { err: String(err), model: model.id },
+              'voice: disabled Dutch voice model wasn’t removed; will retry',
+            );
+          }
+        }
+        continue;
+      }
+      if (!want.has(model.id)) {
+        if (model.state === 'removing') {
+          try {
+            await externalEffect('voice.remove_model', () => fetcher.remove(model.id));
+            forgetVoiceHealth(this.#services);
+            this.#services.log.info({ model: model.id }, 'voice: finished removing leftover speech model');
+            asked = true;
+          } catch (err) {
+            if (!(err instanceof VoiceModelsCallError && err.status === 0)) asked = true;
+            this.#services.log.warn(
+              { err: String(err), model: model.id },
+              'voice: leftover speech model files weren’t removed; will retry',
+            );
+          }
+        }
+        continue;
+      }
       const again = retry && model.state === 'failed' && !this.#retried.has(model.id);
-      if (model.state !== 'absent' && !again) continue;
+      if (model.state !== 'absent' && model.state !== 'removing' && !again) continue;
       if (again) this.#retried.add(model.id);
       try {
         await externalEffect('voice.fetch_model', () => fetcher.fetch(model.id), { idempotent: true });
         this.#services.log.info({ model: model.id, again }, 'voice typing: asked for a speech model');
         asked = true;
       } catch (err) {
+        if (!(err instanceof VoiceModelsCallError && err.status === 0)) asked = true;
         this.#services.log.warn(
           { err: String(err), model: model.id },
           'voice typing: a download wasn’t asked for',
@@ -369,18 +516,51 @@ export class VoiceTypingService {
    */
   #follow(facts: VoiceFacts): void {
     const moving = (facts.fetched ?? []).some((m) => m.state === 'downloading' || m.state === 'waiting');
-    if (!moving || this.#pollTimer || this.#closed) return;
-    this.#pollTimer = setTimeout(
+    if (moving && !this.#pollTimer && !this.#closed) {
+      this.#pollTimer = setTimeout(
+        () =>
+          outsideCommandScope(() => {
+            this.#pollTimer = null;
+            void this.#serial(() => this.#check('changed', { retry: false })).catch((err) =>
+              this.#services.log.debug({ err: String(err) }, 'voice typing: the downloads weren’t read'),
+            );
+          }),
+        this.#timings.pollMs,
+      );
+      this.#pollTimer.unref?.();
+    }
+    const needsRetry =
+      voiceModelsFor(this.#services) !== null && needsModelSyncRetry(facts, this.#dutchRemovePending);
+    if (!needsRetry) {
+      this.#clearSyncRetry();
+      return;
+    }
+    if (this.#syncTimer || this.#closed) return;
+    this.#syncWait = Math.min(START_RETRY_MAX_MS, this.#syncWait ? this.#syncWait * 2 : this.#timings.pollMs);
+    this.#syncTimer = setTimeout(
       () =>
         outsideCommandScope(() => {
-          this.#pollTimer = null;
+          this.#syncTimer = null;
           void this.#serial(() => this.#check('changed', { retry: false })).catch((err) =>
-            this.#services.log.debug({ err: String(err) }, 'voice typing: the downloads weren’t read'),
+            this.#services.log.debug({ err: String(err) }, 'voice: model sync retry failed'),
           );
         }),
-      this.#timings.pollMs,
+      this.#syncWait,
     );
-    this.#pollTimer.unref?.();
+    this.#syncTimer.unref?.();
+  }
+
+  #resetSyncBackoff(): void {
+    this.#syncWait = 0;
+    if (this.#syncTimer) {
+      clearTimeout(this.#syncTimer);
+      this.#syncTimer = null;
+    }
+  }
+
+  #clearSyncRetry(): void {
+    this.#dutchRemovePending = false;
+    this.#resetSyncBackoff();
   }
 
   /**
@@ -446,6 +626,9 @@ export class VoiceTypingService {
       health,
       fetched,
       hasFetcher: voiceModelsFor(this.#services) !== null,
+      knownModelSizes: { ...this.#lastModelSizes },
+      knownDutchSize: this.#lastModelSizes.supertonic ?? null,
+      dutchRemovePending: this.#dutchRemovePending,
     };
   }
 
@@ -457,6 +640,9 @@ export class VoiceTypingService {
       return null;
     });
     if (!state) return null;
+    for (const m of state.models) {
+      if (m.size > 0) this.#lastModelSizes[m.id] = m.size;
+    }
     const ready = state.models
       .filter((m) => m.state === 'ready')
       .map((m) => m.id)

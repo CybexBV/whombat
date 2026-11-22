@@ -15,7 +15,7 @@ export function createGoogleServices(services: Services): GoogleServices {
   return {
     mode,
     oauth,
-    workspace: createGoogleWorkspace(mode),
+    workspace: createGoogleWorkspace(mode, services.clock),
     tokens: createConnectionTokens(services, oauth),
   };
 }

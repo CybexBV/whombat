@@ -5,6 +5,8 @@
 import type { AgentRuntime, ChatRuntime, ProviderModel, RanOn } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  automationDispatchRuntime,
+  backgroundTurnRuntime,
   type ChatProviderFacts,
   checkChoice,
   fiveHourUsage,
@@ -61,6 +63,58 @@ describe('a turn’s runtime (CR-S03)', () => {
     expect(turnProviderOf({ provider: 'claude' }, { provider: 'codex' })).toBe('codex');
     expect(turnProviderOf({ provider: 'claude' }, null)).toBe('claude');
     expect(turnProviderOf(null, null)).toBe('claude');
+  });
+});
+
+describe('background model selection', () => {
+  const WITH_BG: AgentRuntime = {
+    provider: 'claude',
+    model: 'opus',
+    backgroundModel: 'haiku',
+    effort: 'high',
+    fast: true,
+  };
+
+  it('uses the background model of the same provider with automatic effort and no fast replies', () => {
+    const resolved = backgroundTurnRuntime(WITH_BG);
+    expect(resolved).toEqual({ provider: 'claude', model: 'haiku' });
+    expect(turnRuntimeOf(WITH_BG, resolved)).toEqual({ provider: 'claude', model: 'haiku' });
+  });
+
+  it('falls back to the main model when no background model is set', () => {
+    expect(backgroundTurnRuntime(AGENT)).toBeNull();
+    expect(turnRuntimeOf(AGENT, backgroundTurnRuntime(AGENT))).toBe(AGENT);
+  });
+
+  it('applies to scheduled automation steps, not manual, test or event-triggered runs', () => {
+    expect(automationDispatchRuntime(WITH_BG, 'schedule')).toEqual({
+      provider: 'claude',
+      model: 'haiku',
+    });
+    for (const kind of ['manual', 'github', 'message_posted', 'tracker', 'webhook'])
+      expect(automationDispatchRuntime(WITH_BG, kind)).toBeNull();
+    expect(automationDispatchRuntime(AGENT, 'schedule')).toBeNull();
+  });
+
+  it('supports a custom AI model provider when it has a background model configured', () => {
+    const local: AgentRuntime = {
+      provider: 'local',
+      model: 'llama3.3:70b',
+      backgroundModel: 'qwen3:32b',
+    };
+    const resolved = backgroundTurnRuntime(local);
+    expect(resolved).toEqual({ provider: 'local', model: 'qwen3:32b' });
+    expect(turnRuntimeOf(local, resolved)).toEqual({ provider: 'local', model: 'qwen3:32b' });
+  });
+
+  it('leaves person-started chats and thread choices on the main model or thread choice', () => {
+    expect(turnRuntimeOf(WITH_BG, null).model).toBe('opus');
+    expect(
+      turnRuntimeOf(WITH_BG, resolveThreadRuntime(WITH_BG, { provider: 'claude', model: 'sonnet' })),
+    ).toEqual({
+      provider: 'claude',
+      model: 'sonnet',
+    });
   });
 });
 

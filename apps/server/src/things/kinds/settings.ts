@@ -5,28 +5,34 @@
  * service reads back the new value (SST-02). The change it leaves can be put back (SST-03): the same action with the old
  * value, while the setting still has the value Whombat set.
  */
-import type { ThingPagePanel, ThingSetting, ThingSettingChanged } from '@whombat/core';
+import type { ThingPagePanel, ThingPageTab, ThingSetting, ThingSettingChanged } from '@whombat/core';
 import { and, desc, eq, gt, like } from 'drizzle-orm';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { changes } from '../../db/schema/index';
+import { assistantCalled } from '../../home/assistant-name';
 import { hasUndoer } from '../../home/registry';
 import { ApiError, badRequest, conflict } from '../../lib/errors';
+import { loadAgentRow } from '../../read/principals';
 import type { Services } from '../../services';
-import { clip, dayMonth } from '../words';
+import { clip, dayMonth, str } from '../words';
 import { type ActCall, actAs } from './act';
 import { pageButton } from './buttons';
-import { forgetConnectionReads } from './read';
-import type { KindAction, KindActionCtx, KindActionInput, KindActionWords } from './registry';
+import { cachedRead, forgetConnectionReads, KIND_DEADLINE_MS, withDeadline } from './read';
+import type { KindAction, KindActionCtx, KindActionInput, KindActionWords, KindSettings } from './registry';
 import type { KindCtx } from './types';
 
 export type SettingValue = string | number | boolean;
 
 /** The action every declared setting is changed with. */
 export const SETTING_ACTION = 'setting';
+/** The tab key every service's declared settings use. */
+export const SERVICE_SETTINGS_TAB_KEY = 'service-settings';
 /** The change kind's start: `thing.setting.<setting>`. */
 export const SETTING_CHANGE_PREFIX = 'thing.setting.';
-/** How long a declared change can be put back (SST-03). */
+/** How long a declared change can be put back. */
 export const SETTING_UNDO_MS = 7 * 86_400_000;
+/** How long a service's settings read stays warm; a change forgets it at once. */
+const SETTINGS_KEEP_MS = 60_000;
 
 export interface SettingChoice {
   value: SettingValue;
@@ -58,9 +64,14 @@ export interface SettingSpec<S> {
   sentence?: (v: SettingValue, s: S) => string;
   /** The call that sets it (none for `elsewhere`). */
   write?: (v: SettingValue, s: S) => ActCall;
+  /**
+   * Fresh read right before writing and again right after, when this setting can be read on its own without reading
+   * unrelated sections. Absent: `DeclaredSettings.read`.
+   */
+  readFresh?: (services: Services, row: CatalogConnectionRow) => Promise<S>;
   /** A line under the sheet's choices, from what Whombat knows. */
   hint?: (s: S) => string | undefined;
-  /** Where it is changed instead (`elsewhere`, SST-05): the service's own page for it. */
+  /** Where it is changed instead (`elsewhere`): the service's own page for it. */
   elsewhere?: (base: string) => string;
 }
 
@@ -78,6 +89,20 @@ export interface DeclaredSettings<S> {
   specs: readonly SettingSpec<S>[];
   /** Reads the service's settings now (never a kept read): before and after a change. */
   read: (services: Services, row: CatalogConnectionRow) => Promise<S>;
+  /** Where the service's own settings live, from its base address; absent: the base address itself. */
+  url?: (base: string) => string;
+  /** Plain words when reading failed (such as a non-admin key); absent: the generic sentence. */
+  unread?: (err: unknown) => string | undefined;
+}
+
+/** Choices with the current value added when it is none of them (changed in the service itself). */
+export function withCurrent(
+  choices: SettingChoice[],
+  current: SettingValue | undefined,
+  label: (v: SettingValue) => string,
+): SettingChoice[] {
+  if (current === undefined || choices.some((c) => sameValue(c.value, current))) return choices;
+  return [...choices, { value: current, label: label(current) }];
 }
 
 /** Two values are the same setting value whatever their type (Plex says `20000` or `"20000"`). */
@@ -98,7 +123,10 @@ export function asBool(v: unknown): boolean | null {
 export function valueWords<S>(spec: SettingSpec<S>, v: SettingValue, s: S): string {
   if (spec.words) return spec.words(v, s);
   if (spec.kind === 'switch') return asBool(v) ? 'On' : 'Off';
-  return spec.choices?.(s).find((c) => sameValue(c.value, v))?.label ?? String(v);
+  const choice = spec.choices?.(s).find((c) => sameValue(c.value, v))?.label;
+  if (choice !== undefined) return choice;
+  if (typeof v === 'boolean') return v ? 'On' : 'Off';
+  return String(v);
 }
 
 function shortWords<S>(spec: SettingSpec<S>, v: SettingValue, s: S): string {
@@ -130,9 +158,10 @@ function wanted<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, s: S, input: Ki
   return choice.value;
 }
 
-async function readNow<S>(d: DeclaredSettings<S>, ctx: KindActionCtx): Promise<S> {
+async function readNow<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, ctx: KindActionCtx): Promise<S> {
+  const load = spec.readFresh ?? d.read;
   try {
-    return await d.read(ctx.services, ctx.row);
+    return await load(ctx.services, ctx.row);
   } catch {
     throw new ApiError('unavailable', `Whombat couldn’t read ${d.name}’s settings just now.`);
   }
@@ -144,13 +173,15 @@ function lower(label: string): string {
 }
 
 /**
- * The `setting` action (SST-02): reads the setting, takes only a value it offers, writes it, and reads it back. Done
- * only when the service says the new value; the change can be put back (SST-03).
+ * The `setting` action: reads the setting right before writing, takes only a value it offers, writes that single
+ * setting (via a field-only or conditional update), and reads it back. Done only when the service reports the new
+ * value; the change can then be put back.
  */
 export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
   return async (ctx, input) => {
     const spec = specOf(d, input.target);
-    const before = await readNow(d, ctx);
+    const load = spec.readFresh ?? d.read;
+    const before = await readNow(d, spec, ctx);
     const old = spec.read(before);
     if (old === undefined) throw conflict(`${d.name} doesn’t offer ${lower(spec.label)} here.`);
     const value = wanted(d, spec, before, input);
@@ -164,21 +195,38 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
       };
     await actAs(ctx.services, ctx.row, d.name, (spec.write as NonNullable<typeof spec.write>)(value, before));
     forgetConnectionReads(ctx.services, ctx.row.id);
-    const after = await d.read(ctx.services, ctx.row).catch(() => null);
+    const after = await load(ctx.services, ctx.row).catch(() => null);
     const now = after ? spec.read(after) : undefined;
-    if (after && (now === undefined || !sameValue(now, value)))
-      throw new ApiError(
-        'unavailable',
-        `${d.name} didn’t take the change. It still says ${valueWords(spec, now ?? old, after)}.`,
-      );
-    const s = after ?? before;
-    const said = spec.sentence?.(value, s) ?? `${spec.label} is now ${valueWords(spec, value, s)}.`;
+    if (!after || now === undefined)
+      return {
+        message:
+          `Asked ${d.name} to set ${spec.label} to ${valueWords(spec, value, before)}, but Whombat couldn’t check whether it took.`.slice(
+            0,
+            200,
+          ),
+        title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, before)} (not checked)`,
+        uncertain: true,
+      };
+    if (!sameValue(now, value)) {
+      if (sameValue(now, old))
+        throw new ApiError(
+          'unavailable',
+          `${d.name} didn’t take the change. It still says ${valueWords(spec, now, after)}.`,
+        );
+      return {
+        message:
+          `Asked ${d.name} to set ${spec.label} to ${valueWords(spec, value, after)}, but ${d.name} now says ${valueWords(spec, now, after)}.`.slice(
+            0,
+            200,
+          ),
+        title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, after)} (now ${shortWords(spec, now, after)})`,
+        uncertain: true,
+      };
+    }
+    const said = spec.sentence?.(value, after) ?? `${spec.label} is now ${valueWords(spec, value, after)}.`;
     return {
-      message: (after
-        ? `${said} Checked with ${d.name}.`
-        : `${said} Whombat couldn’t check it with ${d.name} just now.`
-      ).slice(0, 200),
-      title: `Changed ${spec.label} in ${d.name} from ${shortWords(spec, old, before)} to ${shortWords(spec, value, s)}`,
+      message: `${said} Checked with ${d.name}.`.slice(0, 200),
+      title: `Changed ${spec.label} in ${d.name} from ${shortWords(spec, old, before)} to ${shortWords(spec, value, after)}`,
       changeKind: `setting.${spec.id}`,
       detail: shortWords(spec, old, before),
       undo: { target: spec.id, value: old, expect: value },
@@ -186,7 +234,7 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
   };
 }
 
-/** A change in the approval card's words (SST-04): “Change a Plex setting”, “Quality outside your home: 8 → 20 Mbps”. */
+/** A change in the approval card's words: “Change a Plex setting”, “Quality outside your home: 8 → 20 Mbps”. */
 export async function describeSetting<S>(
   d: DeclaredSettings<S>,
   ctx: KindActionCtx,
@@ -194,8 +242,13 @@ export async function describeSetting<S>(
 ): Promise<KindActionWords | null> {
   const spec = d.specs.find((s) => s.id === input.target);
   if (!spec?.write || input.value === undefined) return null;
-  const s = await d.read(ctx.services, ctx.row).catch(() => null);
-  if (!s) return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${String(input.value)}`] };
+  const s = await (spec.readFresh ?? d.read)(ctx.services, ctx.row).catch(() => null);
+  if (!s) {
+    const b =
+      spec.kind === 'switch' ? asBool(input.value) : typeof input.value === 'boolean' ? input.value : null;
+    const fallback = b !== null ? (b ? 'On' : 'Off') : String(input.value);
+    return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${fallback}`] };
+  }
   let value: SettingValue;
   try {
     value = wanted(d, spec, s, { ...input, expect: undefined });
@@ -301,13 +354,15 @@ export interface SettingsTabInput<S> {
   who: Pick<KindCtx, 'row'>;
   /** The service's own settings page (“All settings in Plex”, “In Plex”). */
   url: string;
+  /** The service's base address, passed to per-row `elsewhere` builders when set. */
+  baseUrl?: string;
   changed: Map<string, SettingChange>;
   assistant: string;
   now: Date;
   timeZone: string;
 }
 
-/** One setting's row (SST-01, SST-05). */
+/** One setting's row. */
 export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>): ThingSetting | null {
   const { declared: d, settings: s, who } = input;
   const v = spec.read(s);
@@ -325,7 +380,7 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
       ...base,
       elsewhere: {
         label: `In ${d.name}`.slice(0, 30),
-        ...(spec.elsewhere ? { url: spec.elsewhere(input.url) } : {}),
+        url: spec.elsewhere ? spec.elsewhere(input.baseUrl ?? input.url) : input.url,
       },
     };
   if (spec.kind === 'switch')
@@ -335,7 +390,16 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
       toggle: pageButton(who, { action: SETTING_ACTION, target: spec.id, label: spec.label }),
     };
   const choices = (spec.choices?.(s) ?? []).slice(0, 24);
-  if (choices.length < 2) return base;
+  if (choices.length < 2)
+    return spec.elsewhere
+      ? {
+          ...base,
+          elsewhere: {
+            label: `In ${d.name}`.slice(0, 30),
+            url: spec.elsewhere(input.baseUrl ?? input.url),
+          },
+        }
+      : base;
   const current = choices.find((c) => sameValue(c.value, v))?.value ?? null;
   const hint = spec.hint?.(s);
   return {
@@ -355,20 +419,13 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
 }
 
 /**
- * The service's settings tab's panels (SST-07): a line first, one `settings` card per group (each with its Ask), and
+ * The service's settings tab's panels: a line first, one `settings` card per group (each with its Ask), and
  * “Something else?” last.
  */
 export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] {
   const { declared: d, assistant } = input;
-  const panels: ThingPagePanel[] = [
-    {
-      kind: 'text',
-      id: 'settings-intro',
-      place: 'top',
-      body: `The settings that matter most, in plain words. Change one here, or ask ${assistant} to do it for you.`,
-      link: { kind: 'url', label: `All settings in ${d.name}`.slice(0, 30), url: input.url },
-    },
-  ];
+  const groupPanels: ThingPagePanel[] = [];
+  let hasWritable = false;
   // The first half of the groups on the left, the rest on the right (the mock's two columns).
   const half = Math.ceil(d.groups.length / 2);
   d.groups.forEach((g, i) => {
@@ -377,7 +434,8 @@ export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] 
       .map((spec) => settingRow(input, spec))
       .filter((r): r is ThingSetting => r !== null);
     if (!rows.length) return;
-    panels.push({
+    if (rows.some((r) => r.toggle !== undefined || r.choose !== undefined)) hasWritable = true;
+    groupPanels.push({
       kind: 'settings',
       id: `settings-${g.id}`.slice(0, 40),
       place: i < half ? 'main' : 'side',
@@ -386,17 +444,106 @@ export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] 
       ...(g.ask?.length ? { ask: { questions: g.ask.slice(0, 3).map((q) => clip(q, 200)) } } : {}),
     });
   });
-  panels.push({
-    kind: 'text',
-    id: 'settings-more',
-    place: 'bottom',
-    title: 'Something else?',
-    body: `${assistant} can change any other ${d.name} setting for you. It asks you first.`,
-    link: {
-      kind: 'ask',
-      label: `Ask ${assistant}`.slice(0, 30),
-      question: `I’d like to change another ${d.name} setting.`,
+  return [
+    {
+      kind: 'text',
+      id: 'settings-intro',
+      place: 'top',
+      body: hasWritable
+        ? `The settings that matter most, in plain words. Change one here, or ask ${assistant} to do it for you.`
+        : `The settings that matter most, in plain words. They stay in ${d.name} so nothing here can overwrite other settings there.`,
+      link: { kind: 'url', label: `All settings in ${d.name}`.slice(0, 30), url: input.url },
     },
-  });
-  return panels;
+    ...groupPanels,
+    {
+      kind: 'text',
+      id: 'settings-more',
+      place: 'bottom',
+      title: 'Something else?',
+      body: hasWritable
+        ? `${assistant} can change any other ${d.name} setting for you. It asks you first.`
+        : `${assistant} can help you check or plan changes to ${d.name}’s settings.`,
+      link: {
+        kind: 'ask',
+        label: `Ask ${assistant}`.slice(0, 30),
+        question: hasWritable
+          ? `I’d like to change another ${d.name} setting.`
+          : `Help me with my ${d.name} settings.`,
+      },
+    },
+  ];
+}
+
+/** A connection's base address without trailing slashes. */
+function serviceBaseUrl(row: Pick<CatalogConnectionRow, 'fields' | 'baseUrl'>): string {
+  return (str(row.fields.url) ?? row.baseUrl).replace(/\/+$/, '');
+}
+
+/** The service's settings tab: its cards, or why it couldn't be read with a link to the service. */
+export async function settingsTab<S>(ctx: KindCtx, declared: DeclaredSettings<S>): Promise<ThingPageTab> {
+  const { services, row, now } = ctx;
+  const base = serviceBaseUrl(row);
+  const url = declared.url ? declared.url(base) : base;
+  let readError: unknown = null;
+  const [current, changed, agent] = await Promise.all([
+    cachedRead<S>(
+      services,
+      `settings:${row.catalogId}:${row.id}`,
+      row,
+      () =>
+        withDeadline(
+          declared.read(services, row),
+          KIND_DEADLINE_MS,
+          `${declared.name} didn’t answer in time.`,
+        ),
+      SETTINGS_KEEP_MS,
+    ).catch((err: unknown) => {
+      readError = err;
+      return null;
+    }),
+    settingChanges(services, ctx.burrowId, row.id, now).catch(() => new Map<string, SettingChange>()),
+    loadAgentRow(services.db, ctx.burrowId).catch(() => undefined),
+  ]);
+  const tab = { key: SERVICE_SETTINGS_TAB_KEY, label: clip(`${declared.name} settings`, 30) };
+  if (!current) {
+    const body =
+      declared.unread?.(readError) ??
+      `Whombat couldn’t read ${declared.name}’s settings just now. Try again in a moment, or change them in ${declared.name}.`;
+    return {
+      ...tab,
+      panels: [
+        {
+          kind: 'text',
+          id: 'settings-unread',
+          title: clip(`${declared.name} settings`, 60),
+          body: clip(body, 280),
+          link: { kind: 'url', label: clip(`Open ${declared.name}`, 30), url },
+        },
+      ],
+    };
+  }
+  return {
+    ...tab,
+    panels: settingsPanels({
+      declared,
+      settings: current,
+      who: { row },
+      url,
+      baseUrl: base,
+      changed,
+      assistant: assistantCalled(agent?.name),
+      now,
+      timeZone: ctx.timeZone,
+    }),
+  };
+}
+
+/** Bundles a service's declared settings for `KindModule.settings`. */
+export function declaredSettings<S>(declared: DeclaredSettings<S>): KindSettings {
+  return {
+    name: declared.name,
+    tab: (ctx) => settingsTab(ctx, declared),
+    action: settingAction(declared),
+    describe: (ctx, input) => describeSetting(declared, ctx, input),
+  };
 }

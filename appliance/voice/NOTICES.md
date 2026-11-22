@@ -1,11 +1,10 @@
 # Third-party notices of the voice service
 
 `whombat-voice` (this directory, installed with `share/whombat-voice/NOTICES.md`) runs programs that are in the
-appliance image (`nix/packages/voice-engines`, docs/decisions/nixos.md NX-291, NX-470, NX-472, NX-476) over Kokoro,
-which is in the image, and two speech-to-text models, which are not: `whombat-voice-models` downloads them on the box
-after it is installed, from the sources `nix/packages/voice-models` names (NX-473). Supertonic 3, the Dutch voice, is
-not in the image (NX-528); it is listed below for an image that sets `whombat.voice.supertonic.model`. It starts the programs as separate programs; it
-doesn't link them.
+appliance image (`nix/packages/voice-engines`) over Kokoro, which is in the image, and models which are not:
+`whombat-voice-models` downloads the speech-to-text models and, if the person agrees to its Open RAIL-M licence in
+Settings, Supertonic 3 (the Dutch voice) on the box after it is installed, from the sources `nix/packages/voice-models`
+names. It starts the programs as separate programs; it doesn't link them.
 
 | Component | Version | Licence | Source |
 |---|---|---|---|
@@ -21,7 +20,7 @@ doesn't link them.
 | What sherpa-onnx's library also carries: piper-phonemize, kaldi-native-fbank, kaldifst and OpenFst, kaldi-decoder, simple-sentencepiece, cargs, hclust-cpp, kissfft, Eigen, nlohmann/json | as sherpa-onnx 1.13.8 pins them (`nix/packages/voice-engines/default.nix`) | MIT, Apache-2.0, BSD-3-Clause, MPL-2.0 (Eigen) | their sources as that file lists them |
 | ONNX Runtime (and the protobuf and Abseil libraries it uses) | 1.24.4 | MIT (protobuf BSD-3-Clause, Abseil Apache-2.0) | github.com/microsoft/onnxruntime, through nixpkgs |
 | Kokoro v1.0 (`model.onnx`, `voices.bin`, `tokens.txt`), with the US English lexicon (`lexicon-us-en.txt`) | huggingface.co/csukuangfj/kokoro-multi-lang-v1_0 at `f7b96bb6` | Apache-2.0 | below |
-| Supertonic 3, int8 (the four `*.int8.onnx`, `tts.json`, `unicode_indexer.bin`, `voice.bin`), **not in the image** | huggingface.co/csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11 at `cca5a0e6`, from huggingface.co/Supertone/supertonic-3 at `3cadd1ee` | BigScience Open RAIL-M | below |
+| Supertonic 3, int8 (the four `*.int8.onnx`, `tts.json`, `unicode_indexer.bin`, `voice.bin`, `LICENSE`), **downloaded by the box on opt-in** | huggingface.co/csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11 at `cca5a0e6`, from huggingface.co/Supertone/supertonic-3 at `3cadd1ee` | BigScience Open RAIL-M | below |
 
 `kokoro-speak` and `supertonic-speak` are small programs that drive sherpa-onnx's C library; because that library
 carries eSpeak NG, they are under the GNU General Public License version 3, unlike the rest of this repository. Their
@@ -53,10 +52,10 @@ which Whombat used before, because it sounds far more natural while its weights 
 ## Dutch: Supertonic 3
 
 **Supertonic 3** by **Supertone Inc.** (huggingface.co/Supertone/supertonic-3), Copyright (c) 2026 Supertone Inc.,
-licensed under the **BigScience Open RAIL-M License** (dated August 18, 2022). Whombat's image doesn't carry it
-(NX-528). An image that sets `whombat.voice.supertonic.model` installs it with its full licence text beside it
-(`LICENSE` in the model's directory, `pkgs.voice-supertonic-model`) and uses it to speak the desk's answers in Dutch,
-on the box itself.
+licensed under the **BigScience Open RAIL-M License** (dated August 18, 2022). Whombat's image doesn't carry it. When
+the person switches on Dutch voice in Settings and agrees to its use restrictions, `whombat-voice-models` downloads the
+files and the full licence text (`LICENSE`) into `/persist/voice-models/supertonic-3-int8` so `supertonic-speak` can
+speak the desk's answers in Dutch on the box itself. Turning Dutch voice off removes those files.
 
 The model's four ONNX files were **changed**: quantized to int8 by the sherpa-onnx project (Fangjun Kuang;
 github.com/k2-fsa/sherpa-onnx `scripts/supertonic`, its release `sherpa-onnx-supertonic-3-tts-int8-2026-05-11`), which

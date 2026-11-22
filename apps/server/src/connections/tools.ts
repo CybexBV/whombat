@@ -44,8 +44,10 @@ import {
   executeConnectionCall,
   needsReauthText,
   newCallId,
+  otherTargetsOf,
 } from './call';
 import { coversReads } from './call-access';
+import { ChangedWhileAskedError, callTarget } from './call-target';
 import { connectionByHandle, keyTierOf, type VisibleConnection } from './context';
 import { limitsProblem } from './limits';
 import {
@@ -287,20 +289,33 @@ export const CONNECTION_TOOL_HANDLERS: {
     }
     const callId = newCallId();
     const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));
-    const res = await services.pipeline.commit(
-      callConnectionTool,
-      {
-        connectionId: c.row.id,
-        handle: c.handle,
-        tool: tool.name,
-        toolHash: tool.hash,
-        callId,
-        argsEnc,
-        conversationId: ctx.dispatch.conversationId,
-        ...(input.change ? { change: input.change } : {}),
-      },
-      { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
-    );
+    // Where it goes and as whom now, and every other connection it acts through: a yes is bound to them, and the call
+    // is sent only while each still has it.
+    const target = callTarget(c.row);
+    const others = await otherTargetsOf(services, c.row, tool.name, args);
+    let res: Awaited<ReturnType<typeof services.pipeline.commit<typeof callConnectionTool.schema, unknown>>>;
+    try {
+      res = await services.pipeline.commit(
+        callConnectionTool,
+        {
+          connectionId: c.row.id,
+          handle: c.handle,
+          tool: tool.name,
+          toolHash: tool.hash,
+          callId,
+          argsEnc,
+          conversationId: ctx.dispatch.conversationId,
+          ...(input.change ? { change: input.change } : {}),
+          target,
+          others,
+        },
+        { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },
+      );
+    } catch (err) {
+      // It went elsewhere, or as someone else, since it was read here: no card, nothing sent; the agent may ask again.
+      if (err instanceof ChangedWhileAskedError) return failed('destination_refused', err.message);
+      throw err;
+    }
     if (res.status === 'blocked') return { status: 'blocked', eventId: res.eventId, message: res.message };
     // The person the turn is for (one-person.md OP-S40), also in a turn no message of theirs started (a schedule).
     const person = await dispatchPerson(services.db, ctx.dispatch);
@@ -335,6 +350,8 @@ export const CONNECTION_TOOL_HANDLERS: {
       threadRootId: ctx.dispatch.threadRootId ?? null,
       personId: person?.id ?? ctx.onBehalfOf.principalId ?? null,
       change: input.change ?? null,
+      target,
+      others,
     });
     if (result.kind === 'failed') return failed(result.reason, result.message);
     let out = result.output;

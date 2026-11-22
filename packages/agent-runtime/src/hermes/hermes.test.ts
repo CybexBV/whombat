@@ -837,6 +837,35 @@ describe('HermesProvider', () => {
     expect(loopEntry(l)).toMatchObject({ transport: 'chat_completions' });
     expect(JSON.stringify(l)).not.toContain('sk-local');
     expect(readFileSync(join(local.profile, 'local-model.key'), 'utf8').trim()).toBe('sk-local');
+    // When `input.model` is cleared on a fallback retry, Hermes uses `local.defaultModel` instead of the rejected override in `local.model`.
+    const localRetry = setup('', { kind: 'local' });
+    const retryCtx = context();
+    retryCtx.localModel = {
+      v: 1,
+      baseUrl: 'http://192.168.1.20:11434/v1',
+      model: 'removed-bg-model',
+      defaultModel: 'llama4',
+      apiKey: 'sk-local',
+    };
+    await collect(
+      localRetry.provider.runTurn(
+        input(localRetry.dir, { context: retryCtx, model: '' }),
+        new AbortController().signal,
+      ),
+    );
+    expect(configOf(localRetry.profile).model.default).toBe('llama4');
+    expect(
+      localRetry.provider.loopSource(
+        input(localRetry.dir, { context: retryCtx, model: 'removed-bg-model' }),
+        localRetry.profile,
+      )?.model,
+    ).toBe('removed-bg-model');
+    expect(
+      localRetry.provider.loopSource(
+        input(localRetry.dir, { context: retryCtx, model: undefined }),
+        localRetry.profile,
+      )?.model,
+    ).toBe('llama4');
     // `local` without a model on the person's network doesn't start.
     const none = await collect(
       local.provider.runTurn(input(local.dir, { model: '' }), new AbortController().signal),

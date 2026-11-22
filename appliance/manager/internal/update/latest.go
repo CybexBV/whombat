@@ -14,6 +14,9 @@ import (
 // only grows (TUF refuses an older one), so the same repository state is offered once and a new publication is a new
 // offer. Nil, nil: nothing newer. Hold, rollouts and not-before don't exist without control.
 func LatestOffer(repo *trust.Repo, st *State, deviceID, env string) (*Offered, error) {
+	if repo.ChannelPaused {
+		return nil, nil
+	}
 	var curID, curDigest string
 	var cur *trust.Versions
 	if c := st.Current; c != nil {
@@ -58,22 +61,40 @@ func (e *Engine) OfferLatestNow(ctx context.Context, repo *trust.Repo, deviceID,
 }
 
 func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, env string, again bool) (dec Decision, why string, offered *Offered, err error) {
+	if repo == nil {
+		return DecisionNoop, "no metadata", nil, nil
+	}
 	st, err := e.Load()
 	if err != nil {
 		return "", "", nil, err
+	}
+	if repo.Channel != "" {
+		if ok, reason := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+			return DecisionNoop, reason, nil, nil
+		}
+	}
+	if repo.ChannelPaused {
+		return DecisionNoop, "channel paused", nil, nil
 	}
 	o, err := LatestOffer(repo, st, deviceID, env)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("newest release: %w", err)
 	}
 	if o == nil {
+		if _, err := e.RetireWithdrawn(ctx, repo, ""); err != nil {
+			return "", "", nil, err
+		}
 		return DecisionNoop, "nothing newer", nil, nil
 	}
 	if repo.Channel != "" {
 		o.Channel = repo.Channel
+		o.ChannelVersion = repo.ChannelVersion
 		if st.LastOffer == offerKey(repo.Channel, o.Release.Digest) && !again && !retryableRepair(st, o.Release.Digest) {
 			// Offered before: a re-signed snapshot is no new offer, so a release refused or rolled back here, or one
-			// waiting for the owner, isn't taken up again four times a day.
+			// waiting for the owner, isn't taken up again four times a day. Still retire any older withdrawn candidate.
+			if _, err := e.RetireWithdrawn(ctx, repo, o.Release.Digest); err != nil {
+				return "", "", nil, err
+			}
 			return DecisionNoop, "already processed", o, nil
 		}
 		// Another release or another channel: a new offer, also within the snapshot an earlier offer came from (a
@@ -81,7 +102,18 @@ func (e *Engine) offerLatest(ctx context.Context, repo *trust.Repo, deviceID, en
 		o.Payload.Sequence = max(o.Payload.Sequence, st.LastAssignmentSeq+1)
 	}
 	dec, why, err = e.Offer(ctx, *o)
-	return dec, why, o, err
+	if err != nil {
+		return dec, why, o, err
+	}
+	if dec == DecisionNoop && (why == "stale channel metadata" || why == "wrong channel") {
+		return dec, why, nil, nil
+	}
+	if dec == DecisionRefused || (dec == DecisionNoop && why != "assignment renewed") {
+		if _, err := e.RetireWithdrawn(ctx, repo, o.Release.Digest); err != nil {
+			return "", "", nil, err
+		}
+	}
+	return dec, why, o, nil
 }
 
 // offerKey is State.LastOffer of a channel's release.

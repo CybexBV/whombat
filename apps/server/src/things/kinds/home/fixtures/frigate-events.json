@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1761068000.123456-abc123",
+    "camera": "front_door",
+    "label": "person",
+    "sub_label": ["Mara", 0.92],
+    "start_time": 1792608000,
+    "end_time": 1792608020,
+    "top_score": 0.89,
+    "has_clip": true,
+    "has_snapshot": true,
+    "zones": ["porch"]
+  },
+  {
+    "id": "1761064000.654321-def456",
+    "camera": "driveway",
+    "label": "car",
+    "sub_label": null,
+    "start_time": 1792604000,
+    "end_time": 1792604040,
+    "top_score": 0.84,
+    "has_clip": true,
+    "has_snapshot": true,
+    "zones": []
+  }
+]

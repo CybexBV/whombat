@@ -1002,6 +1002,22 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     ),
   },
   {
+    name: 'server_disk_usage',
+    title: 'Find out what fills a disk',
+    description:
+      'Measure what fills one mounted filesystem on a server right now (on request, read-only, low priority). Skips sleeping disks (code spun_down) and disks whose sleep state can’t be checked (code standby_unknown, for example inside containers or behind unknown controllers); tell the person the real reason from message. Reports container images, build cache, volumes, logs, system journal, package caches, VM disks and snapshots, and the largest folders. The server page shows recent results.',
+    access: 'read',
+    inputSchema: obj(
+      {
+        server: SERVER,
+        mount: str(
+          'The mount point to measure, as server_detail lists it (/, /var/lib/docker, /mnt/cache). Leave out to check the fullest local filesystem.',
+        ),
+      },
+      ['server'],
+    ),
+  },
+  {
     name: 'server_command',
     title: 'Run a command on a server',
     description:
@@ -1251,5 +1267,5 @@ export const entry = {
   tools: [...SERVERS_TOOLS],
   sensitive: [...SERVERS_SENSITIVE],
   guide:
-    'Start with servers_overview, then server_detail or guests_list; incus_overview, unraid_overview and libvirt_overview show an Incus, Unraid or QEMU/KVM server’s own things. server_add puts a card in the chat to add a server; the person signs in there, never you. Read before you change: guest_config and incus_profile give the digest their _set tool needs; guest_snapshots, guest_backups, backup_jobs and server_choices the names and ids other tools take. Backups, clones, restores, moves and Unraid commands run as tasks: Whombat says when one ends; server_tasks shows progress. The guest this Whombat runs in can be read, snapshotted and backed up, not changed. Updates: server_updates lists what waits; server_update checks or installs them. Say plainly what changed, offer a restart (server_power) when needed, update a cluster one node at a time, never to a new major release. On a Mac, press by name first (mac_ui press; list shows names); mac_screen look and click by position only if nothing matches; unlock a locked screen; password fills a macOS password prompt; mac_ui open accessibility when Whombat Helper lacks it. Never ask for a Mac’s password. Risky steps (deleting, restoring, moving, stopping, restarting, updates, commands, a Mac’s screen) ask a person first unless server_detail says asksFirst never; give a plain reason. To stop the asking, the person sets Asks you first to Never on the server’s System tab or uses the card’s button; never suggest a way around a question.',
+    'Start with servers_overview, then server_detail or guests_list; incus_overview, unraid_overview and libvirt_overview show their details. Disk filling up: server_disk_usage (when skipped, say its real reason: asleep vs sleep state unknown). server_add puts a card in chat to add a server; only the person signs in there. Read before you change: guest_config and incus_profile give the digest their _set tool needs; guest_snapshots, guest_backups, backup_jobs and server_choices the names and ids other tools take. Backups, clones, restores, moves and Unraid actions run as tasks; Whombat says when one ends and server_tasks shows progress. The guest this Whombat runs in can be read, snapshotted and backed up, not changed. Updates: server_updates lists what waits; server_update checks or installs them. Say what changed, offer a restart (server_power) if needed, update a cluster one node at a time, never a new major release. On a Mac, press by name first (mac_ui press; list gives names); mac_screen look and click only if needed; unlock, password for prompts, mac_ui open accessibility if missing. Never ask for a Mac’s password. Risky steps (deleting, restoring, moving, stopping, restarting, updates, commands, a Mac’s screen) ask a person first unless server_detail says asksFirst never; give a plain reason. To stop asking, the person sets Asks you first to Never on the server’s System tab or the card’s button; never suggest a way around a question.',
 } satisfies CatalogEntryInput;

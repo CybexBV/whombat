@@ -34,6 +34,8 @@ import {
   connectionHost,
   connectionPromptLine,
   connectionTransport,
+  cookieHeaderValue,
+  cutsOffReason,
   defaultConnectionLabel,
   defaultToolTier,
   deletesByName,
@@ -67,7 +69,13 @@ import {
   resolveRequestPrefixes,
   resolveTokenUrl,
   sensitiveReason,
+  sessionAnswerExpiresAt,
+  sessionAnswerToken,
+  sessionCredential,
+  sessionLoginFailure,
+  sessionLoginRequest,
   TASKS_TOOLS,
+  TokenAuth,
   templateFields,
   tokenAuthProblem,
   tokenCredential,
@@ -484,6 +492,141 @@ describe('sensitive calls (CX-31)', () => {
     expect(toolAlwaysAsks(entry('dropbox'), 'files_delete')).toBe(true);
     expect(toolAlwaysAsks(entry('dropbox'), 'files_list')).toBe(false);
     expect(toolAlwaysAsks(ha, 'HassTurnOn')).toBe(false);
+  });
+
+  it('asks before service reads that return passwords, private keys or tokens, while keeping normal reads automatic', () => {
+    const readReason = (id: string, path: string, method: 'GET' | 'HEAD' | 'POST' = 'GET') => {
+      const e = entry(id);
+      return sensitiveReason(
+        e,
+        REQUEST_TOOL_NAME,
+        { method, path },
+        { access: callAccess(e, REQUEST_TOOL_NAME, { method, path }) },
+      );
+    };
+    const secretReads: [string, string, ('GET' | 'HEAD' | 'POST')?][] = [
+      ['qbittorrent', '/api/v2/app/preferences'],
+      ['qbittorrent', '/api/v2/app/preferences/', 'HEAD'],
+      ['qbittorrent', '/api/v2/app/cookies'],
+      ['qbittorrent', '/api/v2/app/setCookies', 'POST'],
+      ['qbittorrent', '/api/v2/app/rotateAPIKey', 'POST'],
+      ['qbittorrent', '/api/v2/app/deleteAPIKey', 'POST'],
+      ['jellyfin', '/System/Configuration'],
+      ['jellyfin', '/System/Configuration/Network'],
+      ['jellyfin', '/Plugins/abc123/Configuration'],
+      ['frigate', '/api/config'],
+      ['frigate', '/api/config/raw', 'HEAD'],
+      ['frigate', '/api/ffprobe'],
+      ['immich', '/api/system-config'],
+      ['immich', '/api/admin/config'],
+      ['immich', '/api/admin/database-backups/immich-db-backup.sql.gz'],
+      ['immich', '/api/api-keys', 'POST'],
+      ['pihole', '/api/teleporter'],
+      ['pihole', '/api/config'],
+      ['pihole', '/api/config/webserver'],
+      ['pihole', '/api/config/webserver/api/pwhash'],
+      ['pihole', '/api/auth/app'],
+      ['pihole', '/api/auth/totp'],
+      ['adguard', '/control/tls/status'],
+      ['plex', '/:/prefs'],
+      ['nginx_proxy_manager', '/api/nginx/certificates/3/download'],
+      ['opnsense', '/api/core/backup/download/this'],
+      ['opnsense', '/api/trust/cert/get/uuid-1'],
+      ['opnsense', '/api/trust/ca/raw_dump/uuid-1'],
+      ['opnsense', '/api/auth/user/get/uuid-1'],
+      ['opnsense', '/api/auth/user/newOtpSeed'],
+      ['opnsense', '/api/wireguard/server/getServer/uuid-1'],
+      ['opnsense', '/api/wireguard/server/keyPair'],
+      ['opnsense', '/api/wireguard/client/psk'],
+      ['opnsense', '/api/openvpn/instances/get/uuid-1'],
+      ['opnsense', '/api/ipsec/pre_shared_keys/getItem/uuid-1'],
+      ['cloudflare', '/client/v4/accounts/a1/cfd_tunnel/t1/token'],
+      ['sonarr', '/api/v3/config/host'],
+      ['radarr', '/api/v3/config/host'],
+    ];
+    for (const [id, path, method] of secretReads) {
+      expect(readReason(id, path, method ?? 'GET'), `${id} ${method ?? 'GET'} ${path}`).not.toBeNull();
+      // Guarding individual paths never marks the whole `request` tool as "Always asks".
+      expect(toolAlwaysAsks(entry(id), REQUEST_TOOL_NAME), id).toBe(false);
+    }
+
+    const safeReads: [string, string][] = [
+      ['qbittorrent', '/api/v2/sync/maindata'],
+      ['qbittorrent', '/api/v2/torrents/info'],
+      ['qbittorrent', '/api/v2/app/version'],
+      ['jellyfin', '/System/Info'],
+      ['jellyfin', '/Plugins'],
+      ['jellyfin', '/Users'],
+      ['frigate', '/api/stats'],
+      ['frigate', '/api/events'],
+      ['immich', '/api/albums'],
+      ['immich', '/api/admin/database-backups'],
+      ['pihole', '/api/config/dns'],
+      ['pihole', '/api/stats/summary'],
+      ['adguard', '/control/status'],
+      ['adguard', '/control/filtering/status'],
+      ['plex', '/library/sections'],
+      ['nginx_proxy_manager', '/api/nginx/certificates'],
+      ['nginx_proxy_manager', '/api/nginx/proxy-hosts'],
+      ['opnsense', '/api/core/system/status'],
+      ['opnsense', '/api/wireguard/service/show'],
+      ['opnsense', '/api/openvpn/service/searchSessions'],
+      ['cloudflare', '/client/v4/zones'],
+      ['cloudflare', '/client/v4/accounts/a1/cfd_tunnel'],
+    ];
+    for (const [id, path] of safeReads) {
+      expect(readReason(id, path), `${id} GET ${path}`).toBeNull();
+    }
+  });
+});
+describe('changes that can cut the person off', () => {
+  const call = (id: string, method: string, path: string, body?: unknown) =>
+    cutsOffReason(entry(id), 'request', { method, path, ...(body !== undefined ? { body } : {}) });
+
+  it('names DNS, DHCP, firewall and network changes, which outsiders’ runs can’t propose', () => {
+    expect(
+      call('pihole', 'PATCH', '/api/config', { config: { dns: { upstreams: ['203.0.113.9'] } } }),
+    ).toContain('DNS');
+    expect(call('pihole', 'PUT', '/api/config/dns/hosts/203.0.113.9%20bank.example.com')).toContain('DNS');
+    expect(call('adguard', 'POST', '/control/dns_config', { upstream_dns: ['203.0.113.9'] })).toContain(
+      'DNS',
+    );
+    expect(
+      call('adguard', 'POST', '/control/rewrite/add', { domain: 'a.example.com', answer: '203.0.113.9' }),
+    ).toBeTruthy();
+    expect(call('adguard', 'POST', '/control/filtering/set_rules', { rules: [] })).toBeTruthy();
+    expect(call('tailscale', 'POST', '/api/v2/tailnet/-/dns/nameservers', { dns: [] })).toContain('DNS');
+    expect(call('tailscale', 'POST', '/api/v2/device/n1/expire')).toBeTruthy();
+    expect(call('opnsense', 'POST', '/api/unbound/settings/add_host_override', {})).toContain('DNS');
+    expect(call('opnsense', 'POST', '/api/core/service/stop/unbound', {})).toBeTruthy();
+    expect(call('unifi_network', 'PATCH', '/v1/sites/s1/networks/n1', {})).toBeTruthy();
+    expect(call('cloudflare', 'POST', '/client/v4/zones/z1/dns_records', { type: 'A' })).toContain('DNS');
+    expect(call('hetzner', 'POST', '/v1/firewalls/1/actions/apply_to_resources', {})).toBeTruthy();
+    expect(call('nginx_proxy_manager', 'PUT', '/api/nginx/proxy-hosts/3', {})).toBeTruthy();
+  });
+
+  it('leaves ordinary changes alone, and the person’s own calls don’t ask for them', () => {
+    expect(
+      call('adguard', 'POST', '/control/filtering/add_url', { name: 'x', url: 'https://example.com/l.txt' }),
+    ).toBeNull();
+    expect(call('pihole', 'POST', '/api/domains/deny/exact', { domain: 'ads.example.com' })).toBeNull();
+    expect(call('opnsense', 'POST', '/api/unbound/settings/search_host_override', {})).toBeNull();
+    expect(call('cloudflare', 'GET', '/client/v4/zones/z1/dns_records')).toBeNull();
+    // The rules only ever keep an outsiders' run out: they don't make the person's own call ask.
+    expect(
+      isSensitiveCall(entry('tailscale'), 'request', {
+        method: 'POST',
+        path: '/api/v2/tailnet/-/dns/nameservers',
+      }),
+    ).toBe(false);
+    expect(
+      isSensitiveCall(entry('cloudflare'), 'request', {
+        method: 'POST',
+        path: '/client/v4/zones/z1/dns_records',
+      }),
+    ).toBe(false);
+    // Every entry has them, if only as none.
+    for (const e of CATALOG) expect(Array.isArray(e.cutsOff)).toBe(true);
   });
 });
 
@@ -1090,5 +1233,61 @@ describe('why an entry is not offered (contracts 4.5)', () => {
     expect(
       CatalogEntryStatus.safeParse({ catalogId: 'dropbox', available: false, reason: 'later' }).success,
     ).toBe(false);
+  });
+});
+
+describe('cookie-based session sign-ins', () => {
+  const cookieAuth = TokenAuth.parse({
+    type: 'session',
+    login: {
+      method: 'POST',
+      path: '/api/v2/auth/login',
+      encoding: 'form',
+      body: { username: '{username}', password: '{secret}' },
+    },
+    tokenCookie: 'SID',
+    ttlSeconds: 3600,
+    apply: { type: 'cookie', name: 'SID' },
+    logout: { method: 'POST', path: '/api/v2/auth/logout' },
+    failures: [
+      { status: [200], bodyPattern: '^\\s*Fails\\.?\\s*$', reason: 'refused' },
+      { status: [403], bodyPattern: 'banned', reason: 'locked' },
+    ],
+  });
+
+  it('extracts a named cookie from Set-Cookie headers, ignoring cleared or malformed values', () => {
+    expect(cookieHeaderValue('SID=abc123; HttpOnly; Path=/; SameSite=Strict', 'SID')).toBe('abc123');
+    expect(cookieHeaderValue(['other=1; Path=/', 'SID="quoted-tok"; Path=/'], 'SID')).toBe('quoted-tok');
+    expect(cookieHeaderValue(['SID=old; Path=/', 'SID=; Max-Age=0'], 'SID')).toBeNull();
+    expect(cookieHeaderValue(['SID=old; Path=/', 'SID=fresh; HttpOnly'], 'SID')).toBe('fresh');
+    expect(cookieHeaderValue('sid=wrongcase; Path=/', 'SID')).toBeNull();
+    expect(cookieHeaderValue(undefined, 'SID')).toBeNull();
+  });
+
+  it('reads cookie tokens, sends them in the Cookie header, and matches bodyPattern login failures', () => {
+    if (cookieAuth.type !== 'session') throw new Error('expected session');
+    expect(sessionAnswerToken(cookieAuth, 'Ok.', ['SID=qbt-sid-1; HttpOnly; Path=/'])).toBe('qbt-sid-1');
+    expect(sessionAnswerToken(cookieAuth, 'Ok.', undefined)).toBeNull();
+    expect(sessionAnswerExpiresAt(cookieAuth, 'Ok.', 1_000)).toBe(3_601_000);
+    expect(sessionCredential(cookieAuth.apply, 'qbt-sid-1')).toEqual({
+      headers: { Cookie: 'SID=qbt-sid-1' },
+      query: {},
+    });
+    const req = sessionLoginRequest(entry('nginx_proxy_manager'), cookieAuth, 'pw', { username: 'admin' });
+    expect(req).toEqual({
+      method: 'POST',
+      path: '/api/v2/auth/login',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: '*/*' },
+      body: 'username=admin&password=pw',
+    });
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'Fails.', 200)?.reason).toBe('refused');
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'Ok.', 200)).toBeNull();
+    expect(sessionLoginFailure({ name: 'qBittorrent' }, cookieAuth, 'User IP is banned', 403)?.reason).toBe(
+      'locked',
+    );
+    expect(TokenAuth.safeParse({ ...cookieAuth, tokenJsonPath: 'token' }).success).toBe(false);
+    expect(
+      tokenAuthProblem(entry('nginx_proxy_manager'), { ...cookieAuth, tokenJsonPath: 'token' }),
+    ).toContain('one of them');
   });
 });

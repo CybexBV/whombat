@@ -16,6 +16,8 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { BACKUP_PLACE_TEXT, catalogEntry, placeKindOfCatalog } from '@whombat/core';
 import { externalEffect } from '../../commit/scope';
+import { keepBoundTarget } from '../../connections/bound-targets';
+import { ConnectionChangedError } from '../../connections/call-target';
 import { resolveCredential } from '../../connections/credentials';
 import { openConnectionSecret } from '../../connections/crypto';
 import { connectionPolicy } from '../../connections/destination';
@@ -226,7 +228,8 @@ function trueNasOpen(services: Services, row: CatalogConnectionRow): () => Promi
         { idempotent: true },
       );
     } catch (err) {
-      if (err instanceof NasPlaceError) throw err;
+      // A connection that changed since the call was checked (`bound-targets.ts`) says so, not that it didn't answer.
+      if (err instanceof NasPlaceError || err instanceof ConnectionChangedError) throw err;
       if (err instanceof ConnectionAuthError || (err instanceof Error && err.name === 'SocketSignInRefused'))
         throw new NasPlaceError(
           'refused',
@@ -253,6 +256,8 @@ function synologyAccess(services: Services, row: CatalogConnectionRow) {
         login: { ...auth.login, body: { ...auth.login.body, enable_syno_token: 'yes' } },
       };
       let answer = '';
+      // Signed in only as the connection the work under way was checked on (`bound-targets.ts`).
+      await keepBoundTarget(services, row);
       try {
         const made = await signInSession(
           async (url, init) => {
@@ -308,9 +313,13 @@ function qnapAccess(services: Services, row: CatalogConnectionRow) {
     async send(req: NasRequest): Promise<NasAnswer> {
       for (let attempt = 0; ; attempt++) {
         let sid: string;
+        // Signed in and sent only as the connection the work under way was checked on (`bound-targets.ts`): checked
+        // before the sign-in, which reads the connection again, and before the request.
+        await keepBoundTarget(services, row);
         try {
           sid = (await sessionAccess(services, row, { force: attempt > 0 })).token;
         } catch (err) {
+          if (err instanceof ConnectionChangedError) throw err;
           if (err instanceof ConnectionAuthError)
             throw new NasPlaceError(
               'refused',
@@ -318,6 +327,7 @@ function qnapAccess(services: Services, row: CatalogConnectionRow) {
             );
           throw new NasPlaceError('unreachable', `${row.label} didn’t answer.`);
         }
+        await keepBoundTarget(services, row);
         const res = await rawSend(services, row, {
           ...req,
           query: { ...(req.query ?? {}), ...(req.path.startsWith('/cgi-bin/') ? { sid } : {}) },

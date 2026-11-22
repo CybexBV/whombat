@@ -12,6 +12,7 @@ import (
 
 	"rackoon/internal/agent/broker"
 	"rackoon/internal/agent/diagnose"
+	"rackoon/internal/agent/diskusage"
 	"rackoon/internal/proto"
 )
 
@@ -25,7 +26,9 @@ func cmdDiagnoseTest(args []string) error {
 	var checkArgs argList
 	fs.Var(&checkArgs, "arg", "check argument key=value; repeatable")
 	command := fs.String("exec", "", "run this shell command as root instead (the assistant's exec)")
-	timeout := fs.Int("timeout", 0, "exec: seconds (0 = the default)")
+	diskMount := fs.String("disk-usage", "", "measure what fills this mount point instead")
+	maxDepth := fs.Int("max-depth", 0, "disk-usage: directory depth limit (0 = default)")
+	timeout := fs.Int("timeout", 0, "exec or disk-usage: seconds (0 = the default)")
 	asJSON := fs.Bool("json", false, "print the whole answer as JSON")
 	level := fs.String("log-level", "warn", "log level")
 	fs.Parse(args)
@@ -33,6 +36,19 @@ func cmdDiagnoseTest(args []string) error {
 	cfg, err := loadOrDefaultConfig(*dir)
 	if err != nil {
 		return err
+	}
+	if *diskMount != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		du := diskusage.New(nil, log)
+		resp := du.DiskUsage(ctx, proto.DiskUsageRequest{Mount: *diskMount, MaxDepth: *maxDepth, TimeoutS: *timeout})
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(resp)
+		if resp.Code != "" {
+			return fmt.Errorf("%s: %s", resp.Code, resp.Message)
+		}
+		return nil
 	}
 	var d *diagnose.Diagnostics
 	if runtime.GOOS == "darwin" {

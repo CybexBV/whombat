@@ -127,6 +127,46 @@ export const entry = {
       path: '^/api/core/(defaults/(factory_?defaults|reset)|backup/revert_?backup|snapshots/activate)(/|$)',
       reason: 'Resets or restores the firewall’s configuration',
     },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/core/backup/download(/|$)',
+      reason: 'Downloads OPNsense’s configuration backup, which contains passwords and private keys',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/trust/(ca|cert)/(get|generate_?file|raw_?dump)[a-z_]*(/|$)',
+      reason: 'Reads a certificate or authority, including its private key',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/auth/user/(get|download|new_?otp_?seed)[a-z_]*(/|$)',
+      reason: 'Reads or generates user credentials, API keys or two-step secrets',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      path: '^/api/(wireguard/(server|client)|openvpn/(instances|export)|ipsec/(key_?pairs|pre_?shared_?keys|connections|settings))/(get|search|key_?pair|gen_?key|psk|download)[a-z_]*(/|$)',
+      reason: 'Reads VPN configuration or keys, which may contain private keys or pre-shared secrets',
+    },
+  ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/(unbound|dnsmasq|kea|dhcrelay|dhcpv4|dhcpv6)/[^/]+/(add|set|toggle)[a-z_]*(/|$)',
+      reason: 'Changes DNS or DHCP, which every device on the network uses',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/interfaces/[^/]+/(add|set|toggle|reconfigure)[a-z_]*(/|$)',
+      reason: 'Changes a network interface; a mistake can cut the network off',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/api/(core/service/(stop|restart)|(unbound|dnsmasq|kea)/service/(stop|restart|reconfigure))(/|$)',
+      reason: 'Stops or restarts a service; DNS or DHCP going down cuts the network off',
+    },
   ],
   docsUrl: 'https://docs.opnsense.org/development/api.html',
   tokenUrl: null,

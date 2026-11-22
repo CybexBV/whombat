@@ -125,7 +125,7 @@ export function failureReason(error: string | null, refusal: string | null): str
       case 'engine':
         return 'Part of this Whombat didn’t start, so the assessment couldn’t run.';
       case 'local':
-        return 'The agent’s model on your network isn’t set up, so the assessment couldn’t run.';
+        return 'The agent’s custom AI model isn’t set up, so the assessment couldn’t run.';
       default:
         return 'The agent isn’t connected to Claude Code or ChatGPT, so the assessment couldn’t run.';
     }

@@ -45,6 +45,7 @@ import type { Services } from '../services';
 import { devicePage, learningPage } from './devices';
 import { genericSlots } from './generic';
 import { kindFor } from './kinds/index';
+import { SERVICE_SETTINGS_TAB_KEY } from './kinds/settings';
 import { slotProblems } from './kinds/slots';
 import type { KindCtx, KindView } from './kinds/types';
 import { diskNotice, itselfCard, type MachineNow, machineCard, machineCharts, machineKpis } from './machine';
@@ -189,10 +190,11 @@ export async function connectionPage(
   const range = offeredRange(asked, kind?.ranges);
   // The kind's read starts now (its page part finds it in the cache) while Whombat finds what it runs on.
   kind?.prefetch?.(services, row, now, timeZone).catch(() => undefined);
-  const [resolved, points] = await Promise.all([
+  const [resolved, points, quiet] = await Promise.all([
     within(resolveRunsOn(services, viewer.burrowId, row), 5_000, null as ResolvedMachine | null),
     // The response time over the range (at least a day, for Problems) and the disk over 30 days (its forecast).
     readPoints(services.db, row.id, [RTT_KEY, DISK_PCT_KEY, DISK_GB_KEY], now, POINTS_KEEP_MS),
+    thingQuiet(services.db, row.burrowId, id),
   ]);
   const figures: MachineFigures | null = resolved
     ? await within(readMachine(services, resolved, range), 5_000, null)
@@ -209,14 +211,14 @@ export async function connectionPage(
     burrowId: viewer.burrowId,
     disk,
     viewer,
+    quiet,
   };
-  const [view, tools, changed, partOf, connected, quiet, states] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
     within(partOfServer(services, viewer.burrowId, row), 5_000, null),
     connectedByLine(services, row, viewer, timeZone),
-    thingQuiet(services.db, row.burrowId, id),
     thingStates(services.db, id),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
@@ -334,15 +336,20 @@ export async function connectionPage(
       suggestions: view?.suggestions ?? GENERIC_SUGGESTIONS,
     }),
   );
+  const settingsTab =
+    kind?.settings && view && !bareView(view) && !view.tabs.some((t) => t.key === SERVICE_SETTINGS_TAB_KEY)
+      ? await kind.settings.tab(ctx)
+      : null;
+  const extraTabs = [...(settingsTab ? [settingsTab] : []), ...(view?.tabs ?? [])].slice(0, 7);
   const tabs: ThingPageTab[] = [
     {
       ...SUMMARY_TAB,
       panels: layout(
         summary,
-        (view?.tabs ?? []).map((t) => t.key),
+        extraTabs.map((t) => t.key),
       ).slice(0, 24),
     },
-    ...(view?.tabs ?? []).slice(0, 7),
+    ...extraTabs,
   ];
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];

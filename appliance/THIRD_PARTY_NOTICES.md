@@ -16,7 +16,7 @@ software by others under their own licences. Every image carries this file and `
 | The Go modules our programs link (`go.mod`) | each module's own (mostly BSD-3-Clause, MIT and Apache-2.0) | per binary, the licence inventory of `release/sbom` |
 | Hermes Agent 0.22.5 (`nix/packages/hermes`), with Whombat's plugin and its patch applied | MIT, below | `share/licenses/hermes-agent/LICENSE` of the package; its Python dependencies (pinned by its `uv.lock`) each under their own licence, in their `dist-info` |
 | agent-browser (beside Hermes) | Apache-2.0 | `share/licenses/agent-browser/LICENSE` of its package |
-| The voice service's engines and models (whisper.cpp, Kokoro, sherpa-onnx, eSpeak NG and what they carry; Supertonic 3 is not in the image) | MIT, Apache-2.0, GPL-3.0 and others | `share/whombat-voice/NOTICES.md` (`voice/NOTICES.md`) |
+| The voice service's engines and models (whisper.cpp, Kokoro, sherpa-onnx, eSpeak NG and what they carry; speech-to-text models and optional Dutch voice Supertonic 3 are not in the image) | MIT, Apache-2.0, GPL-3.0 and others | `share/whombat-voice/NOTICES.md` (`voice/NOTICES.md`) |
 | The presence service's model and libraries (YuNet, ONNX Runtime, libjpeg-turbo) | MIT, IJG/BSD-3-Clause and others | `share/whombat-presence/NOTICES.md` (`presence/NOTICES.md`) |
 
 Not in the image: Claude Code and Codex. On an owner's request the manager installs them unmodified, at the versions

@@ -56,6 +56,7 @@ export const UPDATE_TEXT = {
   askOff: 'Updates install by themselves.',
   askSwitched: (on: boolean) =>
     on ? 'Updates now wait for your yes.' : 'Updates install by themselves again.',
+  paused: 'Updates are paused for now.',
 } as const;
 
 /** States in which an update is on its way (the status is asked again every few seconds). */
@@ -73,6 +74,7 @@ const NOT_THROUGH: ReadonlySet<string> = new Set(['Failed', 'RolledBack', 'Quara
 /** How often This Whombat asks again: while an update moves, every 5 s; while one waits, every 15 s; else not. */
 export function updatePollMs(update: UpdateStatus | null | undefined): number | null {
   if (!update) return null;
+  if (update.paused && update.state !== 'Activating' && update.state !== 'Verifying') return null;
   if (MOVING.has(update.state)) return 5_000;
   if (update.state === 'WaitingForSafeBoundary' || update.waiting) return 15_000;
   return null;
@@ -148,6 +150,7 @@ export function updateView(
         u.failureDetail ? describeUpdateFailure(u.failureDetail) : UPDATE_TEXT.forwardRepairMeta,
       ].join(' · '),
     });
+    if (u.paused) rows.push({ dot: 'mut', title: UPDATE_TEXT.paused });
   } else if (NOT_THROUGH.has(u.state)) {
     const why = u.failureDetail ? describeUpdateFailure(u.failureDetail) : null;
     const settled = why && /Nothing was changed\.|went back to the release it ran before\./.test(why);
@@ -157,6 +160,14 @@ export function updateView(
       meta: [why, UPDATE_TEXT.stillOn(u.current), settled ? null : UPDATE_TEXT.nothingChanged]
         .filter(Boolean)
         .join(' '),
+    });
+    if (u.paused) rows.push({ dot: 'mut', title: UPDATE_TEXT.paused });
+  } else if (u.paused && u.state !== 'Activating' && u.state !== 'Verifying') {
+    // A paused channel stops offering and holding back updates before activation without changing anything else.
+    rows.push({
+      dot: 'mut',
+      title: UPDATE_TEXT.paused,
+      meta: version,
     });
   } else {
     const waiting = u.waiting ?? null;

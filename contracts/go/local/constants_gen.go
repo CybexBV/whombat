@@ -179,6 +179,7 @@ const (
 	VoiceTextPartsMax              = 12
 	VoiceModelParakeet             = "parakeet"
 	VoiceModelWhisper              = "whisper"
+	VoiceModelSupertonic           = "supertonic"
 	VoiceChoiceAuto                = "auto"
 	VoiceChoiceParakeet            = "parakeet"
 	VoiceChoiceWhisper             = "whisper"
@@ -192,12 +193,14 @@ const (
 	VoiceModelsPathState         = "/v1/voice-models"
 	VoiceModelsPathFetch         = "/v1/voice-models/fetch"
 	VoiceModelsPathRemove        = "/v1/voice-models/remove"
+	VoiceModelsIncludeParam      = "include"
 	VoiceModelMaxBytes           = 4294967296
 	VoiceModelStateAbsent        = "absent"
 	VoiceModelStateDownloading   = "downloading"
 	VoiceModelStateWaiting       = "waiting"
 	VoiceModelStateReady         = "ready"
 	VoiceModelStateFailed        = "failed"
+	VoiceModelStateRemoving      = "removing"
 	VoiceModelProblemNoNetwork   = "no_network"
 	VoiceModelProblemNoRoom      = "no_room"
 	VoiceModelProblemBadDownload = "bad_download"

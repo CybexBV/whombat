@@ -60,13 +60,14 @@ function incompleteOf(gap: BackupIncomplete | undefined): Pick<BackupStatus, 'in
  */
 export function summarizeUpdate(update: UpdateFacts | null): UpdateStatus | null {
   if (!update) return null;
-  const { failureDetail, waiting, lastUpdate, ...rest } = update;
+  const { failureDetail, waiting, lastUpdate, paused, ...rest } = update;
   return {
     ...rest,
     lastCheckedAt: update.lastCheckedAt ? iso(update.lastCheckedAt) : null,
     ...(failureDetail ? { failureDetail } : {}),
     ...(waiting ? { waiting: { ...waiting, since: iso(waiting.since) } } : {}),
     ...(lastUpdate ? { lastUpdate: { ...lastUpdate, at: iso(lastUpdate.at) } } : {}),
+    ...(paused ? { paused } : {}),
   };
 }
 

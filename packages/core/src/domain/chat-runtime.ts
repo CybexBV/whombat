@@ -68,7 +68,8 @@ export function chatRuntimeWithProvider(runtime: ChatRuntime, provider: ChatProv
 /**
  * Another model of the same provider (CR-05; `id` absent: the tool's default): the effort stays within what the model
  * takes (`turnEffort`'s rule — the nearest lower, else the nearest higher; none for a model that takes none; automatic
- * stays automatic), and fast is dropped when the model has none. A model the list doesn't have keeps both.
+ * stays automatic), and fast is dropped when the model has none (and `fast: false` is dropped for unknown models when
+ * the provider's list is known, matching the server). A `local` provider never keeps effort or fast replies.
  */
 export function chatRuntimeWithModel(
   runtime: ChatRuntime,
@@ -78,11 +79,13 @@ export function chatRuntimeWithModel(
   const model = modelOf(models, id);
   const next: ChatRuntime = { provider: runtime.provider };
   if (id) next.model = id;
+  if (runtime.provider === 'local') return next;
   if (runtime.effort) {
     const effort = model ? turnEffort(runtime.effort, 'chat', model.efforts) : runtime.effort;
     if (effort) next.effort = effort;
   }
-  if (runtime.fast !== undefined && (!model || model.fast)) next.fast = runtime.fast;
+  if (runtime.fast !== undefined && (model ? !!model.fast : !models?.length || runtime.fast === true))
+    next.fast = runtime.fast;
   return next;
 }
 

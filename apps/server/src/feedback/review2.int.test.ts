@@ -200,11 +200,20 @@ describe('F1 + F2: assessor output stays data', () => {
       expect(message?.text).not.toContain(assessorText);
 
     const claimed: DispatchContext[] = [];
+    const reads = new Map<string, string>();
     const claimAll = async () => {
       for (let i = 0; i < 8; i++) {
         const next = await claim();
         if (!next) break;
         claimed.push(next);
+        if (!next.outside && next.dispatch.threadRootId === report.rootMessageId) {
+          const read = await tool(next, 'read_conversation', {
+            conversationId: integration.conversationId,
+            threadRootId: report.rootMessageId,
+          });
+          expect(read.isError).not.toBe(true);
+          reads.set(next.dispatch.id, read.text);
+        }
         await runnerProtocol(t).complete(next, { outcome: 'done' });
       }
     };
@@ -246,6 +255,9 @@ describe('F1 + F2: assessor output stays data', () => {
     expect(asked2?.feedbackHandoff).toBeUndefined();
     const askedSees = asked2?.thread?.replies.filter((m) => m.authorId === IDS.dusty) ?? [];
     expect(askedSees.map((m) => m.provenance)).toEqual(['feedback_assessment', 'feedback_assessment']);
+    const readBack = reads.get(asked2?.dispatch.id ?? '');
+    expect(readBack).toContain('[[untrusted · from a Feedback assessment');
+    expect(readBack).not.toContain('Totals off by a cent.');
     // Only the turn the handoff asked for gets its data: a person's own message in the thread gives nothing.
     expect(claimed.filter((c) => c.feedbackHandoff).map((c) => c.dispatch.id)).toEqual([handoff?.id]);
 

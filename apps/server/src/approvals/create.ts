@@ -89,6 +89,8 @@ export interface NewApproval {
    * the requesting agent's dispatch scope says, else the person's.
    */
   onBehalfOfAccountId?: string | null;
+  /** The card is posted by a run outsiders' input started (`messages.outsiders_run`). */
+  outsidersRun?: boolean;
 }
 
 /**
@@ -273,6 +275,7 @@ export async function createApproval(
     // The card's text describes the action (an event title, a file name): an `@Name` in it mentions no one.
     mentions: [],
     dispatch: false,
+    ...(a.outsidersRun !== undefined ? { outsidersRun: a.outsidersRun } : {}),
   });
   await tx.update(approvals).set({ messageId: posted.id }).where(eq(approvals.id, id));
 
@@ -442,6 +445,7 @@ export async function createAskApproval(
     conditions: draft.conditions ?? [],
     involvedIds: draft.involvedIds ?? [],
     conversation,
+    ...(draft.threadRootId !== undefined ? { threadRootId: draft.threadRootId } : {}),
     cardText: draft.cardText ?? `I need a person to say yes before I ${attempt}.`,
     askText: `Asked to ${attempt}`,
     where: requirement.where ?? null,

@@ -190,8 +190,8 @@ describe('the tools as the contract has them', () => {
   const tools = catalogEntry('whombat_servers')?.tools ?? [];
 
   it('runs every tool and takes exactly the arguments its schema names', () => {
-    // A Mac's mac_screen and mac_ui (macos-servers.md): 57.
-    expect(tools.length).toBe(57);
+    // A Mac's mac_screen and mac_ui (macos-servers.md): 57; server_disk_usage: 58.
+    expect(tools.length).toBe(58);
     for (const tool of tools) {
       expect(SERVERS_ADAPTER[tool.name], tool.name).toBeTypeOf('function');
       const props = Object.keys(

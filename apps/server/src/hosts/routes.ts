@@ -59,6 +59,7 @@ import {
   toHostBackupVolumes,
   toHostCheck,
   toHostChoices,
+  toHostDiskUsage,
   toHostEnrollment,
   toHostFirewall,
   toHostGuest,
@@ -1873,6 +1874,28 @@ export const hostsRoutes: RouteDef[] = [
       { server: serverId },
     );
     return toHostInspect(raw, kind, ctx.services.clock());
+  }),
+
+  route(api.hosts.diskUsage, async (ctx) => {
+    const g = await guard(ctx);
+    const { serverId } = ctx.params;
+    const body = ctx.body;
+    const raw = await hostsCall(
+      () =>
+        g.hosts.call<unknown>({
+          method: 'POST',
+          path: `${S(serverId)}/disk-usage`,
+          body: {
+            ...(body.mount ? { mount: body.mount } : {}),
+            ...(body.maxDepth ? { max_depth: body.maxDepth } : {}),
+            ...(body.timeoutS ? { timeout_s: body.timeoutS } : {}),
+          },
+          actor: asOperator(g),
+          timeoutMs: 65_000,
+        }),
+      { server: serverId },
+    );
+    return toHostDiskUsage(raw, ctx.services.clock());
   }),
 ];
 

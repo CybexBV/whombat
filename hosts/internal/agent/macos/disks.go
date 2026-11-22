@@ -69,8 +69,10 @@ func ParseDiskutilList(b []byte) (*DiskList, error) {
 		}
 		if stores := e.list("APFSPhysicalStores"); stores != nil {
 			var whole []string
+			seen := map[string]bool{}
 			for _, s := range stores {
-				if w := WholeDiskOf(asDict(s).str("DeviceIdentifier")); diskIDRe.MatchString(w) {
+				if w := WholeDiskOf(asDict(s).str("DeviceIdentifier")); diskIDRe.MatchString(w) && !seen[w] {
+					seen[w] = true
 					whole = append(whole, w)
 				}
 			}
@@ -100,15 +102,23 @@ func (l *DiskList) IsContainer(id string) bool {
 
 // DiskInfo is `diskutil info -plist <disk>` of a whole disk.
 type DiskInfo struct {
-	Device      string // "disk0"
-	MediaName   string
-	Bus         string // "Apple Fabric", "PCI-Express", "USB", "SATA", "Disk Image"
-	Internal    bool
-	SolidState  bool
-	Virtual     bool // a disk image or a synthesized container
-	Size        uint64
-	SMARTStatus string // "Verified", "Failing", "Not Supported", ""
-	SMART       map[string]int64
+	Device             string // "disk0"
+	MediaName          string
+	Bus                string // "Apple Fabric", "PCI-Express", "USB", "SATA", "Disk Image"
+	Internal           bool
+	InternalKnown      bool
+	SolidState         bool
+	SolidStateKnown    bool
+	Virtual            bool // a disk image or a synthesized container
+	ParentWholeDisk    string
+	APFSContainer      string
+	APFSPhysicalStores []string // whole physical disk identifiers ("disk0")
+	RAIDMaster         bool
+	RAIDSlice          bool
+	CoreStorage        bool
+	Size               uint64
+	SMARTStatus        string // "Verified", "Failing", "Not Supported", ""
+	SMART              map[string]int64
 }
 
 // ParseDiskutilInfo reads `diskutil info -plist`.
@@ -122,14 +132,33 @@ func ParseDiskutilInfo(b []byte) (*DiskInfo, error) {
 		return nil, errors.New("diskutil info: not a dictionary")
 	}
 	di := &DiskInfo{
-		Device:      d.str("DeviceIdentifier"),
-		MediaName:   clip(strings.TrimSpace(d.str("MediaName")), 128),
-		Bus:         clip(d.str("BusProtocol"), 64),
-		SMARTStatus: clip(strings.TrimSpace(d.str("SMARTStatus")), 64),
+		Device:          d.str("DeviceIdentifier"),
+		MediaName:       clip(strings.TrimSpace(d.str("MediaName")), 128),
+		Bus:             clip(d.str("BusProtocol"), 64),
+		ParentWholeDisk: d.str("ParentWholeDisk"),
+		APFSContainer:   d.str("APFSContainerReference"),
+		SMARTStatus:     clip(strings.TrimSpace(d.str("SMARTStatus")), 64),
 	}
-	di.Internal, _ = d.bool("Internal")
-	di.SolidState, _ = d.bool("SolidState")
-	di.Virtual = d.str("VirtualOrPhysical") == "Virtual" || di.Bus == "Disk Image" || d.str("APFSContainerReference") == di.Device && di.Device != ""
+	di.Internal, di.InternalKnown = d.bool("Internal")
+	di.SolidState, di.SolidStateKnown = d.bool("SolidState")
+	di.RAIDMaster, _ = d.bool("RAIDMaster")
+	di.RAIDSlice, _ = d.bool("RAIDSlice")
+	di.CoreStorage = d.str("CoreStorageLogicalVolumeUUID") != "" || d.str("Content") == "Apple_CoreStorage"
+	di.Virtual = d.str("VirtualOrPhysical") == "Virtual" || di.Bus == "Disk Image" || di.APFSContainer == di.Device && di.Device != ""
+	if stores := d.list("APFSPhysicalStores"); len(stores) > 0 {
+		seen := map[string]bool{}
+		for _, s := range stores {
+			sd := asDict(s)
+			raw := sd.str("APFSPhysicalStore")
+			if raw == "" {
+				raw = sd.str("DeviceIdentifier")
+			}
+			if w := WholeDiskOf(raw); diskIDRe.MatchString(w) && !seen[w] {
+				seen[w] = true
+				di.APFSPhysicalStores = append(di.APFSPhysicalStores, w)
+			}
+		}
+	}
 	for _, k := range []string{"TotalSize", "Size", "IOKitSize"} {
 		if n, ok := d.int(k); ok && n > 0 {
 			di.Size = uint64(n)
@@ -167,12 +196,16 @@ const nvmeDataUnit = 512 * 1000
 func (di *DiskInfo) Disk() proto.Disk {
 	d := proto.Disk{Device: di.Device, Model: di.MediaName, CapacityBytes: di.Size}
 	switch {
-	case !di.SolidState:
+	case di.SolidStateKnown && !di.SolidState:
 		d.Type = "hdd"
-	case di.Bus == "Apple Fabric" || di.Bus == "PCI-Express" || di.Bus == "PCI" || strings.Contains(strings.ToLower(di.Bus), "nvme"):
+	case di.SolidStateKnown && di.SolidState:
+		if di.Bus == "Apple Fabric" || di.Bus == "PCI-Express" || di.Bus == "PCI" || strings.Contains(strings.ToLower(di.Bus), "nvme") {
+			d.Type = "nvme"
+		} else {
+			d.Type = "ssd"
+		}
+	case di.Internal && (di.Bus == "Apple Fabric" || strings.Contains(strings.ToLower(di.Bus), "nvme")):
 		d.Type = "nvme"
-	default:
-		d.Type = "ssd"
 	}
 	d.SmartPassed = SmartPassed(di.SMARTStatus)
 	s := di.SMART

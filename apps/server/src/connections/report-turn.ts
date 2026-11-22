@@ -64,6 +64,16 @@ export interface ReportTurnPlace {
   threadRootId: string | null;
 }
 
+/** Watches of work handed over without a person, as a report's turn hands over work. */
+export function reportTurnWatch() {
+  return and(
+    isNull(t3Watches.personId),
+    eq(t3Watches.wakes, false),
+    isNull(t3Watches.councilId),
+    isNull(t3Watches.delegationTaskId),
+  );
+}
+
 /** Whether a T3 Code thread was started (or handed work) from this report turn's thread. */
 async function startedHere(db: Db | Tx, place: ReportTurnPlace, threadId: string): Promise<boolean> {
   const [row] = await db
@@ -74,6 +84,7 @@ async function startedHere(db: Db | Tx, place: ReportTurnPlace, threadId: string
         eq(t3Watches.connectionId, place.connectionId),
         eq(t3Watches.threadId, threadId),
         eq(t3Watches.agentId, place.agentId),
+        reportTurnWatch(),
         eq(t3Watches.conversationId, place.conversationId),
         place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
       ),
@@ -91,6 +102,7 @@ async function threadsStartedHere(db: Db | Tx, place: ReportTurnPlace): Promise<
       and(
         eq(t3Watches.connectionId, place.connectionId),
         eq(t3Watches.agentId, place.agentId),
+        reportTurnWatch(),
         eq(t3Watches.conversationId, place.conversationId),
         place.threadRootId ? eq(t3Watches.threadRootId, place.threadRootId) : isNull(t3Watches.threadRootId),
       ),

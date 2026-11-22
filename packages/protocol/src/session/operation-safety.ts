@@ -565,6 +565,8 @@ const TABLE = {
   'hosts.createConsole': NEVER,
   'hosts.closeConsole': DESTRUCTIVE_NEVER,
   'hosts.inspect': READ,
+  // On-request disk usage scan on the agent outside a receipt: read-only, not automatically resent.
+  'hosts.diskUsage': NEVER,
   // A Mac's screen (Whombat macos-servers.md): a click or a key acts at once on the Mac, outside any receipt, so it is
   // never resent; `account.set` carries the Mac's password (secret). The screenshot is a read.
   'hosts.screen': DESTRUCTIVE_NEVER,
@@ -821,6 +823,7 @@ const TABLE = {
   'voice.update': RECEIPT,
   'voice.fetchModel': RECEIPT,
   'voice.removeModel': DESTRUCTIVE,
+  'voice.setDutchVoice': DESTRUCTIVE,
 } satisfies Record<OperationName, OperationSafety>;
 
 /** `TABLE`, frozen (0.29.1, CT-195). `satisfies` keeps typecheck failing on a missing or an extra op. */

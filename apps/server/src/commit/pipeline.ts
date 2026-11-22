@@ -259,7 +259,13 @@ export class Pipeline {
       }
 
       const requirement = def.requiredKey
-        ? await def.requiredKey(data, { db: tx, services: this.services, burrow, actor })
+        ? await def.requiredKey(data, {
+            db: tx,
+            services: this.services,
+            burrow,
+            actor,
+            approvalId: options.approvalId ?? null,
+          })
         : null;
       let decision: Decision | null = null;
       if (requirement) {

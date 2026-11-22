@@ -20,6 +20,7 @@ import { and, eq } from 'drizzle-orm';
 import { connectionTools } from '../db/schema/index';
 import type { Services } from '../services';
 import { connectionCallAccess } from './call-access';
+import { callTarget } from './call-target';
 import { nameWithoutAddress } from './labels';
 import { outputDocument } from './output';
 import type { CallOutput } from './request';
@@ -33,6 +34,11 @@ export interface ConnectionUndo {
   connectionId: string;
   tool: string;
   args: Record<string, unknown>;
+  /**
+   * Where the change's calls went and as whom (`callTarget`) when it was made: Undo sends the inverse only while the
+   * connection still goes there. Absent on changes recorded before it was kept.
+   */
+  destination?: string;
 }
 
 export interface PreparedChange {
@@ -283,7 +289,9 @@ export async function prepareConnectionChange(
   } catch {
     known = null;
   }
-  return changeTitle(known, agentWords, genericChangeTitle(tool.name, name));
+  const prepared = changeTitle(known, agentWords, genericChangeTitle(tool.name, name));
+  // Its inverse goes only where this change went (`undo.ts`).
+  return prepared.undo ? { ...prepared, undo: { ...prepared.undo, destination: callTarget(row) } } : prepared;
 }
 
 /** The call id of an Undo: it names the change it undoes and who asked. */

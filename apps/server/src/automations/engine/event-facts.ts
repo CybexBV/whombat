@@ -15,6 +15,13 @@ import {
   repos,
 } from '../../db/schema/index';
 import { isFeedbackPrincipal, isReportThread } from '../../feedback/principal';
+import {
+  mailHeadline,
+  mailItemKey,
+  mailItemScope,
+  mailTriggerFactsOf,
+  mirroredMailItem,
+} from '../../mail-triggers/index';
 import { actorKind, loadPrincipalRow } from '../../read/principals';
 import { decisionNote } from '../../trackers/features';
 import { trackerHeadline, trackerItemKey, trackerItemScope } from '../../trackers/items';
@@ -51,6 +58,8 @@ export const EVENT_TYPES = [
   'tracker.item_opened',
   // The customer wrote back on, or reopened, a report an automation ran for (report-trackers.md TA-31).
   'tracker.reporter_replied',
+  // A matching incoming email arrived in a connected mailbox watched by a live automation.
+  'mail.received',
 ];
 
 export interface EventFacts {
@@ -59,6 +68,8 @@ export interface EventFacts {
   threadRootId: string | null;
   /** The GitHub issue or pull request the event is about (`itemKeyOf`), else null. */
   itemKey: string | null;
+  /** When an incoming mail message was received by the provider (used to skip pre-existing mail for newer automations). */
+  receivedAt?: Date;
   scope: JsonObject;
   info: (e: EventRow) => AutomationRunRow['trigger'];
 }
@@ -83,10 +94,10 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
     if (!m || m.deletedAt) return null;
     if (event.type === 'message.reacted' && payload.on !== true) return null;
     const threadRootId = m.threadRootId ?? m.id;
-    // An assessor's output and an approved handoff's message carry a website visitor's words (or what an agent made
-    // of them) onwards, whoever posted them: a message with a Feedback provenance starts nothing, and neither does a
-    // reaction to it (feedback.md FB-D11, review-2 F1).
-    if (m.provenance) return null;
+    // A Feedback assessment or handoff, or a message an outsiders' run posted (an email's, a tracker customer's): it
+    // carries what outsiders wrote onwards, so neither it nor a reaction to it ever starts another automation
+    // (docs/decisions/feedback.md, docs/decisions/outsiders-turns.md).
+    if (m.provenance || m.outsidersRun) return null;
     // An agent in a feedback report's thread is assessing (or answering about) what a website visitor sent: its
     // messages carry that visitor's words onwards, so they start nothing either (feedback.md FB-21, FB-23).
     if (actorKind(actor.kind) === 'agent' && (await isReportThread(tx, threadRootId))) return null;
@@ -189,6 +200,28 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
       info: (e) => ({
         kind: 'tracker',
         summary: (String(scope.text).split('\n')[0] ?? '').slice(0, 200),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  // A matching incoming email in a watched mailbox: its mirrored row fills the outsider-fenced run scope.
+  if (event.type === 'mail.received') {
+    const rowId = typeof payload.rowId === 'string' ? payload.rowId : null;
+    const item = rowId ? await mirroredMailItem(tx, rowId) : null;
+    if (!item) return null;
+    return {
+      facts: mailTriggerFactsOf(item),
+      conversationId: null,
+      threadRootId: null,
+      itemKey: mailItemKey(item.connectionId, item.externalId),
+      receivedAt: item.receivedAt,
+      scope: mailItemScope(item),
+      info: (e) => ({
+        kind: 'mail',
+        summary: mailHeadline(item),
         actorId: actor.id,
         eventId: e.id,
         messageId: null,

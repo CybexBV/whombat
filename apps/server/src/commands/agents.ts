@@ -8,12 +8,15 @@ import {
   AGENT_NAME_PATTERN,
   AGENT_NAME_RESERVED_TEXT,
   AgentFace,
-  AgentModelRuntime,
+  type AgentModelRuntime,
+  AgentModelRuntimeUpdate,
   type AgentRuntime,
+  agentBackgroundModelChangeText,
   agentEffortChangeText,
   agentFastChangeText,
   agentModelChangeText,
   agentName,
+  backgroundModelLabel,
   clampGrants,
   diffGrants,
   effortLabel,
@@ -29,12 +32,15 @@ import {
   keyRequestProblem,
   keyRowTier,
   keysEventFields,
+  localProviderModels,
   MODEL_ID_MAX,
   modelFast,
   modelLabel,
   PROVIDER_LABELS,
   type ProviderModel,
+  providerHasModelEffort,
   requestedTier,
+  resolveAgentModelRuntime,
   type Tier,
   topics,
   withKeyRowTier,
@@ -48,6 +54,7 @@ import { approvals, conversations, grants, principals, searchDocuments } from '.
 import { publishConversation } from '../domain/members';
 import { postMessage } from '../domain/messages';
 import { ApiError, badRequest, forbidden, notFound } from '../lib/errors';
+import { localModelView } from '../local-model/store';
 import { loadConversationRow } from '../read/conversations';
 import {
   agentRuntimeOf,
@@ -76,61 +83,60 @@ function personChanges(attempt: string, name = 'the agent') {
   return { keyId: 'burrow.manage' as const, attempt, where: agentWhere(name) };
 }
 
-/** The tools whose own models and efforts an agent may pick (model-effort.md ME-01). */
-function takesModels(provider: AgentRuntime['provider']): provider is 'claude' | 'codex' {
-  return provider === 'claude' || provider === 'codex';
-}
-
-/**
- * What the agent's model runtime becomes: a model and an effort only with Claude Code and Codex, whose own they are
- * (model-effort.md ME-01, ME-D07).
- */
-function modelRuntime(runtime: z.output<typeof AgentModelRuntime>): z.output<typeof AgentModelRuntime> {
-  const tool = takesModels(runtime.provider);
-  return {
-    provider: runtime.provider,
-    ...(tool && runtime.model ? { model: runtime.model } : {}),
-    ...(tool && runtime.effort ? { effort: runtime.effort } : {}),
-    // Fast replies are the tool's too (chat-runtime.md CR-06, CR-10).
-    ...(tool && runtime.fast !== undefined ? { fast: runtime.fast } : {}),
-  };
-}
-
-/** The models this Whombat's runner listed for a tool (ME-04); null while none has. */
+/** The models this Whombat knows a provider has; null while none are known. */
 function reportedModels(
-  ctx: Pick<ApplyContext, 'services'>,
+  ctx: Pick<ApplyContext, 'services'> & {
+    burrow?: Pick<ApplyContext['burrow'], 'localModel' | 'localModelKeyEnc'>;
+  },
   provider: AgentRuntime['provider'],
 ): ProviderModel[] | null {
-  if (!takesModels(provider)) return null;
+  if (provider === 'local') {
+    if (!ctx.burrow) return null;
+    const view = localModelView(ctx.burrow);
+    return view ? localProviderModels(view) : [];
+  }
   return ctx.services.runtime.setupStatus().providers.find((p) => p.provider === provider)?.models ?? null;
 }
 
 /**
- * A model and an effort the tool takes (model-effort.md ME-04): one of the models the runner listed and an effort that
- * model takes, when there is a list; without one any model name up to `MODEL_ID_MAX` characters and any effort. Only
- * what changes is checked (`before`): an agent whose model has since left the list keeps it (ME-05 covers its turns).
+ * Checks a changed main model, background model, effort and fast replies against what the provider offers. Only what
+ * changes is checked (`before`): an agent whose stored model later left the list keeps it until changed. Custom AI
+ * models (`local`) allow any main model id up to `MODEL_ID_MAX` (the user may type one not in the server's list)
+ * while background models must be listed; effort and fast replies apply only to Claude Code and ChatGPT.
  */
 function assertModelChoice(
-  ctx: Pick<ApplyContext, 'services'>,
+  ctx: Pick<ApplyContext, 'services'> & {
+    burrow?: Pick<ApplyContext['burrow'], 'localModel' | 'localModelKeyEnc'>;
+  },
   runtime: z.output<typeof AgentModelRuntime>,
-  before?: Pick<AgentRuntime, 'provider' | 'model' | 'effort' | 'fast'>,
+  before?: Pick<AgentRuntime, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
 ): z.output<typeof AgentModelRuntime> {
   const refuse = (text: string): never => {
     throw new ApiError('validation_failed', text, { fields: { runtime: [text] } });
   };
   const sameTool = before?.provider === runtime.provider;
   const modelChanged = !sameTool || before?.model !== runtime.model;
+  const bgChanged = !sameTool || before?.backgroundModel !== runtime.backgroundModel;
   const effortChanged = modelChanged || before?.effort !== runtime.effort;
   if (modelChanged && runtime.model && runtime.model.length > MODEL_ID_MAX)
     refuse(`A model’s name has at most ${MODEL_ID_MAX} characters.`);
+  if (bgChanged && runtime.backgroundModel && runtime.backgroundModel.length > MODEL_ID_MAX)
+    refuse(`A model’s name has at most ${MODEL_ID_MAX} characters.`);
   const models = reportedModels(ctx, runtime.provider);
-  if (!models || !takesModels(runtime.provider)) return runtime;
-  if (modelChanged && runtime.model && !models.some((m) => m.id === runtime.model))
-    refuse(`${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.model}” on this Whombat.`);
+  const own = providerHasModelEffort(runtime.provider);
+  if (models) {
+    if (own && modelChanged && runtime.model && !models.some((m) => m.id === runtime.model))
+      refuse(`${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.model}” on this Whombat.`);
+    if (bgChanged && runtime.backgroundModel && !models.some((m) => m.id === runtime.backgroundModel))
+      refuse(
+        `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.backgroundModel}” on this Whombat.`,
+      );
+  }
+  if (!models || !own) return runtime;
   if (effortChanged && runtime.effort && !effortsFor(models, runtime.model).includes(runtime.effort))
     refuse(`${modelLabel(models, runtime.model)} doesn’t take ${effortLabel(runtime.effort)} effort.`);
-  // Fast replies only where the model offers them (chat-runtime.md CR-06, CR-10): turning them on elsewhere is refused
-  // in Chat's words; “off” where there is nothing to turn off is dropped.
+  // Fast replies only where the model offers them: turning them on elsewhere is refused in Chat's words; “off” where
+  // there is nothing to turn off is dropped.
   const fastChanged = modelChanged || before?.fast !== runtime.fast;
   if (runtime.fast !== undefined && !modelFast(models, runtime.model)) {
     if (runtime.fast && fastChanged) refuse(fastNoneText(models, runtime.model));
@@ -143,19 +149,23 @@ function assertModelChoice(
 }
 
 /**
- * The model runtime this Whombat offers for one a backup file brings back (backup-file.md BF-19, BF-S06): the file's
- * model, effort and fast replies where this Whombat's runner lists them (`assertModelChoice` with nothing to keep), else
- * the same with less — without fast replies, then without the effort, then the tool's own default model. Never throws.
+ * The model runtime this Whombat offers for one a backup file brings back: keeps what this box's provider lists,
+ * dropping unsupported background model, fast replies, effort or main model in turn. Never throws.
  */
 export function offeredModelRuntime(
-  ctx: Pick<ApplyContext, 'services'>,
+  ctx: Pick<ApplyContext, 'services'> & {
+    burrow?: Pick<ApplyContext['burrow'], 'localModel' | 'localModelKeyEnc'>;
+  },
   runtime: z.output<typeof AgentModelRuntime>,
 ): z.output<typeof AgentModelRuntime> {
-  const wanted = modelRuntime(runtime);
+  const wanted = resolveAgentModelRuntime(runtime);
+  const { backgroundModel: _bg, ...noBg } = wanted;
   const { fast: _fast, ...noFast } = wanted;
+  const { backgroundModel: _bg2, ...noFastNoBg } = noFast;
   const { effort: _effort, ...noEffort } = noFast;
-  const { model: _model, ...bare } = noEffort;
-  for (const candidate of [wanted, noFast, noEffort]) {
+  const { backgroundModel: _bg3, ...noEffortNoBg } = noEffort;
+  const { model: _model, ...bare } = noEffortNoBg;
+  for (const candidate of [wanted, noBg, noFast, noFastNoBg, noEffort, noEffortNoBg]) {
     try {
       return assertModelChoice(ctx, candidate);
     } catch {
@@ -398,7 +408,7 @@ export const updateAgent = defineCommand({
     /** One capitalised word, at most 24 letters; empty: Dusty. */
     name: z.string().trim().max(AGENT_NAME_MAX).optional(),
     face: AgentFace.optional(),
-    runtime: AgentModelRuntime.optional(),
+    runtime: AgentModelRuntimeUpdate.optional(),
   }),
   requiredKey: () => personChanges('change the agent'),
   async apply(tx, ctx, input) {
@@ -420,33 +430,37 @@ export const updateAgent = defineCommand({
       texts.push(`Changed ${shownName}’s face`);
     }
     const current = agentRuntimeOf(agent.runtime);
-    // The whole model runtime every time (model-effort.md ME-01): provider, model, effort. A model or an effort that
-    // isn't sent is the tool's default or automatic; a new provider's model and effort come in the same body.
-    const sent = input.runtime ? modelRuntime(input.runtime) : null;
+    // The whole model runtime every time: provider, model, effort and fast replies. Omitting `backgroundModel`
+    // on the same provider keeps the stored one so an older app never erases it; explicit `null` clears it back to
+    // “Same as the main model”.
+    const sent = input.runtime ? resolveAgentModelRuntime(input.runtime, current) : null;
     if (
       sent &&
       (sent.provider !== current.provider ||
         sent.model !== current.model ||
+        sent.backgroundModel !== current.backgroundModel ||
         sent.effort !== current.effort ||
         sent.fast !== current.fast)
     ) {
       const wanted = assertModelChoice(ctx, sent, current);
-      // The provider's part is replaced; no credential source is kept (one-person.md OP-S09).
-      const { model: _model, effort: _effort, fast: _fast, ...kept } = current;
+      // Replace the provider's model settings cleanly so switching provider clears stale ids.
+      const { model: _model, backgroundModel: _bg, effort: _effort, fast: _fast, ...kept } = current;
       set.runtime = { ...kept, ...wanted } satisfies AgentRuntime;
-      // One Keys line per part that changed (ME-01); a new provider's cleared model and effort say nothing of their own.
+      const models = reportedModels(ctx, wanted.provider);
+      // One Keys line per part that changed; a new provider's cleared settings say nothing of their own.
       const toolMoved = wanted.provider !== current.provider;
       if (toolMoved) texts.push(`Moved ${shownName} to ${wanted.provider}`);
       const modelChanged = wanted.model !== current.model && !(toolMoved && !wanted.model);
-      if (modelChanged)
+      if (modelChanged) texts.push(agentModelChangeText(shownName, modelLabel(models, wanted.model)));
+      const bgChanged =
+        wanted.backgroundModel !== current.backgroundModel && !(toolMoved && !wanted.backgroundModel);
+      if (bgChanged)
         texts.push(
-          agentModelChangeText(shownName, modelLabel(reportedModels(ctx, wanted.provider), wanted.model)),
+          agentBackgroundModelChangeText(shownName, backgroundModelLabel(models, wanted.backgroundModel)),
         );
       if (wanted.effort !== current.effort && !(toolMoved && !wanted.effort))
         texts.push(agentEffortChangeText(shownName, wanted.effort));
-      // Fast replies turned on or off (chat-runtime.md CR-10); back to the model's own speed says what that is when it
-      // changes anything, and a new provider that only clears it says nothing more.
-      const models = reportedModels(ctx, wanted.provider);
+      // Fast replies turned on or off; back to the model's own speed says what that is when it changes anything.
       const fastOn = (r: Pick<AgentRuntime, 'model' | 'fast'>) =>
         r.fast ?? modelFast(models, r.model) === 'on';
       if (
@@ -454,7 +468,7 @@ export const updateAgent = defineCommand({
         (wanted.fast !== undefined || (!toolMoved && fastOn(wanted) !== fastOn(current)))
       )
         texts.push(agentFastChangeText(shownName, fastOn(wanted)));
-      // The last turn's fallback was about the model it had (ME-05).
+      // The last turn's fallback was about the main model it had.
       if (toolMoved || wanted.model !== current.model) set.modelFallback = null;
     }
     if (texts.length === 0) return { agentId: agent.id };

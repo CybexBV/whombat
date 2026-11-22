@@ -107,8 +107,9 @@ export async function loadShareThread(
         : author?.id === conv.dmAgentId && author.kind === 'agent'
           ? 'assistant'
           : null;
-    // Outsiders' words (a Feedback assessment's), automations and Whombat's own lines aren't the person's to pass on.
-    if (!from || row.deletedAt || row.provenance) {
+    // Outsiders' words (a Feedback assessment's, an outsiders' run's), automations and Whombat's own lines aren't the
+    // person's to pass on.
+    if (!from || row.deletedAt || row.provenance || row.outsidersRun) {
       if (!row.deletedAt) leftOut++;
       continue;
     }
@@ -128,7 +129,10 @@ export async function loadShareThread(
   return {
     conversationId: conv.id,
     rootId: root.id,
-    title: threadTitleOf(root.text, root.subjectName ?? null).slice(0, 200),
+    title:
+      root.outsidersRun || root.provenance
+        ? threadTitleOf(shown[0]?.row.text ?? '', null).slice(0, 200)
+        : threadTitleOf(root.text, root.subjectName ?? null).slice(0, 200),
     person: { name: person ? firstName(person) : 'Someone' },
     assistant: {
       name: agent ? (agent.shortName ?? agent.name) : 'Whombat',

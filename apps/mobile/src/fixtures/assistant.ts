@@ -37,7 +37,7 @@ import {
   AGENT_NAME_RESERVED_TEXT,
   type Agent,
   type AgentFace,
-  type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProfile,
   type AgentRuntime,
   type Approval,
@@ -66,6 +66,7 @@ import {
   type Principal,
   parseThingId,
   type RealtimeEvent,
+  resolveAgentModelRuntime,
   type ThingSummary,
   thingHref,
   thingId,
@@ -124,12 +125,12 @@ export const HEAT_PROPOSAL = 'dvp_heatpump';
 const HEAT_CONNECTION = 'con_heatpump';
 
 /**
- * An agent's runtime with another model runtime (ME-01): provider, model, effort and fast replies as given, the rest
- * (workdir, checkout, access) kept.
+ * An agent's runtime with another model runtime: matches the server's normalization (main model and background model
+ * for every provider, effort and fast replies only for Claude Code and ChatGPT; omitting `backgroundModel` keeps it on
+ * the same provider, `null` or a provider switch clears it).
  */
-function withModelRuntime(runtime: AgentRuntime, model: AgentModelRuntime): AgentRuntime {
-  const { model: _m, effort: _e, fast: _f, ...rest } = runtime;
-  return { ...rest, ...model };
+function withModelRuntime(runtime: AgentRuntime, model: AgentModelRuntimeUpdate): AgentRuntime {
+  return resolveAgentModelRuntime(model, runtime);
 }
 
 /**
@@ -1769,7 +1770,9 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
         return json({ grants, events });
       }
       case 'agent.update': {
-        const body = await bodyOf<{ name?: string; face?: AgentFace; runtime?: AgentModelRuntime }>(init);
+        const body = await bodyOf<{ name?: string; face?: AgentFace; runtime?: AgentModelRuntimeUpdate }>(
+          init,
+        );
         const name = body.name?.trim();
         // The server's checks (OA-08): not “Whombat”, one capitalised word; there is no other agent to clash with.
         if (name !== undefined) {
@@ -1784,7 +1787,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
           // AP-2732).
           ...(body.runtime ? { runtime: withModelRuntime(assistant.runtime, body.runtime) } : {}),
         };
-        if (body.runtime) rooms?.runtime.setDefault(body.runtime);
+        if (body.runtime) rooms?.runtime.setDefault(assistant.runtime);
         // Mara's Chat is called after the agent (AN-07).
         const dm = chats.get(DEFAULT_CHAT_ID);
         if (dm && name !== undefined) dm.conversation = { ...dm.conversation, title: name };

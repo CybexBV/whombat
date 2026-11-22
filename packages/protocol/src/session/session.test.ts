@@ -22,8 +22,11 @@ import {
   SESSION_OPERATIONS,
 } from './operations.js';
 import {
+  BACKGROUND_MODEL_MINOR,
+  DISK_USAGE_MINOR,
   negotiateCapabilities,
   negotiateVersion,
+  protocolAtLeast,
   SESSION_PROTOCOL,
   VERSION_REFUSAL_COPY,
 } from './version.js';
@@ -90,7 +93,7 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 2 });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 3 });
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });
@@ -113,6 +116,18 @@ describe('version negotiation', () => {
       'events',
       'stream.upload',
     ]);
+  });
+
+  it('checks negotiated minor thresholds for additive features', () => {
+    expect(BACKGROUND_MODEL_MINOR).toBe(3);
+    expect(DISK_USAGE_MINOR).toBe(3);
+    expect(protocolAtLeast(null, 3)).toBe(false);
+    expect(protocolAtLeast(undefined, 3)).toBe(false);
+    expect(protocolAtLeast({ major: 5, minor: 2 }, 3)).toBe(false);
+    expect(protocolAtLeast({ major: 5, minor: 3 }, 3)).toBe(true);
+    expect(protocolAtLeast({ major: 5, minor: 4 }, 3)).toBe(true);
+    expect(protocolAtLeast({ major: 6, minor: 0 }, 3)).toBe(true);
+    expect(protocolAtLeast({ major: 4, minor: 11 }, 3)).toBe(false);
   });
 });
 

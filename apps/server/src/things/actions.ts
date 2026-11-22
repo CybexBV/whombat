@@ -18,11 +18,19 @@
 import { thingHref } from '@whombat/core';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
+import { boundTarget, signingOnlyAs } from '../connections/bound-targets';
+import {
+  ConnectionChangedError,
+  callTarget,
+  changedJustNowText,
+  changedSinceChangeText,
+  undoGoesWhereChangeWent,
+} from '../connections/call-target';
 import { type ConnectionViewer, visibleConnections } from '../connections/store';
 import type { CatalogConnectionRow } from '../connections/types';
 import { EVERYDAY_CHANGE_PREFIX } from '../home/changes';
 import { type DirectUndoer, recordChange } from '../home/registry';
-import { ApiError, badRequest, forbidden } from '../lib/errors';
+import { ApiError, badRequest, conflict, forbidden } from '../lib/errors';
 import { actingAgentId } from '../managed/acting-assistant';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
@@ -30,7 +38,7 @@ import { buttonRefusal } from './kinds/buttons';
 import { kindOf } from './kinds/index';
 import { forgetConnectionReads } from './kinds/read';
 import type { KindAction, KindActionInput, KindActionWords } from './kinds/registry';
-import { SETTING_UNDO_MS } from './kinds/settings';
+import { SETTING_ACTION, SETTING_UNDO_MS } from './kinds/settings';
 import { findThing } from './page';
 import { displayName } from './part-of';
 
@@ -57,6 +65,11 @@ const UndoPayload = z.object({
   target: z.string().max(200).optional(),
   value: z.union([z.string().max(200), z.number(), z.boolean()]),
   expect: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+  /**
+   * Where the change went and as whom (`callTarget` of the connection) when it was made: it is put back only there.
+   * Absent on changes recorded before it was kept.
+   */
+  destination: z.string().max(64).optional(),
 });
 type UndoPayload = z.infer<typeof UndoPayload>;
 
@@ -131,14 +144,112 @@ export function actionFor(
   viewer: Pick<ConnectionViewer, 'principal'>,
   action: string,
 ): KindAction {
-  const actions = kindOf(row.catalogId)?.actions;
-  const run = actions && Object.hasOwn(actions, action) ? actions[action] : undefined;
+  const kind = kindOf(row.catalogId);
+  const actions = kind?.actions;
+  const run =
+    action === SETTING_ACTION && kind?.settings
+      ? kind.settings.action
+      : actions && Object.hasOwn(actions, action)
+        ? actions[action]
+        : undefined;
   if (!run) throw badRequest('This has no such action.');
   if (viewer.principal.kind !== 'person') throw forbidden('Only you can use a page’s actions.');
   // The words a disabled button shows (`kinds/buttons.ts`).
   const refusal = buttonRefusal({ row });
   if (refusal) throw forbidden(refusal);
   return run;
+}
+
+async function executeThingAction(
+  services: Services,
+  viewer: ConnectionViewer,
+  value: string,
+  input: ThingActionInput,
+  timeZone = 'UTC',
+  undoes?: string,
+  /** Put it back: where the change went; the connection must still go there. */
+  destination?: string,
+): Promise<{ outcome: ThingActionOutcome; uncertain: boolean }> {
+  const target = await findThing(services, viewer, value);
+  if (target.kind !== 'connection') throw badRequest('This has no such action.');
+  const row = target.row;
+  // Repointed at another service or account since: the old value would land there, not where it was changed.
+  if (!undoGoesWhereChangeWent(row, destination)) throw conflict(changedSinceChangeText(row.label));
+  // Where it goes and as whom: the connection as it was checked here, or where a yes the assistant asked for was bound
+  // to (the settings change that runs it binds that first). Every request the action signs is signed only there.
+  const checked = callTarget(row);
+  const bound = boundTarget(row.id);
+  const changedText = () =>
+    destination !== undefined ? changedSinceChangeText(row.label) : changedJustNowText(row.label);
+  if (bound !== undefined && bound !== checked) throw conflict(changedText());
+  // The assistant's page action runs only bound to where its ask or its yes went (`runBound` around the dispatcher):
+  // one that reached here without it refuses rather than run on the connection as it is now.
+  if (bound === undefined && destination === undefined && actingAgentId() !== null)
+    throw conflict(changedText());
+  const run = actionFor(row, viewer, input.action);
+  let done: Awaited<ReturnType<typeof run>>;
+  try {
+    ({ value: done } = await signingOnlyAs({ [row.id]: checked }, () =>
+      run(
+        { services, row, now: services.clock(), timeZone },
+        {
+          ...(input.target !== undefined ? { target: input.target } : {}),
+          ...(input.value !== undefined ? { value: input.value } : {}),
+          ...(undoes && input.expect !== undefined ? { expect: input.expect } : {}),
+        },
+      ),
+    ));
+  } catch (err) {
+    // The connection changed between the check and a request it would have signed, whatever words the kind made of
+    // it: nothing was signed as it is now.
+    if (err instanceof ConnectionChangedError) throw conflict(changedText());
+    throw err;
+  } finally {
+    // Whatever it changed there, the page read right after shows it (SD-S10): its kept reads go.
+    forgetConnectionReads(services, row.id);
+  }
+  // Already so: nothing changed, nothing to record.
+  if (done.unchanged)
+    return { outcome: { message: done.message.slice(0, 200), refresh: true }, uncertain: false };
+  const uncertain = done.uncertain === true;
+  const agentId = actingAgentId();
+  const result = await services.pipeline.commit(
+    recordThingAction,
+    {
+      connectionId: row.id,
+      action: input.action,
+      title: done.title.slice(0, 200),
+      name: displayName(row).slice(0, 120),
+      ...(done.everyday ? { everyday: true } : {}),
+      ...(done.changeKind ? { changeKind: done.changeKind } : {}),
+      ...(done.detail ? { detail: done.detail.slice(0, 200) } : {}),
+      ...(done.undo && !uncertain
+        ? {
+            undo: {
+              connectionId: row.id,
+              action: input.action,
+              ...(done.undo.target !== undefined ? { target: done.undo.target } : {}),
+              value: done.undo.value,
+              ...(done.undo.expect !== undefined ? { expect: done.undo.expect } : {}),
+              destination: checked,
+            },
+          }
+        : {}),
+      ...(agentId ? { agentId } : {}),
+      ...(undoes && !uncertain ? { undoes } : {}),
+    },
+    { burrowId: viewer.burrowId, actorId: viewer.principal.id },
+  );
+  const changeId = result.status === 'ok' ? result.result.changeId : undefined;
+  return {
+    outcome: {
+      message: done.message.slice(0, 200),
+      ...(changeId ? { changeId } : {}),
+      ...(changeId && done.undo && !uncertain ? { undoable: true } : {}),
+      refresh: true,
+    },
+    uncertain,
+  };
 }
 
 /** `things.action`: runs one of the page's buttons for the person. */
@@ -151,93 +262,127 @@ export async function runThingAction(
   /** Put it back (SST-03): the change this run undoes. */
   undoes?: string,
 ): Promise<ThingActionOutcome> {
-  const target = await findThing(services, viewer, value);
-  if (target.kind !== 'connection') throw badRequest('This has no such action.');
-  const row = target.row;
-  const run = actionFor(row, viewer, input.action);
-  let done: Awaited<ReturnType<typeof run>>;
-  try {
-    done = await run(
-      { services, row, now: services.clock(), timeZone },
-      {
-        ...(input.target !== undefined ? { target: input.target } : {}),
-        ...(input.value !== undefined ? { value: input.value } : {}),
-        ...(undoes && input.expect !== undefined ? { expect: input.expect } : {}),
-      },
-    );
-  } finally {
-    // Whatever it changed there, the page read right after shows it (SD-S10): its kept reads go.
-    forgetConnectionReads(services, row.id);
-  }
-  // Already so: nothing changed, nothing to record.
-  if (done.unchanged) return { message: done.message.slice(0, 200), refresh: true };
-  const agentId = actingAgentId();
-  const result = await services.pipeline.commit(
-    recordThingAction,
-    {
-      connectionId: row.id,
-      action: input.action,
-      title: done.title.slice(0, 200),
-      name: displayName(row).slice(0, 120),
-      ...(done.everyday ? { everyday: true } : {}),
-      ...(done.changeKind ? { changeKind: done.changeKind } : {}),
-      ...(done.detail ? { detail: done.detail.slice(0, 200) } : {}),
-      ...(done.undo
-        ? {
-            undo: {
-              connectionId: row.id,
-              action: input.action,
-              ...(done.undo.target !== undefined ? { target: done.undo.target } : {}),
-              value: done.undo.value,
-              ...(done.undo.expect !== undefined ? { expect: done.undo.expect } : {}),
-            },
-          }
-        : {}),
-      ...(agentId ? { agentId } : {}),
-      ...(undoes ? { undoes } : {}),
-    },
-    { burrowId: viewer.burrowId, actorId: viewer.principal.id },
-  );
-  const changeId = result.status === 'ok' ? result.result.changeId : undefined;
-  return {
-    message: done.message.slice(0, 200),
-    ...(changeId ? { changeId } : {}),
-    ...(changeId && done.undo ? { undoable: true } : {}),
-    refresh: true,
-  };
+  return (await executeThingAction(services, viewer, value, input, timeZone, undoes)).outcome;
+}
+
+/** The id of the connection a settings op of the assistant acts through (a page action, `things.action`), or null. */
+export function thingActionConnectionId(op: string, input: unknown): string | null {
+  if (op !== 'things.action') return null;
+  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
+  // A session may pass the thingId still encoded (`connection%3Acon_…`).
+  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
+  return id.startsWith('connection:') ? id.slice('connection:'.length) || null : null;
+}
+
+/** The connection of the burrow a page action the assistant asks for (`things.action`) runs on, or null. */
+async function thingActionRow(
+  services: Services,
+  burrowId: string,
+  op: string,
+  input: unknown,
+): Promise<CatalogConnectionRow | null> {
+  const id = thingActionConnectionId(op, input);
+  if (!id) return null;
+  return (await visibleConnections(services.db, { burrowId })).find((r) => r.id === id) ?? null;
 }
 
 /**
- * A page action in Whombat's words for the assistant's approval card (SST-04): the kind's own (“Change a Plex
- * setting”, “Quality outside your home: 8 Mbps → 20 Mbps”), or null for the generic words. Never throws.
+ * A card's title that names the connection it is about by its label (“Change a Plex setting · Plex upstairs”), so two
+ * connections of one service can be told apart; as it is when it names it already.
  */
-export async function describeThingAction(
+export function namedTitle(title: string, label: string): string {
+  return title.toLowerCase().includes(label.toLowerCase()) ? title : `${title} · ${label}`.slice(0, 160);
+}
+
+/**
+ * Where a page action the assistant asks for (`settings_change` of `things.action`) goes and as whom, by connection id
+ * (`callTarget`): its yes is bound to it, and it runs only while the connection still goes there. Empty for any other
+ * op, or a thing that isn't a connection of the burrow.
+ */
+export async function thingActionTargets(
   services: Services,
   burrowId: string,
-  thing: unknown,
-  body: unknown,
+  op: string,
+  input: unknown,
+): Promise<Record<string, string>> {
+  const row = await thingActionRow(services, burrowId, op, input);
+  return row ? { [row.id]: callTarget(row) } : {};
+}
+
+/** What the assistant's approval card for a page action says, and what its yes is bound to (`askThingAction`). */
+export interface ThingActionAsk {
+  /** Where the action goes and as whom, by connection id (`callTarget`); empty when it isn't a connection's. */
+  targets: Record<string, string>;
+  /** The card's words in Whombat's terms, or null for the generic words. */
+  said: KindActionWords | null;
+  /** The connection's name when it went elsewhere, or as someone else, while the words were read: no card then. */
+  changed: string | null;
+  /** The label of the connection it acts through, which the card names; null when it isn't a connection's. */
+  label: string | null;
+}
+
+/**
+ * A page action the assistant asks for, from one read of its connection (SST-04): the target its yes is bound to and the
+ * card's words (“Change a Plex setting · Plex upstairs”, “Quality outside your home: 8 Mbps → 20 Mbps”), the kind's own
+ * with the connection's label, read from that same connection only while it still goes there. A card never describes
+ * one server and binds its yes to another.
+ */
+export async function askThingAction(
+  services: Services,
+  burrowId: string,
+  op: string,
+  input: unknown,
   timeZone = 'UTC',
+): Promise<ThingActionAsk> {
+  const row = await thingActionRow(services, burrowId, op, input);
+  if (!row) return { targets: {}, said: null, changed: null, label: null };
+  const targets = { [row.id]: callTarget(row) };
+  const label = row.label;
+  try {
+    const { value, refused } = await signingOnlyAs(targets, () =>
+      describeOn(services, row, (input as { body?: unknown } | null)?.body, timeZone),
+    );
+    if (refused) return { targets, said: null, changed: label, label };
+    const said = value ? { ...value, title: namedTitle(value.title, label) } : null;
+    return { targets, said, changed: null, label };
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) return { targets, said: null, changed: label, label };
+    throw err;
+  }
+}
+
+/** A page action on `row` in the kind's words, or null for the generic words. Never throws but for a changed connection. */
+async function describeOn(
+  services: Services,
+  row: CatalogConnectionRow,
+  body: unknown,
+  timeZone: string,
 ): Promise<KindActionWords | null> {
   try {
-    // A session may pass the thingId still encoded (`connection%3Acon_…`).
-    const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? decodeURIComponent(thing) : thing) : '';
-    if (!id.startsWith('connection:')) return null;
+    const kind = kindOf(row.catalogId);
     const b = (body ?? {}) as Record<string, unknown>;
-    if (typeof b.action !== 'string') return null;
-    const row = (await visibleConnections(services.db, { burrowId })).find(
-      (r) => r.id === id.slice('connection:'.length),
-    );
-    const describe = row ? kindOf(row.catalogId)?.describe : undefined;
-    if (!row || !describe) return null;
+    if (!kind || typeof b.action !== 'string') return null;
     const value = b.value;
-    return await describe({ services, row, now: services.clock(), timeZone }, b.action, {
+    const input: KindActionInput = {
       ...(typeof b.target === 'string' ? { target: b.target } : {}),
       ...(typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
         ? { value }
         : {}),
-    });
-  } catch {
+    };
+    const ctx = { services, row, now: services.clock(), timeZone };
+    if (b.action === SETTING_ACTION && kind.settings) return await kind.settings.describe(ctx, input);
+    return kind.describe ? await kind.describe(ctx, b.action, input) : null;
+  } catch (err) {
+    if (err instanceof ConnectionChangedError) throw err;
     return null;
+  }
+}
+
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return '';
   }
 }
 
@@ -252,8 +397,10 @@ export const undoThingAction: DirectUndoer = async (ctx, change) => {
   const principal = await loadPrincipalRow(ctx.services.db, ctx.person.id);
   if (!principal?.accountId) return { ok: false, reason: 'Only you can put this back.' };
   const viewer: ConnectionViewer = { accountId: principal.accountId, burrowId: ctx.burrowId, principal };
+  let uncertain = false;
+  let outcome: ThingActionOutcome;
   try {
-    await runThingAction(
+    ({ outcome, uncertain } = await executeThingAction(
       ctx.services,
       viewer,
       `connection:${recipe.connectionId}`,
@@ -265,12 +412,14 @@ export const undoThingAction: DirectUndoer = async (ctx, change) => {
       },
       'UTC',
       change.id,
-    );
+      recipe.destination,
+    ));
   } catch (err) {
     // Changed again since, refused, or the service didn't answer: its words.
     if (err instanceof ApiError) return { ok: false, reason: err.message };
     throw err;
   }
+  if (uncertain) return { ok: false, reason: outcome.message };
   return { ok: true, state: 'undone' };
 };
 

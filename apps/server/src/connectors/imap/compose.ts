@@ -157,7 +157,7 @@ export function attachmentsOf(m: ParsedMail): MailAttachment[] {
     mimeType: MIME.test(a.contentType ?? '')
       ? (a.contentType as string).slice(0, 200)
       : 'application/octet-stream',
-    size: a.size ?? a.content.length,
+    size: Math.max(0, Math.trunc(a.size ?? a.content.length)),
   }));
 }
 

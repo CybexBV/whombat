@@ -205,7 +205,7 @@ How the split was made: `docs.md`.
   what the assistant may do on each account's page.
 - `ps5-connection.md` — PlayStation 5 homebrew, library, storage, approved updates, optional remote reboot and calm availability.
 - `connections-catalog.md` — catalog connections (*in part*).
-- `approved-connection-calls.md` — an approved connection call ends its approval as the call did, and is settled after a crash without being sent twice.
+- `approved-connection-calls.md` — an approved connection call ends its approval as the call did, is settled after a crash without being sent twice, is signed only as the connections the yes was for, and an Undo goes only where its change went; a page's action signs only as the connection it was checked on.
 - `connections-setup.md` — sign in once, Look only, found on your network (*in part*).
 - `connection-signin.md` — connections that sign in properly (two-step, single sign-on).
 - `connect-in-chat.md` — setting up from the chat: the connect card, the write-only Vault card, servers found on the network, Add a server's failure card.

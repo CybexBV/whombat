@@ -11,7 +11,8 @@
  */
 import { isIP } from 'node:net';
 import type { MailSecurity } from '@whombat/core';
-import { type FetchMessageObject, ImapFlow, type SearchObject } from 'imapflow';
+import { type FetchMessageObject, ImapFlow, type MessageStructureObject, type SearchObject } from 'imapflow';
+import type { MailHeaderAttachment } from '../types';
 import { MailError, mailErrorOf } from './errors';
 
 /**
@@ -40,11 +41,17 @@ export interface MailTimeouts {
 }
 
 export const MAIL_TIMEOUTS: MailTimeouts = { connectMs: 10_000, greetingMs: 10_000, socketMs: 30_000 };
+/** Socket timeout for long-lived IMAP IDLE sessions (10 minutes, instead of the 30-second command timeout). */
+export const MAIL_IDLE_SOCKET_TIMEOUT_MS = 10 * 60_000;
+/** How often an IDLE session refreshes with DONE + IDLE so servers and NATs keep the connection alive (5 minutes). */
+export const MAIL_IDLE_REFRESH_MS = 5 * 60_000;
 
 export interface ImapConnectOptions extends MailEndpoint {
   user: string;
   pass: string;
   timeouts?: Partial<MailTimeouts>;
+  /** How long imapflow stays in one IDLE command before sending DONE and re-entering IDLE. */
+  maxIdleTimeMs?: number;
   /** Tests only: a certificate authority to trust besides the system's (a fake server's own). */
   ca?: string;
 }
@@ -63,6 +70,8 @@ export interface OpenedFolder {
   /** Decimal. */
   uidValidity: string;
   exists: number;
+  /** Next UID the server will assign in this folder, when advertised. */
+  uidNext: number | null;
 }
 
 export interface MailAddressShown {
@@ -88,10 +97,14 @@ export interface MessageMeta {
   bcc: MailAddressShown[];
   /** The first bytes of the raw message, when asked (`prefixBytes`), for a snippet. */
   prefix: Buffer | null;
+  /** Attachment metadata parsed from IMAP BODYSTRUCTURE when `bodyStructure: true` was requested. */
+  attachments?: MailHeaderAttachment[];
 }
 
 export interface MetaOptions {
   prefixBytes?: number;
+  /** Fetch IMAP BODYSTRUCTURE so attachment filenames and MIME types are known without downloading body bytes. */
+  bodyStructure?: boolean;
 }
 
 /** One IMAP connection. Methods that work in a folder work in the one `open` selected last. */
@@ -118,6 +131,8 @@ export interface ImapSession {
   /** Removes messages from the open folder (expunged by UID with UIDPLUS, else only marked `\Deleted`). */
   remove(uids: readonly number[]): Promise<void>;
   create(path: string): Promise<void>;
+  /** Waits in IMAP IDLE on the open folder and calls `onExists` whenever new mail arrives, until aborted or closed. */
+  idle?(onExists: () => void, signal: AbortSignal): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -149,7 +164,42 @@ export function headerFrom(raw: Buffer | undefined, name: string): string | null
   return value ? value.slice(0, 8000) : null;
 }
 
-function metaOf(m: FetchMessageObject, prefixBytes: number | undefined): MessageMeta {
+/** Extracts attachment descriptors from an IMAP BODYSTRUCTURE tree without downloading any body or file bytes. */
+export function attachmentsFromBodyStructure(
+  structure: MessageStructureObject | undefined,
+): MailHeaderAttachment[] {
+  if (!structure) return [];
+  const out: MailHeaderAttachment[] = [];
+  const walk = (node: MessageStructureObject): void => {
+    if (node.childNodes?.length) {
+      for (const child of node.childNodes) walk(child);
+      return;
+    }
+    const disp = (node.disposition ?? '').toLowerCase();
+    const dispFile = node.dispositionParameters?.filename;
+    const paramName = node.parameters?.name;
+    const filename =
+      (typeof dispFile === 'string' && dispFile) || (typeof paramName === 'string' && paramName) || '';
+    const mimeType = (node.type || 'application/octet-stream').toLowerCase();
+    const isAttachment =
+      disp === 'attachment' || Boolean(filename) || (disp === 'inline' && !mimeType.startsWith('text/'));
+    if (!isAttachment) return;
+    out.push({
+      ...(node.part ? { id: node.part } : {}),
+      name: (filename || 'attachment').slice(0, 500),
+      mimeType: mimeType.slice(0, 200),
+      size: Math.max(0, Number(node.size) || 0),
+    });
+  };
+  walk(structure);
+  return out;
+}
+
+function metaOf(
+  m: FetchMessageObject,
+  prefixBytes: number | undefined,
+  includeStructure: boolean | undefined,
+): MessageMeta {
   const e = m.envelope ?? {};
   return {
     uid: m.uid,
@@ -166,6 +216,7 @@ function metaOf(m: FetchMessageObject, prefixBytes: number | undefined): Message
     cc: addresses(e.cc),
     bcc: addresses(e.bcc),
     prefix: prefixBytes ? (m.source ?? null) : null,
+    ...(includeStructure ? { attachments: attachmentsFromBodyStructure(m.bodyStructure) } : {}),
   };
 }
 
@@ -206,7 +257,12 @@ class ImapflowSession implements ImapSession {
   open(path: string, options: { write: boolean }): Promise<OpenedFolder> {
     return this.run(async () => {
       const mb = await this.client.mailboxOpen(path, { readOnly: !options.write });
-      return { path: mb.path, uidValidity: String(mb.uidValidity), exists: mb.exists };
+      return {
+        path: mb.path,
+        uidValidity: String(mb.uidValidity),
+        exists: mb.exists,
+        uidNext: typeof mb.uidNext === 'number' && mb.uidNext > 0 ? mb.uidNext : null,
+      };
     });
   }
 
@@ -236,11 +292,12 @@ class ImapflowSession implements ImapSession {
           internalDate: true,
           size: true,
           headers: ['references'],
+          ...(options.bodyStructure ? { bodyStructure: true } : {}),
           ...(options.prefixBytes ? { source: { start: 0, maxLength: options.prefixBytes } } : {}),
         },
         { uid: true },
       );
-      return found.map((m) => metaOf(m, options.prefixBytes));
+      return found.map((m) => metaOf(m, options.prefixBytes, options.bodyStructure));
     });
   }
 
@@ -306,6 +363,29 @@ class ImapflowSession implements ImapSession {
     });
   }
 
+  async idle(onExists: () => void, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return;
+    const onNew = (data: { count: number; prevCount: number }) => {
+      if (data.count > data.prevCount) onExists();
+    };
+    const onAbort = () => {
+      void this.close();
+    };
+    this.client.on('exists', onNew);
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      while (!signal.aborted && this.client.usable) {
+        await this.client.idle();
+      }
+    } catch (err) {
+      // Aborting ends IDLE cleanly; propagate unexpected socket errors so the watcher backs off before reconnecting.
+      if (!signal.aborted) throw err;
+    } finally {
+      this.client.off('exists', onNew);
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
   async close(): Promise<void> {
     try {
       await this.client.logout();
@@ -338,6 +418,7 @@ export const openImapflow: OpenImap = async (o) => {
     connectionTimeout: t.connectMs,
     greetingTimeout: t.greetingMs,
     socketTimeout: t.socketMs,
+    ...(o.maxIdleTimeMs ? { maxIdleTime: o.maxIdleTimeMs } : {}),
     maxLiteralSize: MAX_LITERAL,
     maxResponseSize: MAX_LITERAL * 2,
     maxLineLength: 4 * 1024 * 1024,

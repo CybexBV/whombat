@@ -49,6 +49,7 @@ import type { z } from 'zod';
 import { forgetEndedTurnSecrets, forgetTurnSecrets } from '../agent-commands/secrets';
 import { slidTokenExpiry } from '../auth/agent-tokens';
 import { HANDED_OVER_ERROR } from '../automations/handed-over';
+import { forgetLateMailSession } from '../automations/mail-text';
 import { previewsFor } from '../browser/previews';
 import { correctRanOn } from '../chats/ran-on';
 import { clientJustInstalled } from '../clients/service';
@@ -68,6 +69,7 @@ import { homeOf, sessionForgotten } from '../hermes-home/housekeeping';
 import { ApiError, notFound } from '../lib/errors';
 import { DEFAULT_MCP_LIMITS, type McpLimits, McpRateLimiter } from '../mcp/rate-limit';
 import { mcpToolList } from '../mcp/server';
+import { loadMessageRow } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { toSearchAnswer } from '../read/search';
 import type { Services } from '../services';
@@ -81,6 +83,7 @@ import {
 import { buildDispatchContext, type DispatchRow, previousSessionForRun } from './context';
 import { failureReportOf, publicRefusal, recordTurnFailure, requeueSuperseded } from './failure';
 import { noteModelFallback } from './model-fallback';
+import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 import { holdsItsPlace, outsidersTurnsInFlight, placeKey } from './places';
 import { afterRunTurn, reconcileLiveRuns } from './run-recovery';
@@ -589,6 +592,22 @@ export class RunnerRuntime {
             continue;
           }
         }
+        // Older builds could queue More detail on an outsiders’ message, the previous release too after an update, on
+        // one it didn't mark. It must never reach the person’s runner.
+        const source =
+          d.messageId && (d.trigger === 'expand' || d.trigger === 'retry')
+            ? await loadMessageRow(tx, d.messageId)
+            : null;
+        if (source && (source.outsidersRun || source.provenance || (await outsidersWrote(tx, source.id)))) {
+          const [cancelled] = await tx
+            .update(dispatches)
+            .set({ state: 'cancelled', finishedAt: now, error: 'outside_message' })
+            .where(and(eq(dispatches.id, d.id), eq(dispatches.state, 'queued')))
+            .returning();
+          if (cancelled) publishDispatch(txSession, cancelled);
+          taken.delete(pair);
+          continue;
+        }
         // A turn queued again after a usage limit that a newer turn took over: not run.
         const moot = d.requeuedFor ? await requeueSuperseded(tx, d) : null;
         if (moot) {
@@ -682,6 +701,14 @@ export class RunnerRuntime {
     return row;
   }
 
+  /** A session a beat tells for a turn that no longer runs (`forgetLateMailSession`). */
+  private async forgetLateSession(id: string, body: ProgressBody): Promise<void> {
+    if (!body.providerSessionId) return;
+    await this.services.pipeline.transactAccount((_tx, session) =>
+      forgetLateMailSession(session, id, body.providerSessionId),
+    );
+  }
+
   /** Why the dispatch's turn must stop, if it must. */
   private async stopReason(tx: Tx | Services['db'], row: DispatchRow): Promise<CancelReason | null> {
     if (row.state === 'cancelled')
@@ -728,10 +755,15 @@ export class RunnerRuntime {
 
   async progress(id: string, body: ProgressBody): Promise<ProgressResponse> {
     const row = await this.load(id);
-    // A runner that lost its lease stops and touches nothing: not the lease, the state or "thinking".
-    if (this.lost(row, body)) return { cancel: true, reason: 'cancelled' };
+    // A runner that lost its lease stops and touches nothing: not the lease, the state or "thinking". Only the session
+    // of a mail run's turn it names is forgotten, as no turn will name it again.
+    if (this.lost(row, body)) {
+      await this.forgetLateSession(id, body);
+      return { cancel: true, reason: 'cancelled' };
+    }
     const reason = await this.stopReason(this.services.db, row);
     if (row.state !== 'claimed' && row.state !== 'running') {
+      await this.forgetLateSession(id, body);
       return { cancel: true, reason: reason ?? 'cancelled' };
     }
     const now = this.services.clock();
@@ -860,6 +892,8 @@ export class RunnerRuntime {
     this.followUps.forget(id);
     const result = await this.services.pipeline.transactAccount(async (tx, session) => {
       const outcome = await this.finalizeIn(tx, id, body, guard, now);
+      // A mail run's turn may tell its session only now, after Whombat ended it: forgotten with the email.
+      await forgetLateMailSession(session, id, body.providerSessionId);
       if (outcome && outcome !== 'lease_lost') {
         // What the turn was still doing is interrupted, never done (WS-15); a new state is a lifecycle frame.
         await interruptActivity(tx, session, [id], now);
@@ -921,10 +955,10 @@ export class RunnerRuntime {
       if ((guard.lease && this.lost(row, guard.lease)) || renewed) return 'lease_lost' as const;
       // The unrunnable sweep: a runner claimed it meanwhile after all.
       if (guard.queuedOnly && row.state !== 'queued') return 'lease_lost' as const;
-      // The agent's model wasn't available for this turn, which ran on the default (model-effort.md ME-05); or a turn on
-      // its own model finished, and the last fallback is history. A turn on its Chat thread's choice says nothing about
-      // the agent's own model (chat-runtime.md CR-08): its reply says it instead (`correctRanOn`).
-      const fallback = row.runtime ? null : await noteModelFallback(tx, row, body, now);
+      // The agent's model wasn't available for this turn, which ran on the default; or a turn on its own main model
+      // finished, and the last fallback is history. Turns on a Chat thread's choice or the background model (and
+      // background Look turns) never set or clear the main-model fallback warning.
+      const fallback = await noteModelFallback(tx, row, body, now);
       if (fallback)
         this.services.log.info(
           {

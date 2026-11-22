@@ -345,7 +345,7 @@ function savedLocalModel(ctx: Pick<ApplyContext, 'burrow' | 'services'>) {
 export const setLocalModel = defineCommand({
   name: 'set_local_model',
   schema: SetLocalModelBody,
-  requiredKey: () => manage('set up the model on your network'),
+  requiredKey: () => manage('set up the custom AI model'),
   async apply(tx, ctx, input) {
     const saved = savedLocalModel(ctx);
     const key = keyFor(input.apiKey, saved, input.baseUrl);
@@ -391,7 +391,7 @@ export const setLocalModel = defineCommand({
 export const prepareLocalModelTest = defineCommand({
   name: 'prepare_local_model_test',
   schema: TestLocalModelBody,
-  requiredKey: () => manage('test the model on your network'),
+  requiredKey: () => manage('test the custom AI model'),
   async apply(_tx, ctx, input) {
     const saved = savedLocalModel(ctx);
     if (input.draft) {
@@ -402,7 +402,7 @@ export const prepareLocalModelTest = defineCommand({
         updatedAt: null as string | null,
       };
     }
-    if (!saved) throw notFound('Model on your network');
+    if (!saved) throw notFound('Custom AI model');
     return {
       target: { baseUrl: saved.baseUrl, model: saved.model, apiKey: saved.key },
       updatedAt: saved.updatedAt as string | null,
@@ -417,7 +417,7 @@ export const prepareLocalModelTest = defineCommand({
 export const recordLocalModelCheck = defineCommand({
   name: 'record_local_model_check',
   schema: z.object({ updatedAt: z.string().min(1), check: LocalModelCheck }),
-  requiredKey: () => manage('check the model on your network'),
+  requiredKey: () => manage('check the custom AI model'),
   async apply(tx, ctx, input) {
     const [row] = await tx
       .update(burrows)
@@ -443,7 +443,7 @@ export const recordLocalModelCheck = defineCommand({
 export const clearLocalModel = defineCommand({
   name: 'clear_local_model',
   schema: z.object({}),
-  requiredKey: () => manage('remove the model on your network'),
+  requiredKey: () => manage('remove the custom AI model'),
   async apply(tx, ctx) {
     const saved = ctx.burrow.localModel;
     if (!saved && !ctx.burrow.localModelKeyEnc)

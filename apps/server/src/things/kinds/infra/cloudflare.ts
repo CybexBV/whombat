@@ -20,6 +20,7 @@ import type {
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { ApiError } from '../../../lib/errors';
 import type { Services } from '../../../services';
+import { checkWatched } from '../../quiet/defaults';
 import type { KindCheck, KindNotice } from '../../quiet/types';
 import { clip, line, list, num, pct, plural, rec, span, str, thousands } from '../../words';
 import { actAs } from '../act';
@@ -38,6 +39,7 @@ import {
   trend,
 } from '../slots';
 import type { KindCtx, KindView } from '../types';
+import { cachedDomainExpirations, readDomainExpirations, warmDomainExpirations } from './rdap';
 import {
   type ButtonCtx,
   badgeOf,
@@ -61,6 +63,8 @@ const API = '/client/v4';
 export const CLOUDFLARE_DASH = 'https://dash.cloudflare.com/';
 /** Sites one read looks at (GraphQL takes 10 zones a query). */
 export const ZONES_MAX = 10;
+const DOMAIN_WARN_DAYS = 30;
+const DOMAIN_URGENT_DAYS = 7;
 const ACCOUNTS_MAX = 3;
 /** Tunnels whose connections one read asks for (SD-S05). */
 const CONNECTIONS_MAX = 12;
@@ -129,6 +133,10 @@ export interface CfSnapshot {
   tunnelsPartial?: boolean;
   /** Not every shown site's certificates were read. */
   certificatesPartial?: boolean;
+  /** Domain registration expiry per lowercase zone name from public RDAP; null when RDAP couldn't be read. */
+  domainExpirations?: Map<string, Date | null> | null;
+  /** Not every shown site's domain registration could be looked up via RDAP. */
+  domainExpirationsPartial?: boolean;
 }
 
 /* Reading -------------------------------------------------------------------------------------------------------------- */
@@ -424,6 +432,7 @@ export const cloudflareReader = snapshotReader<CfSnapshot>(NAME, 'cloudflare', a
     traffic,
     tunnels: tunnels?.tunnels ?? null,
     certificates: certificates?.certificates ?? null,
+    domainExpirations: null,
     ...(tunnels && (tunnels.partial || known.length > accounts.length) ? { tunnelsPartial: true } : {}),
     ...(certificates?.partial ? { certificatesPartial: true } : {}),
   };
@@ -530,6 +539,13 @@ export const CLOUDFLARE_CHECKS: readonly KindCheck[] = [
   },
   { check: 'cloudflare.cert', name: 'Certificates ending', nature: 'problem', perItem: true, startsOn: true },
   {
+    check: 'cloudflare.domain_expiring',
+    name: 'Domains about to expire',
+    nature: 'you',
+    perItem: true,
+    startsOn: false,
+  },
+  {
     check: 'cloudflare.zone',
     name: 'Sites that aren’t active',
     nature: 'you',
@@ -551,7 +567,9 @@ export function cloudflareSkipped(s: CfSnapshot): string[] {
   const out: string[] = [];
   if (!s.tunnels || s.tunnelsPartial) out.push('cloudflare.tunnel_down', 'cloudflare.tunnel_degraded');
   if (!s.certificates || s.certificatesPartial) out.push('cloudflare.cert');
-  if (s.zonesTotal > s.zones.length) out.push('cloudflare.cert', 'cloudflare.zone', 'cloudflare.paused');
+  if (s.domainExpirations === null || s.domainExpirationsPartial) out.push('cloudflare.domain_expiring');
+  if (s.zonesTotal > s.zones.length)
+    out.push('cloudflare.cert', 'cloudflare.domain_expiring', 'cloudflare.zone', 'cloudflare.paused');
   return out;
 }
 
@@ -671,6 +689,34 @@ export function cloudflareNotices(s: CfSnapshot, now: Date): KindNotice[] {
       episode: (c.expires as Date).toISOString(),
       ignore: { lifts: 'newer', words: 'Until it’s renewed.' },
       badge: badgeOf(expired ? `Certificate expired: ${name}` : `Certificate ending: ${name}`),
+    });
+  }
+  for (const z of s.zones.filter((x) => x.status !== 'moved')) {
+    const expires = s.domainExpirations?.get(z.name.toLowerCase()) ?? null;
+    if (!expires || daysUntil(expires, now) >= DOMAIN_WARN_DAYS) continue;
+    const expired = expires <= now;
+    const urgent = daysUntil(expires, now) < DOMAIN_URGENT_DAYS;
+    out.push({
+      id: `domain-expiring-${z.id}`,
+      tone: expired || urgent ? 'bad' : 'warn',
+      icon: 'clock',
+      title: clip(
+        expired
+          ? `${z.name}’s domain registration has expired`
+          : `${z.name}’s domain registration expires ${inTime(expires, now)}`,
+        120,
+      ),
+      detail: expired
+        ? 'Renew it with your domain registrar right away so your website and email come back.'
+        : 'Renew it with your domain registrar before it expires so your website and email don’t stop working.',
+      link: { kind: 'url', label: 'Open Cloudflare', url: CLOUDFLARE_DASH },
+      nature: 'you',
+      check: 'cloudflare.domain_expiring',
+      subject: siteSubject(s, z.id),
+      // Renewing pushes the registration expiry date forward, lifting an ignore automatically.
+      episode: expires.toISOString(),
+      ignore: { lifts: 'newer', words: 'Until it’s renewed.' },
+      badge: badgeOf(expired ? `Domain expired: ${z.name}` : `Domain expiring: ${z.name}`),
     });
   }
   for (const z of s.zones.filter((x) => x.status !== 'active')) {
@@ -1074,12 +1120,27 @@ export function signInView(): KindView {
   };
 }
 
+function domainNames(s: CfSnapshot): string[] {
+  return s.zones.filter((z) => z.status !== 'moved').map((z) => z.name);
+}
+
 export async function cloudflarePage(ctx: KindCtx): Promise<KindView> {
   if (!viaToken(ctx.row)) return signInView();
   const read = await cloudflareReader.latest(ctx.services, ctx.row, ctx.now);
   if (!read.ok) return unreadView(read, NAME, { label: 'Open Cloudflare', url: CLOUDFLARE_DASH }, []);
+  let snapshot = read.value;
+  if (ctx.quiet && checkWatched(ctx.quiet, 'cloudflare.domain_expiring')) {
+    const domains = domainNames(snapshot);
+    const cached = cachedDomainExpirations(ctx.services, domains, ctx.now);
+    if (cached.missing) warmDomainExpirations(ctx.services, domains, ctx.now);
+    snapshot = {
+      ...snapshot,
+      domainExpirations: cached.expirations,
+      ...(cached.partial ? { domainExpirationsPartial: true } : {}),
+    };
+  }
   return {
-    ...cloudflareView({ snapshot: read.value, now: ctx.now, row: ctx.row, timeZone: ctx.timeZone }),
+    ...cloudflareView({ snapshot, now: ctx.now, row: ctx.row, timeZone: ctx.timeZone }),
     refreshing: read.refreshing,
   };
 }
@@ -1105,9 +1166,20 @@ const purge: KindAction = async ({ services, row, now }, { target }) => {
 
 export const CLOUDFLARE_KIND: KindModule = {
   page: cloudflarePage,
-  seen: async (services, row, now, timeZone) => {
+  seen: async (services, row, now, timeZone, quiet) => {
     if (!viaToken(row)) return { glance: { facts: [] }, points: {}, ...linesSeen(signInView(), []) };
-    const s = await cloudflareReader.cached(services, row, now);
+    const base = await cloudflareReader.cached(services, row, now);
+    const watchExpiry = quiet ? checkWatched(quiet, 'cloudflare.domain_expiring') : false;
+    const rdap = watchExpiry
+      ? await readDomainExpirations(services, domainNames(base), now).catch(() => null)
+      : null;
+    const s: CfSnapshot = watchExpiry
+      ? {
+          ...base,
+          domainExpirations: rdap?.expirations ?? null,
+          ...(rdap?.partial ? { domainExpirationsPartial: true } : {}),
+        }
+      : base;
     const view = cloudflareCardView({ snapshot: s, now, row, timeZone });
     return {
       glance: cardOf(view, ['requests', 'tunnels'], plural(s.zonesTotal, 'site')),

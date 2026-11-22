@@ -84,7 +84,7 @@ export const AUDIT_EVENT_GROUPS: EventGroup[] = [
       'assistant.deleted',
     ],
   },
-  { label: t('Diagnostics'), events: ['diagnose.ran', 'exec.requested', 'exec.finished'] },
+  { label: t('Diagnostics'), events: ['diagnose.ran', 'disk_usage.ran', 'exec.requested', 'exec.finished'] },
   {
     label: t('Hub'),
     prefix: 'hub.',

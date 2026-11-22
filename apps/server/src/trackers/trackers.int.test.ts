@@ -10,16 +10,18 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import {
   type AutomationDefinition,
   type AutomationRecipeInput,
   type AutomationRun,
+  newId,
   type ReportAssessmentInput,
   recipeDefinition,
   recipeInstructions,
   recipeIsCurrent,
 } from '@whombat/core';
-import { and, desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BurrowAccess } from '../auth/request';
 import {
@@ -33,12 +35,14 @@ import {
 import { automationSamples, sampleReport } from '../automations/routes';
 import { updateAutomationsWords } from '../automations/words';
 import { decideApproval } from '../commands/approvals';
-import { sendMessage } from '../commands/messages';
+import { reactToMessage, sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
 import { visibleConnections } from '../connections/context';
 import { connectionViews } from '../connections/views';
 import {
   approvals,
+  attachments,
+  automationRunSteps,
   automationRuns,
   automations,
   automationVersions,
@@ -47,16 +51,21 @@ import {
   events,
   messages,
   notifications,
+  searchDocuments,
   t3Watches,
   trackerCursors,
   trackerItems,
   vaultNetworks,
 } from '../db/schema/index';
+import { indexMessage } from '../domain/search-index';
+import { thePersonAccountId } from '../domain/the-person';
+import { dispatchReadableAttachment } from '../files/access';
+import { blobKey } from '../files/store';
 import { checkConnectionHealth } from '../home/health';
 import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
-import { buildDispatchContext } from '../runtime/context';
+import { buildDispatchContext, WINDOW_SIZE } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
@@ -959,6 +968,22 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
         wakes: false,
         armedAt: w.now(),
       });
+      // The person's own turn can hand over work in the same chat thread. It stays theirs.
+      await w.services.db.insert(t3Watches).values({
+        burrowId: w.burrowId,
+        connectionId: t3,
+        threadId: 'mcp:person-in-same-thread',
+        title: 'Private follow-up',
+        conversationId: turn?.conversationId as string,
+        threadRootId: turn?.threadRootId ?? null,
+        agentId: IDS.dusty,
+        personId: IDS.mara,
+        wakes: false,
+        armedAt: w.now(),
+      });
+      expect(
+        (await call('t3_thread_send', { threadId: 'mcp:person-in-same-thread', message: 'Hi' })).body.status,
+      ).toBe('blocked');
       // A thread started from this report passes the check (this T3 Code is unreachable, so it then lists no tools).
       expect((await call('t3_thread_read', { threadId: 'mcp:started-here' })).body.status).not.toBe(
         'blocked',
@@ -986,6 +1011,88 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, t3));
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, other));
     }
+  });
+});
+
+describe('a report’s turn uses no file someone adds to its thread', () => {
+  it('neither names nor gives it the person’s file, by any way, also for a run started before the handover was kept', async () => {
+    const id = await recipe();
+    await poll();
+    const { run } = await reportRun(id, { title: 'Charts are blank' });
+    const dispatchId = step(run, 'ask').dispatchId as string;
+    const [turn] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+    if (!turn?.threadRootId) throw new Error('no thread');
+    // The person adds a file of their own to the report's thread.
+    const staged = await w.services.files.store.stage([Buffer.from('MARA_PRIVATE')], { maxBytes: 1024 });
+    const key = blobKey(staged.sha256);
+    await w.services.files.store.commit(staged, key);
+    const fileId = newId('attachment');
+    await w.services.db.insert(attachments).values({
+      id: fileId,
+      burrowId: w.burrowId,
+      conversationId: turn.conversationId,
+      name: 'notes.pdf',
+      declaredType: 'application/pdf',
+      contentType: 'application/pdf',
+      kind: 'file',
+      size: staged.size,
+      sha256: staged.sha256,
+      blobKey: key,
+      state: 'ready',
+      url: `/api/v1/burrows/burrow-hq/attachments/${fileId}`,
+      uploadedById: IDS.mara,
+      createdAt: w.now(),
+      uploadedAt: w.now(),
+    });
+    const notes = await w.ok(IDS.mara, sendMessage, {
+      conversationId: turn.conversationId,
+      threadRootId: turn.threadRootId,
+      text: 'My notes on it',
+      attachmentIds: [fileId],
+    });
+    const reachesIt = async () => {
+      const context = await claim(dispatchId);
+      const shown = [
+        ...(context.trigger ? [context.trigger] : []),
+        ...context.window,
+        ...(context.thread ? [context.thread.root, ...context.thread.replies] : []),
+      ];
+      expect(shown.some((m) => m.text === 'My notes on it')).toBe(true);
+      const thread = await tool(dispatchId, 'read_conversation', {
+        conversationId: turn.conversationId,
+        threadRootId: turn.threadRootId,
+      });
+      expect(thread.isError).toBe(false);
+      return {
+        listed: context.attachments.map((a) => a.id),
+        shown: shown.flatMap((m) => m.attachments.map((a) => a.id)),
+        inThread: JSON.stringify(thread.body).includes(fileId),
+        read: !(await tool(dispatchId, 'read_attachment', { attachmentId: fileId })).isError,
+        fetched: !!(await dispatchReadableAttachment(w.services.db, turn, WINDOW_SIZE, fileId)),
+      };
+    };
+    const none = { listed: [], shown: [], inThread: false, read: false, fetched: false };
+    expect(await reachesIt()).toEqual(none);
+    // A run started before the handed-over files were kept counts only what the server put on its first prompt.
+    await w.services.db
+      .update(automationRunSteps)
+      .set({ output: {} })
+      .where(eq(automationRunSteps.dispatchId, dispatchId));
+    expect(await reachesIt()).toEqual(none);
+    // The person's own turn there reads it as ever.
+    const person = await thePersonAccountId(w.services.db, w.burrowId);
+    const theirs = { ...turn, id: 'dsp_persons_own', trigger: 'mention' as const, messageId: notes.id };
+    expect(
+      (
+        await dispatchReadableAttachment(
+          w.services.db,
+          { ...theirs, onBehalfOfAccountId: person },
+          WINDOW_SIZE,
+          fileId,
+        )
+      )?.id,
+    ).toBe(fileId);
+    await done(id);
   });
 });
 
@@ -1168,5 +1275,127 @@ describe('a stuck intake tells the person', () => {
     expect(rows[0]?.text).toContain('Acme dev');
     expect((await poll()).problem).toBeUndefined();
     await done(id);
+  });
+
+  it('marks tracker run messages as an outsiders’ run’s so message and reaction automations skip them', async () => {
+    const trackerAutoId = await recipe({ writeBack: false });
+    await poll();
+
+    const msgWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: IDS.billing,
+        triggers: [
+          {
+            kind: 'message_posted',
+            conversationId: IDS.billing,
+            contains: ['TRACKER_TRIGGER_PHRASE'],
+            includeAgents: true,
+            includeReplies: true,
+          },
+        ],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Tracker message watcher' },
+    );
+    const reactWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: IDS.billing,
+        triggers: [{ kind: 'reaction_added', conversationId: IDS.billing, value: '👍' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered reaction' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Tracker reaction watcher' },
+    );
+    try {
+      w.advance(10_000);
+      file({
+        title: 'Bug with TRACKER_TRIGGER_PHRASE',
+        description: 'Echo TRACKER_TRIGGER_PHRASE',
+      });
+      await poll();
+      const [run] = await w.runs(trackerAutoId);
+      expect(run).toBeDefined();
+      const dispatchId = run?.steps[0]?.dispatchId as string;
+      expect(dispatchId).toBeTruthy();
+
+      await w.fakeAgentReply(dispatchId, 'Assessment mentions TRACKER_TRIGGER_PHRASE.');
+      await w.settle();
+
+      const threadMsgs = await w.runThread(run?.id as string);
+      expect(threadMsgs.length).toBeGreaterThanOrEqual(2);
+      for (const m of threadMsgs) {
+        expect(m.outsidersRun, m.text).toBe(true);
+        expect(m.provenance, m.text).toBeNull();
+        await w.ok(IDS.mara, reactToMessage, { messageId: m.id, value: '👍', on: true });
+      }
+      await w.settle();
+
+      expect(await w.runs(msgWatcherId)).toHaveLength(0);
+      expect(await w.runs(reactWatcherId)).toHaveLength(0);
+
+      // The migration that brought the column marks what tracker runs posted before it (what the run's own steps and
+      // turns posted in its thread while they ran), and moves a mark a newer build kept in `provenance` to the column.
+      const ids = threadMsgs.map((m) => m.id);
+      const root = threadMsgs.find((m) => !m.threadRootId) ?? threadMsgs[0];
+      if (!root) throw new Error('no thread root');
+      // The run is still open at the upgrade, and the person asks their agent in its thread: their own turn's answer
+      // there is theirs, not the run's.
+      await w.services.db
+        .update(automationRuns)
+        .set({ status: 'running', finishedAt: null })
+        .where(eq(automationRuns.id, run?.id as string));
+      w.advance(60_000);
+      const own = await w.ok(IDS.mara, sendMessage, {
+        conversationId: root.conversationId,
+        text: 'Thanks',
+        threadRootId: root.id,
+      });
+      const [runTurn] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+      const personTurn = await w.turn(runTurn?.agentId as string, root.conversationId, {
+        trigger: 'mention',
+        threadRootId: root.id,
+      });
+      await w.fakeAgentReply(personTurn, 'Your own answer about it.');
+      const [agentAnswer] = await w.services.db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.threadRootId, root.id), eq(messages.text, 'Your own answer about it.')));
+      expect(agentAnswer?.outsidersRun).toBe(false);
+      await w.services.db.update(messages).set({ outsidersRun: false }).where(inArray(messages.id, ids));
+      await w.services.db.execute(
+        sql`update messages set provenance = 'outsiders_run' where id = ${root.id}`,
+      );
+      // Indexed while it wasn't marked: the migration takes it out of Search.
+      for (const id of ids) await indexMessage(w.services.db, id);
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).not.toEqual([]);
+      const migration = readFileSync(
+        new URL('../db/migrations/0014_outsiders_run_mark.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint').map((x) => x.trim()))
+        if (statement && !statement.startsWith('ALTER')) await w.services.db.execute(sql.raw(statement));
+      const theirs = [own.id, agentAnswer?.id as string];
+      const after = await w.services.db
+        .select()
+        .from(messages)
+        .where(inArray(messages.id, [...ids, ...theirs]));
+      expect(after).toHaveLength(ids.length + 2);
+      for (const m of after) {
+        expect(m.outsidersRun, m.text).toBe(!theirs.includes(m.id));
+        expect(m.provenance, m.text).toBeNull();
+      }
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).toEqual([]);
+    } finally {
+      await done(trackerAutoId);
+      await done(msgWatcherId);
+      await done(reactWatcherId);
+    }
   });
 });

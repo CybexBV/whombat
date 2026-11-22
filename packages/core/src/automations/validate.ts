@@ -8,11 +8,15 @@ import {
   AUTOMATION_DEFINITION_MAX_BYTES,
   AutomationDefinition,
   AutomationExport,
+  type AutomationStep,
   type AutomationTrigger,
+  EXTERNAL_STEP_KINDS,
   type GitHubTriggerEvent,
+  stepKindLabel,
   TRIGGER_KIND_LABELS,
 } from '../domain/automation.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
+import { mailTriggerProblems, mailWhenText } from './mail.js';
 import { checkSchedule, describeSchedule, ScheduleError } from './schedule.js';
 import { templatePaths } from './template.js';
 
@@ -54,6 +58,32 @@ export function jsonBytes(value: unknown): number {
   return bytes;
 }
 
+/**
+ * Plain-English problem when a step is disallowed in a mail-triggered automation: incoming mail comes from outsiders,
+ * so mail automations may never check out a repository (`workspace`) or run any external-effect step other than
+ * `connection_actions` (which always asks a person on a card first).
+ */
+export function mailStepProblem(step: AutomationStep): string | null {
+  if (step.kind === 'dispatch_agent' && step.workspace) {
+    return 'A mail automation can’t give the agent a repository checkout.';
+  }
+  if (step.kind !== 'connection_actions' && EXTERNAL_STEP_KINDS.includes(step.kind)) {
+    return `A mail automation can’t use “${stepKindLabel(step.kind)}” steps; use approved connection actions instead.`;
+  }
+  return null;
+}
+
+/** Validation problems for definitions that include a `mail` trigger. */
+export function mailDefinitionProblems(def: AutomationDefinition): string[] {
+  if (!def.triggers.some((t) => t.kind === 'mail')) return [];
+  const problems: string[] = [];
+  def.steps.forEach((s, i) => {
+    const err = mailStepProblem(s);
+    if (err) problems.push(`steps[${i}]: ${err}`);
+  });
+  return problems;
+}
+
 /** Semantic checks of a definition that already matches the schema. */
 export function definitionProblems(def: AutomationDefinition, now = Date.now()): string[] {
   const problems: string[] = [];
@@ -73,6 +103,9 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
       problems.push(`triggers[${i}].branch: issues have no branch.`);
     if (t.kind === 'tracker' && t.itemKinds && new Set(t.itemKinds).size !== t.itemKinds.length)
       problems.push(`triggers[${i}].itemKinds: each kind of report only once.`);
+    if (t.kind === 'mail') {
+      for (const err of mailTriggerProblems(t)) problems.push(`triggers[${i}].${err}`);
+    }
     if (t.kind === 'schedule') {
       try {
         checkSchedule(t.schedule, t.timeZone, now);
@@ -114,6 +147,8 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
           problems.push(`${at}.workspace: an agent that writes code needs a branch of its own.`);
         if (s.assessment && s.verdict)
           problems.push(`${at}: an agent gives a verdict or an assessment, not both.`);
+        if (s.proposeActions && (s.verdict || s.assessment))
+          problems.push(`${at}: an agent can’t combine proposeActions with verdict or assessment.`);
         // `trackerAccess` is ignored since 0.71 (TA-23): looking inside the organization follows the tracker's token.
         break;
       case 'post_message':
@@ -173,10 +208,19 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
         }
         break;
       }
+      case 'connection_actions': {
+        earlier(i, s.from, `${at}.from`);
+        const from = def.steps[ids.get(s.from) ?? -1];
+        if (from && ids.get(s.from) !== undefined && (ids.get(s.from) as number) < i)
+          if (from.kind !== 'dispatch_agent' || !from.proposeActions)
+            problems.push(`${at}.from: “${s.from}” isn’t an agent step that proposes actions.`);
+        break;
+      }
       case 'wait':
         break;
     }
   });
+  problems.push(...mailDefinitionProblems(def));
   return problems;
 }
 
@@ -252,6 +296,8 @@ export function triggerSummary(
         case 'tracker':
           // “Customer replies in Acme Desk dev” (0.75, TA-31).
           return `${t.event === 'reporter_replied' ? 'Customer replies' : trackerSummary(t.itemKinds)} in ${connectionLabel(t.connectionId) ?? 'a tracker connection'}`;
+        case 'mail':
+          return mailWhenText(t, connectionLabel(t.connectionId));
       }
       return '';
     })

@@ -3,7 +3,7 @@
  * `dictation` upload against the fake box, its refusals with their reason, an older box without it; and what
  * Settings → This Whombat → VOICE TYPING and the mic show.
  */
-import type { VoiceTyping } from '@whombat/core/domain';
+import { DUTCH_VOICE_LICENCE_URL, DUTCH_VOICE_LICENCE_VERSION, type VoiceTyping } from '@whombat/core/domain';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createFakeSession } from '../session/fake-session';
 import { OperationError } from '../session/managed-ops';
@@ -100,6 +100,31 @@ describe('voice typing over the session', () => {
   it('a box without voice typing answers unknown_op', async () => {
     const { api } = open(createFakeVoice({ initial: { available: false } }));
     await expect(api.get()).rejects.toMatchObject({ code: 'unknown_op' });
+    expect(
+      voiceSettingErrorText(new OperationError('voice.setDutchVoice', 404, 'unknown_op', 'Unknown op')),
+    ).toBe(VOICE_TEXT.errors.needsUpdate);
+  });
+
+  it('agrees to the Dutch voice licence, downloads it, and removes it when turned off', async () => {
+    const voice = createFakeVoice({ ...instant });
+    const { api } = open(voice);
+    expect((await api.get()).dutchVoice).toMatchObject({ on: false, state: 'absent', agreedAt: null });
+    await expect(api.fetchModel('supertonic')).rejects.toMatchObject({ code: 'forbidden' });
+    const on = await api.setDutchVoice({ on: true, licenceVersion: DUTCH_VOICE_LICENCE_VERSION });
+    expect(on.dutchVoice).toMatchObject({
+      on: true,
+      state: 'downloading',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect((await api.get()).dutchVoice?.state).toBe('ready');
+    const off = await api.setDutchVoice({ on: false });
+    expect(off.dutchVoice).toMatchObject({
+      on: false,
+      state: 'absent',
+      agreedAt: null,
+      licenceVersion: null,
+    });
   });
 });
 
@@ -165,5 +190,37 @@ describe('Settings → VOICE TYPING', () => {
     expect(gpu.model.uses).toBe(VOICE_TEXT.model.uses.whisper);
     // Both ready: Fast is free to go only while voice typing is off.
     expect(gpu.models.rows.map((r) => r.action?.kind ?? null)).toEqual([null, null]);
+    expect(gpu.dutchVoice).toMatchObject({
+      title: VOICE_TEXT.dutchVoice.label,
+      on: false,
+      size: '145 MB',
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+      licenceUrl: DUTCH_VOICE_LICENCE_URL,
+    });
+    const removing = voiceSectionView(
+      createFakeVoice({
+        initial: {
+          models: {
+            whisper: { state: 'removing', received: 32_768 },
+            supertonic: { state: 'removing', received: 65_536 },
+          },
+        },
+      }).state(),
+    );
+    expect(removing.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      tone: 'warn',
+      status: VOICE_TEXT.dutchVoice.removing,
+      progress: null,
+      retryLabel: null,
+    });
+    expect(removing.models.rows.find((r) => r.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      tone: 'warn',
+      status: VOICE_TEXT.states.removing,
+      action: null,
+      progress: null,
+    });
   });
 });

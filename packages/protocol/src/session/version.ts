@@ -56,9 +56,32 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * local claim's proof round (`enroll.claim.local.prove`): an app names the person only to a box that proved it knows
  * the letters on its screen, and a box refuses an app below it (`claim_update_app`; Whombat whombat-link.md); minor 2 is
  * the claim link in a page's `hello` at the box's own address (`hello.claimLink`), for the places an unclaimed box keeps
- * for the visitor who has it (Whombat own-address.md).
+ * for the visitor who has it (Whombat own-address.md); minor 3 is automations started by incoming mail: the `mail` trigger,
+ * run trigger and list source, the `connection_actions` step and an agent step's `proposeActions`, which a box sends as
+ * they are only to a session at minor 3 or later (Whombat automation-recipes.md), plus the agent's optional
+ * `backgroundModel` (`agent.update` `runtime.backgroundModel`, Whombat model-effort.md), on-request server disk
+ * usage (`hosts.diskUsage`), and the opt-in Dutch voice plus `removing` voice model state (Whombat desk-display-talk.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 2 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 3 };
+
+/** Session protocol minor (major 5) where `agent.update` stores `runtime.backgroundModel`. */
+export const BACKGROUND_MODEL_MINOR = 3;
+
+/** Session protocol minor (major 5) where `hosts.diskUsage` is supported. */
+export const DISK_USAGE_MINOR = 3;
+
+/** Session protocol minor (major 5) whose `VoiceModelState` accepts `removing`. */
+export const VOICE_REMOVING_MINOR = 3;
+
+/** Whether a negotiated session protocol is at least `{ major, minor }` (false before `welcome`). */
+export function protocolAtLeast(
+  protocol: ProtocolVersion | null | undefined,
+  minor: number,
+  major: number = SESSION_PROTOCOL.major,
+): boolean {
+  if (!protocol) return false;
+  return protocol.major > major || (protocol.major === major && protocol.minor >= minor);
+}
 
 /** `stream.download`, `events`, … */
 export const Capability = z

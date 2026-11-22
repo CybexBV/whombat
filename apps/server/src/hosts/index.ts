@@ -10,7 +10,11 @@
  *   AU-08), the pass that ends quiet hint rows (quiet-notices.md QN-S56) and the built-in Servers connection.
  *   `stopHosts` on close.
  */
-import { registerBuiltinAdapter, registerCallWords } from '../connections/adapters/index';
+import {
+  registerBuiltinAdapter,
+  registerCallReaches,
+  registerCallWords,
+} from '../connections/adapters/index';
 import { registerWidgetReader } from '../home/widgets';
 import type { Services } from '../services';
 import { agentUpdatesFor } from './agent-signing';
@@ -23,6 +27,7 @@ import { HostsRealtime } from './realtime';
 import { hostsFor } from './service';
 import { registerHostsSources } from './sources';
 import { SERVERS_ADAPTER } from './tools';
+import { serversReach } from './tools-backup-places';
 import { registerHostsUndoers } from './undo';
 import { readServerMetric } from './widget-reader';
 import {
@@ -42,6 +47,8 @@ export function setUpHosts(): void {
     startsTask: serversStartsTask,
     saysItself: serversSaysItself,
   });
+  // A backup place on a TrueNAS acts through that connection too: a yes is bound to where it goes as well.
+  registerCallReaches('whombat_servers', serversReach);
   registerHostsSources();
   // A pinned widget of a server's metrics reads them here (home/widgets.ts).
   registerWidgetReader('server_metric', readServerMetric);

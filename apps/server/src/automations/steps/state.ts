@@ -1,5 +1,5 @@
 import { type JsonObject, trackerAccessAsked } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, type SQL, sql } from 'drizzle-orm';
 import type { ApplyContext } from '../../commit/types';
 import type { Tx } from '../../db/client';
 import { automationRunSteps, automationRuns, automations } from '../../db/schema/index';
@@ -24,6 +24,11 @@ export async function lockRun(tx: Tx, input: { runId: string; fence: number; own
   return run;
 }
 
+/**
+ * `values` on step `idx`. Its `messageIds` are added to the step's, never put in their place: a step's messages are
+ * every message it or its run posted about it, in every attempt (an earlier attempt's notice too), since what an
+ * outsiders' turn reads of a `connection_actions` step's messages is only a line (`runtime/outsiders-view.ts`).
+ */
 export async function updateStep(
   tx: Tx,
   runId: string,
@@ -31,10 +36,20 @@ export async function updateStep(
   values: Partial<typeof automationRunSteps.$inferInsert>,
   now: Date,
 ) {
+  const { messageIds, ...rest } = values;
   await tx
     .update(automationRunSteps)
-    .set({ ...values, updatedAt: now })
+    .set({
+      ...rest,
+      ...(messageIds?.length ? { messageIds: withStepMessages(messageIds) } : {}),
+      updatedAt: now,
+    })
     .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.idx, idx)));
+}
+
+/** A step's `message_ids` with `ids` added after those it has, each once (see `updateStep`). */
+export function withStepMessages(ids: readonly string[]): SQL {
+  return sql`array_cat(${automationRunSteps.messageIds}, array(select t.id from unnest(${sql.param([...ids])}::text[]) with ordinality as t(id, n) where t.id <> all(${automationRunSteps.messageIds}) order by t.n))`;
 }
 
 export async function stopRun(
@@ -42,7 +57,11 @@ export async function stopRun(
   run: AutomationRunRow,
   status: 'succeeded' | 'failed' | 'cancelled' | 'needs_review',
   error: string | null,
-  o: { quiet?: boolean } = {},
+  /**
+   * `noticeOn`: the step the run stopped at, whose messages the notice joins (a `connection_actions` step's: what an
+   * outsiders' turn reads of them is only a summary, `runtime/outsiders-view.ts`).
+   */
+  o: { quiet?: boolean; noticeOn?: number } = {},
 ) {
   const finished = status !== 'needs_review';
   await ctx.tx
@@ -77,7 +96,14 @@ export async function stopRun(
     where: null,
     payload: { automationId: run.automationId, runId: run.id, number: run.number, status },
   });
-  if (status !== 'succeeded' && !o.quiet) await postRunNotice(ctx, run, name, status, error);
+  if (status !== 'succeeded' && !o.quiet) {
+    const notice = await postRunNotice(ctx, run, name, status, error);
+    if (notice && o.noticeOn !== undefined)
+      await ctx.tx
+        .update(automationRunSteps)
+        .set({ messageIds: withStepMessages([notice]), updatedAt: ctx.now })
+        .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, o.noticeOn)));
+  }
   // A customer's bug it set out to fix and didn't: its thread says why and the person's Inbox has it (TA-61).
   // Once, when the run first ends: a run finished again says nothing more.
   if (finished && !run.finishedAt)
@@ -110,7 +136,12 @@ export async function block(ctx: ApplyContext, run: AutomationRunRow, idx: numbe
     where: null,
     payload: { runId: run.id, number: run.number, idx },
   });
-  await stopRun(ctx, run, 'failed', reason);
+  await stopRun(ctx, run, 'failed', reason, noticeOnStep(run, idx));
+}
+
+/** Where a run's notice is kept when it stops at step `idx`: on a `connection_actions` step, with its own messages. */
+export function noticeOnStep(run: Pick<AutomationRunRow, 'definition'>, idx: number): { noticeOn?: number } {
+  return run.definition.steps[idx]?.kind === 'connection_actions' ? { noticeOn: idx } : {};
 }
 
 /** A step that has nothing to do here: skipped, with why, and the run goes on. */

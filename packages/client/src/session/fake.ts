@@ -100,6 +100,8 @@ export interface FakeApplianceOptions {
   account?: FakeAccount | null;
   capabilities?: readonly string[];
   majors?: readonly number[];
+  /** Negotiated session protocol minor (default `SESSION_PROTOCOL.minor`); lower values simulate an older box. */
+  protocolMinor?: number;
   /** The running release's client security floor (CT-53): builds below it are refused at `hello`. */
   clientFloor?: Partial<Record<'web' | 'android' | 'ios' | 'desktop' | 'cli', number>>;
   /** Largest DATA payload (default 16 KiB, so tests cross frame boundaries). */
@@ -301,6 +303,8 @@ export interface FakeAppliance {
      */
     repeatSnapshot(n?: number): void;
     majors(list: readonly number[]): void;
+    /** What protocol minor the next `welcome` announces (simulating an older or rolled-back box). */
+    protocolMinor(minor: number): void;
     /** The running release's client floor changes (a new release): refused at the next `hello`. */
     clientFloor(floor: FakeApplianceOptions['clientFloor'] | null): void;
     /** What the next `welcome` says about the box's direct ways in (`welcome.direct`). */
@@ -347,6 +351,7 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
   const applianceId = options.applianceId ?? FAKE_PEER_ID;
   const extra = new Map<string, AnyEndpoint>((options.endpoints ?? []).map((ep) => [ep.id, ep]));
   let majors = options.majors ?? [SESSION_PROTOCOL.major];
+  let protocolMinor = options.protocolMinor ?? SESSION_PROTOCOL.minor;
   let floor = options.clientFloor ?? null;
   let direct = options.direct ?? null;
   let edition = options.edition;
@@ -591,7 +596,7 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
       // The box speaks one major (its newest); a client that doesn't is refused (CT-1260).
       const version = negotiateVersion(m.versions, {
         major: Math.max(...majors),
-        minor: SESSION_PROTOCOL.minor,
+        minor: protocolMinor,
       });
       if (!version) {
         this.send({
@@ -1521,6 +1526,9 @@ export function createFakeAppliance(options: FakeApplianceOptions): FakeApplianc
       },
       majors(list) {
         majors = list;
+      },
+      protocolMinor(minor) {
+        protocolMinor = minor;
       },
       clientFloor(value) {
         floor = value ?? null;

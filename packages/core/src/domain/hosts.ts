@@ -1247,6 +1247,54 @@ export type HostMacosDetail = z.infer<typeof HostMacosDetail>;
 /** The oldest macOS Whombat's helper runs on. */
 export const HOST_MACOS_MIN_MAJOR = 13;
 
+/* On-request disk usage breakdown ------------------------------------------------------------------- */
+
+/** One recognised bucket in an on-request disk usage breakdown (container images, journal, caches, VM disks…). */
+export const HostDiskUsageCategory = z.object({
+  key: z.string().min(1).max(64),
+  label: z.string().min(1).max(120),
+  bytes: z.number().nonnegative(),
+  reclaimableBytes: z.number().nonnegative().optional(),
+  detail: z.string().max(200).optional(),
+});
+export type HostDiskUsageCategory = z.infer<typeof HostDiskUsageCategory>;
+
+/** One large directory in an on-request disk usage breakdown. */
+export const HostDiskUsageFolder = z.object({
+  path: z.string().min(1).max(512),
+  bytes: z.number().nonnegative(),
+  partial: z.boolean().optional(),
+});
+export type HostDiskUsageFolder = z.infer<typeof HostDiskUsageFolder>;
+
+/** One on-request breakdown of what fills a mounted filesystem on a server. */
+export const HostDiskUsage = z.object({
+  mount: z.string().min(1).max(512),
+  fsType: z.string().max(64).optional(),
+  device: z.string().max(256).optional(),
+  measuredAt: Timestamp,
+  durationMs: z.number().nonnegative().optional(),
+  totalBytes: z.number().nonnegative(),
+  usedBytes: z.number().nonnegative(),
+  partial: z.boolean().optional(),
+  skippedSpunDown: z.array(z.string()).optional(),
+  categories: z.array(HostDiskUsageCategory),
+  folders: z.array(HostDiskUsageFolder),
+  /** False when skipped without measuring (`spun_down` when a disk is asleep, `standby_unknown` when sleep state can’t be checked). */
+  ok: z.boolean().optional(),
+  code: z.string().max(64).optional(),
+  message: z.string().max(500).optional(),
+});
+export type HostDiskUsage = z.infer<typeof HostDiskUsage>;
+
+/** `hosts.diskUsage` body: which mount to inspect and optional safety bounds. */
+export const HostDiskUsageBody = z.object({
+  mount: z.string().min(1).max(512).optional(),
+  maxDepth: z.number().int().min(1).max(12).optional(),
+  timeoutS: z.number().int().min(1).max(45).optional(),
+});
+export type HostDiskUsageBody = z.infer<typeof HostDiskUsageBody>;
+
 /**
  * `hosts.getServer`: everything on a server's page (mock 2): Summary, Guests, Storage, Sensors, Backups, System.
  * `workloads` on standard hosts; `proxmox` on Proxmox nodes; `incus` on Incus hosts and `unraid` on unRAID servers
@@ -1263,6 +1311,8 @@ export const HostServerDetail = z.object({
   hints: z.array(HostHint),
   alerts: z.array(HostAlert).optional(),
   health: HostHealth.optional(),
+  /** Recent on-request disk usage breakdowns (measured within 24 hours), newest first. */
+  diskUsage: z.array(HostDiskUsage).optional(),
   /**
    * The platforms the host runs (a Docker host has only `docker`). A partial record (0.80.2, CT-351): Zod 4's `z.record`
    * over an enum requires every key, which refused every normal host's page.

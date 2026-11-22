@@ -8,6 +8,7 @@ import type { ApplyContext } from '../commit/types';
 import { postMessage } from '../domain/messages';
 import { loadConversationRow } from '../read/conversations';
 import { publisherCheck } from './authority';
+import { outsidersRun } from './runs';
 import { startsRunThread } from './steps/thread';
 
 /** At most `max` characters, cut at a word with “…”. */
@@ -25,7 +26,8 @@ export function automationRunUrl(ctx: Pick<ApplyContext, 'services' | 'burrow'>,
 /**
  * Posts the notice when the automation may post there: the run has a thread — or was started by a message, whose run
  * posts in its publisher's own room and starts its thread there with the notice (one-agent.md OA-S100) — and its
- * publisher is still allowed and in the room. `ctx.actor` must be the automation's principal.
+ * publisher is still allowed and in the room. `ctx.actor` must be the automation's principal. Returns the notice's id,
+ * or null when none was posted.
  */
 export async function postRunNotice(
   ctx: ApplyContext,
@@ -36,17 +38,17 @@ export async function postRunNotice(
     publishedById: string;
     conversationId: string;
     threadRootId: string | null;
-    trigger: { messageId?: string | null };
+    trigger: { kind: string; messageId?: string | null };
   },
   name: string,
   status: 'failed' | 'cancelled' | 'needs_review',
   error: string | null,
-): Promise<void> {
-  if (!run.threadRootId && !run.trigger.messageId) return;
+): Promise<string | null> {
+  if (!run.threadRootId && !run.trigger.messageId) return null;
   const who = await publisherCheck(ctx.tx, run.burrowId, run.publishedById);
-  if (!who.ok) return;
+  if (!who.ok) return null;
   const conversation = await loadConversationRow(ctx.tx, run.conversationId);
-  if (!conversation || conversation.burrowId !== run.burrowId) return;
+  if (!conversation || conversation.burrowId !== run.burrowId) return null;
   // Said like a colleague would: what happened to which automation, Whombat's own reason in a sentence or two, and the
   // run's page behind a link for whoever wants the steps (no run number, no bare address).
   const reason = error ? ` ${clipWords(error.replace(/\s+/g, ' ').trim(), 240)}` : '';
@@ -62,6 +64,8 @@ export async function postRunNotice(
     threadRootId: run.threadRootId,
     mentions: [],
     dispatch: false,
+    outsidersRun: outsidersRun(run.trigger),
   });
   if (!run.threadRootId) await startsRunThread(ctx.tx, run.id, posted.id);
+  return posted.id;
 }

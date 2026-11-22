@@ -6,7 +6,8 @@
  * `VoiceApi` (`voiceApi(session)`) and its recorder.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { VoiceSttModel, VoiceTyping, VoiceTypingPatch } from '@whombat/core/domain';
+import type { VoiceDownloadModel, VoiceTyping, VoiceTypingPatch } from '@whombat/core/domain';
+import type { VoiceDutchInput } from '@whombat/protocol/session';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QUERY_ROOT } from '../query/keys';
 import type { VoiceApi } from './api';
@@ -48,8 +49,9 @@ export function useVoice(api: VoiceApi | null, enabled = true) {
 export interface VoiceActions {
   /** Shown at once; put back as it was when refused. */
   update(patch: VoiceTypingPatch): Promise<VoiceTyping>;
-  fetchModel(model: VoiceSttModel): Promise<VoiceTyping>;
-  removeModel(model: VoiceSttModel): Promise<VoiceTyping>;
+  fetchModel(model: VoiceDownloadModel): Promise<VoiceTyping>;
+  removeModel(model: VoiceDownloadModel): Promise<VoiceTyping>;
+  setDutchVoice(input: VoiceDutchInput): Promise<VoiceTyping>;
 }
 
 /** The settings' changes, each keeping `voice.get`'s cache as the box answered. */
@@ -78,6 +80,7 @@ export function useVoiceActions(api: VoiceApi | null): VoiceActions {
       },
       fetchModel: async (model) => put(await need().fetchModel(model)),
       removeModel: async (model) => put(await need().removeModel(model)),
+      setDutchVoice: async (input) => put(await need().setDutchVoice(input)),
     };
   }, [api, qc]);
 }

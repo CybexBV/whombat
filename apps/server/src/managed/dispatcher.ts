@@ -36,6 +36,7 @@ import {
   SessionErrorCode as SessionErrorCodeSchema,
 } from '@whombat/protocol/session';
 import { type BurrowAccess, burrowAccess, type RequestAuth } from '../auth/request';
+import { answerFor } from '../automations/older-apps';
 import { BACKUP_PLACE_HANDLERS } from '../backup-places/ops';
 import { type CommandScope, CommandStopped, type EffectEnd, runInCommandScope } from '../commit/scope';
 import type { Tx } from '../db/client';
@@ -1045,7 +1046,9 @@ export class SessionDispatcher {
     const def = ep ? this.routes.get(ep.id) : undefined;
     if (!ep || !def)
       throw new ApiError('not_implemented', `${spec.op} isn’t available on this appliance yet.`);
-    return runApiHandler(this.services, def, spec.op, principal.account, input);
+    const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
+    // An older app gets what its contracts read (`automations/older-apps.ts`).
+    return out.raw ? out : { ...out, body: answerFor(ep.id, out.body, principal.protocolMinor) };
   }
 
   /**

@@ -12,17 +12,21 @@ import {
   type AgentEffort,
   type AgentModelFallback,
   type AgentModelRuntime,
+  type AgentModelRuntimeUpdate,
   type AgentProvider,
   effortsFor,
   type LocalModelView,
   localProviderModels,
   modelFast,
   modelOf,
+  modelRuntimeSaved,
   type ProviderModel,
+  providerHasModelEffort,
   turnEffort,
 } from '@whombat/core/domain';
 import {
   agentModelSummary,
+  backgroundModelLabel,
   CHAT_RUNTIME_COPY,
   defaultModelLabel,
   EFFORT_LABELS,
@@ -37,36 +41,39 @@ export interface ModelRuntimeDraft {
   provider: AgentProvider;
   /** One of the tool's models (`ProviderModel.id`); null: the tool's default. */
   model: string | null;
-  /** null: automatic (high for code work, medium for conversation, ME-02); always null on `local`. */
+  /** Optional model of the same provider for background work; absent/null: same as the main model. */
+  backgroundModel?: string | null;
+  /** null: automatic (high for code work, medium for conversation); always null on `local`. */
   effort: AgentEffort | null;
   /**
-   * Fast replies (contracts 0.96, CT-456; Whombat chat-runtime.md CR-10): on or off; absent: the model's own default.
+   * Fast replies: on or off; absent: the model's own default.
    * Carried through every change, so saving a model or an effort never drops it.
    */
   fast?: boolean;
 }
 
-/** The tools whose effort and fast replies an agent picks: Claude Code and ChatGPT (a model on the network has neither). */
+/** The tools whose effort and fast replies an agent picks: Claude Code and ChatGPT (custom AI models have neither). */
 export function hasModelEffort(provider: AgentProvider): provider is 'claude' | 'codex' {
-  return provider === 'claude' || provider === 'codex';
+  return providerHasModelEffort(provider);
 }
 
 /** An agent's stored model runtime as a draft. */
 export function modelRuntimeDraft(
-  runtime: Pick<AgentModelRuntime, 'provider' | 'model' | 'effort' | 'fast'>,
+  runtime: Pick<AgentModelRuntimeUpdate, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
 ): ModelRuntimeDraft {
   const own = hasModelEffort(runtime.provider);
   return {
     provider: runtime.provider,
     model: runtime.model ?? null,
+    ...(runtime.backgroundModel ? { backgroundModel: runtime.backgroundModel } : {}),
     effort: own ? (runtime.effort ?? null) : null,
     ...(own && runtime.fast !== undefined ? { fast: runtime.fast } : {}),
   };
 }
 
 /**
- * Another provider picked: the model, the effort and fast replies go back to the default, automatic and the model's own
- * (ME-01: a model id is the tool's own; CR-05). Picking the one it is on changes nothing.
+ * Another provider picked: main model, background model, effort and fast replies go back to their defaults
+ * (a model id belongs to its provider). Picking the one it is on changes nothing.
  */
 export function draftWithProvider(draft: ModelRuntimeDraft, provider: AgentProvider): ModelRuntimeDraft {
   if (provider === draft.provider) return draft;
@@ -75,8 +82,9 @@ export function draftWithProvider(draft: ModelRuntimeDraft, provider: AgentProvi
 
 /**
  * Another model picked (null: the default): a chosen effort stays when the model takes it, else becomes the nearest
- * level it does take (ME-03's rule, `turnEffort`), and automatic when it takes none; fast replies are dropped when it
- * has none (CR-05). While the list doesn't know the model, the effort and fast replies stay as they are.
+ * level it does take (`turnEffort`), and automatic when it takes none; fast replies are dropped when it has none (and
+ * `fast: false` is dropped for unknown models when the provider's list is known, matching the server). Custom AI models
+ * never keep effort or fast replies.
  */
 export function draftWithModel(
   draft: ModelRuntimeDraft,
@@ -85,9 +93,21 @@ export function draftWithModel(
 ): ModelRuntimeDraft {
   const known = modelOf(models, model);
   const supported = known?.efforts ?? null;
-  const effort = draft.effort ? turnEffort(draft.effort, 'chat', supported) : null;
+  const own = hasModelEffort(draft.provider);
+  const effort = own && draft.effort ? turnEffort(draft.effort, 'chat', supported) : null;
   const { fast, ...rest } = draft;
-  return { ...rest, model, effort, ...(fast !== undefined && (!known || known.fast) ? { fast } : {}) };
+  const keepFast = own && fast !== undefined && (known ? !!known.fast : !models?.length || fast === true);
+  return { ...rest, model, effort, ...(keepFast ? { fast } : {}) };
+}
+
+/** Another background model picked (null: explicit “Same as the main model”). */
+export function draftWithBackgroundModel(
+  draft: ModelRuntimeDraft,
+  backgroundModel: string | null,
+): ModelRuntimeDraft {
+  const { backgroundModel: _bg, ...rest } = draft;
+  const trimmed = backgroundModel?.trim();
+  return { ...rest, backgroundModel: trimmed || null };
 }
 
 /** Another effort picked (null: automatic). */
@@ -127,19 +147,28 @@ export function fastChoice(
 }
 
 /**
- * `agents.update`'s `runtime`: the whole model runtime, every time (ME-01), so saving the provider never drops a model,
- * an effort or fast replies: `{provider, model?, effort?, fast?}` (on `local` a model only).
+ * `agents.update`'s `runtime`: the whole model runtime, every time, so saving one field never drops another:
+ * `{provider, model?, backgroundModel?, effort?, fast?}` (explicit `null` clears `backgroundModel`; omitted keeps it
+ * on the same provider). Pass `{ backgroundModel: false }` for boxes that don't support `backgroundModel` yet.
  */
-export function modelRuntimeBody(draft: ModelRuntimeDraft): AgentModelRuntime {
+export function modelRuntimeBody(
+  draft: ModelRuntimeDraft,
+  options: { backgroundModel?: boolean } = {},
+): AgentModelRuntimeUpdate {
   const own = hasModelEffort(draft.provider);
   const model = draft.model?.trim();
+  const backgroundModel = options.backgroundModel === false ? undefined : draft.backgroundModel?.trim();
+  const clearBackground = options.backgroundModel !== false && draft.backgroundModel === null;
   return {
     provider: draft.provider,
     ...(model ? { model } : {}),
+    ...(backgroundModel ? { backgroundModel } : clearBackground ? { backgroundModel: null } : {}),
     ...(own && draft.effort ? { effort: draft.effort } : {}),
     ...(own && draft.fast !== undefined ? { fast: draft.fast } : {}),
   };
 }
+
+export { modelRuntimeSaved };
 
 /**
  * The models a provider offers on this Whombat: a tool's as the runner lists them (`ProviderSetup.models`; undefined
@@ -184,6 +213,23 @@ export function modelChoices(
   return choices;
 }
 
+/**
+ * BACKGROUND MODEL's choices: “Same as the main model” first (no override), then only the models the chosen provider
+ * actually lists; a previously stored id that left the list stays visible so the person can see and change it.
+ */
+export function backgroundModelChoices(
+  models: readonly ProviderModel[] | null | undefined,
+  current: string | null | undefined,
+): ModelChoice[] {
+  const choices: ModelChoice[] = [
+    { id: null, label: MODEL_EFFORT_COPY.backgroundModelSame, description: null },
+    ...(models ?? []).map((m) => ({ id: m.id, label: m.label, description: m.description })),
+  ];
+  if (current && !choices.some((c) => c.id === current))
+    choices.push({ id: current, label: backgroundModelLabel(models, current), description: null });
+  return choices;
+}
+
 /** One of EFFORT's choices: `value` null is Automatic. */
 export interface EffortChoice {
   value: AgentEffort | null;
@@ -217,14 +263,15 @@ export function effortHint(effort: AgentEffort | null): string {
   return effort ? MODEL_EFFORT_COPY.effortHint : MODEL_EFFORT_COPY.automaticHint;
 }
 
-/** The picked model and effort in words (Android's rows): “Default (Opus)”, “Automatic”. */
+/** The picked model, background model and effort in words (Android's rows): “Default (Opus)”, “Same as the main model”, “Automatic”. */
 export function modelEffortLabels(
-  draft: Pick<ModelRuntimeDraft, 'model' | 'effort'>,
+  draft: Pick<ModelRuntimeDraft, 'model' | 'backgroundModel' | 'effort'>,
   models: readonly ProviderModel[] | null | undefined,
-): { model: string; description: string | null; effort: string } {
+): { model: string; description: string | null; backgroundModel: string; effort: string } {
   return {
     model: modelLabel(models, draft.model),
     description: draft.model ? (modelOf(models, draft.model)?.description ?? null) : null,
+    backgroundModel: backgroundModelLabel(models, draft.backgroundModel),
     effort: effortLabel(draft.effort),
   };
 }

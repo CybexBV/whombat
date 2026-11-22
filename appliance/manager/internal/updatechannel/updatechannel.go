@@ -151,7 +151,7 @@ type Status struct {
 // StatusOf reads a channel's view (a Repo refreshed with that channel) against the installed release.
 func StatusOf(repo *trust.Repo, installedID string, installed *trust.Versions) Status {
 	st := Status{Channel: repo.Channel}
-	newest, err := repo.NewestRelease("", nil, "")
+	newest, err := repo.NewestListedRelease("", nil, "")
 	if err != nil || newest == nil {
 		st.Waiting = installed != nil
 		return st

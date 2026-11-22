@@ -4,6 +4,7 @@
  */
 import { triggerMatches } from '@whombat/core';
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { MAIL_SINCE_SKEW_MS } from '../../connectors/types';
 import type { Db } from '../../db/client';
 import {
   automationCursors,
@@ -11,6 +12,7 @@ import {
   automations,
   automationVersions,
   events,
+  mailTriggerItems,
 } from '../../db/schema/index';
 import { inBurrow } from '../../read/conversations';
 import type { Services } from '../../services';
@@ -107,6 +109,16 @@ export async function scanBurrow(
       const cause = await eventCause(tx, event, facts);
       for (const { a, v } of live) {
         if (!v.definition.triggers.some((t) => triggerMatches(t, facts.facts))) continue;
+        // Mail already present when this automation's mail trigger became active must never start it (allow 5 s for
+        // provider/box clock skew on freshly arrived mail).
+        if (facts.facts.kind === 'mail') {
+          const activeAt = a.mailActiveAt ?? v.publishedAt;
+          if (
+            event.createdAt < activeAt ||
+            (facts.receivedAt && facts.receivedAt.getTime() < activeAt.getTime() - MAIL_SINCE_SKEW_MS)
+          )
+            continue;
+        }
         // Loop guards: automation-caused events stop at a small depth, and never trigger their own automation.
         if (
           cause.depth > limits.maxCausalDepth ||
@@ -202,6 +214,16 @@ export async function scanBurrow(
         if (runId) created++;
       }
     }
+    // Every run that matched has its own scope. Clear the mail cache as the cursor consumes the event, even
+    // when the automation was switched off, hit a limit, or otherwise started no run.
+    const mailRows = batch.flatMap(({ type, payload }) =>
+      type === 'mail.received' && typeof payload.rowId === 'string' ? [payload.rowId] : [],
+    );
+    if (mailRows.length)
+      await tx
+        .update(mailTriggerItems)
+        .set({ body: '', snippet: '' })
+        .where(and(eq(mailTriggerItems.burrowId, burrowId), inArray(mailTriggerItems.id, mailRows)));
     const last = batch[batch.length - 1];
     if (last)
       await tx

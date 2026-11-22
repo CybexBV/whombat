@@ -892,6 +892,9 @@ describe('robust updates (CT-137…CT-141)', () => {
     expect(bare && Object.keys(bare).sort()).toEqual(
       ['candidate', 'current', 'deferredReason', 'failure', 'lastCheckedAt', 'state'].sort(),
     );
+    const pausedFacts = UpdateFacts.parse({ ...facts, paused: true });
+    expect(summarizeUpdate(pausedFacts)).toMatchObject({ paused: true });
+    expect(summarizeUpdate({ ...facts, paused: false })?.paused).toBeUndefined();
   });
 
   it('has the wave presets of UP-E1, each a valid rollout', () => {
