@@ -64,6 +64,17 @@ export interface SettingSpec<S> {
   sentence?: (v: SettingValue, s: S) => string;
   /** The call that sets it (none for `elsewhere`). */
   write?: (v: SettingValue, s: S) => ActCall;
+  /**
+   * Fresh read right before writing and again right after, when this setting can be read on its own without reading
+   * unrelated sections. Absent: `DeclaredSettings.read`.
+   */
+  readFresh?: (services: Services, row: CatalogConnectionRow) => Promise<S>;
+  /**
+   * For a whole-object write, returns the fields of the written object that this setting does not mean to change.
+   * After writing, `settingAction` checks that every untouched field still matches what was read before writing, and
+   * reports an uncertain outcome instead of done if anything else changed.
+   */
+  untouched?: (s: S) => unknown;
   /** A line under the sheet's choices, from what Whombat knows. */
   hint?: (s: S) => string | undefined;
   /** Where it is changed instead (`elsewhere`, SST-05): the service's own page for it. */
@@ -150,9 +161,36 @@ function wanted<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, s: S, input: Ki
   return choice.value;
 }
 
-async function readNow<S>(d: DeclaredSettings<S>, ctx: KindActionCtx): Promise<S> {
+/** Returns a copy of `raw` with the named keys omitted (for checking untouched fields of a whole-object write). */
+export function omitFields(raw: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
+  const copy = structuredClone(raw);
+  for (const key of keys) delete copy[key];
+  return copy;
+}
+
+/** Deep structural equality for JSON values returned by a whole-object settings read. */
+function sameSnapshot(a: unknown, b: unknown): boolean {
+  if (a === b || (Number.isNaN(a) && Number.isNaN(b))) return true;
+  if (typeof a !== typeof b || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => sameSnapshot(v, b[i]));
+  }
+  if (typeof a === 'object') {
+    const ra = a as Record<string, unknown>;
+    const rb = b as Record<string, unknown>;
+    const ka = Object.keys(ra);
+    const kb = Object.keys(rb);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) => Object.hasOwn(rb, k) && sameSnapshot(ra[k], rb[k]));
+  }
+  return false;
+}
+
+async function readNow<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, ctx: KindActionCtx): Promise<S> {
+  const load = spec.readFresh ?? d.read;
   try {
-    return await d.read(ctx.services, ctx.row);
+    return await load(ctx.services, ctx.row);
   } catch {
     throw new ApiError('unavailable', `Whombat couldn’t read ${d.name}’s settings just now.`);
   }
@@ -164,13 +202,15 @@ function lower(label: string): string {
 }
 
 /**
- * The `setting` action (SST-02): reads the setting, takes only a value it offers, writes it, and reads it back. Done
- * only when the service says the new value; the change can be put back (SST-03).
+ * The `setting` action: reads the setting right before writing, takes only a value it offers, writes it, and reads it
+ * back. Done only when the service reports the new value and (for whole-object writes) every untouched field still
+ * matches what was read before writing; the change can then be put back.
  */
 export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
   return async (ctx, input) => {
     const spec = specOf(d, input.target);
-    const before = await readNow(d, ctx);
+    const load = spec.readFresh ?? d.read;
+    const before = await readNow(d, spec, ctx);
     const old = spec.read(before);
     if (old === undefined) throw conflict(`${d.name} doesn’t offer ${lower(spec.label)} here.`);
     const value = wanted(d, spec, before, input);
@@ -184,7 +224,7 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
       };
     await actAs(ctx.services, ctx.row, d.name, (spec.write as NonNullable<typeof spec.write>)(value, before));
     forgetConnectionReads(ctx.services, ctx.row.id);
-    const after = await d.read(ctx.services, ctx.row).catch(() => null);
+    const after = await load(ctx.services, ctx.row).catch(() => null);
     const now = after ? spec.read(after) : undefined;
     if (!after || now === undefined)
       return {
@@ -196,6 +236,24 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
         title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, before)} (not checked)`,
         uncertain: true,
       };
+    if (spec.untouched) {
+      const untouchedBefore = spec.untouched(before);
+      const untouchedAfter = spec.untouched(after);
+      if (
+        untouchedBefore === undefined ||
+        untouchedAfter === undefined ||
+        !sameSnapshot(untouchedBefore, untouchedAfter)
+      )
+        return {
+          message:
+            `Another setting in ${d.name} changed while Whombat updated ${spec.label}. Check ${d.name}’s settings.`.slice(
+              0,
+              200,
+            ),
+          title: `Updated ${spec.label} in ${d.name} (another setting also changed)`,
+          uncertain: true,
+        };
+    }
     if (!sameValue(now, value)) {
       if (sameValue(now, old))
         throw new ApiError(
@@ -223,7 +281,7 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
   };
 }
 
-/** A change in the approval card's words (SST-04): “Change a Plex setting”, “Quality outside your home: 8 → 20 Mbps”. */
+/** A change in the approval card's words: “Change a Plex setting”, “Quality outside your home: 8 → 20 Mbps”. */
 export async function describeSetting<S>(
   d: DeclaredSettings<S>,
   ctx: KindActionCtx,
@@ -231,7 +289,7 @@ export async function describeSetting<S>(
 ): Promise<KindActionWords | null> {
   const spec = d.specs.find((s) => s.id === input.target);
   if (!spec?.write || input.value === undefined) return null;
-  const s = await d.read(ctx.services, ctx.row).catch(() => null);
+  const s = await (spec.readFresh ?? d.read)(ctx.services, ctx.row).catch(() => null);
   if (!s) return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${String(input.value)}`] };
   let value: SettingValue;
   try {
@@ -403,20 +461,13 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
 }
 
 /**
- * The service's settings tab's panels (SST-07): a line first, one `settings` card per group (each with its Ask), and
+ * The service's settings tab's panels: a line first, one `settings` card per group (each with its Ask), and
  * “Something else?” last.
  */
 export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] {
   const { declared: d, assistant } = input;
-  const panels: ThingPagePanel[] = [
-    {
-      kind: 'text',
-      id: 'settings-intro',
-      place: 'top',
-      body: `The settings that matter most, in plain words. Change one here, or ask ${assistant} to do it for you.`,
-      link: { kind: 'url', label: `All settings in ${d.name}`.slice(0, 30), url: input.url },
-    },
-  ];
+  const groupPanels: ThingPagePanel[] = [];
+  let hasWritable = false;
   // The first half of the groups on the left, the rest on the right (the mock's two columns).
   const half = Math.ceil(d.groups.length / 2);
   d.groups.forEach((g, i) => {
@@ -425,7 +476,8 @@ export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] 
       .map((spec) => settingRow(input, spec))
       .filter((r): r is ThingSetting => r !== null);
     if (!rows.length) return;
-    panels.push({
+    if (rows.some((r) => r.toggle !== undefined || r.choose !== undefined)) hasWritable = true;
+    groupPanels.push({
       kind: 'settings',
       id: `settings-${g.id}`.slice(0, 40),
       place: i < half ? 'main' : 'side',
@@ -434,19 +486,34 @@ export function settingsPanels<S>(input: SettingsTabInput<S>): ThingPagePanel[] 
       ...(g.ask?.length ? { ask: { questions: g.ask.slice(0, 3).map((q) => clip(q, 200)) } } : {}),
     });
   });
-  panels.push({
-    kind: 'text',
-    id: 'settings-more',
-    place: 'bottom',
-    title: 'Something else?',
-    body: `${assistant} can change any other ${d.name} setting for you. It asks you first.`,
-    link: {
-      kind: 'ask',
-      label: `Ask ${assistant}`.slice(0, 30),
-      question: `I’d like to change another ${d.name} setting.`,
+  return [
+    {
+      kind: 'text',
+      id: 'settings-intro',
+      place: 'top',
+      body: hasWritable
+        ? `The settings that matter most, in plain words. Change one here, or ask ${assistant} to do it for you.`
+        : `The settings that matter most, in plain words. They stay in ${d.name} so nothing here can overwrite other settings there.`,
+      link: { kind: 'url', label: `All settings in ${d.name}`.slice(0, 30), url: input.url },
     },
-  });
-  return panels;
+    ...groupPanels,
+    {
+      kind: 'text',
+      id: 'settings-more',
+      place: 'bottom',
+      title: 'Something else?',
+      body: hasWritable
+        ? `${assistant} can change any other ${d.name} setting for you. It asks you first.`
+        : `${assistant} can help you check or plan changes to ${d.name}’s settings.`,
+      link: {
+        kind: 'ask',
+        label: `Ask ${assistant}`.slice(0, 30),
+        question: hasWritable
+          ? `I’d like to change another ${d.name} setting.`
+          : `Help me with my ${d.name} settings.`,
+      },
+    },
+  ];
 }
 
 /** A connection's base address without trailing slashes. */

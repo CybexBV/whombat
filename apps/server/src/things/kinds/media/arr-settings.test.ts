@@ -12,6 +12,7 @@ import { fixture, rowOf } from './testing';
 interface Store {
   sections: Record<string, Record<string, unknown>>;
   deaf: boolean;
+  onPut?: (section: string) => void;
   calls: { method: string; path: string; body: Record<string, unknown> | null }[];
 }
 
@@ -35,7 +36,10 @@ vi.mock('../../../connections/http', async (importOriginal) => {
         return { status: 404, headers: {}, body: Buffer.from('{}') };
       if (req.method === 'GET')
         return { status: 200, headers: {}, body: Buffer.from(JSON.stringify(arr.store.sections[section])) };
-      if (req.method === 'PUT' && body && !arr.store.deaf) arr.store.sections[section] = { ...body };
+      if (req.method === 'PUT' && body && !arr.store.deaf) {
+        arr.store.sections[section] = { ...body };
+        arr.store.onPut?.(section);
+      }
       return { status: 202, headers: {}, body: Buffer.from(JSON.stringify(arr.store.sections[section])) };
     },
   };
@@ -276,5 +280,58 @@ describe('Sonarr and Radarr declared settings', () => {
     const words = await describeSetting(declared, sCtx, { target: 'rss_sync_interval', value: 60 });
     expect(words?.title).toContain('Sonarr');
     expect(words?.lines[0]).toContain('every 15 minutes → every hour');
+  });
+
+  it('reads only the target section right before writing and reports uncertain if any untouched field changed', async () => {
+    reset('sonarr');
+    const sonarrAct = settingAction(arrSettings('sonarr'));
+    const sCtx = {
+      services: {} as Services,
+      row: rowOf('sonarr', { baseUrl: 'http://192.0.2.20:8989' }),
+      now,
+      timeZone: 'Europe/Amsterdam',
+    };
+
+    // Normal write reads only `/api/v3/config/naming`, writes it, and reads only `/api/v3/config/naming` back.
+    await sonarrAct(sCtx, { target: 'rename_files', value: false });
+    expect(arr.store.calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /api/v3/config/naming',
+      'PUT /api/v3/config/naming/1',
+      'GET /api/v3/config/naming',
+    ]);
+
+    // Concurrent change to a sibling naming field makes read-back differ -> uncertain, never done or undoable.
+    reset('sonarr');
+    arr.store.onPut = (section) => {
+      if (section === 'naming' && arr.store.sections.naming)
+        arr.store.sections.naming.standardEpisodeFormat = '{Series Title} - S{season:00}E{episode:00}';
+    };
+    const namingRace = await sonarrAct(sCtx, { target: 'rename_files', value: false });
+    expect(namingRace.uncertain).toBe(true);
+    expect(namingRace.undo).toBeUndefined();
+    expect(namingRace.changeKind).toBeUndefined();
+    expect(namingRace.title).not.toMatch(/Changed/);
+    expect(namingRace.message).toMatch(/Another setting.*changed/i);
+    expect(namingRace.message).not.toMatch(/Checked with/);
+
+    // Concurrent change to a sibling indexer field in Radarr -> uncertain, never done or undoable.
+    reset('radarr');
+    const radarrAct = settingAction(arrSettings('radarr'));
+    const rCtx = {
+      services: {} as Services,
+      row: rowOf('radarr', { baseUrl: 'http://192.0.2.21:7878' }),
+      now,
+      timeZone: 'Europe/Amsterdam',
+    };
+    arr.store.onPut = (section) => {
+      if (section === 'indexer' && arr.store.sections.indexer) arr.store.sections.indexer.maximumSize = 2000;
+    };
+    const indexerRace = await radarrAct(rCtx, { target: 'rss_sync_interval', value: 60 });
+    expect(indexerRace.uncertain).toBe(true);
+    expect(indexerRace.undo).toBeUndefined();
+    expect(indexerRace.changeKind).toBeUndefined();
+    expect(indexerRace.title).not.toMatch(/Changed/);
+    expect(indexerRace.message).toMatch(/Another setting.*changed/i);
+    expect(indexerRace.message).not.toMatch(/Checked with/);
   });
 });

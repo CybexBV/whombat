@@ -1,22 +1,15 @@
 /**
  * AdGuard Home's declared settings: read from `/control/filtering/status`, `/control/safebrowsing/status`,
  * `/control/parental/status`, `/control/safesearch/status`, `/control/querylog/config` and `/control/stats/config`.
- * DNS filtering switches (block lists, safe browsing, parental control), log and statistics collection switches,
- * retention, upstream DNS, encryption and access stay in AdGuard Home so nothing here can block lookups, cut off
- * access or stop keeping logs and statistics.
+ * Every row stays read-only (“In AdGuard Home”): DNS filtering switches, log and statistics switches, retention,
+ * upstream DNS, encryption and access stay in AdGuard Home, and block-list update interval stays there too because
+ * `POST /control/filtering/config` always resends `enabled` and could overwrite a concurrent DNS filtering change.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
 import { num, rec } from '../../words';
 import { getJson, ReadProblem } from '../read';
-import {
-  asBool,
-  type DeclaredSettings,
-  type SettingChoice,
-  type SettingSpec,
-  type SettingValue,
-  withCurrent,
-} from '../settings';
+import { asBool, type DeclaredSettings, type SettingSpec, type SettingValue } from '../settings';
 
 const NAME = 'AdGuard Home';
 const HOUR_MS = 3_600_000;
@@ -100,19 +93,19 @@ export async function readAdGuardSettings(
   return parseAdGuardSettings({ filtering, safebrowsing, parental, safesearch, querylog, stats });
 }
 
-const FILTER_INTERVALS: SettingChoice[] = [
-  { value: 0, label: 'Never automatically' },
-  { value: 1, label: 'Every hour' },
-  { value: 12, label: 'Every 12 hours' },
-  { value: 24, label: 'Every day' },
-  { value: 72, label: 'Every 3 days' },
-  { value: 168, label: 'Every week' },
-];
+const FILTER_INTERVAL_LABELS: Record<number, string> = {
+  0: 'Never automatically',
+  1: 'Every hour',
+  12: 'Every 12 hours',
+  24: 'Every day',
+  72: 'Every 3 days',
+  168: 'Every week',
+};
 
 function filterIntervalWords(v: SettingValue): string {
   const h = Number(v);
-  const known = FILTER_INTERVALS.find((c) => c.value === h);
-  if (known) return known.label;
+  const known = FILTER_INTERVAL_LABELS[h];
+  if (known) return known;
   if (h === 0) return 'Never automatically';
   return h % 24 === 0 ? `Every ${h / 24} days` : `Every ${h} hours`;
 }
@@ -142,21 +135,11 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'filter_update_interval',
     group: 'protection',
     label: 'Update block lists',
-    help: 'How often AdGuard Home checks your block lists for updates.',
-    kind: 'choice',
+    help: 'How often AdGuard Home checks your block lists for updates. Saving it also sends the block-lists switch, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.filtering?.interval,
-    choices: (s) => withCurrent(FILTER_INTERVALS, s.filtering?.interval, filterIntervalWords),
     words: filterIntervalWords,
-    short: (v) => filterIntervalWords(v).toLowerCase(),
-    write: (v, s) => ({
-      method: 'POST',
-      path: '/control/filtering/config',
-      body: { enabled: s.filtering?.enabled === true, interval: Number(v) },
-    }),
-    sentence: (v) =>
-      Number(v) === 0
-        ? 'AdGuard Home no longer updates its block lists automatically.'
-        : `AdGuard Home now updates its block lists ${filterIntervalWords(v).toLowerCase()}.`,
+    elsewhere: (base) => `${base}/#filters`,
   },
   {
     id: 'safebrowsing',

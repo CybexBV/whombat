@@ -1,6 +1,6 @@
 /**
- * AdGuard Home's declared settings: rows from its OpenAPI config endpoints, verified writes preserving sibling
- * fields, deaf write refusal, undo guard, and approval card words.
+ * AdGuard Home's declared settings: read-only rows from its OpenAPI config endpoints, keeping every setting in
+ * AdGuard Home so `POST /control/filtering/config` cannot overwrite a concurrent DNS filtering change.
  */
 import { ThingPagePanel, type ThingSetting } from '@whombat/core';
 import { describe, expect, it, vi } from 'vitest';
@@ -127,7 +127,11 @@ describe('AdGuard Home declared settings', () => {
     });
     expect(by('filtering_enabled')?.toggle).toBeUndefined();
     expect(by('filtering_enabled')?.on).toBeUndefined();
-    expect(by('filter_update_interval')).toMatchObject({ value: 'Every day', choose: { current: 24 } });
+    expect(by('filter_update_interval')).toMatchObject({
+      value: 'Every day',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#filters' },
+    });
+    expect(by('filter_update_interval')?.choose).toBeUndefined();
     expect(by('safebrowsing')).toMatchObject({
       value: 'On',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -183,33 +187,19 @@ describe('AdGuard Home declared settings', () => {
       url: 'http://192.0.2.15:3000/#dns',
     });
 
-    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
-    expect(look.find((r) => r.id === 'filter_update_interval')?.choose?.button.allowed).toBe(false);
-    expect(look.find((r) => r.id === 'filter_update_interval')?.choose?.button.reason).toMatch(/Look only/);
+    for (const r of rows) {
+      expect(r.toggle).toBeUndefined();
+      expect(r.choose).toBeUndefined();
+      expect(r.elsewhere?.label).toBe('In AdGuard Home');
+    }
   });
 
-  it('writes block-list update interval preserving filtering.enabled and reads back to verify', async () => {
-    reset();
-    // Changing the block list update schedule never flips filtering on when it is off.
-    ag.store.filtering.enabled = false;
-    const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
-    expect(done.message).toContain('every 12 hours');
-    expect(done.message).toContain('Checked with AdGuard Home');
-    expect(done).toMatchObject({
-      changeKind: 'setting.filter_update_interval',
-      detail: 'every day',
-      undo: { target: 'filter_update_interval', value: 24, expect: 12 },
-    });
-    expect(ag.store.filtering).toEqual({ enabled: false, interval: 12 });
-    const post = ag.store.calls.find((c) => c.method === 'POST' && c.path === '/control/filtering/config');
-    expect(post?.body).toEqual({ enabled: false, interval: 12 });
-  });
-
-  it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
+  it('refuses every AdGuard Home setting write so POST /control/filtering/config cannot overwrite concurrent filtering.enabled changes', async () => {
     reset();
     for (const [target, value] of [
       ['dns_and_access', true],
       ['filtering_enabled', false],
+      ['filter_update_interval', 12],
       ['safebrowsing', false],
       ['parental', true],
       ['safesearch', true],
@@ -218,50 +208,11 @@ describe('AdGuard Home declared settings', () => {
       ['anonymize_ip', true],
       ['stats_enabled', false],
       ['stats_interval', 604_800_000],
-      ['filter_update_interval', 999],
       ['nope', true],
     ] as const) {
       await expect(act(ctx, { target, value })).rejects.toThrow();
-    }
-
-    const same = await act(ctx, { target: 'filter_update_interval', value: 24 });
-    expect(same.unchanged).toBe(true);
-
-    ag.store.deaf = true;
-    await expect(act(ctx, { target: 'filter_update_interval', value: 12 })).rejects.toThrow(/didn’t take/);
-
-    ag.store.deaf = false;
-    const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
-    ag.store.filtering.interval = 72;
-    await expect(
-      act(ctx, { target: 'filter_update_interval', value: done.undo?.value, expect: done.undo?.expect }),
-    ).rejects.toThrow(/changed again since/);
-    ag.store.filtering.interval = 12;
-    await act(ctx, { target: 'filter_update_interval', value: done.undo?.value, expect: done.undo?.expect });
-    expect(ag.store.filtering.interval).toBe(24);
-  });
-
-  it('describes changes in plain words for the approval card', async () => {
-    reset();
-    const words = await describeSetting(ADGUARD_SETTINGS, ctx, {
-      target: 'filter_update_interval',
-      value: 12,
-    });
-    expect(words?.title).toContain('AdGuard Home');
-    expect(words?.lines[0]).toContain('every day → every 12 hours');
-    expect(
-      await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filter_update_interval', value: 5 }),
-    ).toBeNull();
-    for (const [target, value] of [
-      ['filtering_enabled', false],
-      ['safebrowsing', false],
-      ['parental', true],
-      ['safesearch', true],
-      ['querylog_enabled', false],
-      ['anonymize_ip', true],
-      ['stats_enabled', false],
-    ] as const) {
       expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target, value })).toBeNull();
     }
+    expect(ag.store.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 });
