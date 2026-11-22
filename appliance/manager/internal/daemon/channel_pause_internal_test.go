@@ -15,6 +15,7 @@ import (
 	"github.com/CybexBV/whombat/appliance/manager/internal/helperclient"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
 	"github.com/CybexBV/whombat/appliance/manager/internal/tufclient"
+	"github.com/CybexBV/whombat/appliance/manager/internal/update"
 	"github.com/CybexBV/whombat/appliance/manager/internal/updatechannel"
 	"github.com/CybexBV/whombat/appliance/release-tools/devtuf"
 )
@@ -277,4 +278,123 @@ func TestOlderRefreshAfterResumeFixChangesNothing(t *testing.T) {
 				before.JournalSeq, before.ChannelPaused, before.LastAssignmentSeq, before.LastOffer)
 		}
 	}
+}
+
+// Even when applyRepo runs with offer=false, resuming a channel whose held candidate was withdrawn must retire that
+// candidate before clearing ChannelPaused; and when a newer release is quarantined on this box, resuming still retires
+// the older held candidate rather than releasing it.
+func TestApplyRepoRetiresWithdrawnCandidateOnPauseOnlyAndQuarantinedNewer(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("offer=false retires withdrawn candidate before unpausing", func(t *testing.T) {
+		w := testworld.NewAt(t, time.Now().UTC().Truncate(time.Second))
+		w.SetChannel(trust.ChannelProduction)
+		publishPauseTestRelease(t, w.Repo, "whombat-20261121.2", "26.05.1", "1.2.0", true)
+		d, _ := newPauseTestDaemon(t, w)
+
+		repoBad, err := d.refreshTUF(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.applyRepo(ctx, repoBad, true, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Repo.PauseChannel(trust.ChannelProduction, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.refreshTUF(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if !w.State().ChannelPaused {
+			t.Fatal("expected channel paused")
+		}
+
+		// Withdraw .2 and resume production.
+		if err := w.Repo.InChannel(trust.ChannelProduction); err != nil {
+			t.Fatal(err)
+		}
+		w.Repo.RemoveTarget(trust.ReleaseTarget("whombat-20261121.2"))
+		if err := w.Repo.Publish(); err != nil {
+			t.Fatal(err)
+		}
+		_ = w.Repo.InChannel("")
+		if _, err := w.Repo.ResumeChannel(trust.ChannelProduction, nil); err != nil {
+			t.Fatal(err)
+		}
+		repoResumed, err := d.refreshTUF(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Track transition order during offer=false applyRepo.
+		var retiredWhilePaused bool
+		w.Engine.OnTransition = func(st update.State) {
+			if st.Phase == update.Failed && st.Candidate != nil && st.Candidate.Failure != nil &&
+				st.Candidate.Failure.Blocked && st.Candidate.Failure.Code == "not_assigned" && st.ChannelPaused {
+				retiredWhilePaused = true
+			}
+		}
+		if _, err := d.applyRepo(ctx, repoResumed, false, false); err != nil {
+			t.Fatalf("applyRepo(offer=false): %v", err)
+		}
+		st := w.State()
+		if st.ChannelPaused || st.Phase != update.Failed || st.Candidate == nil ||
+			st.Candidate.Failure == nil || !st.Candidate.Failure.Blocked || st.Candidate.Failure.Code != "not_assigned" {
+			t.Fatalf("expected unpaused retired state, got paused=%v phase=%s cand=%+v", st.ChannelPaused, st.Phase, st.Candidate)
+		}
+		if !retiredWhilePaused {
+			t.Fatal("expected withdrawn candidate to be retired before clearing ChannelPaused")
+		}
+	})
+
+	t.Run("resuming with quarantined newer release still retires older held candidate", func(t *testing.T) {
+		w := testworld.NewAt(t, time.Now().UTC().Truncate(time.Second))
+		w.SetChannel(trust.ChannelProduction)
+		publishPauseTestRelease(t, w.Repo, "whombat-20261121.2", "26.05.1", "1.2.0", true)
+		d, _ := newPauseTestDaemon(t, w)
+
+		repo2, err := d.refreshTUF(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.applyRepo(ctx, repo2, true, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Repo.PauseChannel(trust.ChannelProduction, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.refreshTUF(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Promote .3 and quarantine it in the box's journal before resuming so Offer(.3) returns DecisionRefused.
+		publishPauseTestRelease(t, w.Repo, "whombat-20261121.3", "26.05.1", "1.3.0", true)
+		if _, err := w.Repo.ResumeChannel(trust.ChannelProduction, nil); err != nil {
+			t.Fatal(err)
+		}
+		repo3, err := d.refreshTUF(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel3, err := repo3.NewestRelease("", nil, "")
+		if err != nil || rel3 == nil {
+			t.Fatalf("expected .3 in repo: %+v %v", rel3, err)
+		}
+		st := w.State()
+		st.Quarantine[rel3.ID()] = update.Quarantine{ReleaseID: rel3.ID(), Digest: rel3.Digest, Code: "unhealthy", Reason: "quarantined in test"}
+		if err := w.Engine.J.Save(st); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := d.applyRepo(ctx, repo3, true, true); err != nil {
+			t.Fatalf("applyRepo with quarantined .3: %v", err)
+		}
+		after := w.State()
+		if after.ChannelPaused || after.Phase != update.Failed || after.Candidate == nil ||
+			after.Candidate.Failure == nil || !after.Candidate.Failure.Blocked || after.Candidate.Failure.Code != "not_assigned" {
+			t.Fatalf("expected older .2 retired when newer .3 is quarantined: paused=%v phase=%s cand=%+v",
+				after.ChannelPaused, after.Phase, after.Candidate)
+		}
+	})
 }

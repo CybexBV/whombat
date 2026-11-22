@@ -688,8 +688,8 @@ func (d *Daemon) currentChannel() string {
 
 // applyRepo applies one verified TUF metadata set to the engine as a single serialized decision: when the box follows a
 // channel, it verifies the metadata belongs to the followed channel with a non-decreasing role version before either
-// offering a release or changing ChannelPaused. On resume it offers the newest release first and clears ChannelPaused
-// only once the offer succeeds.
+// offering a release, retiring a withdrawn candidate, or changing ChannelPaused. On resume it offers the newest release
+// (or retires any pre-activation candidate the channel no longer offers) before clearing ChannelPaused.
 func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now bool) (*broker.CheckResult, error) {
 	defaultRes := &broker.CheckResult{
 		Result:     controlapi.ResultNone,
@@ -746,6 +746,26 @@ func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now boo
 			res, err = d.offerLatest(ctx, repo, now)
 			if err != nil {
 				return nil, err
+			}
+			if after, lerr := d.Engine.Load(); lerr == nil && after.Phase == update.Failed &&
+				after.Candidate != nil && after.Candidate.Failure != nil && after.Candidate.Failure.ResumeRequired {
+				d.wakeEngine()
+			}
+		} else {
+			offeredDigest := ""
+			if o, err := update.LatestOffer(repo, st, d.Dev.DeviceID, d.Dev.Env); err != nil {
+				d.warnOnce("withdrawn release check failed", err)
+				return defaultRes, nil
+			} else if o != nil {
+				offeredDigest = o.Release.Digest
+			}
+			retired, err := d.Engine.RetireWithdrawn(ctx, repo, offeredDigest)
+			if err != nil {
+				d.warnOnce("withdrawn release not retired", err)
+				return defaultRes, nil
+			}
+			if retired {
+				d.wakeEngine()
 			}
 		}
 		changed, _, err := d.Engine.SyncChannelPause(repo)
