@@ -33,6 +33,7 @@ import { z } from 'zod';
 import { reportedAssessment } from '../automations/assessment';
 import { keyDecision, publisherCheck } from '../automations/authority';
 import { postInRunThread } from '../automations/steps';
+import { withStepMessages } from '../automations/steps/state';
 import { type AutomationRunRow, loadRunRow, publishRun } from '../automations/store';
 import { loadBurrowRow } from '../commit/pipeline';
 import { defineCommand } from '../commit/types';
@@ -657,7 +658,7 @@ export const updateFix = defineCommand({
           .update(automationRunSteps)
           .set({
             output: { ...(step.output as JsonObject), mergedNotice: true },
-            ...(said ? { messageIds: [...(step.messageIds ?? []), said] } : {}),
+            ...(said ? { messageIds: withStepMessages([said]) } : {}),
             updatedAt: ctx.now,
           })
           .where(and(eq(automationRunSteps.runId, run.id), eq(automationRunSteps.idx, step.idx)));

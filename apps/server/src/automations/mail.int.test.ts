@@ -66,6 +66,7 @@ import {
   createAutomation,
   deleteAutomation,
   publishAutomationDraft,
+  reviewAutomationStep,
   runAutomationNow,
   saveAutomationDraft,
   setAutomationEnabled,
@@ -3016,7 +3017,7 @@ describe('mail-arrives automations', () => {
 
   it('settles connection_actions as uncertain on timeout or partial-batch failure, and failed on clean first-call error', async () => {
     const openResponses: ServerResponse[] = [];
-    let mode: 'timeout' | 'partial' | 'first_fail' = 'timeout';
+    let mode: 'timeout' | 'partial' | 'first_fail' | 'ok' = 'timeout';
     let hitCount = 0;
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       req.resume();
@@ -3026,7 +3027,7 @@ describe('mail-arrives automations', () => {
           openResponses.push(res);
           return;
         }
-        if (mode === 'partial' && hitCount === 1) {
+        if (mode === 'ok' || (mode === 'partial' && hitCount === 1)) {
           res.writeHead(201, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ id: 'first-ok' }));
           return;
@@ -3172,6 +3173,35 @@ describe('mail-arrives automations', () => {
         await loadMessages(w.services.db, notice ? [notice] : [], IDS.dusty),
       );
       expect(asRead?.text).toBe(OUTSIDERS_ACTIONS_LINE);
+
+      // The person checks and tries again, and this time it goes: the step keeps the earlier notice with its “Done:”
+      // line, so a later outsiders' turn still reads both only as the line.
+      mode = 'ok';
+      await w.ok(IDS.mara, reviewAutomationStep, {
+        number: timedOutRun.number,
+        stepId: timedOutRun.steps[1]?.stepId as string,
+        resolution: 'retry',
+      });
+      await w.settle();
+      const askedAgain = await w.run(timedOutRun.id);
+      const [againCard] = await w.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.id, askedAgain.steps[1]?.approvalId as string));
+      await w.ok(IDS.mara, decideApproval, { number: againCard?.number as number, decision: 'approve' });
+      await w.settle();
+      const retried = await w.run(timedOutRun.id);
+      expect(retried.steps[1]?.state).toBe('succeeded');
+      const done = (await w.runThread(timedOutRun.id)).find((m) => m.text.startsWith('Done:'));
+      expect(done).toBeDefined();
+      expect(retried.steps[1]?.messageIds).toEqual(
+        expect.arrayContaining([notice?.id as string, done?.id as string]),
+      );
+      const afterRetry = await forOutsiders(
+        w.services.db,
+        await loadMessages(w.services.db, notice && done ? [notice, done] : [], IDS.dusty),
+      );
+      expect(afterRetry.map((m) => m.text)).toEqual([OUTSIDERS_ACTIONS_LINE, OUTSIDERS_ACTIONS_LINE]);
 
       // 3. Partial batch (call 1 succeeds, call 2 returns HTTP 422) settles as uncertain (needs_review).
       mode = 'partial';
