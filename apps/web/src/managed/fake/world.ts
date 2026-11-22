@@ -875,8 +875,11 @@ export interface FakeFaults {
    * secret while unclaimed, and what its certificate watch found (`foreign`, `missed`).
    */
   ownBox(value: boolean, watch?: { foreign?: boolean; missed?: boolean }): void;
-  /** Whombat Link's state on the box target's box (4.4): `grace` ends in a week, `on` may run its free month. */
-  linkState(state: LinkSummary['state'], extra?: Partial<LinkSummary>): void;
+  /**
+   * Whombat Link's state on the box target's box (4.4), or on `device` when given: `grace` ends in a week, `on` may run
+   * its free month.
+   */
+  linkState(state: LinkSummary['state'], extra?: Partial<LinkSummary>, device?: string): void;
   ownClaimLink(): string | null;
   /** The four letters the A3 box's screen shows while unclaimed. */
   ownLetters(): string | null;
@@ -4294,8 +4297,8 @@ export async function createFakeWorld(): Promise<FakeWorld> {
         if (own) Object.assign(own, { foreign: watch.foreign === true, missed: watch.missed === true });
         save();
       },
-      linkState(linkState, extra = {}) {
-        const a = state.appliances[state.ownBox ? DEVICES.own : DEVICES.community];
+      linkState(linkState, extra = {}, device) {
+        const a = state.appliances[device ?? (state.ownBox ? DEVICES.own : DEVICES.community)];
         if (!a) return;
         const at = new Date().toISOString();
         a.link = {

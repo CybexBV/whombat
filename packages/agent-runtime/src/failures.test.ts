@@ -64,6 +64,12 @@ describe('classifyTurnFailure (essentials-agents.md EA-08)', () => {
       'the upstream for claude-opus-5-5 stalled (it sent nothing before the first-token deadline); next try in 45s',
       'provider',
     ],
+    // Fusebox 0.17 at a restart: the 503 before an answer, and the error event ending an answer it cut short.
+    ['Fusebox is restarting; try again', 'provider'],
+    [
+      'API Error: {"type":"error","error":{"type":"api_error","message":"Fusebox stopped before the answer was complete"}}',
+      'provider',
+    ],
     ['fatal: could not read from remote repository.', 'workspace'],
     // The engine's content/safety refusal: the model declined the request, not an outage or a limit.
     [
