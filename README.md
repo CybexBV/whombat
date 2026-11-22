@@ -55,7 +55,9 @@ Your data lives on the box, and it works with the Claude or ChatGPT you already 
 ## Install
 
 1. **Download** the installer from [whombat.com/download](https://whombat.com/download): one ISO for x86-64 computers
-   with UEFI, about 4 GB. Check it against its SHA-256 file if you like (`sha256sum -c whombat-installer.iso.sha256`).
+   with UEFI, about 4 GB. To check that it arrived whole, run `sha256sum -c whombat-installer.iso.sha256` beside its
+   SHA-256 file. That file comes from the same site as the ISO, so it isn't proof the ISO is ours; a signed checksum
+   will be.
 2. **Write it or attach it.** For a PC: write it to a USB stick of 8 GB or more with a raw (“DD”) copy. For a virtual
    machine on Proxmox VE, Incus or libvirt: attach it as the CD drive.
 3. **Start it** with Secure Boot off and follow the screen. The installer puts Whombat on the disk.

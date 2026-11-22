@@ -92,6 +92,9 @@ wget -O whombat-installer.iso.sha256 '<link>.sha256'
 sha256sum -c whombat-installer.iso.sha256
 ```
 
+The checksum comes from the same site as the ISO: it shows the download arrived whole, not that the ISO is
+Whombat's. A signed checksum is planned (`docs/decisions/installer-signature.md`).
+
 Download it where you need it: on the computer that writes the USB stick (§4), or on the hypervisor host (§5).
 
 ## 4. Bare metal: a dedicated machine

@@ -286,6 +286,7 @@ How the split was made: `docs.md`.
 - `stack-optimization.md` — bounded/grouped reads and replay, automation hydration, transfer cancellation, shared activity redaction, desk identities, client pages and terminal styles, frame/console buffering, CIDR parsing, event queues, cron and Markdown; the web page's boot preloads and calmer renders, once-per-request Home/desk/MCP/poller reads, command launch and production lookups, shared web/phone and contract logic, local test caching and ordering.
 - `refactor-dispatch-context.md`, `refactor-home-reads.md`, `refactor-node-http.md`, `refactor-archive-parsing.md`,
   `refactor-runner-api.md`, `refactor-runner-turn.md` — runtime-only refactors and their boundaries.
+- `installer-signature.md` — what the installer's checksum proves, and the signature planned for it.
 - `bp-distribution.md` — *in part*: release manifests, reproducible archives, signatures, the migration lock;
   self-hosted install and upgrade are gone.
 - `cli.md` — *in part*: only CLI-02 holds (the CLI imports `@whombat/server/host` alone).
