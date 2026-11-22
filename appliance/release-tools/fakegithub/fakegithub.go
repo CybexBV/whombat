@@ -1,6 +1,6 @@
 // Package fakegithub is a local stand-in for the parts of GitHub the update channels use (Whombat LNK-24), for
 // tests: release downloads that answer 302 to another host whose storage honours Range (as GitHub's does), the REST
-// calls the publisher makes (releases by tag, create a release, list, upload and delete assets) and a static Pages
+// calls the publisher makes (releases by tag, list, create and delete releases and tags, list, upload and delete assets) and a static Pages
 // tree. It keeps everything in memory except the Pages tree, which is a directory.
 package fakegithub
 
@@ -63,7 +63,9 @@ type GitHub struct {
 
 	mu       sync.Mutex
 	releases []*Release
-	nextID   int64
+	// tags are the git tags: GitHub makes one with a release and keeps it when the release is deleted.
+	tags   map[string]bool
+	nextID int64
 	// Downloads counts download requests per asset name; RangeRequests those with a Range header (at the storage).
 	Downloads     map[string]int
 	RangeRequests int
@@ -78,7 +80,7 @@ type GitHub struct {
 // New starts the fake's servers. Close them with Close.
 func New(owner, repo, token, pagesDir string) *GitHub {
 	g := &GitHub{Owner: owner, Repo: repo, Token: token, PagesDir: pagesDir, nextID: 100,
-		Downloads: map[string]int{}, APICalls: map[string]int{}, FailNext: map[string]int{}}
+		Downloads: map[string]int{}, APICalls: map[string]int{}, FailNext: map[string]int{}, tags: map[string]bool{}}
 	g.storage = httptest.NewServer(http.HandlerFunc(g.serveStorage))
 	g.web = httptest.NewServer(http.HandlerFunc(g.serveWeb))
 	g.api = httptest.NewServer(http.HandlerFunc(g.serveAPI))
@@ -134,6 +136,18 @@ func (g *GitHub) Tags() []string {
 	return out
 }
 
+// GitTags lists the git tags (a deleted release's stays until its ref is deleted).
+func (g *GitHub) GitTags() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	var out []string
+	for t := range g.tags {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // PutAsset adds an asset directly (a test's starting state).
 func (g *GitHub) PutAsset(tag, name string, data []byte) {
 	g.mu.Lock()
@@ -160,6 +174,7 @@ func (g *GitHub) create(tag string, pre bool) *Release {
 	r := &Release{ID: g.nextID, TagName: tag, Name: tag, Prerelease: pre}
 	r.UploadURL = fmt.Sprintf("%s/uploads/repos/%s/%s/releases/%d/assets{?name,label}", g.APIURL, g.Owner, g.Repo, r.ID)
 	g.releases = append(g.releases, r)
+	g.tags[tag] = true
 	return r
 }
 
@@ -260,8 +275,9 @@ func (g *GitHub) releaseJSON(r *Release) map[string]any {
 		"assets": assets}
 }
 
-// serveAPI is the REST subset: GET releases/tags/<tag>, POST releases, GET releases/<id>/assets, POST
-// uploads/.../releases/<id>/assets?name=, DELETE releases/assets/<id>.
+// serveAPI is the REST subset: GET releases/tags/<tag>, GET releases (paged), POST releases, DELETE releases/<id>,
+// DELETE git/refs/tags/<tag>, GET releases/<id>/assets, POST uploads/.../releases/<id>/assets?name=, DELETE
+// releases/assets/<id>.
 func (g *GitHub) serveAPI(w http.ResponseWriter, req *http.Request) {
 	if req.Header.Get("Authorization") != "Bearer "+g.Token {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
@@ -291,6 +307,54 @@ func (g *GitHub) serveAPI(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
+	case req.Method == http.MethodGet && len(parts) == 1 && parts[0] == "releases":
+		g.count("GET", "releases")
+		perPage, _ := strconv.Atoi(req.URL.Query().Get("per_page"))
+		if perPage <= 0 || perPage > 100 {
+			perPage = 30
+		}
+		page, _ := strconv.Atoi(req.URL.Query().Get("page"))
+		if page <= 0 {
+			page = 1
+		}
+		g.mu.Lock()
+		lo := min((page-1)*perPage, len(g.releases))
+		hi := min(lo+perPage, len(g.releases))
+		out := []map[string]any{}
+		for _, r := range g.releases[lo:hi] {
+			out = append(out, g.releaseJSON(r))
+		}
+		g.mu.Unlock()
+		writeJSON(w, http.StatusOK, out)
+	case req.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "releases" && parts[1] != "assets":
+		g.count("DELETE", "releases")
+		id, _ := strconv.ParseInt(parts[1], 10, 64)
+		g.mu.Lock()
+		found := false
+		for i, r := range g.releases {
+			if r.ID == id {
+				g.releases = append(g.releases[:i], g.releases[i+1:]...)
+				found = true
+				break
+			}
+		}
+		g.mu.Unlock()
+		if !found {
+			writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	case req.Method == http.MethodDelete && len(parts) == 4 && parts[0] == "git" && parts[1] == "refs" && parts[2] == "tags":
+		g.count("DELETE", "git/refs/tags")
+		g.mu.Lock()
+		had := g.tags[parts[3]]
+		delete(g.tags, parts[3])
+		g.mu.Unlock()
+		if !had {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"message": "Reference does not exist"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	case req.Method == http.MethodPost && len(parts) == 1 && parts[0] == "releases" && !upload:
 		g.count("POST", "releases")
 		var body struct {

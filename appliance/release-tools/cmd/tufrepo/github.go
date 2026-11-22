@@ -23,6 +23,15 @@ package main
 //	        publish a release directory into development: blobs → release assets → role metadata (git push)
 //	tufrepo gh-promote --dir D --release ID [--key-file F] promote and push (nothing is uploaded again); the production
 //	        key from F, else the repository's own (online since the key ceremony, ONE-05)
+//	tufrepo gh-unlist --dir D --keep ID,… [--channel production|development] [--key-file F] [--dry-run]
+//	        take every release out of the channel roles (both, or --channel's) except --keep, and push the roles:
+//	        nothing is uploaded or deleted; a channel's newest release must be kept. Each role is signed with its own
+//	        key (F with --channel, else the repository's), never the root or top-level targets keys. --dry-run signs
+//	        nothing and prints what would be unlisted and what gh-prune would then delete from GitHub
+//	tufrepo gh-prune --dir D [--metadata-url https://releases.whombat.com/] [--dry-run]
+//	        delete from GitHub what no listed release needs: unlisted releases' own GitHub releases and tags, and blobs
+//	        no listed release's index names. Only once the site serves the clone's channel roles, under the publish
+//	        lock, and after checking GitHub has every file the listed releases need; --dry-run deletes nothing
 //	tufrepo gh-pause --dir D [--channel production|development] [--key-file F]
 //	        pause the channel from the already-published remote branch and push its signed role metadata (nothing is
 //	        uploaded; never blocked by an active upload or pending publish)
@@ -80,7 +89,7 @@ import (
 
 var githubCommands = map[string]bool{"add-channels": true, "promote": true, "pause": true, "resume": true,
 	"gh-continue": true, "gh-init": true, "gh-publish": true, "gh-promote": true, "gh-pause": true, "gh-resume": true,
-	"gh-clients": true, "gh-resign": true, "gh-expiry": true, "gh-rotate": true, "gh-clients-env": true}
+	"gh-clients": true, "gh-unlist": true, "gh-prune": true, "gh-resign": true, "gh-expiry": true, "gh-rotate": true, "gh-clients-env": true}
 
 func runGitHub(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
@@ -113,6 +122,9 @@ func runGitHub(cmd string, args []string) error {
 	tsEnv := fs.String("timestamp-key-env", "TUF_TIMESTAMP_KEY", "gh-resign: the variable holding the timestamp key file")
 	warnDays := fs.String("warn-days", "30,14,7", "gh-expiry: warn this many days before a role expires")
 	annotations := fs.Bool("annotations", false, "gh-expiry, gh-resign: GitHub workflow annotations")
+	keep := fs.String("keep", "", "gh-unlist: the release ids that stay listed (comma-separated)")
+	dryRun := fs.Bool("dry-run", false, "gh-unlist, gh-prune: plan and check only")
+	metadataURL := fs.String("metadata-url", "https://releases.whombat.com/", "gh-prune: the site boxes read the metadata from")
 	fs.Parse(args)
 	ctx := context.Background()
 	publisher := func() (*ghpublish.Publisher, error) {
@@ -281,6 +293,67 @@ func runGitHub(cmd string, args []string) error {
 			fmt.Fprintf(os.Stderr, "tufrepo: note: %s\n", devtuf.ChannelPauseScopeNote)
 		}
 		return printJSON(map[string]any{"github": res, "channel": pr})
+	case "gh-unlist":
+		ids := splitList(*keep)
+		if len(ids) == 0 {
+			return fmt.Errorf("gh-unlist: --keep names the releases that stay listed")
+		}
+		channels := []string{trust.ChannelDevelopment, trust.ChannelProduction}
+		if channelSet(fs, "channel") {
+			if !trust.ValidChannel(*channel) {
+				return fmt.Errorf("unknown channel %q (use %s)", *channel, strings.Join(trust.Channels, " or "))
+			}
+			channels = []string{*channel}
+		} else if *keyFile != "" {
+			return fmt.Errorf("gh-unlist: --key-file holds one channel's key: name it with --channel")
+		}
+		p, err := publisher()
+		if err != nil {
+			return err
+		}
+		if *dryRun {
+			r, err := p.LocalRepo(ctx)
+			if err != nil {
+				return err
+			}
+			var unlisted []*devtuf.UnlistResult
+			for _, ch := range channels {
+				u, err := r.Unlist(ch, ids)
+				if err != nil {
+					return err
+				}
+				unlisted = append(unlisted, u)
+			}
+			plan, err := p.PlanPrune(ctx, r)
+			if err != nil {
+				return err
+			}
+			return printJSON(map[string]any{"dryRun": true, "unlist": unlisted, "prune": plan})
+		}
+		var out []map[string]any
+		for _, ch := range channels {
+			k, err := channelKey(ch)
+			if err != nil {
+				return err
+			}
+			res, u, err := p.Unlist(ctx, ch, ids, k)
+			if err != nil {
+				return err
+			}
+			out = append(out, map[string]any{"github": res, "unlist": u})
+		}
+		fmt.Fprintln(os.Stderr, "tufrepo: once the site serves the new roles, `tufrepo gh-prune` deletes what no listed release needs")
+		return printJSON(out)
+	case "gh-prune":
+		p, err := publisher()
+		if err != nil {
+			return err
+		}
+		plan, err := p.Prune(ctx, ghpublish.PruneOptions{MetadataURL: *metadataURL, DryRun: *dryRun})
+		if err != nil {
+			return err
+		}
+		return printJSON(plan)
 	case "gh-rotate":
 		if *check {
 			plan, err := devtuf.PlanRotation(filepath.Join(*dir, "metadata"))
@@ -410,6 +483,28 @@ func runGitHub(cmd string, args []string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown command %s", cmd)
+}
+
+// splitList splits a comma-separated list, leaving out empty entries.
+func splitList(s string) []string {
+	var out []string
+	for _, x := range strings.Split(s, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// channelSet reports whether a flag was given on the command line (not just its default).
+func channelSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			set = true
+		}
+	})
+	return set
 }
 
 // devtufKey is a private key as devtuf takes it.
