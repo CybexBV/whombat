@@ -15,6 +15,7 @@ import {
   type AutomationDefinition,
   type AutomationRecipeInput,
   type AutomationRun,
+  newId,
   type ReportAssessmentInput,
   recipeDefinition,
   recipeInstructions,
@@ -40,6 +41,8 @@ import { visibleConnections } from '../connections/context';
 import { connectionViews } from '../connections/views';
 import {
   approvals,
+  attachments,
+  automationRunSteps,
   automationRuns,
   automations,
   automationVersions,
@@ -55,11 +58,14 @@ import {
   vaultNetworks,
 } from '../db/schema/index';
 import { indexMessage } from '../domain/search-index';
+import { thePersonAccountId } from '../domain/the-person';
+import { dispatchReadableAttachment } from '../files/access';
+import { blobKey } from '../files/store';
 import { checkConnectionHealth } from '../home/health';
 import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadPrincipalRow } from '../read/principals';
-import { buildDispatchContext } from '../runtime/context';
+import { buildDispatchContext, WINDOW_SIZE } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { FakeTracker, type FakeTrackerItem } from '../test/tracker';
@@ -989,6 +995,88 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, t3));
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, other));
     }
+  });
+});
+
+describe('a report’s turn uses no file someone adds to its thread (outsiders-turns.md OT-05)', () => {
+  it('neither names nor gives it the person’s file, by any way, also for a run started before the handover was kept', async () => {
+    const id = await recipe();
+    await poll();
+    const { run } = await reportRun(id, { title: 'Charts are blank' });
+    const dispatchId = step(run, 'ask').dispatchId as string;
+    const [turn] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+    if (!turn?.threadRootId) throw new Error('no thread');
+    // The person adds a file of their own to the report's thread.
+    const staged = await w.services.files.store.stage([Buffer.from('MARA_PRIVATE')], { maxBytes: 1024 });
+    const key = blobKey(staged.sha256);
+    await w.services.files.store.commit(staged, key);
+    const fileId = newId('attachment');
+    await w.services.db.insert(attachments).values({
+      id: fileId,
+      burrowId: w.burrowId,
+      conversationId: turn.conversationId,
+      name: 'notes.pdf',
+      declaredType: 'application/pdf',
+      contentType: 'application/pdf',
+      kind: 'file',
+      size: staged.size,
+      sha256: staged.sha256,
+      blobKey: key,
+      state: 'ready',
+      url: `/api/v1/burrows/burrow-hq/attachments/${fileId}`,
+      uploadedById: IDS.mara,
+      createdAt: w.now(),
+      uploadedAt: w.now(),
+    });
+    const notes = await w.ok(IDS.mara, sendMessage, {
+      conversationId: turn.conversationId,
+      threadRootId: turn.threadRootId,
+      text: 'My notes on it',
+      attachmentIds: [fileId],
+    });
+    const reachesIt = async () => {
+      const context = await claim(dispatchId);
+      const shown = [
+        ...(context.trigger ? [context.trigger] : []),
+        ...context.window,
+        ...(context.thread ? [context.thread.root, ...context.thread.replies] : []),
+      ];
+      expect(shown.some((m) => m.text === 'My notes on it')).toBe(true);
+      const thread = await tool(dispatchId, 'read_conversation', {
+        conversationId: turn.conversationId,
+        threadRootId: turn.threadRootId,
+      });
+      expect(thread.isError).toBe(false);
+      return {
+        listed: context.attachments.map((a) => a.id),
+        shown: shown.flatMap((m) => m.attachments.map((a) => a.id)),
+        inThread: JSON.stringify(thread.body).includes(fileId),
+        read: !(await tool(dispatchId, 'read_attachment', { attachmentId: fileId })).isError,
+        fetched: !!(await dispatchReadableAttachment(w.services.db, turn, WINDOW_SIZE, fileId)),
+      };
+    };
+    const none = { listed: [], shown: [], inThread: false, read: false, fetched: false };
+    expect(await reachesIt()).toEqual(none);
+    // A run started before the handed-over files were kept counts only what the server put on its first prompt.
+    await w.services.db
+      .update(automationRunSteps)
+      .set({ output: {} })
+      .where(eq(automationRunSteps.dispatchId, dispatchId));
+    expect(await reachesIt()).toEqual(none);
+    // The person's own turn there reads it as ever.
+    const person = await thePersonAccountId(w.services.db, w.burrowId);
+    const theirs = { ...turn, id: 'dsp_persons_own', trigger: 'mention' as const, messageId: notes.id };
+    expect(
+      (
+        await dispatchReadableAttachment(
+          w.services.db,
+          { ...theirs, onBehalfOfAccountId: person },
+          WINDOW_SIZE,
+          fileId,
+        )
+      )?.id,
+    ).toBe(fileId);
+    await done(id);
   });
 });
 

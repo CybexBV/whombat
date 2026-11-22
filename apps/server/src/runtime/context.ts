@@ -12,6 +12,7 @@ import {
   type KEY_CATALOG,
   keyRows,
   MCP_PATH,
+  type Message,
   PLAN_MAX_STEPS,
   type Plan,
   type PrincipalLite,
@@ -44,6 +45,7 @@ import { agentBriefOf, withBrief } from '../domain/agent-brief';
 import { linkOfConversation } from '../domain/links';
 import { assessorBrowser } from '../feedback/browser';
 import { type FeedbackDispatchParts, feedbackDispatchParts, feedbackHandoffPart } from '../feedback/dispatch';
+import { outsidersFileIds, withOnlyFiles } from '../files/access';
 import { dispatchAttachments, dispatchFiles } from '../files/dispatch';
 import { ghContextFor } from '../github/agent-gh-context';
 import { undoRequestOf } from '../home/reports';
@@ -272,6 +274,16 @@ export async function buildDispatchContext(
       window = window.map(withFull);
       if (thread) thread = { ...thread, root: withFull(thread.root), replies: thread.replies.map(withFull) };
     }
+  }
+
+  // An automation run's outsiders' turn sees only the files handed over from what started the run: a file someone
+  // added to its thread isn't named to it either.
+  const onlyFiles = assessing ? null : await outsidersFileIds(db, row);
+  if (onlyFiles) {
+    const keep = <M extends Pick<Message, 'attachments'>>(m: M): M => withOnlyFiles(m, onlyFiles);
+    trigger = trigger ? keep(trigger) : trigger;
+    window = window.map(keep);
+    if (thread) thread = { ...thread, root: keep(thread.root), replies: thread.replies.map(keep) };
   }
 
   // Whombat's own signers are `system` (one-agent.md OA-17).

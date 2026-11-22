@@ -17,6 +17,7 @@ import {
   newId,
 } from '@whombat/core';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import Fastify from 'fastify';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
@@ -44,6 +45,7 @@ import {
   vaultNetworks,
 } from '../db/schema/index';
 import { indexAutomationRun, indexMessage } from '../domain/search-index';
+import { registerFileRoutes } from '../files/routes';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
@@ -1699,9 +1701,55 @@ describe('mail-arrives automations', () => {
 
       await w.services.db
         .update(dispatches)
-        .set({ state: 'running', claimedAt: w.now() })
+        .set({ state: 'running', claimedAt: w.now(), runnerId: 'rnr_mail-files', attempts: 1 })
         .where(eq(dispatches.id, dispatchId));
       const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+
+      // The turn can't reach the person's file by any way: its context lists and names only the email's file, the
+      // thread it is shown and `read_conversation` show their message without it, and neither `read_attachment` nor
+      // the runner's download gives it.
+      const again = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      expect(again.attachments.map((a) => a.id)).toEqual([emailFileId]);
+      const shownMessages = [
+        ...(again.trigger ? [again.trigger] : []),
+        ...again.window,
+        ...(again.thread ? [again.thread.root, ...again.thread.replies] : []),
+      ];
+      expect(shownMessages.some((m) => m.text === 'Here is my copy')).toBe(true);
+      const shownFiles = shownMessages.flatMap((m) => m.attachments.map((a) => a.id));
+      expect(shownFiles).toContain(emailFileId);
+      expect(shownFiles).not.toContain(ownId);
+      expect(turnPrompt(again)).toContain(emailFileId);
+      expect(turnPrompt(again)).not.toContain(ownId);
+      const readTheirs = await callTool(w.services, auth, 'read_attachment', { attachmentId: ownId });
+      expect(readTheirs.isError).toBe(true);
+      const readOurs = await callTool(w.services, auth, 'read_attachment', { attachmentId: emailFileId });
+      expect(readOurs.isError, JSON.stringify(readOurs.content)).not.toBe(true);
+      const thread = await callTool(w.services, auth, 'read_conversation', {
+        conversationId: maraChat.dmId,
+        threadRootId: loaded?.threadRootId as string,
+      });
+      expect(thread.isError, JSON.stringify(thread.content)).not.toBe(true);
+      expect(JSON.stringify(thread.content)).toContain('Here is my copy');
+      expect(JSON.stringify(thread.content)).toContain(emailFileId);
+      expect(JSON.stringify(thread.content)).not.toContain(ownId);
+      const runnerApp = Fastify();
+      registerFileRoutes(runnerApp, w.services);
+      try {
+        const fetchFile = (id: string) =>
+          runnerApp.inject({
+            method: 'GET',
+            url: `/internal/runner/dispatches/${dispatchId}/attachments/${id}?runnerId=rnr_mail-files&attempt=1`,
+            headers: { authorization: 'Bearer dev-runner-token' },
+          });
+        expect((await fetchFile(ownId)).statusCode).toBe(404);
+        const ourFile = await fetchFile(emailFileId);
+        expect(ourFile.statusCode).toBe(200);
+        expect(ourFile.rawPayload.equals(pdf)).toBe(true);
+      } finally {
+        await runnerApp.close();
+      }
+
       const put = (attachmentId: string) => ({
         actions: [
           {

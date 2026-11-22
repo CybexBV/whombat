@@ -561,7 +561,10 @@ Automations. Code finds it by kind
 - **An outsiders' turn** — a Feedback assessment, what a tracker customer's report or reply starts, incoming mail —
   is queued for nobody (`runtime/person.ts`). Its room is usually the person's Chat or Feedback room, so it works in
   its own thread there: it gets its request and that thread but never the room's recent messages or Files, and its
-  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). It is served a
+  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). An automation
+  run's turn (mail, a tracker report) is shown and reads only the files the server handed over from what started the
+  run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
+  readable or fetched by its runner. It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
