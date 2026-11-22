@@ -54,6 +54,7 @@ import { accountInBurrow, loadPrincipalRow, type PrincipalRow } from '../read/pr
 import { publishDispatch } from './activity';
 import type { DispatchRow } from './context';
 import { claudeExtraUsageText } from './failure-text';
+import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 
 /** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
@@ -367,7 +368,12 @@ export const retryDispatch = defineCommand({
     if (row.state !== 'failed' || !row.failure)
       throw new ApiError('conflict', 'Only a reply that failed can be tried again.');
     const source = row.messageId ? await loadMessageRow(tx, row.messageId) : null;
-    if (!retryable(row) || source?.outsidersRun || source?.provenance)
+    if (
+      !retryable(row) ||
+      source?.outsidersRun ||
+      source?.provenance ||
+      (source && (await outsidersWrote(tx, source.id)))
+    )
       throw new ApiError('conflict', 'This one is tried again by the part of Whombat that started it.');
     if (!turnFailureRetryable(row.failure.code))
       throw new ApiError(

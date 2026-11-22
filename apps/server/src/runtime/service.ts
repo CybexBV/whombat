@@ -83,6 +83,7 @@ import {
 import { buildDispatchContext, type DispatchRow, previousSessionForRun } from './context';
 import { failureReportOf, publicRefusal, recordTurnFailure, requeueSuperseded } from './failure';
 import { noteModelFallback } from './model-fallback';
+import { outsidersWrote } from './outsiders-marks';
 import { outsidersTurn } from './person';
 import { holdsItsPlace, outsidersTurnsInFlight, placeKey } from './places';
 import { afterRunTurn, reconcileLiveRuns } from './run-recovery';
@@ -591,12 +592,13 @@ export class RunnerRuntime {
             continue;
           }
         }
-        // Older builds could queue More detail on an outsiders’ message. It must never reach the person’s runner.
+        // Older builds could queue More detail on an outsiders’ message, the previous release too after an update, on
+        // one it didn't mark. It must never reach the person’s runner.
         const source =
           d.messageId && (d.trigger === 'expand' || d.trigger === 'retry')
             ? await loadMessageRow(tx, d.messageId)
             : null;
-        if (source?.outsidersRun || source?.provenance) {
+        if (source && (source.outsidersRun || source.provenance || (await outsidersWrote(tx, source.id)))) {
           const [cancelled] = await tx
             .update(dispatches)
             .set({ state: 'cancelled', finishedAt: now, error: 'outside_message' })

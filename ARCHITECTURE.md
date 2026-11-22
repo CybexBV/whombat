@@ -575,10 +575,13 @@ Automations. Code finds it by kind
   (`automations/steps/scope.ts`). Agent posts carry their dispatch id, so the step collects just its own replies.
   Outsiders' results carry no attachment ids, and no later step copies files from them. For older rows without a
   dispatch id, collection uses only marked posts within the claim. A result names its turn; templates drop one that
-  names another turn, and a result the previous release saved (no turn named) is read as it was. The thread's marked posts offer no shortcuts into the person's turns and create no link
-  previews. The person can start a new turn by replying directly. That turn starts a fresh session in the thread and
-  sees marked posts as quoted data. The person still sees the full posts in Chat. It is served a
-  short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
+  names another turn, and a result the previous release saved (no turn named) is read as it was. The thread's marked
+  posts offer no shortcuts into the person's turns and create no link previews. Every start marks what outsiders'
+  input wrote and the mark missed (a step's own thread, what the previous release wrote after a rollback), and More
+  detail, Try again and the claim read the turn that wrote a message, not only its mark
+  (`runtime/outsiders-marks.ts`). The person can start a new turn by replying directly. That turn starts a fresh
+  session in the thread and sees marked posts as quoted data. The person still sees the full posts in Chat. It is
+  served a short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
   gets no mail, calendar, files, Vault, connections, notes or memory, and runs in Hermes's separate `_feedback` profile,
