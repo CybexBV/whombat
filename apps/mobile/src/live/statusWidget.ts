@@ -75,30 +75,85 @@ export async function clearCloudStatusWidget(
 }
 
 /**
- * Deduplicates writes to the native widget store so identical overviews don't re-broadcast updates, and forgets
- * its last key whenever `clear` runs so signing back in always writes fresh state.
+ * Clears `departingDevice`'s widget snapshot when the person leaves it (explicit switch, revocation,
+ * or selecting another box). When `nextDevice` matches `departingDevice`, keeps the snapshot intact
+ * so reopening the same box does not blank its status while reconnecting.
+ */
+export async function clearDepartingStatusWidget(
+  target: Pick<StatusWidgetTarget, 'clearStatusWidget'>,
+  departingDevice: string | null | undefined,
+  nextDevice?: string | null,
+): Promise<void> {
+  const leaving = departingDevice?.trim() ?? '';
+  if (!leaving) return;
+  const entering = nextDevice?.trim() ?? '';
+  if (entering && leaving === entering) return;
+  await target.clearStatusWidget(leaving).catch(() => {});
+}
+
+/**
+ * Switches the registry's active appliance to `nextDevice` and clears the departing box's widget
+ * snapshot whenever the active box actually changes, so an offline next box never keeps showing the
+ * previous box's status.
+ */
+export function switchActiveAppliance(
+  registry: { lastUsed(): string | null; setLastUsed(device: string | null): void },
+  target: Pick<StatusWidgetTarget, 'clearStatusWidget'>,
+  nextDevice: string | null,
+): void {
+  const previous = registry.lastUsed();
+  registry.setLastUsed(nextDevice);
+  if (previous && previous !== nextDevice) {
+    void target.clearStatusWidget(previous).catch(() => {});
+  }
+}
+
+/**
+ * Deduplicates and serializes writes to the native widget store so identical overviews don't re-broadcast
+ * updates, stale queued writes are dropped after `clear`/`reset`, and clearing always lets the next push write.
  */
 export function createStatusWidgetSync(target: StatusWidgetTarget) {
   let lastKey: string | null = null;
+  let queue: Promise<void> = Promise.resolve();
+  let generation = 0;
+
+  const enqueue = <T>(work: () => Promise<T>): Promise<T> => {
+    const run = queue.then(work, work);
+    queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
   return {
-    async push(payload: StatusWidgetPayload): Promise<boolean> {
+    push(payload: StatusWidgetPayload): Promise<boolean> {
       const key = JSON.stringify(payload);
-      if (key === lastKey) return false;
+      if (key === lastKey) return Promise.resolve(false);
+      const gen = generation;
       lastKey = key;
-      try {
-        await target.setStatusWidget(payload);
-        return true;
-      } catch {
-        // Retry on the next change if the native write failed.
-        if (lastKey === key) lastKey = null;
-        return false;
-      }
+      return enqueue(async () => {
+        // A clear or reset ran while this write waited in the queue: drop the stale push.
+        if (gen !== generation) return false;
+        try {
+          await target.setStatusWidget(payload);
+          return true;
+        } catch {
+          // Retry on the next change if the native write failed.
+          if (lastKey === key && gen === generation) lastKey = null;
+          return false;
+        }
+      });
     },
-    async clear(filter?: string | ClearStatusWidgetFilter): Promise<void> {
+    clear(filter?: string | ClearStatusWidgetFilter): Promise<void> {
+      generation++;
       lastKey = null;
-      await target.clearStatusWidget(filter).catch(() => {});
+      return enqueue(async () => {
+        await target.clearStatusWidget(filter).catch(() => {});
+      });
     },
     reset(): void {
+      generation++;
       lastKey = null;
     },
   };
