@@ -313,8 +313,10 @@ func TestRuntimeRestartBetweenProbes(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.eventually("facts after a quick restart", factsCurrent(w, testworld.Factory), detail)
-		if l, _ := w.Runtime.ClaimLookup(); l == nil {
-			t.Fatal("no lease push after the restart")
-		}
+		// The lease follows the facts and the claim window in the same hand-over, so it may land a moment later.
+		h.eventually("lease push after the restart", func() bool {
+			l, _ := w.Runtime.ClaimLookup()
+			return l != nil
+		}, detail)
 	}
 }
