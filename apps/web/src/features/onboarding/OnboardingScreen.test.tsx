@@ -168,20 +168,46 @@ describe('OnboardingScreen (mocked server)', () => {
     expect(screen.getByText('STEP 2 OF 3')).toBeTruthy();
   }
 
-  it('on the box’s own page carries on the claim’s count: the claim’s steps done, then 5, 6 and 7 of 7 (FDY-32)', async () => {
+  it('on the box’s own page asks only Set up your AI: the Whombat is made with the person’s name, the agent is Dusty', async () => {
     const user = userEvent.setup();
-    const services = mockedServices(mockServer({ calls: [] }));
-    // The box's own page after its setup: only `page` matters here.
-    Object.assign(services, { managed: { page: { kind: 'box', secure: true, atAddress: true } } });
-    renderApp('/onboarding', services);
-    await screen.findByRole('heading', { name: 'Name your Whombat' });
-    expect(screen.getByText('STEP 5 OF 7')).toBeTruthy();
-    for (const done of ['Claim your Whombat', 'Who are you?', 'Make its passkey', 'Protect your Whombat'])
-      expect(screen.getByText(done)).toBeTruthy();
-    await user.type(screen.getByLabelText('WHOMBAT NAME'), 'Acme Corp');
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const services = mockedServices(mockServer({ calls }));
+    // The box's own page after its setup from the link page: only `page` matters here.
+    Object.assign(services, {
+      managed: { page: { kind: 'box', secure: true, atAddress: true, fromLink: true, knowsAccount: true } },
+    });
+    const app = renderApp('/onboarding', services);
     await screen.findByRole('heading', { name: 'Set up your AI' });
-    expect(screen.getByText('STEP 6 OF 7')).toBeTruthy();
+    expect(screen.getByText('STEP 4 OF 4')).toBeTruthy();
+    for (const done of ['Link your Whombat', 'Claim your Whombat', 'Make its passkey'])
+      expect(screen.getByText(done)).toBeTruthy();
+    for (const gone of ['Who are you?', 'Protect your Whombat', 'Name your Whombat', 'Meet your agent'])
+      expect(screen.queryByText(gone)).toBeNull();
+    // Made by itself, named after the person (the seeded account's first name).
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === '/burrows')).toBeTruthy());
+    const name =
+      (calls.find((c) => c.path === '/burrows')?.body as { name?: string } | undefined)?.name ?? '';
+    expect(name).toMatch(/’s Whombat$/);
+    const named = await screen.findByTestId('onboarding-named');
+    expect(named.textContent).toContain(name);
+    expect(named.textContent).toContain('Dusty');
+    expect(named.textContent).toContain('Settings');
+    // No way back to a name step; skipping the AI opens the Whombat with Dusty as it is.
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: AI_STEP_TEXT.skip }));
+    await waitFor(() => expect(app.location()).not.toMatch(/^\/onboarding/));
+    expect(calls.some((c) => c.path.endsWith('/onboarding/complete'))).toBe(true);
+    expect(calls.some((c) => c.method === 'PATCH' && 'agentName' in ((c.body as object) ?? {}))).toBe(false);
+  });
+
+  it('on the box’s own page opened another way, its count names Who are you? and still ends at 4', async () => {
+    const services = mockedServices(mockServer({ calls: [] }));
+    Object.assign(services, { managed: { page: { kind: 'box', secure: true, atAddress: false } } });
+    renderApp('/onboarding', services);
+    await screen.findByRole('heading', { name: 'Set up your AI' });
+    expect(screen.getByText('STEP 4 OF 4')).toBeTruthy();
+    for (const done of ['Claim your Whombat', 'Who are you?', 'Reach it from anywhere'])
+      expect(screen.getByText(done)).toBeTruthy();
   });
 
   it('creates the burrow, sets up Claude Code with a key, names the agent and finishes', async () => {

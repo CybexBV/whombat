@@ -10,7 +10,6 @@ import {
   agoText,
   appliancesEmptyText,
   BACKUP_OPTIONS_TEXT,
-  BACKUP_SETUP_TEXT,
   type ClaimCard,
   type ClaimRequest,
   COPY,
@@ -81,14 +80,12 @@ import { Input } from '../components/Input';
 import { SectionLabel } from '../components/SectionLabel';
 import { StatusDot } from '../components/StatusDot';
 import { SCREEN_MODE_TEXT } from '../features/screens/screenMode/model';
-import { savedNotes } from '../features/settings/BackupDestination';
 import { saveBlob } from '../lib/saveBlob';
 import { KeepWayBack, type KitChoices, KitPrintSheet, startingKitChoices } from './KitScreen';
 import { browserLabel } from './keys';
 import { noteKitSaved } from './kitRecord';
 import { LettersInput } from './LettersInput';
 import styles from './managed.module.css';
-import { ProtectPlaces } from './ProtectPlaces';
 
 export function ErrorLine({ text }: { text: string | null }) {
   return text ? (
@@ -1547,68 +1544,6 @@ export function RecoveryKitScreen({
       />
       {text ? <KitPrintSheet name={applianceName} kitText={text} /> : null}
     </>
-  );
-}
-
-/* Protect your Whombat (AP-260, UP-F1) ------------------------------------------------------------------- */
-
-/**
- * After the claim, before Connect your AI: where backups go, what is there first (`ProtectPlaces`, first-day.md).
- * Skippable; a Whombat that has a destination already, or whose status can't be read, goes straight on.
- */
-export function ProtectScreen({ session, onDone }: { session: ApplianceSession; onDone: () => void }) {
-  const T = BACKUP_SETUP_TEXT;
-  const [needed, setNeeded] = useState<boolean | null>(null);
-  const [saved, setSaved] = useState<string[] | null>(null);
-  /** “Let {assistant} set it up”: the yes is kept, said before going on. */
-  const [said, setSaid] = useState<string | null>(null);
-  const done = useRef(onDone);
-  done.current = onDone;
-  useEffect(() => {
-    let live = true;
-    sessionOps.applianceStatus(session).then(
-      (s) => {
-        if (!live) return;
-        if (s.backup.state === 'unprotected') setNeeded(true);
-        else done.current();
-      },
-      () => live && done.current(),
-    );
-    return () => {
-      live = false;
-    };
-  }, [session]);
-  if (!needed) return null;
-  return (
-    <AuthLayout kicker={T.kicker} title={T.title} sub={saved ? T.saved : (said ?? T.sub)} tip={T.tip}>
-      {said ? (
-        <div className={styles.actions}>
-          <Button variant="primary" size="lg" onClick={onDone}>
-            {T.continue}
-          </Button>
-        </div>
-      ) : saved ? (
-        <>
-          {saved.map((note) => (
-            <p key={note} className={styles.status} role="status">
-              {note}
-            </p>
-          ))}
-          <div className={styles.actions}>
-            <Button variant="primary" size="lg" onClick={onDone}>
-              {T.continue}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <ProtectPlaces
-          session={session}
-          onSaved={(result) => setSaved(savedNotes(result))}
-          onAssistant={setSaid}
-          onDone={onDone}
-        />
-      )}
-    </AuthLayout>
   );
 }
 

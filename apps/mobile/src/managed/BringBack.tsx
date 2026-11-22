@@ -20,7 +20,6 @@ import {
   bringBackName,
   type ControlApi,
   capital,
-  claimStepKicker,
   kitFromScan,
   kitsFromNetwork,
   longDate,
@@ -403,7 +402,7 @@ export function BringBackFlow(props: BringBackProps) {
   switch (step.kind) {
     case 'question':
       return (
-        <Frame kicker={claimStepKicker('protect')} title={B.question} sub={B.questionLead}>
+        <Frame kicker={B.kicker} title={B.question} sub={B.questionLead}>
           <View accessibilityRole="radiogroup" style={{ gap: 10 }}>
             <ChoiceCard
               title={B.fresh}

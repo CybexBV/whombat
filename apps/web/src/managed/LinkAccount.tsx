@@ -8,12 +8,16 @@
  * containers talk to control; the screens only show what they are given.
  */
 import {
+  BOX_SETUP_TEXT,
   billingRedirectUrl,
   COPY,
   type ControlApi,
   ControlError,
   type ControlSession,
+  LINK_JOURNEY_STEPS,
+  LINK_OPEN_FALLBACK_MS,
   type LinkAccount,
+  type LinkAddressStage,
   type LinkCheckoutInput,
   type LinkCountryChoice,
   type LinkedBox,
@@ -52,7 +56,7 @@ import {
 } from '@whombat/client/managed';
 import { normalizeLinkCode } from '@whombat/protocol';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
-import { AuthLayout } from '../app/auth/AuthLayout';
+import { AuthLayout, type AuthStep } from '../app/auth/AuthLayout';
 import { Button, ButtonLink } from '../components/Button';
 import { Input } from '../components/Input';
 import { SegmentedControl } from '../components/SegmentedControl';
@@ -168,13 +172,50 @@ export type LinkStep =
   | { kind: 'done'; box: LinkedBox; trial: boolean };
 
 /**
- * After linking, the Whombat's own page: still waiting for its address, waited long enough to say so, or ready to open
- * (`claim`: nobody has set it up yet, so its page opens on the claim with the name and email from here).
+ * After linking, the Whombat's own page: still waiting for its address or for its page to answer, waited long enough to
+ * say so, or ready to open (`claim`: nobody has set it up yet, so its page opens by itself on the claim with the name and
+ * email from here; `button`: the button shows, for a Whombat set up already or when the page didn't open by itself).
  */
 export type LinkAddress =
-  | { kind: 'waiting' }
+  | { kind: 'waiting'; stage: LinkAddressStage }
   | { kind: 'slow' }
-  | { kind: 'ready'; url: string; claim: boolean };
+  | { kind: 'ready'; url: string; claim: boolean; button: boolean };
+
+/**
+ * While a new Whombat is linked, the link page is the setup's first step: the box's page that opens next carries on
+ * this count (`done`: linked, waiting for that page).
+ */
+function linkJourney(done: boolean): { kicker: string; steps: AuthStep[] } {
+  return {
+    kicker: BOX_SETUP_TEXT.stepLabel(0, LINK_JOURNEY_STEPS.length),
+    steps: LINK_JOURNEY_STEPS.map((s, i) => ({
+      ...BOX_SETUP_TEXT.steps[s],
+      state: i === 0 ? (done ? 'done' : 'current') : 'todo',
+    })),
+  };
+}
+
+/** The wait after linking, step by step, so the person sees it moving. */
+function LinkProgress({ address }: { address: LinkAddress }) {
+  const P = T.progress;
+  const at = address.kind === 'ready' ? 3 : address.kind === 'waiting' && address.stage === 'page' ? 2 : 1;
+  const items = [P.linked, P.address, P.page, P.open];
+  return (
+    <ol className={styles.progress} aria-label={T.addressWaiting} data-testid="link-progress">
+      {items.map((text, i) => {
+        const state = i < at ? 'done' : i === at && address.kind !== 'slow' ? 'current' : 'todo';
+        return (
+          <li key={text} className={styles.progressItem} data-state={state}>
+            <span className={styles.progressMark} aria-hidden="true">
+              {state === 'done' ? '✓' : null}
+            </span>
+            <span>{text}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 export interface LinkCodeScreenProps {
   step: LinkStep;
@@ -239,18 +280,24 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
           : address.kind === 'slow'
             ? T.addressSlow
             : address.claim
-              ? T.addressReady
+              ? T.addressOpening
               : T.addressOpen;
+    // A new Whombat: this page was the setup's first step, and its own page carries on the count.
+    const journey = runs && step.box.name === null ? linkJourney(true) : null;
     return (
       <AuthLayout
-        kicker={T.kicker}
+        kicker={journey?.kicker ?? T.kicker}
         title={T.doneTitle(name)}
         sub={<span role="status">{sub}</span>}
         tip={T.tip}
+        {...(journey && { steps: journey.steps })}
       >
+        {address && address.kind !== 'slow' && (ready === null || ready.claim) && (
+          <LinkProgress address={address} />
+        )}
         {step.trial && <p className={styles.status}>{T.trial}</p>}
         <div className={styles.actions}>
-          {ready && (
+          {ready?.button && (
             <ButtonLink variant="primary" size="lg" href={ready.url} data-testid="link-claim-now">
               {ready.claim ? T.claimNow : T.openName(name)}
             </ButtonLink>
@@ -264,7 +311,7 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
             {T.toAccount}
           </Button>
         </div>
-        {ready && <p className={styles.hint}>{T.addressNotYet}</p>}
+        {ready?.claim && ready.button && <p className={styles.hint}>{T.openNotYet}</p>}
       </AuthLayout>
     );
   }
@@ -276,12 +323,15 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
     const after = lookup.trial ? T.trial : runs ? `${T.joins} ${price}` : `${T.needsPlan} ${price}`;
     // A control that asks for the terms names their version; an older one takes none.
     const askTerms = !lookup.linked && lookup.termsVersion !== undefined;
+    // A Whombat nobody set up yet (it has no name): linking it is the setup's first step.
+    const journey = !lookup.linked && lookup.name === null ? linkJourney(false) : null;
     return (
       <AuthLayout
-        kicker={T.kicker}
+        kicker={journey?.kicker ?? T.kicker}
         title={lookup.linked ? T.alreadyTitle(lookup.name ?? T.yourWhombatTitle) : T.confirmTitle(name)}
         sub={lookup.name || lookup.linked ? T.what : `${T.showing(lookup.code)} ${T.what}`}
         tip={T.tip}
+        {...(journey && { steps: journey.steps })}
       >
         {!lookup.linked && (
           <div className={styles.notice} data-testid="link-terms">
@@ -383,38 +433,57 @@ function linkedBoxRuns(box: Pick<LinkedBox, 'state'>): boolean {
   return box.state !== 'ended' && box.state !== 'off';
 }
 
+/** Opens the Whombat's page in this tab. */
+function openInThisTab(url: string) {
+  window.location.assign(url);
+}
+
 /**
  * Once a Whombat is linked: waits for its own address (`pollLinkAddress`), and stops when the page closes or the step
- * changes. A Whombat nobody set up yet (an Easy box links before its setup asks for one) opens on its claim: its claim
- * link when control has it, so only the four letters on its screen are left to type, with the account's name and
- * email in the fragment, which never reaches a server.
+ * changes. A Whombat nobody set up yet (an Easy box links before its setup asks for one) opens by itself on its claim:
+ * its claim link when control has it, so only the four letters on its screen are left to type, with the account's name
+ * and email in the fragment, which never reaches a server, and the mark that the setup's count goes on from here. The
+ * button shows only if the page is still here a while later (the browser didn't go). A Whombat set up already isn't
+ * opened unasked: its owner chooses.
  */
 function useLinkAddress(
   control: ControlApi,
   step: LinkStep,
   session: ControlSession | undefined,
+  open: (url: string) => void,
 ): { address: LinkAddress | null; checkAgain: () => void } {
   const [address, setAddress] = useState<LinkAddress | null>(null);
   const [run, setRun] = useState(0);
   const device = step.kind === 'done' && linkedBoxRuns(step.box) ? step.box.device : null;
   const name = session?.account.name ?? '';
   const email = session?.account.email ?? '';
+  const opener = useRef(open);
+  opener.current = open;
   useEffect(() => {
     const load = control.linkAccount;
     if (!device || !load || run < 0) return setAddress(null);
     let live = true;
-    setAddress({ kind: 'waiting' });
-    void pollLinkAddress({ device, load: () => load(), live: () => live }).then((out) => {
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    setAddress({ kind: 'waiting', stage: 'address' });
+    const onStage = (stage: LinkAddressStage) =>
+      setAddress((now) =>
+        now?.kind === 'waiting' && now.stage === stage ? now : { kind: 'waiting', stage },
+      );
+    void pollLinkAddress({ device, load: () => load(), onStage, live: () => live }).then((out) => {
       if (!live || out === 'stopped') return;
       if (out === 'timeout') return setAddress({ kind: 'slow' });
-      setAddress({
-        kind: 'ready',
-        url: out.claim ? `${out.url}${ownClaimPrefillHash({ name, email })}` : out.url,
-        claim: out.claim,
-      });
+      if (!out.claim) return setAddress({ kind: 'ready', url: out.url, claim: false, button: true });
+      const url = `${out.url}${ownClaimPrefillHash({ name, email, fromLink: true })}`;
+      setAddress({ kind: 'ready', url, claim: true, button: false });
+      fallback = setTimeout(
+        () => live && setAddress({ kind: 'ready', url, claim: true, button: true }),
+        LINK_OPEN_FALLBACK_MS,
+      );
+      opener.current(url);
     });
     return () => {
       live = false;
+      clearTimeout(fallback);
     };
   }, [control, device, run, name, email]);
   return { address, checkAgain: () => setRun((n) => n + 1) };
@@ -426,6 +495,7 @@ export function LinkCodeFlow({
   initialCode,
   billingRedirectOrigins,
   onAccount,
+  openPage = openInThisTab,
 }: {
   control: ControlApi;
   /** Who is signed in: their name and email go along to the claim on the Whombat's own page. */
@@ -433,10 +503,12 @@ export function LinkCodeFlow({
   initialCode: string | null;
   billingRedirectOrigins?: readonly string[];
   onAccount: () => void;
+  /** Opens a new Whombat's page once it answers (this tab; tests pass their own). */
+  openPage?: (url: string) => void;
 }) {
   const [code, setCode] = useState(initialCode ?? '');
   const [step, setStep] = useState<LinkStep>({ kind: 'enter' });
-  const { address, checkAgain } = useLinkAddress(control, step, session);
+  const { address, checkAgain } = useLinkAddress(control, step, session, openPage);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsCard, setNeedsCard] = useState<string | null>(null);

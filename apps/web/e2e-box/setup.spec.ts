@@ -1,6 +1,6 @@
 /**
  * The one setup on a box's own page (whombat-link.md LNK-40): the letters from its screen, who you are, Tailscale with
- * your own login server and the advice on key expiry, Whombat Link offered once (never a gate), backups, Connect your AI;
+ * your own login server and the advice on key expiry, Whombat Link offered once (never a gate), Connect your AI;
  * a wrong guess goes back to the letters, which the box changed.
  */
 import { expect, test } from '@playwright/test';

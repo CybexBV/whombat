@@ -1,6 +1,7 @@
 /**
  * Updates on the clients (updates.md UP-E4, UP-F1; AP-257…AP-260): what you're told about updates in Settings →
- * This Whombat, and “Protect your Whombat” after the claim. Versions are one check (HE-52; `appliance.spec.ts`).
+ * This Whombat, and where backups go, set in Settings after the claim. Versions are one check (HE-52;
+ * `appliance.spec.ts`).
  */
 import { expect, type Page, test } from '@playwright/test';
 import {
@@ -149,7 +150,7 @@ test('updates: one that needs a backup says so, and you set up a destination fro
   await expect(backups.getByText('A new place needs a new recovery kit', { exact: false })).toHaveCount(0);
 });
 
-test('Protect your Whombat after the claim: an SFTP server with this Whombat’s key; a kit made later carries it', async ({
+test('backups to an SFTP server with this Whombat’s key, set in Settings after the claim; a kit made later carries it', async ({
   page,
 }) => {
   await fresh(page);
@@ -164,32 +165,31 @@ test('Protect your Whombat after the claim: an SFTP server with this Whombat’s
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
 
+  // Where backups go isn't a step of the claim: on to Connect your AI.
   await startFresh(page);
-
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
-  await expect(page.getByText('CLAIM · STEP 2 OF 3')).toBeVisible();
-  // A server over SFTP is one of the other places, after what is there (first-day.md FDY-20).
-  await page.getByRole('button', { name: /Other places/ }).click();
-  await page.getByRole('radio', { name: /A NAS or server \(SFTP\)/ }).check();
-  await expect(page.getByTestId('backup-ssh-key')).toContainText(`whombat-backup@${c.device}`);
-  await page.getByRole('button', { name: 'Save and check' }).click();
-  await expect(page.getByText('Enter the server’s name or address.')).toBeVisible();
-  await page.getByLabel('Server', { exact: true }).fill('nas.burrowhq.example');
-  await page.getByLabel('Folder on the server').fill('/srv/whombat');
-  await page.getByLabel('User', { exact: true }).fill('whombat');
-  await page.getByRole('button', { name: 'Save and check' }).click();
-  await expect(
-    page.getByText('Compare this with your server’s host key fingerprint: SHA256:', { exact: false }),
-  ).toBeVisible();
-  // No kit step any more (BX-01): Continue opens the Whombat; a kit made from Settings carries the destination.
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByText('CLAIM · STEP 2 OF 2')).toBeVisible({ timeout: 20_000 });
   await skipConnectAi(page);
   await expect(page.locator('[data-screen]').first()).toBeVisible({ timeout: 20_000 });
+
+  await page.goto(`${B}/settings?tab=appliance&section=backups`);
+  const backups = page.getByRole('region', { name: 'BACKUPS' });
+  await backups.getByRole('button', { name: 'Set up backups' }).click();
+  await backups.getByRole('radio', { name: /A NAS or server \(SFTP\)/ }).check();
+  await expect(backups.getByTestId('backup-ssh-key')).toContainText(`whombat-backup@${c.device}`);
+  await backups.getByRole('button', { name: 'Save and check' }).click();
+  await expect(backups.getByText('Enter the server’s name or address.')).toBeVisible();
+  await backups.getByLabel('Server', { exact: true }).fill('nas.burrowhq.example');
+  await backups.getByLabel('Folder on the server').fill('/srv/whombat');
+  await backups.getByLabel('User', { exact: true }).fill('whombat');
+  await backups.getByRole('button', { name: 'Save and check' }).click();
+  await expect(
+    backups.getByText('Compare this with your server’s host key fingerprint: SHA256:', { exact: false }),
+  ).toBeVisible();
   const { kitText } = await makeKit(page, c.device);
   expect(kitText).toContain('Destination: sftp:nas.burrowhq.example:/srv/whombat');
 });
 
-test('Protect your Whombat: skipped, Settings says what that blocks', async ({ page }) => {
+test('no backups yet: Settings says what that blocks', async ({ page }) => {
   await setup(page);
   await page.goto(`${B}/settings?tab=appliance&section=backups`);
   const backups = page.getByRole('region', { name: 'BACKUPS' });

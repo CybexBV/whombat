@@ -2,8 +2,8 @@
  * Where a managed Whombat's backups go, on the phone (AP-260; the web's `BackupDestination`, contracts 0.22 CT-142):
  * the kinds as radio rows (44dp, TalkBack says which is chosen), then the kind's fields — an S3-compatible bucket, an
  * SFTP server or NAS (this Whombat's key to add to the server, shared through the share sheet), a restic REST server,
- * a disk labelled `WHOMBAT-BACKUP`. Used by the claim's “Protect your Whombat” step and This Whombat → BACKUPS. The
- * words and the repository they make are `@whombat/client/managed`'s, the same as the web's.
+ * a disk labelled `WHOMBAT-BACKUP`. Used by This Whombat → BACKUPS. The words and the repository they make are
+ * `@whombat/client/managed`'s, the same as the web's.
  */
 import {
   ACCOUNTS_TEXT,

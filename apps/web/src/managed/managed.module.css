@@ -486,3 +486,68 @@
     min-width: min(240px, 100%);
   }
 }
+
+/* The wait after linking, step by step: what is done, what it is doing now (turning), what is next. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progressItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--mut);
+  font-size: 15px;
+}
+
+.progressItem[data-state="done"],
+.progressItem[data-state="current"] {
+  color: var(--ink);
+}
+
+.progressMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  font: 600 11px var(--font-mono);
+}
+
+.progressItem[data-state="done"] .progressMark {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--on-solid);
+}
+
+.progressItem[data-state="current"] .progressMark {
+  border-color: var(--line);
+  border-top-color: var(--ink);
+  animation: progress-turn 0.9s linear infinite;
+}
+
+@keyframes progress-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressItem[data-state="current"] .progressMark {
+    animation: progress-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes progress-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}

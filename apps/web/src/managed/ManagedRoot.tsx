@@ -124,7 +124,6 @@ import {
   PasskeyProgressScreen,
   type PasskeySignIn,
   PasskeyStopScreen,
-  ProtectScreen,
   RecoverScreen,
   RecoveryKitScreen,
   ScreenSignInScreen,
@@ -891,8 +890,8 @@ function SignedIn({
             { replacePin: true },
           );
           registry.setLastUsed(device);
-          // A new Whombat or one brought back (backup-options.md AP-6830); then where backups go (UP-F1, AP-260) and
-          // the Whombat: no recovery kit at the claim any more (BX-01).
+          // A new Whombat or one brought back (backup-options.md AP-6830); then Connect your AI and the Whombat. Where
+          // backups go is Needs you's proposal, not a step here, and there's no recovery kit at the claim (BX-01).
           navigate(`/appliances/${device}/start`);
         }}
       />
@@ -906,7 +905,7 @@ function SignedIn({
         keyPair={keyPair}
         known={known}
         email={cloud.account.email}
-        onFresh={() => navigate(at(known.device, 'protect'))}
+        onFresh={() => navigate('/connect-ai')}
         onOpenChat={() => navigate('/chat')}
         onList={() => navigate('/appliances')}
       />
@@ -928,12 +927,8 @@ function SignedIn({
       />
     );
   }
-  if (protectMatch?.[1]) {
-    const known = registry.get(decodeURIComponent(protectMatch[1]));
-    if (!known) return <GoTo navigate={navigate} to="/appliances" />;
-    // Then Connect your AI, the claim's last step, in the Whombat itself (first-day.md).
-    return <ProtectFlow env={env} keyPair={keyPair} known={known} onDone={() => navigate('/connect-ai')} />;
-  }
+  // Where backups go isn't a step of the claim any more (Needs you proposes a place): an open page of it goes on.
+  if (protectMatch?.[1]) return <GoTo navigate={navigate} to="/connect-ai" />;
   // “Make a kit” from Settings · This Whombat (BX-01): no longer a step of the claim.
   if (kitMatch?.[1]) {
     const known = registry.get(decodeURIComponent(kitMatch[1]));
@@ -1539,22 +1534,6 @@ function StartFlow({
       onList={onList}
     />
   );
-}
-
-function ProtectFlow({
-  env,
-  keyPair,
-  known,
-  onDone,
-}: {
-  env: ManagedEnvironment;
-  keyPair: EndpointKey;
-  known: { orgId: string; device: string; peerId: string };
-  onDone: () => void;
-}) {
-  const session = useAppSession(env, keyPair, known, 'app');
-  if (!session) return null;
-  return <ProtectScreen session={session} onDone={onDone} />;
 }
 
 function PairFlow({

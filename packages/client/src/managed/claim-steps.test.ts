@@ -1,7 +1,6 @@
 import type { ClientStatus, ProviderSignIn } from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import type { ClientsList, SignInsList } from '../signins/model';
-import { BACKUP_SETUP_TEXT, PROTECT_OTHER_KINDS, protectFoundPlace } from './backup-setup';
 import {
   CLAIM_STEPS,
   CONNECT_AI_PROVIDERS,
@@ -41,12 +40,11 @@ const signIns = (...ready: ('claude' | 'codex')[]): SignInsList => ({
 });
 
 describe('the claim’s steps (first-day.md)', () => {
-  it('are three, numbered on each step', () => {
-    expect(CLAIM_STEPS).toEqual(['claim', 'protect', 'ai']);
-    expect(COPY.claim.kicker).toBe('CLAIM · STEP 1 OF 3');
-    expect(BACKUP_SETUP_TEXT.kicker).toBe('CLAIM · STEP 2 OF 3');
+  it('are two, numbered on each step: where backups go isn’t one of them', () => {
+    expect(CLAIM_STEPS).toEqual(['claim', 'ai']);
+    expect(COPY.claim.kicker).toBe('CLAIM · STEP 1 OF 2');
     expect(CONNECT_AI_TEXT.kicker).toBe(claimStepKicker('ai'));
-    expect(claimStepKicker('ai')).toBe('CLAIM · STEP 3 OF 3');
+    expect(claimStepKicker('ai')).toBe('CLAIM · STEP 2 OF 2');
   });
 
   it('offers ChatGPT first: it needs nothing installed', () => {
@@ -82,33 +80,5 @@ describe('Connect your AI (first-day.md)', () => {
     expect(readyProviders(clients(), signIns('claude', 'codex'))).toEqual(['codex', 'claude']);
     expect(CONNECT_AI_TEXT.ready(['codex'], 'Dusty')).toContain('ChatGPT');
     expect(CONNECT_AI_TEXT.ready(['codex', 'claude'], 'Dusty')).toContain('ChatGPT and Claude Code');
-  });
-});
-
-describe('Protect your Whombat offers what is there first (first-day.md)', () => {
-  const found = (catalogId: string, host: string, over: { hidden?: boolean; serverIds?: string[] } = {}) => ({
-    catalogId,
-    host,
-    ...over,
-  });
-
-  it('a NAS the scan found, in the assistant’s order; not one hidden or added as a server', () => {
-    expect(
-      protectFoundPlace([
-        found('homeassistant', '10.0.0.2'),
-        found('qnap', '10.0.0.9'),
-        found('synology', '10.0.0.8'),
-      ]),
-    ).toEqual({
-      title: 'The Synology NAS at 10.0.0.8',
-      host: '10.0.0.8',
-    });
-    expect(protectFoundPlace([found('synology', '10.0.0.8', { hidden: true })])).toBeNull();
-    expect(protectFoundPlace([found('unraid', '10.0.0.7', { serverIds: ['tower'] })])).toBeNull();
-  });
-
-  it('keeps a bucket, SFTP and a REST server under Other places; the disk is its own', () => {
-    expect(PROTECT_OTHER_KINDS).toEqual(['s3', 'sftp', 'rest']);
-    expect(BACKUP_SETUP_TEXT.places.later('Dusty')).toContain('Dusty');
   });
 });

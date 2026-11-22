@@ -2,8 +2,8 @@
  * Choosing where a managed Whombat's backups go (AP-260, updates.md UP-F1; contracts 0.22 CT-142): an S3-compatible
  * bucket, an SFTP server or NAS (this Whombat's own key goes into the server's `authorized_keys`; the server's host key
  * is pinned, pasted or trusted on first use and shown to compare), a restic REST server, or a disk labelled
- * `WHOMBAT-BACKUP` on its machine. The same form is the claim's “Protect your Whombat” step and Settings → This
- * Whombat → BACKUPS. A Whombat before contracts 0.22 (no `backup.destinations`) takes the REST server only.
+ * `WHOMBAT-BACKUP` on its machine, in Settings → This Whombat → BACKUPS. A Whombat before contracts 0.22 (no
+ * `backup.destinations`) takes the REST server only.
  *
  * Secrets travel only in the `secret` op `backup.configureDestination` and are cleared from the form once sent.
  * Not in the mocks: onboarding's choice cards (the Billing page's) and the settings' fields.

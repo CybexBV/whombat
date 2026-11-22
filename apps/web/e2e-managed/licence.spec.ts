@@ -75,7 +75,7 @@ test('the terms at claim: the claim waits for the tick, the terms page is public
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
   expect(await fake<string[]>(page, 'claimTerms')).toEqual(['2026-11-19']);
 });
 

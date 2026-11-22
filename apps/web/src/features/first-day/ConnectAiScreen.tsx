@@ -1,12 +1,14 @@
 /**
- * Connect your AI, the claim's third step (Whombat first-day.md): right after “Protect your Whombat”, before the
- * Whombat opens. The person picks ChatGPT or Claude Code and signs in with the same rows as Settings → AI
+ * Connect your AI, the claim's last step (Whombat first-day.md): right after the claim, before the Whombat opens. The person picks ChatGPT or Claude Code and signs in with the same rows as Settings → AI
  * (`SignInRow`: ChatGPT's device code, Claude Code's own sign-in), so the assistant can answer from the first message.
  * Asked only while nothing is ready: a Whombat with a provider ready already, or whose sign-ins can't be read, opens at
  * once. Later opens the Whombat, where the line above Chat says the assistant can't work yet.
  */
 import {
+  BOX_SETUP_TEXT,
+  type BoxSetupPage,
   boxSetupAiKicker,
+  boxSetupSteps,
   CONNECT_AI_PROVIDERS,
   CONNECT_AI_TEXT,
   connectAiStep,
@@ -33,8 +35,11 @@ export interface ConnectAiScreenProps {
   onDone: () => void;
   /** Tests: a terminal without xterm. */
   terminal?: SignInRowProps['terminal'];
-  /** On the box's own page this step ends the box's setup: its kicker carries on that count (“STEP 5 OF 5”). */
-  afterBoxSetup?: boolean;
+  /**
+   * On the box's own page this step ends the box's setup: its kicker carries on that count (“STEP 4 OF 4”) and the
+   * aside shows the setup's steps before it done.
+   */
+  afterBoxSetup?: BoxSetupPage | null;
 }
 
 export function ConnectAiScreen({ burrow, onDone, terminal, afterBoxSetup }: ConnectAiScreenProps) {
@@ -68,6 +73,12 @@ export function ConnectAiScreen({ burrow, onDone, terminal, afterBoxSetup }: Con
       title={T.title}
       sub={T.sub(words.Name)}
       tip={T.tip}
+      {...(afterBoxSetup && {
+        steps: boxSetupSteps(afterBoxSetup).map((s) => ({
+          ...BOX_SETUP_TEXT.steps[s],
+          state: s === 'ai' ? ('current' as const) : ('done' as const),
+        })),
+      })}
     >
       {step === 'checking' ? (
         <p className={styles.status} role="status">

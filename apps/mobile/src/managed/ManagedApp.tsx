@@ -132,7 +132,6 @@ import {
   PairScreen,
   PasskeyProgressScreen,
   PasskeyStopScreen,
-  ProtectScreen,
   RecoverScreen,
   RecoveryKitScreen,
   SetupScreen,
@@ -148,14 +147,15 @@ type Route =
   /** `found`: what the empty list just found on this network (AP-75), shown without asking again. */
   | { name: 'claim'; card?: ClaimCard; found?: NearbyClaimStep }
   /**
-   * Right after the claim: “Is this a new Whombat?” — Start fresh goes on to `protect`, Bring back brings an earlier
+   * Right after the claim: “Is this a new Whombat?” — Start fresh goes on to `ai`, Bring back brings an earlier
    * Whombat back from its backups (backup-options-android.md AP-6859) and then opens it.
    */
   /** Bringing a Whombat back: after the claim, or from the app's Backups (`later`: where it stands, or replacing). */
   | { name: 'restore'; device: string; later?: 'resume' | 'replace' }
-  /** Where backups go (UP-F1, AP-260), then the AI (no kit step, BX-01, AP-3525). */
-  | { name: 'protect'; device: string }
-  /** The claim's last step, Connect your AI (Whombat first-day.md), then the Whombat. */
+  /**
+   * The claim's last step, Connect your AI (Whombat first-day.md), then the Whombat. Where backups go isn't asked:
+   * Needs you proposes a place (no kit step either, BX-01, AP-3525).
+   */
   | { name: 'ai'; device: string }
   /** A recovery kit made from This Whombat (BX-01): back to it afterwards. */
   | { name: 'kit'; device: string }
@@ -1142,24 +1142,12 @@ function SignedIn({
         known={known}
         email={cloud.account.email}
         {...(route.later ? { later: route.later } : {})}
-        onFresh={() => setRoute(route.later ? { name: 'open' } : { name: 'protect', device: known.device })}
+        onFresh={() => setRoute(route.later ? { name: 'open' } : { name: 'ai', device: known.device })}
         onDone={(name) => {
           if (name) registry.put({ ...known, name });
           setRoute({ name: 'open' });
         }}
         onCancel={() => setRoute({ name: 'open' })}
-      />
-    );
-  }
-  if (route.name === 'protect') {
-    const known = registry.get(route.device);
-    if (!known) return <GoTo go={toAppliances} />;
-    return (
-      <ProtectFlow
-        env={env}
-        keyPair={keyPair}
-        known={known}
-        onDone={() => setRoute({ name: 'ai', device: route.device })}
       />
     );
   }
@@ -1552,27 +1540,6 @@ function ClaimFlow({
   if (step.kind === 'none')
     return <ClaimNoneScreen onLookAgain={lookAgain} onCard={toCard} onBack={onBack} />;
   return <ClaimCardScreen {...common} initial={card} onCode={() => go(codeStep)} />;
-}
-
-function ProtectFlow({
-  env,
-  keyPair,
-  known,
-  onDone,
-}: {
-  env: ManagedEnvironment;
-  keyPair: EndpointKey;
-  known: KnownAppliance;
-  onDone: () => void;
-}) {
-  const session = useFlowSession(env, keyPair, known, 'app');
-  if (!session)
-    return (
-      <Screen>
-        <Loading />
-      </Screen>
-    );
-  return <ProtectScreen session={session} onDone={onDone} />;
 }
 
 function BringBackRoute({

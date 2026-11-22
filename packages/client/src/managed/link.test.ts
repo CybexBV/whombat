@@ -579,16 +579,20 @@ describe('after linking, waiting for the Whombat’s own address', () => {
   it('opens a Whombat nobody set up yet on its claim link as soon as control has it', async () => {
     const answers = [starting, unclaimed, unclaimed, withLink];
     let asked = 0;
+    const stages: string[] = [];
     const out = await pollLinkAddress({
       device: unclaimed.device,
       load: async () => {
         asked += 1;
         return { plan: plan(), boxes: [answers.shift() ?? withLink] };
       },
+      onStage: (stage) => stages.push(stage),
       ...clock(),
     });
     expect(out).toMatchObject({ url: `https://${host}/c/pqrtvw`, claim: true });
     expect(asked).toBe(4);
+    // What the page shows meanwhile: its address first, then its page answering.
+    expect(stages).toEqual(['address', 'page', 'page']);
   });
 
   it('opens its page after a short wait when no claim link comes (an older Whombat or control)', async () => {

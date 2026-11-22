@@ -124,11 +124,12 @@ full set.
   internet holds a place the person at home needs. Nothing a visitor does changes the claim link: a wrong one is a try
   of the visitor's own address, ten different ones an hour (`own-address/claim-link.ts`). While nobody claimed the box
   and its page works, the runtime hands the link to the manager, which sends it to control with `link.status`; control
-  shows it only to the account the box is linked to, so the account site's Claim it now opens the claim itself
-  (`own-address/claim-handover.ts`). Under the claim link the
+  shows it only to the account the box is linked to, so the account site's link page opens the claim by itself once
+  the box's page answers, showing step by step what it waits for meanwhile (`own-address/claim-handover.ts`). Under the
+  claim link the
   screen names a second way in that nobody outside can keep busy, the Tailscale page or the address on the local
   network (`ConsoleState.fallbackUrl`)
-  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, LNK-79, [own-address.md](docs/decisions/own-address.md)
+  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, LNK-79…LNK-84, [own-address.md](docs/decisions/own-address.md)
   OWA-34…OWA-37, OWA-39). Other ways in: six letters on the box's own screen (`managed/screen-signin.ts`), pairing from another of the person's
   devices, a device link, a passkey the box verifies itself (`managed/passkeys.ts`) or the recovery kit. A passkey
   uses an owner public key in its authenticator user handle and signs the list of Whombats it opens. Control stores
@@ -1638,12 +1639,16 @@ Connections' title is one status sentence true to the worst state (`homeStatus` 
 `packages/client/src/home/greeting.ts`, with what the assistant fixed from Home's `doneToday`). What needs the person is
 the Inbox's (the phone's Inbox tab) alone: Chat carries no status line of its own, and its head has Files
 while there is a file to see ([status-line.md](docs/decisions/status-line.md)). Claiming a new
-Whombat (the hosted app's `ManagedRoot`, the phone's `ManagedApp`) is three steps — the claim, where backups go (what is
-there first: a NAS the scan found, a USB disk), and Connect your AI (`/connect-ai` in the box's own app on the web; on the
-phone ChatGPT's device code and Claude Code's own sign-in open the providers' pages in the in-app browser). On a box's
-own page the setup is one count of seven: the claim's four steps (`BoxSetup`), then onboarding's Name your Whombat, Set
-up your AI (Continue once an AI is signed in, or Skip for now) and Meet your agent, carrying on the count. Empty
-first screens show one step, not empty sections ([first-day.md](docs/decisions/first-day.md)). The hosted app is
+Whombat (the hosted app's `ManagedRoot`, the phone's `ManagedApp`) is two steps — the claim, and Connect your AI
+(`/connect-ai` in the box's own app on the web; on the phone ChatGPT's device code and Claude Code's own sign-in open the
+providers' pages in the in-app browser). Where backups go isn't a step: Needs you proposes a place. On a box's own page
+the setup is one count of four from the account site's link page to Chat: Link your Whombat (on the link page, shown
+done), Claim your Whombat (the four letters; the name and email come from the account site, or Who are you? asks for
+them when the page was opened another way), Make its passkey (it goes on by itself once made; elsewhere Reach it from
+anywhere) (`BoxSetup`, `boxSetupSteps`), then onboarding's Set up your AI (Continue once an AI is signed in, or Skip for
+now). The Whombat is made by itself as “Mara’s Whombat” with Dusty as its agent, both changed in Settings; onboarding
+elsewhere keeps Name your Whombat and Meet your agent. Empty first screens show one step, not empty sections
+([first-day.md](docs/decisions/first-day.md)). The hosted app is
 also the account site for Whombat Link: open sign-up by magic link, `/link` where a person enters the code their
 Whombat's screen shows and ticks the Subscription Terms, and Your Whombats (`/account`, `/billing`) with each Whombat's
 Open at its own address (the one this browser opened last first), the Link subscription by the month or the year with
