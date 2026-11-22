@@ -359,6 +359,8 @@ export function describePlannedAction(input: {
   uploadFile?: CardFile | null;
   summary?: string;
   names?: Readonly<Record<string, string>>;
+  /** The ids (`kind:id`) the service says it doesn't have: shown as they are, each with a line that says so. */
+  missing?: readonly string[];
 }): DescribedAction {
   const { tool, args } = input;
   const label = input.label.replace(/\s+/g, ' ').trim() || 'the service';
@@ -378,6 +380,8 @@ export function describePlannedAction(input: {
   const reading = readArgs(tool.origin, args);
   const refs = listedRefs(input.catalogId, tool, args);
   let unnamed = false;
+  const missing = new Set(input.missing ?? []);
+  const absent: string[] = [];
   for (const v of reading.values) {
     const ref = refs.find((r) => r.at.test(v.path));
     if (!ref) {
@@ -385,12 +389,19 @@ export function describePlannedAction(input: {
       continue;
     }
     const withName = (id: unknown) => {
-      const name = input.names?.[`${ref.kind}:${String(id)}`];
+      const key = `${ref.kind}:${String(id)}`;
+      if (missing.has(key)) {
+        const line = `${label} has no ${ref.what} ${visible(String(id))}.`;
+        if (!absent.includes(line)) absent.push(line);
+        return id;
+      }
+      const name = input.names?.[key];
       if (name === undefined) unnamed = true;
       return name === undefined ? id : namedId(name, id);
     };
     lines.push(...valueLines(v.path, Array.isArray(v.value) ? v.value.map(withName) : withName(v.value)));
   }
+  lines.push(...absent);
   if (unnamed) lines.push(`Whombat couldn’t look up some names in ${label}, so their ids are shown.`);
   const note = (input.summary ?? '').replace(/\s+/g, ' ').trim();
   if (note) lines.push(...valueLines('Agent’s note', note));

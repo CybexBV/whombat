@@ -78,6 +78,7 @@ import {
   setAutomationEnabled,
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
+import { notOfferedText } from './proposed-actions';
 import {
   BEFORE_FIRST_RELEASE,
   knownRelease,
@@ -1654,15 +1655,24 @@ describe('mail-arrives automations', () => {
       await w.fakeAgentReply(noTagDispatchId, 'Proposed uploading INV-2044.');
       await w.settle();
       const noTagSettled = await w.run(noTagRun.id);
-      expect(noTagSettled.steps[1]?.state).toBe('skipped');
-      expect(noTagSettled.steps[1]?.approvalId).toBeNull();
+      // A tag the service doesn't have doesn't refuse the card: the step waits for the person like any other, so what
+      // a later step reads of it is the same whether the tag is there or not, and only the person's card says so.
+      expect(noTagSettled.steps[1]?.state).toBe('waiting');
+      const [noTagCard] = await w.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.id, noTagSettled.steps[1]?.approvalId as string));
+      expect(noTagCard?.whatHappens).toContain('Paperless-ngx has no tag 99.');
+      expect(noTagCard?.whatHappens).toContain('upload.fields.tags: ["99"]');
       const [noTagStep] = await w.services.db
         .select()
         .from(automationRunSteps)
         .where(and(eq(automationRunSteps.runId, noTagRun.id), eq(automationRunSteps.idx, 1)));
-      expect((noTagStep?.output as { reason?: string } | undefined)?.reason).toBe(
-        'Paperless-ngx has no tag 99.',
-      );
+      expect(noTagStep?.output).not.toHaveProperty('reason');
+      // Declined, it reads like any other no.
+      await w.ok(IDS.mara, decideApproval, { number: noTagCard?.number as number, decision: 'decline' });
+      await w.settle();
+      expect((await w.run(noTagRun.id)).steps[1]?.state).toBe('skipped');
       expect(calls(seenPaperless).filter((c) => c.startsWith('GET'))).toEqual([
         'GET /api/tags/7/',
         'GET /api/tags/99/',
@@ -2615,7 +2625,7 @@ describe('mail-arrives automations', () => {
             summary: 'Upload invoice.pdf',
             arguments: { method: 'DELETE', path: '/api/documents/1/' },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'HTTP GET',
@@ -2625,7 +2635,7 @@ describe('mail-arrives automations', () => {
             summary: 'List docs',
             arguments: { method: 'GET', path: '/api/documents/' },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'HTTP HEAD',
@@ -2635,7 +2645,7 @@ describe('mail-arrives automations', () => {
             summary: 'Check docs',
             arguments: { method: 'HEAD', path: '/api/documents/' },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'read-only adapter tool',
@@ -2645,7 +2655,7 @@ describe('mail-arrives automations', () => {
             summary: 'List files',
             arguments: { path: '/' },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'delete adapter tool',
@@ -2655,7 +2665,7 @@ describe('mail-arrives automations', () => {
             summary: 'Delete file',
             arguments: { path: '/old.pdf' },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'bulk edit that deletes',
@@ -2669,7 +2679,7 @@ describe('mail-arrives automations', () => {
               body: { documents: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], method: 'delete', parameters: {} },
             },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'raw JSON text body that deletes',
@@ -2684,7 +2694,7 @@ describe('mail-arrives automations', () => {
               body: '{"documents":[1],"method":"delete","parameters":{}}',
             },
           },
-          expectedText: 'can’t propose this',
+          expectedText: 'can’t be proposed',
         },
         {
           name: 'a title longer than Paperless-ngx takes',
@@ -2728,6 +2738,80 @@ describe('mail-arrives automations', () => {
         const text = JSON.stringify(res.content);
         expect(text, tc.name).toContain(tc.expectedText);
         expect(text, tc.name).not.toContain(privateLabel);
+      }
+
+      // Whatever the person has, an action the turn wasn't offered is refused in the same words: a handle nobody has,
+      // a connection that can't take proposals, looks only, is signed out, a tool it lacks or that is off.
+      const upload = {
+        tool: 'request',
+        summary: 'Upload it',
+        arguments: {
+          method: 'POST',
+          path: '/api/documents/post_document/',
+          upload: { field: 'document', attachmentId: 'att_0123456789abcdefghij' },
+        },
+      };
+      const setPaperless = (set: Partial<typeof catalogConnections.$inferInsert>) =>
+        w.services.db.update(catalogConnections).set(set).where(eq(catalogConnections.id, plId));
+      const setTier = (tier: 'can' | 'off') =>
+        w.services.db
+          .update(connectionTools)
+          .set({ tier })
+          .where(and(eq(connectionTools.connectionId, plId), eq(connectionTools.name, 'request')));
+      const plHandle = plConn?.handle ?? 'paperless';
+      const notOffered: {
+        name: string;
+        handle: string;
+        action: Record<string, unknown>;
+        before?: () => Promise<unknown>;
+        after?: () => Promise<unknown>;
+      }[] = [
+        { name: 'nobody has it', handle: 'nosuch', action: { connection: 'nosuch', ...upload } },
+        {
+          name: 'can’t take proposals',
+          handle: 'servers',
+          action: { ...upload, connection: 'servers', tool: 'guest_power' },
+        },
+        {
+          name: 'no such tool',
+          handle: plHandle,
+          action: { ...upload, connection: plHandle, tool: 'post_document' },
+        },
+        {
+          name: 'looks only',
+          handle: plHandle,
+          action: { connection: plHandle, ...upload },
+          before: () => setPaperless({ access: 'read' }),
+          after: () => setPaperless({ access: 'manage' }),
+        },
+        {
+          name: 'signed out',
+          handle: plHandle,
+          action: { connection: plHandle, ...upload },
+          before: () => setPaperless({ status: 'needs_reauth' }),
+          after: () => setPaperless({ status: 'active' }),
+        },
+        {
+          name: 'tool off',
+          handle: plHandle,
+          action: { connection: plHandle, ...upload },
+          before: () => setTier('off'),
+          after: () => setTier('can'),
+        },
+      ];
+      for (const tc of notOffered) {
+        await tc.before?.();
+        try {
+          const res = await callTool(w.services, auth, 'propose_connection_actions', {
+            actions: [tc.action],
+          });
+          expect(res.isError, tc.name).toBe(true);
+          const text = JSON.stringify(res.content);
+          expect(text, tc.name).toContain(notOfferedText(tc.handle));
+          expect(text, tc.name).not.toContain(privateLabel);
+        } finally {
+          await tc.after?.();
+        }
       }
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
@@ -2804,7 +2888,7 @@ describe('mail-arrives automations', () => {
         ],
       });
       expect(send.isError).toBe(true);
-      expect(JSON.stringify(send.content)).toContain('can’t propose this');
+      expect(JSON.stringify(send.content)).toContain(notOfferedText('moneybird'));
 
       // The steered agent lies in `summary` ("Upload invoice.pdf to Paperless-ngx?") and hides a question in a value,
       // while actually drafting an invoice for a stranger's contact with an amount.
