@@ -182,29 +182,33 @@ export class VoiceTypingService {
 
   /** `voice.update`: the person's settings in one commit, then what they want downloaded. */
   async update(principal: SessionPrincipal, patch: VoiceTypingPatch): Promise<VoiceTyping> {
-    const person = await this.#person(principal);
+    requirePerson(principal);
     const changes = Object.keys(patch).length > 0;
-    if (changes) {
-      const res = await this.#services.pipeline.commit(updateVoiceTyping, patch, {
-        burrowId: person.burrowId,
-        actorId: person.id,
-      });
-      if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
-    }
-    return this.#serial(() => this.#check(changes ? 'now' : 'changed'));
+    return this.#serial(async () => {
+      const person = await this.#person(principal);
+      if (changes) {
+        const res = await this.#services.pipeline.commit(updateVoiceTyping, patch, {
+          burrowId: person.burrowId,
+          actorId: person.id,
+        });
+        if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
+      }
+      return this.#check(changes ? 'now' : 'changed');
+    });
   }
 
   /** `voice.setDutchVoice`: record the person's agreement and start downloading, or turn off and remove the files. */
   async setDutchVoice(principal: SessionPrincipal, input: VoiceDutchInput): Promise<VoiceTyping> {
-    const person = await this.#person(principal);
-    // Turning on requires the model fetcher so we never record consent for a download the box can't run.
-    const fetcher = input.on ? this.#fetcher() : voiceModelsFor(this.#services);
-    const res = await this.#services.pipeline.commit(setDutchVoice, input, {
-      burrowId: person.burrowId,
-      actorId: person.id,
-    });
-    if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
+    requirePerson(principal);
     return this.#serial(async () => {
+      const person = await this.#person(principal);
+      // Turning on requires the model fetcher so we never record consent for a download the box can't run.
+      const fetcher = input.on ? this.#fetcher() : voiceModelsFor(this.#services);
+      const res = await this.#services.pipeline.commit(setDutchVoice, input, {
+        burrowId: person.burrowId,
+        actorId: person.id,
+      });
+      if (res.status !== 'ok') throw new ApiError('forbidden', res.message);
       if (input.on) {
         this.#clearDutchRemovalRetry();
         await externalEffect(
@@ -233,14 +237,15 @@ export class VoiceTypingService {
 
   /** `voice.fetchModel`: *Download* and *Try again*. */
   async fetchModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
-    await this.#person(principal);
-    if (model === 'supertonic') {
-      const settings = await loadVoiceSettings(this.#services.db);
-      if (!wantsDutchVoice(settings))
-        throw forbidden('Agree to the Dutch voice licence before downloading it.');
-    }
-    const fetcher = this.#fetcher();
+    requirePerson(principal);
     return this.#serial(async () => {
+      await this.#person(principal);
+      if (model === 'supertonic') {
+        const settings = await loadVoiceSettings(this.#services.db);
+        if (!wantsDutchVoice(settings))
+          throw forbidden('Agree to the Dutch voice licence before downloading it.');
+      }
+      const fetcher = this.#fetcher();
       // A download asked twice is one download (the fetcher leaves one on its way as it is).
       await externalEffect('voice.fetch_model', () => fetcher.fetch(model), { idempotent: true }).catch(
         fetcherDown,
@@ -251,9 +256,10 @@ export class VoiceTypingService {
 
   /** `voice.removeModel`: *Remove*, only for a model the settings don't need. */
   async removeModel(principal: SessionPrincipal, model: VoiceDownloadModel): Promise<VoiceTyping> {
-    await this.#person(principal);
-    const fetcher = this.#fetcher();
+    requirePerson(principal);
     return this.#serial(async () => {
+      await this.#person(principal);
+      const fetcher = this.#fetcher();
       const facts = await this.#facts();
       if (model === 'supertonic') {
         if (wantsDutchVoice(facts.settings))

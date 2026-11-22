@@ -405,6 +405,213 @@ describe('voice typing’s settings and models', () => {
     );
     expect((await voiceHealth(m.t.services)).languages).toEqual(['en']);
   });
+
+  it('serialises Dutch voice consent checks, setting changes and fetcher calls across interleaved devices', async () => {
+    fresh({ ready: ['parakeet'] });
+    const deviceA = await m.client(mara);
+    const deviceB = await m.client(mara);
+    await settings(deviceA, { on: true, model: 'auto', language: 'auto' });
+
+    // Start with Dutch voice enabled whose download failed so device B can press Try again.
+    fetcher.failNext.supertonic = 'no_room';
+    await deviceA.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    await until(deviceA, (v) => v.dutchVoice?.state === 'failed');
+    fetcher.calls.length = 0;
+
+    // Interleaving 1: device A starts turning Dutch voice off and pauses right before committing (DB still has
+    // dutchVoice = true). Device B simultaneously retries supertonic. Because both run in one serial queue, device B
+    // must check consent after device A finishes and be refused rather than downloading after removal.
+    let commitEntered!: () => void;
+    const atCommit = new Promise<void>((resolve) => {
+      commitEntered = resolve;
+    });
+    let releaseCommit!: () => void;
+    const commitGate = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    const origCommit = m.t.services.pipeline.commit.bind(m.t.services.pipeline);
+    let gatedOnce = false;
+    const commitSpy = vi.spyOn(m.t.services.pipeline, 'commit').mockImplementation((async (
+      cmd: Parameters<typeof origCommit>[0],
+      input: Parameters<typeof origCommit>[1],
+      ctx: Parameters<typeof origCommit>[2],
+    ) => {
+      if (!gatedOnce && cmd.name === 'set_dutch_voice') {
+        gatedOnce = true;
+        commitEntered();
+        await commitGate;
+      }
+      return origCommit(cmd, input, ctx);
+    }) as typeof origCommit);
+
+    let retryQueued!: () => void;
+    const atRetryQueued = new Promise<void>((resolve) => {
+      retryQueued = resolve;
+    });
+    const origFetchModel = typing.fetchModel.bind(typing);
+    const fetchModelSpy = vi.spyOn(typing, 'fetchModel').mockImplementation((principal, model) => {
+      const p = origFetchModel(principal, model);
+      retryQueued();
+      return p;
+    });
+
+    try {
+      const offP = deviceA.request('voice.setDutchVoice', { on: false });
+      await atCommit;
+      const retryP = deviceB.request('voice.fetchModel', { model: 'supertonic' });
+      await atRetryQueued;
+      releaseCommit();
+
+      const [offRes, retryRes] = await Promise.all([offP, retryP]);
+      expect(offRes).toMatchObject({ t: 'result' });
+      expect(retryRes).toMatchObject({ t: 'error', code: 'forbidden' });
+    } finally {
+      fetchModelSpy.mockRestore();
+      commitSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [rowAfterOff] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowAfterOff?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+
+    // Interleaving 2: retry enters fetcher.fetch first while device A turns Dutch voice off concurrently.
+    // Turning off waits behind the retry in the serial queue, then commits false and removes the download.
+    fetcher.failNext.supertonic = 'no_room';
+    await deviceA.request('voice.setDutchVoice', {
+      on: true,
+      licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+    });
+    await until(deviceA, (v) => v.dutchVoice?.state === 'failed');
+    fetcher.calls.length = 0;
+
+    let fetchEntered!: () => void;
+    const atFetch = new Promise<void>((resolve) => {
+      fetchEntered = resolve;
+    });
+    let releaseFetch!: () => void;
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    const origFetch = fetcher.fetch.bind(fetcher);
+    const fetchSpy = vi.spyOn(fetcher, 'fetch').mockImplementation(async (model) => {
+      if (model === 'supertonic') {
+        fetchEntered();
+        await fetchGate;
+      }
+      return origFetch(model);
+    });
+
+    let offQueued!: () => void;
+    const atOffQueued = new Promise<void>((resolve) => {
+      offQueued = resolve;
+    });
+    const origSetDutch = typing.setDutchVoice.bind(typing);
+    const setDutchSpy = vi.spyOn(typing, 'setDutchVoice').mockImplementation((principal, input) => {
+      const p = origSetDutch(principal, input);
+      offQueued();
+      return p;
+    });
+
+    try {
+      const retryP = deviceB.request('voice.fetchModel', { model: 'supertonic' });
+      await atFetch;
+      const offP = deviceA.request('voice.setDutchVoice', { on: false });
+      await atOffQueued;
+      releaseFetch();
+
+      const [retryRes, offRes] = await Promise.all([retryP, offP]);
+      expect(retryRes).toMatchObject({ t: 'result' });
+      expect(offRes).toMatchObject({ t: 'result' });
+    } finally {
+      setDutchSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'fetch', model: 'supertonic' },
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [rowAfterBoth] = await m.t.services.db.select().from(voiceTyping);
+    expect(rowAfterBoth?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+
+    // Interleaving 3: toggling on on device A and off on device B concurrently keeps DB and fetcher state aligned.
+    fetcher.calls.length = 0;
+    let onCommitEntered!: () => void;
+    const atOnCommit = new Promise<void>((resolve) => {
+      onCommitEntered = resolve;
+    });
+    let releaseOnCommit!: () => void;
+    const onCommitGate = new Promise<void>((resolve) => {
+      releaseOnCommit = resolve;
+    });
+    let gatedOnOnce = false;
+    const onCommitSpy = vi.spyOn(m.t.services.pipeline, 'commit').mockImplementation((async (
+      cmd: Parameters<typeof origCommit>[0],
+      input: Parameters<typeof origCommit>[1],
+      ctx: Parameters<typeof origCommit>[2],
+    ) => {
+      if (!gatedOnOnce && cmd.name === 'set_dutch_voice') {
+        gatedOnOnce = true;
+        onCommitEntered();
+        await onCommitGate;
+      }
+      return origCommit(cmd, input, ctx);
+    }) as typeof origCommit);
+
+    let secondToggleQueued!: () => void;
+    const atSecondToggleQueued = new Promise<void>((resolve) => {
+      secondToggleQueued = resolve;
+    });
+    let toggleCalls = 0;
+    const toggleSpy = vi.spyOn(typing, 'setDutchVoice').mockImplementation((principal, input) => {
+      const p = origSetDutch(principal, input);
+      toggleCalls += 1;
+      if (toggleCalls === 2) secondToggleQueued();
+      return p;
+    });
+
+    try {
+      const onP = deviceA.request('voice.setDutchVoice', {
+        on: true,
+        licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
+      });
+      await atOnCommit;
+      const offP = deviceB.request('voice.setDutchVoice', { on: false });
+      await atSecondToggleQueued;
+      releaseOnCommit();
+
+      const [onRes, offRes] = await Promise.all([onP, offP]);
+      expect(onRes).toMatchObject({ t: 'result' });
+      expect(offRes).toMatchObject({ t: 'result' });
+    } finally {
+      toggleSpy.mockRestore();
+      onCommitSpy.mockRestore();
+    }
+
+    expect(fetcher.calls.filter((x) => x.model === 'supertonic')).toEqual([
+      { kind: 'fetch', model: 'supertonic' },
+      { kind: 'remove', model: 'supertonic' },
+    ]);
+    const [finalRow] = await m.t.services.db.select().from(voiceTyping);
+    expect(finalRow?.dutchVoice).toBe(false);
+    expect((await fetcher.state()).models.find((x) => x.id === 'supertonic')).toMatchObject({
+      state: 'absent',
+      received: 0,
+    });
+  });
 });
 
 describe('a recording', () => {
