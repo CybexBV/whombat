@@ -69,6 +69,7 @@ import { homeOf, sessionForgotten } from '../hermes-home/housekeeping';
 import { ApiError, notFound } from '../lib/errors';
 import { DEFAULT_MCP_LIMITS, type McpLimits, McpRateLimiter } from '../mcp/rate-limit';
 import { mcpToolList } from '../mcp/server';
+import { loadMessageRow } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { toSearchAnswer } from '../read/search';
 import type { Services } from '../services';
@@ -589,6 +590,21 @@ export class RunnerRuntime {
             if (cancelled) publishDispatch(txSession, cancelled);
             continue;
           }
+        }
+        // Older builds could queue More detail on an outsiders’ message. It must never reach the person’s runner.
+        const source =
+          d.messageId && (d.trigger === 'expand' || d.trigger === 'retry')
+            ? await loadMessageRow(tx, d.messageId)
+            : null;
+        if (source?.outsidersRun || source?.provenance) {
+          const [cancelled] = await tx
+            .update(dispatches)
+            .set({ state: 'cancelled', finishedAt: now, error: 'outside_message' })
+            .where(and(eq(dispatches.id, d.id), eq(dispatches.state, 'queued')))
+            .returning();
+          if (cancelled) publishDispatch(txSession, cancelled);
+          taken.delete(pair);
+          continue;
         }
         // A turn queued again after a usage limit that a newer turn took over: not run.
         const moot = d.requeuedFor ? await requeueSuperseded(tx, d) : null;

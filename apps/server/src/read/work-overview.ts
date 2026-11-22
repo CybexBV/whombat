@@ -33,7 +33,7 @@ import {
   type WorkSection,
   workHealth,
 } from '@whombat/core';
-import { and, desc, eq, gt, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { roomByKey } from '../chats/rooms';
 import {
   activities,
@@ -245,6 +245,8 @@ export async function workOverview(
             and(
               eq(messages.burrowId, burrowId),
               eq(messages.asks, true),
+              eq(messages.outsidersRun, false),
+              isNull(messages.provenance),
               eq(principals.kind, 'agent'),
               // A retired agent's question waits for nobody (EP-20).
               inArray(messages.conversationId, rooms),

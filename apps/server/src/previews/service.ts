@@ -84,6 +84,8 @@ export class LinkPreviewService {
         burrowId: messages.burrowId,
         text: messages.text,
         deletedAt: messages.deletedAt,
+        outsidersRun: messages.outsidersRun,
+        provenance: messages.provenance,
         conversationId: messages.conversationId,
         linkPreviews: burrows.linkPreviews,
         conversationPreviews: conversations.linkPreviews,
@@ -92,7 +94,14 @@ export class LinkPreviewService {
       .innerJoin(burrows, eq(burrows.id, messages.burrowId))
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(eq(messages.id, messageId));
-    if (!row || row.deletedAt || row.linkPreviews === false || row.conversationPreviews === false)
+    if (
+      !row ||
+      row.deletedAt ||
+      row.outsidersRun ||
+      row.provenance ||
+      row.linkPreviews === false ||
+      row.conversationPreviews === false
+    )
       return null;
     const urls = previewUrls(row.text, { ownOrigins: this.ownOrigins() });
     return { burrowId: row.burrowId, urls };

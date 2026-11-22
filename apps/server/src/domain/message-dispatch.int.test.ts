@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { requestMore, sendMessage } from '../commands/messages';
 import { defineCommand } from '../commit/types';
 import { dispatches, events, messages, runs } from '../db/schema/index';
+import { loadMessage } from '../read/messages';
+import { runInDispatchScope } from '../runtime/dispatch-scope';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 
@@ -85,6 +87,46 @@ describe('durable message dispatch', () => {
     expect(await jobs(messageId)).toMatchObject([{ trigger: 'expand', state: 'queued' }]);
     await t.services.pipeline.commit(requestMore, { messageId }, options);
     expect(await jobs(messageId)).toHaveLength(1);
+  });
+
+  it('keeps outsiders’ quick replies, asks and More detail from waking the person’s agent', async () => {
+    const posted = await runInDispatchScope(
+      { dispatchId: 'dsp_outside_offer', agentId: IDS.dusty, onBehalfOfAccountId: null },
+      () =>
+        t.commit(IDS.dusty, sendMessage, {
+          conversationId: IDS.dmDusty,
+          text: '@Dusty https://example.com/outside',
+          more: 'Look up the invoice.',
+          suggestions: ['Do it', 'Go ahead'],
+          asks: true,
+        }),
+    );
+    if (posted.status !== 'ok') throw new Error(posted.status);
+    const messageId = posted.result.id;
+    const [saved] = await t.services.db.select().from(messages).where(eq(messages.id, messageId));
+    expect(saved).toMatchObject({ outsidersRun: true, more: null, suggestions: [], asks: false });
+    expect(posted.result.dispatches).toEqual([]);
+    expect(await t.services.linkPreviews.linksOf(messageId)).toBeNull();
+
+    // A message saved by an older runtime may still have these offers in storage.
+    await t.services.pipeline.transact(t.burrowId, ({ tx }) =>
+      tx
+        .update(messages)
+        .set({
+          more: { hint: 'Read the Vault.', requestedById: null, requestedAt: null },
+          suggestions: ['Go ahead'],
+          asks: true,
+        })
+        .where(eq(messages.id, messageId)),
+    );
+    expect(await loadMessage(t.services.db, messageId, IDS.mara)).toMatchObject({
+      more: null,
+      suggestions: [],
+    });
+    await expect(t.services.pipeline.commit(requestMore, { messageId }, options)).rejects.toThrow(
+      'no more detail',
+    );
+    expect(await jobs(messageId)).toEqual([]);
   });
 
   it('commits the answer, cleared attention and resumed run job together', async () => {
