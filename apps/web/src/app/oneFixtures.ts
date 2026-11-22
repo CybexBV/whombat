@@ -49,7 +49,9 @@ import {
   AGENT_NAME_PATTERN,
   AGENT_NAME_RESERVED_TEXT,
   type AgentFace,
+  type AgentModelRuntimeUpdate,
   isReservedAgentName,
+  resolveAgentModelRuntime,
 } from '@whombat/core/domain';
 import { agentDefaultGrants, describeGrantChange, diffGrants } from '@whombat/core/keys';
 import { burrow, cnv_dm_dusty, deployApproval, dusty, mara, withServiceThings } from '@whombat/fixtures';
@@ -1023,7 +1025,7 @@ export function createOneFixtures(
   function updateAssistant(input: {
     name?: string;
     face?: string;
-    runtime?: Partial<Agent['runtime']>;
+    runtime?: AgentModelRuntimeUpdate;
   }): Response {
     const name = input.name?.trim();
     if (name !== undefined && name !== assistant.name) {
@@ -1036,7 +1038,8 @@ export function createOneFixtures(
         return refused('face', 'Pick one of the five faces.');
       assistant = { ...assistant, face: input.face as AgentFace };
     }
-    if (input.runtime) assistant = { ...assistant, runtime: { ...assistant.runtime, ...input.runtime } };
+    if (input.runtime)
+      assistant = { ...assistant, runtime: resolveAgentModelRuntime(input.runtime, assistant.runtime) };
     return json({ agent: assistant });
   }
 

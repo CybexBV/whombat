@@ -38,7 +38,9 @@ import {
   modelLabel,
   PROVIDER_LABELS,
   type ProviderModel,
+  providerHasModelEffort,
   requestedTier,
+  resolveAgentModelRuntime,
   type Tier,
   topics,
   withKeyRowTier,
@@ -81,26 +83,6 @@ function personChanges(attempt: string, name = 'the agent') {
   return { keyId: 'burrow.manage' as const, attempt, where: agentWhere(name) };
 }
 
-/** The tools whose own efforts and fast replies an agent may pick. */
-function takesModels(provider: AgentRuntime['provider']): provider is 'claude' | 'codex' {
-  return provider === 'claude' || provider === 'codex';
-}
-
-/**
- * What the agent's model runtime becomes: main model, effort and fast replies only with Claude Code and ChatGPT;
- * background model for any provider.
- */
-function modelRuntime(runtime: z.output<typeof AgentModelRuntime>): z.output<typeof AgentModelRuntime> {
-  const tool = takesModels(runtime.provider);
-  return {
-    provider: runtime.provider,
-    ...(tool && runtime.model ? { model: runtime.model } : {}),
-    ...(runtime.backgroundModel ? { backgroundModel: runtime.backgroundModel } : {}),
-    ...(tool && runtime.effort ? { effort: runtime.effort } : {}),
-    ...(tool && runtime.fast !== undefined ? { fast: runtime.fast } : {}),
-  };
-}
-
 /** The models this Whombat knows a provider has; null while none are known. */
 function reportedModels(
   ctx: Pick<ApplyContext, 'services'> & {
@@ -109,15 +91,18 @@ function reportedModels(
   provider: AgentRuntime['provider'],
 ): ProviderModel[] | null {
   if (provider === 'local') {
-    const view = ctx.burrow ? localModelView(ctx.burrow) : null;
-    return view ? localProviderModels(view) : null;
+    if (!ctx.burrow) return null;
+    const view = localModelView(ctx.burrow);
+    return view ? localProviderModels(view) : [];
   }
   return ctx.services.runtime.setupStatus().providers.find((p) => p.provider === provider)?.models ?? null;
 }
 
 /**
  * Checks a changed main model, background model, effort and fast replies against what the provider offers. Only what
- * changes is checked (`before`): an agent whose stored model later left the list keeps it until changed.
+ * changes is checked (`before`): an agent whose stored model later left the list keeps it until changed. Custom AI
+ * models (`local`) allow any main model id up to `MODEL_ID_MAX` (the user may type one not in the server's list)
+ * while background models must be listed; effort and fast replies apply only to Claude Code and ChatGPT.
  */
 function assertModelChoice(
   ctx: Pick<ApplyContext, 'services'> & {
@@ -138,20 +123,16 @@ function assertModelChoice(
   if (bgChanged && runtime.backgroundModel && runtime.backgroundModel.length > MODEL_ID_MAX)
     refuse(`A model’s name has at most ${MODEL_ID_MAX} characters.`);
   const models = reportedModels(ctx, runtime.provider);
+  const own = providerHasModelEffort(runtime.provider);
   if (models) {
-    if (
-      takesModels(runtime.provider) &&
-      modelChanged &&
-      runtime.model &&
-      !models.some((m) => m.id === runtime.model)
-    )
+    if (own && modelChanged && runtime.model && !models.some((m) => m.id === runtime.model))
       refuse(`${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.model}” on this Whombat.`);
     if (bgChanged && runtime.backgroundModel && !models.some((m) => m.id === runtime.backgroundModel))
       refuse(
         `${PROVIDER_LABELS[runtime.provider]} has no model called “${runtime.backgroundModel}” on this Whombat.`,
       );
   }
-  if (!models || !takesModels(runtime.provider)) return runtime;
+  if (!models || !own) return runtime;
   if (effortChanged && runtime.effort && !effortsFor(models, runtime.model).includes(runtime.effort))
     refuse(`${modelLabel(models, runtime.model)} doesn’t take ${effortLabel(runtime.effort)} effort.`);
   // Fast replies only where the model offers them: turning them on elsewhere is refused in Chat's words; “off” where
@@ -177,7 +158,7 @@ export function offeredModelRuntime(
   },
   runtime: z.output<typeof AgentModelRuntime>,
 ): z.output<typeof AgentModelRuntime> {
-  const wanted = modelRuntime(runtime);
+  const wanted = resolveAgentModelRuntime(runtime);
   const { backgroundModel: _bg, ...noBg } = wanted;
   const { fast: _fast, ...noFast } = wanted;
   const { backgroundModel: _bg2, ...noFastNoBg } = noFast;
@@ -449,21 +430,10 @@ export const updateAgent = defineCommand({
       texts.push(`Changed ${shownName}’s face`);
     }
     const current = agentRuntimeOf(agent.runtime);
-    // The whole model runtime every time (model-effort.md ME-01): provider, model, effort. Omitting `backgroundModel`
+    // The whole model runtime every time: provider, model, effort and fast replies. Omitting `backgroundModel`
     // on the same provider keeps the stored one so an older app never erases it; explicit `null` clears it back to
     // “Same as the main model”.
-    const resolvedRuntime: z.output<typeof AgentModelRuntime> | null = input.runtime
-      ? {
-          ...input.runtime,
-          backgroundModel:
-            input.runtime.backgroundModel === undefined
-              ? input.runtime.provider === current.provider
-                ? current.backgroundModel
-                : undefined
-              : (input.runtime.backgroundModel ?? undefined),
-        }
-      : null;
-    const sent = resolvedRuntime ? modelRuntime(resolvedRuntime) : null;
+    const sent = input.runtime ? resolveAgentModelRuntime(input.runtime, current) : null;
     if (
       sent &&
       (sent.provider !== current.provider ||

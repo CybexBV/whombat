@@ -227,7 +227,7 @@ export function ChatRuntimeSheet({
       .then((result) => {
         if (result.status !== 'ok') return setDefaultRefusal(chatRuntimeRefusalText(result));
         const saved = result.data.agent.runtime;
-        if (!modelRuntimeSaved(body, saved)) return setDefaultRefusal(MODEL_EFFORT_COPY.notSaved);
+        if (!modelRuntimeSaved(body, saved, models)) return setDefaultRefusal(MODEL_EFFORT_COPY.notSaved);
         showNotice(chatMadeDefaultText(view, saved));
         choice.madeDefault();
         close();

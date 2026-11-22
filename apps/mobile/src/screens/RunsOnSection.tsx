@@ -12,7 +12,7 @@
  * AP-2731). On Local, MODEL's sheet also takes another model by its name (AP-5001), and EFFORT and FAST REPLIES don't
  * show (it has neither).
  */
-import { gatewayRunsOn, localModelOf, modelRuntimeSaved, problemText } from '@whombat/client';
+import { gatewayRunsOn, localModelOf, modelRuntimeSaved, problemText, providerModels } from '@whombat/client';
 import { useAgentSetup, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import {
   type AgentModelRuntimeUpdate,
@@ -122,7 +122,13 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
             return;
           }
-          if (!modelRuntimeSaved(runtime, r.data.agent.runtime)) {
+          if (
+            !modelRuntimeSaved(
+              runtime,
+              r.data.agent.runtime,
+              providerModels(status, runtime.provider, localModel),
+            )
+          ) {
             onChanged();
             then.refused(MODEL_EFFORT_COPY.notSaved);
             return;

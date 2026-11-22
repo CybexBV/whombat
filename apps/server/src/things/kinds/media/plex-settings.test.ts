@@ -89,8 +89,7 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
     const by = (id: string) => r.find((x) => x.id === id);
     expect(by('remote_access')).toMatchObject({
       value: 'On',
-      on: true,
-      toggle: { action: 'setting', target: 'remote_access' },
+      elsewhere: { label: 'In Plex' },
     });
     expect(by('remote_quality')).toMatchObject({ value: 'Up to 8 Mbps', choose: { current: 8000 } });
     expect(by('remote_quality')?.changed).toMatchObject({
@@ -98,12 +97,17 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
       changeId: 'chg_1',
     });
     expect(by('remote_quality')?.changed?.text).toContain('4 Mbps');
+    expect(by('scan_on_change')).toMatchObject({
+      value: 'On',
+      on: true,
+      toggle: { action: 'setting', target: 'scan_on_change' },
+    });
     expect(by('scan_schedule')?.value).toBe('Every 6 hours');
     expect(by('quiet_hours')?.value).toBe('02:00 – 05:00');
     // Left out: the graphics chip, which this Plex doesn't report.
     expect(by('graphics_chip')).toBeUndefined();
-    // Secure connections, emptying the trash and updates stay in Plex: no switch, no Change.
-    for (const id of ['secure_connections', 'empty_trash', 'updates']) {
+    // Remote access, secure connections, emptying the trash and updates stay in Plex: no switch, no Change.
+    for (const id of ['remote_access', 'secure_connections', 'empty_trash', 'updates']) {
       expect(by(id)?.elsewhere?.label).toBe('In Plex');
       expect(by(id)?.toggle).toBeUndefined();
       expect(by(id)?.choose).toBeUndefined();
@@ -116,7 +120,7 @@ describe('the rows (SST-01, SST-05, SST-07)', () => {
     const look = settingsPanels({
       declared: PLEX_SETTINGS,
       settings: parsePrefs({
-        MediaContainer: { Setting: [{ id: 'PublishServerOnPlexOnlineKey', value: true }] },
+        MediaContainer: { Setting: [{ id: 'FSEventLibraryUpdatesEnabled', value: true }] },
       }),
       who: { row: rowOf('plex', { access: 'read' }) },
       url: 'http://x.test/',
@@ -157,6 +161,9 @@ describe('changing one (SST-02, SST-03)', () => {
   it('takes only a choice it offers, refuses elsewhere settings, and changes nothing when it already is', async () => {
     reset();
     await expect(act(ctx, { target: 'remote_quality', value: 123 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'remote_access', value: false })).rejects.toThrow();
+    await expect(act(ctx, { target: 'remote_access', value: true })).rejects.toThrow();
+    expect(await describeSetting(PLEX_SETTINGS, ctx, { target: 'remote_access', value: false })).toBeNull();
     await expect(act(ctx, { target: 'secure_connections', value: 0 })).rejects.toThrow();
     await expect(act(ctx, { target: 'secure_connections', value: 1 })).rejects.toThrow();
     await expect(act(ctx, { target: 'secure_connections', value: 2 })).rejects.toThrow();
@@ -174,7 +181,6 @@ describe('changing one (SST-02, SST-03)', () => {
     reset();
     plex.prefs.set('HardwareAcceleratedCodecs', true);
     const cases: [string, string | number | boolean, string][] = [
-      ['remote_access', false, '?PublishServerOnPlexOnlineKey=0'],
       ['remote_quality', 12000, '?WanPerStreamMaxUploadRate=12000'],
       ['graphics_chip', false, '?HardwareAcceleratedCodecs=0'],
       ['conversion_quality', 2, '?TranscoderQuality=2'],

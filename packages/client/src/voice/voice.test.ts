@@ -197,5 +197,30 @@ describe('Settings → VOICE TYPING', () => {
       licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
       licenceUrl: DUTCH_VOICE_LICENCE_URL,
     });
+    const removing = voiceSectionView(
+      createFakeVoice({
+        initial: {
+          models: {
+            whisper: { state: 'removing', received: 32_768 },
+            supertonic: { state: 'removing', received: 65_536 },
+          },
+        },
+      }).state(),
+    );
+    expect(removing.dutchVoice).toMatchObject({
+      on: false,
+      state: 'removing',
+      tone: 'warn',
+      status: VOICE_TEXT.dutchVoice.removing,
+      progress: null,
+      retryLabel: null,
+    });
+    expect(removing.models.rows.find((r) => r.id === 'whisper')).toMatchObject({
+      state: 'removing',
+      tone: 'warn',
+      status: VOICE_TEXT.states.removing,
+      action: null,
+      progress: null,
+    });
   });
 });

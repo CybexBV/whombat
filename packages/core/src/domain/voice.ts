@@ -38,9 +38,17 @@ export type VoiceLanguage = z.infer<typeof VoiceLanguage>;
 
 /**
  * A model's download on the box: `absent` (not there), `downloading` (`received` of `size` bytes), `waiting` (it will try
- * again by itself, `problem` says why), `ready`, `failed` (needs *Try again*, `problem` says why).
+ * again by itself, `problem` says why), `ready`, `failed` (needs *Try again*, `problem` says why), `removing` (files are
+ * still being removed from disk; `received` is the bytes left).
  */
-export const VOICE_MODEL_STATES = ['absent', 'downloading', 'waiting', 'ready', 'failed'] as const;
+export const VOICE_MODEL_STATES = [
+  'absent',
+  'downloading',
+  'waiting',
+  'ready',
+  'failed',
+  'removing',
+] as const;
 export const VoiceModelState = z.enum(VOICE_MODEL_STATES);
 export type VoiceModelState = z.infer<typeof VoiceModelState>;
 
@@ -74,11 +82,11 @@ export type VoiceTypingModel = z.infer<typeof VoiceTypingModel>;
 export const VoiceDutchVoice = z.object({
   /** Whether the person has turned *Dutch voice* on (agreed to its licence). */
   on: z.boolean(),
-  /** Download state of the Dutch voice model on the box (`absent` when off). */
+  /** Download state of the Dutch voice model on the box (`absent` when off and gone, `removing` while files remain). */
   state: VoiceModelState,
   /** Total download size in bytes across all files of the model. */
   size: z.number().int().min(0),
-  /** Bytes downloaded so far. */
+  /** Bytes downloaded so far, or bytes left on disk while removing. */
   received: z.number().int().min(0),
   /** Why a download waits or failed. */
   problem: VoiceModelProblem.optional(),
@@ -167,6 +175,7 @@ export const VOICE_WORDS = {
   dutchVoice: {
     label: 'Dutch voice',
     meta: 'Speak Dutch answers in a Dutch voice instead of an English one (Supertonic 3, {size}).',
+    removing: 'Still removing the Dutch voice.',
     dialog: {
       title: 'Download the Dutch voice?',
       intro:
@@ -187,6 +196,7 @@ export const VOICE_WORDS = {
     waiting: 'Waiting to download',
     ready: 'Ready',
     failed: 'Couldn’t download',
+    removing: 'Removing…',
   },
   problems: {
     no_network: 'No internet right now. It tries again by itself.',

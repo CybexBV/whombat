@@ -4,11 +4,7 @@
  * a removal, and which fetcher the config gives.
  */
 import { VOICE_MODEL_MAX_BYTES, VOICE_MODELS_PATHS, VoiceModelState } from '@whombat/control-contracts/local';
-import {
-  VoiceModelProblem,
-  VoiceModelState as VoiceModelStateName,
-  VoiceSttModel,
-} from '@whombat/core/domain';
+import { VoiceModelProblem, VoiceSttModel } from '@whombat/core/domain';
 import { requestUnixHttp } from '@whombat/node-io/http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -122,15 +118,16 @@ describe('the socket client', () => {
     expect((err as VoiceModelsCallError).status).toBe(0);
   });
 
-  it('keeps plain v1 responses parseable by a previous runtime that only accepts speech-recognition models', async () => {
-    // Previous runtime's strict schema before supertonic was added to VoiceDownloadModel.
+  it('keeps plain v1 responses parseable by a previous runtime that only accepts speech-recognition models and pre-removing states', async () => {
+    // Previous runtime's strict schema before supertonic and 'removing' were added.
+    const PrevVoiceModelStateName = z.enum(['absent', 'downloading', 'waiting', 'ready', 'failed']);
     const PrevVoiceModelsState = z.object({
       v: z.literal(1),
       models: z
         .array(
           VoiceModelState.extend({
             id: VoiceSttModel,
-            state: VoiceModelStateName,
+            state: PrevVoiceModelStateName,
             size: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
             received: z.number().int().min(0).max(VOICE_MODEL_MAX_BYTES),
             problem: VoiceModelProblem.optional(),
@@ -141,6 +138,7 @@ describe('the socket client', () => {
     });
 
     server = await startFakeVoiceModels({ models: quick() });
+    server.models.setRemoving('parakeet', 65_536);
     const rawGet = await requestUnixHttp({
       socketPath: server.socketPath,
       path: VOICE_MODELS_PATHS.state,
@@ -150,7 +148,17 @@ describe('the socket client', () => {
     });
     expect(rawGet.status).toBe(200);
     const prevState = PrevVoiceModelsState.parse(JSON.parse(rawGet.body.toString('utf8')));
-    expect(prevState.models.map((m) => m.id)).toEqual(['parakeet', 'whisper']);
+    expect(prevState.models.map((m) => [m.id, m.state])).toEqual([
+      ['parakeet', 'absent'],
+      ['whisper', 'absent'],
+    ]);
+
+    const client = new VoiceModelsSocketClient(server.socketPath);
+    const removingState = await client.state();
+    expect(removingState.models.find((m) => m.id === 'parakeet')).toMatchObject({
+      state: 'removing',
+      received: 65_536,
+    });
 
     const fetchPayload = JSON.stringify({ v: 1, model: 'parakeet' });
     const rawFetch = await requestUnixHttp({
@@ -168,7 +176,6 @@ describe('the socket client', () => {
     ).toEqual(['parakeet', 'whisper']);
 
     // The new runtime's client explicitly requests supertonic and gets all three models.
-    const client = new VoiceModelsSocketClient(server.socketPath);
     const fullState = await client.state();
     expect(fullState.models.map((m) => m.id)).toEqual(['parakeet', 'whisper', 'supertonic']);
     expect(() => PrevVoiceModelsState.parse(fullState)).toThrow();

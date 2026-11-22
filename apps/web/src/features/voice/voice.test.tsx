@@ -267,4 +267,35 @@ describe('Settings → This Whombat → VOICE TYPING (DT-06)', () => {
     expect(await within(dialog).findByRole('status')).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
+
+  it('shows “Still removing the Dutch voice.” while leftover files remain after turning it off', async () => {
+    const rest = createWebFixtureFetch({ host: true }) as unknown as (
+      url: string,
+      init: RequestInit,
+    ) => Promise<Response>;
+    const removingVoice = createFakeVoice({
+      initial: {
+        models: {
+          supertonic: { state: 'removing', received: 65_536 },
+        },
+      },
+    });
+    const { session } = createFakeSession({
+      ...withFakeVoice({ handle: restHandler(rest, { origin: 'http://whombat.test' }) }, removingVoice),
+      account: { id: 'acc_mara', name: 'Mara Okafor' },
+    });
+    renderApp(
+      '/settings?tab=appliance',
+      createAppServices({ session, realtime: null, queryClient: testQueryClient() }),
+    );
+    const s = await section();
+    const dutchRow = s.querySelector('[data-row="voice-dutch"]') as HTMLElement;
+    expect(dutchRow.getAttribute('data-state')).toBe('removing');
+    expect(
+      within(dutchRow)
+        .getByRole('switch', { name: VOICE_TEXT.dutchVoice.label })
+        .getAttribute('aria-checked'),
+    ).toBe('false');
+    expect(within(dutchRow).getByText(VOICE_TEXT.dutchVoice.removing)).toBeTruthy();
+  });
 });

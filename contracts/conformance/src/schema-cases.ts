@@ -3436,6 +3436,11 @@ export const SCHEMA_CASES: Case[] = [
       { id: 'supertonic', state: 'downloading', size: 145_310_775, received: 50_000_000 },
       true,
     ],
+    [
+      'supertonic removing',
+      { id: 'supertonic', state: 'removing', size: 145_310_775, received: 65_536 },
+      true,
+    ],
     ['unknown model', { id: 'canary', state: 'absent', size: 100, received: 0 }, false],
   ]),
   ...cases(

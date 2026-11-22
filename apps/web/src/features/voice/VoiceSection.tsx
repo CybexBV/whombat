@@ -134,6 +134,8 @@ function DutchVoiceRow({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
   const [askLicence, setAskLicence] = useState(false);
   const [pending, setPending] = useState(false);
   const percent = row.progress === null ? null : Math.floor(row.progress * 100);
+  const showStatus = row.on || row.state === 'removing';
+  const statusText = row.state === 'removing' ? row.status : `${row.size} · ${row.status}`;
 
   const toggle = (next: boolean) => {
     if (pending) return;
@@ -170,10 +172,10 @@ function DutchVoiceRow({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
           <span className={styles.rowMeta} id={`${ids}-dutch-meta`}>
             {row.meta}
           </span>
-          {row.on ? (
+          {showStatus ? (
             <span className={v.dutchStatus} id={`${ids}-dutch-state`} data-dutch-state="">
               <StatusDot tone={row.tone} size={8} label={null} />
-              <span className={styles.rowMeta}>{`${row.size} · ${row.status}`}</span>
+              <span className={styles.rowMeta}>{statusText}</span>
             </span>
           ) : null}
           {row.problem ? (
@@ -205,7 +207,7 @@ function DutchVoiceRow({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
           id={`${ids}-dutch`}
           checked={row.on}
           disabled={pending}
-          aria-describedby={`${ids}-dutch-meta${row.on ? ` ${ids}-dutch-state` : ''}${row.problem ? ` ${ids}-dutch-problem` : ''}`}
+          aria-describedby={`${ids}-dutch-meta${showStatus ? ` ${ids}-dutch-state` : ''}${row.problem ? ` ${ids}-dutch-problem` : ''}`}
           onCheckedChange={toggle}
         />
       </div>

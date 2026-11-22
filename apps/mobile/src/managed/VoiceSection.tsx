@@ -125,7 +125,8 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
   const [askLicence, setAskLicence] = useState(false);
   const [pending, setPending] = useState(false);
   const [agreeing, setAgreeing] = useState(false);
-  const state = `${row.size} · ${row.status}`;
+  const showStatus = row.on || row.state === 'removing';
+  const state = row.state === 'removing' ? row.status : `${row.size} · ${row.status}`;
 
   const toggle = (next: boolean) => {
     if (pending) return;
@@ -187,7 +188,7 @@ function DutchVoicePart({ api, row }: { api: VoiceApi; row: VoiceDutchRow }) {
             />
           }
         />
-        {row.on ? (
+        {showStatus ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View
               style={{

@@ -1,6 +1,7 @@
 import {
   chatDefaultBody,
   chatMadeDefaultText,
+  chatModelsOf,
   chatRuntimeInEffect,
   chatRuntimeRefusalText,
   chatRuntimeShown,
@@ -27,7 +28,8 @@ function useMakeDefault(burrow: string, view: ChatRuntimeView | undefined, after
       (result) => {
         if (result.status !== 'ok') return void toast.show(chatRuntimeRefusalText(result));
         const saved = result.data.agent.runtime;
-        if (!modelRuntimeSaved(body, saved)) return void toast.show(MODEL_EFFORT_COPY.notSaved);
+        if (!modelRuntimeSaved(body, saved, chatModelsOf(view, runtime.provider)))
+          return void toast.show(MODEL_EFFORT_COPY.notSaved);
         toast.show(chatMadeDefaultText(view, saved));
         after?.();
       },

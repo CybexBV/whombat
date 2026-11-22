@@ -1,4 +1,6 @@
+import { api, buildPath } from '@whombat/core/contracts';
 import type { AgentModelFallback, ProviderModel } from '@whombat/core/domain';
+import { createFixtureFetch } from '@whombat/fixtures/fetch';
 import { describe, expect, it } from 'vitest';
 import {
   agentModelLine,
@@ -238,6 +240,15 @@ describe('fast replies in Configure → Model (CR-10, AP-2700)', () => {
     expect(draftWithModel(d, 'sonnet', FAST).fast).toBeUndefined();
     expect(draftWithModel(d, 'opus', FAST).fast).toBe(true);
     expect(draftWithModel(d, 'claude-new', FAST).fast).toBe(true);
+    // `fast: false` is dropped for an unknown model when the provider's list is known (matching the server),
+    // kept while the list is unknown, and always dropped on custom AI models.
+    expect(draftWithModel(draft({ fast: false }), 'claude-new', FAST).fast).toBeUndefined();
+    expect(draftWithModel(draft({ fast: false }), 'sonnet', FAST).fast).toBeUndefined();
+    expect(draftWithModel(draft({ fast: false }), 'opus', FAST).fast).toBe(false);
+    expect(draftWithModel(draft({ fast: false }), 'claude-new', undefined).fast).toBe(false);
+    expect(
+      draftWithModel({ provider: 'local', model: null, effort: 'high', fast: true }, 'gemma3:27b', []),
+    ).toEqual({ provider: 'local', model: 'gemma3:27b', effort: null });
     expect(draftWithProvider(d, 'codex').fast).toBeUndefined();
     expect(modelRuntimeDraft({ provider: 'local', fast: true }).fast).toBeUndefined();
   });
@@ -353,5 +364,68 @@ describe('background model in Configure → Model', () => {
     expect(modelRuntimeSaved({ provider: 'claude', model: 'sonnet' }, { provider: 'claude' })).toBe(false);
     expect(modelRuntimeSaved({ provider: 'claude', effort: 'max' }, { provider: 'claude' })).toBe(false);
     expect(modelRuntimeSaved({ provider: 'claude', fast: true }, { provider: 'claude' })).toBe(false);
+
+    // Custom AI model keeps model & backgroundModel and ignores effort/fast stripped by the server.
+    expect(
+      modelRuntimeSaved(
+        { provider: 'local', model: 'gemma3:27b', effort: 'high', fast: true },
+        { provider: 'local', model: 'gemma3:27b' },
+      ),
+    ).toBe(true);
+    // An older box that strips `model` for `local` fails save confirmation.
+    expect(modelRuntimeSaved({ provider: 'local', model: 'gemma3:27b' }, { provider: 'local' })).toBe(false);
+
+    // Server drops `fast: false` for models that don't offer fast replies (including unknown models in a known list),
+    // but must keep `fast: false` when the model offers fast replies.
+    const fastList: ProviderModel[] = CLAUDE.map((m) => (m.id === 'opus' ? { ...m, fast: 'on' } : m));
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'claude-legacy', fast: false },
+        { provider: 'claude', model: 'claude-legacy' },
+        fastList,
+      ),
+    ).toBe(true);
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'sonnet', fast: false },
+        { provider: 'claude', model: 'sonnet' },
+        fastList,
+      ),
+    ).toBe(true);
+    expect(
+      modelRuntimeSaved(
+        { provider: 'claude', model: 'opus', fast: false },
+        { provider: 'claude', model: 'opus' },
+        fastList,
+      ),
+    ).toBe(false);
+  });
+
+  it('matches the fixture fetch agent.update response for Custom AI model and provider switches', async () => {
+    const fetchFn = createFixtureFetch();
+    const url = `http://fixtures.local${api.agent.update.base}${buildPath(api.agent.update.path, { burrow: 'burrow-hq' })}`;
+    const patch = async (runtime: Parameters<typeof modelRuntimeSaved>[0]) => {
+      const res = await fetchFn(url, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ runtime }),
+      });
+      expect(res.status).toBe(200);
+      return api.agent.update.response.parse(await res.json()).agent.runtime;
+    };
+    const localReq = modelRuntimeBody({
+      provider: 'local',
+      model: 'gemma3:27b',
+      backgroundModel: 'qwen3:32b',
+      effort: null,
+    });
+    const localSaved = await patch({ ...localReq, effort: 'high', fast: true });
+    expect(localSaved).toEqual({ provider: 'local', model: 'gemma3:27b', backgroundModel: 'qwen3:32b' });
+    expect(modelRuntimeSaved(localReq, localSaved)).toBe(true);
+
+    // Switching back to Claude clears local's model and backgroundModel.
+    const claudeSaved = await patch({ provider: 'claude' });
+    expect(claudeSaved).toEqual({ provider: 'claude' });
+    expect(modelRuntimeSaved({ provider: 'claude' }, claudeSaved)).toBe(true);
   });
 });

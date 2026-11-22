@@ -11,6 +11,8 @@ import {
   api,
   buildPath,
   type DispatchContext,
+  localProviderModels,
+  modelRuntimeSaved,
   type ProviderModel,
   runnerApi,
 } from '@whombat/core';
@@ -18,7 +20,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { updateAgent } from '../commands/agents';
 import { sendMessage } from '../commands/messages';
-import { dispatches, events, principals } from '../db/schema/index';
+import { burrows, dispatches, events, principals } from '../db/schema/index';
 import { loadPrincipalRow } from '../read/principals';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
@@ -236,11 +238,94 @@ describe('agents.update (ME-01, ME-04)', () => {
     expect(runtime).not.toHaveProperty('model');
     expect(runtime).not.toHaveProperty('backgroundModel');
     expect(runtime).not.toHaveProperty('effort');
-    // Main model remains limited to Claude Code and ChatGPT (matching main's behaviour).
-    await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'local', model: 'llama3.3' } });
-    const localRuntime = await runtimeOf(IDS.dusty);
-    expect(localRuntime).toMatchObject({ provider: 'local' });
-    expect(localRuntime).not.toHaveProperty('model');
+    // Custom AI model (`local`) keeps a valid main model (listed or free-text) and listed background model,
+    // while dropping effort and fast replies (which custom AI models do not take).
+    const patchAgent = async (runtime: Record<string, unknown>) => {
+      const ep = api.agent.update;
+      const res = await t.api.inject({
+        method: ep.method,
+        url: `${ep.base}${buildPath(ep.path, { burrow: 'burrow-hq' })}`,
+        headers: { cookie: mara },
+        payload: { runtime },
+      });
+      return res;
+    };
+    const localView = {
+      baseUrl: 'http://192.168.1.20:11434/v1',
+      model: 'llama3.3:70b',
+      label: 'Llama on the NAS',
+      hasApiKey: false,
+      check: {
+        state: 'ok' as const,
+        at: '2026-10-23T09:00:00.000Z',
+        models: ['llama3.3:70b', 'qwen3:32b'],
+        detail: null,
+      },
+      updatedAt: '2026-10-23T09:00:00.000Z',
+    };
+    await t.services.db
+      .update(burrows)
+      .set({
+        localModel: {
+          baseUrl: localView.baseUrl,
+          model: localView.model,
+          label: localView.label,
+          check: localView.check,
+          updatedAt: localView.updatedAt,
+        },
+      })
+      .where(eq(burrows.id, t.burrowId));
+    const localModels = localProviderModels(localView);
+
+    const typedReq = { provider: 'local' as const, model: 'gemma3:27b' };
+    const typedRes = await patchAgent(typedReq);
+    expect(typedRes.statusCode).toBe(200);
+    const typedSaved = api.agent.update.response.parse(typedRes.json()).agent.runtime;
+    expect(typedSaved).toEqual({ provider: 'local', model: 'gemma3:27b' });
+    expect(modelRuntimeSaved(typedReq, typedSaved, localModels)).toBe(true);
+    expect(await lastKeysLine(IDS.dusty)).toBe('Moved Dusty to local. Set Dusty’s model to gemma3:27b');
+
+    const withBgAndExtras = {
+      provider: 'local' as const,
+      model: 'qwen3:32b',
+      backgroundModel: 'llama3.3:70b',
+      effort: 'high' as const,
+      fast: true,
+    };
+    const bgRes = await patchAgent(withBgAndExtras);
+    expect(bgRes.statusCode).toBe(200);
+    const bgSaved = api.agent.update.response.parse(bgRes.json()).agent.runtime;
+    expect(bgSaved).toEqual({ provider: 'local', model: 'qwen3:32b', backgroundModel: 'llama3.3:70b' });
+    expect(modelRuntimeSaved(withBgAndExtras, bgSaved, localModels)).toBe(true);
+
+    // Unlisted background model or over-long main model on local is refused.
+    const badBg = await patchAgent({ provider: 'local', model: 'qwen3:32b', backgroundModel: 'unlisted' });
+    expect(badBg.statusCode).toBe(400);
+    const longLocal = await patchAgent({ provider: 'local', model: 'x'.repeat(121) });
+    expect(longLocal.statusCode).toBe(400);
+
+    // Unknown model with fast: false on Claude drops fast on the server; client save check accepts it.
+    await beat(null);
+    await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'claude', model: 'claude-legacy' } });
+    const claudeWithFast = CLAUDE_MODELS.map((m) => (m.id === 'opus' ? { ...m, fast: 'off' as const } : m));
+    await beat(claudeWithFast);
+    const legacyFastOff = { provider: 'claude' as const, model: 'claude-legacy', fast: false };
+    const legacyRes = await patchAgent(legacyFastOff);
+    expect(legacyRes.statusCode).toBe(200);
+    const legacySaved = api.agent.update.response.parse(legacyRes.json()).agent.runtime;
+    expect(legacySaved).toEqual({ provider: 'claude', model: 'claude-legacy' });
+    expect(modelRuntimeSaved(legacyFastOff, legacySaved, claudeWithFast)).toBe(true);
+
+    // Known fast-capable model keeps fast: false on the server and passes save confirmation.
+    const opusFastOff = { provider: 'claude' as const, model: 'opus', fast: false };
+    const opusRes = await patchAgent(opusFastOff);
+    expect(opusRes.statusCode).toBe(200);
+    const opusSaved = api.agent.update.response.parse(opusRes.json()).agent.runtime;
+    expect(opusSaved).toEqual({ provider: 'claude', model: 'opus', fast: false });
+    expect(modelRuntimeSaved(opusFastOff, opusSaved, claudeWithFast)).toBe(true);
+
+    await t.services.db.update(burrows).set({ localModel: null }).where(eq(burrows.id, t.burrowId));
+    await beat(CLAUDE_MODELS);
     await t.commit(IDS.mara, updateAgent, { runtime: { provider: 'claude' } });
   });
 });
