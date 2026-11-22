@@ -11,8 +11,10 @@ const go = ['render.go', 'start.go']
 
 describe('WORD', () => {
   it.each(Object.entries(WORD))('%s is verbatim from the text console', (_, w) => {
-    const text = typeof w === 'function' ? (w as (v: never) => string)('\u0000' as never) : w;
-    const literal = text.replace('\u0000', typeof w === 'function' && /min\.$/.test(text) ? '%d' : '%s');
+    // Each value the page fills in is a %s (a count of minutes: %d), in order.
+    const values = typeof w === 'function' ? Array.from({ length: w.length }, () => '\u0000') : [];
+    const text = typeof w === 'function' ? (w as (...v: never[]) => string)(...(values as never[])) : w;
+    const literal = text.replaceAll('\u0000', typeof w === 'function' && /min\.$/.test(text) ? '%d' : '%s');
     expect(go).toContain(`"${literal}"`);
   });
 });

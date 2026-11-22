@@ -53,6 +53,9 @@ export const WORD = {
   linkWaiting: 'Waiting for this Whombat’s web address…',
   linkWaitingHint:
     'Whombat Link is on. New web addresses are handed out in turn, and this one usually comes within a few minutes. This Whombat asks again every minute by itself; this screen changes when the address is ready.',
+  // Under the wait for the web address: the Whombat app on this network claims the box already.
+  linkWaitingInApp: (address: string, letters: string) =>
+    `Or claim it now: in the Whombat app on this network, type ${address} and enter ${letters}.`,
   linkStarting: 'Starting Whombat Link…',
   linkGrace: (day: string) =>
     `Whombat Link ends on ${day}. Turn on Tailscale in the Whombat app to keep a way in, and check your paper backup details.`,
@@ -61,6 +64,12 @@ export const WORD = {
   tailscaleLogin: (url: string) => `Sign in to Tailscale: open ${url} on a computer or phone.`,
   tailscaleHttps:
     'Turn on HTTPS in Tailscale: in the Tailscale admin console, open DNS and turn on HTTPS Certificates. This Whombat checks again by itself.',
+  // Tailscale's step and the claim, numbered while Tailscale asks for something and the claim has no address to open:
+  // the sign-in first, and the claim's line says the app on this network works right away.
+  stepOne: '1 · ',
+  stepTwo: '2 · ',
+  claimInAppNow: (address: string) =>
+    `You can do this now: in the Whombat app on this network, type ${address} and enter`,
   // Why the first start can't finish (CG-409), in place of “Starting Whombat…”.
   startTitle: 'Whombat can’t start yet',
   startReleaseMissing: (release: string) =>
@@ -96,6 +105,8 @@ export const CONSOLE = {
   /** The key that does the same, shown on the button. */
   newLettersKey: 'N',
   linkCode: 'Whombat Link code',
+  /** A QR code's name for a screen reader: the address it opens. */
+  qr: (url: string) => `QR code for ${url}`,
   notes: 'How to reach this Whombat',
   retryIn: 'Try again in',
   claimed: 'Claimed!',

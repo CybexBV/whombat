@@ -23,6 +23,7 @@ import { FACT_EVERY_MS, FactRotation } from '../lib/facts';
 import { Bubble, fill } from '../ui/Bubble';
 import { Button } from '../ui/Button';
 import { Confetti } from '../ui/Confetti';
+import { Qr } from '../ui/Qr';
 import { Burrow } from '../ui/Wombat';
 import { WaitingHint } from '../wifi/WifiLayer';
 import styles from './console.module.css';
@@ -91,16 +92,40 @@ function WakingScene({
 }
 
 /**
- * Whombat Link starting, in place of the claim (CG-402, CG-404): its code on the claim's sign with where to type it,
- * or why there is none yet. The text console's words; no QR code (John).
+ * Whombat Link in place of the claim (CG-402, CG-404): its code on the claim's sign with where to type it and a QR code
+ * of that page with the code in its address, or why there is none yet. While it waits for the web address, the claim
+ * in the Whombat app on this network is a quiet line under the wait (`inApp`). The text console's words.
  */
-export function LinkStarting({ screen, link, now }: { screen: LinkScreen; link: ReachLink; now: number }) {
+export function LinkStarting({
+  screen,
+  link,
+  now,
+  inApp,
+}: {
+  screen: LinkScreen;
+  link: ReachLink;
+  now: number;
+  inApp?: { address: string; letters: string } | null;
+}) {
   if (screen === 'waiting') {
     return (
       <WakingScene
         say={SAY.linkWaiting}
         title={WORD.linkWaiting}
-        hint={<p className={styles.wakingHint}>{WORD.linkWaitingHint}</p>}
+        hint={
+          <>
+            <p className={styles.wakingHint}>{WORD.linkWaitingHint}</p>
+            {inApp && (
+              <p className={styles.waitingInApp}>
+                {fill(
+                  WORD.linkWaitingInApp,
+                  <strong>{inApp.address}</strong>,
+                  <strong className={styles.inlineLetters}>{inApp.letters}</strong>,
+                )}
+              </p>
+            )}
+          </>
+        }
       />
     );
   }
@@ -108,8 +133,12 @@ export function LinkStarting({ screen, link, now }: { screen: LinkScreen; link: 
   if (screen === 'starting' || !code) return <WakingScene say={SAY.linkStarting} title={WORD.linkStarting} />;
   return (
     <div className={styles.claim}>
-      <h1 className={styles.claimTitle}>{WORD.linkTitle}</h1>
-      <p className={styles.claimOpen}>{fill(WORD.linkOpen, <strong>{link.url}</strong>)}</p>
+      <OpenHead
+        title={WORD.linkTitle}
+        line={fill(WORD.linkOpen, <strong>{link.url}</strong>)}
+        qr={link.qr}
+        url={link.url}
+      />
       <Sign
         text={code}
         size={codeSize(code.length)}
@@ -121,6 +150,40 @@ export function LinkStarting({ screen, link, now }: { screen: LinkScreen; link: 
       {link.expiresAt && (
         <p className={styles.claimRotates}>{WORD.linkRotates(minutesLeft(link.expiresAt, now))}</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * A claim or Link screen's title and the line that says where to go, with a QR code of that address beside them when
+ * there is one: a phone opens it without typing. The letters are never in it; they are typed.
+ */
+function OpenHead({
+  title,
+  line,
+  qr,
+  url,
+}: {
+  title: ReactNode;
+  line: ReactNode;
+  qr?: string[];
+  url: string;
+}) {
+  if (!qr || qr.length === 0) {
+    return (
+      <>
+        <h1 className={styles.claimTitle}>{title}</h1>
+        <p className={styles.claimOpen}>{line}</p>
+      </>
+    );
+  }
+  return (
+    <div className={styles.openHead}>
+      <div className={styles.openHeadText}>
+        <h1 className={styles.claimTitle}>{title}</h1>
+        <p className={styles.claimOpen}>{line}</p>
+      </div>
+      <Qr rows={qr} size={132} label={CONSOLE.qr(url)} />
     </div>
   );
 }
@@ -169,30 +232,42 @@ function Sign({
 
 /**
  * What Tailscale needs and Link's grace or end, above every claim screen (CG-404), in the text console's words and
- * order. The sign-in link is text, never a link or a QR code.
+ * order. The sign-in link is text with a QR code of it beside, never a link; Tailscale's note is numbered when the claim
+ * under it is the second step.
  */
 export function ReachNotes({ notes }: { notes: ReachNote[] }) {
   if (notes.length === 0) return null;
   return (
     <ul className={styles.notes} aria-label={CONSOLE.notes}>
-      {notes.map((n) => (
-        <li key={n.kind} className={styles.note}>
-          {n.kind === 'tailscaleLogin'
+      {notes.map((n) => {
+        const step =
+          (n.kind === 'tailscaleLogin' || n.kind === 'tailscaleHttps') && n.first ? WORD.stepOne : '';
+        const qr = n.kind === 'tailscaleLogin' && n.qr.length > 0 ? n : null;
+        const words =
+          n.kind === 'tailscaleLogin'
             ? fill(WORD.tailscaleLogin, <strong className={styles.noteUrl}>{n.url}</strong>)
             : n.kind === 'tailscaleHttps'
               ? WORD.tailscaleHttps
               : n.kind === 'linkGrace'
                 ? WORD.linkGrace(n.day)
-                : WORD.linkEnded}
-        </li>
-      ))}
+                : WORD.linkEnded;
+        return (
+          <li key={n.kind} className={`${styles.note} ${qr ? styles.noteWithQr : ''}`}>
+            <span>
+              {step && <strong className={styles.step}>{step}</strong>}
+              {words}
+            </span>
+            {qr && <Qr rows={qr.qr} size={112} label={CONSOLE.qr(qr.url)} />}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
 /**
- * The claim code on a sign Hazel and Banjo hold up (CG-07, CG-35), readable across a room. No QR code here (John).
- * In backoff the sign shows the wait instead.
+ * The claim code on a sign Hazel and Banjo hold up (CG-07, CG-35), readable across a room, under the claim link with
+ * its QR code (never the letters). In backoff the sign shows the wait instead.
  */
 export function Claimable({
   claim,
@@ -216,7 +291,9 @@ export function Claimable({
     // to type it.
     return (
       <div className={styles.claim}>
-        <h1 className={styles.claimTitle}>{WORD.claimTitle}</h1>
+        <h1 className={styles.claimTitle}>
+          <ClaimTitle claim={claim} />
+        </h1>
         <p className={styles.claimOpen}>{WORD[line]}</p>
         {claim.ipv6Only && <p className={styles.claimOpen}>{WORD.claimIpv4}</p>}
         <Burrow face="hazel" size={150} label={GUIDE_LABEL} />
@@ -231,17 +308,19 @@ export function Claimable({
       {backoff ? (
         <h1 className={styles.claimTitle}>{WORD.backoff(minutesLeft(claim.retryAt, now))}</h1>
       ) : (
-        <>
-          <h1 className={styles.claimTitle}>{WORD.claimTitle}</h1>
-          <p className={styles.claimOpen}>
-            {claim.inApp && noAddress(claim)
-              ? fill(WORD.claimInApp, <strong>{claim.inApp}</strong>)
+        <OpenHead
+          title={<ClaimTitle claim={claim} />}
+          line={
+            claim.inApp && noAddress(claim)
+              ? fill(claim.second ? WORD.claimInAppNow : WORD.claimInApp, <strong>{claim.inApp}</strong>)
               : fill(
                   claim.onTailnet ? WORD.claimOpenTailnet : WORD.claimOpen,
                   <strong>{claim.claimUrl}</strong>,
-                )}
-          </p>
-        </>
+                )
+          }
+          qr={claim.qr}
+          url={claim.claimUrl}
+        />
       )}
       <Sign
         text={text}
@@ -256,6 +335,16 @@ export function Claimable({
       {claim.newLetters && client && <NewLetters client={client} refresh={refresh} />}
       {!backoff && <ClaimElse claim={claim} />}
     </div>
+  );
+}
+
+/** “Claim this Whombat”, as the second step after Tailscale's when the note above is the first. */
+function ClaimTitle({ claim }: { claim: ClaimState }) {
+  return (
+    <>
+      {claim.second && <span className={styles.step}>{WORD.stepTwo}</span>}
+      {WORD.claimTitle}
+    </>
   );
 }
 

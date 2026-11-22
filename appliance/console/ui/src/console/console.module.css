@@ -442,3 +442,63 @@
   font: var(--type-body-large);
   font-size: 19px;
 }
+
+/* The claim or Link line with a QR code of its address beside it: the words on the left, the code on the right. */
+.openHead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  max-width: 900px;
+}
+
+.openHeadText {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 700px;
+  text-align: left;
+  text-wrap: balance;
+}
+
+/* “1 · ” and “2 · ”: the order of Tailscale's step and the claim. */
+.step {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.noteWithQr {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 10px 10px 22px;
+  text-align: left;
+}
+
+.noteWithQr > span {
+  flex: 1;
+}
+
+/* A QR code in a note, or in the title under notes: the sign makes room for it. */
+.main[data-tight] .signScene {
+  zoom: 0.82;
+}
+
+/* Under the wait for the web address: the claim in the app on this network, quiet, for whoever doesn't want to wait. */
+.waitingInApp {
+  max-width: 44em;
+  margin: 18px 0 0;
+  color: var(--mut);
+  font: var(--type-body-large);
+}
+
+.waitingInApp strong {
+  color: var(--ink2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inlineLetters {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}

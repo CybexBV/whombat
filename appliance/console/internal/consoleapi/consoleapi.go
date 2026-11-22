@@ -83,13 +83,17 @@ type Reach struct {
 	Tailscale *ReachTailscale `json:"tailscale,omitempty"`
 }
 
-// ReachLink is Link on the screen: starting (in place of the claim: the code, waiting for an address, or starting),
-// grace with its end date, or ended. Off and on show nothing and are left out.
+// ReachLink is Link on the screen: starting (in place of the claim: the code, waiting for an address, or starting), on
+// while the unclaimed box still waits for its web address (waitingForAddress, screen.LinkAwaitsAddress), grace with its
+// end date, or ended. Off, and on otherwise, show nothing and are left out.
 type ReachLink struct {
 	State string `json:"state"`
 	// Code and URL: starting, while the code is live; the page types nothing, it shows them.
 	Code string `json:"code,omitempty"`
 	URL  string `json:"url,omitempty"`
+	// QR is the Link page with the code in its address as a QR code (screen.QRModules: one string per row, '#' dark),
+	// so a phone opens it with the code filled in; left out without an https page or when too long to read.
+	QR []string `json:"qr,omitempty"`
 	// ExpiresAt (RFC 3339, the server's clock): when the code changes, only when the screen says so (screen.RotatesShown).
 	ExpiresAt         string `json:"expiresAt,omitempty"`
 	WaitingForAddress bool   `json:"waitingForAddress,omitempty"`
@@ -102,6 +106,10 @@ type ReachLink struct {
 type ReachTailscale struct {
 	LoginURL   string `json:"loginUrl,omitempty"`
 	NeedsHTTPS bool   `json:"needsHttps,omitempty"`
+	// LoginQR is the sign-in page as a QR code (as ReachLink.QR); left out when it isn't https or is too long to read.
+	LoginQR []string `json:"loginQr,omitempty"`
+	// First: the screen numbers Tailscale's step and the claim (screen.TailscaleFirst), “1 · ” on this note.
+	First bool `json:"first,omitempty"`
 }
 
 // Alert is the runtime's alert as the page gets it: its kind and since when (RFC 3339).
@@ -141,6 +149,11 @@ type Claim struct {
 	// to type in the Whombat app. At most one, and only where the page shows the claim link with its code.
 	FallbackTailnet string `json:"fallbackTailnet,omitempty"`
 	FallbackInApp   string `json:"fallbackInApp,omitempty"`
+	// QR is the claim link as a QR code (screen.QRModules), only beside the claim link with its code and only for an
+	// https link. Never the letters: they are typed, so whoever opens the link still needs to be at the screen.
+	QR []string `json:"qr,omitempty"`
+	// Second: the claim is the second of two numbered steps, after Tailscale's (screen.TailscaleFirst).
+	Second bool `json:"second,omitempty"`
 }
 
 // Start is the start problem as the page gets it: its kind and the release the box was installed with ("" none to
@@ -180,6 +193,9 @@ func (s *Server) State(ctx context.Context) State {
 	}
 	if c.ClaimURL != "" && c.Code != "" {
 		c.FallbackTailnet, c.FallbackInApp = sc.FallbackTailnet, sc.FallbackInApp
+		if sc.State == screen.Claimable {
+			c.QR = screen.QRModules(sc.ClaimHref)
+		}
 	}
 	if p := sc.StartShown(); p != nil {
 		c.Start = &Start{Problem: p.Problem, Release: p.Release}
@@ -188,6 +204,7 @@ func (s *Server) State(ctx context.Context) State {
 		c.RetryAt = sc.RetryAt.UTC().Format(time.RFC3339)
 	}
 	now := s.now()
+	c.Second = sc.TailscaleFirst(now)
 	// New letters: only where the page still shows letters (or the wait), and only when this server can pass it on.
 	if c.Code != "" && sc.LettersStay(now) {
 		c.LettersUntil = sc.LettersUntil.UTC().Format(time.RFC3339)
@@ -224,7 +241,7 @@ func reach(sc screen.Screen, now time.Time) *Reach {
 	if l := sc.LinkShown(now); l != nil {
 		rl := &ReachLink{State: l.State, WaitingForAddress: l.WaitingForAddress}
 		if code := l.LiveCode(now); code != "" {
-			rl.Code, rl.URL = code, l.URL
+			rl.Code, rl.URL, rl.QR = code, l.URL, screen.QRModules(l.CodeHref(code))
 			if l.RotatesShown(now) {
 				rl.ExpiresAt = l.ExpiresAt.UTC().Format(time.RFC3339)
 			}
@@ -239,7 +256,8 @@ func reach(sc screen.Screen, now time.Time) *Reach {
 		}
 	}
 	if t := sc.Reach.Tailscale; t != nil && (t.LoginURL != "" || t.NeedsHTTPS) {
-		out.Tailscale = &ReachTailscale{LoginURL: t.LoginURL, NeedsHTTPS: t.NeedsHTTPS}
+		out.Tailscale = &ReachTailscale{LoginURL: t.LoginURL, NeedsHTTPS: t.NeedsHTTPS, LoginQR: screen.QRModules(t.LoginHref),
+			First: sc.TailscaleFirst(now)}
 	}
 	if out.Link == nil && out.Tailscale == nil {
 		return nil

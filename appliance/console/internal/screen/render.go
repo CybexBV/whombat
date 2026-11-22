@@ -94,6 +94,19 @@ const (
 	wordClaimOpenTailnet = "On a device on your tailnet, open %s and enter"
 )
 
+// While the screen waits for the box's web address (Link confirmed, or on with the address still coming), the Whombat
+// app on this network claims it already: one quiet line under the wait, with the letters to enter there.
+const wordLinkWaitingInApp = "Or claim it now: in the Whombat app on this network, type %s and enter %s."
+
+// Tailscale's step and the claim, numbered while Tailscale asks for something and the claim has no address to open
+// (Screen.TailscaleFirst): the sign-in comes first, and the line under the claim says the app on this network works
+// right away.
+const (
+	wordStepOne       = "1 · "
+	wordStepTwo       = "2 · "
+	wordClaimInAppNow = "You can do this now: in the Whombat app on this network, type %s and enter"
+)
+
 // body returns the lines of a screen, top to bottom, and the letters drawn large where codeMarker is.
 func body(s Screen, now time.Time) ([]string, string) {
 	if si := s.LiveSignIn(now); si != nil {
@@ -102,13 +115,17 @@ func body(s Screen, now time.Time) ([]string, string) {
 			wordSignInType, fmt.Sprintf(wordSignInIgnore, MinutesLeft(si.ExpiresAt, now))}, DisplayLetters(si.Code)
 	}
 	if l := s.LinkShown(now); l != nil {
-		return linkBody(l, now)
+		return linkBody(l, s.WaitingInApp(now), s.Code, now)
+	}
+	title := wordClaimTitle
+	if s.TailscaleFirst(now) {
+		title = wordStepTwo + wordClaimTitle
 	}
 	switch s.State {
 	case Waiting:
 		if s.IPv6Only {
 			// The network is there, with IPv6 only: the claim screen without an address, not “check the cable”.
-			return []string{wordClaimTitle, "", s.claimNoAddress(), "", wordClaimIPv4}, ""
+			return []string{title, "", s.claimNoAddress(), "", wordClaimIPv4}, ""
 		}
 		return []string{wordWaiting, "", wordWaitingHint}, ""
 	case Claimable:
@@ -116,10 +133,12 @@ func body(s Screen, now time.Time) ([]string, string) {
 		switch {
 		case s.Openable && s.OnTailnet():
 			open = wordClaimOpenTailnet
+		case !s.Openable && s.InApp != "" && s.TailscaleFirst(now):
+			open, at = wordClaimInAppNow, s.InApp
 		case !s.Openable && s.InApp != "":
 			open, at = wordClaimInApp, s.InApp
 		case !s.Openable:
-			lines := []string{wordClaimTitle, "", s.claimNoAddress()}
+			lines := []string{title, "", s.claimNoAddress()}
 			if s.IPv6Only {
 				lines = append(lines, "", wordClaimIPv4)
 			}
@@ -129,7 +148,7 @@ func body(s Screen, now time.Time) ([]string, string) {
 		if s.LettersStay(now) {
 			rotates = fmt.Sprintf(wordClaimStays, MinutesLeft(s.LettersUntil, now))
 		}
-		lines := []string{wordClaimTitle, "", fmt.Sprintf(open, at), "", codeMarker, "", rotates}
+		lines := []string{title, "", fmt.Sprintf(open, at), "", codeMarker, "", rotates}
 		if s.NewLetters {
 			lines = append(lines, wordNewLetters)
 		}
@@ -190,9 +209,15 @@ func (s Screen) claimNoAddress() string {
 }
 
 // linkBody is the screen while Link starts on an unclaimed box: the code and where to type it, else why there is none.
-func linkBody(l *Link, now time.Time) ([]string, string) {
+// While it waits for the web address, inApp and letters are the claim in the Whombat app on this network meanwhile
+// (Screen.WaitingInApp; inApp "" for none).
+func linkBody(l *Link, inApp, letters string, now time.Time) ([]string, string) {
 	if l.WaitingForAddress {
-		return []string{wordLinkWaiting, "", wordLinkWaitingHint}, ""
+		lines := []string{wordLinkWaiting, "", wordLinkWaitingHint}
+		if inApp != "" {
+			lines = append(lines, "", fmt.Sprintf(wordLinkWaitingInApp, inApp, letters))
+		}
+		return lines, ""
 	}
 	code := l.LiveCode(now)
 	if code == "" {
@@ -223,6 +248,10 @@ func notes(s Screen, now time.Time) []string {
 		}
 		if t.NeedsHTTPS {
 			out = append(out, wordTailscaleHTTPS)
+		}
+		if len(out) > 0 && s.TailscaleFirst(now) {
+			// Tailscale's step is the first of two: the claim under it is the second.
+			out[0] = wordStepOne + out[0]
 		}
 	}
 	if l := s.Reach.Link; l != nil {

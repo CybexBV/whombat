@@ -33,6 +33,7 @@ import type { BluetoothWorld } from './bluetoothDemo';
 import { BLUETOOTH_FIXTURES } from './bluetoothFixtures';
 import { CALM_FIXTURES } from './calmFixtures';
 import { DESK_FIXTURES } from './deskFixtures';
+import { demoQr } from './qr';
 import { REMOTE_HELP_FIXTURES } from './remoteHelpFixtures';
 import { SCREEN_FIXTURES } from './screenFixtures';
 import type { WifiWorld } from './wifiDemo';
@@ -212,9 +213,14 @@ const claimBase = {
   retryAt: null,
   burrows: null,
 };
+/** A claim state; a claimable one with a claim link and its code gets that link's QR code, as the server sends it. */
 const claim = (
   p: Partial<NonNullable<ConsoleState['claim']>> & { state: NonNullable<ConsoleState['claim']>['state'] },
-) => consoleState({ claim: { ...claimBase, ...p } });
+) => {
+  const c = { ...claimBase, ...p };
+  const qr = c.state === 'claimable' && c.claimUrl && c.code ? demoQr(`https://${c.claimUrl}`) : [];
+  return consoleState({ claim: { ...c, ...(qr.length && !p.qr ? { qr } : {}) } });
+};
 
 const one = (state: ServerState) => [{ at: 0, state }];
 
@@ -227,6 +233,7 @@ const linkBase: ReachLink = {
   state: 'starting',
   code: '',
   url: '',
+  qr: [],
   expiresAt: null,
   waitingForAddress: false,
   graceEndsOn: '',
@@ -236,8 +243,16 @@ const linkCode: ReachLink = {
   ...linkBase,
   code: 'KXQM-TRVW',
   url: 'app.whombat.com/link',
+  qr: demoQr('https://app.whombat.com/link?code=KXQM-TRVW'),
   expiresAt: '2026-09-27T12:12:30Z',
 };
+/** Tailscale's sign-in, as the server sends it with its QR code; `first` when the claim under it is the second step. */
+const tailscaleLogin = (first: boolean) => ({
+  loginUrl: 'login.tailscale.com/a/1a2b3c4d5e6f7a',
+  needsHttps: false,
+  loginQr: demoQr('https://login.tailscale.com/a/1a2b3c4d5e6f7a'),
+  first,
+});
 
 /** A device waiting to sign in at the screen (BX-06), its code going away `minutes` after the fixture's clock. */
 const signIn = (minutes: number, p: Partial<SignIn> = {}): SignIn => ({
@@ -612,6 +627,22 @@ export const FIXTURES: Record<string, Fixture> = {
       claimReach({ state: 'claimable', code: 'KXQM' }, { link: { ...linkBase, waitingForAddress: true } }),
     ),
   },
+  'console-link-on-waiting': {
+    note: 'Easy: Whombat Link on, the web address still coming; the app on this network claims it already',
+    timeline: one(
+      claimReach(
+        {
+          state: 'claimable',
+          code: 'EQMX',
+          claimUrl: '',
+          appUrl: '',
+          inApp: '10.100.0.10',
+          newLetters: true,
+        },
+        { link: { ...linkBase, state: 'on', waitingForAddress: true } },
+      ),
+    ),
+  },
   'console-link-starting': {
     note: 'Whombat Link starting, no code yet',
     timeline: one(claimReach({ state: 'claimable', code: 'KXQM' }, { link: linkBase })),
@@ -620,8 +651,25 @@ export const FIXTURES: Record<string, Fixture> = {
     note: 'Tailscale: sign in, then turn on HTTPS (no secure address yet)',
     timeline: one(
       claimReach(
-        { state: 'claimable', claimUrl: '', appUrl: '' },
-        { tailscale: { loginUrl: 'login.tailscale.com/a/1a2b3c4d5e6f7a', needsHttps: true } },
+        { state: 'claimable', claimUrl: '', appUrl: '', second: true },
+        { tailscale: { ...tailscaleLogin(true), needsHttps: true } },
+      ),
+    ),
+  },
+  'console-tailscale-first': {
+    note: 'Expert: 1 · sign in to Tailscale, 2 · claim in the app on this network, which works right away',
+    timeline: one(
+      claimReach(
+        {
+          state: 'claimable',
+          code: 'WADA',
+          claimUrl: '',
+          appUrl: '',
+          inApp: '10.100.0.214',
+          newLetters: true,
+          second: true,
+        },
+        { tailscale: tailscaleLogin(true) },
       ),
     ),
   },
@@ -638,7 +686,13 @@ export const FIXTURES: Record<string, Fixture> = {
         { state: 'claimable', code: 'KXQM' },
         {
           link: linkCode,
-          tailscale: { loginUrl: `login.tailscale.com/a/${'1a2b3c4d5e6f7a8b'.repeat(8)}`, needsHttps: true },
+          // Too long for a QR code a phone reads off the screen: the words only.
+          tailscale: {
+            loginUrl: `login.tailscale.com/a/${'1a2b3c4d5e6f7a8b'.repeat(8)}`,
+            needsHttps: true,
+            loginQr: [],
+            first: false,
+          },
         },
       ),
     ),

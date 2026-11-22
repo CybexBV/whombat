@@ -55,6 +55,13 @@ export interface ClaimState {
   fallbackInApp?: string;
   /** Why the first start can't finish (CG-409): starting only; left out when there is none. */
   start?: StartProblem;
+  /**
+   * The claim link as a QR code (rows of '#' dark and '.' light, see `qrRows`), beside the link with its code: the https
+   * address only, never the letters. Claimable only; left out when there is none.
+   */
+  qr?: string[];
+  /** The claim is the second of two numbered steps, after what Tailscale needs (the note above says “1 · ”). */
+  second?: boolean;
 }
 
 /** The start problems the server sends (consoleapi `Start`, screen/start.go). */
@@ -84,8 +91,11 @@ export interface ConsoleState {
   reach?: ConsoleReach;
 }
 
-/** The Link states the server sends: the others show nothing on the screen (consoleapi `ReachLink`). */
-export const REACH_LINK_STATES = ['starting', 'grace', 'ended'] as const;
+/**
+ * The Link states the server sends (consoleapi `ReachLink`): `on` only while an unclaimed box waits for its web address
+ * (`waitingForAddress`); the others show nothing on the screen.
+ */
+export const REACH_LINK_STATES = ['starting', 'on', 'grace', 'ended'] as const;
 export type ReachLinkState = (typeof REACH_LINK_STATES)[number];
 
 /** Whombat Link on the screen: only what the text console shows at the same moment (the server decides). */
@@ -94,6 +104,8 @@ export interface ReachLink {
   /** Starting, while the code is live: XXXX-XXXX, and the page to type it at (without the scheme); else ''. */
   code: string;
   url: string;
+  /** The Link page with the code in its address as a QR code (`qrRows`), beside a live code; else []. */
+  qr: string[];
   /** When the code changes (RFC 3339, the server's clock), only when the screen says so; else null. */
   expiresAt: string | null;
   waitingForAddress: boolean;
@@ -105,6 +117,10 @@ export interface ReachLink {
 export interface ReachTailscale {
   loginUrl: string;
   needsHttps: boolean;
+  /** The sign-in page as a QR code (`qrRows`); [] when there is none. */
+  loginQr: string[];
+  /** Tailscale's note is the first of two numbered steps, the claim under it the second. */
+  first: boolean;
 }
 
 export interface ConsoleReach {
@@ -242,7 +258,25 @@ function parseClaim(v: unknown): ClaimState | null {
       : {}),
     ...fallback(v),
     ...start(v.state === 'starting' ? v.start : null),
+    ...(v.state === 'claimable' && str(v.claimUrl) !== '' && str(v.code) !== '' && qrRows(v.qr).length
+      ? { qr: qrRows(v.qr) }
+      : {}),
+    ...(v.state !== 'claimed' && v.state !== 'backoff' && v.second === true ? { second: true } : {}),
   };
+}
+
+/** The widest QR code the server sends (version 7): a denser one would be hard to read off the screen. */
+const QR_MAX = 45;
+
+/**
+ * A QR code as the server sends it (screen.QRModules): rows of '#' (dark) and '.' (light), as many as each is long, a
+ * size a QR code has (21, 25, … modules). Anything else is [], and the screen shows the address as words only.
+ */
+export function qrRows(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const n = v.length;
+  if (n < 21 || n > QR_MAX || (n - 17) % 4 !== 0) return [];
+  return v.every((r) => typeof r === 'string' && r.length === n && /^[#.]+$/.test(r)) ? (v as string[]) : [];
 }
 
 /** The claim's second way in, only beside a claim link to open: the tailnet page first, else the app's address. */
@@ -300,6 +334,7 @@ function reach(v: unknown): { reach?: ConsoleReach } {
       state: l.state as ReachLinkState,
       code,
       url: code ? url : '',
+      qr: code ? qrRows(l.qr) : [],
       expiresAt: code && typeof l.expiresAt === 'string' ? l.expiresAt : null,
       waitingForAddress: l.waitingForAddress === true,
       graceEndsOn: typeof l.graceEndsOn === 'string' && l.graceEndsOn.length <= 40 ? l.graceEndsOn : '',
@@ -307,7 +342,13 @@ function reach(v: unknown): { reach?: ConsoleReach } {
   }
   const t = v.tailscale;
   if (isObj(t)) {
-    const ts = { loginUrl: plainUrl(t.loginUrl, 500), needsHttps: t.needsHttps === true };
+    const loginUrl = plainUrl(t.loginUrl, 500);
+    const ts = {
+      loginUrl,
+      needsHttps: t.needsHttps === true,
+      loginQr: loginUrl ? qrRows(t.loginQr) : [],
+      first: t.first === true,
+    };
     if (ts.loginUrl || ts.needsHttps) out.tailscale = ts;
   }
   return out.link || out.tailscale ? { reach: out } : {};

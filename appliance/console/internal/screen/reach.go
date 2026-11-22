@@ -22,6 +22,7 @@ type Link struct {
 	State             string    // off, starting, on, grace or ended (protocol.LinkState)
 	Code              string    // starting only, XXXX-XXXX; "" unless URL is set too, as the code means nothing without the page
 	URL               string    // the page to type the code at, without the scheme (app.whombat.com/link)
+	PageHref          string    // the same as a phone opens it (https://…), "" unless the file's is https; see CodeHref
 	ExpiresAt         time.Time // the code changes then; zero when the file doesn't say
 	WaitingForAddress bool      // confirmed, but the day's new addresses ran out
 	GraceEndsAt       time.Time // grace only; zero when the file doesn't say
@@ -30,6 +31,7 @@ type Link struct {
 // Tailscale is what Tailscale needs from the person, on the screen (contracts 4.4 `ConsoleTailscale`).
 type Tailscale struct {
 	LoginURL   string // the sign-in page without the scheme, e.g. login.tailscale.com/a/abc123
+	LoginHref  string // the same as a phone opens it (https://…), for the graphical console's QR code; "" unless https
 	NeedsHTTPS bool   // the tailnet has HTTPS certificates off
 	Name       string // the box's name on the tailnet, once it's in
 }
@@ -69,7 +71,7 @@ func displayLink(l *local.ConsoleLink) *Link {
 	out := &Link{State: string(l.State), WaitingForAddress: l.WaitingForAddress != nil && *l.WaitingForAddress}
 	if l.Code != nil && l.URL != nil && linkCodeRe.MatchString(*l.Code) {
 		if u, err := displayURLMax(*l.URL, 100); err == nil {
-			out.Code, out.URL = *l.Code, u
+			out.Code, out.URL, out.PageHref = *l.Code, u, httpsHref(*l.URL, u)
 		}
 	}
 	if l.ExpiresAt != nil {
@@ -91,9 +93,10 @@ func displayTailscale(t *local.ConsoleTailscale) *Tailscale {
 	}
 	out := &Tailscale{NeedsHTTPS: t.NeedsHttps != nil && *t.NeedsHttps}
 	if t.LoginURL != nil {
-		// Shown as text, never as a link or a QR code: the same plain host/path rule as the claim link.
+		// Shown as text (and on the graphical console as a QR code of the same address): the same plain host/path rule
+		// as the claim link.
 		if u, err := displayURLMax(*t.LoginURL, MaxLoginURL); err == nil {
-			out.LoginURL = u
+			out.LoginURL, out.LoginHref = u, httpsHref(*t.LoginURL, u)
 		}
 	}
 	if t.Name != nil && len(*t.Name) <= 253 && tailnetNameRe.MatchString(*t.Name) {
@@ -116,14 +119,60 @@ func (s Screen) LinkStarting() *Link {
 }
 
 // LinkShown is the Link that takes the place of the claim screen at now, nil when the claim's own screen shows: Link
-// starting, and on a claimed box only while there is a code to type. The text console (body) and the graphical one
-// (consoleapi) use the same rule.
+// starting, and on a claimed box only while there is a code to type; or Link on while the claim still has no address
+// to open (LinkAwaitsAddress), as the wait for the address. The text console (body) and the graphical one (consoleapi)
+// use the same rule.
 func (s Screen) LinkShown(now time.Time) *Link {
+	if s.LinkAwaitsAddress() {
+		w := *s.Reach.Link
+		w.WaitingForAddress = true
+		return &w
+	}
 	l := s.LinkStarting()
 	if l == nil || (s.State == Claimed && l.LiveCode(now) == "") {
 		return nil
 	}
 	return l
+}
+
+// LinkAwaitsAddress reports whether Link is on but the unclaimed box has no address to open yet: control confirmed it,
+// and its own web address (the name and its certificate) is still on the way. The claim link only works once it is
+// there, so the screen shows the wait, with the Whombat app on this network as the quiet other way (WaitingInApp).
+func (s Screen) LinkAwaitsAddress() bool {
+	return s.Reach != nil && s.Reach.Link != nil && s.Reach.Link.State == string(protocol.LinkStateOn) &&
+		s.State == Claimable && !s.Openable
+}
+
+// WaitingInApp is the address for the Whombat app on this network while the screen waits for the box's web address,
+// "" when there is none or no letters to enter there: the claim works that way meanwhile.
+func (s Screen) WaitingInApp(now time.Time) string {
+	if l := s.LinkShown(now); l == nil || !l.WaitingForAddress || s.State != Claimable || s.Code == "" {
+		return ""
+	}
+	return s.InApp
+}
+
+// CodeHref is the Link page with the code in its address (“https://app.whombat.com/link?code=ABCD-EFGH”), which opens
+// with the code filled in: the graphical console's QR code. "" without an https page or a code.
+func (l *Link) CodeHref(code string) string {
+	if l.PageHref == "" || code == "" {
+		return ""
+	}
+	return l.PageHref + "?code=" + code
+}
+
+// TailscaleFirst reports whether the screen numbers what to do: what Tailscale still needs first, then the claim. That
+// is while Tailscale asks for a sign-in or HTTPS and the claim has no address to open, so the person sees one order,
+// while the line under the claim still says the Whombat app on this network works at once.
+func (s Screen) TailscaleFirst(now time.Time) bool {
+	t := s.Reach
+	if t == nil || t.Tailscale == nil || (t.Tailscale.LoginURL == "" && !t.Tailscale.NeedsHTTPS) {
+		return false
+	}
+	if s.Openable || s.LinkShown(now) != nil {
+		return false
+	}
+	return s.State == Claimable || (s.State == Waiting && s.IPv6Only)
 }
 
 // RotatesShown reports whether the screen says when the Link code changes: a code lasts LinkCodeTTLS, and a time much

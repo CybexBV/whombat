@@ -129,13 +129,26 @@ export function liveLinkCode(l: ReachLink, now: number): string {
 }
 
 /**
- * Whether Link starts in place of the claim, the text console's rule (screen.LinkShown): on a claimed box only while
- * there is a code to type. The server sends a code only while it is live, so this needs no clock: the desk steps
- * aside for it as it does for a claim code (deskActive).
+ * Whether Link takes the claim's place, the text console's rule (screen.LinkShown): starting, on a claimed box only
+ * while there is a code to type; or on while an unclaimed box waits for its web address (the server sends `on` only
+ * then). The server sends a code only while it is live, so this needs no clock: the desk steps aside for it as it
+ * does for a claim code (deskActive).
  */
 export function linkShown(s: ConsoleState): boolean {
   const l = s.reach?.link;
+  if (l?.state === 'on') return l.waitingForAddress && s.claim?.state === 'claimable';
   return l?.state === 'starting' && (s.claim?.state !== 'claimed' || l.code !== '');
+}
+
+/**
+ * The claim in the Whombat app on this network while the screen waits for the web address (screen.WaitingInApp): its
+ * address and the letters to enter there, or null when there is none.
+ */
+export function waitingInApp(s: ConsoleState): { address: string; letters: string } | null {
+  const c = s.claim;
+  if (!s.reach?.link?.waitingForAddress || c?.state !== 'claimable' || !c.inApp || !codeRe.test(c.code))
+    return null;
+  return { address: c.inApp, letters: c.code };
 }
 
 /** The Link screen at `now` (server clock), or null for the claim's own screen. */
@@ -149,17 +162,19 @@ export function linkScreen(s: ConsoleState, now: number): LinkScreen | null {
 }
 
 /** A note above every claim screen, in the text console's order: what Tailscale needs, then Link's grace or end. */
+/** Tailscale's note is numbered (`first`: “1 · ”) when the claim under it is the second step. */
 export type ReachNote =
-  | { kind: 'tailscaleLogin'; url: string }
-  | { kind: 'tailscaleHttps' }
+  | { kind: 'tailscaleLogin'; url: string; qr: string[]; first: boolean }
+  | { kind: 'tailscaleHttps'; first: boolean }
   | { kind: 'linkGrace'; day: string }
   | { kind: 'linkEnded' };
 
 export function reachNotes(s: ConsoleState): ReachNote[] {
   const out: ReachNote[] = [];
   const t = s.reach?.tailscale;
-  if (t?.loginUrl) out.push({ kind: 'tailscaleLogin', url: t.loginUrl });
-  if (t?.needsHttps) out.push({ kind: 'tailscaleHttps' });
+  // Only Tailscale's first note carries the number: the claim is the second step.
+  if (t?.loginUrl) out.push({ kind: 'tailscaleLogin', url: t.loginUrl, qr: t.loginQr, first: t.first });
+  if (t?.needsHttps) out.push({ kind: 'tailscaleHttps', first: t.first && !t.loginUrl });
   const l = s.reach?.link;
   if (l?.state === 'grace' && l.graceEndsOn) out.push({ kind: 'linkGrace', day: l.graceEndsOn });
   else if (l?.state === 'ended') out.push({ kind: 'linkEnded' });
