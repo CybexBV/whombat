@@ -21,7 +21,7 @@ described under Notifications below, which you can turn off.
 - Our cloud keeps only what it needs to run your account and Whombat Link: your email address, your Whombats with
   their names, addresses and Link state, and your subscription.
 - We don't store IP addresses. Where we need to recognize a network (for example to stop abuse), we keep a keyed
-  hash of it instead.
+  hash of it instead. The one exception is the login log of our own servers, which only our staff log in to.
 - No analytics, no advertising, no tracking cookies, no session recordings. We never sell your data and we never use
   it to train AI models.
 - You can delete your account yourself, and you can ask us about everything we hold on you.
@@ -66,7 +66,8 @@ what it does, and you can have each update wait for your yes (“Ask before upda
 
 **Your account.** Your email address, your sign-in sessions (when they were created and last used; no IP address
 or browser details) and, if you use them, your passkeys. We use them to sign you in and to send you sign-in links.
-We also keep which version of our terms you accepted, and when.
+We also keep which version of our terms you accepted, and when, with a keyed hash of the network you accepted them
+from (not its IP address).
 
 **Whombat Link.** For each Whombat you add: its name, its own address (`<label>.box.whombat.app`), whether Link is
 on, starting, ending or off and since when, and when it last asked us for a connection. The one-time code a Whombat
@@ -118,7 +119,9 @@ changed), recorded under a pseudonymous account number, without email addresses,
 to your account, with who made it and why. Request logs with the kind of request, its result and its duration,
 without IP addresses, browser details or request contents. Counters that limit how often something can be tried,
 keyed by a hash, never by an IP address. When you claim a new Whombat, we compare keyed hashes of your network and the
-Whombat's network to find it; those hashes are erased once it's claimed.
+Whombat's network to find it; those hashes are erased once it's claimed. Our servers' own login log keeps the IP
+addresses of logins to them: our staff's, and the attempts strangers make from the internet. Nobody else logs in
+there.
 
 **The Feedback widget.** If you put Whombat's Feedback widget on your website, the reports visitors send are encrypted
 in their browser for your Whombat. We hold them, unreadable, until your Whombat collects them, together with the
@@ -143,7 +146,8 @@ that website only, and signing out removes it.
 - **To provide the service you signed up for** (performance of a contract): your account, your Whombats, Whombat
   Link, connections, notifications, shared links, emails and billing, and remote help when you turn it on.
 - **Our legitimate interest** in keeping Whombat secure and fair: the audit log, request logs, rate limits, network
-  hashes and the one-free-month-per-account check. We've kept each of these to the minimum that does the job.
+  hashes, the server login log and the one-free-month-per-account check. We've kept each of these to the minimum that
+  does the job.
 - **Legal obligations:** keeping invoices and payment records as tax law requires.
 - **Your consent:** notifications, which you can turn off at any time.
 
@@ -179,9 +183,9 @@ after 30 days). Both are needed for what the visitor asked for, and neither is u
 We use a small number of service providers, under agreements that only let them process data for us:
 
 - **Hetzner Online GmbH** (Germany) hosts our servers, in Germany.
-- **Cloudflare, Inc.** sits in front of our services and protects them. It handles the encrypted web traffic to our
-  servers, including IP addresses, but not the content between your devices and your Whombat, which stays
-  end-to-end encrypted.
+- **Cloudflare, Inc.** sits in front of our websites and services: it answers for their names (DNS), delivers and
+  protects them. It handles the web traffic to them for us, including visitors' IP addresses, but not the content
+  between your devices and your Whombat, which stays end-to-end encrypted.
 - **Mailgun** (Sinch) sends our emails.
 - **Stripe** handles payments. For fraud prevention and its own legal obligations, Stripe is also a controller in its
   own right; see Stripe's privacy policy.
@@ -220,7 +224,8 @@ provider is certified, and otherwise on the European Commission's Standard Contr
 - **Sign-in links:** one day after they expire.
 - **Your Whombats, their Link and your terms acceptances:** as long as your account exists. A Whombat that is retired
   keeps its hardware entry, without your account.
-- **Health reports:** 30 days. **Notification deliveries:** 14 days. **Request logs:** 14 days.
+- **Health reports:** 30 days. **Notification deliveries:** 14 days. **Request logs:** 14 days. **Server login
+  log:** up to 2 months.
   **Rate-limit counters:** 2 days. **Payment events from Stripe:** 90 days. **Audit log:** 400 days.
 - **Phone push addresses:** until unused for 90 days.
 - **Shared links:** until you remove them or they expire.

@@ -187,6 +187,26 @@ const dayTime = (iso: string, locale?: string) =>
     minute: '2-digit',
   });
 
+/** When the box tries for its certificate again: the time today, the day and the time later, null once it passed. */
+function retryWhen(iso: string, now: number, locale?: string): string | null {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at) || at <= now) return null;
+  const time = new Date(at).toLocaleTimeString(locale ?? 'en-GB', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = (ms: number) => new Date(ms).toLocaleDateString(locale ?? 'en-GB');
+  if (sameDay(at) === sameDay(now)) return `at ${time}`;
+  const date = new Date(at).toLocaleDateString(locale ?? 'en-GB', { day: 'numeric', month: 'short' });
+  return `on ${date} at ${time}`;
+}
+
+/** The state line while the box can't get its certificate: why, and when it tries again. */
+function failingState(a: OwnAddressSummary, now: number, locale?: string) {
+  const t = OWN_ADDRESS_TEXT.settings;
+  const f = a.failure;
+  const when = f?.retryAt ? retryWhen(f.retryAt, now, locale) : null;
+  if (f?.reason === 'rate_limited') return { state: t.busy(when), tone: 'warn' as const };
+  return { state: when ? t.failingRetry(when) : t.failing, tone: 'bad' as const };
+}
+
 /** What Settings → This Whombat → About shows for the address, line by line. */
 export interface OwnAddressView {
   /** The address as people read it. */
@@ -217,7 +237,7 @@ export function ownAddressView(
     : a.state === 'ready'
       ? { state: t.ready, tone: 'ok' as const }
       : a.state === 'failing'
-        ? { state: t.failing, tone: 'bad' as const }
+        ? failingState(a, now, locale)
         : a.state === 'starting'
           ? { state: t.starting, tone: 'warn' as const }
           : { state: t.off, tone: 'mut' as const };
@@ -335,6 +355,11 @@ export const OWN_ADDRESS_TEXT = {
     ready: 'Works from anywhere',
     starting: 'Getting its certificate…',
     failing: 'Can’t get its certificate. Check that this Whombat is online.',
+    failingRetry: (when: string) =>
+      `Can’t get its certificate yet. It tries again by itself ${when}. Check that this Whombat is online.`,
+    /** Let's Encrypt asked it to wait: nothing for the person to do. */
+    busy: (when: string | null) =>
+      `Many new Whombats are getting their addresses right now. Yours ${when ? `tries again by itself ${when}` : 'is trying again'}.`,
     off: 'Switched off',
     foreign: 'Someone got a certificate for this address that your Whombat didn’t ask for.',
     certificate: (date: string) => `Certificate ends ${date}.`,

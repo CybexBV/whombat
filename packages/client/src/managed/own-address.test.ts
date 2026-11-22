@@ -163,6 +163,37 @@ describe('the address in Settings (design §6)', () => {
     expect(v.missed[1]).toContain('10 Nov');
   });
 
+  it('says Let’s Encrypt asked it to wait, and when it tries again, while the certificate is refused', () => {
+    const later = '2026-11-18T13:30:00Z';
+    const time = new Date(later).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const failing = { ...summary, state: 'failing' as const, certificateEndsAt: null };
+    const busy = ownAddressView({ ...failing, failure: { reason: 'rate_limited', retryAt: later } }, now);
+    expect(busy.tone).toBe('warn');
+    expect(busy.state).toContain('Many new Whombats');
+    expect(busy.state).toContain(time);
+    // Another day names the day; once the time passed it says it is trying.
+    expect(
+      ownAddressView(
+        { ...failing, failure: { reason: 'rate_limited', retryAt: '2026-11-20T13:30:00Z' } },
+        now,
+      ).state,
+    ).toContain('20 Nov');
+    const passed = ownAddressView(
+      { ...failing, failure: { reason: 'rate_limited', retryAt: later } },
+      Date.parse(later),
+    );
+    expect(passed.state).not.toContain(time);
+    // Another reason keeps “check it is online”, with the time; an older box without a reason, the old line.
+    const offline = ownAddressView(
+      { ...failing, failure: { reason: 'ca_unreachable', retryAt: later } },
+      now,
+    );
+    expect(offline).toMatchObject({ tone: 'bad' });
+    expect(offline.state).toContain(time);
+    expect(offline.state).toContain('online');
+    expect(ownAddressView(failing, now).state).toBe(OWN_ADDRESS_TEXT.settings.failing);
+  });
+
   it('says so when the switch is off or a certificate it didn’t ask for is still valid', () => {
     expect(ownAddressView({ ...summary, reachable: false }, now).tone).toBe('mut');
     const foreign = {

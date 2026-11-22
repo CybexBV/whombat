@@ -34,6 +34,18 @@ import { ClaimLink } from './claim-link';
 import { type ForeignCertificate, foreignCertificates } from './ct';
 
 const STATE_ID = 1;
+
+/**
+ * Why the manager has no certificate yet and when it tries again, for the person's screen: only while it is failing,
+ * and only with a reason the contract can carry (an odd code from a newer manager is left out, not sent broken).
+ */
+export function summaryFailure(
+  acme: OwnAddressStateResponse['acme'],
+): NonNullable<OwnAddressSummary['failure']> | undefined {
+  if (acme.state !== 'failing' || !acme.error || !/^[a-z0-9_]{1,40}$/.test(acme.error)) return undefined;
+  const at = acme.nextAttemptAt ? Date.parse(acme.nextAttemptAt) : Number.NaN;
+  return { reason: acme.error, retryAt: Number.isFinite(at) ? new Date(at).toISOString() : null };
+}
 /** While the box waits for its first certificate (the manager probes and orders right after registering). */
 export const OWN_ADDRESS_WAITING_POLL_MS = 30_000;
 /** Draws of a label in a row that control may call used, then a pause. */
@@ -462,12 +474,14 @@ export class OwnAddressService {
     if (!this.state || !host) return null;
     const now = this.now();
     const served = this.context() ? this.served : null;
+    const failure = served ? undefined : summaryFailure(this.state.acme);
     return {
       host,
       url: `https://${host}/`,
       state: served ? 'ready' : this.state.acme.state === 'failing' ? 'failing' : 'starting',
       reachable: this.reach,
       certificateEndsAt: served ? served.notAfter.toISOString() : null,
+      ...(failure ? { failure } : {}),
       watch: {
         lastCheckAt: this.ct?.lastFreshAt ?? null,
         missed: (this.ct?.missed ?? []).slice(-64),

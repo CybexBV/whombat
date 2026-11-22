@@ -42,6 +42,20 @@ export const OwnAddressSummary = z.object({
   /** The owner's switch “Reach my Whombat's page from anywhere” (on unless an owner turned it off). */
   reachable: z.boolean(),
   certificateEndsAt: Timestamp.nullable(),
+  /**
+   * While `failing`: why the certificate didn't come (`rate_limited`, `probe_failed`, `validation_failed`,
+   * `ca_unreachable`, `order_failed`, …) and when the box tries again by itself. Older boxes leave it out, and so does
+   * a box with nothing to say.
+   */
+  failure: z
+    .object({
+      reason: z
+        .string()
+        .max(40)
+        .regex(/^[a-z0-9_]+$/),
+      retryAt: Timestamp.nullable(),
+    })
+    .optional(),
   watch: z.object({
     /** The last fresh, complete certificate check; silence and errors never count. */
     lastCheckAt: Timestamp.nullable(),
