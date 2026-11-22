@@ -64,6 +64,8 @@ export interface FencedMailInput {
   body: string;
   bodyTruncated?: boolean | undefined;
   attachments?: readonly FencedMailAttachment[] | undefined;
+  /** Additional attachments left out of `attachments` because the email exceeded the metadata cap. */
+  omittedAttachmentCount?: number | undefined;
 }
 
 function clipText(text: string, max: number): { text: string; clipped: boolean } {
@@ -102,7 +104,8 @@ export function fenceMailContent(mail: FencedMailInput, options: { maxBody?: num
   lines.push(`Subject: ${line(mail.subject) || '(no subject)'}`);
   if (mail.receivedAt) lines.push(`Received: ${line(mail.receivedAt)}`);
   const attachments = mail.attachments ?? [];
-  if (attachments.length === 0) {
+  const omitted = Math.max(0, Math.trunc(mail.omittedAttachmentCount ?? 0));
+  if (attachments.length === 0 && omitted === 0) {
     lines.push('Attachments: none');
   } else {
     const items = attachments.slice(0, 20).map((a) => {
@@ -110,14 +113,25 @@ export function fenceMailContent(mail: FencedMailInput, options: { maxBody?: num
       const missing = a.notAttached ? ` — not attached: ${line(a.notAttached)}` : '';
       return `${line(a.name) || 'attachment'} (${line(a.mimeType)}, ${a.size} bytes${id}${missing})`;
     });
-    const extra = attachments.length > 20 ? ` and ${attachments.length - 20} more` : '';
-    lines.push(`Attachments: ${items.join('; ')}${extra}`);
+    const extraCount = Math.max(0, attachments.length - 20) + omitted;
+    const extra = extraCount > 0 ? ` and ${extraCount} more` : '';
+    if (items.length > 0) {
+      lines.push(`Attachments: ${items.join('; ')}${extra}`);
+    } else {
+      lines.push(`Attachments: ${omitted} not listed (attachment limit reached)`);
+    }
     const missing = attachments.filter((a) => a.notAttached);
-    if (missing.length > 0) {
+    const missingExtra = Math.max(0, missing.length - 20) + omitted;
+    if (missing.length > 0 || omitted > 0) {
       const missingItems = missing
         .slice(0, 20)
         .map((a) => `${line(a.name) || 'attachment'} (${line(a.notAttached as string)})`);
-      lines.push(`Not attached (didn’t come along): ${missingItems.join('; ')}`);
+      if (missingItems.length > 0) {
+        const more = missingExtra > 0 ? ` and ${missingExtra} more (attachment limit reached)` : '';
+        lines.push(`Not attached (didn’t come along): ${missingItems.join('; ')}${more}`);
+      } else {
+        lines.push(`Not attached (didn’t come along): ${omitted} more (attachment limit reached)`);
+      }
     }
   }
   const body = clipText(mail.body, maxBody);

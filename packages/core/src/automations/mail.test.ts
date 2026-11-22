@@ -497,5 +497,31 @@ describe('mail automation safety restrictions', () => {
     });
     expect(fenced).toContain('huge.pdf (application/pdf, 50000000 bytes — not attached: too large)');
     expect(fenced).toContain('Not attached (didn’t come along): huge.pdf (too large)');
+
+    // Omitted attachment counts show up in both the run page summary and the fenced agent prompt.
+    expect(
+      missingAttachmentsText(
+        Array.from({ length: 20 }, (_, i) => ({ name: `f${i + 1}.pdf`, reason: 'too_many' as const })),
+        75,
+      ),
+    ).toContain('and 85 more.');
+    expect(missingAttachmentsText([], 5)).toContain('5 more attachments didn’t come along');
+
+    const fencedCapped = fenceMailContent({
+      mailbox: 'you@example.com',
+      from: 'billing@example.com',
+      subject: '105 attachments',
+      body: 'Many files.',
+      omittedAttachmentCount: 5,
+      attachments: Array.from({ length: 100 }, (_, i) => ({
+        name: `doc-${i + 1}.pdf`,
+        mimeType: 'application/pdf',
+        size: 100,
+        ...(i >= 10 ? { notAttached: 'attachment limit reached' } : {}),
+      })),
+    });
+    expect(fencedCapped).toContain('and 85 more');
+    expect(fencedCapped).toContain('Not attached (didn’t come along):');
+    expect(fencedCapped).toContain('and 75 more (attachment limit reached)');
   });
 });

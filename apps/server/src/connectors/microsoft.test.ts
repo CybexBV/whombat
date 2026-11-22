@@ -628,4 +628,65 @@ describe('Microsoft mail change feed', () => {
     expect(reset.reset).toBe(true);
     expect(reset.cursor).toEqual({ kind: 'microsoft', deltaLink: freshDelta });
   });
+
+  it('clips oversized message fields and handles messages with more than 100 attachments without failing', async () => {
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const page2Att = 'https://graph.microsoft.com/v1.0/me/messages/m_big/attachments?$skiptoken=p2';
+    const delta2 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=d2';
+    const makeAtts = (start: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `att_${start + i}`,
+        name: `${'f'.repeat(600)}-${start + i}.pdf`,
+        contentType: `application/${'p'.repeat(250)}`,
+        size: 128,
+      }));
+    const bigMessage = {
+      id: 'm_big',
+      conversationId: '',
+      internetMessageId: `<${'i'.repeat(600)}@example.com>`,
+      from: { emailAddress: { name: 'Sender', address: `${'a'.repeat(550)}@example.com` } },
+      toRecipients: [{ emailAddress: { address: `${'b'.repeat(550)}@example.com` } }],
+      ccRecipients: [{ emailAddress: { address: `${'c'.repeat(550)}@example.com` } }],
+      subject: 'S'.repeat(1400),
+      bodyPreview: 'P'.repeat(700),
+      body: { contentType: 'text', content: 'Hello' },
+      receivedDateTime: '2026-10-28T10:01:00Z',
+      categories: ['C'.repeat(250)],
+      webLink: `https://outlook.office.com/mail/${'w'.repeat(2100)}`,
+      hasAttachments: true,
+      isDraft: false,
+    };
+
+    const changesFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ value: [bigMessage], '@odata.deltaLink': delta2 }))
+      .mockResolvedValueOnce(response({ value: makeAtts(1, 100), '@odata.nextLink': page2Att }))
+      .mockResolvedValueOnce(response({ value: makeAtts(101, 5) }));
+    const changes = await new MicrosoftWorkspace(changesFetcher).mailChanges(
+      'tok',
+      {
+        kind: 'microsoft',
+        deltaLink: 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=d1',
+      },
+      { since: activation, needAttachmentTypes: true },
+    );
+    expect(changes.headers).toHaveLength(1);
+    expect(changes.headers[0]?.attachments).toHaveLength(105);
+    expect(changes.headers[0]?.messageId?.length).toBeLessThanOrEqual(500);
+
+    const readFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(bigMessage))
+      .mockResolvedValueOnce(response({ value: makeAtts(1, 100), '@odata.nextLink': page2Att }))
+      .mockResolvedValueOnce(response({ value: makeAtts(101, 5) }));
+    const [msg] = await new MicrosoftWorkspace(readFetcher).mailRead('tok', { messageId: 'm_big' });
+    expect(msg?.attachments).toHaveLength(105);
+    expect(msg?.subject.length).toBe(1000);
+    expect(msg?.from.length).toBe(500);
+    expect(msg?.to[0]?.length).toBe(500);
+    expect(msg?.cc[0]?.length).toBe(500);
+    expect(msg?.labels[0]?.length).toBe(200);
+    expect(msg?.webUrl).toBeUndefined();
+    expect(msg?.threadId).toBe('m_big');
+  });
 });

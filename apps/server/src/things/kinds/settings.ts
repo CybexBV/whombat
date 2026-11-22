@@ -374,7 +374,16 @@ export function settingRow<S>(input: SettingsTabInput<S>, spec: SettingSpec<S>):
       toggle: pageButton(who, { action: SETTING_ACTION, target: spec.id, label: spec.label }),
     };
   const choices = (spec.choices?.(s) ?? []).slice(0, 24);
-  if (choices.length < 2) return base;
+  if (choices.length < 2)
+    return spec.elsewhere
+      ? {
+          ...base,
+          elsewhere: {
+            label: `In ${d.name}`.slice(0, 30),
+            url: spec.elsewhere(input.baseUrl ?? input.url),
+          },
+        }
+      : base;
   const current = choices.find((c) => sameValue(c.value, v))?.value ?? null;
   const hint = spec.hint?.(s);
   return {

@@ -8,7 +8,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.widget.RemoteViews
 
 /**
@@ -74,11 +73,8 @@ class WhombatStatusWidgetProvider : AppWidgetProvider() {
       val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
       val pending = rolloverIntent(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
       runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextAt, pending)
-        } else {
-          alarmManager.set(AlarmManager.RTC_WAKEUP, nextAt, pending)
-        }
+        // Plain RTC avoids waking a sleeping phone; Android delivers the redraw when it next wakes.
+        alarmManager.set(AlarmManager.RTC, nextAt, pending)
       }
     }
 

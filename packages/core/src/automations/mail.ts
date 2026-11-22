@@ -357,10 +357,22 @@ export function missingAttachmentReasonText(reason: MissingMailAttachmentReason)
 }
 
 /** Plain-English notice for mail attachments that didn't come along with a run (for the run page and summaries). */
-export function missingAttachmentsText(missing: readonly MissingMailAttachment[]): string {
-  if (missing.length === 0) return '';
-  const items = missing.slice(0, 10).map((m) => `“${m.name}” (${missingAttachmentReasonText(m.reason)})`);
-  const extra = missing.length > 10 ? ` and ${missing.length - 10} more` : '';
-  if (missing.length === 1) return `Attachment didn’t come along: ${items[0]}.`;
+export function missingAttachmentsText(
+  missing: readonly MissingMailAttachment[],
+  omittedCount = 0,
+  maxListed = 10,
+): string {
+  const omitted = Math.max(0, Math.trunc(omittedCount));
+  const limit = Math.max(1, Math.trunc(maxListed));
+  if (missing.length === 0 && omitted === 0) return '';
+  if (missing.length === 0) {
+    return omitted === 1
+      ? '1 more attachment didn’t come along (attachment limit reached).'
+      : `${omitted} more attachments didn’t come along (attachment limit reached).`;
+  }
+  const items = missing.slice(0, limit).map((m) => `“${m.name}” (${missingAttachmentReasonText(m.reason)})`);
+  const more = Math.max(0, missing.length - limit) + omitted;
+  const extra = more > 0 ? ` and ${more} more` : '';
+  if (missing.length === 1 && more === 0) return `Attachment didn’t come along: ${items[0]}.`;
   return `These attachments didn’t come along: ${items.join(', ')}${extra}.`;
 }

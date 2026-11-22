@@ -111,11 +111,14 @@ function withWidgetTarget(config, opts) {
     const project = c.modResults;
     if (project.pbxTargetByName(TARGET)) return c;
     const bundleId = `${c.ios?.bundleIdentifier ?? 'com.whombat.mobile'}.${TARGET}`;
-    const sources = opts.iosStatusWidget ? [...BASE_SOURCES, STATUS_WIDGET_SOURCE] : BASE_SOURCES;
-    const resources = opts.iosStatusWidget ? [PRIVACY_MANIFEST] : [];
-    const groupFiles = opts.iosStatusWidget
-      ? [...sources, 'Info.plist', PRIVACY_MANIFEST, ENTITLEMENTS_FILE]
-      : [...sources, 'Info.plist'];
+    const pref = (file) => `${TARGET}/${file}`;
+    const sources = (opts.iosStatusWidget ? [...BASE_SOURCES, STATUS_WIDGET_SOURCE] : BASE_SOURCES).map(pref);
+    const resources = (opts.iosStatusWidget ? [PRIVACY_MANIFEST] : []).map(pref);
+    const groupFiles = (
+      opts.iosStatusWidget
+        ? [...BASE_SOURCES, STATUS_WIDGET_SOURCE, 'Info.plist', PRIVACY_MANIFEST, ENTITLEMENTS_FILE]
+        : [...BASE_SOURCES, 'Info.plist']
+    ).map(pref);
 
     // `addTarget` makes the app depend on the extension only when these sections exist.
     const objects = project.hash.project.objects;
@@ -123,7 +126,10 @@ function withWidgetTarget(config, opts) {
     objects.PBXContainerItemProxy ??= {};
     const target = project.addTarget(TARGET, 'app_extension', TARGET, bundleId);
 
-    const group = project.addPbxGroup(groupFiles, TARGET, TARGET);
+    // Use target-prefixed file paths on a pathless group so shared filenames (`PrivacyInfo.xcprivacy`,
+    // `Info.plist`) never collide with another extension target (e.g. ShareExtension) in `xcode`'s path lookup.
+    const group = project.addPbxGroup(groupFiles, TARGET, '""');
+    if (group.pbxGroup) delete group.pbxGroup.path;
     const mainGroup = project.getFirstProject().firstProject.mainGroup;
     project.addToPbxGroup(group.uuid, mainGroup);
 

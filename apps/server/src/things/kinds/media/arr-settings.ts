@@ -2,6 +2,7 @@
  * Sonarr's and Radarr's declared settings: read from `/api/v3/config/mediamanagement`, `/api/v3/config/naming`,
  * `/api/v3/config/downloadclient` and `/api/v3/config/indexer`, written back with `PUT /api/v3/config/<section>/<id>`
  * preserving every untouched field. Never reads or writes `/api/v3/config/host` (API key, auth, ports, TLS).
+ * Anything that can delete, replace or stop keeping files or monitoring state stays in Sonarr/Radarr.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -97,19 +98,8 @@ const putSection = (sectionName: string, section: ConfigSection, patch: Record<s
   body: { ...section.raw, ...patch },
 });
 
-const FREE_SPACE: SettingChoice[] = [
-  { value: 100, label: '100 MB' },
-  { value: 500, label: '500 MB' },
-  { value: 1024, label: '1 GB' },
-  { value: 5120, label: '5 GB' },
-  { value: 10240, label: '10 GB' },
-  { value: 51200, label: '50 GB' },
-];
-
 function spaceWords(v: SettingValue): string {
   const mb = Number(v);
-  const known = FREE_SPACE.find((c) => c.value === mb);
-  if (known) return known.label;
   if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024} GB`;
   return `${mb.toLocaleString('en-GB')} MB`;
 }
@@ -132,6 +122,7 @@ const RSS_INTERVALS: SettingChoice[] = [
 
 function rssWords(v: SettingValue): string {
   const m = Number(v);
+  if (m === 0) return 'Off';
   const known = RSS_INTERVALS.find((c) => c.value === m);
   if (known) return known.label;
   return m >= 60 && m % 60 === 0 ? `Every ${m / 60} hours` : `Every ${m} minutes`;
@@ -165,49 +156,31 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       id: 'hardlinks',
       group: 'files',
       label: 'Use hardlinks instead of copying',
-      help: 'Saves disk space and finishes imports instantly when downloads and media share a disk.',
-      kind: 'switch',
+      help: `Use hardlinks instead of copying files on the same disk. Changing it affects import space checks and links to download files, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.mediamanagement, 'copyUsingHardlinks'),
-      write: (v, s) =>
-        putSection('mediamanagement', s.mediamanagement as ConfigSection, {
-          copyUsingHardlinks: asBool(v) === true,
-        }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now uses hardlinks instead of copying files.`
-          : `${name} now copies files instead of using hardlinks.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'import_extra_files',
       group: 'files',
       label: 'Import extra files',
-      help: 'Bring along subtitles and info files that come with a download.',
-      kind: 'switch',
+      help: `Bring along subtitles and info files from a download. Turning it off drops those files when downloads are cleaned up, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.mediamanagement, 'importExtraFiles'),
-      write: (v, s) =>
-        putSection('mediamanagement', s.mediamanagement as ConfigSection, {
-          importExtraFiles: asBool(v) === true,
-        }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now imports subtitles and extra files alongside downloads.`
-          : `${name} no longer imports extra files alongside downloads.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'min_free_space',
       group: 'files',
       label: 'Minimum free space',
-      help: 'Stop importing when free space on the media disk drops below this.',
-      kind: 'choice',
+      help: `Stop importing when free space on the media disk drops below this. Lowering it can unblock upgrades that replace old files, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => numField(s.mediamanagement, 'minimumFreeSpaceWhenImporting'),
-      choices: (s) =>
-        withCurrent(FREE_SPACE, numField(s.mediamanagement, 'minimumFreeSpaceWhenImporting'), spaceWords),
       words: spaceWords,
-      write: (v, s) =>
-        putSection('mediamanagement', s.mediamanagement as ConfigSection, {
-          minimumFreeSpaceWhenImporting: Number(v),
-        }),
-      sentence: (v) => `${name} now keeps at least ${spaceWords(v)} free before importing.`,
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'propers_and_repacks',
@@ -223,49 +196,31 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       id: 'completed_download_handling',
       group: 'downloads',
       label: 'Import finished downloads',
-      help: 'Automatically move and rename files when your downloader finishes them.',
-      kind: 'switch',
+      help: `Automatically import finished downloads. Turning it on can replace and permanently delete older files on upgrades, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.downloadclient, 'enableCompletedDownloadHandling'),
-      write: (v, s) =>
-        putSection('downloadclient', s.downloadclient as ConfigSection, {
-          enableCompletedDownloadHandling: asBool(v) === true,
-        }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now imports finished downloads automatically.`
-          : `${name} no longer imports finished downloads automatically.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/downloadclients`,
     },
     {
       id: 'auto_redownload_failed',
       group: 'downloads',
       label: 'Retry failed downloads',
-      help: 'Search for another release automatically when a download fails.',
-      kind: 'switch',
+      help: `Search for another release when a download fails. Grabbing a replacement can replace an existing file on import, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.downloadclient, 'autoRedownloadFailed'),
-      write: (v, s) =>
-        putSection('downloadclient', s.downloadclient as ConfigSection, {
-          autoRedownloadFailed: asBool(v) === true,
-        }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now searches again when a download fails.`
-          : `${name} no longer searches again automatically when a download fails.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/downloadclients`,
     },
     {
       id: 'unmonitor_deleted',
       group: 'downloads',
       label: `Stop watching deleted ${unitPlural}`,
-      help: `Don’t download ${unitPlural} again after you delete their files.`,
-      kind: 'switch',
+      help: `Stop watching ${unitPlural} after their files disappear. A brief drive drop during a scan can unmonitor items permanently, so it stays in ${name}.`,
+      kind: 'elsewhere',
       read: (s) => boolField(s.mediamanagement, unmonitorField),
-      write: (v, s) =>
-        putSection('mediamanagement', s.mediamanagement as ConfigSection, {
-          [unmonitorField]: asBool(v) === true,
-        }),
-      sentence: (v) =>
-        asBool(v)
-          ? `${name} now stops watching ${unitPlural} after their files are deleted.`
-          : `${name} now keeps watching ${unitPlural} even if their files are deleted.`,
+      words: (v) => (asBool(v) ? 'On' : 'Off'),
+      elsewhere: (base) => `${base}/settings/mediamanagement`,
     },
     {
       id: 'rss_sync_interval',
@@ -274,9 +229,15 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       help: `How often ${name} checks your indexers for new uploads.`,
       kind: 'choice',
       read: (s) => numField(s.indexer, 'rssSyncInterval'),
-      choices: (s) => withCurrent(RSS_INTERVALS, numField(s.indexer, 'rssSyncInterval'), rssWords),
+      // When RSS sync is off (0), turning it on could grab upgrades and replace files; keep that in Sonarr/Radarr.
+      choices: (s) => {
+        const cur = numField(s.indexer, 'rssSyncInterval');
+        if (cur === 0) return [];
+        return withCurrent(RSS_INTERVALS, cur, rssWords);
+      },
       words: rssWords,
       short: (v) => rssWords(v).toLowerCase(),
+      elsewhere: (base) => `${base}/settings/indexers`,
       write: (v, s) =>
         putSection('indexer', s.indexer as ConfigSection, {
           rssSyncInterval: Number(v),

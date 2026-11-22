@@ -623,4 +623,26 @@ describe('Email (IMAP) behind the mail tools', () => {
     server.capabilities = new Set(['IMAP4REV1']);
     expect(await ws.watchInbox(TOKEN, () => {}, new AbortController().signal)).toBe('unsupported');
   });
+
+  it('clips oversized subjects and long folder labels so one email never fails MailSummary/MailMessage parsing', async () => {
+    const longFolder = `Archive/${'f'.repeat(240)}`;
+    server.addFolder(longFolder);
+    server.add(
+      longFolder,
+      mail({
+        from: 'Alert <alerts@example.com>',
+        subject: 'X'.repeat(1500),
+        body: 'Oversized subject body',
+        id: `<${'i'.repeat(550)}@example.com>`,
+      }),
+    );
+    const found = await ws.mailSearch(TOKEN, { query: `in:"${longFolder}"`, limit: 5 });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.subject.length).toBe(1000);
+    expect(found[0]?.labels.every((l) => l.length <= 200)).toBe(true);
+
+    const [read] = await ws.mailRead(TOKEN, { messageId: found[0]?.id ?? '' });
+    expect(read?.subject.length).toBe(1000);
+    expect(read?.labels.every((l) => l.length <= 200)).toBe(true);
+  });
 });

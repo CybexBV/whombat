@@ -169,8 +169,10 @@ describe('home-screen status widget tokens and copy', () => {
     expect(storeKt).toContain('updatedAt <= 0L');
     expect(storeKt).toContain('fun nextRolloverAtMs');
 
-    // Android redraws at midnight via AlarmManager, on clock/date/zone changes, and cleans up on disable.
-    expect(providerKt).toContain('AlarmManager');
+    // Android redraws at midnight via non-waking AlarmManager.RTC, on clock/date/zone changes, and cleans up on disable.
+    expect(providerKt).toContain('AlarmManager.RTC');
+    expect(providerKt).not.toContain('RTC_WAKEUP');
+    expect(providerKt).not.toContain('setAndAllowWhileIdle');
     expect(providerKt).toContain('scheduleNextRollover');
     expect(providerKt).toContain('onDisabled');
     expect(providerKt).toContain('Intent.ACTION_TIME_CHANGED');
@@ -320,7 +322,10 @@ describe('whombat-live iOS config plugin', () => {
     expect(out.files.entitlements).toBe(false);
     expect(out.files.infoPlistContent).not.toContain('WhombatStatusWidgetAppGroup');
     const sourcesPhase = out.xcode.phases.find((p) => p.type === 'PBXSourcesBuildPhase');
-    expect(sourcesPhase?.files).toEqual(['WhombatLiveWidget.swift', 'WhombatLiveAttributes.swift']);
+    expect(sourcesPhase?.files).toEqual([
+      'WhombatLiveWidget/WhombatLiveWidget.swift',
+      'WhombatLiveWidget/WhombatLiveAttributes.swift',
+    ]);
     expect(out.xcode.buildSettings.CODE_SIGN_ENTITLEMENTS).toBeUndefined();
     expect(out.xcode.buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS).toBeUndefined();
   });
@@ -333,14 +338,18 @@ describe('whombat-live iOS config plugin', () => {
     expect(out.entitlements['com.apple.security.application-groups']).toEqual(['group.com.whombat.mobile']);
     expect(out.files.statusWidget).toBe(true);
     expect(out.files.privacy).toBe(true);
+    expect(readFileSync(join(ROOT, 'ios/widget/PrivacyInfo.xcprivacy'), 'utf8')).toContain('1C8F.1');
     expect(out.files.entitlements).toBe(true);
     expect(out.files.entitlementsContent).toContain('group.com.whombat.mobile');
     expect(out.files.infoPlistContent).toContain('WhombatStatusWidgetAppGroup');
     expect(out.files.infoPlistContent).toContain('group.com.whombat.mobile');
     const sourcesPhase = out.xcode.phases.find((p) => p.type === 'PBXSourcesBuildPhase');
     const resourcesPhase = out.xcode.phases.find((p) => p.type === 'PBXResourcesBuildPhase');
-    expect(sourcesPhase?.files).toContain('WhombatStatusWidget.swift');
-    expect(resourcesPhase?.files).toContain('PrivacyInfo.xcprivacy');
+    expect(sourcesPhase?.files).toContain('WhombatLiveWidget/WhombatStatusWidget.swift');
+    expect(resourcesPhase?.files).toContain('WhombatLiveWidget/PrivacyInfo.xcprivacy');
+    // Target-prefixed paths keep PrivacyInfo.xcprivacy distinct from ShareExtension's own manifest.
+    expect(out.xcode.groups[0]?.files).toContain('WhombatLiveWidget/PrivacyInfo.xcprivacy');
+    expect(out.xcode.groups[0]?.files).not.toContain('PrivacyInfo.xcprivacy');
     expect(out.xcode.buildSettings.CODE_SIGN_ENTITLEMENTS).toBe(
       'WhombatLiveWidget/WhombatLiveWidget.entitlements',
     );

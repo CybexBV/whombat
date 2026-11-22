@@ -13,6 +13,7 @@ import {
   agentDefaultGrants,
   MAIL_TEXT_REMOVED,
   Message,
+  missingAttachmentsText,
   newId,
 } from '@whombat/core';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
@@ -2979,6 +2980,62 @@ describe('mail-arrives automations', () => {
       expect(prompt).toContain('lost.pdf (couldn’t be downloaded)');
     } finally {
       attSpy.mockRestore();
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
+
+  it('caps metadata at 100 on a 105-attachment email, records the omitted count, and advances the cursor', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['hundred-plus-attachments'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      const okPdf = Buffer.from('%PDF-1.4\nValid invoice\n%%EOF');
+      const okPdfBase64 = okPdf.toString('base64');
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_105_att',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'hundred-plus-attachments test',
+        body: 'Many files attached.',
+        messageId: `<${'m'.repeat(520)}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: Array.from({ length: 105 }, (_, i) => ({
+          id: `att_many_${i + 1}`,
+          name: `doc-${i + 1}.pdf`,
+          mimeType: 'application/pdf',
+          size: okPdf.length,
+          contentBase64: okPdfBase64,
+        })),
+      });
+      expect(await pollAndSettle()).toBe(1);
+
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      expect(run.missingAttachments).toHaveLength(20);
+      expect(run.missingAttachments?.[0]).toEqual({ name: 'doc-11.pdf', reason: 'too_many' });
+      expect(run.missingAttachmentsOmitted).toBe(75);
+      expect(run.steps[0]?.inputSummary).toContain('and 92 more.');
+      expect(
+        missingAttachmentsText(run.missingAttachments ?? [], run.missingAttachmentsOmitted ?? 0),
+      ).toContain('and 85 more.');
+
+      const [dispatch] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, run.steps[0]?.dispatchId as string));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      expect(ctx.attachments).toHaveLength(10);
+      const prompt = ctx.trigger?.text ?? '';
+      expect(prompt).toContain('and 85 more');
+      expect(prompt).toContain('and 75 more (attachment limit reached)');
+    } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       await pollAndSettle();
     }

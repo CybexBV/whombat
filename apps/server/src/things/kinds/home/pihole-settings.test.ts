@@ -122,8 +122,17 @@ describe('Pi-hole declared settings', () => {
     expect(dnssecOn.find((r) => r.id === 'dnssec')?.value).toBe('On');
     ph.store.dns.dnssec = false;
     expect(by('rate_limit')).toBeUndefined();
-    expect(by('query_logging')).toMatchObject({ value: 'On', on: true });
-    expect(by('privacy_level')).toMatchObject({ value: 'Show everything', choose: { current: 0 } });
+    expect(by('query_logging')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
+    });
+    expect(by('query_logging')?.toggle).toBeUndefined();
+    expect(by('query_logging')?.on).toBeUndefined();
+    expect(by('privacy_level')).toMatchObject({
+      value: 'Show everything',
+      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
+    });
+    expect(by('privacy_level')?.choose).toBeUndefined();
     expect(by('max_db_days')).toMatchObject({
       value: '90 days',
       elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings' },
@@ -152,36 +161,34 @@ describe('Pi-hole declared settings', () => {
 
     await act(ctx, { target: 'blocking_mode', value: 'IP_NODATA_AAAA' });
     expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('IP_NODATA_AAAA');
-
-    await act(ctx, { target: 'privacy_level', value: 2 });
-    expect(ph.store.misc.privacylevel).toBe(2);
   });
 
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'dnssec', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'query_logging', value: false })).rejects.toThrow();
+    await expect(act(ctx, { target: 'privacy_level', value: 2 })).rejects.toThrow();
     await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
     await expect(act(ctx, { target: 'rate_limit', value: 2000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'blocking_mode', value: 'ZERO' })).rejects.toThrow();
-    await expect(act(ctx, { target: 'privacy_level', value: 9 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: 1 })).rejects.toThrow();
 
-    const same = await act(ctx, { target: 'query_logging', value: true });
+    const same = await act(ctx, { target: 'blocking_mode', value: 'NULL' });
     expect(same.unchanged).toBe(true);
 
     ph.store.deaf = true;
-    await expect(act(ctx, { target: 'query_logging', value: false })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' })).rejects.toThrow(/didn’t take/);
 
     ph.store.deaf = false;
-    const done = await act(ctx, { target: 'privacy_level', value: 2 });
-    ph.store.misc.privacylevel = 3;
+    const done = await act(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
+    (ph.store.dns.blocking as Record<string, unknown>).mode = 'NODATA';
     await expect(
-      act(ctx, { target: 'privacy_level', value: done.undo?.value, expect: done.undo?.expect }),
+      act(ctx, { target: 'blocking_mode', value: done.undo?.value, expect: done.undo?.expect }),
     ).rejects.toThrow(/changed again since/);
-    ph.store.misc.privacylevel = 2;
-    await act(ctx, { target: 'privacy_level', value: done.undo?.value, expect: done.undo?.expect });
-    expect(ph.store.misc.privacylevel).toBe(0);
+    (ph.store.dns.blocking as Record<string, unknown>).mode = 'NXDOMAIN';
+    await act(ctx, { target: 'blocking_mode', value: done.undo?.value, expect: done.undo?.expect });
+    expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('NULL');
   });
 
   it('describes changes in plain words for the approval card', async () => {
@@ -198,6 +205,8 @@ describe('Pi-hole declared settings', () => {
       await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' }),
     ).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'dnssec', value: true })).toBeNull();
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'query_logging', value: false })).toBeNull();
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'privacy_level', value: 2 })).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'BAD' })).toBeNull();
   });
 });

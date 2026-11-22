@@ -90,20 +90,42 @@ describe('Sonarr and Radarr declared settings', () => {
     for (const p of sp) expect(ThingPagePanel.safeParse(p).success).toBe(true);
     const sRows = sp.flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
     expect(sRows.find((r) => r.id === 'rename_files')).toMatchObject({ value: 'On', on: true });
+    expect(sRows.find((r) => r.id === 'hardlinks')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
+    });
+    expect(sRows.find((r) => r.id === 'hardlinks')?.toggle).toBeUndefined();
+    expect(sRows.find((r) => r.id === 'import_extra_files')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
+    });
+    expect(sRows.find((r) => r.id === 'import_extra_files')?.toggle).toBeUndefined();
     expect(sRows.find((r) => r.id === 'min_free_space')).toMatchObject({
       value: '100 MB',
-      choose: { current: 100 },
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
     });
+    expect(sRows.find((r) => r.id === 'min_free_space')?.choose).toBeUndefined();
     expect(sRows.find((r) => r.id === 'propers_and_repacks')).toMatchObject({
       value: 'Prefer and upgrade',
       elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
     });
     expect(sRows.find((r) => r.id === 'propers_and_repacks')?.choose).toBeUndefined();
+    expect(sRows.find((r) => r.id === 'completed_download_handling')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/downloadclients' },
+    });
+    expect(sRows.find((r) => r.id === 'completed_download_handling')?.toggle).toBeUndefined();
+    expect(sRows.find((r) => r.id === 'auto_redownload_failed')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/downloadclients' },
+    });
+    expect(sRows.find((r) => r.id === 'auto_redownload_failed')?.toggle).toBeUndefined();
     expect(sRows.find((r) => r.id === 'unmonitor_deleted')).toMatchObject({
       label: 'Stop watching deleted episodes',
       value: 'Off',
-      on: false,
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/mediamanagement' },
     });
+    expect(sRows.find((r) => r.id === 'unmonitor_deleted')?.toggle).toBeUndefined();
     expect(sRows.find((r) => r.id === 'rss_sync_interval')).toMatchObject({
       value: 'Every 15 minutes',
       choose: { current: 15 },
@@ -113,6 +135,17 @@ describe('Sonarr and Radarr declared settings', () => {
       url: 'http://192.0.2.20:8989/settings/general',
     });
 
+    // When RSS sync is off (0), keep turning it on in Sonarr.
+    if (arr.store.sections.indexer) arr.store.sections.indexer.rssSyncInterval = 0;
+    const rssOffRows = panels('sonarr').flatMap((p) =>
+      p.kind === 'settings' ? p.rows : [],
+    ) as ThingSetting[];
+    expect(rssOffRows.find((r) => r.id === 'rss_sync_interval')).toMatchObject({
+      value: 'Off',
+      elsewhere: { label: 'In Sonarr', url: 'http://192.0.2.20:8989/settings/indexers' },
+    });
+    expect(rssOffRows.find((r) => r.id === 'rss_sync_interval')?.choose).toBeUndefined();
+
     reset('radarr');
     const rp = panels('radarr');
     for (const p of rp) expect(ThingPagePanel.safeParse(p).success).toBe(true);
@@ -120,12 +153,19 @@ describe('Sonarr and Radarr declared settings', () => {
     expect(rRows.find((r) => r.id === 'unmonitor_deleted')).toMatchObject({
       label: 'Stop watching deleted movies',
       value: 'On',
-      on: true,
+      elsewhere: { label: 'In Radarr', url: 'http://192.0.2.21:7878/settings/mediamanagement' },
     });
+    expect(rRows.find((r) => r.id === 'unmonitor_deleted')?.toggle).toBeUndefined();
     expect(rRows.find((r) => r.id === 'min_free_space')).toMatchObject({
       value: '500 MB',
-      choose: { current: 500 },
+      elsewhere: { label: 'In Radarr', url: 'http://192.0.2.21:7878/settings/mediamanagement' },
     });
+    expect(rRows.find((r) => r.id === 'min_free_space')?.choose).toBeUndefined();
+    expect(rRows.find((r) => r.id === 'completed_download_handling')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Radarr', url: 'http://192.0.2.21:7878/settings/downloadclients' },
+    });
+    expect(rRows.find((r) => r.id === 'completed_download_handling')?.toggle).toBeUndefined();
     expect(rRows.find((r) => r.id === 'propers_and_repacks')).toMatchObject({
       value: 'Don’t upgrade automatically',
       elsewhere: { label: 'In Radarr', url: 'http://192.0.2.21:7878/settings/mediamanagement' },
@@ -136,9 +176,13 @@ describe('Sonarr and Radarr declared settings', () => {
       url: 'http://192.0.2.21:7878/settings/general',
     });
 
-    const look = panels('sonarr', 'read').flatMap((p) => (p.kind === 'settings' ? p.rows : []));
-    expect(look[0]?.toggle?.allowed).toBe(false);
-    expect(look[0]?.toggle?.reason).toMatch(/Look only/);
+    reset('sonarr');
+    const look = panels('sonarr', 'read').flatMap((p) =>
+      p.kind === 'settings' ? p.rows : [],
+    ) as ThingSetting[];
+    expect(look.find((r) => r.id === 'rename_files')?.toggle?.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'rename_files')?.toggle?.reason).toMatch(/Look only/);
+    expect(look.find((r) => r.id === 'rss_sync_interval')?.choose?.button.allowed).toBe(false);
   });
 
   it('writes full-object PUTs preserving untouched fields for both Sonarr and Radarr', async () => {
@@ -150,28 +194,24 @@ describe('Sonarr and Radarr declared settings', () => {
       now,
       timeZone: 'Europe/Amsterdam',
     };
-    const done = await sonarrAct(sCtx, { target: 'min_free_space', value: 5120 });
-    expect(done.message).toContain('5 GB');
+    const done = await sonarrAct(sCtx, { target: 'rename_files', value: false });
+    expect(done.message).toContain('no longer renames');
     expect(done.message).toContain('Checked with Sonarr');
     expect(done).toMatchObject({
-      changeKind: 'setting.min_free_space',
-      detail: '100 MB',
-      undo: { target: 'min_free_space', value: 100, expect: 5120 },
+      changeKind: 'setting.rename_files',
+      detail: 'On',
+      undo: { target: 'rename_files', value: true, expect: false },
     });
-    const put = arr.store.calls.find(
-      (c) => c.method === 'PUT' && c.path === '/api/v3/config/mediamanagement/1',
-    );
+    const put = arr.store.calls.find((c) => c.method === 'PUT' && c.path === '/api/v3/config/naming/1');
     expect(put?.body).toMatchObject({
       id: 1,
-      minimumFreeSpaceWhenImporting: 5120,
-      copyUsingHardlinks: true,
-      extraFileExtensions: 'srt,nfo',
-      chmodFolder: '755',
+      renameEpisodes: false,
     });
-
-    await sonarrAct(sCtx, { target: 'rename_files', value: false });
-    expect(arr.store.sections.naming?.renameEpisodes).toBe(false);
     expect(arr.store.sections.naming?.standardEpisodeFormat).toContain('{Series Title}');
+
+    await sonarrAct(sCtx, { target: 'rss_sync_interval', value: 60 });
+    const idxPut = arr.store.calls.find((c) => c.method === 'PUT' && c.path === '/api/v3/config/indexer/1');
+    expect(idxPut?.body).toMatchObject({ id: 1, rssSyncInterval: 60 });
 
     reset('radarr');
     const radarrAct = settingAction(arrSettings('radarr'));
@@ -183,13 +223,11 @@ describe('Sonarr and Radarr declared settings', () => {
     };
     await radarrAct(rCtx, { target: 'rename_files', value: false });
     expect(arr.store.sections.naming?.renameMovies).toBe(false);
-    await radarrAct(rCtx, { target: 'unmonitor_deleted', value: false });
-    expect(arr.store.sections.mediamanagement?.autoUnmonitorPreviouslyDownloadedMovies).toBe(false);
     await radarrAct(rCtx, { target: 'rss_sync_interval', value: 60 });
     expect(arr.store.sections.indexer?.rssSyncInterval).toBe(60);
   });
 
-  it('refuses invalid targets, detects deaf writes, enforces undo guard, and describes approval cards', async () => {
+  it('refuses invalid and elsewhere targets, detects deaf writes, enforces undo guard, and describes approval cards', async () => {
     reset('sonarr');
     const declared = arrSettings('sonarr');
     const act = settingAction(declared);
@@ -199,13 +237,31 @@ describe('Sonarr and Radarr declared settings', () => {
       now,
       timeZone: 'Europe/Amsterdam',
     };
-    await expect(act(sCtx, { target: 'general_and_updates', value: true })).rejects.toThrow();
-    await expect(act(sCtx, { target: 'propers_and_repacks', value: 'doNotUpgrade' })).rejects.toThrow();
+    for (const [target, value] of [
+      ['general_and_updates', true],
+      ['propers_and_repacks', 'doNotUpgrade'],
+      ['completed_download_handling', false],
+      ['auto_redownload_failed', false],
+      ['unmonitor_deleted', true],
+      ['min_free_space', 5120],
+      ['hardlinks', false],
+      ['import_extra_files', false],
+    ] as const) {
+      await expect(act(sCtx, { target, value })).rejects.toThrow();
+      expect(await describeSetting(declared, sCtx, { target, value })).toBeNull();
+    }
     await expect(act(sCtx, { target: 'rss_sync_interval', value: 7 })).rejects.toThrow();
-    expect((await act(sCtx, { target: 'hardlinks', value: true })).unchanged).toBe(true);
+    await expect(act(sCtx, { target: 'rss_sync_interval', value: 0 })).rejects.toThrow();
+    expect((await act(sCtx, { target: 'rename_files', value: true })).unchanged).toBe(true);
+
+    // Refuses turning RSS sync on when it is currently off (0).
+    if (arr.store.sections.indexer) arr.store.sections.indexer.rssSyncInterval = 0;
+    await expect(act(sCtx, { target: 'rss_sync_interval', value: 15 })).rejects.toThrow();
+    expect(await describeSetting(declared, sCtx, { target: 'rss_sync_interval', value: 15 })).toBeNull();
+    if (arr.store.sections.indexer) arr.store.sections.indexer.rssSyncInterval = 15;
 
     arr.store.deaf = true;
-    await expect(act(sCtx, { target: 'hardlinks', value: false })).rejects.toThrow(/didn’t take/);
+    await expect(act(sCtx, { target: 'rename_files', value: false })).rejects.toThrow(/didn’t take/);
 
     arr.store.deaf = false;
     const done = await act(sCtx, { target: 'rss_sync_interval', value: 60 });
@@ -220,8 +276,5 @@ describe('Sonarr and Radarr declared settings', () => {
     const words = await describeSetting(declared, sCtx, { target: 'rss_sync_interval', value: 60 });
     expect(words?.title).toContain('Sonarr');
     expect(words?.lines[0]).toContain('every 15 minutes → every hour');
-    expect(
-      await describeSetting(declared, sCtx, { target: 'propers_and_repacks', value: 'doNotUpgrade' }),
-    ).toBeNull();
   });
 });

@@ -170,6 +170,21 @@ module.exports = {
       // The share sheet's Save Image, on a picture's Download: iOS ends an app that saves to Photos without it.
       NSPhotoLibraryAddUsageDescription: PHOTO_SAVE_TEXT,
     },
+    // Declare App Group UserDefaults (`1C8F.1`) on the main app's own PrivacyInfo.xcprivacy when extensions are on,
+    // which also registers `Whombat/PrivacyInfo.xcprivacy` before `pod install` so RN aggregates into the app's
+    // manifest rather than picking up an extension's manifest.
+    ...(IOS_APP_GROUP_ENABLED
+      ? {
+          privacyManifests: {
+            NSPrivacyAccessedAPITypes: [
+              {
+                NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+                NSPrivacyAccessedAPITypeReasons: ['CA92.1', '1C8F.1'],
+              },
+            ],
+          },
+        }
+      : {}),
   },
   plugins: [
     ['expo-secure-store', { faceIDPermission: false }],

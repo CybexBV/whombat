@@ -285,6 +285,14 @@ export class ImapWorkspace implements GoogleWorkspace {
     return made;
   }
 
+  private safeDate(raw: string | null | undefined): string {
+    if (raw) {
+      const ms = Date.parse(raw);
+      if (Number.isFinite(ms)) return new Date(ms).toISOString();
+    }
+    return this.deps.now().toISOString();
+  }
+
   private summary(
     path: string,
     uidValidity: string,
@@ -298,11 +306,11 @@ export class ImapWorkspace implements GoogleWorkspace {
       threadId: threadIdOf(ref, threadRoot(m), threadHome(folders, path)),
       from: m.from[0] ? shownAddress(m.from[0]) : '',
       to: m.to.map(shownAddress),
-      subject: m.subject,
-      snippet,
-      date: m.internalDate ?? m.date ?? this.deps.now().toISOString(),
+      subject: m.subject.slice(0, 1000),
+      snippet: snippet.slice(0, 500),
+      date: this.safeDate(m.internalDate ?? m.date),
       unread: !has(m.flags, '\\Seen'),
-      labels: labelsOf(folderLabel(folders, path), m.flags),
+      labels: labelsOf(folderLabel(folders, path), m.flags).map((l) => l.slice(0, 200)),
     });
   }
 
@@ -754,7 +762,7 @@ export class ImapWorkspace implements GoogleWorkspace {
       const m = byUid.get(uid);
       if (!m) continue;
       if (has(m.flags, '\\Draft') || has(m.flags, '\\Deleted')) continue;
-      const dateIso = m.internalDate ?? m.date ?? this.deps.now().toISOString();
+      const dateIso = this.safeDate(m.internalDate ?? m.date);
       if (!receivedAtOrAfter(dateIso, since)) continue;
       const ref = { mailbox: opened.path, uidValidity: opened.uidValidity, uid: m.uid };
       const attachments = m.attachments ?? [];
@@ -764,7 +772,7 @@ export class ImapWorkspace implements GoogleWorkspace {
         messageId: normalizeRfcMessageId(m.messageId),
         from: m.from[0] ? shownAddress(m.from[0]) : '',
         to: m.to.map(shownAddress),
-        subject: m.subject,
+        subject: m.subject.slice(0, 1000),
         snippet: '',
         date: dateIso,
         hasAttachments: attachments.length > 0,
