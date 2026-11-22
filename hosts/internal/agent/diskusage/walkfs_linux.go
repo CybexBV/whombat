@@ -12,26 +12,71 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const linuxOpenat2Resolve = unix.RESOLVE_NO_XDEV | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS
+const (
+	// linuxResolveCached is Linux 5.12+'s RESOLVE_CACHED (include/uapi/linux/openat2.h),
+	// defined here because our pinned golang.org/x/sys/unix does not export it yet.
+	linuxResolveCached      = 0x20
+	linuxOpenat2Resolve     = unix.RESOLVE_NO_XDEV | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS
+	linuxRootOpenat2Resolve = linuxResolveCached | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS
+
+	// rootCachedAttempts bounds retries on EAGAIN from openat2(RESOLVE_CACHED)
+	// so a transient concurrent rename_lock/mount_lock seqcount bump in RCU-walk
+	// can retry while NEVER dropping RESOLVE_CACHED.
+	rootCachedAttempts = 3
+)
 
 type openat2Func func(dirfd int, path string, how *unix.OpenHow) (int, error)
 type statxFunc func(dirfd int, path string, flags int, mask int, stat *unix.Statx_t) error
 type fdinfoMountIDFunc func(fd int) (uint64, bool)
 
-// linuxScanFS requires Linux openat2(RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS|
-// RESOLVE_NO_MAGICLINKS), /proc/self/fdinfo/<fd> mnt_id verification, and
+// linuxScanFS requires Linux 5.12+ openat2(RESOLVE_CACHED) for zero-I/O root
+// resolution, openat2(RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)
+// for every relative step, /proc/self/fdinfo/<fd> mnt_id verification, and
 // statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
 //
-// Why no call in this file can send a request to an unchecked filesystem:
-//  1. open(hostPath, O_PATH|O_NOFOLLOW|O_CLOEXEC) pins the mount root dentry
-//     from the kernel VFS mount table without O_DIRECTORY or O_RDONLY, so VFS
-//     installs empty_fops without calling i_fop->open(), i_op->getattr(), or
-//     d_automount().
+// Proof that no call in this file can trigger an automount or send a request
+// to an unchecked filesystem (citing Linux openat2(2), include/uapi/linux/openat2.h,
+// fs/open.c, fs/namei.c, fs/autofs/root.c, and fs/proc/fd.c):
+//  1. Root lookup uses openat2(AT_FDCWD, hostPath, O_PATH|O_CLOEXEC,
+//     RESOLVE_CACHED|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS) — never plain
+//     open(2), which can trigger automounts or follow symlinks on intermediate
+//     path components (e.g. /srv when opening /srv/archive):
+//     - fs/open.c: build_open_flags() sets LOOKUP_CACHED from RESOLVE_CACHED,
+//     sets LOOKUP_NO_SYMLINKS|LOOKUP_NO_MAGICLINKS, and with O_PATH leaves
+//     LOOKUP_OPEN, LOOKUP_DIRECTORY, and LOOKUP_CREATE unset.
+//     - fs/namei.c: do_filp_open() runs path_openat(&nd, op, flags|LOOKUP_RCU)
+//     -> do_o_path() -> path_lookupat() strictly under rcu_read_lock(), where
+//     sleeping, blocking disk I/O, and invoking d_automount() are illegal.
+//     Across every intermediate and final component:
+//     * lookup_fast() checks only the in-memory dcache (__d_lookup_rcu); any
+//     dcache miss fails RCU-walk without calling lookup_slow()/i_op->lookup().
+//     * __follow_mount_rcu() crosses only already-mounted filesystems via the
+//     in-memory mount hash (__lookup_mnt). An automount trigger carries
+//     DCACHE_NEED_AUTOMOUNT (or DCACHE_MANAGE_TRANSIT with
+//     fs/autofs/root.c: autofs_d_manage(..., rcu_walk=true)), which forces
+//     handle_mounts() to call try_to_unlazy_next().
+//     * try_to_unlazy() / try_to_unlazy_next() immediately fail when
+//     LOOKUP_CACHED is set, aborting the RCU pass with -ECHILD. When
+//     do_filp_open() retries without LOOKUP_RCU, path_init() checks
+//     `if ((flags & (LOOKUP_RCU | LOOKUP_CACHED)) == LOOKUP_CACHED) return ERR_PTR(-EAGAIN);`
+//     and returns -EAGAIN immediately without ever entering REF-walk,
+//     calling lookup_slow(), or calling follow_automount()/d_automount().
+//     * RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS rejects any intermediate or
+//     final symlink with -ELOOP without following it.
+//     - For an unchanged mounted filesystem from /proc/self/mountinfo, every
+//     dentry along hostPath is pinned in the dcache by its vfsmount
+//     (mnt_mountpoint and d_parent chain to "/"), so cached RCU lookup
+//     succeeds with zero I/O, and vfs_open() sees O_PATH and installs
+//     empty_fops without calling i_fop->open() or i_op->getattr().
+//     - Unknown how->resolve flags return -EINVAL (include/uapi/linux/openat2.h,
+//     openat2(2)), so kernels < 5.12 lacking RESOLVE_CACHED fail with EINVAL
+//     (and < 5.6 with ENOSYS) and are refused cleanly with CodeUnsupported;
+//     persistent EAGAIN is refused cleanly without ever retrying uncached.
 //  2. /proc/self/fdinfo/<fd> (fs/proc/fd.c: seq_show) reads
 //     real_mount(file->f_path.mnt)->mnt_id purely from kernel VFS memory in
 //     procfs, issuing zero operations on the target filesystem. We compare that
-//     mount ID against the standby-checked mount BEFORE any openat2, statx,
-//     fstatfs, or readable open on both the root and every child descriptor.
+//     mount ID against the standby-checked mount BEFORE any follow-up openat2,
+//     statx, fstatfs, or readable open on both the root and every child fd.
 //  3. openat2(parentFD, child, O_PATH|O_CLOEXEC, RESOLVE_NO_XDEV|
 //     RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS) resolves a single child name
 //     strictly on parentFD's already-verified mount: VFS rejects already-mounted
@@ -48,8 +93,9 @@ type fdinfoMountIDFunc func(fd int) (uint64, bool)
 //     without crossing an overmount, and step 2+4 re-verify the new fd before
 //     getdents64 or fstatfs reads from it.
 //
-// Kernels before 5.6 (ENOSYS) and seccomp profiles blocking openat2/statx
-// (EPERM/EACCES) are refused cleanly instead of falling back to openat/fstatat.
+// Kernels before 5.12 (ENOSYS/EINVAL) and seccomp profiles blocking
+// openat2/statx (EPERM/EACCES) are refused cleanly instead of falling back to
+// uncached open/openat/fstatat.
 type linuxScanFS struct {
 	r             *Runner
 	openat2       openat2Func
@@ -158,15 +204,60 @@ func (s *linuxFSState) verifyDirFD(fd int, logicalPath string, rejectMountRoot b
 	return es, nil
 }
 
-func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
-	// Step 1: pin hostPath with O_PATH and no O_DIRECTORY so opening the root
-	// uses VFS's cached mount root dentry without invoking i_fop->open(),
-	// i_op->getattr(), or d_automount().
-	pathFD, err := openNoEINTR(hostPath, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC)
-	if err != nil {
-		return nil, err
+func openRootPathCached(openat2Fn openat2Func, hostPath string) (int, error) {
+	how := &unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: linuxRootOpenat2Resolve,
 	}
+	var (
+		fd  int
+		err error
+	)
+	for attempt := 0; attempt < rootCachedAttempts; attempt++ {
+		fd, err = openat2NoEINTR(openat2Fn, unix.AT_FDCWD, hostPath, how)
+		if err == nil {
+			return fd, nil
+		}
+		if !errors.Is(err, unix.EAGAIN) {
+			break
+		}
+	}
+	if errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.EINVAL) {
+		return -1, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+	}
+	if errors.Is(err, unix.EPERM) {
+		return -1, &scanUnsupportedError{msg: "This server does not allow a safe disk scan."}
+	}
+	if errors.Is(err, unix.EACCES) {
+		// Distinguish seccomp returning EACCES on openat2 from genuine directory
+		// permission denial on an intermediate component by probing "/" with the
+		// same zero-I/O RESOLVE_CACHED call.
+		if hostPath == "/" {
+			return -1, &scanUnsupportedError{msg: "This server does not allow a safe disk scan."}
+		}
+		probeFD, perr := openat2NoEINTR(openat2Fn, unix.AT_FDCWD, "/", how)
+		if perr == nil {
+			_ = unix.Close(probeFD)
+			return -1, err
+		}
+		if errors.Is(perr, unix.ENOSYS) || errors.Is(perr, unix.EINVAL) {
+			return -1, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+		}
+		if errors.Is(perr, unix.EPERM) || errors.Is(perr, unix.EACCES) {
+			return -1, &scanUnsupportedError{msg: "This server does not allow a safe disk scan."}
+		}
+		return -1, err
+	}
+	if errors.Is(err, unix.EAGAIN) {
+		return -1, errRootNotCached
+	}
+	if errors.Is(err, unix.ELOOP) {
+		return -1, errRootChanged
+	}
+	return -1, err
+}
 
+func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
 	openat2Fn := f.openat2
 	if openat2Fn == nil {
 		openat2Fn = unix.Openat2
@@ -178,6 +269,15 @@ func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo
 	fdinfoFn := f.fdinfoMountID
 	if fdinfoFn == nil {
 		fdinfoFn = fdinfoMountID
+	}
+
+	// Step 1: resolve hostPath strictly from kernel RCU dcache/mount memory
+	// with openat2(O_PATH|O_CLOEXEC, RESOLVE_CACHED|RESOLVE_NO_SYMLINKS|
+	// RESOLVE_NO_MAGICLINKS). No intermediate or final component can trigger
+	// an automount, follow a symlink, or issue disk I/O (EAGAIN refuses).
+	pathFD, err := openRootPathCached(openat2Fn, hostPath)
+	if err != nil {
+		return nil, err
 	}
 
 	state := &linuxFSState{
@@ -209,16 +309,15 @@ func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo
 		state.hasRootMntID = true
 	}
 
-	// Step 3: probe openat2 once on the already mount-verified O_PATH descriptor.
-	// Refuse cleanly on kernels before 5.6 (ENOSYS) or seccomp policies blocking
-	// openat2 (EPERM/EACCES).
+	// Step 3: probe openat2(RESOLVE_NO_XDEV) once on the already mount-verified
+	// O_PATH descriptor. Refuse cleanly if the kernel or seccomp rejects it.
 	probeFD, perr := openat2NoEINTR(openat2Fn, pathFD, ".", &unix.OpenHow{
 		Flags:   unix.O_PATH | unix.O_CLOEXEC,
 		Resolve: linuxOpenat2Resolve,
 	})
 	if perr != nil {
 		_ = unix.Close(pathFD)
-		if errors.Is(perr, unix.ENOSYS) {
+		if errors.Is(perr, unix.ENOSYS) || errors.Is(perr, unix.EINVAL) {
 			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
 		}
 		if errors.Is(perr, unix.EPERM) || errors.Is(perr, unix.EACCES) {

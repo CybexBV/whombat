@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	errWrongMount  = errors.New("path is outside target mount")
-	errNotDir      = errors.New("not a directory")
-	errRootChanged = errors.New("mount root changed before scan started")
+	errWrongMount    = errors.New("path is outside target mount")
+	errNotDir        = errors.New("not a directory")
+	errRootChanged   = errors.New("mount root changed before scan started")
+	errRootNotCached = errors.New("mount root path could not be resolved without filesystem I/O")
 )
 
 // scanUnsupportedError indicates that this host's kernel, security policy,

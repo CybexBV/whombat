@@ -175,7 +175,9 @@ func TestLinuxRefusesScanWithoutOpenat2(t *testing.T) {
 		wantSubstr string
 	}{
 		{"pre_5_6_enosys", unix.ENOSYS, "too old for a safe scan"},
+		{"pre_5_12_einval_no_resolve_cached", unix.EINVAL, "too old for a safe scan"},
 		{"seccomp_eperm", unix.EPERM, "does not allow a safe disk scan"},
+		{"seccomp_eacces", unix.EACCES, "does not allow a safe disk scan"},
 	}
 
 	for _, tc := range cases {
@@ -223,6 +225,7 @@ func TestLinuxOpenDirPinsWithOPathBeforeOpeningDotAndRejectsAutomount(t *testing
 	_ = autoInfo
 
 	type openCall struct {
+		dirfd   int
 		path    string
 		flags   uint64
 		resolve uint64
@@ -238,7 +241,7 @@ func TestLinuxOpenDirPinsWithOPathBeforeOpeningDotAndRejectsAutomount(t *testing
 		r: r,
 		openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
 			mu.Lock()
-			calls = append(calls, openCall{path: path, flags: how.Flags, resolve: how.Resolve})
+			calls = append(calls, openCall{dirfd: dirfd, path: path, flags: how.Flags, resolve: how.Resolve})
 			mu.Unlock()
 			// If anything ever tries to open "." on the automount inode with O_DIRECTORY, catch it!
 			if path == "." && how.Flags&unix.O_DIRECTORY != 0 {
@@ -272,11 +275,25 @@ func TestLinuxOpenDirPinsWithOPathBeforeOpeningDotAndRejectsAutomount(t *testing
 		t.Fatalf("opened '.' with O_DIRECTORY on automount trigger %d times, want 0", autoDotOpened.Load())
 	}
 
-	// Verify NO openat2 call on a child name ever passed O_DIRECTORY (only "." on an already-pinned fd may).
+	// Verify root lookup used O_PATH + RESOLVE_CACHED and NO openat2 call on a
+	// child name ever passed O_DIRECTORY (only "." on an already-pinned fd may).
 	mu.Lock()
 	defer mu.Unlock()
-	var sawAutoPin bool
+	var sawRootCached, sawAutoPin bool
 	for _, c := range calls {
+		if c.dirfd == unix.AT_FDCWD {
+			sawRootCached = true
+			if c.flags&unix.O_PATH == 0 {
+				t.Errorf("root openat2(%q) missing O_PATH flag (flags=%#x)", c.path, c.flags)
+			}
+			if c.flags&unix.O_DIRECTORY != 0 {
+				t.Errorf("root openat2(%q) passed O_DIRECTORY (flags=%#x)", c.path, c.flags)
+			}
+			if c.resolve != linuxRootOpenat2Resolve {
+				t.Errorf("root openat2(%q) resolve=%#x, want %#x", c.path, c.resolve, linuxRootOpenat2Resolve)
+			}
+			continue
+		}
 		if c.path != "." {
 			if c.flags&unix.O_PATH == 0 {
 				t.Errorf("openat2(%q) missing O_PATH flag (flags=%#x)", c.path, c.flags)
@@ -291,6 +308,9 @@ func TestLinuxOpenDirPinsWithOPathBeforeOpeningDotAndRejectsAutomount(t *testing
 				sawAutoPin = true
 			}
 		}
+	}
+	if !sawRootCached {
+		t.Errorf("expected root openat2 with AT_FDCWD + RESOLVE_CACHED; calls=%+v", calls)
 	}
 	if !sawAutoPin {
 		t.Errorf("expected openat2 to pin 'auto' with O_PATH; calls=%+v", calls)
@@ -458,14 +478,18 @@ func TestLinuxOpenRootRejectsOvermountAndAutomountBeforeReadableOpen(t *testing.
 		{"automount_root", true, 10, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var openat2Calls atomic.Int32
+			var postRootOpenat2Calls atomic.Int32
 			var readableOpenCalls atomic.Int32
 			var statxCalls atomic.Int32
 			r := newTestRunner(t, root, mounts, nil)
 			r.scanFS = &linuxScanFS{
 				r: r,
 				openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
-					openat2Calls.Add(1)
+					if dirfd != unix.AT_FDCWD {
+						postRootOpenat2Calls.Add(1)
+					} else if how.Resolve&linuxResolveCached == 0 || how.Flags&unix.O_PATH == 0 {
+						t.Errorf("root openat2 missing RESOLVE_CACHED/O_PATH: flags=%#x resolve=%#x", how.Flags, how.Resolve)
+					}
 					if how.Flags&unix.O_DIRECTORY != 0 {
 						readableOpenCalls.Add(1)
 					}
@@ -496,8 +520,8 @@ func TestLinuxOpenRootRejectsOvermountAndAutomountBeforeReadableOpen(t *testing.
 			if tc.wantZeroStatx && statxCalls.Load() != 0 {
 				t.Fatalf("statx called %d times on %s, want 0 (fdinfo mount ID must reject before statx)", statxCalls.Load(), tc.name)
 			}
-			if tc.wantZeroOpenAt && openat2Calls.Load() != 0 {
-				t.Fatalf("openat2 called %d times on %s, want 0 (fdinfo mount ID must reject before openat2)", openat2Calls.Load(), tc.name)
+			if tc.wantZeroOpenAt && postRootOpenat2Calls.Load() != 0 {
+				t.Fatalf("post-root openat2 called %d times on %s, want 0 (fdinfo mount ID must reject before follow-up openat2)", postRootOpenat2Calls.Load(), tc.name)
 			}
 		})
 	}
@@ -537,7 +561,7 @@ func TestLinuxChecksFDInfoMountIDBeforeStatxAndOpen(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				var openat2Calls, statxCalls, statfsCalls atomic.Int32
+				var postRootOpenat2Calls, statxCalls, statfsCalls atomic.Int32
 				mounts := []mountInfo{{ID: 42, ParentID: 1, MountPoint: root, FSType: "ext4", Source: "/dev/nvme0n1p2"}}
 				r := newTestRunner(t, root, mounts, nil)
 				r.root = "" // exercise real-host fdinfo path (not synthetic test root)
@@ -548,7 +572,11 @@ func TestLinuxChecksFDInfoMountIDBeforeStatxAndOpen(t *testing.T) {
 				sfs := &linuxScanFS{
 					r: r,
 					openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
-						openat2Calls.Add(1)
+						if dirfd != unix.AT_FDCWD {
+							postRootOpenat2Calls.Add(1)
+						} else if how.Resolve&linuxResolveCached == 0 || how.Flags&unix.O_PATH == 0 {
+							t.Errorf("root openat2 missing RESOLVE_CACHED/O_PATH: flags=%#x resolve=%#x", how.Flags, how.Resolve)
+						}
 						return unix.Openat2(dirfd, path, how)
 					},
 					statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
@@ -570,17 +598,17 @@ func TestLinuxChecksFDInfoMountIDBeforeStatxAndOpen(t *testing.T) {
 				if statxCalls.Load() != 0 {
 					t.Fatalf("statx called %d times, want 0", statxCalls.Load())
 				}
-				if openat2Calls.Load() != 0 {
-					t.Fatalf("openat2 called %d times, want 0", openat2Calls.Load())
+				if postRootOpenat2Calls.Load() != 0 {
+					t.Fatalf("post-root openat2 called %d times, want 0", postRootOpenat2Calls.Load())
 				}
 
 				resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: root})
 				if resp.Code != tc.wantCode {
 					t.Fatalf("DiskUsage code = %q, want %q (%+v)", resp.Code, tc.wantCode, resp)
 				}
-				if statxCalls.Load() != 0 || openat2Calls.Load() != 0 || statfsCalls.Load() != 0 {
-					t.Fatalf("syscalls after fdinfo reject: statx=%d openat2=%d statfs=%d, want all 0",
-						statxCalls.Load(), openat2Calls.Load(), statfsCalls.Load())
+				if statxCalls.Load() != 0 || postRootOpenat2Calls.Load() != 0 || statfsCalls.Load() != 0 {
+					t.Fatalf("syscalls after fdinfo reject: statx=%d postRootOpenat2=%d statfs=%d, want all 0",
+						statxCalls.Load(), postRootOpenat2Calls.Load(), statfsCalls.Load())
 				}
 			})
 		}
@@ -851,4 +879,185 @@ func TestLinuxSparseFileCountsZeroAllocatedBytes(t *testing.T) {
 	if total < 16*1024 || total >= 1<<20 {
 		t.Fatalf("total walked bytes with 100 MiB sparse file = %d, want ~16 KiB (folders=%+v)", total, resp.Folders)
 	}
+}
+
+func TestLinuxOpenRootUsesResolveCachedAndRefusesUncachedOrAutomountIntermediate(t *testing.T) {
+	t.Run("eagain_refuses_without_uncached_fallback", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/archive/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 20, ParentID: 10, MountPoint: "/srv/archive", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+		var calls, fdinfoCalls, statxCalls, statfsCalls atomic.Int32
+		r.statfs = func(string) (fsStat, error) {
+			statfsCalls.Add(1)
+			return fsStat{}, nil
+		}
+		r.scanFS = &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				calls.Add(1)
+				if dirfd != unix.AT_FDCWD {
+					t.Errorf("unexpected non-root openat2(dirfd=%d, path=%q)", dirfd, path)
+				}
+				if how.Flags&unix.O_PATH == 0 || how.Flags&unix.O_DIRECTORY != 0 {
+					t.Errorf("root openat2 flags=%#x, want O_PATH without O_DIRECTORY", how.Flags)
+				}
+				if how.Resolve != linuxRootOpenat2Resolve {
+					t.Errorf("root openat2 dropped RESOLVE_CACHED or symlink guards: resolve=%#x, want %#x", how.Resolve, linuxRootOpenat2Resolve)
+				}
+				// Simulate /srv becoming an automount trigger or requiring disk I/O.
+				return -1, unix.EAGAIN
+			},
+			statx: func(int, string, int, int, *unix.Statx_t) error {
+				statxCalls.Add(1)
+				return nil
+			},
+			fdinfoMountID: func(int) (uint64, bool) {
+				fdinfoCalls.Add(1)
+				return 20, true
+			},
+		}
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
+		if resp.Code != CodeFailed {
+			t.Fatalf("resp = %+v, want CodeFailed", resp)
+		}
+		if !strings.Contains(resp.Message, "without waking disks") {
+			t.Errorf("resp.Message = %q, want plain reason mentioning without waking disks", resp.Message)
+		}
+		if calls.Load() != rootCachedAttempts {
+			t.Errorf("openat2(RESOLVE_CACHED) attempts = %d, want %d", calls.Load(), rootCachedAttempts)
+		}
+		if fdinfoCalls.Load() != 0 || statxCalls.Load() != 0 || statfsCalls.Load() != 0 {
+			t.Fatalf("unexpected post-open calls after EAGAIN: fdinfo=%d statx=%d statfs=%d",
+				fdinfoCalls.Load(), statxCalls.Load(), statfsCalls.Load())
+		}
+	})
+
+	t.Run("transient_eagain_retries_cached_and_succeeds", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/archive/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 20, ParentID: 10, MountPoint: "/srv/archive", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+		var rootAttempts atomic.Int32
+		r.scanFS = &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				if dirfd == unix.AT_FDCWD {
+					if how.Resolve != linuxRootOpenat2Resolve {
+						t.Errorf("root retry resolve=%#x, want %#x", how.Resolve, linuxRootOpenat2Resolve)
+					}
+					if rootAttempts.Add(1) == 1 {
+						return -1, unix.EAGAIN
+					}
+				}
+				return unix.Openat2(dirfd, path, how)
+			},
+			statx:         unix.Statx,
+			fdinfoMountID: fdinfoMountID,
+		}
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error after transient EAGAIN: %+v", resp)
+		}
+		if rootAttempts.Load() != 2 {
+			t.Fatalf("root openat2 attempts = %d, want 2", rootAttempts.Load())
+		}
+	})
+
+	t.Run("real_kernel_rejects_intermediate_symlink_on_root_path", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "real/archive/data.bin"), 16*1024)
+		if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "srv")); err != nil {
+			t.Fatal(err)
+		}
+		mounts := []mountInfo{
+			{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 20, ParentID: 10, MountPoint: "/srv/archive", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+		var fdinfoCalls, statxCalls atomic.Int32
+		r.scanFS = &linuxScanFS{
+			r:       r,
+			openat2: unix.Openat2,
+			statx: func(dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
+				statxCalls.Add(1)
+				return unix.Statx(dirfd, path, flags, mask, stx)
+			},
+			fdinfoMountID: func(fd int) (uint64, bool) {
+				fdinfoCalls.Add(1)
+				return fdinfoMountID(fd)
+			},
+		}
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
+		if resp.Code != CodeFailed || !strings.Contains(resp.Message, "changed before the scan started") {
+			t.Fatalf("intermediate symlink root: resp = %+v, want CodeFailed about changed filesystem", resp)
+		}
+		if fdinfoCalls.Load() != 0 || statxCalls.Load() != 0 {
+			t.Fatalf("unexpected calls after intermediate symlink ELOOP: fdinfo=%d statx=%d",
+				fdinfoCalls.Load(), statxCalls.Load())
+		}
+	})
+
+	t.Run("pre_5_12_einval_refuses_unsupported_without_fallback", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/archive/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 20, ParentID: 10, MountPoint: "/srv/archive", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+		var calls atomic.Int32
+		r.scanFS = &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				calls.Add(1)
+				if how.Resolve&linuxResolveCached != 0 {
+					return -1, unix.EINVAL
+				}
+				t.Errorf("fell back to uncached openat2(%q) after EINVAL", path)
+				return unix.Openat2(dirfd, path, how)
+			},
+			statx:         unix.Statx,
+			fdinfoMountID: fdinfoMountID,
+		}
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
+		if resp.Code != CodeUnsupported || !strings.Contains(resp.Message, "too old for a safe scan") {
+			t.Fatalf("pre-5.12 EINVAL: resp = %+v, want CodeUnsupported", resp)
+		}
+		if calls.Load() != 1 {
+			t.Fatalf("openat2 calls = %d, want 1", calls.Load())
+		}
+	})
+
+	t.Run("genuine_eacces_on_intermediate_dir_is_failed_not_unsupported", func(t *testing.T) {
+		root := t.TempDir()
+		writeBytes(t, filepath.Join(root, "srv/archive/data.bin"), 16*1024)
+		mounts := []mountInfo{
+			{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			{ID: 20, ParentID: 10, MountPoint: "/srv/archive", FSType: "ext4", Source: "/dev/nvme0n1p3"},
+		}
+		r := newTestRunner(t, root, mounts, nil)
+		r.scanFS = &linuxScanFS{
+			r: r,
+			openat2: func(dirfd int, path string, how *unix.OpenHow) (int, error) {
+				if dirfd == unix.AT_FDCWD && path != "/" {
+					return -1, unix.EACCES
+				}
+				return unix.Openat2(dirfd, path, how)
+			},
+			statx:         unix.Statx,
+			fdinfoMountID: fdinfoMountID,
+		}
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/srv/archive"})
+		if resp.Code != CodeFailed {
+			t.Fatalf("genuine directory EACCES: resp = %+v, want CodeFailed", resp)
+		}
+	})
 }
