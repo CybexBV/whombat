@@ -46,6 +46,10 @@ export const VOICE_TEXT = {
     interrupted: 'The recording stopped. Try again.',
     /** *Remove* for a model the settings use (`in_use`). */
     inUse: 'The settings use this model, so it stays.',
+    /** The box doesn't have this voice setting yet (`unknown_op`). */
+    needsUpdate: 'Update this Whombat to use this setting.',
+    /** The box answered without keeping the change. */
+    notSaved: 'This Whombat didn’t keep that change. Try again.',
     /** Any other refusal of a setting. */
     setting: 'That didn’t go through. Try again.',
   },
@@ -115,7 +119,10 @@ export function voiceProblemText(problem: VoiceTypingProblem): string {
 export function voiceSettingErrorText(error: unknown): string {
   if (detailsCode(error) === VOICE_IN_USE) return VOICE_TEXT.errors.inUse;
   if (error instanceof ConnectError) return VOICE_TEXT.errors.offline;
-  if (error instanceof OperationError && OFFLINE_CODES.has(error.code)) return VOICE_TEXT.errors.offline;
+  if (error instanceof OperationError) {
+    if (error.code === 'unknown_op') return VOICE_TEXT.errors.needsUpdate;
+    if (OFFLINE_CODES.has(error.code)) return VOICE_TEXT.errors.offline;
+  }
   return VOICE_TEXT.errors.setting;
 }
 

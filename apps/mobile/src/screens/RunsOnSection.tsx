@@ -12,14 +12,15 @@
  * AP-2731). On Local, MODEL's sheet also takes another model by its name (AP-5001), and EFFORT and FAST REPLIES don't
  * show (it has neither).
  */
-import { gatewayRunsOn, localModelOf, problemText } from '@whombat/client';
-import { useAgentSetup, useSetAgentModel } from '@whombat/client/react';
+import { gatewayRunsOn, localModelOf, modelRuntimeSaved, problemText } from '@whombat/client';
+import { useAgentSetup, useSessionProtocol, useSetAgentModel } from '@whombat/client/react';
 import {
   type AgentModelRuntimeUpdate,
   type AgentProfile,
   CHAT_RUNTIME_COPY,
   MODEL_EFFORT_COPY,
 } from '@whombat/core';
+import { BACKGROUND_MODEL_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
@@ -47,6 +48,8 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   // Where the Whombat says which providers are ready (`host.agents`); hidden where it doesn't answer.
   const { data: status } = useAgentSetup({ params: { burrow: slug } }, { retry: false });
   const update = useSetAgentModel(slug);
+  const protocol = useSessionProtocol();
+  const canPickBackgroundModel = protocolAtLeast(protocol, BACKGROUND_MODEL_MINOR);
   const [error, setError] = useState<string | null>(null);
   const [fastError, setFastError] = useState<string | null>(null);
   const [picking, setPicking] = useState<'model' | 'backgroundModel' | 'effort' | null>(null);
@@ -78,7 +81,15 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   if (!status) return bare;
   const model = runsOnModel(agent.runtime, status, { agentName: agent.name, localModel });
 
-  const choices = modelEffortView(agent, status, true, profile.modelFallback, true, localModel);
+  const choices = modelEffortView(
+    agent,
+    status,
+    true,
+    profile.modelFallback,
+    true,
+    localModel,
+    canPickBackgroundModel,
+  );
   const fast = choices?.fast ?? null;
   /** Fast replies switched: saved at once, the whole model runtime (CR-10, AP-2730). */
   const switchFast = (on: boolean) => {
@@ -107,10 +118,17 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
       { params: { burrow: slug }, body: { runtime } },
       {
         onSuccess: (r) => {
-          if (r.status === 'ok') {
-            then.done();
+          if (r.status !== 'ok') {
+            then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
+            return;
+          }
+          if (!modelRuntimeSaved(runtime, r.data.agent.runtime)) {
             onChanged();
-          } else then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
+            then.refused(MODEL_EFFORT_COPY.notSaved);
+            return;
+          }
+          then.done();
+          onChanged();
         },
         onError: (e) => then.refused(problemText(e)),
       },

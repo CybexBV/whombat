@@ -15,6 +15,7 @@ import {
   type ChatModelRow,
   type ChatProviderSegment,
   type ChatThreadState,
+  chatDefaultBody,
   chatDraftWithEffort,
   chatDraftWithFast,
   chatDraftWithModel,
@@ -38,6 +39,7 @@ import {
   chatThreadChoice,
   chatThreadState,
   LOCAL_MODEL_TEXT,
+  modelRuntimeSaved,
 } from '@whombat/client';
 import { useChatRuntime, useMakeChatDefault, useSetThreadRuntime } from '@whombat/client/react';
 import {
@@ -48,6 +50,7 @@ import {
   type ChatRuntime,
   type ChatRuntimeView,
   type Message,
+  MODEL_EFFORT_COPY,
 } from '@whombat/core';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Switch, View } from 'react-native';
@@ -218,11 +221,14 @@ export function ChatRuntimeSheet({
   const setFast = (on: boolean) => choice.change(chatDraftWithFast(runtime, on, models, view.default));
   const saveDefault = () => {
     setDefaultRefusal(null);
+    const body = chatDefaultBody(runtime);
     makeDefault
       .make(runtime)
       .then((result) => {
         if (result.status !== 'ok') return setDefaultRefusal(chatRuntimeRefusalText(result));
-        showNotice(chatMadeDefaultText(view, runtime));
+        const saved = result.data.agent.runtime;
+        if (!modelRuntimeSaved(body, saved)) return setDefaultRefusal(MODEL_EFFORT_COPY.notSaved);
+        showNotice(chatMadeDefaultText(view, saved));
         choice.madeDefault();
         close();
       })

@@ -144,23 +144,43 @@ export function fastChoice(
 /**
  * `agents.update`'s `runtime`: the whole model runtime, every time, so saving one field never drops another:
  * `{provider, model?, backgroundModel?, effort?, fast?}` (explicit `null` clears `backgroundModel`; omitted keeps it
- * on the same provider).
+ * on the same provider). Pass `{ backgroundModel: false }` for boxes that don't support `backgroundModel` yet.
  */
-export function modelRuntimeBody(draft: ModelRuntimeDraft): AgentModelRuntimeUpdate {
+export function modelRuntimeBody(
+  draft: ModelRuntimeDraft,
+  options: { backgroundModel?: boolean } = {},
+): AgentModelRuntimeUpdate {
   const own = hasModelEffort(draft.provider);
   const model = draft.model?.trim();
-  const backgroundModel = draft.backgroundModel?.trim();
+  const backgroundModel = options.backgroundModel === false ? undefined : draft.backgroundModel?.trim();
+  const clearBackground = options.backgroundModel !== false && draft.backgroundModel === null;
   return {
     provider: draft.provider,
     ...(model ? { model } : {}),
-    ...(backgroundModel
-      ? { backgroundModel }
-      : draft.backgroundModel === null
-        ? { backgroundModel: null }
-        : {}),
+    ...(backgroundModel ? { backgroundModel } : clearBackground ? { backgroundModel: null } : {}),
     ...(own && draft.effort ? { effort: draft.effort } : {}),
     ...(own && draft.fast !== undefined ? { fast: draft.fast } : {}),
   };
+}
+
+/**
+ * Whether the box's returned `agent.runtime` kept every setting `agents.update` asked to save.
+ * Catches older runtimes that silently strip a newer field (such as `backgroundModel`) while answering 200 OK.
+ */
+export function modelRuntimeSaved(
+  requested: AgentModelRuntimeUpdate,
+  returned: Pick<AgentModelRuntime, 'provider' | 'model' | 'backgroundModel' | 'effort' | 'fast'>,
+): boolean {
+  if (returned.provider !== requested.provider) return false;
+  if ((returned.model ?? null) !== (requested.model ?? null)) return false;
+  if (
+    requested.backgroundModel !== undefined &&
+    (returned.backgroundModel ?? null) !== requested.backgroundModel
+  )
+    return false;
+  if ((returned.effort ?? null) !== (requested.effort ?? null)) return false;
+  if ((returned.fast ?? undefined) !== (requested.fast ?? undefined)) return false;
+  return true;
 }
 
 /**

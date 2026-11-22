@@ -95,9 +95,18 @@ export function ProfileTab({ burrow, profile }: SettingsTabProps) {
     setSaving(true);
     try {
       const result = await update.mutateAsync({ params: { burrow }, body: { name: trimmed } });
-      const notice = outcomeNotice(result);
-      if (notice) setError(notice);
-      else toast.show(words.renamed(trimmed));
+      if (result.status !== 'ok') {
+        const notice = outcomeNotice(result);
+        if (notice) setError(notice);
+        return;
+      }
+      const saved = result.data.agent.name;
+      if (saved !== trimmed) {
+        setName(saved);
+        setError('Couldn’t save that. Try again in a moment.');
+      } else {
+        toast.show(words.renamed(saved));
+      }
     } catch (err) {
       const message = refusal(err, 'name');
       if (message) setError(message);
@@ -120,8 +129,13 @@ export function ProfileTab({ burrow, profile }: SettingsTabProps) {
     }
     try {
       const result = await update.mutateAsync({ params: { burrow }, body: { face: next } });
-      const notice = outcomeNotice(result);
-      if (notice) toast.show(notice);
+      if (result.status !== 'ok') {
+        const notice = outcomeNotice(result);
+        if (notice) toast.show(notice);
+        return;
+      }
+      if (agentFaceOf(result.data.agent) !== next)
+        toast.show('Couldn’t save that face. Try again in a moment.');
       else toast.show(words.newFace);
     } catch (err) {
       toast.show(refusal(err, 'face') ?? 'Couldn’t save that face. Try again in a moment.');

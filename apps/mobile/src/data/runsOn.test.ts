@@ -320,4 +320,23 @@ describe('background model on Runs on', () => {
       'haiku',
     ]);
   });
+
+  it('hides background model and omits it from save bodies when the box does not support it', () => {
+    const older = modelEffortView(
+      { name: 'Banjo', runtime: runtime({ model: 'opus', backgroundModel: 'sonnet', effort: 'high' }) },
+      withModels,
+      true,
+      null,
+      true,
+      null,
+      false,
+    );
+    expect(older?.backgroundModel).toBeNull();
+    for (const choice of older?.model.choices ?? []) {
+      expect(choice.runtime).not.toHaveProperty('backgroundModel');
+    }
+    for (const choice of older?.effort?.choices ?? []) {
+      expect(choice.runtime).not.toHaveProperty('backgroundModel');
+    }
+  });
 });

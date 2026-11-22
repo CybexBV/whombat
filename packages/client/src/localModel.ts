@@ -151,6 +151,20 @@ export function localModelSetBody(
   };
 }
 
+/** Whether the box's returned `localModel` matches what `burrows.setLocalModel` asked to save. */
+export function localModelSaved(
+  requested: SetLocalModelBody,
+  returned: Pick<LocalModelView, 'baseUrl' | 'model' | 'label' | 'hasApiKey'> | null | undefined,
+): boolean {
+  if (!returned) return false;
+  if (returned.baseUrl !== requested.baseUrl) return false;
+  if (returned.model !== requested.model) return false;
+  if ((returned.label ?? null) !== (requested.label ?? null)) return false;
+  if (typeof requested.apiKey === 'string' && !returned.hasApiKey) return false;
+  if (requested.apiKey === null && returned.hasApiKey) return false;
+  return true;
+}
+
 /** Whether the form holds the saved model as it is (address, model and key); its name may differ. */
 export function localModelUnchanged(
   draft: LocalModelDraft,

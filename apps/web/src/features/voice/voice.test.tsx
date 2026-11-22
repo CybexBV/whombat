@@ -5,12 +5,20 @@
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createFakeSession, restHandler } from '@whombat/client/fake';
 import { encodeWav, VOICE_TEXT, type VoiceRecorder } from '@whombat/client/voice';
-import { FAKE_TRANSCRIPT, type FakeVoiceWorld } from '@whombat/client/voice/fake';
-import { DUTCH_VOICE_LICENCE_URL } from '@whombat/core/domain';
+import {
+  createFakeVoice,
+  FAKE_TRANSCRIPT,
+  type FakeVoiceWorld,
+  withFakeVoice,
+} from '@whombat/client/voice/fake';
+import { DUTCH_VOICE_LICENCE_URL, type VoiceTyping } from '@whombat/core/domain';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { PVE_THREAD } from '../../app/chatChannelFixtures';
-import { fixtureServices, renderApp } from '../../test/renderApp';
+import { createWebFixtureFetch } from '../../app/fixtureFetch';
+import { createAppServices } from '../../app/services';
+import { fixtureServices, renderApp, testQueryClient } from '../../test/renderApp';
 
 /** The page's microphone: two seconds of sound whatever happens. */
 const recorder = vi.hoisted(() => ({
@@ -201,5 +209,62 @@ describe('Settings → This Whombat → VOICE TYPING (DT-06)', () => {
     await user.click(dutchSwitch);
     await waitFor(() => expect(dutchSwitch.getAttribute('aria-checked')).toBe('false'));
     expect(dutchRow.getAttribute('data-state')).toBe('absent');
+  });
+
+  it('hides Dutch voice when an older box omits it, and keeps the licence dialog open if the box did not turn it on', async () => {
+    const rest = createWebFixtureFetch({ host: true }) as unknown as (
+      url: string,
+      init: RequestInit,
+    ) => Promise<Response>;
+    const baseVoice = createFakeVoice();
+    const withVoice = withFakeVoice(
+      { handle: restHandler(rest, { origin: 'http://whombat.test' }) },
+      baseVoice,
+    );
+    const { session: olderSession } = createFakeSession({
+      ...withVoice,
+      account: { id: 'acc_mara', name: 'Mara Okafor' },
+      protocolMinor: 2,
+      handle: async (op, input, ctx) => {
+        const res = await withVoice.handle(op, input, ctx);
+        if (op === 'voice.get' && res.status === 200) {
+          const { dutchVoice: _omitted, ...older } = res.body as VoiceTyping;
+          return { status: 200, body: older };
+        }
+        return res;
+      },
+    });
+    const older = renderApp(
+      '/settings?tab=appliance',
+      createAppServices({ session: olderSession, realtime: null, queryClient: testQueryClient() }),
+    );
+    const olderSection = await section();
+    expect(olderSection.querySelector('[data-row="voice-dutch"]')).toBeNull();
+    older.unmount();
+
+    // Box answers 200 OK to voice.setDutchVoice({ on: true }) without turning Dutch voice on.
+    const { session: ignoredSession } = createFakeSession({
+      ...withVoice,
+      account: { id: 'acc_mara', name: 'Mara Okafor' },
+      handle: async (op, input, ctx) => {
+        if (op === 'voice.setDutchVoice') return { status: 200, body: baseVoice.state() };
+        return withVoice.handle(op, input, ctx);
+      },
+    });
+    const user = userEvent.setup();
+    renderApp(
+      '/settings?tab=appliance',
+      createAppServices({ session: ignoredSession, realtime: null, queryClient: testQueryClient() }),
+    );
+    const s = await section();
+    const dutchSwitch = within(s.querySelector('[data-row="voice-dutch"]') as HTMLElement).getByRole(
+      'switch',
+      { name: VOICE_TEXT.dutchVoice.label },
+    );
+    await user.click(dutchSwitch);
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: VOICE_TEXT.dutchVoice.dialog.agree }));
+    expect(await within(dialog).findByRole('status')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });

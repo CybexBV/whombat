@@ -16,14 +16,15 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { burrow } from '@whombat/fixtures';
 import { describe, expect, it } from 'vitest';
+import { createWebFixtureFetch } from '../../app/fixtureFetch';
 import { Providers } from '../../app/providers';
-import { fixtureServices } from '../../test/renderApp';
+import type { AppServices } from '../../app/services';
+import { fixtureServices, mockedServices } from '../../test/renderApp';
 import { ThingScreen } from './ThingScreen';
 
 const text = (el: Element | null) => (el?.textContent ?? '').replaceAll(' ', ' ');
 
-function renderThing(url: string) {
-  const services = fixtureServices({ hosts: true });
+function renderThing(url: string, services: AppServices = fixtureServices({ hosts: true })) {
   const root = createRootRoute({ component: () => <Outlet /> });
   const thing = createRoute({
     getParentRoute: () => root,
@@ -40,12 +41,12 @@ function renderThing(url: string) {
   });
   const history = createMemoryHistory({ initialEntries: [url] });
   const router = createRouter({ routeTree: root.addChildren([thing, settings]), history });
-  render(
+  const view = render(
     <Providers services={services}>
       <RouterProvider router={router} />
     </Providers>,
   );
-  return { history, location: () => `${history.location.pathname}${history.location.search}` };
+  return { ...view, history, location: () => `${history.location.pathname}${history.location.search}` };
 }
 
 describe('a server’s page (mock 2)', () => {
@@ -240,5 +241,23 @@ describe('a guest', () => {
     expect(within(dialog).getByText('Shut homeassistant down? It closes its programs first.')).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: 'Shut down' }));
     expect(await screen.findByText('Shutting down homeassistant.')).toBeTruthy();
+  });
+});
+
+describe('server Storage tab on older boxes', () => {
+  it('shows “Check what fills it” on minor 3 and hides it on an older box (minor 2)', async () => {
+    const first = renderThing('/things/server%3Apve-02?tab=storage');
+    expect(await screen.findByRole('button', { name: 'Check what fills it' })).toBeTruthy();
+    first.unmount();
+
+    const base = createWebFixtureFetch({ hosts: true });
+    const olderFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input instanceof Request ? input.url : input), 'http://whombat.test');
+      return base(new Request(url, init), init);
+    }) as typeof globalThis.fetch;
+    const older = mockedServices(olderFetch, { protocolMinor: 2 });
+    renderThing('/things/server%3Apve-02?tab=storage', older);
+    expect(await screen.findByRole('heading', { name: 'Disks' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Check what fills it' })).toBeNull();
   });
 });

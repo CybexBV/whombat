@@ -5,9 +5,10 @@
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createWebFixtureFetch } from '../../app/fixtureFetch';
 import { pinMockDate } from '../../test/clock';
-import { fixtureServices, renderApp } from '../../test/renderApp';
+import { fixtureServices, mockedServices, renderApp } from '../../test/renderApp';
 
 pinMockDate();
 
@@ -86,5 +87,36 @@ describe('custom AI model in Settings → Advanced → AI on this Whombat', () =
     expect(await within(section).findByText('Llama on the NAS')).toBeTruthy();
     expect(within(section).getByRole('button', { name: 'Change' })).toBeTruthy();
     expect(section.textContent).not.toMatch(/owner/i);
+  });
+
+  it('refuses to toast saved if the box answers ok without keeping the requested model', async () => {
+    const base = createWebFixtureFetch();
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input instanceof Request ? input.url : input), 'http://whombat.test');
+      const req = new Request(url, init);
+      const res = await base(req, init);
+      if (req.method === 'PUT' && url.pathname.endsWith('/local-model')) {
+        const body = (await res.json()) as {
+          burrow: Record<string, unknown>;
+          localModel: Record<string, unknown>;
+          eventId: null;
+        };
+        const returned = { ...body.localModel, model: 'different-model' };
+        return Response.json({
+          ...body,
+          burrow: { ...body.burrow, localModel: returned },
+          localModel: returned,
+        });
+      }
+      return res;
+    }) as unknown as typeof globalThis.fetch;
+    const user = userEvent.setup();
+    renderApp(AI, mockedServices(fetch));
+    const section = await screen.findByRole('region', { name: SECTION });
+    await user.type(within(section).getByLabelText('Address'), 'https://api.example.com/v1');
+    await user.type(within(section).getByLabelText('Model'), 'qwen3:32b');
+    await user.click(within(section).getByRole('button', { name: 'Save' }));
+    expect(await within(section).findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText('Saved the custom AI model.')).toBeNull();
   });
 });

@@ -19,6 +19,7 @@ import {
   localModelOf,
   localModelProblems,
   localModelRow,
+  localModelSaved,
   localModelSetBody,
   localModelTestBody,
 } from '@whombat/client';
@@ -56,12 +57,33 @@ export function LocalModelCard() {
   const { slug, bootstrap } = useBurrow();
   const view = localModelOf(bootstrap.burrow);
   const [editing, setEditing] = useState(false);
+  const [mismatch, setMismatch] = useState<string | null>(null);
   return (
     <Card>
       {view && !editing ? (
-        <Saved slug={slug} view={view} onChange={() => setEditing(true)} />
+        <Saved
+          slug={slug}
+          view={view}
+          notice={mismatch}
+          onChange={() => {
+            setMismatch(null);
+            setEditing(true);
+          }}
+        />
       ) : (
-        <Form slug={slug} view={view} onDone={() => setEditing(false)} />
+        <Form
+          slug={slug}
+          view={view}
+          onStart={() => setMismatch(null)}
+          onMismatch={(msg) => {
+            setMismatch(msg);
+            setEditing(false);
+          }}
+          onDone={() => {
+            setMismatch(null);
+            setEditing(false);
+          }}
+        />
       )}
     </Card>
   );
@@ -110,7 +132,17 @@ function Head({ tone, status }: { tone: LocalModelTone; status: string }) {
   );
 }
 
-function Saved({ slug, view, onChange }: { slug: string; view: LocalModelView; onChange: () => void }) {
+function Saved({
+  slug,
+  view,
+  notice,
+  onChange,
+}: {
+  slug: string;
+  view: LocalModelView;
+  notice?: string | null;
+  onChange: () => void;
+}) {
   const theme = useTheme();
   const test = useTestLocalModel(slug);
   const clear = useClearLocalModel(slug);
@@ -142,8 +174,10 @@ function Saved({ slug, view, onChange }: { slug: string; view: LocalModelView; o
             {
               onSuccess: (r) => {
                 const refused = refusalOf(r);
-                if (refused) setProblem(refused);
-                else showNotice(LOCAL_MODEL_COPY.removed);
+                if (refused) return setProblem(refused);
+                if (r.status === 'ok' && r.data.burrow.localModel != null)
+                  return setProblem(LOCAL_MODEL_TEXT.failed);
+                showNotice(LOCAL_MODEL_COPY.removed);
               },
               onError: (e) => setProblem(errorText(e)),
             },
@@ -170,7 +204,7 @@ function Saved({ slug, view, onChange }: { slug: string; view: LocalModelView; o
           {line.text}
         </Text>
       </View>
-      <FormMessage text={problem} />
+      <FormMessage text={problem ?? notice ?? null} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
           label={LOCAL_MODEL_COPY.checkAgain}
@@ -209,7 +243,19 @@ const FIELD_INPUT: Record<LocalModelField, { mono: boolean; secret: boolean; url
   apiKey: { mono: true, secret: true, url: false, raw: true },
 };
 
-function Form({ slug, view, onDone }: { slug: string; view: LocalModelView | null; onDone: () => void }) {
+function Form({
+  slug,
+  view,
+  onStart,
+  onMismatch,
+  onDone,
+}: {
+  slug: string;
+  view: LocalModelView | null;
+  onStart: () => void;
+  onMismatch: (message: string) => void;
+  onDone: () => void;
+}) {
   const theme = useTheme();
   const set = useSetLocalModel(slug);
   const test = useTestLocalModel(slug);
@@ -243,13 +289,20 @@ function Form({ slug, view, onDone }: { slug: string; view: LocalModelView | nul
   const save = () => {
     setTried(true);
     setProblem(null);
+    onStart();
     if (blocked) return;
+    const body = localModelSetBody(draft, view);
     set.mutate(
-      { params: { burrow: slug }, body: localModelSetBody(draft, view) },
+      { params: { burrow: slug }, body },
       {
         onSuccess: (r) => {
           const refused = refusalOf(r);
           if (refused) return setProblem(refused);
+          if (r.status !== 'ok' || !localModelSaved(body, r.data.localModel)) {
+            setProblem(LOCAL_MODEL_TEXT.failed);
+            onMismatch(LOCAL_MODEL_TEXT.failed);
+            return;
+          }
           showNotice(LOCAL_MODEL_COPY.saved);
           onDone();
         },

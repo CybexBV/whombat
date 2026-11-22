@@ -27,6 +27,8 @@ export const MODEL_EFFORT_COPY = {
   effortHint: 'Every reply and task uses this. Higher thinks longer: slower replies and more usage.',
   /** The toast's “Saved Banjo’s …”. */
   saved: 'model and effort',
+  /** Shown when the box answered ok without keeping what the app asked to save (e.g. an older box stripped a field). */
+  notSaved: 'This Whombat didn’t save that change. Update this Whombat to use every setting.',
 } as const;
 
 /** “Default (Opus)” — the tool's default model by name when the list says which — else “Default”. */
