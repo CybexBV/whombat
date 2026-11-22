@@ -350,7 +350,7 @@ describe('writes', () => {
     const claude = await patch({
       runtime: { provider: 'claude', model: 'opus', backgroundModel: 'haiku', effort: 'high', fast: true },
     });
-    expect(endpoint('agent.update').response.parse(await claude.json()).agent.runtime).toEqual({
+    expect(api.agent.update.response.parse(await claude.json()).agent.runtime).toEqual({
       provider: 'claude',
       model: 'opus',
       backgroundModel: 'haiku',
@@ -360,12 +360,12 @@ describe('writes', () => {
     const local = await patch({
       runtime: { provider: 'local', model: 'gemma3:27b', effort: 'high', fast: true },
     });
-    expect(endpoint('agent.update').response.parse(await local.json()).agent.runtime).toEqual({
+    expect(api.agent.update.response.parse(await local.json()).agent.runtime).toEqual({
       provider: 'local',
       model: 'gemma3:27b',
     });
     const switched = await patch({ runtime: { provider: 'codex' } });
-    expect(endpoint('agent.update').response.parse(await switched.json()).agent.runtime).toEqual({
+    expect(api.agent.update.response.parse(await switched.json()).agent.runtime).toEqual({
       provider: 'codex',
     });
   });
