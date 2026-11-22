@@ -688,6 +688,29 @@ func TestGitHubPauseAndResumeCommands(t *testing.T) {
 	if err != nil || r.ChannelPaused(trust.ChannelProduction) {
 		t.Fatalf("after gh-resume: paused=%v err=%v", r != nil && r.ChannelPaused(trust.ChannelProduction), err)
 	}
+
+	// A stalled gh-publish leaving .publish-pending.json must not block gh-pause or gh-resume.
+	relDir := exportDir(t, "whombat-20261120.1", "whombat-20261120.1", "1.0.1")
+	t.Setenv("WHOMBAT_RELEASES_TOKEN", "wrong")
+	if err := runGitHub("gh-publish", append(append([]string{}, common...), "--release-dir", relDir)); err == nil {
+		t.Fatal("gh-publish succeeded with wrong token")
+	}
+	t.Setenv("WHOMBAT_RELEASES_TOKEN", "tok")
+	if err := runGitHub("gh-pause", append(append([]string{}, common...), "--channel", trust.ChannelDevelopment)); err != nil {
+		t.Fatalf("gh-pause with pending publish: %v", err)
+	}
+	// Re-running gh-publish after the pause discards the stale pre-pause signature, signs strictly
+	// above the pause version, and keeps development paused.
+	if err := runGitHub("gh-publish", append(append([]string{}, common...), "--release-dir", relDir)); err != nil {
+		t.Fatalf("gh-publish after pause: %v", err)
+	}
+	r, err = devtuf.Load(dir, devtuf.Options{})
+	if err != nil || !r.ChannelPaused(trust.ChannelDevelopment) {
+		t.Fatalf("development should remain paused after re-publish: paused=%v err=%v", r != nil && r.ChannelPaused(trust.ChannelDevelopment), err)
+	}
+	if err := runGitHub("gh-resume", append(append([]string{}, common...), "--channel", trust.ChannelDevelopment)); err != nil {
+		t.Fatalf("gh-resume after re-publish: %v", err)
+	}
 }
 
 func captureOutput(t *testing.T, fn func() error) (stdout, stderr string, err error) {

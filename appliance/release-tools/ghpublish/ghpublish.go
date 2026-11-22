@@ -4,12 +4,15 @@
 //
 // The order never lets a box see metadata for files that aren't there: blobs (each once, into its nar-xx bucket
 // release) → the release's tuple and indexes (release <release-id>) → the role metadata (git push) → the workflow's
-// snapshot and timestamp. A publish that stopped before its push holds every other publish back until it is run
-// again (.publish-pending.json), so its signed role never goes up with another's; one that left nothing signed or
-// unpushed is given up by itself. A publish commits only the metadata it signed (a clients role the channel publisher
-// signs during its upload waits for gh-clients) and is done only once the remote's branch has its commit. One publish
-// at a time (a lock in the repository directory). The GitHub REST API is used with a token from the environment;
-// boxes never call it.
+// snapshot and timestamp. A publish that stopped before its push holds every other release/clients publish back until
+// it is run again (.publish-pending.json), so its signed role never goes up with another's; one that left nothing
+// signed or unpushed is given up by itself. Emergency channel pause and resume (PauseChannel, ResumeChannel) are never
+// blocked by an active upload or a pending publish: they sign directly from the already-published remote branch in an
+// isolated temporary checkout and push there, and an unfinished publish re-checks the published remote metadata before
+// pushing so it can never overwrite a pause or reuse a lower or equal role version. A publish commits only the
+// metadata it signed (a clients role the channel publisher signs during its upload waits for gh-clients) and is done
+// only once the remote's branch has its commit. One release publish at a time (a lock in the repository directory). The
+// GitHub REST API is used with a token from the environment; boxes never call it.
 package ghpublish
 
 import (
@@ -28,7 +31,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -144,8 +149,53 @@ func (p *Publisher) lock(wait time.Duration) (func(), error) {
 	}
 }
 
+// tryLock acquires .publish.lock without waiting. Used by pause/resume for a best-effort sync of the clone after
+// pushing to the remote.
+func (p *Publisher) tryLock() (func(), bool, error) {
+	f, err := os.OpenFile(filepath.Join(p.cfg.Dir, ".publish.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err == nil {
+		return func() { _ = unix.Flock(int(f.Fd()), unix.LOCK_UN); f.Close() }, true, nil
+	} else if err == unix.EWOULDBLOCK {
+		f.Close()
+		return nil, false, nil
+	} else {
+		f.Close()
+		return nil, false, err
+	}
+}
+
+// pauseLock serializes concurrent pause/resume operations on the same clone without ever contending with
+// .publish.lock or devtuf.Lock. Kept inside the clone's git directory so pre-existing clones stay git-clean.
+func (p *Publisher) pauseLock(ctx context.Context, wait time.Duration) (func(), error) {
+	gitDir, err := p.git(ctx, "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(p.cfg.Dir, gitDir)
+	}
+	f, err := os.OpenFile(filepath.Join(gitDir, "whombat-pause.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(wait)
+	for {
+		if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err == nil {
+			return func() { _ = unix.Flock(int(f.Fd()), unix.LOCK_UN); f.Close() }, nil
+		} else if err != unix.EWOULDBLOCK || time.Now().After(deadline) {
+			f.Close()
+			return nil, fmt.Errorf("ghpublish: another channel pause/resume holds %s: %w", p.cfg.Dir, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // pendingFile records a publish that may have signed role metadata whose files aren't all on GitHub yet: until the
-// same publish runs again and pushes, no other publish may push the metadata folder (it would carry that role along).
+// same publish runs again and pushes, no other release/clients publish may push the metadata folder (it would carry
+// that role along). Emergency pause/resume runs out of band from the published remote branch instead.
 const pendingFile = ".publish-pending.json"
 
 type pendingPublish struct {
@@ -160,6 +210,9 @@ type pendingPublish struct {
 	// their keys): a clients role signed since then is never pushed with it.
 	Base  map[string]string `json:"base,omitempty"`
 	Files map[string]string `json:"files,omitempty"`
+	// BaseVersions records the highest published version of each role on the remote branch when this publish signed,
+	// so any out-of-band push (such as an emergency pause or resume) is detected before pushing.
+	BaseVersions map[string]int64 `json:"baseVersions,omitempty"`
 	// Signed: its signing finished and Files are what it wrote. A run again pushes them and never signs again (R1 #4:
 	// the key ceremony's signer can't sign a second time once its old keys would be gone).
 	Signed bool `json:"signed,omitempty"`
@@ -260,7 +313,11 @@ func (p *Publisher) clearPending() error {
 
 // unpushed lists the files of the metadata folder that differ from the last commit (signed, not committed).
 func (p *Publisher) unpushed(ctx context.Context) ([]string, error) {
-	out, err := p.git(ctx, "status", "--porcelain", "--untracked-files=all", "--", "metadata")
+	return p.unpushedIn(ctx, p.cfg.Dir)
+}
+
+func (p *Publisher) unpushedIn(ctx context.Context, dir string) ([]string, error) {
+	out, err := p.gitIn(ctx, dir, "status", "--porcelain", "--untracked-files=all", "--", "metadata")
 	if err != nil {
 		return nil, err
 	}
@@ -276,13 +333,17 @@ func (p *Publisher) unpushed(ctx context.Context) ([]string, error) {
 
 // unpushedHashes is unpushed with each file's sha256 ("" for a removed file).
 func (p *Publisher) unpushedHashes(ctx context.Context) (map[string]string, error) {
-	files, err := p.unpushed(ctx)
+	return p.unpushedHashesIn(ctx, p.cfg.Dir)
+}
+
+func (p *Publisher) unpushedHashesIn(ctx context.Context, dir string) (map[string]string, error) {
+	files, err := p.unpushedIn(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]string{}
 	for _, f := range files {
-		b, err := os.ReadFile(filepath.Join(p.cfg.Dir, f))
+		b, err := os.ReadFile(filepath.Join(dir, f))
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 			out[f] = ""
@@ -298,14 +359,440 @@ func (p *Publisher) unpushedHashes(ctx context.Context) (map[string]string, erro
 
 // ahead reports whether the clone has metadata commits the remote's branch lacks (a push that failed after its commit).
 func (p *Publisher) ahead(ctx context.Context) (bool, error) {
-	if _, err := p.git(ctx, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
+	return p.aheadIn(ctx, p.cfg.Dir)
+}
+
+func (p *Publisher) aheadIn(ctx context.Context, dir string) (bool, error) {
+	if _, err := p.gitIn(ctx, dir, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
 		return false, err
 	}
-	n, err := p.git(ctx, "rev-list", "--count", "FETCH_HEAD..HEAD")
+	n, err := p.gitIn(ctx, dir, "rev-list", "--count", "FETCH_HEAD..HEAD")
 	if err != nil {
 		return false, err
 	}
 	return n != "0", nil
+}
+
+var versionedMetaRe = regexp.MustCompile(`^([0-9]+)\.([a-z][a-z0-9-]*)\.json$`)
+
+func parseMetaFile(path string) (version int64, role string, ok bool) {
+	base := filepath.Base(path)
+	if base == "timestamp.json" {
+		return 0, metadata.TIMESTAMP, true
+	}
+	if base == "root.json" {
+		return 0, metadata.ROOT, true
+	}
+	m := versionedMetaRe.FindStringSubmatch(base)
+	if m == nil {
+		return 0, "", false
+	}
+	v, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return 0, "", false
+	}
+	return v, m[2], true
+}
+
+func isOnlineMetaFile(path string) bool {
+	_, role, ok := parseMetaFile(path)
+	return ok && (role == metadata.SNAPSHOT || role == metadata.TIMESTAMP)
+}
+
+func cloneVersions(m map[string]int64) map[string]int64 {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]int64, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeHashes(a, b map[string]string) map[string]string {
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range b {
+		out[k] = v
+	}
+	for k, v := range a {
+		out[k] = v
+	}
+	return out
+}
+
+type refMetadata struct {
+	MaxVersion    map[string]int64
+	ChannelPaused map[string]bool
+	Files         map[string]bool
+}
+
+// readRefMetadata inspects the metadata/ tree of a git ref (such as FETCH_HEAD or HEAD) without touching the work tree.
+func (p *Publisher) readRefMetadata(ctx context.Context, ref string) (*refMetadata, error) {
+	out, err := p.git(ctx, "ls-tree", "-r", "--name-only", ref, "--", "metadata")
+	if err != nil {
+		return nil, err
+	}
+	rm := &refMetadata{
+		MaxVersion:    map[string]int64{},
+		ChannelPaused: map[string]bool{},
+		Files:         map[string]bool{},
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.TrimSpace(line)
+		if f == "" {
+			continue
+		}
+		rm.Files[f] = true
+		if v, role, ok := parseMetaFile(f); ok && v > 0 && v > rm.MaxVersion[role] {
+			rm.MaxVersion[role] = v
+		}
+	}
+	if rm.Files["metadata/timestamp.json"] {
+		if b, err := p.gitBytesIn(ctx, p.cfg.Dir, "show", ref+":metadata/timestamp.json"); err == nil {
+			if ts, err := metadata.Timestamp().FromBytes(b); err == nil {
+				rm.MaxVersion[metadata.TIMESTAMP] = ts.Signed.Version
+			}
+		}
+	}
+	for _, ch := range trust.Channels {
+		v := rm.MaxVersion[ch]
+		if v <= 0 {
+			continue
+		}
+		name := fmt.Sprintf("metadata/%d.%s.json", v, ch)
+		if b, err := p.gitBytesIn(ctx, p.cfg.Dir, "show", ref+":"+name); err == nil {
+			if md, err := metadata.Targets().FromBytes(b); err == nil {
+				paused, _ := trust.IsChannelPaused(md)
+				rm.ChannelPaused[ch] = paused
+			}
+		}
+	}
+	return rm, nil
+}
+
+// pendingUnpushedFiles returns the metadata files belonging to pend that have not yet reached FETCH_HEAD: both
+// uncommitted working-tree files and files committed in local unpushed commits (merge-base(HEAD, FETCH_HEAD)..HEAD).
+// Caller must have fetched FETCH_HEAD first.
+func (p *Publisher) pendingUnpushedFiles(ctx context.Context, pend *pendingPublish) (dirtyFiles, committedFiles map[string]string, err error) {
+	dirty, err := p.unpushedHashes(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	dirtyFiles = pend.own(dirty)
+	committedFiles = map[string]string{}
+	mergeBase, err := p.git(ctx, "merge-base", "HEAD", "FETCH_HEAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	head, err := p.git(ctx, "rev-parse", "HEAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	if head == mergeBase {
+		return dirtyFiles, committedFiles, nil
+	}
+	out, err := p.git(ctx, "diff", "--name-only", mergeBase+"..HEAD", "--", "metadata")
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.TrimSpace(line)
+		if f == "" {
+			continue
+		}
+		if pend.Files != nil {
+			if _, ok := pend.Files[f]; !ok {
+				continue
+			}
+		} else if !pend.signs(f) {
+			continue
+		}
+		b, err := p.gitBytesIn(ctx, p.cfg.Dir, "show", "HEAD:"+f)
+		if err != nil {
+			continue
+		}
+		sum := sha256.Sum256(b)
+		committedFiles[f] = hex.EncodeToString(sum[:])
+	}
+	return dirtyFiles, committedFiles, nil
+}
+
+type remoteCheckResult struct {
+	StaleReason   string
+	RefreshOnline bool
+}
+
+// readPendingFileBytes returns the bytes of a pending file f from the work tree (if dirty) or HEAD (if committed).
+func (p *Publisher) readPendingFileBytes(ctx context.Context, f string, dirtyFiles map[string]string) ([]byte, error) {
+	if _, isDirty := dirtyFiles[f]; isDirty {
+		return os.ReadFile(filepath.Join(p.cfg.Dir, f))
+	}
+	return p.gitBytesIn(ctx, p.cfg.Dir, "show", "HEAD:"+f)
+}
+
+// checkFilesAgainstRemote verifies that none of a publish's signed role files would overwrite an out-of-band change
+// (such as an emergency channel pause/resume) or reuse a lower or equal role version relative to the published remote
+// branch. When only locally signed snapshot/timestamp files collide with the remote (because another role was pushed),
+// RefreshOnline is reported so they can be re-signed over the latest published metadata.
+func (p *Publisher) checkFilesAgainstRemote(ctx context.Context, pend *pendingPublish, allFiles, dirtyFiles map[string]string, remote *refMetadata) (remoteCheckResult, error) {
+	var res remoteCheckResult
+	for _, f := range keys(allFiles) {
+		if isOnlineMetaFile(f) {
+			continue
+		}
+		v, role, ok := parseMetaFile(f)
+		if !ok || v <= 0 {
+			continue
+		}
+		rMax := remote.MaxVersion[role]
+		if v <= rMax {
+			res.StaleReason = fmt.Sprintf("%s version %d is not newer than published version %d on the remote", role, v, rMax)
+			return res, nil
+		}
+		if pend != nil && pend.BaseVersions != nil {
+			if baseV, has := pend.BaseVersions[role]; has && rMax != baseV {
+				res.StaleReason = fmt.Sprintf("%s moved from version %d to %d on the remote since signing", role, baseV, rMax)
+				return res, nil
+			}
+		}
+		if trust.ValidChannel(role) && rMax > 0 {
+			b, err := p.readPendingFileBytes(ctx, f, dirtyFiles)
+			if err != nil {
+				return res, err
+			}
+			md, err := metadata.Targets().FromBytes(b)
+			if err != nil {
+				return res, err
+			}
+			signedPaused, _ := trust.IsChannelPaused(md)
+			if remote.ChannelPaused[role] && !signedPaused {
+				res.StaleReason = fmt.Sprintf("%s is paused on the remote (version %d); refusing to push unpaused version %d", role, rMax, v)
+				return res, nil
+			}
+		}
+	}
+	for _, f := range keys(allFiles) {
+		if !isOnlineMetaFile(f) {
+			continue
+		}
+		v, role, ok := parseMetaFile(f)
+		if !ok {
+			continue
+		}
+		switch role {
+		case metadata.SNAPSHOT:
+			if v <= remote.MaxVersion[metadata.SNAPSHOT] {
+				res.RefreshOnline = true
+			} else if pend != nil && pend.BaseVersions != nil {
+				if baseV, has := pend.BaseVersions[metadata.SNAPSHOT]; has && remote.MaxVersion[metadata.SNAPSHOT] != baseV {
+					res.RefreshOnline = true
+				}
+			}
+		case metadata.TIMESTAMP:
+			b, err := p.readPendingFileBytes(ctx, f, dirtyFiles)
+			if err != nil {
+				return res, err
+			}
+			ts, err := metadata.Timestamp().FromBytes(b)
+			if err != nil {
+				return res, err
+			}
+			if ts.Signed.Version <= remote.MaxVersion[metadata.TIMESTAMP] {
+				res.RefreshOnline = true
+			} else if pend != nil && pend.BaseVersions != nil {
+				if baseV, has := pend.BaseVersions[metadata.TIMESTAMP]; has && remote.MaxVersion[metadata.TIMESTAMP] != baseV {
+					res.RefreshOnline = true
+				}
+			}
+		}
+	}
+	return res, nil
+}
+
+// cleanWorktreeFiles removes or restores only the exact working-tree files in files whose on-disk hashes still match,
+// leaving any other dirty files (such as an unpushed clients role) untouched.
+func (p *Publisher) cleanWorktreeFiles(ctx context.Context, files map[string]string) error {
+	for _, f := range keys(files) {
+		full := filepath.Join(p.cfg.Dir, f)
+		b, err := os.ReadFile(full)
+		if errors.Is(err, os.ErrNotExist) {
+			_, _ = p.git(ctx, "reset", "-q", "HEAD", "--", f)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(b)
+		if hex.EncodeToString(sum[:]) != files[f] {
+			continue
+		}
+		_, _ = p.git(ctx, "reset", "-q", "HEAD", "--", f)
+		if _, err := p.git(ctx, "cat-file", "-e", "HEAD:"+f); err == nil {
+			if _, err := p.git(ctx, "checkout", "HEAD", "--", f); err != nil {
+				return err
+			}
+		} else {
+			if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// syncHeadToFetchHead drops local unpushed commits only when every file they changed belongs to committedFiles, and
+// brings HEAD to FETCH_HEAD without disturbing unrelated untracked files (such as an unpushed clients role).
+func (p *Publisher) syncHeadToFetchHead(ctx context.Context, committedFiles map[string]string) error {
+	mergeBase, err := p.git(ctx, "merge-base", "HEAD", "FETCH_HEAD")
+	if err != nil {
+		return err
+	}
+	head, err := p.git(ctx, "rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	if head != mergeBase {
+		out, err := p.git(ctx, "diff", "--name-only", mergeBase+"..HEAD")
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(out, "\n") {
+			f := strings.TrimSpace(line)
+			if f == "" {
+				continue
+			}
+			if _, ok := committedFiles[f]; !ok {
+				return fmt.Errorf("ghpublish: local unpushed commit touches %s outside this publish", f)
+			}
+		}
+		if _, err := p.git(ctx, "reset", "--merge", "FETCH_HEAD"); err != nil {
+			return err
+		}
+		return nil
+	}
+	if _, err := p.git(ctx, "merge", "--ff-only", "-q", "FETCH_HEAD"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// discardPending removes only this publish's stale unpushed files (and unpushed local commits of those files only),
+// fast-forwards the clone to FETCH_HEAD, and clears .publish-pending.json when hasPendingFile is true.
+func (p *Publisher) discardPending(ctx context.Context, dirtyFiles, committedFiles map[string]string, hasPendingFile bool) error {
+	if err := p.cleanWorktreeFiles(ctx, dirtyFiles); err != nil {
+		return err
+	}
+	if err := p.syncHeadToFetchHead(ctx, committedFiles); err != nil {
+		return err
+	}
+	if hasPendingFile {
+		return p.clearPending()
+	}
+	return nil
+}
+
+// refreshOnlineMeta preserves this publish's valid non-online role files while advancing the clone to FETCH_HEAD and
+// re-signing local snapshot and timestamp metadata over FETCH_HEAD plus only those role files (never pulling in an
+// unrelated unpushed clients role).
+func (p *Publisher) refreshOnlineMeta(ctx context.Context, pend *pendingPublish, allFiles, dirtyFiles, committedFiles map[string]string, remote *refMetadata, hasPendingFile bool) (map[string]string, error) {
+	roleBytes := map[string][]byte{}
+	newFiles := map[string]string{}
+	for _, f := range keys(allFiles) {
+		if isOnlineMetaFile(f) {
+			continue
+		}
+		b, err := p.readPendingFileBytes(ctx, f, dirtyFiles)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(b)
+		h := hex.EncodeToString(sum[:])
+		if h != allFiles[f] {
+			return nil, fmt.Errorf("ghpublish: %s changed after it was signed for this publish; nothing is pushed", f)
+		}
+		roleBytes[f] = b
+		newFiles[f] = h
+	}
+	if err := p.cleanWorktreeFiles(ctx, dirtyFiles); err != nil {
+		return nil, err
+	}
+	if err := p.syncHeadToFetchHead(ctx, committedFiles); err != nil {
+		return nil, err
+	}
+	for _, f := range keys(newFiles) {
+		if err := os.WriteFile(filepath.Join(p.cfg.Dir, f), roleBytes[f], 0o644); err != nil {
+			return nil, err
+		}
+	}
+	// Re-sign snapshot/timestamp inside an isolated directory containing only FETCH_HEAD's metadata plus this
+	// publish's own role files so an unpushed clients role on disk can never be included in the snapshot.
+	tmpParent, err := os.MkdirTemp("", "whombat-ghpublish-resign-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpParent)
+	tmpMeta := filepath.Join(tmpParent, "metadata")
+	if err := os.MkdirAll(tmpMeta, 0o755); err != nil {
+		return nil, err
+	}
+	for f := range remote.Files {
+		b, err := p.gitBytesIn(ctx, p.cfg.Dir, "show", "FETCH_HEAD:"+f)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(filepath.Join(tmpMeta, filepath.Base(f)), b, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	for f, b := range roleBytes {
+		if err := os.WriteFile(filepath.Join(tmpMeta, filepath.Base(f)), b, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	stateBytes, err := p.preparedStateJSON()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(tmpParent, "state.json"), stateBytes, 0o600); err != nil {
+		return nil, err
+	}
+	r, err := devtuf.Load(tmpParent, devtuf.Options{})
+	if err != nil {
+		return nil, err
+	}
+	if snapKey, tsKey := r.OnlineKeys(); snapKey != nil && tsKey != nil {
+		res, err := devtuf.ResignOnline(tmpMeta, snapKey, tsKey, devtuf.ResignOptions{})
+		if err != nil {
+			return nil, err
+		}
+		copyBack := []string{"timestamp.json"}
+		if res.SnapshotNew {
+			copyBack = append(copyBack, fmt.Sprintf("%d.snapshot.json", res.Snapshot))
+		}
+		for _, base := range copyBack {
+			b, err := os.ReadFile(filepath.Join(tmpMeta, base))
+			if err != nil {
+				return nil, err
+			}
+			rel := filepath.Join("metadata", base)
+			if err := os.WriteFile(filepath.Join(p.cfg.Dir, rel), b, 0o644); err != nil {
+				return nil, err
+			}
+			sum := sha256.Sum256(b)
+			newFiles[rel] = hex.EncodeToString(sum[:])
+		}
+	}
+	if pend != nil {
+		pend.Files = newFiles
+		pend.BaseVersions = cloneVersions(remote.MaxVersion)
+		if hasPendingFile {
+			if err := p.writePending(pend); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return newFiles, nil
 }
 
 func keys(m map[string]string) []string {
@@ -361,7 +848,10 @@ func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg 
 	}
 	defer unlock()
 	res := &Result{ReleaseID: id, Channel: channel, Uploaded: []string{}}
-	if err := p.pull(ctx); err != nil {
+	if _, err := os.Stat(filepath.Join(p.cfg.Dir, ".git")); err != nil {
+		return nil, fmt.Errorf("ghpublish: %s is not a clone of the releases repository", p.cfg.Dir)
+	}
+	if _, err := p.git(ctx, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
 		return nil, err
 	}
 	pend, err := p.readPending()
@@ -369,15 +859,85 @@ func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg 
 		return nil, err
 	}
 	this := &pendingPublish{Channel: channel, ReleaseID: id, Action: action}
-	if pend != nil && !pend.same(this) {
+	if pend != nil {
 		gone, err := p.abandoned(ctx, pend)
 		if err != nil {
 			return nil, err
 		}
-		if !gone {
-			return nil, fmt.Errorf("ghpublish: the publish of %s didn't finish: run it again first; its signed metadata isn't pushed until all its files are on GitHub (to give it up instead: docs/runbooks/updates.md, “A publish that stopped”)", pend.what())
+		if gone {
+			if pend.same(this) && pend.Signed {
+				// Already on the remote (e.g. crashed right before clearing .publish-pending.json).
+				if err := p.pull(ctx); err != nil {
+					return nil, err
+				}
+				return res, nil
+			}
+			pend = nil
 		}
-		pend = nil
+	}
+	pulled := false
+	if pend != nil {
+		var (
+			staleReason string
+			refreshed   bool
+		)
+		if err := func() error {
+			unlockRepo, err := devtuf.Lock(p.cfg.Dir, time.Minute)
+			if err != nil {
+				return err
+			}
+			defer unlockRepo()
+			dirtyFiles, committedFiles, err := p.pendingUnpushedFiles(ctx, pend)
+			if err != nil {
+				return err
+			}
+			allPend := mergeHashes(dirtyFiles, committedFiles)
+			if len(allPend) == 0 {
+				return nil
+			}
+			remote, err := p.readRefMetadata(ctx, "FETCH_HEAD")
+			if err != nil {
+				return err
+			}
+			chk, err := p.checkFilesAgainstRemote(ctx, pend, allPend, dirtyFiles, remote)
+			if err != nil {
+				return err
+			}
+			if chk.StaleReason != "" {
+				staleReason = chk.StaleReason
+				p.cfg.Log("the unfinished publish of %s was superseded by published metadata on the remote (%s): discarding its stale unpushed metadata", pend.what(), chk.StaleReason)
+				if derr := p.discardPending(ctx, dirtyFiles, committedFiles, true); derr != nil {
+					return fmt.Errorf("ghpublish: published metadata changed while %s was pending (%s); failed to discard stale local metadata: %w", pend.what(), chk.StaleReason, derr)
+				}
+				pulled = true
+				return nil
+			}
+			if pend.same(this) && chk.RefreshOnline {
+				if _, rerr := p.refreshOnlineMeta(ctx, pend, allPend, dirtyFiles, committedFiles, remote, true); rerr != nil {
+					return rerr
+				}
+				refreshed = true
+				pulled = true
+			}
+			return nil
+		}(); err != nil {
+			return nil, err
+		}
+		if staleReason != "" {
+			if pend.same(this) && (sign == nil || channel == metadata.ROOT) {
+				return nil, fmt.Errorf("ghpublish: published metadata changed while %s was pending (%s); stale unpushed metadata was discarded — run the publish again to sign over the current metadata", pend.what(), staleReason)
+			}
+			pend = nil
+		} else if !pend.same(this) {
+			return nil, fmt.Errorf("ghpublish: the publish of %s didn't finish: run it again first; its signed metadata isn't pushed until all its files are on GitHub (to give it up instead: docs/runbooks/updates.md, “A publish that stopped”)", pend.what())
+		} else if refreshed {
+			this = pend
+		}
+	}
+	if !pulled {
+		if err := p.pull(ctx); err != nil {
+			return nil, err
+		}
 	}
 	fresh := pend == nil
 	if fresh {
@@ -407,6 +967,15 @@ func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg 
 		}
 		if fresh {
 			this.Base = before // another signer's, signed since the check above
+			if headMeta, err := p.readRefMetadata(ctx, "HEAD"); err == nil {
+				this.BaseVersions = cloneVersions(headMeta.MaxVersion)
+			}
+		} else if len(this.BaseVersions) == 0 {
+			if baseRef, err := p.git(ctx, "merge-base", "HEAD", "FETCH_HEAD"); err == nil && baseRef != "" {
+				if baseMeta, err := p.readRefMetadata(ctx, baseRef); err == nil {
+					this.BaseVersions = cloneVersions(baseMeta.MaxVersion)
+				}
+			}
 		}
 		if err := p.writePending(this); err != nil {
 			return err
@@ -436,7 +1005,9 @@ func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg 
 				mine[f] = h
 			}
 		}
-		this.Files = mine
+		if len(mine) > 0 || !this.Signed {
+			this.Files = mine
+		}
 		this.Signed = true
 		if err := p.writePending(this); err != nil {
 			return err
@@ -468,7 +1039,7 @@ func (p *Publisher) publish(ctx context.Context, channel, id, action, commitMsg 
 			msg = channel + ": " + id
 		}
 	}
-	commit, err := p.commitPush(ctx, msg, this.Files)
+	commit, err := p.commitPush(ctx, msg, this, true)
 	if err != nil {
 		return res, err
 	}
@@ -790,10 +1361,22 @@ func (p *Publisher) deleteAsset(ctx context.Context, id int64) error {
 // git runs git in the repository directory. The token, when the remote is https, goes in an environment variable
 // that git reads as an extra header: never on a command line.
 func (p *Publisher) git(ctx context.Context, args ...string) (string, error) {
+	return p.gitIn(ctx, p.cfg.Dir, args...)
+}
+
+func (p *Publisher) gitIn(ctx context.Context, dir string, args ...string) (string, error) {
+	b, err := p.gitBytesIn(ctx, dir, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+func (p *Publisher) gitBytesIn(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, p.cfg.Git, args...)
-	cmd.Dir = p.cfg.Dir
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	if remote, err := exec.CommandContext(ctx, p.cfg.Git, "-C", p.cfg.Dir, "remote", "get-url", p.cfg.Remote).Output(); err == nil &&
+	if remote, err := exec.CommandContext(ctx, p.cfg.Git, "-C", dir, "remote", "get-url", p.cfg.Remote).Output(); err == nil &&
 		strings.HasPrefix(strings.TrimSpace(string(remote)), "https://") {
 		auth := "Authorization: Basic " + basicAuth("x-access-token", p.cfg.Token)
 		cmd.Env = append(cmd.Env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0="+auth)
@@ -801,9 +1384,47 @@ func (p *Publisher) git(ctx context.Context, args ...string) (string, error) {
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("ghpublish: git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
+		return nil, fmt.Errorf("ghpublish: git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
 	}
-	return strings.TrimSpace(out.String()), nil
+	return out.Bytes(), nil
+}
+
+func resolveRemoteURL(dir, raw string) string {
+	if strings.Contains(raw, "://") || filepath.IsAbs(raw) {
+		return raw
+	}
+	if i := strings.IndexByte(raw, ':'); i > 0 && !strings.Contains(raw[:i], "/") {
+		return raw // scp-style remote (e.g. git@github.com:org/repo.git)
+	}
+	return filepath.Clean(filepath.Join(dir, raw))
+}
+
+// preparedStateJSON reads the clone's state.json and rewrites keysDir to an absolute path so an isolated temporary
+// checkout can load the same signing keys without writing to the clone.
+func (p *Publisher) preparedStateJSON() ([]byte, error) {
+	b, err := os.ReadFile(filepath.Join(p.cfg.Dir, "state.json"))
+	if err != nil {
+		return nil, err
+	}
+	var st map[string]any
+	if err := json.Unmarshal(b, &st); err != nil {
+		return nil, err
+	}
+	absDir, err := filepath.Abs(p.cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	kd, _ := st["keysDir"].(string)
+	switch {
+	case kd == "":
+		kd = filepath.Join(absDir, "keys")
+	case !filepath.IsAbs(kd):
+		kd = filepath.Join(absDir, kd)
+	default:
+		kd = filepath.Clean(kd)
+	}
+	st["keysDir"] = kd
+	return json.MarshalIndent(st, "", " ")
 }
 
 // pull brings the clone up to date with the remote (the workflow's commits).
@@ -811,39 +1432,81 @@ func (p *Publisher) pull(ctx context.Context) error {
 	if _, err := os.Stat(filepath.Join(p.cfg.Dir, ".git")); err != nil {
 		return fmt.Errorf("ghpublish: %s is not a clone of the releases repository", p.cfg.Dir)
 	}
-	if _, err := p.git(ctx, "pull", "--rebase", "--autostash", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
+	if _, err := p.git(ctx, "-c", "user.name="+CommitName, "-c", "user.email="+CommitEmail,
+		"pull", "--rebase", "--autostash", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
+		_, _ = p.git(ctx, "rebase", "--abort")
 		return err
 	}
 	return nil
 }
 
-// commitPush commits exactly the given metadata files, when each still has the content signed for it (path → sha256),
-// and pushes every commit the remote lacks: also one an earlier run committed and couldn't push. When the workflow
-// pushed in between, it rebases and tries again. It returns the pushed head ("" when there was nothing to push) only
-// once the remote's branch has it.
-func (p *Publisher) commitPush(ctx context.Context, msg string, files map[string]string) (string, error) {
+// commitPush re-checks the published remote metadata, commits exactly the given metadata files when each still has the
+// content signed for it (path → sha256), and pushes every commit the remote lacks: also one an earlier run committed
+// and couldn't push. If the published metadata for any role in pend moved on the remote (for instance an emergency
+// pause or resume landed while an upload was in flight), commitPush refuses to push, discards only this publish's
+// stale metadata, and returns an error so it can never overwrite a pause or reuse a lower/equal version.
+func (p *Publisher) commitPush(ctx context.Context, msg string, pend *pendingPublish, hasPendingFile bool) (string, error) {
 	unlockRepo, err := devtuf.Lock(p.cfg.Dir, time.Minute)
 	if err != nil {
 		return "", err
 	}
 	defer unlockRepo()
-	if len(files) > 0 {
+	var lastPushErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, err := p.git(ctx, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
+			return "", err
+		}
+		remoteHead, err := p.git(ctx, "rev-parse", "FETCH_HEAD")
+		if err != nil {
+			return "", err
+		}
 		now, err := p.unpushedHashes(ctx)
 		if err != nil {
 			return "", err
 		}
-		var commit []string
-		for _, f := range keys(files) {
-			h, dirty := now[f]
-			switch {
-			case !dirty:
-				continue // committed already (an earlier run)
-			case h != files[f]:
-				return "", fmt.Errorf("ghpublish: %s changed after it was signed for this publish; nothing is pushed", f)
+		dirtyFiles := map[string]string{}
+		if pend != nil && len(pend.Files) > 0 {
+			for _, f := range keys(pend.Files) {
+				h, dirty := now[f]
+				switch {
+				case !dirty:
+					continue // committed already (an earlier run or attempt)
+				case h != pend.Files[f]:
+					return "", fmt.Errorf("ghpublish: %s changed after it was signed for this publish; nothing is pushed", f)
+				}
+				dirtyFiles[f] = h
 			}
-			commit = append(commit, f)
 		}
-		if len(commit) > 0 {
+		_, committedFiles, err := p.pendingUnpushedFiles(ctx, pend)
+		if err != nil {
+			return "", err
+		}
+		allFiles := mergeHashes(dirtyFiles, committedFiles)
+		if len(allFiles) > 0 {
+			remote, err := p.readRefMetadata(ctx, "FETCH_HEAD")
+			if err != nil {
+				return "", err
+			}
+			chk, err := p.checkFilesAgainstRemote(ctx, pend, allFiles, dirtyFiles, remote)
+			if err != nil {
+				return "", err
+			}
+			if chk.StaleReason != "" {
+				if derr := p.discardPending(ctx, dirtyFiles, committedFiles, hasPendingFile); derr != nil {
+					return "", fmt.Errorf("ghpublish: published metadata changed before push (%s); failed to discard stale local metadata: %w", chk.StaleReason, derr)
+				}
+				return "", fmt.Errorf("ghpublish: published metadata changed before push (%s); discarded stale unpushed metadata without pushing — run the publish again to sign over the current metadata", chk.StaleReason)
+			}
+			if chk.RefreshOnline {
+				newFiles, rerr := p.refreshOnlineMeta(ctx, pend, allFiles, dirtyFiles, committedFiles, remote, hasPendingFile)
+				if rerr != nil {
+					return "", rerr
+				}
+				dirtyFiles = newFiles
+			}
+		}
+		if len(dirtyFiles) > 0 {
+			commit := keys(dirtyFiles)
 			if _, err := p.git(ctx, append([]string{"add", "--"}, commit...)...); err != nil {
 				return "", err
 			}
@@ -852,26 +1515,41 @@ func (p *Publisher) commitPush(ctx context.Context, msg string, files map[string
 				return "", err
 			}
 		}
-	}
-	ahead, err := p.ahead(ctx)
-	if err != nil {
-		return "", err
-	}
-	if !ahead {
-		p.cfg.Log("metadata: nothing to push")
-		return "", nil
-	}
-	for attempt := 0; attempt < 3; attempt++ {
-		if _, err = p.git(ctx, "push", "-q", p.cfg.Remote, "HEAD:"+p.cfg.Branch); err == nil {
+		nAhead, err := p.git(ctx, "rev-list", "--count", "FETCH_HEAD..HEAD")
+		if err != nil {
+			return "", err
+		}
+		if nAhead == "0" {
+			p.cfg.Log("metadata: nothing to push")
+			return "", nil
+		}
+		// If FETCH_HEAD moved (e.g. the other channel was paused or the workflow pushed snapshot/timestamp) and none
+		// of our role files collided, rebase onto the exact FETCH_HEAD we just verified before pushing. If the remote
+		// moved again since that fetch, push is rejected and the next iteration fetches and re-checks it.
+		if _, ancErr := p.git(ctx, "merge-base", "--is-ancestor", "FETCH_HEAD", "HEAD"); ancErr != nil {
+			if _, perr := p.git(ctx, "-c", "user.name="+CommitName, "-c", "user.email="+CommitEmail,
+				"rebase", "--autostash", "-q", "FETCH_HEAD"); perr != nil {
+				_, _ = p.git(ctx, "rebase", "--abort")
+				return "", perr
+			}
+		}
+		if _, pushErr := p.git(ctx, "push", "-q", p.cfg.Remote, "HEAD:"+p.cfg.Branch); pushErr == nil {
+			lastPushErr = nil
 			break
-		}
-		p.cfg.Log("push refused, rebasing on the remote: %v", err)
-		if _, perr := p.git(ctx, "pull", "--rebase", "--autostash", "-q", p.cfg.Remote, p.cfg.Branch); perr != nil {
-			return "", perr
+		} else {
+			lastPushErr = pushErr
+			if _, ferr := p.git(ctx, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); ferr != nil {
+				return "", pushErr
+			}
+			newHead, rerr := p.git(ctx, "rev-parse", "FETCH_HEAD")
+			if rerr != nil || newHead == remoteHead {
+				return "", pushErr
+			}
+			p.cfg.Log("push refused because the remote moved, re-checking published metadata: %v", pushErr)
 		}
 	}
-	if err != nil {
-		return "", err
+	if lastPushErr != nil {
+		return "", lastPushErr
 	}
 	if ahead, err := p.ahead(ctx); err != nil || ahead {
 		if err == nil {
@@ -915,32 +1593,173 @@ func (p *Publisher) Promote(ctx context.Context, id string, productionKey ed2551
 	})
 }
 
-// PauseChannel signs the pause marker into channel's role metadata and pushes it (nothing is uploaded).
+// PauseChannel signs the pause marker into channel's role metadata from the already-published remote branch and pushes
+// it (nothing is uploaded). It never waits on .publish.lock and never refuses because of a pending or stalled publish.
 func (p *Publisher) PauseChannel(ctx context.Context, channel string, key ed25519.PrivateKey) (*Result, *devtuf.ChannelPauseResult, error) {
-	if !trust.ValidChannel(channel) {
-		return nil, nil, fmt.Errorf("ghpublish: unknown channel %q", channel)
-	}
-	var pr *devtuf.ChannelPauseResult
-	res, err := p.publish(ctx, channel, "", "pause", channel+": pause", func(r *devtuf.Repo) error {
-		var err error
-		pr, err = r.PauseChannel(channel, key)
-		return err
-	})
-	return res, pr, err
+	return p.publishChannelPause(ctx, channel, true, key)
 }
 
-// ResumeChannel clears the pause marker from channel's role metadata and pushes it (nothing is uploaded).
+// ResumeChannel clears the pause marker from channel's role metadata from the already-published remote branch and
+// pushes it (nothing is uploaded). It never waits on .publish.lock and never refuses because of a pending publish.
 func (p *Publisher) ResumeChannel(ctx context.Context, channel string, key ed25519.PrivateKey) (*Result, *devtuf.ChannelPauseResult, error) {
+	return p.publishChannelPause(ctx, channel, false, key)
+}
+
+func (p *Publisher) publishChannelPause(ctx context.Context, channel string, paused bool, key ed25519.PrivateKey) (*Result, *devtuf.ChannelPauseResult, error) {
 	if !trust.ValidChannel(channel) {
 		return nil, nil, fmt.Errorf("ghpublish: unknown channel %q", channel)
 	}
-	var pr *devtuf.ChannelPauseResult
-	res, err := p.publish(ctx, channel, "", "resume", channel+": resume", func(r *devtuf.Repo) error {
-		var err error
-		pr, err = r.ResumeChannel(channel, key)
-		return err
-	})
-	return res, pr, err
+	if _, err := os.Stat(filepath.Join(p.cfg.Dir, ".git")); err != nil {
+		return nil, nil, fmt.Errorf("ghpublish: %s is not a clone of the releases repository", p.cfg.Dir)
+	}
+	unlock, err := p.pauseLock(ctx, time.Minute)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer unlock()
+	rawRemote, err := p.git(ctx, "remote", "get-url", p.cfg.Remote)
+	if err != nil {
+		return nil, nil, err
+	}
+	remoteURL := resolveRemoteURL(p.cfg.Dir, rawRemote)
+	stateBytes, err := p.preparedStateJSON()
+	if err != nil {
+		return nil, nil, err
+	}
+	tmpDir, err := os.MkdirTemp("", "whombat-ghpublish-pause-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+	for _, args := range [][]string{{"init", "-q", "-b", p.cfg.Branch}, {"remote", "add", p.cfg.Remote, remoteURL}} {
+		if _, err := p.gitIn(ctx, tmpDir, args...); err != nil {
+			return nil, nil, err
+		}
+	}
+	action := "pause"
+	if !paused {
+		action = "resume"
+	}
+	var (
+		res         = &Result{Channel: channel, Uploaded: []string{}}
+		pr          *devtuf.ChannelPauseResult
+		lastPushErr error
+	)
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, err := p.gitIn(ctx, tmpDir, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
+			return nil, nil, err
+		}
+		baseHead, err := p.gitIn(ctx, tmpDir, "rev-parse", "FETCH_HEAD")
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := p.gitIn(ctx, tmpDir, "checkout", "-q", "-B", p.cfg.Branch, "FETCH_HEAD"); err != nil {
+			return nil, nil, err
+		}
+		if _, err := p.gitIn(ctx, tmpDir, "clean", "-fdq", "metadata"); err != nil {
+			return nil, nil, err
+		}
+		if err := os.WriteFile(filepath.Join(tmpDir, "state.json"), stateBytes, 0o600); err != nil {
+			return nil, nil, err
+		}
+		before, err := p.unpushedHashesIn(ctx, tmpDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		r, err := devtuf.Load(tmpDir, devtuf.Options{})
+		if err != nil {
+			return nil, nil, err
+		}
+		if !r.GitHub() {
+			return nil, nil, errors.New("ghpublish: the repository is not of the GitHub layout")
+		}
+		if paused {
+			pr, err = r.PauseChannel(channel, key)
+		} else {
+			pr, err = r.ResumeChannel(channel, key)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if pr.Already {
+			p.syncCloneIfIdle(ctx)
+			return res, pr, nil
+		}
+		after, err := p.unpushedHashesIn(ctx, tmpDir)
+		if err != nil {
+			return nil, nil, err
+		}
+		var written []string
+		for _, f := range keys(after) {
+			if before[f] != after[f] {
+				written = append(written, f)
+			}
+		}
+		if len(written) == 0 {
+			p.syncCloneIfIdle(ctx)
+			return res, pr, nil
+		}
+		if _, err := p.gitIn(ctx, tmpDir, append([]string{"add", "--"}, written...)...); err != nil {
+			return nil, nil, err
+		}
+		if _, err := p.gitIn(ctx, tmpDir, append([]string{"-c", "user.name=" + CommitName, "-c", "user.email=" + CommitEmail,
+			"commit", "-q", "-m", "publish " + channel + ": " + action, "--"}, written...)...); err != nil {
+			return nil, nil, err
+		}
+		if _, pushErr := p.gitIn(ctx, tmpDir, "push", "-q", p.cfg.Remote, "HEAD:"+p.cfg.Branch); pushErr == nil {
+			if ahead, err := p.aheadIn(ctx, tmpDir); err != nil || ahead {
+				if err == nil {
+					err = errors.New("ghpublish: the remote's branch doesn't have the pushed metadata")
+				}
+				return nil, nil, err
+			}
+			head, err := p.gitIn(ctx, tmpDir, "rev-parse", "HEAD")
+			if err != nil {
+				return nil, nil, err
+			}
+			p.cfg.Log("metadata pushed: %s", head)
+			res.MetadataPushed, res.Commit = true, head
+			p.syncCloneIfIdle(ctx)
+			return res, pr, nil
+		} else {
+			lastPushErr = pushErr
+			if _, ferr := p.gitIn(ctx, tmpDir, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); ferr != nil {
+				return nil, nil, pushErr
+			}
+			newHead, rerr := p.gitIn(ctx, tmpDir, "rev-parse", "FETCH_HEAD")
+			if rerr != nil || newHead == baseHead {
+				return nil, nil, pushErr
+			}
+			p.cfg.Log("push refused because the remote moved, re-signing %s %s from published metadata: %v", channel, action, pushErr)
+		}
+	}
+	return nil, nil, lastPushErr
+}
+
+// syncCloneIfIdle fast-forwards the publisher's clone to the remote after an out-of-band pause/resume push when no
+// other publish holds .publish.lock or devtuf.Lock and the clone has no pending publish, dirty metadata, or unpushed
+// commits. Best-effort: never blocks and never fails the pause/resume.
+func (p *Publisher) syncCloneIfIdle(ctx context.Context) {
+	unlock, ok, err := p.tryLock()
+	if err != nil || !ok {
+		return
+	}
+	defer unlock()
+	if pend, err := p.readPending(); err != nil || pend != nil {
+		return
+	}
+	unlockRepo, err := devtuf.Lock(p.cfg.Dir, 0)
+	if err != nil {
+		return
+	}
+	defer unlockRepo()
+	if dirty, err := p.unpushed(ctx); err != nil || len(dirty) > 0 {
+		return
+	}
+	if ahead, err := p.ahead(ctx); err != nil || ahead {
+		return
+	}
+	_, _ = p.git(ctx, "merge", "--ff-only", "-q", "FETCH_HEAD")
 }
 
 // UploadClients sends the clients role's targets (the AI client channel and bundles) to the `clients` release, then
@@ -951,26 +1770,75 @@ func (p *Publisher) UploadClients(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 	defer unlock()
-	if err := p.pull(ctx); err != nil {
+	if _, err := os.Stat(filepath.Join(p.cfg.Dir, ".git")); err != nil {
+		return nil, fmt.Errorf("ghpublish: %s is not a clone of the releases repository", p.cfg.Dir)
+	}
+	if _, err := p.git(ctx, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
 		return nil, err
 	}
 	pend, err := p.readPending()
 	if err != nil {
 		return nil, err
 	}
+	pulled := false
 	if pend != nil {
 		gone, err := p.abandoned(ctx, pend)
 		if err != nil {
 			return nil, err
 		}
 		if !gone {
-			return nil, fmt.Errorf("ghpublish: the publish of %s didn't finish: run it again first", pend.what())
+			var staleReason string
+			if err := func() error {
+				unlockRepo, err := devtuf.Lock(p.cfg.Dir, time.Minute)
+				if err != nil {
+					return err
+				}
+				defer unlockRepo()
+				dirtyFiles, committedFiles, err := p.pendingUnpushedFiles(ctx, pend)
+				if err != nil {
+					return err
+				}
+				allPend := mergeHashes(dirtyFiles, committedFiles)
+				if len(allPend) == 0 {
+					return nil
+				}
+				remote, err := p.readRefMetadata(ctx, "FETCH_HEAD")
+				if err != nil {
+					return err
+				}
+				chk, err := p.checkFilesAgainstRemote(ctx, pend, allPend, dirtyFiles, remote)
+				if err != nil {
+					return err
+				}
+				if chk.StaleReason != "" {
+					staleReason = chk.StaleReason
+					p.cfg.Log("the unfinished publish of %s was superseded by published metadata on the remote (%s): discarding its stale unpushed metadata", pend.what(), chk.StaleReason)
+					if derr := p.discardPending(ctx, dirtyFiles, committedFiles, true); derr != nil {
+						return derr
+					}
+					pulled = true
+				}
+				return nil
+			}(); err != nil {
+				return nil, err
+			}
+			if staleReason == "" {
+				return nil, fmt.Errorf("ghpublish: the publish of %s didn't finish: run it again first", pend.what())
+			}
+		}
+	}
+	if !pulled {
+		if err := p.pull(ctx); err != nil {
+			return nil, err
 		}
 	}
 	// The role and its file list are read under the devtuf lock; the channel publisher may sign a newer role during
 	// the upload, which stays for the next gh-clients: only the files read here are committed.
-	var dirty map[string]string
-	var files []devtuf.ReleaseFile
+	var (
+		dirty        map[string]string
+		baseVersions map[string]int64
+		files        []devtuf.ReleaseFile
+	)
 	if err := func() error {
 		unlockRepo, err := devtuf.Lock(p.cfg.Dir, time.Minute)
 		if err != nil {
@@ -986,6 +1854,9 @@ func (p *Publisher) UploadClients(ctx context.Context) (*Result, error) {
 			if !strings.HasSuffix(base, "."+trust.ClientsRole+".json") && !strings.HasSuffix(base, "snapshot.json") && base != "timestamp.json" {
 				return fmt.Errorf("ghpublish: the metadata folder has signed changes that aren't the clients role's (%s)", strings.Join(keys(dirty), ", "))
 			}
+		}
+		if headMeta, err := p.readRefMetadata(ctx, "HEAD"); err == nil {
+			baseVersions = cloneVersions(headMeta.MaxVersion)
 		}
 		r, err := devtuf.Load(p.cfg.Dir, devtuf.Options{})
 		if err != nil {
@@ -1003,7 +1874,8 @@ func (p *Publisher) UploadClients(ctx context.Context) (*Result, error) {
 	if err := p.Verify(ctx, files); err != nil {
 		return res, err
 	}
-	commit, err := p.commitPush(ctx, "clients", dirty)
+	clientsPend := &pendingPublish{Channel: trust.ClientsRole, Files: dirty, BaseVersions: baseVersions}
+	commit, err := p.commitPush(ctx, "clients", clientsPend, false)
 	if err != nil {
 		return res, err
 	}

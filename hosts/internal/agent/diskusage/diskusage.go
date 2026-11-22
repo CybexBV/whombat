@@ -257,6 +257,10 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
 				return
 			}
+			if errors.Is(err, errRootNotCached) {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not open %s safely without waking disks.", mount)}
+				return
+			}
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
 			return
 		}

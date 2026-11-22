@@ -529,19 +529,24 @@ sysfs, ZFS zvols or union/pooled FUSE mounts such as mergerfs) it returns
 `code: "standby_unknown"` without doing I/O on the mount. Walks on a
 low-priority thread (Linux nice 19 + `IOPRIO_CLASS_IDLE`; macOS
 `PRIO_DARWIN_BG`), anchors the scan to one open directory descriptor of the
-target mount root (using `fstatfs` on that descriptor, checking mount ID on
-Linux so an overmounted root fails before any read, and skipping child mount
-points from mountinfo before touching them), and resolves every subsequent step
-relative to its open parent descriptor: on Linux via `openat2` with
-`RESOLVE_NO_XDEV | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (refusing
-newly mounted filesystems and bind mounts with `EXDEV` before any stat or open
-touches them, and reading raw `getdents64` entries so `DT_UNKNOWN` entries on
-XFS without `ftype=1` or FUSE never trigger a hidden `lstatat` and are still
-handled across walks and category collectors); on Linux kernels without
-`openat2` (`ENOSYS` / seccomp) via `openat(O_NOFOLLOW | O_DIRECTORY)` plus
-`st_dev` and descriptor mount-ID checks before reading any directory entries;
-and on macOS via `openat(O_NOFOLLOW | O_DIRECTORY)` plus `st_dev` checks before
-descending and `Readdirnames`. Never follows symlinks, deduplicates hardlinks,
+target mount root (on Linux resolved strictly from kernel cache via
+`openat2(O_PATH, RESOLVE_CACHED | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS)`
+so neither intermediate nor final components can trigger an automount or wake a
+disk, verified via `/proc/self/fdinfo/<fd>` mount ID before `statx`, `fstatfs`,
+or readable open; on macOS verified via `fgetattrlist(ATTR_CMN_FSID)` before
+`fstat`), and resolves every subsequent step relative to its open parent
+descriptor: on Linux via `openat2` with
+`RESOLVE_NO_XDEV | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (pinning entries
+with `O_PATH` and verifying `/proc/self/fdinfo/<fd>` before `statx`, refusing
+newly mounted filesystems and bind mounts with `EXDEV`, rejecting automount
+triggers before any readable open, and reading raw `getdents64` entries so
+`DT_UNKNOWN` entries on XFS without `ftype=1` or FUSE never trigger a hidden
+`lstatat`); Linux kernels lacking `openat2` or `RESOLVE_CACHED` (`ENOSYS` /
+`EINVAL`), seccomp profiles blocking `openat2`/`statx`, unsupported macOS
+volumes lacking `ATTR_DIR_MOUNTSTATUS`, and other OSes refuse cleanly with
+`code: "unsupported"`; on macOS via batched `getattrlistbulk(2)` (skipping
+mount points, automount triggers, and APFS firmlinks before `openat`). Never
+follows symlinks, deduplicates hardlinks,
 and bounds depth (default 6, max 12), entries (250,000) and time (default 20 s,
 max 45 s; sets `partial: true` when cut short). Reports recognised categories on
 that mount (container images, build cache, volumes and logs, systemd journal,

@@ -471,7 +471,7 @@ redirect, and the account `CybexHQ` must stay Cybex's.
 | a box's channel | the helper keeps it (`/var/lib/whombat-update-helper/channel.json`); the owner changes it in Settings → This Whombat → Updates (the runtime's `updateChannelSet`); root: `whombat-update-helper --config /etc/whombat/update-helper.json set-channel development` |
 | a release into development (Beta) | `tufrepo gh-publish --dir <clone> --release-dir <release>`; the maintainers' `candidate` does it for every release (the clone and token from `~/.config/whombat/releases.env`); the token in `WHOMBAT_RELEASES_TOKEN` |
 | promote to production | `tufrepo gh-promote --dir <clone> --release <id>`: the same files, nothing uploaded, signed with the repository's online production key (ONE-05; `--key-file` for an offline copy); the maintainers' `promote <id> --yes` runs it on John's word and then puts the installer on the download site (IN-835, PI-25) |
-| pause / resume a channel | `tufrepo gh-pause --dir <clone> [--channel production\|development] [--key-file F]` and `tufrepo gh-resume --dir <clone> [--channel production\|development] [--key-file F]` (local repository: `tufrepo pause` / `tufrepo resume`; `--channel` defaults to `production`): signs the pause marker in the channel's own role metadata with the channel's key, nothing uploaded; keeps all listed releases for rollbacks and stays paused across publishes/promotions until resumed. **Scope:** a pause only holds boxes that already run a pause-aware release; older boxes ignore the marker and keep updating. See **Channel role versions** below before rebuilding or restoring metadata |
+| pause / resume a channel | `tufrepo gh-pause --dir <clone> [--channel production\|development] [--key-file F]` and `tufrepo gh-resume --dir <clone> [--channel production\|development] [--key-file F]` (local repository: `tufrepo pause` / `tufrepo resume`; `--channel` defaults to `production`): signs the pause marker in the channel's own role metadata with the channel's key, nothing uploaded; keeps all listed releases for rollbacks and stays paused across publishes/promotions until resumed. `gh-pause` and `gh-resume` sign from the already-published remote branch in an isolated checkout without waiting on `.publish.lock` or refusing while another upload is pending, so a stalled publish cannot block an emergency stop; any unfinished publish re-checks published metadata before pushing and discards its stale signature rather than overwrite the pause or reuse a lower version. **Scope:** a pause only holds boxes that already run a pause-aware release; older boxes ignore the marker and keep updating. See **Channel role versions** below before rebuilding or restoring metadata |
 | the client channel | `tufrepo gh-clients --dir <clone>` after the channel publisher signed it |
 | freshness | the whombat-releases workflow re-signs snapshot and timestamp every 6 h and on each push (3 days); an issue opens 30 days before a role expires |
 | set up from DEV's repository | the bridge procedure below |
@@ -613,9 +613,17 @@ helper refuses anything older (`downgrade`/`not_assigned`), and `updateChannel` 
 either family orders by date and number (`whombat-dev-20261118.3` < `whombat-20261119.1`; contracts 4.4.0).
 
 When a publish stops halfway nothing reaches a box: blobs and files may be on GitHub, but the metadata is pushed only
-after them. Run the same command again (“A publish that stopped” above). Until then every other publish (and
-`gh-clients`) is refused and names the one to finish (`<clone>/.publish-pending.json`), so its signed role never goes up
-with another's. `gh-clients` works the same way:
+after them. Run the same command again (“A publish that stopped” above). Until then every other release or clients
+publish (`gh-publish`, `gh-promote`, `gh-rotate`, `gh-clients`) is refused and names the one to finish
+(`<clone>/.publish-pending.json`), so its signed role never goes up with another's. Emergency `gh-pause` and
+`gh-resume` are the deliberate exception: they do not wait on `.publish.lock` and sign directly from the
+already-published remote branch in an isolated checkout (never including the unfinished publish's unpushed release).
+When the unfinished publish later reaches its push (or is retried), it re-checks the published remote metadata first:
+if its channel moved (for example paused or resumed), it refuses to push its stale metadata and discards it without
+touching unrelated files so it cannot overwrite the pause or reuse a lower or equal version — re-running `gh-publish`
+or `gh-promote` then signs strictly above the published version (preserving `paused: true` while paused) and skips
+assets already on GitHub; if only the other channel moved, it finishes without overwriting that channel's pause.
+`gh-clients` works the same way:
 the clients role's files first, then its role pushed. A file over 2 GiB is refused by name (the ISO is not published here, LNK-27). The repository's settings, secrets
 and token: `release/github/whombat-releases/SETUP.md`.
 
