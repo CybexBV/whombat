@@ -2816,7 +2816,7 @@ describe('mail-arrives automations', () => {
             summary: 'Upload invoice.pdf to Paperless-ngx?',
             arguments: {
               method: 'POST',
-              path: '/12345/documents/purchase_invoices.json',
+              path: '/documents/purchase_invoices.json',
               body: {
                 purchase_invoice: {
                   contact_id: '666',
@@ -2953,7 +2953,7 @@ describe('mail-arrives automations', () => {
               summary: 'Draft INV-A',
               arguments: {
                 method: 'POST',
-                path: '/12345/documents/purchase_invoices.json',
+                path: '/documents/purchase_invoices.json',
                 body: {
                   purchase_invoice: {
                     reference: 'INV-A',
@@ -2994,7 +2994,7 @@ describe('mail-arrives automations', () => {
                 summary: 'Draft INV-B',
                 arguments: {
                   method: 'POST',
-                  path: '/12345/documents/purchase_invoices.json',
+                  path: '/documents/purchase_invoices.json',
                   body: {
                     purchase_invoice: {
                       reference: 'INV-B',
@@ -3159,7 +3159,7 @@ describe('mail-arrives automations', () => {
           summary: 'Draft failing',
           arguments: {
             method: 'POST',
-            path: '/12345/documents/purchase_invoices.json',
+            path: '/documents/purchase_invoices.json',
             body: { purchase_invoice: { reference: 'INV-FAIL' } },
           },
         },
@@ -3177,7 +3177,7 @@ describe('mail-arrives automations', () => {
           summary: 'Draft timeout invoice',
           arguments: {
             method: 'POST',
-            path: '/12345/documents/purchase_invoices.json',
+            path: '/documents/purchase_invoices.json',
             body: { purchase_invoice: { reference: 'INV-TIMEOUT' } },
           },
         },
@@ -3237,7 +3237,7 @@ describe('mail-arrives automations', () => {
           summary: 'Draft first',
           arguments: {
             method: 'POST',
-            path: '/12345/documents/purchase_invoices.json',
+            path: '/documents/purchase_invoices.json',
             body: { purchase_invoice: { reference: 'INV-P1' } },
           },
         },
@@ -3247,7 +3247,7 @@ describe('mail-arrives automations', () => {
           summary: 'Draft second',
           arguments: {
             method: 'POST',
-            path: '/12345/documents/purchase_invoices.json',
+            path: '/documents/purchase_invoices.json',
             body: { purchase_invoice: { reference: 'INV-P2' } },
           },
         },
@@ -3349,7 +3349,7 @@ describe('mail-arrives automations', () => {
               summary: 'Draft TRIGGER_PHRASE',
               arguments: {
                 method: 'POST',
-                path: '/12345/documents/purchase_invoices.json',
+                path: '/documents/purchase_invoices.json',
                 body: { purchase_invoice: { reference: 'TRIGGER_PHRASE' } },
               },
             },

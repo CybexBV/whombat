@@ -84,6 +84,8 @@ export function outsidersCall(
   tool: Pick<ConnectionToolRow, 'name' | 'access' | 'origin'>,
   raw: Readonly<Record<string, unknown>>,
   name: string,
+  /** The server's own arguments, settled when the card was made (checked again before they run), not the agent's. */
+  settled = false,
 ): OutsidersCall {
   if (!isProposableEntry(entry))
     return {
@@ -102,15 +104,15 @@ export function outsidersCall(
     }
   }
   const given = args;
-  const settled = settleListed(entry.id, tool, args, conn.fields);
-  if (!settled.ok)
+  const listed = settleListed(entry.id, tool, args, conn.fields, settled);
+  if (!listed.ok)
     return {
       ok: false,
-      reason: settled.listed
-        ? `${name}: ${settled.reason}`
-        : `${name}: a mail automation can’t propose this. ${settled.reason}`,
+      reason: listed.listed
+        ? `${name}: ${listed.reason}`
+        : `${name}: a mail automation can’t propose this. ${listed.reason}`,
     };
-  args = settled.args;
+  args = listed.args;
   if (
     tool.origin === 'request' &&
     !requestAllowed(entry, conn.fields, String(args.method), String(args.path))

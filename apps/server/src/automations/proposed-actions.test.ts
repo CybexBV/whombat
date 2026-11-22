@@ -38,6 +38,13 @@ function refusal(
   return out.ok ? null : out.reason;
 }
 
+/** The server's own settled arguments checked again before they run (throws when refused). */
+function resent(id: string, args: Record<string, unknown>, tool: Tool = REQUEST, fields = FIELDS[id] ?? {}) {
+  const out = outsidersCall(entryOrThrow(id), { fields }, tool, args, id, true);
+  if (!out.ok) throw new Error(out.reason);
+  return out.args;
+}
+
 /** The arguments as Whombat sends them (throws when refused). */
 function sent(
   id: string,
@@ -113,12 +120,15 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       sent('moneybird', {
         method: 'POST',
-        path: '/12345/documents/receipts.json',
+        path: '/documents/receipts.json',
         body: {
           receipt: { reference: 'R-1', details_attributes: [{ description: 'Coffee', price: '3.50' }] },
         },
       }),
-    ).toMatchObject({ headers: { 'Content-Type': 'application/json' } });
+    ).toMatchObject({
+      path: '/12345/documents/receipts.json',
+      headers: { 'Content-Type': 'application/json' },
+    });
     expect(
       sent('todoist', { content: 'Pay the invoice', due: 'Friday', labels: ['bills'] }, adapter('tasks_add')),
     ).toEqual({ content: 'Pay the invoice', due: 'Friday', labels: ['bills'] });
@@ -132,9 +142,10 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
         body: { title: 'Invoice', message: 'An invoice from Acme came in.' },
       }),
     ).toMatchObject({ headers: { 'Content-Type': 'application/json' } });
-    expect(sent('nextcloud', { method: 'MKCOL', path: '/remote.php/dav/files/mara/Invoices/2026/' })).toEqual(
-      { method: 'MKCOL', path: '/remote.php/dav/files/mara/Invoices/2026/' },
-    );
+    expect(sent('nextcloud', { method: 'MKCOL', path: '/Invoices/2026/' })).toEqual({
+      method: 'MKCOL',
+      path: '/remote.php/dav/files/mara/Invoices/2026/',
+    });
   });
 
   it('sets the create-only parts itself: never over a file that is there, never a replace', () => {
@@ -142,7 +153,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       sent('nextcloud', {
         method: 'PUT',
-        path: '/remote.php/dav/files/mara/Invoices/acme.pdf',
+        path: '/Invoices/acme.pdf',
         upload: { attachmentId: ATT },
       }),
     ).toEqual({
@@ -151,10 +162,10 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
       headers: { 'If-None-Match': '*' },
       upload: { attachmentId: ATT },
     });
-    expect(
-      sent('nextcloud', { method: 'PUT', path: '/remote.php/dav/files/mara/Notes/acme.txt', body: 'Paid.' })
-        .headers,
-    ).toEqual({ 'If-None-Match': '*', 'Content-Type': 'text/plain; charset=utf-8' });
+    expect(sent('nextcloud', { method: 'PUT', path: '/Notes/acme.txt', body: 'Paid.' }).headers).toEqual({
+      'If-None-Match': '*',
+      'Content-Type': 'text/plain; charset=utf-8',
+    });
     // Dropbox's upload is written again with mode add, on the content base, as a raw file.
     const dropbox = sent('dropbox', {
       method: 'POST',
@@ -181,25 +192,21 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     // Settling what was settled changes nothing: the card, the hash and the wire agree.
     for (const [kind, args, tool] of [
       ['dropbox', dropbox, REQUEST],
-      [
-        'nextcloud',
-        sent('nextcloud', { method: 'PUT', path: '/remote.php/dav/files/mara/a.txt', body: 'x' }),
-        REQUEST,
-      ],
+      ['nextcloud', sent('nextcloud', { method: 'PUT', path: '/a.txt', body: 'x' }), REQUEST],
       [
         'dropbox',
         sent('dropbox', { path: '/a.txt', content: 'x' }, adapter('files_write')),
         adapter('files_write'),
       ],
     ] as const)
-      expect(sent(kind, args, tool)).toEqual(args);
+      expect(resent(kind, args, tool)).toEqual(args);
   });
 
   it('refuses replacing, moving or copying what is there', () => {
     const put = (headers: Record<string, string>) =>
       refusal('nextcloud', {
         method: 'PUT',
-        path: '/remote.php/dav/files/mara/a.pdf',
+        path: '/a.pdf',
         headers,
         upload: { attachmentId: ATT },
       });
@@ -337,7 +344,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     const invoice = (extra: Record<string, unknown>) =>
       refusal('moneybird', {
         method: 'POST',
-        path: '/12345/documents/purchase_invoices.json',
+        path: '/documents/purchase_invoices.json',
         body: { purchase_invoice: { reference: 'INV-1', ...extra } },
       });
     expect(invoice({ set_permissions: { view: { users: [99] } } })).toContain('“set_permissions”');
@@ -378,7 +385,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       refusal('moneybird', {
         method: 'POST',
-        path: '/12345/documents/receipts.json',
+        path: '/documents/receipts.json',
         body: { receipt: { contact_id: 'acme' } },
       }),
     ).toContain('body.receipt.contact_id: an id');
@@ -404,7 +411,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     const json = (headers: Record<string, string>) =>
       refusal('moneybird', {
         method: 'POST',
-        path: '/12345/documents/purchase_invoices.json',
+        path: '/documents/purchase_invoices.json',
         headers,
         body: '{"purchase_invoice":{"reference":"INV-1"}}',
       });
@@ -421,7 +428,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       refusal('moneybird', {
         method: 'POST',
-        path: '/12345/documents/purchase_invoices.json',
+        path: '/documents/purchase_invoices.json',
         body: { purchase_invoice: { reference: 'x' }, auth: { user: 'a', password: 'b' } },
       }),
     ).toContain('“auth”');
@@ -457,7 +464,7 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     }));
     const invoice = sent('moneybird', {
       method: 'POST',
-      path: '/12345/documents/purchase_invoices.json',
+      path: '/documents/purchase_invoices.json',
       body: {
         purchase_invoice: {
           contact_id: '424242424242424242',
@@ -480,14 +487,9 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(proposalCard([{ ...described, label: 'Moneybird' }]).ok).toBe(true);
     // A 2,000-character file and task description: wrapped on the card, not refused.
     const note = `${'Pay before Friday and file the receipt with the others. '.repeat(36)}`.slice(0, 2000);
-    const file = sent(
-      'nextcloud',
-      { method: 'PUT', path: '/remote.php/dav/files/admin/Notes/acme.txt', body: note },
-      REQUEST,
-      {
-        userId: 'admin',
-      },
-    );
+    const file = sent('nextcloud', { method: 'PUT', path: '/Notes/acme.txt', body: note }, REQUEST, {
+      userId: 'admin',
+    });
     const fileCard = describePlannedAction({
       catalogId: 'nextcloud',
       label: 'Nextcloud',
@@ -529,14 +531,14 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
     expect(
       sent('moneybird', {
         method: 'POST',
-        path: '/12345/documents/purchase_invoices.json',
+        path: '/documents/purchase_invoices.json',
         body: '{"purchase_invoice":{"reference":"INV-1"}}',
       }).body,
     ).toEqual({ purchase_invoice: { reference: 'INV-1' } });
     expect(
       refusal('moneybird', {
         method: 'POST',
-        path: '/12345/documents/purchase_invoices.json',
+        path: '/documents/purchase_invoices.json',
         body: '{"purchase_invoice":{"contact_id":424242424242424242424}}',
       }),
     ).toContain('too large to send exactly');
@@ -588,7 +590,40 @@ describe('what an outsiders’ run may propose: only listed, create-only actions
       ['nextcloud', put],
       ['nextcloud', sent('nextcloud', { method: 'MKCOL', path: '/Invoices/' })],
     ] as const)
-      expect(sent(kind, args)).toEqual(args);
+      expect(resent(kind, args)).toEqual(args);
+  });
+
+  it('refuses an agent’s path that names an account id with the same words, right or wrong', () => {
+    const invoice = (path: string) => ({
+      method: 'POST',
+      path,
+      body: { purchase_invoice: { reference: 'INV-1' } },
+    });
+    const right = refusal('moneybird', invoice('/12345/documents/purchase_invoices.json'));
+    const wrong = refusal('moneybird', invoice('/99999/documents/purchase_invoices.json'));
+    expect(right).not.toBeNull();
+    expect(right).toBe(wrong);
+    expect(refusal('moneybird', invoice('/%31%32%33%34%35/documents/purchase_invoices.json'))).toBe(wrong);
+    const file = (user: string) => ({
+      method: 'PUT',
+      path: `/remote.php/dav/files/${user}/a.txt`,
+      body: 'x',
+    });
+    const own = refusal('nextcloud', file('mara'));
+    expect(own).not.toBeNull();
+    expect(own).toBe(refusal('nextcloud', file('someone')));
+    expect(refusal('nextcloud', { method: 'MKCOL', path: '/remote.php/dav/files/mara/Invoices/' })).toBe(
+      refusal('nextcloud', { method: 'MKCOL', path: '/remote.php/dav/files/someone/Invoices/' }),
+    );
+    for (const reason of [right, own]) expect(reason).not.toMatch(/12345|mara/);
+    // Only the server's own settled arguments, checked again before they run, keep the id it filled in, and only that
+    // one.
+    expect(resent('moneybird', invoice('/12345/documents/purchase_invoices.json')).path).toBe(
+      '/12345/documents/purchase_invoices.json',
+    );
+    expect(() => resent('moneybird', invoice('/99999/documents/purchase_invoices.json'))).toThrow();
+    expect(resent('nextcloud', file('mara')).path).toBe('/remote.php/dav/files/mara/a.txt');
+    expect(() => resent('nextcloud', file('someone'))).toThrow();
   });
 
   it('never says an account id the agent didn’t write, in what it lists or what it refuses', () => {

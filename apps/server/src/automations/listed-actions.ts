@@ -48,8 +48,11 @@ interface ListedAction {
   path?: RegExp;
   /** For `request`: whether its body is JSON (a body written as JSON text is read as the JSON it says). */
   jsonBody?: boolean;
-  /** The arguments as they are sent, or why they can't be (strict: anything not listed is refused). */
-  settle(args: Args, fields: Fields): Args;
+  /**
+   * The arguments as they are sent, or why they can't be (strict: anything not listed is refused). `settled`: they are
+   * the server's own, settled before (a path with the account id it filled in), not the agent's.
+   */
+  settle(args: Args, fields: Fields, settled: boolean): Args;
   /** The ids its arguments name, which the card shows by name. */
   refs?: readonly ListedRef[];
   /** What else it does, as lines the card shows right after its words (`quote` writes a value as the card does). */
@@ -323,10 +326,11 @@ const moneybirdDocument = (due: boolean) =>
 
 /**
  * A Moneybird document path in the connection's administration. The agent writes it from `/documents/` (it can't know
- * the administration's id); the server puts the connection's administration in front. A path that already starts with
- * it (one the server settled) stays as it is; one with any other administration is refused without naming the right one.
+ * the administration's id); the server puts the connection's administration in front. An agent's path that names any
+ * administration is refused with the same words whether it is the right one or not, so a proposal can't find it out;
+ * only the server's own settled path (`settled`) may start with it, and with no other.
  */
-function moneybirdPath(path: string, fields: Fields): string {
+function moneybirdPath(path: string, fields: Fields, settled: boolean): string {
   const administration = fieldText(fields, 'administration');
   if (!administration)
     throw new ListedArgumentError(
@@ -334,7 +338,7 @@ function moneybirdPath(path: string, fields: Fields): string {
     );
   const m = /^\/(?:([^/]+)\/)?(documents\/.+)$/.exec(path);
   const given = m?.[1];
-  if (!m || (given !== undefined && decodeURIComponentSafe(given) !== administration))
+  if (!m || (given !== undefined && (!settled || decodeURIComponentSafe(given) !== administration)))
     throw new ListedArgumentError(
       'path: start it at /documents/, like /documents/purchase_invoices.json: Whombat adds the administration.',
     );
@@ -346,8 +350,8 @@ function moneybirdPath(path: string, fields: Fields): string {
 
 function moneybird(kind: 'purchase_invoice' | 'receipt'): ListedAction['settle'] {
   const schema = z.object({ [kind]: moneybirdDocument(kind === 'purchase_invoice') }).strict();
-  return (args, fields) => {
-    const path = moneybirdPath(String(args.path), fields);
+  return (args, fields, settled) => {
+    const path = moneybirdPath(String(args.path), fields, settled);
     const { body } = requestParts(args, { body: true });
     return request(
       { ...args, path },
@@ -445,11 +449,11 @@ function nextcloudUsers(fields: Fields): string[] {
 
 /**
  * A path in the person's Nextcloud files as WebDAV takes it. The agent writes it from the root of their files
- * (`/Invoices/acme.pdf`: it can't know their user id); the server puts `/remote.php/dav/files/<user>` in front. A path
- * that already has it (one the server settled) is kept with the connection's own user; one naming anyone else is
- * refused without naming the user.
+ * (`/Invoices/acme.pdf`: it can't know their user id); the server puts `/remote.php/dav/files/<user>` in front. An
+ * agent's WebDAV path is refused with the same words whoever it names, the right user or not, so a proposal can't find
+ * the user out; only the server's own settled path (`settled`) may have it, with the connection's own user.
  */
-function nextcloudPath(path: string, fields: Fields, folder: boolean): string {
+function nextcloudPath(path: string, fields: Fields, folder: boolean, settled: boolean): string {
   const users = nextcloudUsers(fields);
   const user = users[0];
   if (!user)
@@ -457,7 +461,7 @@ function nextcloudPath(path: string, fields: Fields, folder: boolean): string {
       'This Nextcloud connection doesn’t know its user yet, so nothing can be saved in it.',
     );
   const dav = NEXTCLOUD_DAV_FILES.exec(path);
-  if (dav && !users.includes(decodeURIComponentSafe(dav[1] as string)))
+  if (dav && (!settled || !users.includes(decodeURIComponentSafe(dav[1] as string))))
     throw new ListedArgumentError(
       'path: a path in the person’s files, like /Invoices/acme.pdf: Whombat adds the rest.',
     );
@@ -636,9 +640,9 @@ const LISTED: readonly ListedAction[] = [
     origin: 'request',
     method: 'PUT',
     path: NEXTCLOUD_PATH,
-    settle(args, fields) {
+    settle(args, fields, settled) {
       if (String(args.path).endsWith('/')) throw new ListedArgumentError('path: name a file, not a folder.');
-      const path = nextcloudPath(String(args.path), fields, false);
+      const path = nextcloudPath(String(args.path), fields, false, settled);
       const { body, upload } = requestParts(args, { body: true, upload: true });
       const content = textOrFile(body, upload);
       // Never over a file that is there already: the server refuses the PUT then (412).
@@ -657,8 +661,8 @@ const LISTED: readonly ListedAction[] = [
     origin: 'request',
     method: 'MKCOL',
     path: NEXTCLOUD_PATH,
-    settle(args, fields) {
-      const path = nextcloudPath(String(args.path), fields, true);
+    settle(args, fields, settled) {
+      const path = nextcloudPath(String(args.path), fields, true, settled);
       requestParts(args, {});
       return request({ ...args, path }, { headers: settledHeaders(args.headers, {}) });
     },
@@ -902,13 +906,15 @@ function listedSecretKey(action: ListedAction, args: Readonly<Args>): string | n
 /**
  * A call (its request arguments already normalised) as its listed action sends it, with the create-only parts and the
  * person's account ids set by Whombat; `listed: false` when no listed action is this call, else why its arguments
- * can't be used. Settling what it settled gives the same arguments again.
+ * can't be used. `settled`: the arguments are the server's own, settled before (checked again before they run);
+ * settling what it settled gives the same arguments again. An agent's arguments never carry the account ids.
  */
 export function settleListed(
   catalogId: string,
   tool: Tool,
   args: Readonly<Args>,
   fields: Fields,
+  settled = false,
 ): { ok: true; args: Args } | { ok: false; listed: boolean; reason: string } {
   const listed = listedFor(catalogId, tool, args);
   if (!listed) return { ok: false, listed: false, reason: whatMailCanDo(catalogId) };
@@ -920,7 +926,7 @@ export function settleListed(
       reason: `an outsiders’ run has no passwords or keys, so it can’t propose a value named “${secret}”: it could only have come from the email.`,
     };
   try {
-    return { ok: true, args: listed.settle({ ...args }, fields) };
+    return { ok: true, args: listed.settle({ ...args }, fields, settled) };
   } catch (err) {
     if (err instanceof ListedArgumentError || err instanceof ConnectionArgumentError)
       return { ok: false, listed: true, reason: err.message };

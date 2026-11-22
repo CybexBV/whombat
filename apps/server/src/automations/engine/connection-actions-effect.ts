@@ -144,8 +144,9 @@ export async function runConnectionActions(
     } catch {
       return void (await refuse('The approved action details could not be opened.'));
     }
-    // The same check as when it was proposed and shown: a listed action, as Whombat sends it.
-    const call = outsidersCall(entry, conn, tool, args, conn.label);
+    // The same check as when it was proposed and shown: a listed action, as Whombat sends it. These are the arguments
+    // Whombat settled for the card, with the account ids it filled in.
+    const call = outsidersCall(entry, conn, tool, args, conn.label, true);
     if (!call.ok) return void (await refuse(call.reason));
     args = call.args;
     const upload = tool.origin === 'request' ? parseRequestUpload(args.upload) : null;
