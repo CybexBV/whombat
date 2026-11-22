@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,8 +13,11 @@ import (
 
 func TestDiskUsageHeadlessAndPersistence(t *testing.T) {
 	now := time.Date(2026, 11, 21, 18, 0, 0, 0, time.UTC)
-	e := headlessEnv(t, nil)
-	e.h.now = func() time.Time { return now }
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&now)
+	e := headlessEnv(t, func(c *Config) {
+		c.Now = func() time.Time { return *clock.Load() }
+	})
 	svc := e.service("pe_1|John")
 
 	ag := e.enroll(svc, "srv-disk", "")
@@ -132,7 +136,8 @@ func TestDiskUsageHeadlessAndPersistence(t *testing.T) {
 	}
 
 	// Once older than 24h, GET /servers/{id} omits the stale breakdown.
-	now = now.Add(model.DiskUsageRecentWindow + time.Minute)
+	later := now.Add(model.DiskUsageRecentWindow + time.Minute)
+	clock.Store(&later)
 	detail.DiskUsage = nil
 	svc.json(http.MethodGet, "/api/v1/servers/srv-disk", nil, 200, &detail)
 	if len(detail.DiskUsage) != 0 {

@@ -113,6 +113,8 @@ type Config struct {
 	// Interfaces replaces the machine's network interfaces (the addresses
 	// agents are told, addrs.go); for tests.
 	Interfaces func() ([]netaddrs.Interface, error)
+	// Now overrides the hub's clock; for tests. Defaults to time.Now.
+	Now func() time.Time
 
 	// ReconnectHold is how long the servers' heartbeat alerts wait while
 	// the hub reconnects to them (hold.go), ReconnectHoldMax how long a
