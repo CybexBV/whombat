@@ -4,6 +4,7 @@ package diskusage
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"runtime"
@@ -72,6 +73,10 @@ type unixScanDir struct {
 	f           *os.File
 	logicalPath string
 	state       *unixFSState
+
+	hookEnts   []fs.DirEntry
+	hookLoaded bool
+	hookOff    int
 }
 
 func (d *unixScanDir) Stat() (entryStat, error) {
@@ -120,30 +125,43 @@ func (d *unixScanDir) OpenSelf() (scanDir, error) {
 	}, nil
 }
 
-func (d *unixScanDir) ReadDir() ([]dirEntryInfo, error) {
+func (d *unixScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	limit := clampBatchSize(maxEntries)
 	if d.state.readDirHook != nil {
-		raw, err := d.state.readDirHook(d.logicalPath)
-		if err != nil {
-			return nil, err
+		if !d.hookLoaded {
+			raw, err := d.state.readDirHook(d.logicalPath)
+			if err != nil {
+				return nil, err
+			}
+			d.hookEnts = raw
+			d.hookLoaded = true
 		}
-		out := make([]dirEntryInfo, 0, len(raw))
-		for _, e := range raw {
+		if d.hookOff >= len(d.hookEnts) {
+			return nil, io.EOF
+		}
+		end := min(d.hookOff+limit, len(d.hookEnts))
+		out := make([]dirEntryInfo, 0, end-d.hookOff)
+		for _, e := range d.hookEnts[d.hookOff:end] {
 			out = append(out, dirEntryInfo{Name: e.Name(), Kind: dirEntryKind(e)})
 		}
+		d.hookOff = end
 		return out, nil
 	}
-	names, err := d.f.Readdirnames(-1)
-	if err != nil {
+	names, err := d.f.Readdirnames(limit)
+	if len(names) == 0 {
 		return nil, err
 	}
 	out := make([]dirEntryInfo, 0, len(names))
 	for _, name := range names {
 		out = append(out, dirEntryInfo{Name: name, Kind: entryUnknown})
 	}
-	return out, nil
+	if errors.Is(err, io.EOF) {
+		return out, nil
+	}
+	return out, err
 }
 
-func (d *unixScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error) {
+func (d *unixScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}

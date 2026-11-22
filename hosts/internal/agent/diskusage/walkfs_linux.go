@@ -5,6 +5,7 @@ package diskusage
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"io/fs"
 	"sync/atomic"
 	"unsafe"
@@ -118,6 +119,15 @@ type linuxScanDir struct {
 	fd          int
 	logicalPath string
 	state       *linuxFSState
+
+	direntBuf []byte
+	direntOff int
+	direntLen int
+	direntEOF bool
+
+	hookEnts   []fs.DirEntry
+	hookLoaded bool
+	hookOff    int
 }
 
 func (d *linuxScanDir) Stat() (entryStat, error) {
@@ -167,22 +177,32 @@ func (d *linuxScanDir) OpenSelf() (scanDir, error) {
 	return &linuxScanDir{fd: fd, logicalPath: d.logicalPath, state: d.state}, nil
 }
 
-func (d *linuxScanDir) ReadDir() ([]dirEntryInfo, error) {
+func (d *linuxScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	limit := clampBatchSize(maxEntries)
 	if d.state.readDirHook != nil {
-		raw, err := d.state.readDirHook(d.logicalPath)
-		if err != nil {
-			return nil, err
+		if !d.hookLoaded {
+			raw, err := d.state.readDirHook(d.logicalPath)
+			if err != nil {
+				return nil, err
+			}
+			d.hookEnts = raw
+			d.hookLoaded = true
 		}
-		out := make([]dirEntryInfo, 0, len(raw))
-		for _, e := range raw {
+		if d.hookOff >= len(d.hookEnts) {
+			return nil, io.EOF
+		}
+		end := min(d.hookOff+limit, len(d.hookEnts))
+		out := make([]dirEntryInfo, 0, end-d.hookOff)
+		for _, e := range d.hookEnts[d.hookOff:end] {
 			out = append(out, dirEntryInfo{Name: e.Name(), Kind: dirEntryKind(e)})
 		}
+		d.hookOff = end
 		return out, nil
 	}
-	return readLinuxDirents(d.fd)
+	return d.readLinuxDirentBatch(limit)
 }
 
-func (d *linuxScanDir) OpenDir(name, logicalPath string, searchOnly bool) (scanDir, error) {
+func (d *linuxScanDir) OpenDir(name, logicalPath string, searchOnly, _ bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}
@@ -303,6 +323,8 @@ func (d *linuxScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 }
 
 func (d *linuxScanDir) Close() error {
+	d.direntBuf = nil
+	d.hookEnts = nil
 	if d.fd < 0 {
 		return nil
 	}
@@ -311,67 +333,95 @@ func (d *linuxScanDir) Close() error {
 	return unix.Close(fd)
 }
 
-// readLinuxDirents reads directory entries directly via getdents64 so
-// DT_UNKNOWN entries (XFS without ftype=1, FUSE) are returned as entryUnknown
-// without Go's os.File.ReadDir calling lstatat on them before mount checks run.
-func readLinuxDirents(fd int) ([]dirEntryInfo, error) {
+// readLinuxDirentBatch reads up to limit directory entries incrementally via
+// getdents64 so DT_UNKNOWN entries (XFS without ftype=1, FUSE) are returned as
+// entryUnknown without Go's os.File.ReadDir calling lstatat, and huge
+// directories are never buffered in full before entry caps or cancellation run.
+func (d *linuxScanDir) readLinuxDirentBatch(limit int) ([]dirEntryInfo, error) {
 	const (
 		reclenOff = int(unsafe.Offsetof(unix.Dirent{}.Reclen))
 		typeOff   = int(unsafe.Offsetof(unix.Dirent{}.Type))
 		nameOff   = int(unsafe.Offsetof(unix.Dirent{}.Name))
 	)
-	buf := make([]byte, 32*1024)
-	var out []dirEntryInfo
-	for {
-		n, err := unix.Getdents(fd, buf)
-		if errors.Is(err, unix.EINTR) {
-			continue
+	out := make([]dirEntryInfo, 0, min(limit, 64))
+	for len(out) < limit {
+		if d.direntOff < d.direntLen {
+			b := d.direntBuf[d.direntOff:d.direntLen]
+			for len(b) >= nameOff && len(out) < limit {
+				reclen := int(binary.NativeEndian.Uint16(b[reclenOff : reclenOff+2]))
+				if reclen < nameOff || reclen > len(b) {
+					d.direntOff = d.direntLen
+					b = nil
+					break
+				}
+				rec := b[:reclen]
+				b = b[reclen:]
+				d.direntOff += reclen
+
+				rawName := rec[nameOff:]
+				for i, c := range rawName {
+					if c == 0 {
+						rawName = rawName[:i]
+						break
+					}
+				}
+				if len(rawName) == 0 {
+					continue
+				}
+				name := string(rawName)
+				if name == "." || name == ".." {
+					continue
+				}
+				var kind entryKind
+				switch rec[typeOff] {
+				case unix.DT_DIR:
+					kind = entryDir
+				case unix.DT_REG:
+					kind = entryRegular
+				case unix.DT_LNK:
+					kind = entrySymlink
+				case unix.DT_UNKNOWN:
+					kind = entryUnknown
+				default:
+					kind = entryOther
+				}
+				out = append(out, dirEntryInfo{Name: name, Kind: kind})
+			}
+			if len(b) < nameOff {
+				d.direntOff = d.direntLen
+			}
+			if len(out) > 0 {
+				return out, nil
+			}
+		}
+
+		if d.direntEOF {
+			return nil, io.EOF
+		}
+		if d.direntBuf == nil {
+			d.direntBuf = make([]byte, 32*1024)
+		}
+		var n int
+		var err error
+		for {
+			n, err = unix.Getdents(d.fd, d.direntBuf)
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			break
 		}
 		if err != nil {
 			return nil, err
 		}
 		if n == 0 {
-			return out, nil
+			d.direntEOF = true
+			d.direntBuf = nil
+			return nil, io.EOF
 		}
-		b := buf[:n]
-		for len(b) >= nameOff {
-			reclen := int(binary.NativeEndian.Uint16(b[reclenOff : reclenOff+2]))
-			if reclen < nameOff || reclen > len(b) {
-				break
-			}
-			rec := b[:reclen]
-			b = b[reclen:]
-
-			rawName := rec[nameOff:]
-			for i, c := range rawName {
-				if c == 0 {
-					rawName = rawName[:i]
-					break
-				}
-			}
-			if len(rawName) == 0 {
-				continue
-			}
-			name := string(rawName)
-			if name == "." || name == ".." {
-				continue
-			}
-			var kind entryKind
-			switch rec[typeOff] {
-			case unix.DT_DIR:
-				kind = entryDir
-			case unix.DT_REG:
-				kind = entryRegular
-			case unix.DT_LNK:
-				kind = entrySymlink
-			case unix.DT_UNKNOWN:
-				kind = entryUnknown
-			default:
-				kind = entryOther
-			}
-			out = append(out, dirEntryInfo{Name: name, Kind: kind})
-		}
+		d.direntOff = 0
+		d.direntLen = n
 	}
+	return out, nil
 }
 
 func openat2NoEINTR(fn openat2Func, dirfd int, path string, how *unix.OpenHow) (int, error) {

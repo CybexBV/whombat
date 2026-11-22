@@ -5,6 +5,8 @@ package diskusage
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -77,14 +79,14 @@ func TestLinuxOpenat2RefusesRealMountCrossingAndSymlinks(t *testing.T) {
 
 	// openat2(RESOLVE_NO_XDEV) must refuse crossing from / into /<childMount>
 	// for both OpenDir (readable and searchOnly) and StatEntry (O_PATH).
-	if sub, err := rootDir.OpenDir(childMount, "/"+childMount, false); err == nil {
+	if sub, err := rootDir.OpenDir(childMount, "/"+childMount, false, false); err == nil {
 		_ = sub.Close()
 		t.Fatalf("OpenDir(/%s, searchOnly=false) unexpectedly crossed mount boundary", childMount)
 	} else if !errors.Is(err, errWrongMount) {
 		t.Fatalf("OpenDir(/%s, searchOnly=false) err = %v, want errWrongMount (EXDEV)", childMount, err)
 	}
 
-	if sub, err := rootDir.OpenDir(childMount, "/"+childMount, true); err == nil {
+	if sub, err := rootDir.OpenDir(childMount, "/"+childMount, true, false); err == nil {
 		_ = sub.Close()
 		t.Fatalf("OpenDir(/%s, searchOnly=true) unexpectedly crossed mount boundary", childMount)
 	} else if !errors.Is(err, errWrongMount) {
@@ -121,13 +123,13 @@ func TestLinuxOpenat2RefusesRealMountCrossingAndSymlinks(t *testing.T) {
 	}
 	defer tmpDir.Close()
 
-	if sub, err := tmpDir.OpenDir("symdir", "/symdir", false); err == nil {
+	if sub, err := tmpDir.OpenDir("symdir", "/symdir", false, false); err == nil {
 		_ = sub.Close()
 		t.Fatal("OpenDir followed symlink directory")
 	} else if !isSkipDirErr(err) {
 		t.Fatalf("OpenDir(symdir) err = %v, want skip dir error", err)
 	}
-	if sub, err := tmpDir.OpenDir("symdir", "/symdir", true); err == nil {
+	if sub, err := tmpDir.OpenDir("symdir", "/symdir", true, false); err == nil {
 		_ = sub.Close()
 		t.Fatal("OpenDir(searchOnly=true) followed symlink directory")
 	} else if !isSkipDirErr(err) {
@@ -145,10 +147,10 @@ func TestLinuxOpenat2RefusesRealMountCrossingAndSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openRelDir(/xonly/inner) through 0111 dir failed: %v", err)
 	}
-	ents, err := innerDir.ReadDir()
+	ents, err := innerDir.ReadDirBatch(64)
 	_ = innerDir.Close()
 	if err != nil || len(ents) != 1 || ents[0].Name != "data.bin" || ents[0].Kind != entryRegular {
-		t.Fatalf("innerDir.ReadDir() = (%+v, %v), want [data.bin regular]", ents, err)
+		t.Fatalf("innerDir.ReadDirBatch() = (%+v, %v), want [data.bin regular]", ents, err)
 	}
 }
 
@@ -169,7 +171,7 @@ func TestLinuxOpenat2ENOSYSFallback(t *testing.T) {
 		if rootDir.(*linuxScanDir).state.openat2Works.Load() {
 			t.Fatal("expected openat2Works=false when openat2 returns ENOSYS")
 		}
-		if sub, err := rootDir.OpenDir(childMount, "/"+childMount, false); err == nil {
+		if sub, err := rootDir.OpenDir(childMount, "/"+childMount, false, false); err == nil {
 			_ = sub.Close()
 			t.Fatalf("ENOSYS fallback OpenDir(/%s) unexpectedly crossed mount", childMount)
 		} else if !errors.Is(err, errWrongMount) {
@@ -248,5 +250,65 @@ func TestLinuxOpenat2ENOSYSFallback(t *testing.T) {
 				t.Errorf("container_logs = %d, want ~16 KiB", logBytes)
 			}
 		})
+	}
+}
+
+func TestLinuxReadDirBatchStreamsLargeDirectory(t *testing.T) {
+	dir := t.TempDir()
+	const totalFiles = 1200
+	sub := filepath.Join(dir, "many")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < totalFiles; i++ {
+		f, err := os.Create(filepath.Join(sub, fmt.Sprintf("entry-%04d.txt", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = f.Close()
+	}
+
+	r := newTestRunner(t, dir, []mountInfo{{ID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}, nil)
+	sfs := newLinuxScanFSWithOpenat2(r, unix.Openat2)
+	rootDir, err := sfs.OpenRoot(dir, "/")
+	if err != nil {
+		t.Fatalf("OpenRoot: %v", err)
+	}
+	defer rootDir.Close()
+
+	manyDir, err := rootDir.OpenDir("many", "/many", false, false)
+	if err != nil {
+		t.Fatalf("OpenDir(many): %v", err)
+	}
+	defer manyDir.Close()
+
+	seen := map[string]bool{}
+	batches := 0
+	for {
+		ents, err := manyDir.ReadDirBatch(100)
+		if len(ents) > 100 {
+			t.Fatalf("batch size %d exceeded requested cap 100", len(ents))
+		}
+		for _, e := range ents {
+			if seen[e.Name] {
+				t.Fatalf("duplicate entry %q across batches", e.Name)
+			}
+			seen[e.Name] = true
+		}
+		if len(ents) > 0 {
+			batches++
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("ReadDirBatch: %v", err)
+		}
+	}
+	if len(seen) != totalFiles {
+		t.Fatalf("streamed %d unique files, want %d", len(seen), totalFiles)
+	}
+	if batches < 12 {
+		t.Fatalf("expected at least 12 batches of <=100 entries, got %d", batches)
 	}
 }

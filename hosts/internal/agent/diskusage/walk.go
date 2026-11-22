@@ -2,6 +2,8 @@ package diskusage
 
 import (
 	"context"
+	"errors"
+	"io"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -56,150 +58,190 @@ func (r *Runner) walkMount(ctx context.Context, rootDir scanDir, scope mountScop
 	var visit func(dir scanDir, logicalPath string, depth int) *dirNode
 	visit = func(dir scanDir, logicalPath string, depth int) *dirNode {
 		node := &dirNode{path: logicalPath, depth: depth}
-		if ctx.Err() != nil {
-			partial = true
-			node.partial = true
-			return node
-		}
-		ents, err := dir.ReadDir()
-		if err != nil {
-			if !isSkipDirErr(err) {
-				partial = true
-				node.partial = true
-			}
-			return node
-		}
-		for _, e := range ents {
-			entries++
-			if entries > maxEntries {
+		for {
+			if ctx.Err() != nil {
 				partial = true
 				node.partial = true
 				return node
 			}
-			if entries&255 == 0 && ctx.Err() != nil {
+			rem := maxEntries - entries
+			if rem < 0 {
 				partial = true
 				node.partial = true
 				return node
 			}
+			batchCap := min(dirBatchSize, rem+1)
+			ents, err := dir.ReadDirBatch(batchCap)
+			for _, e := range ents {
+				entries++
+				if entries > maxEntries {
+					partial = true
+					node.partial = true
+					return node
+				}
+				if entries&255 == 0 && ctx.Err() != nil {
+					partial = true
+					node.partial = true
+					return node
+				}
+				if e.Err != nil {
+					if !isSkipEntryErr(e.Err) {
+						partial = true
+						node.partial = true
+					}
+					continue
+				}
 
-			name := e.Name
-			if !isSafeChildName(name) {
-				continue
-			}
+				name := e.Name
+				if !isSafeChildName(name) {
+					continue
+				}
 
-			// Skip known symlinks, sockets, pipes and devices without any syscall.
-			if e.Kind == entrySymlink || e.Kind == entryOther {
-				continue
-			}
+				// Skip known symlinks, sockets, pipes and devices without any syscall.
+				if e.Kind == entrySymlink || e.Kind == entryOther {
+					continue
+				}
 
-			childLogical := joinLogical(logicalPath, name)
+				childLogical := joinLogical(logicalPath, name)
 
-			// Skip mount points known from mountinfo (including bind mounts) and virtual
-			// roots BEFORE any open or stat so a sleeping disk or stalled network mount
-			// below this mount is never touched.
-			if scope.isOtherMount(childLogical) {
-				continue
-			}
+				// Skip mount points known from mountinfo (including bind mounts) and virtual
+				// roots BEFORE any open or stat so a sleeping disk or stalled network mount
+				// below this mount is never touched.
+				if scope.isOtherMount(childLogical) {
+					continue
+				}
 
-			// Known directory from d_type: resolve directly from dir without a prior
-			// stat so a mount appearing mid-walk is refused before touching it.
-			if e.Kind == entryDir {
-				if depth >= maxDepth {
-					// Confirm it is still a same-mount directory (not a newly mounted fs
-					// or symlink) without reading its contents.
-					subDir, err := dir.OpenDir(name, childLogical, true)
-					if err != nil {
-						if !isSkipDirErr(err) {
+				// Known directory from d_type or bulk listing: resolve directly from dir
+				// without a prior stat so a mount appearing mid-walk is refused before touching it.
+				if e.Kind == entryDir {
+					if depth >= maxDepth {
+						if !e.HasStat {
+							// Confirm it is still a same-mount directory (not a newly mounted fs
+							// or symlink) without reading its contents.
+							subDir, oerr := dir.OpenDir(name, childLogical, true, true)
+							if oerr != nil {
+								if !isSkipDirErr(oerr) {
+									partial = true
+									node.partial = true
+								}
+								continue
+							}
+							_ = subDir.Close()
+						}
+						partial = true
+						node.partial = true
+						continue
+					}
+					subDir, oerr := dir.OpenDir(name, childLogical, false, true)
+					if oerr != nil {
+						if !isSkipDirErr(oerr) {
 							partial = true
 							node.partial = true
 						}
 						continue
 					}
+					sub := visit(subDir, childLogical, depth+1)
 					_ = subDir.Close()
-					partial = true
-					node.partial = true
-					continue
-				}
-				subDir, err := dir.OpenDir(name, childLogical, false)
-				if err != nil {
-					if !isSkipDirErr(err) {
+					node.children = append(node.children, sub)
+					node.totalBytes += sub.totalBytes
+					if sub.partial {
+						node.partial = true
+					}
+					if entries > maxEntries || ctx.Err() != nil {
 						partial = true
 						node.partial = true
+						return node
 					}
 					continue
 				}
-				sub := visit(subDir, childLogical, depth+1)
-				_ = subDir.Close()
-				node.children = append(node.children, sub)
-				node.totalBytes += sub.totalBytes
-				if sub.partial {
-					node.partial = true
-				}
-				continue
-			}
 
-			// Regular file or DT_UNKNOWN: stat relative to dir without crossing mounts.
-			st, err := dir.StatEntry(name, childLogical)
+				// Regular file or DT_UNKNOWN: use inline stat when already provided by a
+				// bulk directory API, otherwise stat relative to dir without crossing mounts.
+				var st entryStat
+				if e.HasStat {
+					st = e.Stat
+				} else {
+					var serr error
+					st, serr = dir.StatEntry(name, childLogical)
+					if serr != nil {
+						if !isSkipEntryErr(serr) {
+							partial = true
+							node.partial = true
+						}
+						continue
+					}
+				}
+				if st.Mode&fs.ModeSymlink != 0 {
+					continue
+				}
+				if !st.HasDev || st.Dev != rootDev {
+					continue
+				}
+				if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
+					continue
+				}
+
+				if st.Mode.IsDir() {
+					if depth >= maxDepth {
+						partial = true
+						node.partial = true
+						continue
+					}
+					subDir, oerr := dir.OpenDir(name, childLogical, false, true)
+					if oerr != nil {
+						if !isSkipDirErr(oerr) {
+							partial = true
+							node.partial = true
+						}
+						continue
+					}
+					sub := visit(subDir, childLogical, depth+1)
+					_ = subDir.Close()
+					node.children = append(node.children, sub)
+					node.totalBytes += sub.totalBytes
+					if sub.partial {
+						node.partial = true
+					}
+					if entries > maxEntries || ctx.Err() != nil {
+						partial = true
+						node.partial = true
+						return node
+					}
+					continue
+				}
+
+				if !st.Mode.IsRegular() {
+					continue
+				}
+
+				// Deduplicate hardlinks so shared backups or layers are counted once.
+				if st.HasInode && st.Nlink > 1 {
+					k := inodeKey{dev: st.Dev, ino: st.Ino}
+					if _, dup := seen[k]; dup {
+						continue
+					}
+					if len(seen) < MaxSeenInodes {
+						seen[k] = struct{}{}
+					}
+				}
+
+				node.directBytes += st.AllocBytes
+				node.totalBytes += st.AllocBytes
+			}
 			if err != nil {
-				if !isSkipEntryErr(err) {
+				if errors.Is(err, io.EOF) {
+					return node
+				}
+				if !isSkipDirErr(err) {
 					partial = true
 					node.partial = true
 				}
-				continue
+				return node
 			}
-			if st.Mode&fs.ModeSymlink != 0 {
-				continue
+			if len(ents) == 0 {
+				return node
 			}
-			if !st.HasDev || st.Dev != rootDev {
-				continue
-			}
-			if rootMntID != 0 && st.HasMntID && st.MntID != rootMntID {
-				continue
-			}
-
-			if st.Mode.IsDir() {
-				if depth >= maxDepth {
-					partial = true
-					node.partial = true
-					continue
-				}
-				subDir, err := dir.OpenDir(name, childLogical, false)
-				if err != nil {
-					if !isSkipDirErr(err) {
-						partial = true
-						node.partial = true
-					}
-					continue
-				}
-				sub := visit(subDir, childLogical, depth+1)
-				_ = subDir.Close()
-				node.children = append(node.children, sub)
-				node.totalBytes += sub.totalBytes
-				if sub.partial {
-					node.partial = true
-				}
-				continue
-			}
-
-			if !st.Mode.IsRegular() {
-				continue
-			}
-
-			// Deduplicate hardlinks so shared backups or layers are counted once.
-			if st.HasInode && st.Nlink > 1 {
-				k := inodeKey{dev: st.Dev, ino: st.Ino}
-				if _, dup := seen[k]; dup {
-					continue
-				}
-				if len(seen) < MaxSeenInodes {
-					seen[k] = struct{}{}
-				}
-			}
-
-			node.directBytes += st.AllocBytes
-			node.totalBytes += st.AllocBytes
 		}
-		return node
 	}
 
 	root := visit(startDir, mount, 0)
@@ -304,107 +346,146 @@ func (r *Runner) walkDirBytes(ctx context.Context, rootDir scanDir, scope mountS
 	defer startDir.Close()
 
 	entries := 0
-	const capEntries = 100_000
+	capEntries := r.catMaxEntries
+	if capEntries <= 0 {
+		capEntries = 100_000
+	}
 	var walk func(dir scanDir, p string, depth int)
 	walk = func(dir scanDir, p string, depth int) {
-		if ctx.Err() != nil {
-			partial = true
-			return
-		}
-		ents, err := dir.ReadDir()
-		if err != nil {
-			if !isSkipDirErr(err) {
-				partial = true
-			}
-			return
-		}
-		for _, e := range ents {
-			entries++
-			if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
+		for {
+			if ctx.Err() != nil {
 				partial = true
 				return
 			}
-			name := e.Name
-			if !isSafeChildName(name) {
-				continue
+			rem := capEntries - entries
+			if rem < 0 {
+				partial = true
+				return
 			}
-			if e.Kind == entrySymlink || e.Kind == entryOther {
-				continue
-			}
-			child := joinLogical(p, name)
-			if scope.isOtherMount(child) {
-				continue
-			}
-			if e.Kind == entryDir {
-				if depth >= maxDepth {
-					subDir, err := dir.OpenDir(name, child, true)
-					if err != nil {
-						if !isSkipDirErr(err) {
+			batchCap := min(dirBatchSize, rem+1)
+			ents, err := dir.ReadDirBatch(batchCap)
+			for _, e := range ents {
+				entries++
+				if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
+					partial = true
+					return
+				}
+				if e.Err != nil {
+					if !isSkipEntryErr(e.Err) {
+						partial = true
+					}
+					continue
+				}
+				name := e.Name
+				if !isSafeChildName(name) {
+					continue
+				}
+				if e.Kind == entrySymlink || e.Kind == entryOther {
+					continue
+				}
+				child := joinLogical(p, name)
+				if scope.isOtherMount(child) {
+					continue
+				}
+				if e.Kind == entryDir {
+					if depth >= maxDepth {
+						if !e.HasStat {
+							subDir, oerr := dir.OpenDir(name, child, true, true)
+							if oerr != nil {
+								if !isSkipDirErr(oerr) {
+									partial = true
+								}
+								continue
+							}
+							_ = subDir.Close()
+						}
+						partial = true
+						continue
+					}
+					subDir, oerr := dir.OpenDir(name, child, false, true)
+					if oerr != nil {
+						if !isSkipDirErr(oerr) {
 							partial = true
 						}
 						continue
 					}
+					walk(subDir, child, depth+1)
 					_ = subDir.Close()
-					partial = true
-					continue
-				}
-				subDir, err := dir.OpenDir(name, child, false)
-				if err != nil {
-					if !isSkipDirErr(err) {
+					if entries > capEntries || ctx.Err() != nil {
 						partial = true
+						return
 					}
 					continue
 				}
-				walk(subDir, child, depth+1)
-				_ = subDir.Close()
-				continue
-			}
 
-			st, err := dir.StatEntry(name, child)
-			if err != nil {
-				if !isSkipEntryErr(err) {
-					partial = true
+				var st entryStat
+				if e.HasStat {
+					st = e.Stat
+				} else {
+					var serr error
+					st, serr = dir.StatEntry(name, child)
+					if serr != nil {
+						if !isSkipEntryErr(serr) {
+							partial = true
+						}
+						continue
+					}
 				}
-				continue
-			}
-			if st.Mode&fs.ModeSymlink != 0 {
-				continue
-			}
-			if !st.HasDev || st.Dev != rootDev {
-				continue
-			}
-			if rootMntID != 0 && st.HasMntID && st.MntID != rootMntID {
-				continue
-			}
-			if st.Mode.IsDir() {
-				if depth >= maxDepth {
-					partial = true
+				if st.Mode&fs.ModeSymlink != 0 {
 					continue
 				}
-				subDir, err := dir.OpenDir(name, child, false)
-				if err != nil {
-					if !isSkipDirErr(err) {
+				if !st.HasDev || st.Dev != rootDev {
+					continue
+				}
+				if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
+					continue
+				}
+				if st.Mode.IsDir() {
+					if depth >= maxDepth {
 						partial = true
+						continue
+					}
+					subDir, oerr := dir.OpenDir(name, child, false, true)
+					if oerr != nil {
+						if !isSkipDirErr(oerr) {
+							partial = true
+						}
+						continue
+					}
+					walk(subDir, child, depth+1)
+					_ = subDir.Close()
+					if entries > capEntries || ctx.Err() != nil {
+						partial = true
+						return
 					}
 					continue
 				}
-				walk(subDir, child, depth+1)
-				_ = subDir.Close()
-				continue
-			}
-			if !st.Mode.IsRegular() {
-				continue
-			}
-			if st.HasInode && st.Nlink > 1 {
-				k := inodeKey{dev: st.Dev, ino: st.Ino}
-				if _, dup := seen[k]; dup {
+				if !st.Mode.IsRegular() {
 					continue
 				}
-				if len(seen) < MaxSeenInodes {
-					seen[k] = struct{}{}
+				if st.HasInode && st.Nlink > 1 {
+					k := inodeKey{dev: st.Dev, ino: st.Ino}
+					if _, dup := seen[k]; dup {
+						continue
+					}
+					if len(seen) < MaxSeenInodes {
+						seen[k] = struct{}{}
+					}
 				}
+				bytes += st.AllocBytes
 			}
-			bytes += st.AllocBytes
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return
+				}
+				if !isSkipDirErr(err) {
+					partial = true
+				}
+				return
+			}
+			if len(ents) == 0 {
+				return
+			}
 		}
 	}
 	walk(startDir, cleanDir, 0)

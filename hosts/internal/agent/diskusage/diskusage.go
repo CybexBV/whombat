@@ -94,6 +94,7 @@ type Runner struct {
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
 	maxEntries     int
+	catMaxEntries  int
 	hangGrace      time.Duration
 	setLowPriority func()
 	isUnraid       func() bool

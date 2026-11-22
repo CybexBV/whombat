@@ -26,10 +26,18 @@ const (
 	entryOther
 )
 
+// dirBatchSize caps how many directory entries one ReadDirBatch call delivers
+// so the entry cap and cancellation run between bounded batches instead of
+// loading huge directories into memory at once.
+const dirBatchSize = 512
+
 // dirEntryInfo is one entry returned by reading an open directory descriptor.
 type dirEntryInfo struct {
-	Name string
-	Kind entryKind
+	Name    string
+	Kind    entryKind
+	Stat    entryStat
+	HasStat bool
+	Err     error
 }
 
 // entryStat holds the stat metadata needed by the walker and category probes.
@@ -44,6 +52,8 @@ type entryStat struct {
 	HasInode   bool
 	MntID      uint64
 	HasMntID   bool
+	FSID       [2]int32
+	HasFSID    bool
 }
 
 // scanDir is an open handle to a verified directory on the target mount.
@@ -60,15 +70,18 @@ type scanDir interface {
 	// (at directory offset 0) without re-resolving any path string.
 	OpenSelf() (scanDir, error)
 
-	// ReadDir lists entries of this open directory descriptor without calling
-	// lstat on DT_UNKNOWN entries before mount-boundary checks run.
-	ReadDir() ([]dirEntryInfo, error)
+	// ReadDirBatch reads up to maxEntries entries from this open directory
+	// descriptor without calling lstat on DT_UNKNOWN entries before
+	// mount-boundary checks run. It returns (nil, io.EOF) when all entries have
+	// been read.
+	ReadDirBatch(maxEntries int) ([]dirEntryInfo, error)
 
 	// OpenDir opens direct child directory name relative to this open directory
 	// descriptor without crossing mounts or following symlinks. When searchOnly
 	// is true, the handle is only used for traversing deeper or verifying the
-	// directory stays on the target mount (not ReadDir).
-	OpenDir(name, logicalPath string, searchOnly bool) (scanDir, error)
+	// directory stays on the target mount (not reading entries). When prechecked
+	// is true, the caller just received name from ReadDirBatch on this descriptor.
+	OpenDir(name, logicalPath string, searchOnly, prechecked bool) (scanDir, error)
 
 	// StatEntry returns stat metadata for direct child name relative to this
 	// open directory descriptor without crossing mounts or following symlinks.
@@ -76,6 +89,13 @@ type scanDir interface {
 
 	// Close releases the underlying directory descriptor.
 	Close() error
+}
+
+func clampBatchSize(maxEntries int) int {
+	if maxEntries <= 0 || maxEntries > dirBatchSize {
+		return dirBatchSize
+	}
+	return maxEntries
 }
 
 // scanFS anchors a disk usage scan to an open directory descriptor of the
@@ -157,7 +177,7 @@ func openRelDir(rootDir scanDir, scope mountScope, logicalDir string, searchOnly
 			return nil, errWrongMount
 		}
 		stepSearchOnly := searchOnly || i < len(segs)-1
-		next, err := cur.OpenDir(seg, curLogical, stepSearchOnly)
+		next, err := cur.OpenDir(seg, curLogical, stepSearchOnly, false)
 		if cur != rootDir {
 			_ = cur.Close()
 		}

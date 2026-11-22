@@ -4,6 +4,7 @@ package diskusage
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -35,6 +36,9 @@ type otherScanDir struct {
 	r           *Runner
 	hostPath    string
 	logicalPath string
+	ents        []fs.DirEntry
+	loaded      bool
+	off         int
 }
 
 func (d *otherScanDir) Stat() (entryStat, error) {
@@ -53,25 +57,33 @@ func (d *otherScanDir) OpenSelf() (scanDir, error) {
 	return &otherScanDir{r: d.r, hostPath: d.hostPath, logicalPath: d.logicalPath}, nil
 }
 
-func (d *otherScanDir) ReadDir() ([]dirEntryInfo, error) {
-	var raw []fs.DirEntry
-	var err error
-	if d.r.readDir != nil {
-		raw, err = d.r.readDir(d.logicalPath)
-	} else {
-		raw, err = os.ReadDir(d.hostPath)
+func (d *otherScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	limit := clampBatchSize(maxEntries)
+	if !d.loaded {
+		var err error
+		if d.r.readDir != nil {
+			d.ents, err = d.r.readDir(d.logicalPath)
+		} else {
+			d.ents, err = os.ReadDir(d.hostPath)
+		}
+		if err != nil {
+			return nil, err
+		}
+		d.loaded = true
 	}
-	if err != nil {
-		return nil, err
+	if d.off >= len(d.ents) {
+		return nil, io.EOF
 	}
-	out := make([]dirEntryInfo, 0, len(raw))
-	for _, e := range raw {
+	end := min(d.off+limit, len(d.ents))
+	out := make([]dirEntryInfo, 0, end-d.off)
+	for _, e := range d.ents[d.off:end] {
 		out = append(out, dirEntryInfo{Name: e.Name(), Kind: dirEntryKind(e)})
 	}
+	d.off = end
 	return out, nil
 }
 
-func (d *otherScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error) {
+func (d *otherScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}

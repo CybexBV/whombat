@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -2407,14 +2409,14 @@ func (d *recordingScanDir) OpenSelf() (scanDir, error) {
 	return &recordingScanDir{inner: sub, logicalPath: d.logicalPath, onOp: d.onOp}, nil
 }
 
-func (d *recordingScanDir) ReadDir() ([]dirEntryInfo, error) {
+func (d *recordingScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
 	d.onOp(d.logicalPath)
-	return d.inner.ReadDir()
+	return d.inner.ReadDirBatch(maxEntries)
 }
 
-func (d *recordingScanDir) OpenDir(name, logicalPath string, searchOnly bool) (scanDir, error) {
+func (d *recordingScanDir) OpenDir(name, logicalPath string, searchOnly, prechecked bool) (scanDir, error) {
 	d.onOp(logicalPath)
-	sub, err := d.inner.OpenDir(name, logicalPath, searchOnly)
+	sub, err := d.inner.OpenDir(name, logicalPath, searchOnly, prechecked)
 	if err != nil {
 		return nil, err
 	}
@@ -2629,6 +2631,9 @@ type fakeScanDir struct {
 	fs          *fakeScanFS
 	node        *fakeNode
 	logicalPath string
+	entries     []dirEntryInfo
+	loaded      bool
+	off         int
 }
 
 func (d *fakeScanDir) Stat() (entryStat, error) {
@@ -2660,43 +2665,54 @@ func (d *fakeScanDir) OpenSelf() (scanDir, error) {
 	return &fakeScanDir{fs: d.fs, node: d.node, logicalPath: d.logicalPath}, nil
 }
 
-func (d *fakeScanDir) ReadDir() ([]dirEntryInfo, error) {
-	if d.node.tracker != nil {
-		d.node.tracker.touched.Add(1)
-		d.node.tracker.dataReads.Add(1)
-	}
-	if d.fs.onReadDir != nil {
-		d.fs.onReadDir(d.logicalPath, d.fs)
-	}
-	d.fs.mu.Lock()
-	defer d.fs.mu.Unlock()
-	names := make([]string, 0, len(d.node.children))
-	for name := range d.node.children {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	out := make([]dirEntryInfo, 0, len(names))
-	for _, name := range names {
-		ch := d.node.children[name]
-		kind := entryUnknown
-		if !d.fs.noDType {
-			switch {
-			case ch.mode&fs.ModeSymlink != 0:
-				kind = entrySymlink
-			case ch.mode.IsDir():
-				kind = entryDir
-			case ch.mode.IsRegular():
-				kind = entryRegular
-			default:
-				kind = entryOther
-			}
+func (d *fakeScanDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	limit := clampBatchSize(maxEntries)
+	if !d.loaded {
+		if d.node.tracker != nil {
+			d.node.tracker.touched.Add(1)
+			d.node.tracker.dataReads.Add(1)
 		}
-		out = append(out, dirEntryInfo{Name: name, Kind: kind})
+		if d.fs.onReadDir != nil {
+			d.fs.onReadDir(d.logicalPath, d.fs)
+		}
+		d.fs.mu.Lock()
+		names := make([]string, 0, len(d.node.children))
+		for name := range d.node.children {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		out := make([]dirEntryInfo, 0, len(names))
+		for _, name := range names {
+			ch := d.node.children[name]
+			kind := entryUnknown
+			if !d.fs.noDType {
+				switch {
+				case ch.mode&fs.ModeSymlink != 0:
+					kind = entrySymlink
+				case ch.mode.IsDir():
+					kind = entryDir
+				case ch.mode.IsRegular():
+					kind = entryRegular
+				default:
+					kind = entryOther
+				}
+			}
+			out = append(out, dirEntryInfo{Name: name, Kind: kind})
+		}
+		d.fs.mu.Unlock()
+		d.entries = out
+		d.loaded = true
 	}
-	return out, nil
+	if d.off >= len(d.entries) {
+		return nil, io.EOF
+	}
+	end := min(d.off+limit, len(d.entries))
+	batch := d.entries[d.off:end]
+	d.off = end
+	return batch, nil
 }
 
-func (d *fakeScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error) {
+func (d *fakeScanDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
 	if !isSafeChildName(name) {
 		return nil, errWrongMount
 	}
@@ -3069,4 +3085,243 @@ func TestDarwinDataVolumeCategoryRoots(t *testing.T) {
 	if pkgSingle.Bytes < 32*1024 || pkgSingle.Detail != "Homebrew" {
 		t.Errorf("package_cache on single-volume / = %+v, want >= 32 KiB Homebrew", pkgSingle)
 	}
+}
+
+// hugeBatchScanFS simulates a directory with millions of virtual entries
+// generated lazily per ReadDirBatch call so tests can verify that walkMount,
+// walkDirBytes and collectContainerLogs bound memory, apply entry caps and
+// check cancellation between batches without reading an entire huge directory.
+type hugeBatchScanFS struct {
+	rootDev       uint64
+	rootMntID     uint64
+	hugeDirPath   string // logical path of the directory containing totalVirtual regular files
+	fileSuffix    string // suffix appended to generated filenames (e.g. ".bin" or "-json.log")
+	totalVirtual  int
+	onBatch       func(path string, batchIndex int)
+	batchesRead   atomic.Int64
+	entriesRead   atomic.Int64
+	maxBatchAsked atomic.Int64
+}
+
+func (f *hugeBatchScanFS) OpenRoot(_ string, logicalMount string) (scanDir, error) {
+	return &hugeBatchDir{fs: f, logicalPath: logicalMount}, nil
+}
+
+type hugeBatchDir struct {
+	fs          *hugeBatchScanFS
+	logicalPath string
+	offset      int
+	batchCount  int
+	sentChild   bool
+}
+
+func (d *hugeBatchDir) Stat() (entryStat, error) {
+	return entryStat{
+		Mode:     fs.ModeDir | 0o755,
+		Dev:      d.fs.rootDev,
+		HasDev:   true,
+		Ino:      1,
+		Nlink:    2,
+		HasInode: true,
+		MntID:    d.fs.rootMntID,
+		HasMntID: true,
+	}, nil
+}
+
+func (d *hugeBatchDir) Statfs() (fsStat, error) {
+	return fsStat{TotalBytes: 200 << 30, UsedBytes: 10 << 30}, nil
+}
+
+func (d *hugeBatchDir) OpenSelf() (scanDir, error) {
+	return &hugeBatchDir{fs: d.fs, logicalPath: d.logicalPath}, nil
+}
+
+func (d *hugeBatchDir) nextSegmentTowardHuge() (string, bool) {
+	if d.logicalPath == d.fs.hugeDirPath {
+		return "", false
+	}
+	if !hasPathPrefix(d.fs.hugeDirPath, d.logicalPath) {
+		return "", false
+	}
+	rel := strings.TrimPrefix(d.fs.hugeDirPath, d.logicalPath)
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
+		return "", false
+	}
+	seg, _, _ := strings.Cut(rel, "/")
+	return seg, seg != ""
+}
+
+func (d *hugeBatchDir) ReadDirBatch(maxEntries int) ([]dirEntryInfo, error) {
+	if d.logicalPath != d.fs.hugeDirPath {
+		if d.sentChild {
+			return nil, io.EOF
+		}
+		d.sentChild = true
+		if seg, ok := d.nextSegmentTowardHuge(); ok {
+			return []dirEntryInfo{{Name: seg, Kind: entryDir}}, nil
+		}
+		return nil, io.EOF
+	}
+	limit := clampBatchSize(maxEntries)
+	for {
+		cur := d.fs.maxBatchAsked.Load()
+		if int64(maxEntries) <= cur || d.fs.maxBatchAsked.CompareAndSwap(cur, int64(maxEntries)) {
+			break
+		}
+	}
+	if d.offset >= d.fs.totalVirtual {
+		return nil, io.EOF
+	}
+	n := min(limit, d.fs.totalVirtual-d.offset)
+	out := make([]dirEntryInfo, n)
+	for i := 0; i < n; i++ {
+		out[i] = dirEntryInfo{
+			Name: fmt.Sprintf("f-%07d%s", d.offset+i, d.fs.fileSuffix),
+			Kind: entryRegular,
+		}
+	}
+	d.offset += n
+	d.batchCount++
+	d.fs.batchesRead.Add(1)
+	d.fs.entriesRead.Add(int64(n))
+	if d.fs.onBatch != nil {
+		d.fs.onBatch(d.logicalPath, d.batchCount)
+	}
+	return out, nil
+}
+
+func (d *hugeBatchDir) OpenDir(name, logicalPath string, _, _ bool) (scanDir, error) {
+	seg, ok := d.nextSegmentTowardHuge()
+	if !ok || name != seg {
+		return nil, fs.ErrNotExist
+	}
+	return &hugeBatchDir{fs: d.fs, logicalPath: logicalPath}, nil
+}
+
+func (d *hugeBatchDir) StatEntry(_ string, _ string) (entryStat, error) {
+	return entryStat{
+		Mode:       0o644,
+		Size:       4096,
+		AllocBytes: 4096,
+		Dev:        d.fs.rootDev,
+		HasDev:     true,
+		Ino:        2,
+		Nlink:      1,
+		HasInode:   true,
+		MntID:      d.fs.rootMntID,
+		HasMntID:   true,
+	}, nil
+}
+
+func (d *hugeBatchDir) Close() error { return nil }
+
+func TestBatchedReadDirCapsAndCancelsLargeDirectories(t *testing.T) {
+	const virtualCount = 5_000_000
+	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+
+	t.Run("walkMount_entry_cap", func(t *testing.T) {
+		hfs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/srv/huge",
+			fileSuffix:   ".bin",
+			totalVirtual: virtualCount,
+		}
+		r := newTestRunner(t, t.TempDir(), mounts, nil)
+		r.scanFS = hfs
+		r.maxEntries = 1200
+
+		resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if !resp.Partial {
+			t.Fatalf("expected Partial=true when hitting entry cap on 5M dir")
+		}
+		if got := hfs.maxBatchAsked.Load(); got > dirBatchSize {
+			t.Errorf("ReadDirBatch asked for %d entries at once, want <= %d", got, dirBatchSize)
+		}
+		// Total entries emitted from /srv/huge must be bounded by maxEntries (never 5M).
+		if got := hfs.entriesRead.Load(); got > int64(r.maxEntries+1) {
+			t.Errorf("huge dir read %d entries, want <= %d", got, r.maxEntries+1)
+		}
+		if got := hfs.batchesRead.Load(); got < 2 || got > 4 {
+			t.Errorf("huge dir batches read = %d, want 2..4", got)
+		}
+	})
+
+	t.Run("walkMount_cancel_between_batches", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		hfs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/srv/huge",
+			fileSuffix:   ".bin",
+			totalVirtual: virtualCount,
+			onBatch: func(_ string, batchIndex int) {
+				if batchIndex == 2 {
+					cancel()
+				}
+			},
+		}
+		r := newTestRunner(t, t.TempDir(), mounts, nil)
+		r.scanFS = hfs
+		r.maxEntries = 100_000
+
+		resp := r.DiskUsage(ctx, proto.DiskUsageRequest{Mount: "/"})
+		if resp.Code != "" {
+			t.Fatalf("unexpected error: %+v", resp)
+		}
+		if !resp.Partial {
+			t.Fatalf("expected Partial=true when cancelled between batches")
+		}
+		if got := hfs.batchesRead.Load(); got != 2 {
+			t.Errorf("expected stop immediately after batch 2 on cancel, read %d batches", got)
+		}
+	})
+
+	t.Run("walkDirBytes_and_container_logs_caps", func(t *testing.T) {
+		// 1. walkDirBytes (/var/log/journal with 5M files) stops at catMaxEntries.
+		hfsJournal := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/var/log/journal",
+			fileSuffix:   ".journal",
+			totalVirtual: virtualCount,
+		}
+		r1 := newTestRunner(t, t.TempDir(), mounts, nil)
+		r1.scanFS = hfsJournal
+		r1.catMaxEntries = 900
+		r1.maxEntries = 10 // keep general walk tiny so only journal reads many batches
+		resp1 := r1.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp1.Code != "" || !resp1.Partial {
+			t.Fatalf("journal huge dir: resp = %+v, want Partial=true", resp1)
+		}
+		if got := hfsJournal.entriesRead.Load(); got > int64(r1.catMaxEntries+r1.maxEntries+2) {
+			t.Errorf("journal huge dir read %d entries, want <= %d", got, r1.catMaxEntries+r1.maxEntries+2)
+		}
+
+		// 2. collectContainerLogs (/var/lib/docker/containers/c1 with 5M log files) stops at catMaxEntries.
+		hfsLogs := &hugeBatchScanFS{
+			rootDev:      100,
+			rootMntID:    10,
+			hugeDirPath:  "/var/lib/docker/containers/c1",
+			fileSuffix:   "-json.log",
+			totalVirtual: virtualCount,
+		}
+		r2 := newTestRunner(t, t.TempDir(), mounts, nil)
+		r2.scanFS = hfsLogs
+		r2.catMaxEntries = 900
+		r2.maxEntries = 10
+		resp2 := r2.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+		if resp2.Code != "" || !resp2.Partial {
+			t.Fatalf("container logs huge dir: resp = %+v, want Partial=true", resp2)
+		}
+		if got := hfsLogs.entriesRead.Load(); got > int64(r2.catMaxEntries+r2.maxEntries+2) {
+			t.Errorf("container logs huge dir read %d entries, want <= %d", got, r2.catMaxEntries+r2.maxEntries+2)
+		}
+	})
 }

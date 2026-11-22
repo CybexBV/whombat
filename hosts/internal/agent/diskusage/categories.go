@@ -3,6 +3,7 @@ package diskusage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -290,22 +291,40 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 	seen := map[inodeKey]struct{}{}
 
 	containersDir := filepath.Join(dockerRoot, "containers")
+	capEntries := r.catMaxEntries
+	if capEntries <= 0 {
+		capEntries = 100_000
+	}
+	entries := 0
 	cDir, err := openRelDir(rootDir, scope, containersDir, false)
 	if err != nil {
 		if !isSkipDirErr(err) {
 			partial = true
 		}
 	} else {
-		ents, rerr := cDir.ReadDir()
-		if rerr != nil {
-			if !isSkipDirErr(rerr) {
+	outerLoop:
+		for {
+			if ctx.Err() != nil {
 				partial = true
+				break
 			}
-		} else {
+			rem := capEntries - entries
+			if rem < 0 {
+				partial = true
+				break
+			}
+			ents, rerr := cDir.ReadDirBatch(min(dirBatchSize, rem+1))
 			for _, e := range ents {
-				if ctx.Err() != nil {
+				entries++
+				if entries > capEntries || ctx.Err() != nil {
 					partial = true
-					break
+					break outerLoop
+				}
+				if e.Err != nil {
+					if !isSkipEntryErr(e.Err) {
+						partial = true
+					}
+					continue
 				}
 				if !isSafeChildName(e.Name) {
 					continue
@@ -319,7 +338,7 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 				if scope.isOtherMount(sub) {
 					continue
 				}
-				subDir, oerr := cDir.OpenDir(e.Name, sub, false)
+				subDir, oerr := cDir.OpenDir(e.Name, sub, false, true)
 				if oerr != nil {
 					// Plain files and symlinks inside containers/ return ENOTDIR/ELOOP,
 					// and newly mounted filesystems return errWrongMount; all skip cleanly.
@@ -328,61 +347,99 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 					}
 					continue
 				}
-				files, ferr := subDir.ReadDir()
-				if ferr != nil {
-					if !isSkipDirErr(ferr) {
+				for {
+					if ctx.Err() != nil {
 						partial = true
+						_ = subDir.Close()
+						break outerLoop
 					}
-					_ = subDir.Close()
-					continue
-				}
-				for i, f := range files {
-					if i&255 == 0 && ctx.Err() != nil {
+					subRem := capEntries - entries
+					if subRem < 0 {
 						partial = true
-						break
+						_ = subDir.Close()
+						break outerLoop
 					}
-					name := f.Name
-					if !isSafeChildName(name) {
-						continue
-					}
-					if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
-						continue
-					}
-					if f.Kind != entryRegular && f.Kind != entryUnknown {
-						continue
-					}
-					child := joinLogical(sub, name)
-					if scope.isOtherMount(child) {
-						continue
-					}
-					st, serr := subDir.StatEntry(name, child)
-					if serr != nil {
-						if !isSkipEntryErr(serr) {
+					files, ferr := subDir.ReadDirBatch(min(dirBatchSize, subRem+1))
+					for _, f := range files {
+						entries++
+						if entries > capEntries || (entries&255 == 0 && ctx.Err() != nil) {
 							partial = true
+							_ = subDir.Close()
+							break outerLoop
 						}
-						continue
-					}
-					if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
-						continue
-					}
-					if !st.HasDev || st.Dev != rootDev {
-						continue
-					}
-					if rootMntID != 0 && st.HasMntID && st.MntID != rootMntID {
-						continue
-					}
-					if st.HasInode && st.Nlink > 1 {
-						k := inodeKey{dev: st.Dev, ino: st.Ino}
-						if _, dup := seen[k]; dup {
+						if f.Err != nil {
+							if !isSkipEntryErr(f.Err) {
+								partial = true
+							}
 							continue
 						}
-						if len(seen) < MaxSeenInodes {
-							seen[k] = struct{}{}
+						name := f.Name
+						if !isSafeChildName(name) {
+							continue
 						}
+						if !strings.Contains(name, "-json.log") && !strings.HasSuffix(name, ".log") {
+							continue
+						}
+						if f.Kind != entryRegular && f.Kind != entryUnknown {
+							continue
+						}
+						child := joinLogical(sub, name)
+						if scope.isOtherMount(child) {
+							continue
+						}
+						var st entryStat
+						if f.HasStat {
+							st = f.Stat
+						} else {
+							var serr error
+							st, serr = subDir.StatEntry(name, child)
+							if serr != nil {
+								if !isSkipEntryErr(serr) {
+									partial = true
+								}
+								continue
+							}
+						}
+						if st.Mode&fs.ModeSymlink != 0 || !st.Mode.IsRegular() {
+							continue
+						}
+						if !st.HasDev || st.Dev != rootDev {
+							continue
+						}
+						if rootMntID != 0 && (!st.HasMntID || st.MntID != rootMntID) {
+							continue
+						}
+						if st.HasInode && st.Nlink > 1 {
+							k := inodeKey{dev: st.Dev, ino: st.Ino}
+							if _, dup := seen[k]; dup {
+								continue
+							}
+							if len(seen) < MaxSeenInodes {
+								seen[k] = struct{}{}
+							}
+						}
+						total += st.AllocBytes
 					}
-					total += st.AllocBytes
+					if ferr != nil {
+						if !errors.Is(ferr, io.EOF) && !isSkipDirErr(ferr) {
+							partial = true
+						}
+						break
+					}
+					if len(files) == 0 {
+						break
+					}
 				}
 				_ = subDir.Close()
+			}
+			if rerr != nil {
+				if !errors.Is(rerr, io.EOF) && !isSkipDirErr(rerr) {
+					partial = true
+				}
+				break
+			}
+			if len(ents) == 0 {
+				break
 			}
 		}
 		_ = cDir.Close()
