@@ -5,12 +5,12 @@
  * decided from the dispatch, message and attachment rows a real turn has.
  */
 import { ASSESSOR_TOOLS } from '@whombat/agent-runtime/feedback';
-import { MCP_TOOL_NAMES } from '@whombat/core';
+import { MCP_TOOL_NAMES, newId } from '@whombat/core';
 import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { sendMessage } from '../commands/messages';
-import { dispatches, messages } from '../db/schema/index';
+import { automationRunSteps, automationRuns, automations, dispatches, messages } from '../db/schema/index';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS } from '../seed/test-world';
 import { upload } from '../test/files';
@@ -28,6 +28,7 @@ let ownReply = '';
 let otherRoot = '';
 let reportFile = '';
 let chatFile = '';
+let reportRun = '';
 
 async function post(text: string, extra: { threadRootId?: string; attachmentIds?: string[] } = {}) {
   const res = await t.commit(IDS.mara, sendMessage, { conversationId: CHAT, text, ...extra });
@@ -48,7 +49,67 @@ beforeAll(async () => {
     attachmentIds: [reportFile],
   });
   ownReply = await post('More from the customer: it happens on every export.', { threadRootId: root });
+  reportRun = await customerReportRun();
 });
+
+/**
+ * The run a customer's report started, in the request's thread: its agent step was handed the customer's file (the
+ * server keeps the ids of the files it hands over on the step).
+ */
+async function customerReportRun(): Promise<string> {
+  const automationId = newId('automation');
+  const runId = newId('automationRun');
+  const now = new Date();
+  await t.services.db.insert(automations).values({
+    id: automationId,
+    burrowId: t.burrowId,
+    name: 'Assess reports',
+    principalId: IDS.dusty,
+    createdById: IDS.mara,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const [{ n } = { n: 0 }] = await t.services.db
+    .select({ n: sql<number>`coalesce(max(${automationRuns.number}), 0)::int` })
+    .from(automationRuns)
+    .where(eq(automationRuns.burrowId, t.burrowId));
+  await t.services.db.insert(automationRuns).values({
+    id: runId,
+    burrowId: t.burrowId,
+    number: n + 1,
+    automationId,
+    version: 1,
+    definition: { steps: [{ id: 'ask', kind: 'dispatch_agent', prompt: 'Assess it.' }] } as never,
+    publishedById: IDS.mara,
+    status: 'waiting',
+    trigger: {
+      kind: 'tracker',
+      summary: 'Acme #5',
+      actorId: null,
+      eventId: null,
+      messageId: null,
+      scheduledFor: null,
+    },
+    triggerKey: `test:${runId}`,
+    conversationId: CHAT,
+    threadRootId: root,
+    createdAt: now,
+    deadlineAt: new Date(now.getTime() + 3_600_000),
+    updatedAt: now,
+  });
+  await t.services.db.insert(automationRunSteps).values({
+    runId,
+    idx: 0,
+    stepId: 'ask',
+    kind: 'dispatch_agent',
+    name: 'Assess it',
+    state: 'waiting',
+    promptMessageId: root,
+    output: { triggerFileIds: [reportFile] },
+    updatedAt: now,
+  });
+  return runId;
+}
 
 /** A live turn in the person's Chat, in the request's thread unless said otherwise. */
 async function turn(options: TestDispatchOptions = {}): Promise<AgentAuth> {
@@ -61,7 +122,15 @@ async function turn(options: TestDispatchOptions = {}): Promise<AgentAuth> {
   return { dispatchId, agentId: IDS.dusty, burrowId: t.burrowId };
 }
 
-const outsiders = () => turn({ onBehalfOfAccountId: null });
+/** The report run's step asks a new outsiders' turn: the step names its turn while it is at work. */
+async function outsiders(): Promise<AgentAuth> {
+  const auth = await turn({ onBehalfOfAccountId: null });
+  await t.services.db
+    .update(automationRunSteps)
+    .set({ dispatchId: auth.dispatchId })
+    .where(eq(automationRunSteps.runId, reportRun));
+  return auth;
+}
 
 async function call(auth: AgentAuth, name: string, args: Record<string, unknown>) {
   const res = await callTool(t.services, auth, name, args);
@@ -192,6 +261,11 @@ describe('an outsiders’ turn keeps to its own thread (OT-04)', () => {
     // The person's turn in the same place reads both.
     const mine = await turn({ trigger: 'dm' });
     expect((await call(mine, 'read_attachment', { attachmentId: chatFile })).body.status).toBe('ok');
+    // An outsiders' turn no run's step names was handed nothing: not even its request's file.
+    const unnamed = await turn({ onBehalfOfAccountId: null });
+    expect((await call(unnamed, 'read_attachment', { attachmentId: reportFile })).body.error?.code).toBe(
+      'not_found',
+    );
   });
 
   it('gets neither the Chat’s Files nor the files of its window in its context', async () => {

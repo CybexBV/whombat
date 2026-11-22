@@ -12,12 +12,15 @@
  *   (search) dispatches get none: their answer goes to someone else. A website visitor's screenshots (a Whombat
  *   Feedback report's root message) only reach the report's assessment and an approved handoff (FB-F3-12). An
  *   outsiders' turn is shown only its request and its thread, never the room's window (its room is usually the
- *   person's Chat or Feedback room). Besides those, the files in its conversation's Files (FS-08;
- *   `dispatchFileRows`), not in an assessment, a search answer or an outsiders' turn: they are the person's files.
+ *   person's Chat or Feedback room); one of an automation run (incoming mail, a tracker report) only the files the
+ *   server handed over from what started its run (`outsidersFileIds`), never one the person or anyone else added to
+ *   its thread. Besides those, the files in its conversation's Files (FS-08; `dispatchFileRows`), not in an
+ *   assessment, a search answer or an outsiders' turn: they are the person's files.
  * Everything else is “not found”, so nobody can probe for ids.
  */
-import type { AttachmentRef } from '@whombat/core';
+import type { AttachmentRef, Message } from '@whombat/core';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { stepTurnFileIds } from '../automations/handed-files';
 import type { Db } from '../db/client';
 import { attachments, events, feedbackReports, messages, principals, repoIcons } from '../db/schema/index';
 import { outsidersTurn } from '../runtime/person';
@@ -26,6 +29,7 @@ import type { AttachmentRow } from './service';
 import { type FileRow, fileRow, listFileRows } from './space';
 
 type DispatchLike = {
+  id: string;
   agentId: string;
   burrowId: string;
   conversationId: string;
@@ -160,6 +164,28 @@ async function withoutVisitorFiles(db: Db, row: DispatchLike, ids: string[]): Pr
   return ids.filter((id) => !drop.has(id));
 }
 
+/**
+ * The only files an outsiders' turn other than a feedback assessment may be shown and use: those the server
+ * handed over from what started the automation run whose step queued it (the email's; none for a tracker report).
+ * Any other such turn has none. Null for every other dispatch, which the rules above decide alone.
+ */
+export async function outsidersFileIds(
+  db: Db,
+  row: Pick<DispatchLike, 'id' | 'trigger' | 'onBehalfOfAccountId'>,
+): Promise<ReadonlySet<string> | null> {
+  if (!outsidersTurn(row) || row.trigger === 'feedback') return null;
+  return new Set(row.trigger === 'automation' ? await stepTurnFileIds(db, row.id) : []);
+}
+
+/** `message` as `only` lets a turn see it: without the files it may not use (all of it when `only` is null). */
+export function withOnlyFiles<M extends Pick<Message, 'attachments'>>(
+  message: M,
+  only: ReadonlySet<string> | null,
+): M {
+  if (!only || message.attachments.every((a) => only.has(a.id))) return message;
+  return { ...message, attachments: message.attachments.filter((a) => only.has(a.id)) };
+}
+
 /** The ready attachments a dispatch's agent may use now, oldest message first. */
 export async function dispatchAttachmentRows(
   db: Db,
@@ -167,6 +193,8 @@ export async function dispatchAttachmentRows(
   windowSize: number,
 ): Promise<AttachmentRow[]> {
   if (row.search) return [];
+  const only = await outsidersFileIds(db, row);
+  if (only?.size === 0) return [];
   const ids = await withoutVisitorFiles(db, row, await dispatchMessageIds(db, row, windowSize));
   if (!ids.length) return [];
   const rows = await db
@@ -179,6 +207,7 @@ export async function dispatchAttachmentRows(
         eq(attachments.state, 'ready'),
         eq(attachments.burrowId, row.burrowId),
         eq(messages.conversationId, row.conversationId),
+        ...(only ? [inArray(attachments.id, [...only])] : []),
       ),
     );
   rows.sort(

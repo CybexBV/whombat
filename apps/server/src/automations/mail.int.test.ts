@@ -17,6 +17,7 @@ import {
   newId,
 } from '@whombat/core';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import Fastify from 'fastify';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
@@ -44,6 +45,7 @@ import {
   vaultNetworks,
 } from '../db/schema/index';
 import { indexAutomationRun, indexMessage } from '../domain/search-index';
+import { registerFileRoutes } from '../files/routes';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
@@ -67,6 +69,7 @@ import {
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import {
+  BEFORE_FIRST_RELEASE,
   knownRelease,
   MAIL_AUTOMATIONS_LATER,
   NewerAutomationsGate,
@@ -1812,9 +1815,55 @@ describe('mail-arrives automations', () => {
 
       await w.services.db
         .update(dispatches)
-        .set({ state: 'running', claimedAt: w.now() })
+        .set({ state: 'running', claimedAt: w.now(), runnerId: 'rnr_mail-files', attempts: 1 })
         .where(eq(dispatches.id, dispatchId));
       const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+
+      // The turn can't reach the person's file by any way: its context lists and names only the email's file, the
+      // thread it is shown and `read_conversation` show their message without it, and neither `read_attachment` nor
+      // the runner's download gives it.
+      const again = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      expect(again.attachments.map((a) => a.id)).toEqual([emailFileId]);
+      const shownMessages = [
+        ...(again.trigger ? [again.trigger] : []),
+        ...again.window,
+        ...(again.thread ? [again.thread.root, ...again.thread.replies] : []),
+      ];
+      expect(shownMessages.some((m) => m.text === 'Here is my copy')).toBe(true);
+      const shownFiles = shownMessages.flatMap((m) => m.attachments.map((a) => a.id));
+      expect(shownFiles).toContain(emailFileId);
+      expect(shownFiles).not.toContain(ownId);
+      expect(turnPrompt(again)).toContain(emailFileId);
+      expect(turnPrompt(again)).not.toContain(ownId);
+      const readTheirs = await callTool(w.services, auth, 'read_attachment', { attachmentId: ownId });
+      expect(readTheirs.isError).toBe(true);
+      const readOurs = await callTool(w.services, auth, 'read_attachment', { attachmentId: emailFileId });
+      expect(readOurs.isError, JSON.stringify(readOurs.content)).not.toBe(true);
+      const thread = await callTool(w.services, auth, 'read_conversation', {
+        conversationId: maraChat.dmId,
+        threadRootId: loaded?.threadRootId as string,
+      });
+      expect(thread.isError, JSON.stringify(thread.content)).not.toBe(true);
+      expect(JSON.stringify(thread.content)).toContain('Here is my copy');
+      expect(JSON.stringify(thread.content)).toContain(emailFileId);
+      expect(JSON.stringify(thread.content)).not.toContain(ownId);
+      const runnerApp = Fastify();
+      registerFileRoutes(runnerApp, w.services);
+      try {
+        const fetchFile = (id: string) =>
+          runnerApp.inject({
+            method: 'GET',
+            url: `/internal/runner/dispatches/${dispatchId}/attachments/${id}?runnerId=rnr_mail-files&attempt=1`,
+            headers: { authorization: 'Bearer dev-runner-token' },
+          });
+        expect((await fetchFile(ownId)).statusCode).toBe(404);
+        const ourFile = await fetchFile(emailFileId);
+        expect(ourFile.statusCode).toBe(200);
+        expect(ourFile.rawPayload.equals(pdf)).toBe(true);
+      } finally {
+        await runnerApp.close();
+      }
+
       const put = (attachmentId: string) => ({
         actions: [
           {
@@ -3387,6 +3436,90 @@ describe('mail-arrives automations', () => {
     }
   });
 
+  it('forgets the sessions of every turn of the run, in a thread of their own and of earlier attempts too', async () => {
+    // It posts first (that starts the run's thread), then asks the agent at the top of the room: a thread of its own.
+    const autoId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'mail', connectionId, from: 'example.com', subjectContains: ['own-thread'] }],
+        steps: [
+          { id: 'note', kind: 'post_message', text: 'Invoice received' },
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}', thread: 'top', retries: 1 },
+        ],
+        limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Asks in its own thread' },
+    );
+    const dropped = async (session: string) =>
+      (await w.services.db.select().from(hermesSessionDrops).where(eq(hermesSessionDrops.sessionId, session)))
+        .length;
+    // The step's turn, claimed for the last time the runtime tries it (a failure then fails the step).
+    const turnOf = async (runId: string) => {
+      const id = (await w.run(runId)).steps[1]?.dispatchId as string;
+      const [row] = await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now(), attempts: w.services.runtime.options.maxAttempts })
+        .where(eq(dispatches.id, id))
+        .returning();
+      if (!row?.threadRootId) throw new Error('no turn');
+      return row;
+    };
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_own_thread',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'own-thread invoice',
+        body: 'BODY_IN_OWN_THREAD',
+        messageId: '<own-thread@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const runId = runRow?.id as string;
+      // The first attempt runs in a thread that isn't the run's, tells its session, and fails.
+      const first = await turnOf(runId);
+      expect(first.threadRootId).not.toBe((await loadRunRow(w.services.db, runId)).threadRootId);
+      await w.services.runtime.finalize(first.id, {
+        outcome: 'failed',
+        error: 'The model stopped.',
+        providerSessionId: 'hermes:own-thread-first',
+      });
+      await w.settle();
+      // Tried again after its pause, in a new thread of its own.
+      w.advance(10 * 60_000);
+      await w.settle();
+      const second = await turnOf(runId);
+      expect(second.id).not.toBe(first.id);
+      expect(second.threadRootId).not.toBe(first.threadRootId);
+      await w.services.db
+        .update(dispatches)
+        .set({ providerSessionId: 'hermes:own-thread-second' })
+        .where(eq(dispatches.id, second.id));
+      expect(await dropped('own-thread-first')).toBe(0);
+      await w.fakeAgentReply(second.id, 'Read it.');
+      await w.settle();
+      expect((await loadRunRow(w.services.db, runId)).status).toBe('succeeded');
+      // Both turns' sessions are forgotten with the email.
+      expect(await dropped('own-thread-first')).toBe(1);
+      expect(await dropped('own-thread-second')).toBe(1);
+      // The first turn's runner telling another session late, after the run ended, has it forgotten too.
+      await w.services.runtime.finalize(first.id, {
+        outcome: 'failed',
+        providerSessionId: 'hermes:own-thread-late',
+      });
+      expect(await dropped('own-thread-late')).toBe(1);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
+
   it('waits for the next update on a box whose previous release doesn’t know them, and goes on once it does', async () => {
     const OLD = 'whombat-20261121.4';
     const ME = 'whombat-20261122.1';
@@ -3396,7 +3529,8 @@ describe('mail-arrives automations', () => {
     const offId = await createMailAutomation({ ...when, subjectContains: ['gate-off'] });
     await w.ok(IDS.mara, setAutomationEnabled, { automationId: offId, enabled: false });
     await pollAndSettle();
-    const deliver = (id: string, subject: string) =>
+    const pdf = Buffer.from('%PDF-1.4\nGate invoice\n%%EOF');
+    const deliver = (id: string, subject: string, withFile = false) =>
       fake.deliverMail(FAKE_ACCESS_TOKEN, {
         id,
         from: 'Billing <billing@example.com>',
@@ -3406,11 +3540,21 @@ describe('mail-arrives automations', () => {
         messageId: `<${id}@example.com>`,
         date: w.now(),
         labelIds: ['INBOX', 'UNREAD'],
-        attachments: [],
+        attachments: withFile
+          ? [
+              {
+                id: `${id}_pdf`,
+                name: 'gate-invoice.pdf',
+                mimeType: 'application/pdf',
+                size: pdf.length,
+                contentBase64: pdf.toString('base64'),
+              },
+            ]
+          : [],
       });
-    // A mail that arrived just before: its run is made after the switch.
+    // A mail that arrived just before, with a file: its run is made after the switch.
     w.advance(10_000);
-    deliver('msg_gate_before', 'gate before');
+    deliver('msg_gate_before', 'gate before', true);
     expect(await w.services.mailTriggers.pollOnce()).toBe(1);
 
     // This release on a box updated from one that doesn't know them.
@@ -3466,14 +3610,43 @@ describe('mail-arrives automations', () => {
       expect(await pollAndSettle()).toBe(0);
       expect(state.calls).toEqual([]);
       expect(await runsOf(liveId)).toHaveLength(1);
+      // A month goes by, far longer than a run may take: the run waiting there hasn't started, so its time hasn't
+      // either.
+      const limit = (waiting?.definition.limits.runTimeoutMinutes ?? 0) * 60_000;
+      w.advance(31 * 24 * 60 * 60_000);
+      await w.settle();
+      expect((await runsOf(liveId))[0]?.status).toBe('queued');
 
+      // A runtime that started before the box's release was recorded doesn't record its stand-in id as one.
+      await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: BEFORE_FIRST_RELEASE }, w.now());
+      expect(await knownRelease(w.services.db, BEFORE_FIRST_RELEASE)).toBe(false);
       // The next release: the one it goes back to recorded itself at its start, so they go on.
       await recordRuntimeRelease(w.services.db, { WHOMBAT_RELEASE_ID: OLD }, w.now());
       expect(await gate.ready()).toBe(true);
-      expect(await pollAndSettle()).toBe(1);
+      // The email's record is older than a month and goes, but its file stays while its run hasn't ended.
+      expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+      await w.services.files.sweep();
+      expect(await pollAndSettle()).toBe(0);
       const runs = await runsOf(liveId);
       expect(runs).toHaveLength(2);
-      expect(runs[0]?.status).not.toBe('queued');
+      // It starts now and asks the agent with the email's file, its time counted from now; past that, it ran out of
+      // time.
+      expect(runs[0]).toMatchObject({ status: 'waiting', error: null, startedAt: w.now() });
+      const asked = await w.run(runs[0]?.id as string);
+      const [turn] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, asked.steps[0]?.dispatchId as string));
+      const context = await buildDispatchContext(w.services, turn as NonNullable<typeof turn>);
+      expect(context.attachments.map((a) => a.name)).toEqual(['gate-invoice.pdf']);
+      w.advance(limit - 60_000);
+      await w.settle();
+      expect((await loadRunRow(w.services.db, runs[0]?.id as string)).status).toBe('waiting');
+      w.advance(2 * 60_000);
+      await w.settle();
+      const late = await loadRunRow(w.services.db, runs[0]?.id as string);
+      expect(late.status).toBe('failed');
+      expect(late.error).toContain('ran out of time');
     } finally {
       w.services.newerAutomations = open;
       await w.ok(IDS.mara, deleteAutomation, { automationId: liveId });

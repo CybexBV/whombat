@@ -6808,3 +6808,12 @@ looked at and none skipped or loosened.
   before placement, Dutch speech after symlinking the model directory, and English-only again after removal;
   `vm-tests/voice.nix` verifies multi-file download, permissions, dynamic health toggle, and removal inside the real
   systemd sandboxes.
+
+## NX-530 A server that started before the box's release was recorded is restarted once it is (2026-11-22; Whombat automation-recipes.md AR-73, NX-446)
+
+A box offline at its first start can start `whombat-server` before its factory release is recorded (NX-446): its
+`WHOMBAT_RELEASE_ID` is then `factory` (`runtime.nix`), so the server can't tell which release an update would go back
+to and keeps mail automations off (AR-73) until it restarts. Once the update helper recorded the release
+(`seed-factory`), provisioning restarts the server if it runs (`systemctl --no-block try-restart whombat-server.service`;
+one that doesn't run starts with the units after it), and the start step writes the release's own id. Only the server
+reads the id, so only it restarts.

@@ -20,6 +20,7 @@ import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
 import { publishDispatch } from '../../runtime/activity';
 import { automationAgent } from '../authority';
+import { turnThreadsOf } from '../mail-text';
 import { proposableConnectionsNote } from '../proposed-actions';
 import {
   type ReusableAssessment,
@@ -184,7 +185,11 @@ export async function executeDispatchAgent({
           approvalId: approval.id,
           dispatchId: null,
           inputSummary: `Asked you to let ${agent.name} work on ${workspace.branch}`,
-          output: { agentId: agent.id, workspace: { ...workspace } },
+          output: {
+            agentId: agent.id,
+            workspace: { ...workspace },
+            ...(turnThreadsOf(previous).length ? { turnThreads: turnThreadsOf(previous) } : {}),
+          },
         },
         ctx.now,
       );
@@ -290,6 +295,7 @@ export async function executeDispatchAgent({
         agentId: agent.id,
         instructions: prompt,
         ...(triggerFileIds ? { triggerFileIds } : {}),
+        turnThreads: [...new Set([...turnThreadsOf(previous), threadRootId])],
         ...(workspace ? { workspace: { ...workspace } } : {}),
         ...(branchApprovalId ? { branchApprovalId } : {}),
       },

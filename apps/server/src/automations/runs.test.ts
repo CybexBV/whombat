@@ -16,11 +16,53 @@ describe('runs the previous release must stop', () => {
 
   it('reads a held run’s deadline from its own time limit, any other from deadline_at', () => {
     const createdAt = new Date('2026-11-22T10:00:00Z');
-    const definition = { limits: { runTimeoutMinutes: 90 } };
-    expect(runDeadline({ deadlineAt: PREVIOUS_RELEASE_STOPS_AT, createdAt, definition })).toEqual(
-      new Date('2026-11-22T11:30:00Z'),
-    );
+    const definition = { limits: { runTimeoutMinutes: 90 }, steps: [actions] };
+    const held = { deadlineAt: PREVIOUS_RELEASE_STOPS_AT, createdAt, startedAt: createdAt, definition };
+    expect(runDeadline({ ...held, trigger: { kind: 'manual' } })).toEqual(new Date('2026-11-22T11:30:00Z'));
     const own = new Date('2026-11-22T10:30:00Z');
-    expect(runDeadline({ deadlineAt: own, createdAt, definition })).toEqual(own);
+    const plain = { limits: { runTimeoutMinutes: 30 }, steps: [agent] };
+    expect(
+      runDeadline({
+        deadlineAt: own,
+        createdAt,
+        startedAt: null,
+        trigger: { kind: 'manual' },
+        definition: plain,
+      }),
+    ).toEqual(own);
+  });
+
+  it('counts a run the release gate may hold from when it first started, however long it waited before', () => {
+    const createdAt = new Date('2026-11-22T10:00:00Z');
+    const startedAt = new Date('2026-11-25T08:00:00Z');
+    const limits = { runTimeoutMinutes: 90 };
+    const proposing = { ...agent, proposeActions: true };
+    for (const [trigger, steps] of [
+      ['mail', [agent]],
+      ['manual', [agent, actions]],
+      ['manual', [proposing]],
+    ] as const) {
+      const run = { createdAt, trigger: { kind: trigger }, definition: { limits, steps } };
+      // Stored at the epoch for the previous release, or with a deadline counted from when it was made.
+      for (const deadlineAt of [PREVIOUS_RELEASE_STOPS_AT, new Date('2026-11-22T11:30:00Z')]) {
+        expect(runDeadline({ ...run, deadlineAt, startedAt })).toEqual(new Date('2026-11-25T09:30:00Z'));
+        // A run from before it kept when it started counts from when it was made.
+        expect(runDeadline({ ...run, deadlineAt, startedAt: null })).toEqual(
+          new Date('2026-11-22T11:30:00Z'),
+        );
+      }
+    }
+    // Any other run keeps the deadline it was made with, however late it started.
+    const own = new Date('2026-11-22T10:30:00Z');
+    const plain = { limits, steps: [agent] };
+    expect(
+      runDeadline({
+        createdAt,
+        startedAt,
+        deadlineAt: own,
+        trigger: { kind: 'schedule' },
+        definition: plain,
+      }),
+    ).toEqual(own);
   });
 });

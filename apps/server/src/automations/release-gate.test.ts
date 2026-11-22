@@ -2,6 +2,7 @@ import type { UpdateFacts } from '@whombat/control-contracts/local';
 import { describe, expect, it } from 'vitest';
 import {
   ACTION_AUTOMATIONS_LATER,
+  BEFORE_FIRST_RELEASE,
   laterWords,
   MAIL_AUTOMATIONS_LATER,
   NewerAutomationsGate,
@@ -56,9 +57,18 @@ describe('rollbackTarget', () => {
     ).toEqual({ kind: 'none' });
   });
 
-  it('is unknown without facts, without the release’s own id, or after it came back another way', () => {
+  it('is nothing for a runtime no update helper started: it names no release, and no manager rolls it back', () => {
+    expect(rollbackTarget(null, null)).toEqual({ kind: 'none' });
+    expect(
+      rollbackTarget(facts({ lastUpdate: { release: ME, from: OLD, at: '2026-11-22T06:00:00Z' } }), null),
+    ).toEqual({ kind: 'none' });
+  });
+
+  it('is unknown without facts, before the box’s release was recorded, or after it came back another way', () => {
     expect(rollbackTarget(null, ME)).toEqual({ kind: 'unknown' });
-    expect(rollbackTarget(facts({}), null)).toEqual({ kind: 'unknown' });
+    // Started before the update helper recorded the box's release: it is restarted with its own id once it did.
+    expect(rollbackTarget(facts({}), BEFORE_FIRST_RELEASE)).toEqual({ kind: 'unknown' });
+    expect(rollbackTarget(null, BEFORE_FIRST_RELEASE)).toEqual({ kind: 'unknown' });
     // Back after a failed update of the next release, or a fallback at boot: the last update isn't its own.
     const lastUpdate = { release: NEXT, from: ME, at: '2026-11-22T06:00:00Z' };
     expect(rollbackTarget(facts({ lastUpdate }), ME)).toEqual({ kind: 'unknown' });
@@ -104,6 +114,22 @@ describe('NewerAutomationsGate', () => {
     const gate = new NewerAutomationsGate(production, lookup);
     gate.follow(() => facts({}));
     expect(await gate.ready()).toBe(true);
+    // A production runtime no update helper started never hears the manager's update facts, and is on all the same.
+    expect(await new NewerAutomationsGate({ NODE_ENV: 'production' }, lookup).ready()).toBe(true);
+    expect(
+      await new NewerAutomationsGate({ NODE_ENV: 'production', WHOMBAT_RELEASE_ID: ' ' }, lookup).ready(),
+    ).toBe(true);
+  });
+
+  it('waits on a runtime started before the box’s release was recorded', async () => {
+    const { lookup } = releases([]);
+    const gate = new NewerAutomationsGate(
+      { NODE_ENV: 'production', WHOMBAT_RELEASE_ID: BEFORE_FIRST_RELEASE },
+      lookup,
+    );
+    expect(await gate.ready()).toBe(false);
+    gate.follow(() => facts({}));
+    expect(await gate.ready()).toBe(false);
   });
 
   it('refuses a newer definition with the person’s line while off, and lets the rest through', async () => {

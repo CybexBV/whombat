@@ -9,7 +9,8 @@
  * the box runs as its current release; once it is the current one, the release its last update came from. A release
  * knows them when it is in `runtime_releases`, where every release since this one records itself at its first start.
  * So the first release with them, on a box updated from an older one, keeps them off, and the next turns them on.
- * Development boxes and tests have them on; a box with nothing to go back to (it never updated) too.
+ * Development boxes and tests have them on; a box with nothing to go back to (it never updated, or no update helper
+ * started its runtime) too.
  */
 import type { UpdateFacts } from '@whombat/control-contracts/local';
 import { eq } from 'drizzle-orm';
@@ -67,13 +68,20 @@ export function laterWords(definition: Json): string {
 
 /**
  * The release the box would go back to if this one failed, from the manager's update facts: `none` when it has nothing
- * to go back to (it never updated), `unknown` when the facts don't say (none yet, or this release came back another
- * way than an update, such as a fallback at boot).
+ * to go back to (it never updated, or no update helper started this runtime), `unknown` when the facts don't say (none
+ * yet, this runtime started before its release was recorded, or this release came back another way than an update,
+ * such as a fallback at boot).
  */
 export type RollbackTarget = { kind: 'none' } | { kind: 'unknown' } | { kind: 'release'; id: string };
 
+/** `WHOMBAT_RELEASE_ID` of a runtime that started before the update helper recorded the box's release: not a release. */
+export const BEFORE_FIRST_RELEASE = 'factory';
+
 export function rollbackTarget(update: UpdateFacts | null | undefined, me: string | null): RollbackTarget {
-  if (!update || !me) return { kind: 'unknown' };
+  // Every runtime the appliance starts names its release (`runtime.nix`). One that names none wasn't started by the
+  // update helper, so no manager rolls it back after a failed update: nothing to go back to.
+  if (!me) return { kind: 'none' };
+  if (!update) return { kind: 'unknown' };
   // Being tried: a failure goes back to the release the box runs as its current one.
   if (update.candidate === me && update.current !== me) return { kind: 'release', id: update.current };
   if (update.current !== me) return { kind: 'unknown' };
@@ -82,14 +90,18 @@ export function rollbackTarget(update: UpdateFacts | null | undefined, me: strin
   return update.lastUpdate.from ? { kind: 'release', id: update.lastUpdate.from } : { kind: 'none' };
 }
 
-/** Records the running release in `runtime_releases` (once, at its first start), on a managed box that names it. */
+/**
+ * Records the running release in `runtime_releases` (once, at its first start), on a managed box that names it. A
+ * runtime that started before the box's release was recorded names none yet: it is restarted once it is
+ * (`provisioning.nix`), and records itself then.
+ */
 export async function recordRuntimeRelease(
   db: Database,
   config: Pick<Config, 'WHOMBAT_RELEASE_ID'>,
   now: Date,
 ): Promise<void> {
   const releaseId = config.WHOMBAT_RELEASE_ID?.trim();
-  if (!releaseId) return;
+  if (!releaseId || releaseId === BEFORE_FIRST_RELEASE) return;
   const build = buildInfo();
   await db
     .insert(runtimeReleases)

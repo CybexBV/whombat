@@ -561,7 +561,10 @@ Automations. Code finds it by kind
 - **An outsiders' turn** — a Feedback assessment, what a tracker customer's report or reply starts, incoming mail —
   is queued for nobody (`runtime/person.ts`). Its room is usually the person's Chat or Feedback room, so it works in
   its own thread there: it gets its request and that thread but never the room's recent messages or Files, and its
-  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). It is served a
+  tools read, reply and read files only in that thread (`mcp/tools.ts` `withinTurn`, `files/access.ts`). An automation
+  run's turn (mail, a tracker report) is shown and reads only the files the server handed over from what started the
+  run (`automations/handed-files.ts`): a file someone adds to its thread isn't listed, named in the thread it sees,
+  readable or fetched by its runner. It is served a
   short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
@@ -847,10 +850,13 @@ published automation details read their definition and publisher from one versio
   the release it would go back to after a failed update knows them (`automations/release-gate.ts`): from the manager's
   update facts, the box's current release while this one is being tried, else the release its own last update came
   from, looked up in `runtime_releases`, where each release records itself at its first start on a managed box. Until
-  then they wait, kept as they are: no mailbox is read, their runs don't start or move on, and making, turning on or
+  then they wait, kept as they are: no mailbox is read, their runs don't start or move on (a run's time counts from when
+  it first starts, and its email's files stay while it hasn't ended), and making, turning on or
   running one, or the assistant's `draft_automation`, answers “Mail automations come with the next update.” (or the same
-  about connected services), as `automation_read`'s guide says. Development boxes, tests and a box that never updated
-  have them on.
+  about connected services), as `automation_read`'s guide says. Development boxes, tests, a box that never updated and
+  a production runtime no update helper started (it names no release, and no manager rolls it back) have them on. A
+  server that started before the box's release was recorded (offline at its first start) is restarted once it is, so it
+  knows its release (`provisioning.nix`).
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
@@ -860,7 +866,7 @@ published automation details read their definition and publisher from one versio
   `steps/turn-words.ts`). A run started by incoming mail, or one with a `connection_actions` step, is stored with
   `deadline_at` at the epoch: the release before mail triggers checks a started run's deadline before any step, so after
   a rollback it fails such a run instead of asking the agent as the person; here its deadline is its own time limit after
-  it was created (`runDeadline`, docs/decisions/automation-recipes.md).
+  it first started (`runDeadline`, docs/decisions/automation-recipes.md).
 - **Identity**: each automation signs as its own system principal, with authority = its grants ∩ the publisher's
   current authority, checked before every step and inside approval execution; the rooms a step uses must still be the
   burrow's. The agent can only draft until the

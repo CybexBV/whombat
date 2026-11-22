@@ -53,6 +53,7 @@ import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
+import { outsidersFileIds, withOnlyFiles } from '../files/access';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
 import { startGuide } from '../guides/commands';
 import { doneInputFor, reportDoneCommand } from '../home/done';
@@ -345,6 +346,8 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
         })
       ).messages;
     }
+    // An automation run's outsiders' turn is told only of the files handed over from what started its run.
+    const only = await outsidersFileIds(ctx.services.db, ctx.dispatch);
     return {
       status: 'ok',
       conversation: {
@@ -353,7 +356,7 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
         title: conversation.title,
         topic: conversation.topic,
       },
-      messages,
+      messages: only ? messages.map((m) => withOnlyFiles(m, only)) : messages,
     };
   },
 
