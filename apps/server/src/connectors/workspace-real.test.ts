@@ -516,6 +516,118 @@ describe('mail', () => {
     expect(resyncSeen.size).toBe(total);
     expect(resyncSeen.has('m_001')).toBe(true);
   });
+
+  it('restarts Gmail backfill when a stale pageToken returns HTTP 400 and never loops on other errors', async () => {
+    const activation = new Date('2026-10-28T10:00:00.000Z');
+    const msg = {
+      id: 'm_fresh',
+      threadId: 't_fresh',
+      labelIds: ['INBOX'],
+      snippet: 'Invoice',
+      internalDate: String(activation.getTime() + 10_000),
+      payload: {
+        headers: [
+          { name: 'From', value: 'billing@example.com' },
+          { name: 'Subject', value: 'Fresh invoice' },
+          { name: 'Message-ID', value: '<fresh@example.com>' },
+        ],
+      },
+    };
+    const { workspace, calls } = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile')) return { json: { historyId: '950' } };
+      if (c.url.pathname.endsWith('/messages')) {
+        const token = c.url.searchParams.get('pageToken');
+        if (token === 'stale_400') {
+          return { status: 400, json: { error: { code: 400, message: 'Invalid page token' } } };
+        }
+        if (token === 'err_500') {
+          return { status: 500, json: { error: { code: 500, message: 'Backend Error' } } };
+        }
+        if (token === 'err_429') {
+          return { status: 429, json: { error: { code: 429, message: 'Rate limited' } } };
+        }
+        if (token === 'repeat_tok') {
+          return { json: { messages: [{ id: 'm_fresh' }], nextPageToken: 'repeat_tok' } };
+        }
+        return { json: { messages: [{ id: 'm_fresh' }] } };
+      }
+      if (c.url.pathname.endsWith('/history')) {
+        if (c.url.searchParams.get('startHistoryId') === 'bad_400') {
+          return { status: 400, json: { error: { code: 400, message: 'Invalid startHistoryId' } } };
+        }
+        return { json: { historyId: '955' } };
+      }
+      if (c.url.pathname.endsWith('/messages/m_fresh')) return { json: msg };
+      return undefined;
+    });
+
+    // HTTP 400 on stale backfill pageToken restarts backfill cleanly with reset: true.
+    const restarted = await workspace.mailChanges(
+      'tok',
+      {
+        kind: 'gmail',
+        historyId: '900',
+        backfill: { pageToken: 'stale_400', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+      },
+      { since: activation },
+    );
+    expect(restarted.reset).toBe(true);
+    expect(restarted.more).toBeUndefined();
+    expect(restarted.cursor).toEqual({ kind: 'gmail', historyId: '950' });
+    expect(restarted.headers.map((h) => h.id)).toEqual(['m_fresh']);
+
+    // HTTP 500 and 429 on backfill propagate immediately without resetting or looping.
+    const beforeErrCalls = calls.length;
+    await expect(
+      workspace.mailChanges('tok', {
+        kind: 'gmail',
+        historyId: '900',
+        backfill: { pageToken: 'err_500', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+    expect(calls.length - beforeErrCalls).toBe(1);
+
+    await expect(
+      workspace.mailChanges('tok', {
+        kind: 'gmail',
+        historyId: '900',
+        backfill: { pageToken: 'err_429', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+      }),
+    ).rejects.toMatchObject({ status: 429 });
+
+    // A repeated identical nextPageToken terminates backfill instead of looping forever.
+    const repeated = await workspace.mailChanges('tok', {
+      kind: 'gmail',
+      historyId: '900',
+      backfill: { pageToken: 'repeat_tok', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+    });
+    expect(repeated.more).toBeUndefined();
+    expect(repeated.cursor).toEqual({ kind: 'gmail', historyId: '900' });
+
+    // HTTP 400 on history.list also resets cleanly.
+    const badHistory = await workspace.mailChanges(
+      'tok',
+      { kind: 'gmail', historyId: 'bad_400' },
+      { since: activation, resyncSince: activation },
+    );
+    expect(badHistory.reset).toBe(true);
+    expect(badHistory.cursor).toEqual({ kind: 'gmail', historyId: '950' });
+
+    // If the fresh baseline itself fails with HTTP 400 after a stale token reset, it throws once without looping.
+    const always400 = mockGoogle((c) => {
+      if (c.url.pathname.endsWith('/profile')) return { json: { historyId: '950' } };
+      return { status: 400, json: { error: { code: 400, message: 'Bad Request' } } };
+    });
+    await expect(
+      always400.workspace.mailChanges('tok', {
+        kind: 'gmail',
+        historyId: '900',
+        backfill: { pageToken: 'stale_400', afterSeconds: 1761645500, sinceMs: activation.getTime() },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    // 1 failed pageToken call + 1 profile call + 1 failed baseline list call = 3 total, no retry loop.
+    expect(always400.calls).toHaveLength(3);
+  });
 });
 
 describe('calendar', () => {

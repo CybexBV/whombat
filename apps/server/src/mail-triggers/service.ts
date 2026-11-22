@@ -271,6 +271,9 @@ export class MailTriggerService {
     const workspace = providerWorkspace(this.services, conn.provider);
     const needAttachmentTypes = triggers.some((t) => Boolean(t.attachmentTypes?.length));
     const isInitial = !existing?.cursor || !existing.since;
+    // Capture the recovery boundary before reading from the provider so mail delivered while we download bodies and
+    // attachments cannot fall into a gap if the provider cursor later expires.
+    const readStartedAt = this.services.clock();
     let changes: MailChangesResult;
     if (isInitial) {
       // First poll after activation: backfill from the earliest active trigger's activation time (with 5 s skew
@@ -495,6 +498,15 @@ export class MailTriggerService {
     // on quiet polls until another write replaces it). While backfill/catch-up still has more batches (`changes.more`),
     // keep `succeededAt` before the backfill window so a mid-backfill reset never skips unprocessed pages.
     const morePending = Boolean(changes.more);
+    const finishingBackfill =
+      !isInitial &&
+      (existing?.cursor?.kind === 'gmail' || existing?.cursor?.kind === 'imap') &&
+      Boolean(existing.cursor.backfill);
+    const recoveryBoundary = finishingBackfill
+      ? existing?.succeededAt && existing.succeededAt > activationSince
+        ? existing.succeededAt
+        : activationSince
+      : readStartedAt;
     const clearTransientProblem = existing?.problemCode !== null && existing?.problemCode !== 'read_failed';
     const cursorChanged = !sameCursor(existing?.cursor, changes.cursor);
     if (
@@ -511,6 +523,7 @@ export class MailTriggerService {
         cursor: changes.cursor,
         since: activationSince.toISOString(),
         succeeded: !morePending,
+        ...(!morePending ? { succeededAt: recoveryBoundary.toISOString() } : {}),
         ...(failuresChanged ? { readFailures: trimReadFailures(readFailures) } : {}),
         ...(skippedProblem
           ? { problemCode: 'read_failed', problem: skippedProblem }

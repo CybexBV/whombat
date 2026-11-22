@@ -11,6 +11,7 @@ import (
 
 	"github.com/CybexBV/whombat/appliance/helper/pkg/trust"
 	"github.com/CybexBV/whombat/appliance/manager/internal/config"
+	"github.com/CybexBV/whombat/appliance/manager/internal/controlapi"
 	"github.com/CybexBV/whombat/appliance/manager/internal/helperclient"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
 	"github.com/CybexBV/whombat/appliance/manager/internal/tufclient"
@@ -37,19 +38,13 @@ func publishPauseTestRelease(t *testing.T, r *devtuf.Repo, id, hostV, rtV string
 	}
 }
 
-// A stale verified TUF refresh (periodic vs manual check completing out of order, or metadata for another channel
-// after a switch) must never clear a newer pause or overwrite the channel the box follows.
-func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
-	t.Parallel()
-	w := testworld.NewAt(t, time.Now().UTC().Truncate(time.Second))
-	w.SetChannel(trust.ChannelProduction)
-	publishPauseTestRelease(t, w.Repo, "whombat-20261121.1", "26.05.1", "1.1.0", true)
-
+func newPauseTestDaemon(t *testing.T, w *testworld.World) (*Daemon, *updatechannel.Service) {
+	t.Helper()
 	meta := httptest.NewServer(http.FileServer(http.Dir(w.Repo.MetadataDir())))
-	defer meta.Close()
-
+	t.Cleanup(meta.Close)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ch := &updatechannel.Service{Helper: helperclient.Client{Socket: w.P.HelperSock}}
+	w.Engine.Channel = ch.Current
 	tuf := &tufclient.Client{
 		PinnedRootPath: w.P.Pinned,
 		CacheDir:       t.TempDir(),
@@ -60,6 +55,7 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 	}
 	d := &Daemon{
 		Cfg:       &config.Config{},
+		Dev:       &config.Device{DeviceID: "dev-1", Env: "dev"},
 		Log:       log,
 		Channel:   ch,
 		TUF:       tuf,
@@ -67,7 +63,17 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 		engineNow: make(chan struct{}, 1),
 		lastErr:   map[string]string{},
 	}
+	return d, ch
+}
 
+// A stale verified TUF refresh (periodic vs manual check completing out of order, or metadata for another channel
+// after a switch) must never offer a stale release, clear a newer pause, or overwrite the channel the box follows.
+func TestApplyRepoRejectsStaleAndOtherChannelMetadata(t *testing.T) {
+	t.Parallel()
+	w := testworld.NewAt(t, time.Now().UTC().Truncate(time.Second))
+	w.SetChannel(trust.ChannelProduction)
+	publishPauseTestRelease(t, w.Repo, "whombat-20261121.1", "26.05.1", "1.1.0", true)
+	d, ch := newPauseTestDaemon(t, w)
 	ctx := context.Background()
 
 	// Refresh 1 (e.g. periodic tufLoop): verified unpaused production metadata at version V.
@@ -95,10 +101,14 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 		t.Fatal("newer paused refresh did not set ChannelPaused")
 	}
 
-	// Out-of-order completion: Refresh 1 now finishes offerLatest and calls syncChannelPause with the older unpaused repo.
-	d.syncChannelPause(repoUnpausedOld)
-	if !w.State().ChannelPaused {
-		t.Fatal("stale unpaused refresh cleared a newer pause")
+	// Out-of-order completion: Refresh 1 now calls applyRepo with the older unpaused repo — changes neither candidate nor pause.
+	seqBefore := w.State().JournalSeq
+	if res, err := d.applyRepo(ctx, repoUnpausedOld, true, true); err != nil || res.Result != controlapi.ResultNone {
+		t.Fatalf("stale unpaused applyRepo: %+v %v", res, err)
+	}
+	if !w.State().ChannelPaused || w.State().Candidate != nil || w.State().JournalSeq != seqBefore {
+		t.Fatalf("stale unpaused refresh mutated state: paused=%v cand=%+v seq=%d (was %d)",
+			w.State().ChannelPaused, w.State().Candidate, w.State().JournalSeq, seqBefore)
 	}
 
 	// Metadata verified for another channel (development, unpaused) while the box follows production is ignored.
@@ -109,20 +119,26 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 	if repoDevUnpaused.Channel != trust.ChannelDevelopment || repoDevUnpaused.ChannelPaused {
 		t.Fatalf("expected unpaused development repo, got %+v", repoDevUnpaused)
 	}
-	d.syncChannelPause(repoDevUnpaused)
-	if !w.State().ChannelPaused {
-		t.Fatal("unpaused metadata from another channel cleared production pause")
+	if res, err := d.applyRepo(ctx, repoDevUnpaused, true, true); err != nil || res.Result != controlapi.ResultNone {
+		t.Fatalf("other-channel applyRepo: %+v %v", res, err)
+	}
+	if !w.State().ChannelPaused || w.State().Candidate != nil || w.State().JournalSeq != seqBefore {
+		t.Fatal("unpaused metadata from another channel mutated production state")
 	}
 
 	// Switching the box to development applies development's unpaused state and ignores stale production pause metadata.
 	if _, err := ch.Set(ctx, trust.ChannelDevelopment); err != nil {
 		t.Fatalf("switch to development: %v", err)
 	}
-	d.syncChannelPause(repoDevUnpaused)
+	if _, err := d.applyRepo(ctx, repoDevUnpaused, false, false); err != nil {
+		t.Fatalf("apply development: %v", err)
+	}
 	if w.State().ChannelPaused {
 		t.Fatal("switching to unpaused development did not clear pause")
 	}
-	d.syncChannelPause(repoPausedNew)
+	if _, err := d.applyRepo(ctx, repoPausedNew, true, true); err != nil {
+		t.Fatalf("other-channel paused applyRepo: %v", err)
+	}
 	if w.State().ChannelPaused {
 		t.Fatal("production pause applied while box follows development")
 	}
@@ -131,11 +147,15 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 	if _, err := ch.Set(ctx, trust.ChannelProduction); err != nil {
 		t.Fatalf("switch back to production: %v", err)
 	}
-	d.syncChannelPause(repoUnpausedOld)
-	if w.State().ChannelPaused {
-		t.Fatal("stale unpaused production repo unexpectedly changed pause state")
+	if _, err := d.applyRepo(ctx, repoUnpausedOld, true, true); err != nil {
+		t.Fatalf("stale production applyRepo: %v", err)
 	}
-	d.syncChannelPause(repoPausedNew)
+	if w.State().ChannelPaused || w.State().Candidate != nil {
+		t.Fatal("stale unpaused production repo unexpectedly changed pause state or offered a release")
+	}
+	if _, err := d.applyRepo(ctx, repoPausedNew, false, false); err != nil {
+		t.Fatalf("re-apply production pause: %v", err)
+	}
 	if !w.State().ChannelPaused {
 		t.Fatal("re-applying current production paused version after switching back did not restore pause")
 	}
@@ -152,8 +172,93 @@ func TestSyncChannelPauseRejectsStaleAndOtherChannelMetadata(t *testing.T) {
 		t.Fatalf("expected newer resumed production repo, got paused=%d resumed=%d channelPaused=%v",
 			repoPausedNew.ChannelVersion, repoResumed.ChannelVersion, repoResumed.ChannelPaused)
 	}
-	d.syncChannelPause(repoResumed)
+	if _, err := d.applyRepo(ctx, repoResumed, false, false); err != nil {
+		t.Fatalf("apply resumed: %v", err)
+	}
 	if w.State().ChannelPaused {
 		t.Fatal("newer resumed refresh did not clear pause")
+	}
+}
+
+// An older refresh arriving after a paused channel resumed with a newer fix must change nothing: it must not replace
+// the newly offered fix with the older held candidate, nor re-pause the channel.
+func TestOlderRefreshAfterResumeFixChangesNothing(t *testing.T) {
+	t.Parallel()
+	w := testworld.NewAt(t, time.Now().UTC().Truncate(time.Second))
+	w.SetChannel(trust.ChannelProduction)
+	publishPauseTestRelease(t, w.Repo, "whombat-20261121.2", "26.05.1", "1.2.0", true)
+	d, _ := newPauseTestDaemon(t, w)
+	ctx := context.Background()
+
+	// Refresh 1 verifies unpaused production with bad release .2 at version V.
+	repoBadUnpaused, err := d.refreshTUF(ctx)
+	if err != nil {
+		t.Fatalf("refresh bad unpaused: %v", err)
+	}
+	if _, err := d.applyRepo(ctx, repoBadUnpaused, true, false); err != nil {
+		t.Fatalf("offer .2: %v", err)
+	}
+	if st := w.State(); st.Candidate == nil || st.Candidate.Tuple.ReleaseID != "whombat-20261121.2" {
+		t.Fatalf("expected .2 candidate, got %+v", st.Candidate)
+	}
+
+	// Production is paused at V+1 while .2 is held.
+	if _, err := w.Repo.PauseChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	repoPaused, err := d.refreshTUF(ctx)
+	if err != nil {
+		t.Fatalf("refresh paused: %v", err)
+	}
+	if !w.State().ChannelPaused {
+		t.Fatal("expected channel paused")
+	}
+
+	// Fix .3 is promoted and production is resumed at V+3. Refresh 2 applies the fix and unpauses in one decision.
+	publishPauseTestRelease(t, w.Repo, "whombat-20261121.3", "26.05.1", "1.3.0", true)
+	if _, err := w.Repo.ResumeChannel(trust.ChannelProduction, nil); err != nil {
+		t.Fatal(err)
+	}
+	repoFixResumed, err := d.refreshTUF(ctx)
+	if err != nil {
+		t.Fatalf("refresh fix resumed: %v", err)
+	}
+	res, err := d.applyRepo(ctx, repoFixResumed, true, true)
+	if err != nil || res.Result != controlapi.ResultAssigned {
+		t.Fatalf("apply fix resumed: %+v %v", res, err)
+	}
+	before := w.State()
+	if before.ChannelPaused || before.Candidate == nil || before.Candidate.Tuple.ReleaseID != "whombat-20261121.3" {
+		t.Fatalf("expected unpaused .3 candidate, got paused=%v cand=%+v", before.ChannelPaused, before.Candidate)
+	}
+
+	// Now the older unpaused refresh (.2, V) and older paused refresh (V+1) arrive late: neither changes anything.
+	for _, tc := range []struct {
+		name string
+		repo *trust.Repo
+		now  bool
+	}{
+		{"stale unpaused .2 periodic", repoBadUnpaused, false},
+		{"stale unpaused .2 manual", repoBadUnpaused, true},
+		{"stale paused V+1", repoPaused, true},
+	} {
+		got, err := d.applyRepo(ctx, tc.repo, true, tc.now)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", tc.name, err)
+		}
+		if got.Result != controlapi.ResultNone {
+			t.Fatalf("%s: expected ResultNone, got %+v", tc.name, got)
+		}
+		after := w.State()
+		if after.JournalSeq != before.JournalSeq ||
+			after.ChannelPaused != before.ChannelPaused ||
+			after.LastAssignmentSeq != before.LastAssignmentSeq ||
+			after.LastOffer != before.LastOffer ||
+			after.Candidate == nil ||
+			after.Candidate.Tuple.ReleaseID != "whombat-20261121.3" {
+			t.Fatalf("%s mutated state: got seq=%d paused=%v lastSeq=%d lastOffer=%q cand=%+v; want seq=%d paused=%v lastSeq=%d lastOffer=%q cand=.3",
+				tc.name, after.JournalSeq, after.ChannelPaused, after.LastAssignmentSeq, after.LastOffer, after.Candidate,
+				before.JournalSeq, before.ChannelPaused, before.LastAssignmentSeq, before.LastOffer)
+		}
 	}
 }

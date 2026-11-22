@@ -518,4 +518,71 @@ func TestChannelPauseStopsUpdatesKeepsRollbackAndResumes(t *testing.T) {
 			t.Fatalf("after rollback while paused: current=%s paused=%v", st.Current.ReleaseID, st.ChannelPaused)
 		}
 	})
+
+	t.Run("older channel role version or wrong channel never replaces a newer offer, even after restart", func(t *testing.T) {
+		w := testworld.New(t)
+		w.SetChannel("production")
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.1", "26.05.1", "1.1.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.1", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoOld := w.Refresh()
+		if dec, why, _, err := w.Engine.OfferLatest(ctx, repoOld, "dev-1", "dev"); err != nil || dec != update.DecisionStarted {
+			t.Fatalf("offer .1: %s %q %v", dec, why, err)
+		}
+
+		// Publish and offer newer fix .2 at a higher channel role version.
+		publishIn(t, w, "development", devtuf.StandardRelease("whombat-20261121.2", "26.05.1", "1.2.0"))
+		if _, err := w.Repo.Promote("whombat-20261121.2", "development", "production", nil); err != nil {
+			t.Fatal(err)
+		}
+		repoNew := w.Refresh()
+		if dec, why, o, err := w.Engine.OfferLatest(ctx, repoNew, "dev-1", "dev"); err != nil || dec != update.DecisionStarted || o == nil || o.Release.ID() != "whombat-20261121.2" {
+			t.Fatalf("offer .2: %s %q %+v %v", dec, why, o, err)
+		}
+		before := w.State()
+
+		// Re-offering the older verified repo (both OfferLatest and OfferLatestNow) changes nothing.
+		for _, nowOffer := range []bool{false, true} {
+			var (
+				dec update.Decision
+				why string
+				o   *update.Offered
+				err error
+			)
+			if nowOffer {
+				dec, why, o, err = w.Engine.OfferLatestNow(ctx, repoOld, "dev-1", "dev")
+			} else {
+				dec, why, o, err = w.Engine.OfferLatest(ctx, repoOld, "dev-1", "dev")
+			}
+			if err != nil || dec != update.DecisionNoop || o != nil {
+				t.Fatalf("stale offer (now=%v): dec=%s why=%q o=%+v err=%v", nowOffer, dec, why, o, err)
+			}
+			after := w.State()
+			if after.JournalSeq != before.JournalSeq || after.Candidate == nil || after.Candidate.Tuple.ReleaseID != "whombat-20261121.2" {
+				t.Fatalf("stale offer mutated state (now=%v): seq=%d (was %d) cand=%+v", nowOffer, after.JournalSeq, before.JournalSeq, after.Candidate)
+			}
+		}
+
+		// Metadata from another channel (development) is refused while following production.
+		repoDev, err := w.TUF.RefreshIn(ctx, "development")
+		if err != nil {
+			t.Fatalf("refresh development: %v", err)
+		}
+		if dec, why, o, err := w.Engine.OfferLatestNow(ctx, repoDev, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("wrong-channel offer: dec=%s why=%q o=%+v err=%v", dec, why, o, err)
+		}
+		if after := w.State(); after.JournalSeq != before.JournalSeq {
+			t.Fatalf("wrong-channel offer mutated journal seq %d -> %d", before.JournalSeq, after.JournalSeq)
+		}
+
+		// After reloading the Engine from the journal (simulated manager restart), the stale role version is still rejected.
+		w.NewEngine()
+		if dec, why, o, err := w.Engine.OfferLatestNow(ctx, repoOld, "dev-1", "dev"); err != nil || dec != update.DecisionNoop || o != nil {
+			t.Fatalf("stale offer after restart: dec=%s why=%q o=%+v err=%v", dec, why, o, err)
+		}
+		if after := w.State(); after.JournalSeq != before.JournalSeq || after.Candidate.Tuple.ReleaseID != "whombat-20261121.2" {
+			t.Fatalf("stale offer after restart mutated state: seq=%d cand=%+v", after.JournalSeq, after.Candidate)
+		}
+	})
 }

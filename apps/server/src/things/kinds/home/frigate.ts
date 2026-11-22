@@ -1,8 +1,8 @@
 /**
  * Frigate's page and card: cameras with live snapshots (`/api/<camera>/latest.jpg?h=360` through the signed image
  * route, refreshed every 10 seconds while open), today's detections (`/api/events`), detections per day this week
- * (`/api/events/summary`), detector inference speeds and recordings storage (`/api/stats`). Never reads `/api/config`
- * so camera RTSP credentials are never fetched.
+ * (`/api/events/summary`), detector inference speeds and recordings storage (`/api/stats`), and only each camera's
+ * `enabled` boolean from `/api/config` (dropping everything else so RTSP URLs and credentials are never retained).
  */
 import type { ThingLine, ThingPageBar, ThingPageItem, ThingPageKpi } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
@@ -60,10 +60,14 @@ const DETECTOR_SLOW_MS = 100;
 
 /* Reading ------------------------------------------------------------------------------------------------------------ */
 
+export type FrigateCameraStatus = 'online' | 'offline' | 'disabled' | 'unknown';
+
 export interface FrigateCamera {
   id: string;
   name: string;
-  enabled: boolean;
+  /** Explicit enabled state from Frigate (`/api/stats` or `/api/config`); `null` when it couldn't be read. */
+  enabled: boolean | null;
+  status: FrigateCameraStatus;
   online: boolean;
   cameraFps: number;
   detectionFps: number;
@@ -123,45 +127,81 @@ function prettyLabel(label: string): string {
 }
 
 /**
- * Whether a camera in `/api/stats` is known to be enabled. Frigate 0.16 reports configured-but-disabled cameras with
- * 0 fps, null `pid`/`capture_pid` and `ffmpeg_pid: 0` because no camera or capture worker is started for them; without
- * an explicit `enabled` flag, a 0 fps entry must have live worker PIDs (and not a zero/null `ffmpeg_pid`) to count as
- * enabled. Never reads `/api/config`.
+ * Extracts only each camera's explicit `enabled` boolean from `/api/config` (falling back to `enabled_in_config` when
+ * `enabled` is absent) and discards every other field so RTSP URLs and credentials are never retained.
  */
-function cameraEnabled(c: Record<string, unknown>, cameraFps: number): boolean {
-  if (typeof c.enabled === 'boolean') return c.enabled;
-  if (cameraFps > 0) return true;
-  const pid = num(c.pid);
-  const capturePid = num(c.capture_pid);
-  if (pid === null || pid <= 0 || capturePid === null || capturePid <= 0) return false;
-  if (Object.hasOwn(c, 'ffmpeg_pid')) {
-    const ffmpegPid = num(c.ffmpeg_pid);
-    if (ffmpegPid === null || ffmpegPid <= 0) return false;
+export function parseConfigEnabled(body: unknown): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  const camerasObj = rec(rec(body).cameras);
+  for (const [id, raw] of Object.entries(camerasObj).slice(0, CAMERAS_MAX)) {
+    const c = rec(raw);
+    if (typeof c.enabled === 'boolean') out.set(id, c.enabled);
+    else if (typeof c.enabled_in_config === 'boolean') out.set(id, c.enabled_in_config);
   }
-  return true;
+  return out;
 }
 
-/** `/api/stats`. */
-export function parseStats(body: unknown, now: Date): FrigateSnapshot {
+/**
+ * Resolves a camera's state from explicit Frigate evidence only: a per-camera `enabled` boolean on `/api/stats` or
+ * `cameras.<name>.enabled` from `/api/config`. Never infers "disabled" from worker or `ffmpeg_pid` values (a crashed
+ * ffmpeg reports 0). A 0 fps camera whose enabled state couldn't be read is `unknown`.
+ */
+function cameraState(
+  c: Record<string, unknown>,
+  cameraFps: number,
+  configEnabled: boolean | undefined,
+): { enabled: boolean | null; status: FrigateCameraStatus; online: boolean } {
+  const explicit = typeof c.enabled === 'boolean' ? c.enabled : configEnabled;
+  if (explicit === false) return { enabled: false, status: 'disabled', online: false };
+  if (cameraFps > 0) return { enabled: true, status: 'online', online: true };
+  if (explicit === true) return { enabled: true, status: 'offline', online: false };
+  return { enabled: null, status: 'unknown', online: false };
+}
+
+/** `/api/stats` combined with optional explicit enabled booleans from `/api/config`. */
+export function parseStats(
+  body: unknown,
+  now: Date,
+  configEnabled?: ReadonlyMap<string, boolean>,
+): FrigateSnapshot {
   const b = rec(body);
   const service = rec(b.service);
   const camerasObj = rec(b.cameras);
   const cameras: FrigateCamera[] = [];
+  const seen = new Set<string>();
   for (const [id, raw] of Object.entries(camerasObj).slice(0, CAMERAS_MAX)) {
+    seen.add(id);
     const c = rec(raw);
     const cameraFps = Math.max(0, num(c.camera_fps) ?? 0);
     const detectionFps = Math.max(0, num(c.detection_fps) ?? 0);
     const skippedFps = Math.max(0, num(c.skipped_fps) ?? 0);
-    const enabled = cameraEnabled(c, cameraFps);
+    const state = cameraState(c, cameraFps, configEnabled?.get(id));
     cameras.push({
       id: id.slice(0, 80),
       name: prettyCameraName(id).slice(0, 80),
-      enabled,
-      online: enabled && cameraFps > 0,
+      enabled: state.enabled,
+      status: state.status,
+      online: state.online,
       cameraFps,
       detectionFps,
       skippedFps,
     });
+  }
+  if (configEnabled) {
+    for (const [id, enabled] of configEnabled) {
+      if (cameras.length >= CAMERAS_MAX) break;
+      if (seen.has(id)) continue;
+      cameras.push({
+        id: id.slice(0, 80),
+        name: prettyCameraName(id).slice(0, 80),
+        enabled,
+        status: enabled ? 'offline' : 'disabled',
+        online: false,
+        cameraFps: 0,
+        detectionFps: 0,
+        skippedFps: 0,
+      });
+    }
   }
   const detectorsObj = rec(b.detectors);
   const detectors: FrigateDetector[] = [];
@@ -250,7 +290,11 @@ export function parseSummary(body: unknown): FrigateSummaryRow[] {
 const optional = <T>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 
 async function readStats(services: Services, row: CatalogConnectionRow, now: Date): Promise<FrigateSnapshot> {
-  return parseStats(await getJson(services, row, NAME, '/api/stats'), now);
+  const [stats, configEnabled] = await Promise.all([
+    getJson(services, row, NAME, '/api/stats'),
+    optional(getJson(services, row, NAME, '/api/config').then(parseConfigEnabled)),
+  ]);
+  return parseStats(stats, now, configEnabled ?? undefined);
 }
 
 function loadStats(services: Services, row: CatalogConnectionRow, now: Date) {
@@ -307,7 +351,7 @@ export function offlineSinceOf(connectionId: string, s: FrigateSnapshot): Map<st
   const seen = offlineSeen.get(connectionId) ?? new Map<string, number>();
   const out = new Map<string, Date>();
   for (const c of s.cameras) {
-    if (!c.enabled || c.online) seen.delete(c.id);
+    if (c.status !== 'offline') seen.delete(c.id);
     else {
       const at = Math.min(seen.get(c.id) ?? s.readAt.getTime(), s.readAt.getTime());
       seen.set(c.id, at);
@@ -353,6 +397,7 @@ export const FRIGATE_CHECKS: readonly KindCheck[] = [
 
 export function frigateSkipped(s: FrigateSnapshot): string[] {
   const out: string[] = [];
+  if (s.cameras.some((c) => c.status === 'unknown')) out.push('frigate.camera_offline');
   if (!s.storage) out.push('frigate.storage_full');
   if (!s.detectors.length) out.push('frigate.detector_slow');
   return out;
@@ -374,7 +419,7 @@ const moment = (at: Date, now: Date, timeZone: string) => {
 export function frigateNotices(s: FrigateSnapshot, ctx: FrigateCtx): KindNotice[] {
   const out: KindNotice[] = [];
   const offline = s.cameras
-    .filter((c) => c.enabled && !c.online)
+    .filter((c) => c.status === 'offline')
     .sort((a, b) => a.name.localeCompare(b.name));
   out.push(
     ...itemLines(
@@ -561,23 +606,41 @@ export function frigateLive(ctx: FrigateCtx): LivePanel | null {
   });
 }
 
+function cameraCounts(s: FrigateSnapshot) {
+  let online = 0;
+  let offline = 0;
+  let unknown = 0;
+  let disabled = 0;
+  for (const c of s.cameras) {
+    if (c.status === 'online') online += 1;
+    else if (c.status === 'offline') offline += 1;
+    else if (c.status === 'unknown') unknown += 1;
+    else disabled += 1;
+  }
+  return { online, offline, unknown, disabled, enabled: online + offline };
+}
+
 export function frigateInventory(s: FrigateSnapshot, ctx: FrigateCtx, openUrl: string): InventoryPanel {
   const items: ThingPageItem[] = [];
-  const enabled = s.cameras.filter((c) => c.enabled);
-  const disabled = s.cameras.length - enabled.length;
-  const off = enabled.filter((c) => !c.online).length;
+  const { online, offline, unknown, disabled, enabled } = cameraCounts(s);
+  const detailParts = [
+    ...(unknown ? [`${unknown} unknown`] : []),
+    ...(disabled ? [`${disabled} disabled`] : []),
+  ];
   items.push(
     countLine({
       id: 'cameras',
       title: 'Cameras',
       icon: 'camera',
-      value: thousands(enabled.length),
-      ...(disabled ? { detail: `${disabled} disabled` } : {}),
-      ...(!enabled.length
-        ? {}
-        : off
-          ? { note: `${off} offline`, noteTone: 'warn' as const }
-          : { note: 'All online', noteTone: 'ok' as const }),
+      value: thousands(enabled + unknown),
+      ...(detailParts.length ? { detail: detailParts.join(' · ') } : {}),
+      ...(offline
+        ? { note: `${offline} offline`, noteTone: 'warn' as const }
+        : unknown
+          ? { note: 'Status unknown' }
+          : enabled && online === enabled
+            ? { note: 'All online', noteTone: 'ok' as const }
+            : {}),
       url: openUrl,
     }),
   );
@@ -633,19 +696,24 @@ export function frigateShelf(
   opts: { picture: (cameraId: string, alt: string) => ThingGalleryItem['image']; openUrl: string },
 ): ShelfPanel | null {
   if (!s.cameras.length) return null;
-  const enabled = s.cameras.filter((c) => c.enabled);
-  const disabled = s.cameras.length - enabled.length;
-  const online = enabled.filter((c) => c.online).length;
-  const rank = (c: FrigateCamera) => (c.online ? 0 : c.enabled ? 1 : 2);
-  const meta = !enabled.length
-    ? `${disabled} disabled`
-    : online === enabled.length
-      ? disabled
-        ? `All ${enabled.length} enabled online`
-        : `All ${enabled.length} online`
-      : disabled
-        ? `${online} of ${enabled.length} enabled online`
-        : `${online} of ${enabled.length} online`;
+  const { online, offline, unknown, disabled, enabled } = cameraCounts(s);
+  const rank = (c: FrigateCamera) =>
+    c.status === 'online' ? 0 : c.status === 'offline' ? 1 : c.status === 'unknown' ? 2 : 3;
+  let meta: string;
+  if (unknown > 0) {
+    const parts: string[] = [];
+    if (online > 0) parts.push(`${online} online`);
+    if (offline > 0) parts.push(`${offline} offline`);
+    parts.push(`${unknown} unknown`);
+    if (disabled > 0 && enabled === 0) parts.push(`${disabled} disabled`);
+    meta = parts.join(' · ');
+  } else if (!enabled) {
+    meta = `${disabled} disabled`;
+  } else if (online === enabled) {
+    meta = disabled ? `All ${enabled} enabled online` : `All ${enabled} online`;
+  } else {
+    meta = disabled ? `${online} of ${enabled} enabled online` : `${online} of ${enabled} online`;
+  }
   return shelf({
     id: 'cameras',
     title: 'Cameras',
@@ -656,22 +724,27 @@ export function frigateShelf(
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
       .map((c): ThingGalleryItem => {
         const since = ctx.offlineSince.get(c.id);
-        const image = c.online ? opts.picture(c.id, c.name) : undefined;
+        const image = c.status === 'online' ? opts.picture(c.id, c.name) : undefined;
         return {
           id: c.id,
           title: clip(c.name, 120),
-          ...(c.online
+          ...(c.status === 'online'
             ? { sub: `${Math.round(c.cameraFps)} fps` }
-            : c.enabled
+            : c.status === 'offline'
               ? {
                   sub: since ? `Offline since ${moment(since, ctx.now, ctx.timeZone)}` : 'Offline',
                   badge: { text: 'Offline', tone: 'warn' as const },
                   muted: true,
                 }
-              : {
-                  sub: 'Disabled',
-                  muted: true,
-                }),
+              : c.status === 'unknown'
+                ? {
+                    sub: 'Status unknown',
+                    muted: true,
+                  }
+                : {
+                    sub: 'Disabled',
+                    muted: true,
+                  }),
           ...(image ? { image } : {}),
           url: opts.openUrl,
         };
@@ -746,36 +819,43 @@ export function frigateMachineLines(s: FrigateSnapshot): ThingPageBar[] {
 }
 
 export function frigateVerdict(s: FrigateSnapshot): string {
-  const enabled = s.cameras.filter((c) => c.enabled);
-  const n = enabled.length;
-  const online = enabled.filter((c) => c.online).length;
-  if (!n) return 'Frigate is fine.';
+  const { online, offline, unknown, enabled } = cameraCounts(s);
+  if (unknown > 0) {
+    if (!enabled) return `Frigate is running: ${plural(unknown, 'camera')} with unknown status.`;
+    if (offline > 0)
+      return `Frigate is running: ${online} of ${enabled} enabled cameras online, ${unknown} unknown.`;
+    return `Frigate is running: ${plural(online, 'camera')} online, ${unknown} unknown.`;
+  }
+  if (!enabled) return 'Frigate is fine.';
   const cams =
-    online === n
-      ? n === 1
+    online === enabled
+      ? enabled === 1
         ? 'the camera is online'
-        : `all ${n} cameras are online`
-      : `${online} of ${n} cameras are online`;
+        : `all ${enabled} cameras are online`
+      : `${online} of ${enabled} cameras are online`;
   return `Frigate is fine: ${cams}.`;
 }
 
 export function frigateKpis(s: FrigateSnapshot, ctx: FrigateCtx): ThingPageKpi[] {
-  const enabled = s.cameras.filter((c) => c.enabled);
-  const disabled = s.cameras.length - enabled.length;
-  const online = enabled.filter((c) => c.online).length;
-  const off = enabled.length - online;
+  const { online, offline, unknown, disabled, enabled } = cameraCounts(s);
+  const total = enabled + unknown;
   const out: ThingPageKpi[] = [
     {
       key: 'cameras',
       label: 'Cameras',
       value: String(online),
-      rest: `of ${enabled.length}`,
-      ...(enabled.length ? { meter: online / enabled.length } : {}),
-      ...(!enabled.length
+      rest: `of ${total}`,
+      ...(total ? { meter: online / total } : {}),
+      ...(!total
         ? { sub: disabled ? `${disabled} disabled` : 'no cameras' }
-        : off
-          ? { sub: `${off} offline`, tone: 'warn' as const }
-          : { sub: 'all online', color: 'green' as const }),
+        : offline
+          ? {
+              sub: unknown ? `${offline} offline · ${unknown} unknown` : `${offline} offline`,
+              tone: 'warn' as const,
+            }
+          : unknown
+            ? { sub: `${unknown} unknown` }
+            : { sub: 'all online', color: 'green' as const }),
     },
   ];
   const counts = todaySummaryCount(ctx);

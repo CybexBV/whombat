@@ -111,7 +111,16 @@ describe('Pi-hole declared settings', () => {
       'NXDOMAIN',
       'NODATA',
     ]);
-    expect(by('dnssec')).toMatchObject({ value: 'Off', on: false });
+    expect(by('dnssec')).toMatchObject({
+      value: 'Off',
+      elsewhere: { label: 'In Pi-hole', url: 'http://192.0.2.16/admin/settings/dns' },
+    });
+    expect(by('dnssec')?.toggle).toBeUndefined();
+    expect(by('dnssec')?.on).toBeUndefined();
+    ph.store.dns.dnssec = true;
+    const dnssecOn = panels().flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
+    expect(dnssecOn.find((r) => r.id === 'dnssec')?.value).toBe('On');
+    ph.store.dns.dnssec = false;
     expect(by('rate_limit')).toBeUndefined();
     expect(by('query_logging')).toMatchObject({ value: 'On', on: true });
     expect(by('privacy_level')).toMatchObject({ value: 'Show everything', choose: { current: 0 } });
@@ -151,6 +160,7 @@ describe('Pi-hole declared settings', () => {
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'dnssec', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'max_db_days', value: 30 })).rejects.toThrow();
     await expect(act(ctx, { target: 'rate_limit', value: 2000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'blocking_mode', value: 'ZERO' })).rejects.toThrow();
@@ -161,7 +171,7 @@ describe('Pi-hole declared settings', () => {
     expect(same.unchanged).toBe(true);
 
     ph.store.deaf = true;
-    await expect(act(ctx, { target: 'dnssec', value: true })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'query_logging', value: false })).rejects.toThrow(/didn’t take/);
 
     ph.store.deaf = false;
     const done = await act(ctx, { target: 'privacy_level', value: 2 });
@@ -187,6 +197,7 @@ describe('Pi-hole declared settings', () => {
     expect(
       await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'ZERO' }),
     ).toBeNull();
+    expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'dnssec', value: true })).toBeNull();
     expect(await describeSetting(PIHOLE_SETTINGS, ctx, { target: 'blocking_mode', value: 'BAD' })).toBeNull();
   });
 });

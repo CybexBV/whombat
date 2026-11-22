@@ -515,4 +515,117 @@ describe('Microsoft mail change feed', () => {
     expect(d2.headers).toEqual([]);
     expect(d2.cursor).toEqual({ kind: 'microsoft', deltaLink: finalDelta });
   });
+
+  it('retries mailBaseline without $filter on HTTP 400 and still drops pre-activation mail client-side', async () => {
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const finalDelta =
+      'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=unfiltered';
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const u = new URL(String(input));
+      if (u.searchParams.has('$filter')) {
+        return new Response(
+          JSON.stringify({ error: { code: 'ErrorInvalidRequest', message: 'Filter not supported' } }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return response({
+        value: [
+          {
+            id: 'm_old',
+            conversationId: 'c_old',
+            from: { emailAddress: { address: 'old@example.com' } },
+            subject: 'Before activation',
+            receivedDateTime: '2026-10-28T09:00:00Z',
+            hasAttachments: false,
+            isDraft: false,
+          },
+          {
+            id: 'm_after',
+            conversationId: 'c_after',
+            internetMessageId: '<after@example.com>',
+            from: { emailAddress: { name: 'Billing', address: 'billing@example.com' } },
+            subject: 'Invoice after activation',
+            receivedDateTime: '2026-10-28T10:02:00Z',
+            hasAttachments: false,
+            isDraft: false,
+          },
+        ],
+        '@odata.deltaLink': finalDelta,
+      });
+    });
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    const baseline = await ws.mailBaseline('tok', { since: activation });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetcher.mock.calls[0]?.[0])).searchParams.get('$filter')).toBe(
+      'receivedDateTime ge 2026-10-28T09:59:55Z',
+    );
+    expect(new URL(String(fetcher.mock.calls[1]?.[0])).searchParams.has('$filter')).toBe(false);
+    expect(baseline.cursor).toEqual({ kind: 'microsoft', deltaLink: finalDelta });
+    expect(baseline.headers.map((h) => h.id)).toEqual(['m_after']);
+
+    // If the unfiltered retry also returns 400, propagate without looping.
+    const always400 = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ error: { code: 'BadRequest' } }), { status: 400 }),
+    );
+    await expect(
+      new MicrosoftWorkspace(always400).mailBaseline('tok', { since: activation }),
+    ).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(always400).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reuse a previous page’s nextLink when a later delta page omits both links', async () => {
+    const activation = new Date('2026-10-28T10:00:00Z');
+    const page2 = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=p2';
+    const fetcher = vi
+      .fn<typeof fetch>()
+      // Page 1 provides @odata.nextLink -> page 2.
+      .mockResolvedValueOnce(
+        response({
+          value: [],
+          '@odata.nextLink': page2,
+        }),
+      )
+      // Page 2 returns neither @odata.deltaLink nor @odata.nextLink.
+      .mockResolvedValueOnce(response({ value: [] }));
+
+    const ws = new MicrosoftWorkspace(fetcher);
+    await expect(ws.mailBaseline('tok', { since: activation })).rejects.toThrow('delta link');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    // Same guard for mailChanges: missing links on page 2 must fail rather than reusing page 2's link.
+    const changesFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response({ value: [], '@odata.nextLink': page2 }))
+      .mockResolvedValueOnce(response({ value: [] }));
+    await expect(
+      new MicrosoftWorkspace(changesFetcher).mailChanges('tok', {
+        kind: 'microsoft',
+        deltaLink: 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=p1',
+        paging: { sinceMs: activation.getTime() },
+      }),
+    ).rejects.toThrow('delta link');
+    expect(changesFetcher).toHaveBeenCalledTimes(2);
+
+    // HTTP 400 on a stale deltaLink in mailChanges resets via mailBaseline.
+    const freshDelta = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=ok';
+    const resetFetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: 'InvalidDeltaToken' } }), { status: 400 }),
+      )
+      .mockResolvedValueOnce(response({ value: [], '@odata.deltaLink': freshDelta }));
+    const reset = await new MicrosoftWorkspace(resetFetcher).mailChanges(
+      'tok',
+      {
+        kind: 'microsoft',
+        deltaLink: 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=stale',
+      },
+      { since: activation, resyncSince: activation },
+    );
+    expect(reset.reset).toBe(true);
+    expect(reset.cursor).toEqual({ kind: 'microsoft', deltaLink: freshDelta });
+  });
 });

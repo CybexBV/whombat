@@ -21,24 +21,25 @@ const overview = {
 
 describe('home-screen status widget bridge model', () => {
   it('prefers the appliance name, falling back to the burrow name and then Whombat', () => {
-    expect(
-      statusWidgetPayload({
-        overview,
-        applianceId: 'wb-1',
-        applianceName: 'Home',
-        burrowName: 'Main',
-        timeZone: TZ,
-        now: new Date(AT),
-      }),
-    ).toMatchObject({
+    const payload = statusWidgetPayload({
+      overview,
+      applianceId: 'wb-1',
+      applianceName: 'Home',
+      burrowName: 'Main',
+      timeZone: TZ,
+      now: new Date(AT),
+    });
+    expect(payload).toMatchObject({
       applianceId: 'wb-1',
       boxName: 'Home',
       status: '1 thing needs you',
       tone: 'warn',
-      asOf: 'as of 14:05',
-      asOfEarlier: 'as of 21 Nov',
-      asOfDay: '2026-11-21',
+      timeZone: TZ,
+      updatedAt: Date.parse(AT),
     });
+    expect('asOf' in payload).toBe(false);
+    expect('asOfEarlier' in payload).toBe(false);
+    expect('asOfDay' in payload).toBe(false);
 
     expect(
       statusWidgetPayload({

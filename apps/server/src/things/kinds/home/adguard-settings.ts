@@ -1,7 +1,8 @@
 /**
  * AdGuard Home's declared settings: read from `/control/filtering/status`, `/control/safebrowsing/status`,
  * `/control/parental/status`, `/control/safesearch/status`, `/control/querylog/config` and `/control/stats/config`.
- * Upstream DNS, encryption and access stay in AdGuard Home so nothing here can cut off the network.
+ * DNS filtering switches (block lists, safe browsing, parental control), upstream DNS, encryption and access stay in
+ * AdGuard Home so nothing here can block lookups or cut off access.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -130,16 +131,11 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'filtering_enabled',
     group: 'protection',
     label: 'Block lists',
-    help: 'Use your enabled block lists to filter ads and trackers.',
-    kind: 'switch',
+    help: 'Use your enabled block lists and custom rules to filter ads and trackers. Turning them on can block your own addresses, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.filtering?.enabled,
-    write: (v, s) => ({
-      method: 'POST',
-      path: '/control/filtering/config',
-      body: { enabled: asBool(v) === true, interval: s.filtering?.interval ?? 24 },
-    }),
-    sentence: (v) =>
-      asBool(v) ? 'AdGuard Home is now using its block lists.' : 'AdGuard Home’s block lists are now off.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#filters`,
   },
   {
     id: 'filter_update_interval',
@@ -154,7 +150,7 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     write: (v, s) => ({
       method: 'POST',
       path: '/control/filtering/config',
-      body: { enabled: s.filtering?.enabled ?? true, interval: Number(v) },
+      body: { enabled: s.filtering?.enabled === true, interval: Number(v) },
     }),
     sentence: (v) =>
       Number(v) === 0
@@ -165,31 +161,21 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'safebrowsing',
     group: 'protection',
     label: 'Safe browsing',
-    help: 'Block known phishing and malware websites.',
-    kind: 'switch',
+    help: 'Block known phishing and malware websites. Because DNS filtering can block addresses you rely on, it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.safebrowsing ?? undefined,
-    write: (v) => ({
-      method: 'POST',
-      path: asBool(v) ? '/control/safebrowsing/enable' : '/control/safebrowsing/disable',
-    }),
-    sentence: (v) =>
-      asBool(v) ? 'Safe browsing is now on in AdGuard Home.' : 'Safe browsing is now off in AdGuard Home.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#settings`,
   },
   {
     id: 'parental',
     group: 'protection',
     label: 'Parental control',
-    help: 'Block adult websites across devices that use AdGuard Home.',
-    kind: 'switch',
+    help: 'Block adult websites across devices that use AdGuard Home. Because DNS filtering can block addresses you rely on, it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.parental ?? undefined,
-    write: (v) => ({
-      method: 'POST',
-      path: asBool(v) ? '/control/parental/enable' : '/control/parental/disable',
-    }),
-    sentence: (v) =>
-      asBool(v)
-        ? 'Parental control is now on in AdGuard Home.'
-        : 'Parental control is now off in AdGuard Home.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#settings`,
   },
   {
     id: 'safesearch',

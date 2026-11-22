@@ -121,10 +121,25 @@ describe('AdGuard Home declared settings', () => {
     const rows = out.flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
     const by = (id: string) => rows.find((r) => r.id === id);
 
-    expect(by('filtering_enabled')).toMatchObject({ value: 'On', on: true });
+    expect(by('filtering_enabled')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#filters' },
+    });
+    expect(by('filtering_enabled')?.toggle).toBeUndefined();
+    expect(by('filtering_enabled')?.on).toBeUndefined();
     expect(by('filter_update_interval')).toMatchObject({ value: 'Every day', choose: { current: 24 } });
-    expect(by('safebrowsing')).toMatchObject({ value: 'On', on: true });
-    expect(by('parental')).toMatchObject({ value: 'Off', on: false });
+    expect(by('safebrowsing')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('safebrowsing')?.toggle).toBeUndefined();
+    expect(by('safebrowsing')?.on).toBeUndefined();
+    expect(by('parental')).toMatchObject({
+      value: 'Off',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('parental')?.toggle).toBeUndefined();
+    expect(by('parental')?.on).toBeUndefined();
     expect(by('safesearch')).toMatchObject({
       value: 'Off',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -135,11 +150,14 @@ describe('AdGuard Home declared settings', () => {
     const enabledRows = panels().flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
     expect(enabledRows.find((r) => r.id === 'safesearch')?.value).toBe('On');
     ag.store.safesearch.enabled = false;
+    expect(by('querylog_enabled')).toMatchObject({ value: 'On', on: true });
     expect(by('querylog_interval')).toMatchObject({
       value: '7 days',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
     });
     expect(by('querylog_interval')?.choose).toBeUndefined();
+    expect(by('anonymize_ip')).toMatchObject({ value: 'Off', on: false });
+    expect(by('stats_enabled')).toMatchObject({ value: 'On', on: true });
     expect(by('stats_interval')).toMatchObject({
       value: '24 hours',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -150,9 +168,10 @@ describe('AdGuard Home declared settings', () => {
       url: 'http://192.0.2.15:3000/#dns',
     });
 
-    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : []));
-    expect(look[0]?.toggle?.allowed).toBe(false);
-    expect(look[0]?.toggle?.reason).toMatch(/Look only/);
+    const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
+    expect(look.find((r) => r.id === 'querylog_enabled')?.toggle?.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'querylog_enabled')?.toggle?.reason).toMatch(/Look only/);
+    expect(look.find((r) => r.id === 'filter_update_interval')?.choose?.button.allowed).toBe(false);
   });
 
   it('writes settings, preserves sibling querylog fields, and reads back to verify', async () => {
@@ -175,26 +194,32 @@ describe('AdGuard Home declared settings', () => {
       ignored: ['example.com'],
     });
 
-    await act(ctx, { target: 'parental', value: true });
-    expect(ag.store.calls.some((c) => c.method === 'POST' && c.path === '/control/parental/enable')).toBe(
-      true,
-    );
+    await act(ctx, { target: 'stats_enabled', value: false });
+    expect(ag.store.stats.enabled).toBe(false);
+
+    // Changing the block list update schedule never flips filtering on when it is off.
+    ag.store.filtering.enabled = false;
+    await act(ctx, { target: 'filter_update_interval', value: 12 });
+    expect(ag.store.filtering).toEqual({ enabled: false, interval: 12 });
   });
 
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_access', value: true })).rejects.toThrow();
+    await expect(act(ctx, { target: 'filtering_enabled', value: false })).rejects.toThrow();
+    await expect(act(ctx, { target: 'safebrowsing', value: false })).rejects.toThrow();
+    await expect(act(ctx, { target: 'parental', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'safesearch', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'querylog_interval', value: 2_592_000_000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'stats_interval', value: 604_800_000 })).rejects.toThrow();
     await expect(act(ctx, { target: 'filter_update_interval', value: 999 })).rejects.toThrow();
     await expect(act(ctx, { target: 'nope', value: true })).rejects.toThrow();
 
-    const same = await act(ctx, { target: 'safebrowsing', value: true });
+    const same = await act(ctx, { target: 'querylog_enabled', value: true });
     expect(same.unchanged).toBe(true);
 
     ag.store.deaf = true;
-    await expect(act(ctx, { target: 'safebrowsing', value: false })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'querylog_enabled', value: false })).rejects.toThrow(/didn’t take/);
 
     ag.store.deaf = false;
     const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
@@ -218,6 +243,11 @@ describe('AdGuard Home declared settings', () => {
     expect(
       await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filter_update_interval', value: 5 }),
     ).toBeNull();
+    expect(
+      await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filtering_enabled', value: false }),
+    ).toBeNull();
+    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'safebrowsing', value: false })).toBeNull();
+    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'parental', value: true })).toBeNull();
     expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'safesearch', value: true })).toBeNull();
   });
 });

@@ -92,6 +92,7 @@ export const setMailCursor = defineCommand({
     since: z.string().datetime().nullable().optional(),
     clear: z.boolean().optional(),
     succeeded: z.boolean().optional(),
+    succeededAt: z.string().datetime().optional(),
     problemCode: z.string().max(64).nullable().optional(),
     problem: z.string().max(500).nullable().optional(),
     readFailures: z.record(z.string().max(200), z.number().int().positive()).nullable().optional(),
@@ -104,6 +105,7 @@ export const setMailCursor = defineCommand({
         .set({
           cursor: null,
           since: null,
+          succeededAt: null,
           problemCode: null,
           problem: null,
           readFailures: null,
@@ -127,7 +129,11 @@ export const setMailCursor = defineCommand({
     const nextCursor = input.cursor !== undefined ? input.cursor : (existing?.cursor ?? null);
     const nextSince =
       input.since !== undefined ? (input.since ? new Date(input.since) : null) : (existing?.since ?? null);
-    const nextSucceededAt = input.succeeded ? ctx.now : (existing?.succeededAt ?? null);
+    const nextSucceededAt = input.succeeded
+      ? input.succeededAt
+        ? new Date(input.succeededAt)
+        : ctx.now
+      : (existing?.succeededAt ?? null);
     const nextProblemCode =
       input.problemCode !== undefined
         ? input.problemCode

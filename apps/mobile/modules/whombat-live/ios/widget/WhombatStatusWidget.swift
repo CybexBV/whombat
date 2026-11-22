@@ -2,45 +2,121 @@ import SwiftUI
 import WidgetKit
 
 /// Saved calm status written by the main app into the shared App Group (`group.com.whombat.mobile`).
-/// The widget never fetches on its own: it only displays what the app last saved and rolls the “as of”
-/// label to the date once the calendar day moves on.
+/// The widget never fetches on its own: it stores the status timestamp and formats the “as of” label
+/// when drawing (“as of 14:05” today, “as of yesterday 23:50”, or “as of 21 Nov” for older dates).
 private struct StatusWidgetSnapshot: Decodable {
   let applianceId: String?
+  let source: String?
   let boxName: String
   let status: String
   let tone: String
-  let asOf: String
-  let asOfEarlier: String?
-  let asOfDay: String?
   let timeZone: String?
-  let updatedAt: Double?
+  let updatedAt: Double
+
+  private static let shortMonths = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ]
+
+  private static let utcCalendar: Calendar = {
+    var cal = Calendar(identifier: .gregorian)
+    if let utc = TimeZone(secondsFromGMT: 0) {
+      cal.timeZone = utc
+    }
+    return cal
+  }()
 
   func resolvedTimeZone() -> TimeZone {
-    timeZone.flatMap(TimeZone.init(identifier:)) ?? .current
+    timeZone
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .flatMap { $0.isEmpty ? nil : TimeZone(identifier: $0) } ?? .current
   }
 
-  func asOfLabel(at date: Date) -> String {
-    guard let savedDay = asOfDay, !savedDay.isEmpty else { return asOf }
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = resolvedTimeZone()
-    let parts = calendar.dateComponents([.year, .month, .day], from: date)
-    let today = String(
-      format: "%04d-%02d-%02d",
-      parts.year ?? 0,
-      parts.month ?? 0,
-      parts.day ?? 0
-    )
-    return today == savedDay ? asOf : (asOfEarlier ?? asOf)
+  private func zonedCalendar() -> Calendar {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = resolvedTimeZone()
+    return cal
   }
 
-  func nextMidnight(after date: Date) -> Date? {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = resolvedTimeZone()
-    return calendar.nextDate(
-      after: date,
-      matching: DateComponents(hour: 0, minute: 0, second: 0),
-      matchingPolicy: .nextTime
-    )
+  private static func dayDiff(from atParts: DateComponents, to nowParts: DateComponents) -> Int? {
+    let from = DateComponents(year: atParts.year, month: atParts.month, day: atParts.day)
+    let to = DateComponents(year: nowParts.year, month: nowParts.month, day: nowParts.day)
+    guard let fromDate = utcCalendar.date(from: from),
+          let toDate = utcCalendar.date(from: to)
+    else { return nil }
+    return Int(round(toDate.timeIntervalSince(fromDate) / 86_400.0))
+  }
+
+  func asOfLabel(at now: Date) -> String {
+    let cal = zonedCalendar()
+    let atDate = Date(timeIntervalSince1970: updatedAt / 1000.0)
+    let atParts = cal.dateComponents([.year, .month, .day, .hour, .minute], from: atDate)
+    let nowParts = cal.dateComponents([.year, .month, .day], from: now)
+    guard let atYear = atParts.year,
+          let atMonth = atParts.month,
+          let atDay = atParts.day,
+          let atHour = atParts.hour,
+          let atMinute = atParts.minute,
+          let nowYear = nowParts.year,
+          let diff = Self.dayDiff(from: atParts, to: nowParts)
+    else {
+      return StatusWidgetEmpty.asOf
+    }
+    let clock = String(format: "%02d:%02d", atHour, atMinute)
+    if diff == 0 {
+      return "as of \(clock)"
+    }
+    if diff == 1 {
+      return "as of yesterday \(clock)"
+    }
+    let monthName = (1...12).contains(atMonth) ? Self.shortMonths[atMonth - 1] : ""
+    if atYear == nowYear {
+      return "as of \(atDay) \(monthName)"
+    }
+    return "as of \(atDay) \(monthName) \(atYear)"
+  }
+
+  private func nextBoundary(after date: Date, calendar cal: Calendar) -> Date? {
+    let atDate = Date(timeIntervalSince1970: updatedAt / 1000.0)
+    let atParts = cal.dateComponents([.year, .month, .day], from: atDate)
+    let nowParts = cal.dateComponents([.year, .month, .day], from: date)
+    guard let atYear = atParts.year,
+          let nowYear = nowParts.year,
+          let diff = Self.dayDiff(from: atParts, to: nowParts)
+    else { return nil }
+    if diff == 0 || diff == 1 {
+      let startOfToday = cal.startOfDay(for: date)
+      guard let nextDay = cal.date(byAdding: .day, value: 1, to: startOfToday) else { return nil }
+      let startOfNext = cal.startOfDay(for: nextDay)
+      return startOfNext > date ? startOfNext : cal.date(byAdding: .day, value: 1, to: startOfNext)
+    }
+    if diff < 0 {
+      let target = atYear > nowYear
+        ? cal.date(from: DateComponents(year: atYear, month: 1, day: 1))
+        : cal.date(from: DateComponents(year: atYear, month: atParts.month, day: atParts.day))
+      return target.flatMap { $0 > date ? $0 : nil }
+    }
+    if atYear == nowYear {
+      return cal.date(from: DateComponents(year: nowYear + 1, month: 1, day: 1))
+    }
+    return nil
+  }
+
+  /// Future instants when `asOfLabel` changes (today -> yesterday -> date -> date with year),
+  /// so WidgetKit rolls over locally without fetching anything.
+  func rolloverDates(after now: Date) -> [Date] {
+    let cal = zonedCalendar()
+    var dates: [Date] = []
+    var cursor = now
+    for _ in 0..<3 {
+      let before = asOfLabel(at: cursor)
+      guard let next = nextBoundary(after: cursor, calendar: cal) else { break }
+      if asOfLabel(at: next) != before {
+        dates.append(next)
+      }
+      cursor = next
+    }
+    return dates
   }
 }
 
@@ -101,9 +177,10 @@ struct WhombatStatusProvider: TimelineProvider {
     guard let raw = UserDefaults(suiteName: group)?.string(forKey: defaultsKey),
           let data = raw.data(using: .utf8),
           let snapshot = try? JSONDecoder().decode(StatusWidgetSnapshot.self, from: data),
-          !snapshot.boxName.isEmpty,
-          !snapshot.status.isEmpty,
-          !snapshot.asOf.isEmpty
+          !snapshot.boxName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          !snapshot.status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          snapshot.updatedAt.isFinite,
+          snapshot.updatedAt > 0
     else { return nil }
     return snapshot
   }
@@ -138,29 +215,24 @@ struct WhombatStatusProvider: TimelineProvider {
       completion(Timeline(entries: [.empty(at: now)], policy: .never))
       return
     }
-    let currentAsOf = snapshot.asOfLabel(at: now)
     var entries = [
       WhombatStatusEntry(
         date: now,
         boxName: snapshot.boxName,
         status: snapshot.status,
         tone: snapshot.tone,
-        asOf: currentAsOf,
+        asOf: snapshot.asOfLabel(at: now),
         isEmpty: false
       )
     ]
-    // Roll “as of 14:05” over to “as of 21 Nov” locally at midnight without fetching anything.
-    if let earlier = snapshot.asOfEarlier,
-       earlier != currentAsOf,
-       let midnight = snapshot.nextMidnight(after: now)
-    {
+    for date in snapshot.rolloverDates(after: now) {
       entries.append(
         WhombatStatusEntry(
-          date: midnight,
+          date: date,
           boxName: snapshot.boxName,
           status: snapshot.status,
           tone: snapshot.tone,
-          asOf: earlier,
+          asOf: snapshot.asOfLabel(at: date),
           isEmpty: false
         )
       )
@@ -212,6 +284,7 @@ private struct WhombatStatusWidgetView: View {
         .font(.system(size: 12, weight: .regular, design: .monospaced))
         .foregroundStyle(Palette.mut)
         .lineLimit(1)
+        .minimumScaleFactor(0.8)
         .padding(.top, 4)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

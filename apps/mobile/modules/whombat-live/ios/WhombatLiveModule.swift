@@ -90,7 +90,14 @@ public class WhombatLiveModule: Module {
       guard let group = Self.statusWidgetAppGroup,
             let defaults = UserDefaults(suiteName: group),
             let data = snapshotJson.data(using: .utf8),
-            (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+            let boxName = (obj["boxName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !boxName.isEmpty,
+            let status = (obj["status"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !status.isEmpty,
+            let updatedAt = (obj["updatedAt"] as? NSNumber)?.doubleValue,
+            updatedAt.isFinite,
+            updatedAt > 0
       else { return }
       let changed = self.state.withLock { () -> Bool in
         if defaults.string(forKey: Self.statusWidgetDefaultsKey) == snapshotJson {

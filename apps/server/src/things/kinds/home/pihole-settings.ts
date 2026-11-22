@@ -1,7 +1,7 @@
 /**
  * Pi-hole v6's declared settings: read from `/api/config/dns`, `/api/config/database` and `/api/config/misc`, written
- * via `PATCH /api/config`. Never touches `/api/config/webserver`, upstream DNS, or DHCP so nothing here can cut off
- * access or the network.
+ * via `PATCH /api/config`. Never touches `/api/config/webserver`, upstream DNS, DNSSEC, or DHCP so nothing here can
+ * break name lookups or cut off access.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -114,11 +114,11 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     id: 'dnssec',
     group: 'blocking',
     label: 'Check DNS signatures (DNSSEC)',
-    help: 'Verify that answers from upstream DNS haven’t been tampered with.',
-    kind: 'switch',
+    help: 'Verify that answers from upstream DNS haven’t been tampered with. Turning it on with an upstream that doesn’t support DNSSEC breaks lookups, so it stays in Pi-hole.',
+    kind: 'elsewhere',
     read: (s) => s.dnssec ?? undefined,
-    write: (v) => patchConfig({ dns: { dnssec: asBool(v) === true } }),
-    sentence: (v) => (asBool(v) ? 'DNSSEC is now on in Pi-hole.' : 'DNSSEC is now off in Pi-hole.'),
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/admin/settings/dns`,
   },
   {
     id: 'dns_and_dhcp',

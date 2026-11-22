@@ -124,10 +124,10 @@ type Daemon struct {
 	factsMu sync.Mutex
 	// backupSent is the backupKey of the backup status the runtime was last handed (guarded by factsMu).
 	backupSent string
-	// pauseMu serializes applying verified channel pause state so a stale periodic or manual refresh (an older role
-	// version, or a channel the box no longer follows) never overwrites a newer pause.
-	pauseMu      sync.Mutex
-	pauseVersion map[string]int64
+	// channelMetaMu serializes applying a verified TUF metadata set (followed-channel check, non-decreasing role
+	// version check, newest-release offer and pause state) as one decision, so a stale refresh never replaces a newly
+	// offered fix or clears a newer pause.
+	channelMetaMu sync.Mutex
 	// lease is the claim-code lookup lease (MG-28, claimlease.go).
 	lease claimLease
 	// lic is the licence loop's state (MG-34, licence.go); nil without licence.keysFile.
@@ -674,7 +674,7 @@ func (d *Daemon) refreshTUF(ctx context.Context) (*trust.Repo, error) {
 		return nil, err
 	}
 	if repo.ChannelPaused {
-		d.syncChannelPause(repo)
+		_, _ = d.applyRepo(ctx, repo, false, false)
 	}
 	return repo, nil
 }
@@ -686,34 +686,81 @@ func (d *Daemon) currentChannel() string {
 	return d.Channel.Current()
 }
 
-func (d *Daemon) syncChannelPause(repo *trust.Repo) {
-	if repo == nil || repo.Channel == "" || d.Engine == nil {
-		return
+// applyRepo applies one verified TUF metadata set to the engine as a single serialized decision: when the box follows a
+// channel, it verifies the metadata belongs to the followed channel with a non-decreasing role version before either
+// offering a release or changing ChannelPaused. On resume it offers the newest release first and clears ChannelPaused
+// only once the offer succeeds.
+func (d *Daemon) applyRepo(ctx context.Context, repo *trust.Repo, offer, now bool) (*broker.CheckResult, error) {
+	defaultRes := &broker.CheckResult{
+		Result:     controlapi.ResultNone,
+		NextCheckS: int64(config.Seconds(d.Cfg.RefreshSec, time.Hour) / time.Second),
 	}
-	d.pauseMu.Lock()
-	defer d.pauseMu.Unlock()
-	if cur := d.currentChannel(); cur == "" || repo.Channel != cur {
-		return
+	if repo == nil || d.Engine == nil {
+		return defaultRes, nil
 	}
-	if d.pauseVersion == nil {
-		d.pauseVersion = map[string]int64{}
+	d.channelMetaMu.Lock()
+	defer d.channelMetaMu.Unlock()
+
+	cur := d.currentChannel()
+	if cur != "" || repo.Channel != "" {
+		if cur == "" || repo.Channel != cur {
+			return defaultRes, nil
+		}
+		st, err := d.Engine.Load()
+		if err != nil {
+			if offer {
+				return nil, err
+			}
+			d.warnOnce("channel pause state not recorded", err)
+			return defaultRes, nil
+		}
+		if prev, ok := st.ChannelVersions[repo.Channel]; ok && repo.ChannelVersion > 0 && repo.ChannelVersion < prev {
+			return defaultRes, nil
+		}
+		if repo.ChannelPaused {
+			changed, _, err := d.Engine.SyncChannelPause(repo)
+			if err != nil {
+				d.warnOnce("channel pause state not recorded", err)
+				if offer {
+					return nil, err
+				}
+				return defaultRes, nil
+			}
+			if changed {
+				d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", true)
+				d.wakeEngine()
+			}
+			if offer {
+				d.mu.Lock()
+				d.lastChecked = time.Now()
+				d.mu.Unlock()
+			}
+			return defaultRes, nil
+		}
+		res := defaultRes
+		if offer {
+			var err error
+			res, err = d.offerLatest(ctx, repo, now)
+			if err != nil {
+				return nil, err
+			}
+		}
+		changed, _, err := d.Engine.SyncChannelPause(repo)
+		if err != nil {
+			d.warnOnce("channel pause state not recorded", err)
+			return res, nil
+		}
+		if changed {
+			d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", false)
+			d.wakeEngine()
+		}
+		return res, nil
 	}
-	if prev, ok := d.pauseVersion[repo.Channel]; ok && repo.ChannelVersion < prev {
-		return
+
+	if offer {
+		return d.offerLatest(ctx, repo, now)
 	}
-	wasPaused := false
-	if st, err := d.Engine.Load(); err == nil {
-		wasPaused = st.ChannelPaused
-	}
-	if err := d.Engine.SetChannelPaused(repo.ChannelPaused); err != nil {
-		d.warnOnce("channel pause state not recorded", err)
-		return
-	}
-	d.pauseVersion[repo.Channel] = repo.ChannelVersion
-	if wasPaused != repo.ChannelPaused {
-		d.Log.Info("update channel pause state changed", "channel", repo.Channel, "paused", repo.ChannelPaused)
-		d.wakeEngine()
-	}
+	return defaultRes, nil
 }
 
 // tufLoop refreshes metadata periodically. Failures never touch the installed release.
@@ -731,20 +778,10 @@ func (d *Daemon) tufLoop(ctx context.Context) {
 			if d.Clients != nil {
 				d.Clients.Poke() // a new client channel is picked up with the metadata (MG-33)
 			}
-			if d.newestUpdates() {
-				// A community box, or one with a channel, takes the newest release of what it just verified (MG-136, LNK-20).
-				// Offer the newest release before clearing a paused state and waking the engine, so a fix published while
-				// paused replaces any held candidate before drain or activation can proceed.
-				if _, err := d.offerLatest(ctx, repo, false); err != nil {
-					d.warnOnce("newest release not offered; the installed release keeps running", err)
-				} else {
-					d.clearErr("newest release not offered; the installed release keeps running")
-					if !repo.ChannelPaused {
-						d.syncChannelPause(repo)
-					}
-				}
-			} else if !repo.ChannelPaused {
-				d.syncChannelPause(repo)
+			if _, err := d.applyRepo(ctx, repo, d.newestUpdates(), false); err != nil {
+				d.warnOnce("newest release not offered; the installed release keeps running", err)
+			} else {
+				d.clearErr("newest release not offered; the installed release keeps running")
 			}
 		}
 		select {
@@ -812,20 +849,12 @@ type checkReply struct {
 // assignment is verified and offered to the engine as at any poll, and the engine takes it at once (MG-68).
 func (d *Daemon) CheckNow(ctx context.Context) (*broker.CheckResult, error) {
 	if d.newestUpdates() {
-		// A community box (MG-136): its own repository, refreshed now, and its newest release offered.
-		// Offer the newest release before clearing a paused state and waking the engine.
+		// A community box or channel-tracked box: refresh its repository and apply offer + pause state together.
 		repo, err := d.refreshTUF(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("the update repository: %w", err)
 		}
-		res, err := d.offerLatest(ctx, repo, true)
-		if err != nil {
-			return nil, err
-		}
-		if !repo.ChannelPaused {
-			d.syncChannelPause(repo)
-		}
-		return res, nil
+		return d.applyRepo(ctx, repo, true, true)
 	}
 	if d.Control == nil {
 		// No channel and no control this start: nobody assigns this box a release (newestUpdates).
