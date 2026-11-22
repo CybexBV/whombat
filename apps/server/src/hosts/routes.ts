@@ -40,6 +40,7 @@ import { serverAsksOf } from './asks-store';
 import { HOSTS_API, type HostsActor, HostsUnavailable, networksOf, poolsOf, seg } from './client';
 import { type HostsChangeInput, recordHostsChange } from './commands';
 import { type HostsNames, hostsCall, refusedBeforeActing } from './errors';
+import { findMyFor } from './findmy';
 import { type InstallPlan, installsFor } from './install';
 import {
   ADDRESS_FIELD_TEXT,
@@ -1875,6 +1876,46 @@ export const hostsRoutes: RouteDef[] = [
         ),
       { server: serverLabel(serverId), op: 'screen' },
     );
+  }),
+
+  // Find My on a Mac's page: an owner's, as a look is (a read unlocks the Mac and reads its screen). What was read
+  // stays in memory only (`findmy.ts`), and none of its steps is signed.
+  route(api.hosts.findMy, async (ctx) => {
+    await guard(ctx, { manage: true });
+    return findMyFor(ctx.services).view(ctx.params.serverId);
+  }),
+
+  route(api.hosts.findMyRefresh, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    // The read runs on after this answer, outside the request's command (its receipt keeps nothing).
+    return outsideCommandScope(() => findMyFor(ctx.services).refresh(g.hosts, serverId, g.actor, label));
+  }),
+
+  route(api.hosts.findMyExact, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    return outsideCommandScope(() =>
+      findMyFor(ctx.services).exact(g.hosts, serverId, ctx.body.person, g.actor, label),
+    );
+  }),
+
+  route(api.hosts.findMyMap, async (ctx) => {
+    const g = await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    const label = await shownNameOf(g, serverId);
+    return hostsCall(() => findMyFor(ctx.services).map(g.hosts, serverId, ctx.query, g.actor, label), {
+      server: label,
+      op: 'screen',
+    });
+  }),
+
+  route(api.hosts.findMyPicture, async (ctx) => {
+    await guard(ctx, { manage: true });
+    const { serverId } = ctx.params;
+    return findMyFor(ctx.services).picture(serverId, ctx.query.person, serverLabel(serverId));
   }),
 
   route(api.hosts.inspect, async (ctx) => {
