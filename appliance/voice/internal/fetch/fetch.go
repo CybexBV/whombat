@@ -60,6 +60,10 @@ type Fetcher struct {
 	deleting map[string]*pendingDelete
 	// removeAll deletes a renamed-aside path after unlocking f.mu (defaults to os.RemoveAll; tests may hook it).
 	removeAll func(string) error
+	// beforeCreate runs right before acquiring f.mu to create a staging folder or part file (tests only).
+	beforeCreate func(id, path string)
+	// onRunDone fires after a run() attempt finishes unwinding (tests only).
+	onRunDone func(id string)
 }
 
 type pendingDelete struct {
@@ -345,6 +349,9 @@ func (f *Fetcher) next() (*entry, time.Duration) {
 
 // run downloads e and decides what follows: ready, wait and try again, or failed until asked again.
 func (f *Fetcher) run(ctx context.Context, e *entry) {
+	if f.onRunDone != nil {
+		defer f.onRunDone(e.model.ID)
+	}
 	dctx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
 	if !e.wanted {
@@ -464,11 +471,8 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry, gen uint64) error
 	if free, err := f.Free(f.Dir); err == nil && free < total-already+Margin {
 		return fmt.Errorf("%w: %d MB free, %d MB needed", errNoRoom, free>>20, (total-already+Margin)>>20)
 	}
-	if err := ctx.Err(); err != nil {
+	if err := f.ensureStageDir(ctx, e, gen, stage); err != nil {
 		return err
-	}
-	if err := os.MkdirAll(stage, 0o750); err != nil {
-		return fmt.Errorf("%w: %v", errNoRoom, err)
 	}
 	want := make(map[string]bool, len(m.Files))
 	var done int64
@@ -508,12 +512,9 @@ func (f *Fetcher) downloadMulti(ctx context.Context, e *entry, gen uint64) error
 // fetchFile downloads one file from url into part (resuming where it stopped), verifies its size and sha256, and
 // renames it to dest.
 func (f *Fetcher) fetchFile(ctx context.Context, e *entry, gen uint64, url, part, dest string, size int64, wantSHA string, progressBase, total int64) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
+	fh, err := f.openPartFile(ctx, e, gen, part)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errNoRoom, err)
+		return err
 	}
 	defer fh.Close()
 	have, err := fh.Seek(0, io.SeekEnd)
@@ -683,6 +684,59 @@ func (f *Fetcher) progress(e *entry, gen uint64, n int64) {
 		e.received = n
 	}
 	f.mu.Unlock()
+}
+
+// ensureStageDir checks the attempt's generation and creates stage under f.mu, the same lock Remove takes before
+// bumping gen and sweeping paths aside, so a cancelled download can never recreate the staging folder after Remove
+// has already reported absent.
+func (f *Fetcher) ensureStageDir(ctx context.Context, e *entry, gen uint64, stage string) error {
+	if f.beforeCreate != nil {
+		f.beforeCreate(e.model.ID, stage)
+	}
+	f.mu.Lock()
+	if e.gen != gen || !e.wanted {
+		f.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		f.mu.Unlock()
+		return err
+	}
+	err := os.MkdirAll(stage, 0o750)
+	f.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("%w: %v", errNoRoom, err)
+	}
+	return nil
+}
+
+// openPartFile checks the attempt's generation and opens/creates part under f.mu, the same lock Remove takes, so a
+// cancelled download can never recreate a part file after Remove has already swept f.Dir.
+func (f *Fetcher) openPartFile(ctx context.Context, e *entry, gen uint64, part string) (*os.File, error) {
+	if f.beforeCreate != nil {
+		f.beforeCreate(e.model.ID, part)
+	}
+	f.mu.Lock()
+	if e.gen != gen || !e.wanted {
+		f.mu.Unlock()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return nil, context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		f.mu.Unlock()
+		return nil, err
+	}
+	fh, err := os.OpenFile(part, os.O_RDWR|os.O_CREATE, 0o640)
+	f.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errNoRoom, err)
+	}
+	return fh, nil
 }
 
 // commitRename atomically renames src to dst only while gen is still current and wanted, so a download attempt
