@@ -50,18 +50,31 @@ export function runScope(
   for (const s of steps) {
     const { offeredActions: _offered, resultDispatchId, ...output } = s.output as JsonObject;
     if (outside && s.kind === 'dispatch_agent') {
-      // An older step may have collected another turn's reply. Without attribution its saved result cannot be reused.
-      if (s.dispatchId && resultDispatchId !== s.dispatchId) {
+      // A result this release collected says which turn it came from: one that isn't the step's turn any more is
+      // dropped. A step the previous release finished keeps the result it collected then (it names no turn).
+      if (typeof resultDispatchId === 'string' && resultDispatchId !== s.dispatchId) {
         delete output.text;
         delete output.reply;
         delete output.messageIds;
         delete output.verdict;
       }
+      // Files never leave an outsiders' step, however it was collected (`outsidersStepFiles`).
       delete output.attachmentIds;
     }
     out[s.stepId] = s.kind === 'connection_actions' ? actionsScope(s) : { ...output, state: s.state };
   }
   return { trigger: run.scope, steps: out, run: { number: run.number, id: run.id, test: run.test } };
+}
+
+/**
+ * Whether `step`'s files stay where they are: an agent step of an outsiders' run carries none onwards, also one the
+ * previous release saved with the files its turn collected then (which could be another turn's).
+ */
+export function outsidersStepFiles(
+  run: Pick<AutomationRunRow, 'trigger'>,
+  step: Pick<AutomationStepRow, 'kind'>,
+): boolean {
+  return outsidersRun(run.trigger) && step.kind === 'dispatch_agent';
 }
 
 /**

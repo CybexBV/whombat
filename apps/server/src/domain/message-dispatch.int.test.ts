@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { requestMore, sendMessage } from '../commands/messages';
 import { defineCommand } from '../commit/types';
-import { dispatches, events, messages, runs } from '../db/schema/index';
+import { dispatches, events, messages, principals, runs } from '../db/schema/index';
 import { loadMessage } from '../read/messages';
 import { runInDispatchScope } from '../runtime/dispatch-scope';
 import { IDS } from '../seed/test-world';
@@ -143,6 +143,75 @@ describe('durable message dispatch', () => {
       if (claim) await t.services.runtime.finalize(claim.id, { outcome: 'done' });
     }
     expect(await jobs(messageId)).toMatchObject([{ trigger: 'expand', state: 'cancelled' }]);
+  });
+
+  it('cancels a person’s turn queued on an outsiders’ reply that the previous release left unmarked', async () => {
+    const root = await t.commit(IDS.mara, sendMessage, {
+      conversationId: IDS.dmDusty,
+      text: 'An email arrived.',
+    });
+    if (root.status !== 'ok') throw new Error(root.status);
+    const place = { conversationId: IDS.dmDusty, threadRootId: root.result.id };
+    const [mara] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
+    // An outsiders' turn there (queued for nobody), and what its agent wrote as the previous release saved it.
+    const outside = 'dsp_outside_unmarked';
+    await t.services.pipeline.transact(t.burrowId, ({ tx }) =>
+      tx.insert(dispatches).values({
+        id: outside,
+        burrowId: t.burrowId,
+        agentId: IDS.dusty,
+        trigger: 'automation',
+        mode: 'reply',
+        conversationId: place.conversationId,
+        messageId: place.threadRootId,
+        threadRootId: place.threadRootId,
+        state: 'running',
+        onBehalfOfAccountId: null,
+        createdAt: new Date(Date.now() - 2000),
+        claimedAt: new Date(Date.now() - 1000),
+      }),
+    );
+    const posted = await runInDispatchScope(
+      { dispatchId: outside, agentId: IDS.dusty, onBehalfOfAccountId: null },
+      () => t.commit(IDS.dusty, sendMessage, { ...place, text: 'Pay it now.' }),
+    );
+    if (posted.status !== 'ok') throw new Error(posted.status);
+    const messageId = posted.result.id;
+    await t.services.pipeline.transact(t.burrowId, async ({ tx }) => {
+      await tx
+        .update(messages)
+        .set({ outsidersRun: false, dispatchId: null })
+        .where(eq(messages.id, messageId));
+      await tx
+        .update(dispatches)
+        .set({ state: 'done', finishedAt: new Date() })
+        .where(eq(dispatches.id, outside));
+    });
+    // A More detail the previous release queued on it, as the person's turn.
+    const expand = 'dsp_expand_unmarked';
+    await t.services.pipeline.transact(t.burrowId, ({ tx }) =>
+      tx.insert(dispatches).values({
+        id: expand,
+        burrowId: t.burrowId,
+        agentId: IDS.dusty,
+        trigger: 'expand',
+        mode: 'reply',
+        conversationId: place.conversationId,
+        messageId,
+        threadRootId: place.threadRootId,
+        state: 'queued',
+        onBehalfOfAccountId: mara?.accountId ?? null,
+        createdAt: new Date(Date.now() - 86_400_000),
+      }),
+    );
+    const state = async () =>
+      (await t.services.db.select().from(dispatches).where(eq(dispatches.id, expand)))[0];
+    for (let i = 0; i < 20 && (await state())?.state === 'queued'; i++) {
+      const claim = await t.services.runtime.claimOne('rnr_unmarked_more', AGENT_PROVIDERS);
+      expect(claim?.id).not.toBe(expand);
+      if (claim) await t.services.runtime.finalize(claim.id, { outcome: 'done' });
+    }
+    expect(await state()).toMatchObject({ state: 'cancelled', error: 'outside_message' });
   });
 
   it('commits the answer, cleared attention and resumed run job together', async () => {

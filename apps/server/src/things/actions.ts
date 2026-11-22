@@ -265,6 +265,15 @@ export async function runThingAction(
   return (await executeThingAction(services, viewer, value, input, timeZone, undoes)).outcome;
 }
 
+/** The id of the connection a settings op of the assistant acts through (a page action, `things.action`), or null. */
+export function thingActionConnectionId(op: string, input: unknown): string | null {
+  if (op !== 'things.action') return null;
+  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
+  // A session may pass the thingId still encoded (`connection%3Acon_…`).
+  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
+  return id.startsWith('connection:') ? id.slice('connection:'.length) || null : null;
+}
+
 /** The connection of the burrow a page action the assistant asks for (`things.action`) runs on, or null. */
 async function thingActionRow(
   services: Services,
@@ -272,16 +281,17 @@ async function thingActionRow(
   op: string,
   input: unknown,
 ): Promise<CatalogConnectionRow | null> {
-  if (op !== 'things.action') return null;
-  const thing = (input as { params?: { thing?: unknown } } | null)?.params?.thing;
-  // A session may pass the thingId still encoded (`connection%3Acon_…`).
-  const id = typeof thing === 'string' ? (/%3a/i.test(thing) ? safeDecode(thing) : thing) : '';
-  if (!id.startsWith('connection:')) return null;
-  return (
-    (await visibleConnections(services.db, { burrowId })).find(
-      (r) => r.id === id.slice('connection:'.length),
-    ) ?? null
-  );
+  const id = thingActionConnectionId(op, input);
+  if (!id) return null;
+  return (await visibleConnections(services.db, { burrowId })).find((r) => r.id === id) ?? null;
+}
+
+/**
+ * A card's title that names the connection it is about by its label (“Change a Plex setting · Plex upstairs”), so two
+ * connections of one service can be told apart; as it is when it names it already.
+ */
+export function namedTitle(title: string, label: string): string {
+  return title.toLowerCase().includes(label.toLowerCase()) ? title : `${title} · ${label}`.slice(0, 160);
 }
 
 /**
@@ -307,12 +317,15 @@ export interface ThingActionAsk {
   said: KindActionWords | null;
   /** The connection's name when it went elsewhere, or as someone else, while the words were read: no card then. */
   changed: string | null;
+  /** The label of the connection it acts through, which the card names; null when it isn't a connection's. */
+  label: string | null;
 }
 
 /**
  * A page action the assistant asks for, from one read of its connection (SST-04): the target its yes is bound to and the
- * card's words (“Change a Plex setting”, “Quality outside your home: 8 Mbps → 20 Mbps”), the kind's own, read from that
- * same connection only while it still goes there. A card never describes one server and binds its yes to another.
+ * card's words (“Change a Plex setting · Plex upstairs”, “Quality outside your home: 8 Mbps → 20 Mbps”), the kind's own
+ * with the connection's label, read from that same connection only while it still goes there. A card never describes
+ * one server and binds its yes to another.
  */
 export async function askThingAction(
   services: Services,
@@ -322,15 +335,18 @@ export async function askThingAction(
   timeZone = 'UTC',
 ): Promise<ThingActionAsk> {
   const row = await thingActionRow(services, burrowId, op, input);
-  if (!row) return { targets: {}, said: null, changed: null };
+  if (!row) return { targets: {}, said: null, changed: null, label: null };
   const targets = { [row.id]: callTarget(row) };
+  const label = row.label;
   try {
     const { value, refused } = await signingOnlyAs(targets, () =>
       describeOn(services, row, (input as { body?: unknown } | null)?.body, timeZone),
     );
-    return refused ? { targets, said: null, changed: row.label } : { targets, said: value, changed: null };
+    if (refused) return { targets, said: null, changed: label, label };
+    const said = value ? { ...value, title: namedTitle(value.title, label) } : null;
+    return { targets, said, changed: null, label };
   } catch (err) {
-    if (err instanceof ConnectionChangedError) return { targets, said: null, changed: row.label };
+    if (err instanceof ConnectionChangedError) return { targets, said: null, changed: label, label };
     throw err;
   }
 }

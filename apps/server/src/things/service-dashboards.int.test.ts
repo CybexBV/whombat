@@ -10,6 +10,8 @@ import { type ThingPage, thingHref, thingId } from '@whombat/core';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { PNG } from 'pngjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { approvalThread } from '../approvals/wake';
+import { decideApproval } from '../commands/approvals';
 import { signingOnlyAs } from '../connections/bound-targets';
 import { callTarget, changedSinceYesText } from '../connections/call-target';
 import { sealConnectionSecret } from '../connections/crypto';
@@ -19,6 +21,7 @@ import {
   catalogConnections,
   changes,
   events,
+  messages,
   principals,
   vaultNetworks,
 } from '../db/schema/index';
@@ -555,6 +558,65 @@ describe('the assistant’s page action, bound from its card to its run', () => 
       )
       .catch((err: unknown) => err);
     expect(asked).not.toMatchObject({ name: 'ChangedWhileAskedError' });
+  });
+
+  it('asks again on a fresh card, bound now and naming its connection, for a yes to a card saved unbound', async () => {
+    // As the previous release saved it: no targets.
+    const asked = await t.services.pipeline.commit(
+      changeSetting,
+      { op: 'things.action', input: input('signed'), conversationId: IDS.dmDusty },
+      { burrowId: t.burrowId, actorId: IDS.dusty },
+    );
+    if (asked.status !== 'pending_approval') throw new Error(asked.status);
+    const executionOf = async (id: string) =>
+      (await t.services.db.select().from(approvals).where(eq(approvals.id, id)))[0]?.execution;
+    const [old] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+    if (!old) throw new Error('no approval');
+    const sent = served.get('/act') ?? 0;
+    // Pointed elsewhere while the card waited, and named apart from another Grafana.
+    const restore = await replaceToken();
+    await t.services.db
+      .update(catalogConnections)
+      .set({ label: 'Grafana upstairs' })
+      .where(eq(catalogConnections.id, shared));
+    try {
+      const decided = await t.services.pipeline.commit(
+        decideApproval,
+        { number: old.number, decision: 'approve' },
+        { burrowId: t.burrowId, actorId: IDS.mara },
+      );
+      expect(decided.status).toBe('ok');
+      await expect.poll(async () => (await executionOf(old.id))?.state, { timeout: 10_000 }).toBe('failed');
+      expect((await executionOf(old.id))?.error).toContain('asks you again');
+      expect(served.get('/act') ?? 0).toBe(sent);
+      const fresh = await t.services.db
+        .select()
+        .from(approvals)
+        .where(sql`${approvals.command} -> 'input' ->> 'askAgainOf' = ${old.id}`);
+      expect(fresh).toHaveLength(1);
+      const [row] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, shared));
+      expect(fresh[0]).toMatchObject({
+        state: 'pending',
+        title: expect.stringContaining('Grafana upstairs'),
+      });
+      expect(fresh[0]?.command?.input).toMatchObject({
+        targets: { [shared]: callTarget(row as NonNullable<typeof row>) },
+      });
+      const [card] = await t.services.db
+        .select({ threadRootId: messages.threadRootId })
+        .from(messages)
+        .where(eq(messages.id, fresh[0]?.messageId as string));
+      expect(card?.threadRootId ?? null).toBe(await approvalThread(t.services.db, old.id, IDS.dmDusty));
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ label: 'Grafana' })
+        .where(eq(catalogConnections.id, shared));
+      await restore();
+    }
   });
 
   it('stays bound through the session dispatcher while it runs', async () => {

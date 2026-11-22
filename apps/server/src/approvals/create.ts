@@ -445,6 +445,7 @@ export async function createAskApproval(
     conditions: draft.conditions ?? [],
     involvedIds: draft.involvedIds ?? [],
     conversation,
+    ...(draft.threadRootId !== undefined ? { threadRootId: draft.threadRootId } : {}),
     cardText: draft.cardText ?? `I need a person to say yes before I ${attempt}.`,
     askText: `Asked to ${attempt}`,
     where: requirement.where ?? null,

@@ -15,6 +15,7 @@ import {
 } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { askAgainThread, askAgainTier, askedAgain, askedAgainError } from '../approvals/ask-again';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { defineCommand, type KeyRequirement } from '../commit/types';
@@ -22,17 +23,18 @@ import { changedSince, heldChanged, signingOnlyAs } from '../connections/bound-t
 import {
   ChangedWhileAskedError,
   ConnectionChangedError,
+  changedJustNowText,
   changedSinceYesText,
 } from '../connections/call-target';
 import type { Db } from '../db/client';
 import { accounts, approvals, principals } from '../db/schema/index';
-import { conflict } from '../lib/errors';
+import { type ApiError, conflict } from '../lib/errors';
 import type { RequestAnswer } from '../managed/dispatcher';
 import { sessionDispatcherOf } from '../managed/dispatcher-ref';
 import { loadConversationRow } from '../read/conversations';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
-import { thingActionTargets } from '../things/actions';
+import { askThingAction, namedTitle, type ThingActionAsk, thingActionConnectionId } from '../things/actions';
 
 /** The key every settings change needs. */
 export const SETTINGS_KEY = 'settings.change' as const;
@@ -105,6 +107,8 @@ const Input = z.object({
     .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
     .refine((t) => Object.keys(t).length <= 8)
     .optional(),
+  /** The earlier approval this card asks again for, saved before its yes was bound (`approvals/ask-again.ts`). */
+  askAgainOf: z.string().min(1).max(64).optional(),
 });
 
 export const changeSetting = defineCommand({
@@ -121,10 +125,13 @@ export const changeSetting = defineCommand({
     const words = input.title ?? e.words ?? input.op;
     const where = pageWords((e.page ?? 'you.profile') as SettingsPageId, actor.shortName).where;
     const held = (await loadGrants(db, actor.id)).find((g) => g.keyId === SETTINGS_KEY)?.tier ?? null;
+    const tier = changeTier(held, input.op, input.input);
     const grants: Grant[] = [
-      { agentId: actor.id, keyId: SETTINGS_KEY, tier: changeTier(held, input.op, input.input) },
+      { agentId: actor.id, keyId: SETTINGS_KEY, tier: input.askAgainOf ? askAgainTier(tier) : tier },
     ];
     const conversation = input.conversationId ? await loadConversationRow(db, input.conversationId) : null;
+    const thread =
+      input.askAgainOf && conversation ? await askAgainThread(db, input.askAgainOf, conversation.id) : {};
     const lower = words.charAt(0).toLowerCase() + words.slice(1);
     return {
       keyId: SETTINGS_KEY,
@@ -145,12 +152,31 @@ export const changeSetting = defineCommand({
           ? `${actor.shortName} always asks before this change. If you approve, it runs once, as you.`
           : `${actor.shortName} asks before changing your settings. If you approve, it runs once, as you.`,
         cardText: `I need your yes before I change this: ${lower}.`,
+        ...thread,
       },
     };
   },
   async apply(_tx, ctx, input) {
     const access = assistantAccessFor(input.op, input.input);
     if (access !== 'change' && access !== 'ask') throw conflict(`${input.op} isn’t a setting to change.`);
+    if (ctx.approvalId && !input.targets && thingActionConnectionId(input.op, input.input)) {
+      // Said yes to on a card the previous release saved without binding it to its connection: nothing runs; a fresh
+      // card asks again, and this approval ends saying so.
+      const services = ctx.services;
+      const again = {
+        burrowId: ctx.burrow.id,
+        agentId: ctx.actor.id,
+        approvalId: ctx.approvalId,
+        op: input.op,
+        input: input.input,
+        conversationId: input.conversationId,
+        timeZone: ctx.burrow.timeZone,
+      };
+      ctx.complete(async () => {
+        throw await askChangeAgain(services, again);
+      });
+      return { deferred: true };
+    }
     await ctx.emit({
       type: 'setting.changed',
       kind: 'System',
@@ -203,8 +229,9 @@ export async function runApprovedChange(
 ): Promise<void> {
   const account = await approverAccount(services.db, call.approvalId);
   const dispatcher = sessionDispatcherOf(services);
-  // A page action asked before its card kept where it went is bound to where its connection goes at the yes.
-  const targets = call.targets ?? (await thingActionTargets(services, call.burrowId, call.op, call.input));
+  // A page action is always bound (one asked before binding asks again instead, `changeSetting`); other settings sign
+  // as no connection.
+  const targets = call.targets ?? {};
   const answer =
     account && dispatcher
       ? await runBound(services, targets, changedSinceYesText, () =>
@@ -262,6 +289,55 @@ export async function runBound(
     if (err instanceof ConnectionChangedError) return refused(err.message);
     throw err;
   }
+}
+
+/** A card's own words for a page action (`askThingAction`): the kind's, else the map's, naming its connection. */
+export function thingCardWords(ask: ThingActionAsk, op: string): { title?: string; lines?: string[] } {
+  if (ask.said) return { title: ask.said.title, lines: ask.said.lines.slice(0, PREVIEW_LINES) };
+  if (!ask.label) return {};
+  return { title: namedTitle(assistantSetting(op).words ?? op, ask.label) };
+}
+
+/**
+ * A page action said yes to on a card saved before its yes was bound: a fresh card for it, bound to where its connection
+ * goes now and worded from that same read, in the earlier card's thread (once). The error the earlier approval ends
+ * with.
+ */
+async function askChangeAgain(
+  services: Services,
+  call: {
+    burrowId: string;
+    agentId: string;
+    approvalId: string;
+    op: string;
+    input: Record<string, unknown>;
+    conversationId: string | null;
+    timeZone: string;
+  },
+): Promise<ApiError> {
+  if (await askedAgain(services.db, call.burrowId, call.approvalId)) return askedAgainError();
+  const ask = await askThingAction(services, call.burrowId, call.op, call.input, call.timeZone);
+  if (!ask.label) return conflict('That connection isn’t here any more, so nothing was changed.');
+  if (ask.changed) return conflict(changedJustNowText(ask.changed));
+  try {
+    const res = await services.pipeline.commit(
+      changeSetting,
+      {
+        op: call.op,
+        input: call.input,
+        conversationId: call.conversationId,
+        ...thingCardWords(ask, call.op),
+        targets: ask.targets,
+        askAgainOf: call.approvalId,
+      },
+      { burrowId: call.burrowId, actorId: call.agentId },
+    );
+    if (res.status === 'blocked') return conflict(res.message);
+  } catch (err) {
+    if (err instanceof ChangedWhileAskedError) return conflict(changedJustNowText(err.label));
+    throw err;
+  }
+  return askedAgainError();
 }
 
 export const SETTINGS_COMMANDS = [changeSetting];

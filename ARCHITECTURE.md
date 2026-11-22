@@ -573,11 +573,15 @@ Automations. Code finds it by kind
   person's answer. A Feedback assessment also gets its own report and screenshots. A connection-action result or
   notice reads as a fixed line, including after a retry. Templates read it as state, whether it ran and how many
   (`automations/steps/scope.ts`). Agent posts carry their dispatch id, so the step collects just its own replies.
-  Outsiders' results carry no attachment ids. For older rows without a dispatch id, collection uses only marked
-  posts within the claim. The thread's marked posts offer no shortcuts into the person's turns and create no link
-  previews. The person can start a new turn by replying directly. That turn starts a fresh session in the thread and
-  sees marked posts as quoted data. The person still sees the full posts in Chat. It is served a
-  short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
+  Outsiders' results carry no attachment ids, and no later step copies files from them. For older rows without a
+  dispatch id, collection uses only marked posts within the claim. A result names its turn; templates drop one that
+  names another turn, and a result the previous release saved (no turn named) is read as it was. The thread's marked
+  posts offer no shortcuts into the person's turns and create no link previews. Every start marks what outsiders'
+  input wrote and the mark missed (a step's own thread, what the previous release wrote after a rollback), and More
+  detail, Try again and the claim read the turn that wrote a message, not only its mark
+  (`runtime/outsiders-marks.ts`). The person can start a new turn by replying directly. That turn starts a fresh
+  session in the thread and sees marked posts as quoted data. The person still sees the full posts in Chat. It is
+  served a short allowlist and nothing else (`mcp/served.ts` `OUTSIDERS_TOOLS`): read its thread, reply there, read its files,
   check its own work, and its automation step's own tools (the assessment, proposed connection actions for approval, the
   tracker's report, a pull request from the branch its step checked out); a Feedback assessment has its own five. It
   gets no mail, calendar, files, Vault, connections, notes or memory, and runs in Hermes's separate `_feedback` profile,
@@ -823,7 +827,7 @@ published automation details read their definition and publisher from one versio
   after three failed attempts with a plain-English problem so a mailbox never stalls; attachment metadata is capped at
   100 per email (recording how many were left out) and attachments that cannot be handed over (too large, unknown type,
   download failed, too many) are marked on the run scope so both the prompt and the run page say they didn't come along. High-water marks (`mail_cursors`) and deduplicated matched items (`mail_trigger_items`, whose
-  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows and rows skipped by the cursor, and whose rows are pruned after 30 days) commit through the
+  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows, rows skipped by the cursor and the rows of a mailbox no live rule watches any more, and whose rows are pruned after 30 days) commit through the
   pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
   nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
   runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail
@@ -1052,7 +1056,10 @@ Setup and operation: `docs/github.md`.
   service, so a connection changed before it gets none. Each transport checks its call's own target too
   (datagrams and lines included), and pooled MCP sessions are kept per call target (`connections/pool.ts`). A card's
   words and the target its yes is bound to come from one read of the connection, and the card is saved only while the
-  connection is still stored so (`heldChanged`, held until the card commits). A write that worked
+  connection is still stored so (`heldChanged`, held until the card commits); a page change's card names the
+  connection by its label. A yes to a card saved without its binding (by the previous release) runs nothing: a fresh
+  card bound now asks again in its place (`approvals/ask-again.ts`). A write, a call's or a page button's, is done only
+  on a 2xx answer, never on a redirect (`things/kinds/act.ts` `writeDone`). A write that worked
   is recorded for Done recently with its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per

@@ -40,6 +40,7 @@ import {
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { askAgainThread, askAgainTier, askedAgain, askedAgainError } from '../approvals/ask-again';
 import { answerAfterApproval, grantedResult } from '../approvals/result';
 import { approvalThread } from '../approvals/wake';
 import { sendInThread } from '../commands/messages';
@@ -65,6 +66,7 @@ import {
   ChangedWhileAskedError,
   ConnectionChangedError,
   callTarget,
+  changedJustNowText,
   changedSinceYesText,
   changedWhileAskedText,
 } from './call-target';
@@ -283,6 +285,8 @@ export const callConnectionTool = defineCommand({
       .record(z.string().min(1).max(64), z.string().regex(/^[0-9a-f]{64}$/))
       .refine((o) => Object.keys(o).length <= 8)
       .optional(),
+    /** The earlier approval this call asks again for, saved before its yes was bound (`approvals/ask-again.ts`). */
+    askAgainOf: z.string().min(1).max(64).optional(),
   }),
   async requiredKey(input, { db, services, actor, approvalId }): Promise<KeyRequirement | null> {
     // Saved, and asked on a card, only while the connection and every other one the call acts through are the ones its
@@ -295,8 +299,13 @@ export const callConnectionTool = defineCommand({
     const plan = await planCall(db, services, actor.id, input);
     // Gone or not this agent's to use: `apply` refuses with the reason.
     if (!plan) return null;
-    const grants: Grant[] = [{ agentId: actor.id, keyId: plan.keyId, tier: GRANT_TIER[plan.tier] }];
+    const tier = GRANT_TIER[plan.tier];
+    const grants: Grant[] = [
+      { agentId: actor.id, keyId: plan.keyId, tier: input.askAgainOf ? askAgainTier(tier) : tier },
+    ];
     const conversation = input.conversationId ? await loadConversationRow(db, input.conversationId) : null;
+    const thread =
+      input.askAgainOf && conversation ? await askAgainThread(db, input.askAgainOf, conversation.id) : {};
     const room = conversation
       ? conversation.kind === 'dm'
         ? 'A DM'
@@ -333,6 +342,7 @@ export const callConnectionTool = defineCommand({
             ? `${plan.row.label} asks you before this on ${plan.server.name}. If you approve, it runs once.`
             : `${plan.row.label} always asks you before this. If you approve, it runs once.`
           : `${actor.shortName} asks before ${plan.access === 'write' ? 'changing things in' : 'reading'} ${plan.row.label}. If you approve, it runs once.`,
+        ...thread,
       },
     };
   },
@@ -349,6 +359,30 @@ export const callConnectionTool = defineCommand({
     // The person's limits as they are now (one-whombat-devices.md ONE-DD04): an ask approved after they narrowed is refused.
     const outside = limitsProblem(plan.tool.limits, plan.args, await limitWordsFor(tx, plan.row, plan.tool));
     if (outside) throw forbidden(outside);
+    // Said yes to on a card the previous release saved without binding it to where the call goes (this connection's,
+    // or another's it acts through): nothing is sent; a fresh card asks again, and this approval ends saying so.
+    const reachesOthers = callReaches(plan.row.catalogId, input.tool, plan.args).some(
+      (id) => id !== plan.row.id,
+    );
+    if (ctx.approvalId && (input.target === undefined || (reachesOthers && input.others === undefined))) {
+      const services = ctx.services;
+      const again = {
+        burrowId: ctx.burrow.id,
+        agentId: agent.id,
+        approvalId: ctx.approvalId,
+        connectionId: plan.row.id,
+        handle: input.handle,
+        tool: input.tool,
+        toolHash: input.toolHash,
+        args: plan.args,
+        conversationId: input.conversationId ?? null,
+        ...(input.change ? { change: input.change } : {}),
+      };
+      ctx.complete(async () => {
+        throw await askCallAgain(services, again);
+      });
+      return { callId: input.callId, deferred: true };
+    }
     const conversation = input.conversationId ? await loadConversationRow(tx, input.conversationId) : null;
     const where = conversation
       ? conversation.kind === 'dm'
@@ -989,6 +1023,58 @@ async function tellAfterCall(
 /** A new call id (the event-id shape, like pack calls). */
 export function newCallId(): string {
   return newId('event');
+}
+
+/**
+ * A call said yes to on a card saved before its yes was bound: a fresh card for it, bound to where the connection and
+ * each other one it acts through go now, in the earlier card's thread (once). The error the earlier approval ends with.
+ */
+async function askCallAgain(
+  services: Services,
+  call: {
+    burrowId: string;
+    agentId: string;
+    approvalId: string;
+    connectionId: string;
+    handle: string;
+    tool: string;
+    toolHash: string;
+    args: Record<string, unknown>;
+    conversationId: string | null;
+    change?: string;
+  },
+): Promise<ApiError> {
+  if (await askedAgain(services.db, call.burrowId, call.approvalId)) return askedAgainError();
+  const row = await currentRow(services, call.connectionId);
+  if (!row || row.burrowId !== call.burrowId)
+    return conflict('That connection isn’t here any more, so nothing was sent.');
+  const others = await otherTargetsOf(services, row, call.tool, call.args);
+  const callId = newCallId();
+  try {
+    const res = await services.pipeline.commit(
+      callConnectionTool,
+      {
+        connectionId: row.id,
+        handle: call.handle,
+        tool: call.tool,
+        toolHash: call.toolHash,
+        callId,
+        argsEnc: services.custody.seal(callArgsAad(callId), JSON.stringify(call.args)),
+        ...(call.conversationId ? { conversationId: call.conversationId } : {}),
+        ...(call.change ? { change: call.change } : {}),
+        target: callTarget(row),
+        // Always, also none: the fresh card's own yes is bound and never asks again.
+        others,
+        askAgainOf: call.approvalId,
+      },
+      { burrowId: call.burrowId, actorId: call.agentId },
+    );
+    if (res.status === 'blocked') return conflict(res.message);
+  } catch (err) {
+    if (err instanceof ChangedWhileAskedError) return conflict(changedJustNowText(err.label));
+    throw err;
+  }
+  return askedAgainError();
 }
 
 export const CONNECTION_CALL_COMMANDS = [callConnectionTool, finishConnectionTool];

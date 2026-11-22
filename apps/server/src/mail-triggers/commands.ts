@@ -14,7 +14,7 @@ import {
   newId,
   safeDisplayName,
 } from '@whombat/core';
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq, lt, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { type MailProviderCursor, normalizeRfcMessageId } from '../connectors/types';
@@ -24,7 +24,7 @@ import { blobKey } from '../files/store';
 import { forbidden } from '../lib/errors';
 import { loadPrincipalRow } from '../read/principals';
 import { mailPrincipal } from './principal';
-import { consumedMailText } from './store';
+import { consumedMailText, unwatchedMailText } from './store';
 
 const StagedMailAttachment = z.object({
   name: z.string().min(1).max(1000),
@@ -119,6 +119,17 @@ export const setMailCursor = defineCommand({
           updatedAt: ctx.now,
         })
         .where(eq(mailCursors.connectionId, input.connectionId));
+      // Its last rule went: what it kept of emails no run started from yet goes with it (`unwatchedMailText`).
+      await tx
+        .update(mailTriggerItems)
+        .set({ body: '', snippet: '' })
+        .where(
+          and(
+            eq(mailTriggerItems.burrowId, ctx.burrow.id),
+            eq(mailTriggerItems.connectionId, input.connectionId),
+            unwatchedMailText(),
+          ),
+        );
       await ctx.emit({
         type: 'mail.cursor_updated',
         kind: 'System',
@@ -361,11 +372,12 @@ export const pruneMailTriggerItems = defineCommand({
   async apply(tx, ctx, input) {
     await requireMailSigner(tx, ctx.actor.id);
     const cutoff = new Date(input.before);
-    // The scan normally clears the text. Catch cursors reset or skipped without scanning and older cached rows.
+    // The scan normally clears the text. Catch cursors reset or skipped without scanning, older cached rows, and the
+    // mail of a mailbox no rule watches any more (also what an earlier release left when its last rule went).
     await tx
       .update(mailTriggerItems)
       .set({ body: '', snippet: '' })
-      .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), consumedMailText()));
+      .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), or(consumedMailText(), unwatchedMailText())));
     const deleted = await tx
       .delete(mailTriggerItems)
       .where(and(eq(mailTriggerItems.burrowId, ctx.burrow.id), lt(mailTriggerItems.mirroredAt, cutoff)))

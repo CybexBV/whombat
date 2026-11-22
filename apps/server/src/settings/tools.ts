@@ -41,7 +41,7 @@ import type { ToolContext } from '../mcp/tools';
 import { shortName } from '../read/principals';
 import { askThingAction } from '../things/actions';
 import { ownTurn } from '../vault/self-serve';
-import { changeSetting, runBound } from './command';
+import { changeSetting, runBound, thingCardWords } from './command';
 
 type FindIn = z.output<typeof SettingsFindInput>;
 type ReadIn = z.output<typeof SettingsReadInput>;
@@ -292,7 +292,8 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
     );
   // A service's declared setting or a page action, from one read of its connection: the card says what changes in
   // Whombat's words (SST-04), read from where its yes is bound to; the change runs only while it still goes there.
-  const { targets, said, changed } = await askThingAction(ctx.services, ctx.burrowId, input.op, full);
+  const ask = await askThingAction(ctx.services, ctx.burrowId, input.op, full);
+  const { targets, changed } = ask;
   if (changed) return failed('refused', changedWhileAskedText(changed));
   let res: Awaited<ReturnType<typeof ctx.services.pipeline.commit<typeof changeSetting.schema, unknown>>>;
   try {
@@ -302,7 +303,7 @@ export async function settingsChangeTool(ctx: ToolContext, input: ChangeIn): Pro
         op: input.op,
         input: full as Record<string, unknown>,
         conversationId: ctx.dispatch.conversationId,
-        ...(said ? { title: said.title, lines: said.lines.slice(0, 6) } : {}),
+        ...thingCardWords(ask, input.op),
         ...(Object.keys(targets).length ? { targets } : {}),
       },
       { burrowId: ctx.burrowId, actorId: ctx.agentId, onBehalfOf: ctx.onBehalfOf },

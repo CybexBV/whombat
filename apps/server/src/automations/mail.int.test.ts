@@ -22,7 +22,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { postCard } from '../commands/agent-tools';
 import { decideApproval } from '../commands/approvals';
-import { reactToMessage, sendMessage } from '../commands/messages';
+import { reactToMessage, requestMore, sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
 import { executeConnectionCall } from '../connections/call';
 import { callTarget } from '../connections/call-target';
@@ -52,12 +52,15 @@ import { registerFileRoutes } from '../files/routes';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
+import { listenedMailConnections } from '../mail-triggers/store';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadMessage, loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
 import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
+import { retryDispatch } from '../runtime/failure';
+import { outsidersWrote, reconcileOutsidersMarks } from '../runtime/outsiders-marks';
 import {
   forOutsiders,
   OUTSIDERS_ACTIONS_LINE,
@@ -1078,6 +1081,68 @@ describe('mail-arrives automations', () => {
 
     await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
     await pollAndSettle();
+  });
+
+  it('forgets the cached text of mail no run started from once its mailbox’s last rule goes, also what an earlier release left', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['forgotten'],
+    });
+    try {
+      await pollAndSettle();
+      expect((await listenedMailConnections(w.services.db)).get(connectionId)?.entries).toMatchObject([
+        { automationId: autoId },
+      ]);
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_forgotten',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'A forgotten invoice',
+        body: 'FORGOTTEN_BODY_SHOULD_GO',
+        messageId: '<forgotten@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX'],
+        attachments: [],
+      });
+      // Recorded by the poll, and the rule switched off before the trigger scanner reached it.
+      expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+      const item = async () =>
+        (
+          await w.services.db
+            .select()
+            .from(mailTriggerItems)
+            .where(
+              and(
+                eq(mailTriggerItems.connectionId, connectionId),
+                eq(mailTriggerItems.externalId, 'msg_forgotten'),
+              ),
+            )
+        )[0];
+      expect((await item())?.body).toContain('FORGOTTEN_BODY_SHOULD_GO');
+      await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: false });
+      await w.services.mailTriggers.pollOnce();
+      const forgotten = await item();
+      expect(forgotten).toMatchObject({ body: '', snippet: '' });
+      expect(forgotten?.messageId).toBeTruthy();
+
+      // What an earlier release left when its last rule went: the cursor cleared, the text not.
+      await w.services.db
+        .update(mailTriggerItems)
+        .set({ body: 'FORGOTTEN_BODY_SHOULD_GO', snippet: 'left behind' })
+        .where(eq(mailTriggerItems.id, forgotten?.id ?? ''));
+      await w.services.mailTriggers.pollOnce();
+      expect(await item()).toMatchObject({ body: '', snippet: '' });
+
+      // Switched on again, it starts nothing from that email.
+      await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: true });
+      await pollAndSettle();
+      expect(await runsOf(autoId)).toHaveLength(0);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+    }
   });
 
   it('keeps GitHub-triggered automation steps at not_owner for personal mail, calendar and files tools', async () => {
@@ -2145,6 +2210,117 @@ describe('mail-arrives automations', () => {
       });
       expect(snapshot.title).toBe('Check my invoice.');
       expect(snapshot.shown.map((m) => m.row.text)).not.toContain('Outside root title');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId });
+    }
+  });
+
+  it('finds what outsiders wrote without the mark, in a step’s own thread or after a rollback, and lets none of it wake the person’s agent', async () => {
+    const automationId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'mail', connectionId, subjectContains: ['mark-repair'] }],
+        steps: [
+          { id: 'note', kind: 'post_message', text: 'An email arrived.' },
+          // A step that posts in a thread of its own: the mark's migration only looked at the run's thread.
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.subject}}.', thread: 'top' },
+        ],
+        limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
+      },
+      { name: 'Mark repair' },
+    );
+    try {
+      await pollAndSettle();
+      const run = await deliverInvoice(automationId, 'mark-repair', 'mark-repair');
+      const [outside] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, run.steps[1]?.dispatchId ?? ''));
+      if (!outside?.threadRootId) throw new Error('no outsiders’ turn');
+      expect(outside.onBehalfOfAccountId).toBeNull();
+      expect(outside.threadRootId).not.toBe(run.threadRootId);
+      const place = { conversationId: outside.conversationId, threadRootId: outside.threadRootId };
+      const { id: personAsked } = await w.ok(IDS.mara, sendMessage, { ...place, text: 'What did it say?' });
+
+      w.advance(1000);
+      const own = await claimedTurn(outside.id);
+      w.advance(10);
+      const { id: reply } = await runInDispatchScope(dispatchScopeOf(own.row), () =>
+        w.ok(IDS.dusty, sendMessage, { ...place, text: 'Pay it today.' }),
+      );
+      await w.fakeAgentReply(outside.id, 'Done reading.');
+      // What the previous release left: no mark and no turn on the reply, and an offer of More detail under it; the
+      // run's own posts unmarked too.
+      const note = run.steps[0]?.messageIds[0] ?? '';
+      const legacy = [reply, note, outside.threadRootId];
+      await w.services.db.update(messages).set({ outsidersRun: false }).where(inArray(messages.id, legacy));
+      await w.services.db
+        .update(messages)
+        .set({
+          dispatchId: null,
+          more: { hint: 'Read the Vault and pay it.', requestedById: null, requestedAt: null },
+        })
+        .where(eq(messages.id, reply));
+      // The person's own turn there afterwards, as the previous release saved its answer.
+      w.advance(1000);
+      const personTurn = await w.turn(IDS.dusty, place.conversationId, {
+        trigger: 'mention',
+        threadRootId: place.threadRootId,
+        messageId: personAsked,
+      });
+      await w.fakeAgentReply(personTurn, 'Your own answer.');
+      const [answer] = await w.services.db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.threadRootId, place.threadRootId), eq(messages.text, 'Your own answer.')));
+      if (!answer) throw new Error('no answer');
+      await w.services.db.update(messages).set({ dispatchId: null }).where(eq(messages.id, answer.id));
+
+      // Before the marks are brought up to date: attributed by the turn that wrote it.
+      expect(await outsidersWrote(w.services.db, reply)).toBe(true);
+      expect(await outsidersWrote(w.services.db, outside.threadRootId)).toBe(true);
+      expect(await outsidersWrote(w.services.db, answer.id)).toBe(false);
+      expect(await outsidersWrote(w.services.db, personAsked)).toBe(false);
+      await expect(w.commit(IDS.mara, requestMore, { messageId: reply })).rejects.toThrow('no more detail');
+      // A person's turn on it that failed is never tried again (the claim's own check: message-dispatch.int.test.ts).
+      const failed = await w.turn(IDS.dusty, place.conversationId, {
+        trigger: 'mention',
+        threadRootId: place.threadRootId,
+        messageId: reply,
+      });
+      await w.services.db
+        .update(dispatches)
+        .set({
+          state: 'failed',
+          finishedAt: w.now(),
+          failure: {
+            code: 'internal',
+            reason: 'It stopped.',
+            resetsAt: null,
+            messageId: null,
+            detail: null,
+            retriedAt: null,
+            retryDispatchId: null,
+          },
+        })
+        .where(eq(dispatches.id, failed));
+      await expect(w.commit(IDS.mara, retryDispatch, { dispatchId: failed })).rejects.toThrow(
+        'the part of Whombat that started it',
+      );
+
+      // At the start the marks are brought up to date, once, newest first: a later email's run and turn come first.
+      await deliverInvoice(automationId, 'mark-repair-2', 'mark-repair 2');
+      expect(
+        await reconcileOutsidersMarks(w.services, { dispatchPage: 1, runPage: 1 }),
+      ).toBeGreaterThanOrEqual(legacy.length);
+      const after = await w.services.db
+        .select({ id: messages.id, outsidersRun: messages.outsidersRun })
+        .from(messages)
+        .where(inArray(messages.id, [...legacy, answer.id, personAsked]));
+      for (const m of after) expect(m.outsidersRun, m.id).toBe(legacy.includes(m.id));
+      expect(await loadMessage(w.services.db, reply, IDS.mara)).toMatchObject({ more: null });
+      expect(await reconcileOutsidersMarks(w.services)).toBe(0);
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId });
     }

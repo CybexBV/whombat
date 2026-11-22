@@ -13,6 +13,7 @@ import type { DispatchContext } from '@whombat/core';
 import { turnPrompt } from '@whombat/runner';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { approvalThread } from '../approvals/wake';
 import { startChat } from '../chats/commands';
 import { decideApproval } from '../commands/approvals';
 import {
@@ -36,7 +37,7 @@ import { mcpClient, type TestMcp } from '../test/mcp';
 import { accountOf, agentTokenFor, type TestDispatchOptions } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
 import { signingOnlyAs } from './bound-targets';
-import { callConnectionTool } from './call';
+import { callArgsAad, callConnectionTool, newCallId } from './call';
 import { ConnectionChangedError, callTarget } from './call-target';
 import { visibleConnections } from './context';
 import { credentialFor } from './credentials';
@@ -449,6 +450,77 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
           .poll(async () => (await executionOf(again.id))?.state, { timeout: 10_000 })
           .toBe('succeeded');
         expect(seenFor('attic-lamp')).toBe(1);
+      } finally {
+        await t.services.db
+          .update(catalogConnections)
+          .set({ credentialVersion: before?.credentialVersion ?? 1 })
+          .where(eq(catalogConnections.id, ha));
+      }
+    });
+
+    it('asks again on a fresh card, bound now, for a yes to a card the previous release saved unbound', async () => {
+      await askToTurnOn('pantry-lamp');
+      const [tool] = await t.services.db
+        .select()
+        .from(connectionTools)
+        .where(and(eq(connectionTools.connectionId, ha), eq(connectionTools.name, 'HassTurnOn')));
+      if (!tool) throw new Error('no tool');
+      // As the previous release saved it: no target.
+      const callId = newCallId();
+      const asked = await t.commit(IDS.dusty, callConnectionTool, {
+        connectionId: ha,
+        handle: 'homeassistant',
+        tool: 'HassTurnOn',
+        toolHash: tool.hash,
+        callId,
+        argsEnc: t.services.custody.seal(callArgsAad(callId), JSON.stringify({ name: 'pantry-lamp' })),
+        conversationId: IDS.billing,
+      });
+      if (asked.status !== 'pending_approval') throw new Error(asked.status);
+      const [old] = await t.services.db.select().from(approvals).where(eq(approvals.id, asked.approvalId));
+      if (!old) throw new Error('no approval');
+      const [before] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, ha));
+      // Pointed elsewhere while the card waited.
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: (before?.credentialVersion ?? 1) + 1 })
+        .where(eq(catalogConnections.id, ha));
+      try {
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: old.number, decision: 'approve' })).status,
+        ).toBe('ok');
+        await expect.poll(async () => (await executionOf(old.id))?.state, { timeout: 10_000 }).toBe('failed');
+        expect((await executionOf(old.id))?.error).toContain('asks you again');
+        expect(seenFor('pantry-lamp')).toBe(0);
+        const fresh = await t.services.db
+          .select()
+          .from(approvals)
+          .where(sql`${approvals.command} -> 'input' ->> 'askAgainOf' = ${old.id}`);
+        expect(fresh).toHaveLength(1);
+        const [again] = fresh;
+        const now = await currentRow(t.services, ha);
+        expect(again).toMatchObject({ state: 'pending', conversationId: IDS.billing });
+        expect(again?.command?.input).toMatchObject({ target: callTarget(now as NonNullable<typeof now>) });
+        // In the earlier card's place (its thread, in a threaded room).
+        const [freshCard] = await t.services.db
+          .select({ threadRootId: messages.threadRootId })
+          .from(messages)
+          .where(eq(messages.id, again?.messageId as string));
+        expect(freshCard?.threadRootId ?? null).toBe(
+          await approvalThread(t.services.db, old.id, IDS.billing),
+        );
+        // The person's yes to the fresh card runs it, once, where the connection goes now.
+        expect(
+          (await t.commit(IDS.mara, decideApproval, { number: again?.number as number, decision: 'approve' }))
+            .status,
+        ).toBe('ok');
+        await expect
+          .poll(async () => (await executionOf(again?.id as string))?.state, { timeout: 10_000 })
+          .toBe('succeeded');
+        expect(seenFor('pantry-lamp')).toBe(1);
       } finally {
         await t.services.db
           .update(catalogConnections)

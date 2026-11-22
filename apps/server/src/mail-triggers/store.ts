@@ -165,6 +165,23 @@ export async function mirroredMailItem(db: Db | Tx, rowId: string): Promise<Mirr
   };
 }
 
+/**
+ * The cached text of a mailbox no live mail automation watches any more. Nothing reads it again: a rule switched back on
+ * starts only from mail that arrives after, so it goes whether or not the trigger scanner reached its event (which it
+ * stops doing once the last such rule went, when no other automation reads events).
+ */
+export function unwatchedMailText() {
+  return sql`(${mailTriggerItems.body} <> '' or ${mailTriggerItems.snippet} <> '') and not exists (
+    select 1 from ${automations} as a
+    inner join ${automationVersions} as v on v.automation_id = a.id and v.n = a.current_version
+    where a.burrow_id = ${mailTriggerItems.burrowId}
+      and a.status = 'published'
+      and a.deleted_at is null
+      and exists (select 1 from jsonb_array_elements(v.definition -> 'triggers') as t
+        where t ->> 'kind' = 'mail' and t ->> 'connectionId' = ${mailTriggerItems.connectionId})
+  )`;
+}
+
 /** A mail event behind the automation cursor can never supply text to a new run again. */
 export function consumedMailText() {
   return sql`(${mailTriggerItems.body} <> '' or ${mailTriggerItems.snippet} <> '') and exists (
