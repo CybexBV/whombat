@@ -64,10 +64,10 @@ import { ApiError, notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { appendApplianceEvent } from './audit';
 import type { SessionScope } from './claim';
-import { passkeysWorkHere } from './direct/transport';
+import { stepUpPasskeysHere } from './direct/transport';
 import { FakeSupport } from './fake-support';
 import type { PasskeyService } from './passkeys';
-import { COMMUNITY_TEXT, passkeysUnavailableHere } from './policy';
+import { COMMUNITY_TEXT } from './policy';
 import type { ControlPush } from './push';
 import {
   SupportCallError,
@@ -94,7 +94,15 @@ export interface RemoteHelpBegin {
   level: RemoteHelpLevel;
   duration: RemoteHelpDuration;
   expiresAt: Date;
+  /** Which passkeys it asked for: the hosted app's, or the box's own (on its address). */
+  kind: StepUpKind;
 }
+
+/** The passkeys a session confirms with (`stepUpPasskeysHere`); null: none works there, so the dialog. */
+export type StepUpKind = 'hosted' | 'box';
+
+/** One kind of passkey's step-up: the hosted app's (`PasskeyService`) or the box's own (`BoxPasskeyService`). */
+export type StepUpPasskeys = Pick<PasskeyService, 'hasPasskey' | 'stepUpOptions' | 'confirm'>;
 
 /** A begin lives this long in the session (`REMOTE_HELP_CONFIRM_TTL_S`, as a passkey registration's, PK-06). */
 export const REMOTE_HELP_BEGIN_TTL_MS = REMOTE_HELP_CONFIRM_TTL_S * 1000;
@@ -421,8 +429,12 @@ type Tell = (
 export interface RemoteHelpOptions {
   /** Where the follower keeps its place (tests: in memory). */
   store?: RemoteHelpCursorStore;
-  /** The step-up (the trust service's passkeys); none: nobody can confirm with a passkey. */
-  passkeys?: Pick<PasskeyService, 'hasPasskey' | 'stepUpOptions' | 'confirm'> | null;
+  /** The step-up with the hosted app's passkeys (the trust service's); none: nobody confirms with one. */
+  passkeys?: StepUpPasskeys | null;
+  /** The step-up with the box's own passkeys, on its own address; none: nobody confirms with one there. */
+  boxPasskeys?: StepUpPasskeys | null;
+  /** Which passkeys this session can use (`stepUpPasskeysHere`); absent: the hosted app's everywhere (tests). */
+  passkeysHere?: (session: SessionScope | null) => StepUpKind | null;
   /** Security pushes to the person's devices. */
   push?: Pick<ControlPush, 'security'> | null;
   /** How the agent tells the person (`desk/tell.ts`). */
@@ -483,6 +495,18 @@ export class RemoteHelpService {
   onChange(fn: () => void): () => void {
     this.#listeners.add(fn);
     return () => this.#listeners.delete(fn);
+  }
+
+  /** Which passkeys this session confirms with. */
+  #passkeysHere(session: SessionScope | null): StepUpKind | null {
+    return this.options.passkeysHere ? this.options.passkeysHere(session) : 'hosted';
+  }
+
+  /** That kind's step-up; null when nobody can confirm with it here. */
+  #stepUp(kind: StepUpKind | null): StepUpPasskeys | null {
+    if (kind === 'box') return this.options.boxPasskeys ?? null;
+    if (kind === 'hosted') return this.options.passkeys ?? null;
+    return null;
   }
 
   #accept(state: SupportState): SupportState {
@@ -700,17 +724,13 @@ export class RemoteHelpService {
     principal: SessionPrincipal,
     session: SessionScope | null,
     input: ConfirmBeginInput,
-    /** The refusal when this session can't run a passkey ceremony (a page of the box's own name); null when it can. */
-    noPasskeysHere: ApiError | null = null,
   ): Promise<RemoteHelpConfirmBeginOutput> {
     const { account, endpoint } = requireEnrolled(principal);
     if (!session) throw new ApiError('bad_request', 'Turn on remote help over a session.');
     session.remoteHelpBegin = null;
-    const passkeys = this.options.passkeys;
-    if (!passkeys || !(await passkeys.hasPasskey(account.id))) return { nonce: null, options: null };
-    // Someone with a passkey confirms with it, which this page can't do: they turn it on in the app instead. Someone
-    // without one confirms in the dialog, which works on any page (direct-connection.md DC-22).
-    if (noPasskeysHere) throw noPasskeysHere;
+    const kind = this.#passkeysHere(session);
+    const passkeys = this.#stepUp(kind);
+    if (!kind || !passkeys || !(await passkeys.hasPasskey(account.id))) return { nonce: null, options: null };
     const nonce = randomBytes(32).toString('hex');
     const challenge = passkeyRemoteHelpChallengeBase64url({
       nonce,
@@ -727,6 +747,7 @@ export class RemoteHelpService {
       level: input.level,
       duration: input.duration,
       expiresAt: new Date(this.services.clock().getTime() + REMOTE_HELP_BEGIN_TTL_MS),
+      kind,
     };
     return { nonce, options };
   }
@@ -744,9 +765,9 @@ export class RemoteHelpService {
     const { account, endpoint } = requireEnrolled(principal);
     const begin = session?.remoteHelpBegin ?? null;
     if (session) session.remoteHelpBegin = null;
-    const passkeys = this.options.passkeys;
     if (input.passkey) {
       const now = this.services.clock();
+      const passkeys = begin ? this.#stepUp(begin.kind) : null;
       if (
         !begin ||
         begin.expiresAt <= now ||
@@ -769,8 +790,10 @@ export class RemoteHelpService {
           }),
       );
       if (!confirmed) throw remoteHelpRefusal('passkey_failed');
-    } else if (passkeys && (await passkeys.hasPasskey(account.id))) {
-      throw remoteHelpRefusal('passkey_required');
+    } else {
+      // Someone with a passkey that works where they are confirms with it; someone with none that does, in the dialog.
+      const passkeys = this.#stepUp(this.#passkeysHere(session));
+      if (passkeys && (await passkeys.hasPasskey(account.id))) throw remoteHelpRefusal('passkey_required');
     }
     try {
       // The service opens the box to support (CS-01): not idempotent; a refusal or a socket nobody listens on did
@@ -898,14 +921,21 @@ interface RemoteHelpOpContext {
    * grace; it says so, not “yet” (HE-S224). Absent: a runtime without Link (tests of remote help alone).
    */
   link?: { state: string } | undefined;
-  /** Whether a passkey ceremony can run in this session (its relying party). Absent: tests of remote help alone. */
-  trust?: Pick<TrustService, 'relyingParty' | 'community'>;
 }
 
-/** The refusal for someone with a passkey on a page that can't run its ceremony; null where passkeys work. */
-function noPasskeysHere(c: RemoteHelpOpContext): ApiError | null {
-  if (!c.trust || passkeysWorkHere(c.session?.transport, c.trust.relyingParty())) return null;
-  return passkeysUnavailableHere(c.trust.community);
+/**
+ * The step-up's passkeys from the trust service: the hosted app's, the box's own, and which of them a session can use
+ * (the box's own only on a page at its own address).
+ */
+export function remoteHelpPasskeys(
+  trust: Pick<TrustService, 'passkeys' | 'boxPasskeys' | 'relyingParty' | 'ownAddress'>,
+): Pick<RemoteHelpOptions, 'passkeys' | 'boxPasskeys' | 'passkeysHere'> {
+  return {
+    passkeys: trust.passkeys,
+    boxPasskeys: trust.boxPasskeys,
+    passkeysHere: (session) =>
+      stepUpPasskeysHere(session?.transport, trust.relyingParty(), trust.ownAddress?.host() ?? null),
+  };
 }
 
 /** Whether remote help's switches show: Link on or in grace (LNK-07). Stopping and the visits always work. */
@@ -934,7 +964,7 @@ export const REMOTE_HELP_SESSION_HANDLERS: Readonly<Record<string, RemoteHelpHan
     return remoteHelpOffered(c) ? state : { ...state, available: false, foreverAllowed: false };
   },
   'remoteHelp.confirmBegin': async (c, i: ConfirmBeginInput) =>
-    serviceOf(c).confirmBegin(c.principal, c.session, i, noPasskeysHere(c)),
+    serviceOf(c).confirmBegin(c.principal, c.session, i),
   'remoteHelp.start': async (c, i: StartInput) => serviceOf(c).start(c.principal, c.session, i),
   'remoteHelp.stop': async (c) => {
     requireEnrolled(c.principal);

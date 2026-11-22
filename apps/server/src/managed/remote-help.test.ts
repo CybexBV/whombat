@@ -23,12 +23,15 @@ import {
   RemoteHelpService,
   recordOf,
   remoteHelpStateOf,
+  type StepUpKind,
+  type StepUpPasskeys,
 } from './remote-help';
 import { SupportCallError, type SupportPort } from './remote-help-client';
 import { type TestIdentity, testIdentity } from './testing';
 import type { AccountRow, EndpointRow, SessionPrincipal } from './trust';
 
 const T0 = Date.parse('2026-10-21T12:00:00.000Z');
+const BOX_HOST = 'maple-otter-river.box.whombat.test';
 const OWNERS = ['acc_mara', 'acc_joris', 'acc_priya'];
 
 class MemoryStore implements RemoteHelpCursorStore {
@@ -80,8 +83,38 @@ function assertion(challenge: string, id = 'cred_mara'): WebAuthnAuthenticationR
   };
 }
 
+/** A fake step-up over `credentials` (credential id → its account) under `rpId`: it reads the signed challenge back. */
+function stepUp(credentials: Map<string, string>, rpId: string): StepUpPasskeys {
+  const ids = (accountId: string) => [...credentials].filter(([, a]) => a === accountId).map(([id]) => id);
+  return {
+    hasPasskey: async (accountId) => ids(accountId).length > 0,
+    stepUpOptions: async (accountId, challenge) =>
+      ids(accountId).length
+        ? {
+            challenge,
+            rpId,
+            allowCredentials: ids(accountId).map((id) => ({ type: 'public-key' as const, id })),
+            userVerification: 'required',
+            timeout: 120_000,
+          }
+        : null,
+    confirm: async (accountId, response, challenge) => {
+      const signed = JSON.parse(
+        Buffer.from(response.response.clientDataJSON, 'base64url').toString(),
+      ).challenge;
+      return credentials.get(response.id) === accountId && signed === challenge();
+    },
+  };
+}
+
 function setup(
-  o: { environment?: 'local' | 'prod'; port?: SupportPort; store?: MemoryStore; noChat?: string[] } = {},
+  o: {
+    environment?: 'local' | 'prod';
+    port?: SupportPort;
+    store?: MemoryStore;
+    noChat?: string[];
+    passkeysHere?: (session: SessionScope | null) => StepUpKind | null;
+  } = {},
 ) {
   let now = T0;
   const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -105,33 +138,18 @@ function setup(
     after,
   });
   const store = o.store ?? new MemoryStore();
-  /** Credential id → its account: Mara has a passkey, the others don't. */
+  /** Credential id → its account: Mara has a hosted passkey, Joris a box passkey, the others none. */
   const credentials = new Map([['cred_mara', 'acc_mara']]);
+  const boxCredentials = new Map([['cred_box_joris', 'acc_joris']]);
   const told: { personId: string; text: string }[] = [];
   const pushes: { ids: string[]; what: string; title: string }[] = [];
   /** Accounts with no Chat to be told in. */
   const noChat = new Set<string>(o.noChat ?? []);
   const service = new RemoteHelpService(services, o.port ?? fake, {
     store,
-    passkeys: {
-      hasPasskey: async (accountId) => [...credentials.values()].includes(accountId),
-      stepUpOptions: async (accountId, challenge) =>
-        [...credentials.values()].includes(accountId)
-          ? {
-              challenge,
-              rpId: 'app.whombat.test',
-              allowCredentials: [{ type: 'public-key', id: 'cred_mara' }],
-              userVerification: 'required',
-              timeout: 120_000,
-            }
-          : null,
-      confirm: async (accountId, response, challenge) => {
-        const signed = JSON.parse(
-          Buffer.from(response.response.clientDataJSON, 'base64url').toString(),
-        ).challenge;
-        return credentials.get(response.id) === accountId && signed === challenge();
-      },
-    },
+    passkeys: stepUp(credentials, 'app.whombat.test'),
+    boxPasskeys: stepUp(boxCredentials, BOX_HOST),
+    ...(o.passkeysHere ? { passkeysHere: o.passkeysHere } : {}),
     push: {
       security: async (ids, what, notice) => {
         pushes.push({ ids: [...ids], what, title: notice.title });
@@ -279,39 +297,49 @@ describe('turning it on (RH-03, RH-04, RH-S04)', () => {
     );
   });
 
-  it('on the box’s own page: someone without a passkey confirms in the dialog, someone with one is sent to the app', async () => {
-    const { service } = setup();
-    const page = (): SessionScope => ({
-      claimBegin: null,
-      transport: {
-        via: 'direct',
-        network: 'door',
-        tls: true,
-        page: { origin: 'https://box-label.box.whombat.test', secureContext: true },
-      },
-    });
-    const trust = {
-      relyingParty: () => ({ rpId: 'app.whombat.test', origins: ['https://app.whombat.test'] }),
-      community: false,
+  it('asks for the passkeys that work where the person is, and for none where none does', async () => {
+    /** Where each session is: the box's own page, the app, or a page where no passkey works. */
+    const where = new WeakMap<SessionScope, StepUpKind | null>();
+    const { service } = setup({ passkeysHere: (session) => (session ? (where.get(session) ?? null) : null) });
+    const at = (kind: StepUpKind | null) => {
+      const session = scope();
+      where.set(session, kind);
+      return session;
     };
-    const begin = REMOTE_HELP_SESSION_HANDLERS['remoteHelp.confirmBegin'];
-    const choice = { level: 'look', duration: 'hour' };
-    const joris = { principal: person('acc_joris'), session: page(), remoteHelp: service, trust };
-    expect(await begin?.(joris, choice)).toEqual({ nonce: null, options: null });
-    const on = await REMOTE_HELP_SESSION_HANDLERS['remoteHelp.start']?.(joris, choice);
-    expect(on).toMatchObject({ grant: { level: 'look' } });
+    const choice = { level: 'look', duration: 'hour' } as const;
+    const joris = person('acc_joris');
+    const mara = person('acc_mara');
 
-    const mara = { principal: person('acc_mara'), session: page(), remoteHelp: service, trust };
-    const refused = await begin?.(mara, choice).catch((e: unknown) => e);
-    expect(refused).toMatchObject({
-      code: 'forbidden',
-      extra: { details: { code: 'passkeys_unavailable_here' } },
+    // On the box's own page Joris confirms with his box passkey, and only with it.
+    const page = at('box');
+    expect(code(await service.start(joris, page, choice).catch((e: unknown) => e))).toBe('passkey_required');
+    const begun = await service.confirmBegin(joris, page, choice);
+    expect(begun.options).toMatchObject({ rpId: BOX_HOST, allowCredentials: [{ id: 'cred_box_joris' }] });
+    const signed = assertion(begun.options?.challenge ?? '', 'cred_box_joris');
+    expect((await service.start(joris, page, { ...choice, passkey: signed })).grant?.level).toBe('look');
+
+    // Mara's passkey is the hosted app's, which the page can't use: she confirms in the dialog there.
+    const marasPage = at('box');
+    expect(await service.confirmBegin(mara, marasPage, choice)).toEqual({ nonce: null, options: null });
+    expect((await service.start(mara, marasPage, choice)).grant?.level).toBe('look');
+
+    // In the app it is the other way round; her hosted passkey can't confirm a box begin either.
+    const app = at('hosted');
+    expect(await service.confirmBegin(joris, app, choice)).toEqual({ nonce: null, options: null });
+    expect((await service.confirmBegin(mara, app, choice)).options).toMatchObject({
+      allowCredentials: [{ id: 'cred_mara' }],
     });
-    // The hosted app, through the relay, asks for her passkey as before.
-    const relayed = { ...mara, session: { claimBegin: null, transport: { via: 'relay' as const } } };
-    expect(await begin?.(relayed, choice)).toMatchObject({
-      options: { allowCredentials: [{ id: 'cred_mara' }] },
-    });
+    const wrongKind = at('box');
+    await service.confirmBegin(joris, wrongKind, choice);
+    const marasKey = assertion((await service.confirmBegin(mara, app, choice)).options?.challenge ?? '');
+    expect(
+      code(await service.start(joris, wrongKind, { ...choice, passkey: marasKey }).catch((e: unknown) => e)),
+    ).toBe('passkey_failed');
+
+    // Where no passkey works (another page of the box), nobody is asked for one.
+    const elsewhere = at(null);
+    expect(await service.confirmBegin(mara, elsewhere, choice)).toEqual({ nonce: null, options: null });
+    expect((await service.start(mara, elsewhere, choice)).grant?.level).toBe('look');
   });
 
   it('leaves Forever to the service: allowed on a test Whombat, refused on a customer’s, the help code shown there', async () => {

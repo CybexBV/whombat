@@ -293,7 +293,9 @@ full set.
   [push-words.md](docs/decisions/push-words.md)); a remote help visit is told in the Chat instead. A quarantined box
   sends nothing but one `backup` push that a restore is done and waits for the person.
 - **Remote help** (`managed/remote-help.ts`) is granted and enforced by the support service; the runtime gives the
-  person its switches and records each step ([remote-help.md](docs/decisions/remote-help.md)). **The desk screen**
+  person its switches and records each step ([remote-help.md](docs/decisions/remote-help.md)). Turning it on is
+  confirmed with a passkey that works where the person is: a box passkey on the box's own address, the hosted app's
+  in the apps, the dialog where none of theirs works (`stepUpPasskeysHere`). **The desk screen**
   (`apps/server/src/desk/`) is the box's own display: a glance, the person's asks, talking to the agent. The glance is
   the calm glance: the runtime gathers what's true (Home's asks and looks, the work, the fleet, the connections'
   activity, what's coming up: `desk/calm-sources.ts`) and core's planner (`deskCalmFor`, `domain/desk-calm.ts`) decides

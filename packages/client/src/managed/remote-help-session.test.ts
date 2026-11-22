@@ -65,6 +65,43 @@ describe('remote help over the session', () => {
     }
   });
 
+  it('hints a passkey only where one of the viewer’s confirms: a box passkey on its address, a hosted one elsewhere', async () => {
+    const HOST = 'maple-otter-river.box.whombat.test';
+    const passkey = (id: string, rpId?: string) => ({
+      id,
+      name: 'iCloud Keychain',
+      accountId: 'acc_fake',
+      personName: 'Mara',
+      createdAt: '2026-11-05T10:00:00.000Z',
+      lastUsedAt: null,
+      synced: true,
+      current: false,
+      ...(rpId ? { rpId } : {}),
+    });
+    const withPasskeys = (passkeys: unknown[]) => {
+      const appliance = createFakeAppliance({
+        handle: async (op) =>
+          op === 'passkeys.list'
+            ? { status: 200, body: { passkeys, policy: { deviceBoundOnly: false } } }
+            : { status: 404, body: {} },
+      });
+      return createSecureSession({ connector: appliance.connector });
+    };
+    const hosted = withPasskeys([passkey('cred_hosted')]);
+    const box = withPasskeys([passkey('cred_box', HOST)]);
+    try {
+      // The hint reads the open session's account: a first request opens it.
+      await Promise.all([sessionOps.passkeysList(hosted), sessionOps.passkeysList(box)]);
+      expect(await remoteHelpApi(hosted).hasPasskey()).toBe(true);
+      expect(await remoteHelpApi(hosted, { boxHost: HOST }).hasPasskey()).toBe(false);
+      expect(await remoteHelpApi(box).hasPasskey()).toBe(false);
+      expect(await remoteHelpApi(box, { boxHost: HOST }).hasPasskey()).toBe(true);
+    } finally {
+      hosted.close();
+      box.close();
+    }
+  });
+
   it('a refusal carries its reason; a visit without a command line is not found', async () => {
     const { remote, session } = world();
     try {

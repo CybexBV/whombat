@@ -73,8 +73,23 @@ export function passkeysWorkHere(
 }
 
 /**
- * Session ops that always need a WebAuthn ceremony in the page (DC-11). `remoteHelp.confirmBegin` needs one only for
- * someone with a passkey, so remote help refuses it itself, after looking (DC-22).
+ * Which of the person's passkeys a session can use to confirm something: the hosted app's where those work (the apps,
+ * the hosted app, a community box's Tailscale page), the box's own on a page at its own address, none anywhere else.
+ */
+export function stepUpPasskeysHere(
+  transport: SessionTransport | undefined,
+  relyingParty: { origins: readonly string[] } | null,
+  ownHost: string | null,
+): 'hosted' | 'box' | null {
+  if (passkeysWorkHere(transport, relyingParty)) return 'hosted';
+  const page = transport?.via === 'direct' ? transport.page : null;
+  if (ownHost && page?.secureContext && page.origin === `https://${ownHost}`) return 'box';
+  return null;
+}
+
+/**
+ * Session ops that always need a WebAuthn ceremony in the page. `remoteHelp.confirmBegin` isn't one: it asks for the
+ * passkeys that work where the person is, and for none where none does.
  */
 export const PAGE_PASSKEY_OPS: ReadonlySet<string> = new Set([
   'passkey.register.begin',
