@@ -43,6 +43,11 @@ describe('checks that start off (watch-defaults.md)', () => {
     expect(checkStartsOn('host.disk.wear_high')).toBe(false);
     expect(checkStartsOn('host.hint.system.updates')).toBe(false);
     expect(checkStartsOn('host.hint.guest.no_backup_job')).toBe(true);
+    expect(checkStartsOn('qbittorrent.disconnected')).toBe(false);
+    expect(checkStartsOn('frigate.camera_offline')).toBe(true);
+    expect(checkStartsOn('hetzner.idle')).toBe(false);
+    expect(checkStartsOn('cloudflare.domain_expiring')).toBe(false);
+    expect(checkStartsOn('pbs.never_verified')).toBe(false);
   });
 
   it('starts what nobody decided off and reports it once; servers’ checks follow the contract', () => {

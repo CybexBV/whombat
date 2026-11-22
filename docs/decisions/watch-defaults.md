@@ -42,7 +42,7 @@ What starts on. Every other check starts off (the full list with natures: `start
 | Jellyfin | — | All: failed tasks, restart needed, many conversions, long scans |
 | Sonarr, Radarr | The media disk filling up | Their own health checks, downloads that can't be imported |
 | SABnzbd | The download disk filling up, news servers not working | Paused downloads, failed downloads, its other warnings |
-| qBittorrent | Disconnected from peers | The download disk low on space, firewalled, errored torrents, stalled downloads, slow speed limits |
+| qBittorrent | — | All: disconnected from peers, the download disk low on space, firewalled, errored torrents, stalled downloads, slow speed limits |
 | ESPHome | — | All: devices offline, installs that fail, older versions |
 | UniFi Protect | The alarm, cameras offline | Following detections |
 | Frigate | Cameras offline | Recordings disk filling up, slow object detector, cameras dropping frames |

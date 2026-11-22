@@ -255,7 +255,7 @@ export const QBT_CHECKS: readonly KindCheck[] = [
     name: 'No network connection',
     nature: 'problem',
     perItem: false,
-    startsOn: true,
+    startsOn: false,
   },
   {
     check: 'qbittorrent.errored',
