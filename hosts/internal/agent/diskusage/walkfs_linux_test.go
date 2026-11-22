@@ -478,3 +478,73 @@ func TestLinuxOpenRootRejectsOvermountAndAutomountBeforeReadableOpen(t *testing.
 		})
 	}
 }
+
+func TestLinuxSparseFileCountsZeroAllocatedBytes(t *testing.T) {
+	// Unit checks for entryStatFromStatx and entryStatFromUnix.
+	sparseStx := &unix.Statx_t{
+		Mask:   unix.STATX_MODE | unix.STATX_SIZE | unix.STATX_BLOCKS,
+		Mode:   unix.S_IFREG | 0o644,
+		Size:   100 << 30,
+		Blocks: 0,
+	}
+	if got := entryStatFromStatx(sparseStx); got.AllocBytes != 0 || got.Size != 100<<30 {
+		t.Fatalf("sparse statx = %+v, want AllocBytes=0 Size=100GiB", got)
+	}
+
+	// Filesystem omitting STATX_BLOCKS still falls back to STATX_SIZE.
+	noBlocksStx := &unix.Statx_t{
+		Mask: unix.STATX_MODE | unix.STATX_SIZE,
+		Mode: unix.S_IFREG | 0o644,
+		Size: 4096,
+	}
+	if got := entryStatFromStatx(noBlocksStx); got.AllocBytes != 4096 {
+		t.Fatalf("statx without STATX_BLOCKS = %+v, want AllocBytes=4096", got)
+	}
+
+	sparseUnix := &unix.Stat_t{
+		Mode:   unix.S_IFREG | 0o644,
+		Size:   100 << 30,
+		Blocks: 0,
+	}
+	if got := entryStatFromUnix(sparseUnix); got.AllocBytes != 0 || got.Size != 100<<30 {
+		t.Fatalf("sparse Stat_t = %+v, want AllocBytes=0 Size=100GiB", got)
+	}
+
+	// End-to-end check on a real sparse file created with Truncate.
+	root := t.TempDir()
+	writeBytes(t, filepath.Join(root, "vms/real.bin"), 16*1024)
+	sparsePath := filepath.Join(root, "vms/sparse-100m.raw")
+	f, err := os.Create(sparsePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(100 << 20); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var st unix.Stat_t
+	if err := unix.Stat(sparsePath, &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Blocks != 0 {
+		t.Skipf("filesystem allocated %d blocks for truncated sparse file", st.Blocks)
+	}
+
+	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+	r := newTestRunner(t, root, mounts, nil)
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+	var total uint64
+	for _, fld := range resp.Folders {
+		total += fld.Bytes
+	}
+	if total < 16*1024 || total >= 1<<20 {
+		t.Fatalf("total walked bytes with 100 MiB sparse file = %d, want ~16 KiB (folders=%+v)", total, resp.Folders)
+	}
+}

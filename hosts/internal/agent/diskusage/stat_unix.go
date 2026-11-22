@@ -22,8 +22,6 @@ func entryStatFromUnix(st *unix.Stat_t) entryStat {
 	var alloc uint64
 	if st.Blocks > 0 {
 		alloc = uint64(st.Blocks) * 512
-	} else if st.Size > 0 {
-		alloc = uint64(st.Size)
 	}
 	return entryStat{
 		Mode:       unixModeToFS(uint32(st.Mode)),

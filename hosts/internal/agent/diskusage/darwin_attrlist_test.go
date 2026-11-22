@@ -220,8 +220,10 @@ func TestParseDarwinAttrlistBulkFiltersMountsTriggersFirmlinksAndExtractsFileSta
 		{name: "foreign", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: otherFSID, hasObjType: true, objType: darwinVDir, hasMntStatus: true, mntStatus: 0},
 		// Regular file with allocated size + hardlink count.
 		{name: "blob.bin", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: rootFSID, hasObjType: true, objType: darwinVReg, hasFileID: true, fileID: 201, hasNlink: true, nlink: 2, hasTotalSize: true, totalSize: 10000, hasAllocSize: true, allocSize: 16384},
-		// Regular file with alloc=0 falling back to totalSize.
-		{name: "inline.txt", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: rootFSID, hasObjType: true, objType: darwinVReg, hasFileID: true, fileID: 202, hasTotalSize: true, totalSize: 512, hasAllocSize: true, allocSize: 0},
+		// Sparse file with reported alloc=0 must be counted as 0 allocated bytes, not totalSize.
+		{name: "sparse.img", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: rootFSID, hasObjType: true, objType: darwinVReg, hasFileID: true, fileID: 202, hasTotalSize: true, totalSize: 100 << 30, hasAllocSize: true, allocSize: 0},
+		// Regular file when filesystem omits ATTR_FILE_ALLOCSIZE falls back to totalSize.
+		{name: "noalloc.txt", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: rootFSID, hasObjType: true, objType: darwinVReg, hasFileID: true, fileID: 204, hasTotalSize: true, totalSize: 512, hasAllocSize: false},
 		// Symlink.
 		{name: "sym", hasDev: true, dev: rootDevInt32, hasFSID: true, fsid: rootFSID, hasObjType: true, objType: darwinVLnk, hasFileID: true, fileID: 203},
 		// Entry error: ENOENT maps to fs.ErrNotExist; EACCES (13) stays non-skip error.
@@ -266,9 +268,14 @@ func TestParseDarwinAttrlistBulkFiltersMountsTriggersFirmlinksAndExtractsFileSta
 		t.Errorf("blob.bin stat = %+v", blob.info.Stat)
 	}
 
-	inl := byName["inline.txt"]
-	if inl.info.Stat.AllocBytes != 512 || inl.info.Stat.Nlink != 1 {
-		t.Errorf("inline.txt stat = %+v, want AllocBytes=512 Nlink=1", inl.info.Stat)
+	sparse := byName["sparse.img"]
+	if sparse.info.Stat.AllocBytes != 0 || sparse.info.Stat.Size != 100<<30 || sparse.info.Stat.Nlink != 1 {
+		t.Errorf("sparse.img stat = %+v, want AllocBytes=0 Size=100GiB Nlink=1", sparse.info.Stat)
+	}
+
+	noAlloc := byName["noalloc.txt"]
+	if noAlloc.info.Stat.AllocBytes != 512 || noAlloc.info.Stat.Nlink != 1 {
+		t.Errorf("noalloc.txt stat = %+v, want AllocBytes=512 Nlink=1", noAlloc.info.Stat)
 	}
 
 	if byName["sym"].info.Kind != entrySymlink {

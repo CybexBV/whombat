@@ -14,7 +14,11 @@ import (
 
 func entryStatFromStatx(stx *unix.Statx_t) entryStat {
 	var alloc uint64
-	if stx.Blocks > 0 {
+	if stx.Mask&unix.STATX_BLOCKS != 0 {
+		alloc = stx.Blocks * 512
+	} else if stx.Mask&unix.STATX_SIZE != 0 {
+		alloc = stx.Size
+	} else if stx.Blocks > 0 {
 		alloc = stx.Blocks * 512
 	} else if stx.Size > 0 {
 		alloc = stx.Size
