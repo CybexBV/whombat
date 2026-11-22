@@ -43,7 +43,7 @@ export async function ranOnForPost(
   ctx: ApplyContext,
   conversation: ConversationRow,
   card: StoredCard | null | undefined,
-): Promise<{ ranOn: RanOn; dispatchId: string } | null> {
+): Promise<RanOn | null> {
   if (ctx.actor.kind !== 'agent' || (card && NOT_A_REPLY.has(card.kind))) return null;
   const scope = currentDispatchScope();
   if (!scope?.dispatchId || scope.agentId !== ctx.actor.id) return null;
@@ -65,10 +65,9 @@ export async function ranOnForPost(
   const runtime = turnRuntime(agent?.runtime, turn);
   if (!isChatProvider(runtime.provider)) return null;
   const local = runtime.provider === 'local' ? localModelView(ctx.burrow) : null;
-  const ranOn = ranOnAtPost(runtime, providerModels(ctx.services, runtime.provider, local), {
+  return ranOnAtPost(runtime, providerModels(ctx.services, runtime.provider, local), {
     gateway: turn.gatewayProvider !== null,
   });
-  return ranOn ? { ranOn, dispatchId: scope.dispatchId } : null;
 }
 
 /**

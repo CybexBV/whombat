@@ -57,6 +57,7 @@ import { loadMessage, loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
+import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
 import {
   forOutsiders,
   OUTSIDERS_ACTIONS_LINE,
@@ -2018,6 +2019,76 @@ describe('mail-arrives automations', () => {
     const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
     return { row, auth, context: await buildDispatchContext(w.services, row) };
   }
+
+  it('collects only its own dispatch after a person’s turn overtakes it in the same thread', async () => {
+    const automationId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'mail', connectionId, subjectContains: ['dispatch-boundary'] }],
+        steps: [{ id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.subject}}.' }],
+        limits: { runTimeoutMinutes: 180, maxConcurrentRuns: 2, maxRunsPerDay: 50 },
+      },
+      { name: 'Dispatch boundary' },
+    );
+    try {
+      await pollAndSettle();
+      const run = await deliverInvoice(automationId, 'dispatch-boundary', 'dispatch-boundary');
+      const step = run.steps[0];
+      const [outside] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, step?.dispatchId ?? ''));
+      if (!outside?.threadRootId) throw new Error('no outsiders’ thread');
+      const place = { conversationId: outside.conversationId, threadRootId: outside.threadRootId };
+      const {
+        dispatches: [asked],
+      } = await w.ok(IDS.mara, sendMessage, { ...place, text: 'Check my invoice.' });
+      const [person] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, asked?.dispatchId ?? ''));
+      if (!person?.onBehalfOfAccountId) throw new Error('no person’s turn');
+      const { messageId: cardId } = await runInDispatchScope(dispatchScopeOf(person), () =>
+        w.ok(IDS.dusty, postCard, {
+          ...place,
+          text: 'Private invoice 8829',
+          card: { kind: 'pill', text: 'Private', tone: 'ok' },
+        }),
+      );
+      await w.fakeAgentReply(person.id, 'Private invoice 8830');
+      expect(await loadMessageRow(w.services.db, cardId)).toMatchObject({
+        dispatchId: person.id,
+        outsidersRun: false,
+      });
+      const { id: before } = await runInDispatchScope(dispatchScopeOf(outside), () =>
+        w.ok(IDS.dusty, sendMessage, { ...place, text: 'Outside before claim' }),
+      );
+      await w.services.db.update(messages).set({ dispatchId: null }).where(eq(messages.id, before));
+
+      w.advance(1000);
+      const own = await claimedTurn(outside.id);
+      const { id: earlier } = await runInDispatchScope(dispatchScopeOf(own.row), () =>
+        w.ok(IDS.dusty, sendMessage, { ...place, text: 'Legacy outside answer' }),
+      );
+      await w.services.db
+        .update(messages)
+        .set({ dispatchId: null, attachmentIds: ['att_legacy'] })
+        .where(eq(messages.id, earlier));
+      await w.fakeAgentReply(outside.id, 'Outside final answer');
+      await w.settle();
+      const result = (await w.run(run.id)).steps[0]?.output;
+      expect(result).toMatchObject({
+        text: 'Legacy outside answer\n\nOutside final answer',
+        reply: 'Outside final answer',
+        attachmentIds: [],
+      });
+      expect(result?.messageIds).toHaveLength(2);
+      expect(result?.messageIds).not.toContain(cardId);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId });
+    }
+  });
 
   it('shows an outsiders’ turn the card and what the server read for it only as a line, and keeps two connections’ names apart', async () => {
     // Two Paperless-ngx connections whose tag 7 is a different tag, and a Moneybird with its own administration.

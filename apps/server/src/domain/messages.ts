@@ -228,9 +228,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     ...(args.subject && !rootId
       ? { subjectKind: args.subject.kind, subjectId: args.subject.id, subjectName: args.subject.name }
       : {}),
-    ...(ran ? { ranOn: ran.ranOn, dispatchId: ran.dispatchId } : {}),
-    // A question needs its asking turn even outside Chat or without a model display label.
-    ...(actor.kind === 'agent' && args.asks && scope?.agentId === actor.id && scope.dispatchId
+    ...(ran ? { ranOn: ran } : {}),
+    ...(actor.kind === 'agent' && scope?.agentId === actor.id && scope.dispatchId
       ? { dispatchId: scope.dispatchId }
       : {}),
   });
