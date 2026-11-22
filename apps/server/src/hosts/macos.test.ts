@@ -427,6 +427,11 @@ describe('mac_screen and mac_ui', () => {
       ]),
     ).toEqual(['Open Details', 'Directions · 0 min', 'Play']);
     expect(ownActionNames(['AXPress'])).toEqual([]);
+    // The agent with Find My passes the names as words already.
+    expect(ownActionNames(['AXPress', 'Open Details', 'Play', 'AXShowMenu'])).toEqual([
+      'Open Details',
+      'Play',
+    ]);
   });
 
   it('word an element’s own action and a quit for the person', () => {

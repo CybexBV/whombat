@@ -239,14 +239,15 @@ export function macSays(r: Pick<HostScreenResult, 'message'>): { message?: strin
 }
 
 /**
- * An element's own actions by name (“Play”, “Directions · 0 min”): Whombat Helper lists them as
- * `Name:Play\nTarget:0x0\nSelector:(null)`; the plain accessibility ones (`AXPress`) are what press does already.
+ * An element's own actions by name (“Play”, “Directions · 0 min”): the Mac's agent passes them as those words (an
+ * agent before Find My passed Accessibility's raw `Name:Play\nTarget:0x0\nSelector:(null)`); the plain accessibility
+ * ones (`AXPress`, `AXShowMenu`) are what press does already.
  */
 export function ownActionNames(actions: readonly string[]): string[] {
   const names: string[] = [];
   for (const a of actions) {
-    const m = /^Name:([^\n]*)/.exec(a);
-    const name = m?.[1]?.trim();
+    const raw = /^Name:([^\n]*)/.exec(a);
+    const name = raw ? raw[1]?.trim() : /^AX[A-Z]/.test(a) ? undefined : a.trim();
     if (name && !names.includes(name)) names.push(name);
   }
   return names;
