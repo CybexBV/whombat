@@ -393,7 +393,7 @@ describe('Frigate page in slots', () => {
     };
     forgetKindReads(services);
     const okSeen = await frigateSeen(services, row, now, TZ);
-    expect(okSeen.notices.map((n) => [n.check, n.subject?.id])).toEqual([
+    expect((okSeen.notices ?? []).map((n) => [n.check, n.subject?.id])).toEqual([
       ['frigate.camera_offline', 'camera:shed'],
     ]);
     expect(okSeen.skipped).not.toContain('frigate.camera_offline');
