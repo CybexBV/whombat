@@ -2090,6 +2090,68 @@ describe('mail-arrives automations', () => {
     }
   });
 
+  it('only accepts actions printed for this dispatch and gives uniform refusals for missing setup', async () => {
+    const ids: string[] = [];
+    const automationId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      subjectContains: ['offer-boundary'],
+    });
+    const connect = async (catalogId: string, handle: string, fields: Record<string, string>) => {
+      w.advance(10);
+      const id = await insertConnection(w.services, { catalogId, handle, fields, burrowId: w.burrowId });
+      ids.push(id);
+      await syncTools(w.services, id);
+      return id;
+    };
+    try {
+      await connect('moneybird', 'missing-books', {});
+      await connect('nextcloud', 'missing-drive', { url: 'https://drive.example.com' });
+      const ready = await connect('moneybird', 'turned-on-mid-turn', { administration: '12345' });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ access: 'read' })
+        .where(eq(catalogConnections.id, ready));
+      for (let i = 0; i < 12; i++) await connect('moneybird', `books-${i}`, { administration: '12345' });
+      await pollAndSettle();
+      const run = await deliverInvoice(automationId, 'offer-boundary', 'offer-boundary');
+      const turn = await claimedTurn(run.steps[0]?.dispatchId ?? '');
+      expect(turn.context.trigger?.text).toContain('- missing-books:');
+      expect(turn.context.trigger?.text).toContain('- missing-drive:');
+      expect(turn.context.trigger?.text).toContain('- books-0:');
+      expect(turn.context.trigger?.text).not.toContain('- books-11:');
+      expect(turn.context.trigger?.text).not.toContain('- turned-on-mid-turn:');
+      await w.services.db
+        .update(catalogConnections)
+        .set({ access: 'manage' })
+        .where(eq(catalogConnections.id, ready));
+
+      const propose = (connection: string, arguments_: Record<string, unknown>) =>
+        callTool(w.services, turn.auth, 'propose_connection_actions', {
+          actions: [{ connection, tool: 'request', summary: 'File this invoice', arguments: arguments_ }],
+        });
+      const invoice = {
+        method: 'POST',
+        path: '/documents/purchase_invoices.json',
+        body: { purchase_invoice: { reference: 'Invoice 5' } },
+      };
+      for (const handle of ['books-11', 'turned-on-mid-turn', 'missing-books', 'nonexistent']) {
+        const result = await propose(handle, invoice);
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(notOfferedText(handle));
+      }
+      const folder = await propose('missing-drive', { method: 'MKCOL', path: '/Invoices/' });
+      expect(folder.isError).toBe(true);
+      expect(JSON.stringify(folder.content)).toContain(notOfferedText('missing-drive'));
+      expect((await propose('books-0', invoice)).isError).not.toBe(true);
+      await w.fakeAgentReply(turn.row.id, 'I proposed filing the invoice.');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId });
+      for (const id of ids)
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, id));
+    }
+  });
+
   it('shows an outsiders’ turn the card and what the server read for it only as a line, and keeps two connections’ names apart', async () => {
     // Two Paperless-ngx connections whose tag 7 is a different tag, and a Moneybird with its own administration.
     const home = await fakeService(({ method, url }) =>

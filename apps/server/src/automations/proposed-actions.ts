@@ -21,7 +21,7 @@ import {
   requestAllowed,
   sensitiveReason,
 } from '@whombat/core';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
 import { callTier, needsReauthText } from '../connections/call';
@@ -49,7 +49,13 @@ import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
 import { handedOverFileIds } from './handed-files';
-import { isProposableEntry, listedHowTo, settleListed, whatMailCanDo } from './listed-actions';
+import {
+  isProposableEntry,
+  listedActionName,
+  listedOffers,
+  settleListed,
+  whatMailCanDo,
+} from './listed-actions';
 import {
   type CardFile,
   type CardNames,
@@ -148,11 +154,13 @@ export function outsidersCall(
   if (reason)
     return {
       ok: false,
+      offered: false,
       reason: `${name}: an outsiders’ run can’t propose this (${reason.replace(/[.\s]+$/, '').toLowerCase()}).`,
     };
   if (connectionCallAccess(entry, tool, args) === 'read')
     return {
       ok: false,
+      offered: false,
       reason: `${name}: read-only calls can’t be proposed because their results aren’t returned.`,
     };
   return { ok: true, args };
@@ -230,6 +238,40 @@ export function reportedProposedActions(kept: unknown): ProposedConnectionAction
   return parsed.success ? parsed.data : [];
 }
 
+const OfferedAction = z.object({
+  connectionId: z.string(),
+  handle: z.string(),
+  catalogId: z.string(),
+  tool: z.string(),
+  origin: z.enum(['request', 'adapter']),
+  action: z.string(),
+});
+type OfferedAction = z.infer<typeof OfferedAction>;
+const OfferedActions = z.array(OfferedAction);
+
+/** Identify each proposal before reading any of the person's connection rows. */
+function offeredAction(
+  offers: readonly OfferedAction[],
+  item: ProposedConnectionAction,
+): OfferedAction | undefined {
+  const handle = item.connection.trim().toLowerCase();
+  return offers.find((offer) => {
+    if (offer.handle !== handle || offer.tool !== item.tool) return false;
+    let args = item.arguments;
+    if (offer.origin === 'request') {
+      try {
+        args = normaliseRequestArgs(args);
+      } catch (err) {
+        // This handle and tool were offered. Explain malformed input before looking up the connection.
+        throw forbidden(`${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`);
+      }
+    }
+    return (
+      listedActionName(offer.catalogId, { name: offer.tool, origin: offer.origin }, args) === offer.action
+    );
+  });
+}
+
 /**
  * `automation.propose_actions` (the step's agent, `propose_connection_actions`): keeps proposed connection actions on
  * the step under the run's lock so the follow-up `connection_actions` step sees the last proposal. Content-free signed
@@ -257,22 +299,35 @@ export const proposeConnectionActions = defineCommand({
     if (!run || row?.state !== 'waiting' || row.dispatchId !== dispatchId)
       throw conflict('This step is finished, so its proposed actions can’t change any more.');
     if (input.actions.length > 0) {
-      const allConnections = await tx
+      const kept = OfferedActions.safeParse((row.output as JsonObject).offeredActions);
+      const offers = kept.success ? kept.data : [];
+      const matched = input.actions.map((item) => {
+        const offer = offeredAction(offers, item);
+        if (!offer) throw forbidden(notOfferedText(item.connection));
+        return { item, offer };
+      });
+      const rows = await tx
         .select()
         .from(catalogConnections)
-        .where(eq(catalogConnections.burrowId, ctx.burrow.id));
-      const byHandle = new Map(allConnections.map((c) => [c.handle.toLowerCase(), c]));
+        .where(
+          and(
+            eq(catalogConnections.burrowId, ctx.burrow.id),
+            inArray(catalogConnections.id, [...new Set(matched.map(({ offer }) => offer.connectionId))]),
+          ),
+        );
+      const byId = new Map(rows.map((connection) => [connection.id, connection]));
       const maxUpload = Math.min(CONNECTOR_BINARY_MAX_BYTES, ctx.services.files.maxBytes);
       const described: (DescribedAction & { label: string })[] = [];
-      for (const item of input.actions) {
-        const handle = item.connection.trim().toLowerCase();
-        const conn = byHandle.get(handle);
+      for (const { item, offer } of matched) {
+        const conn = byId.get(offer.connectionId);
         const entry = conn ? catalogEntry(conn.catalogId) : null;
-        // Only what the turn's instructions offered it (`proposableConnectionsNote`): anything else, whatever the
+        // Only what the turn's instructions offered it (`proposableConnections`): anything else, whatever the
         // reason, is refused in the same words, so the refusal says nothing of what the person has.
         const notOffered = () => forbidden(notOfferedText(item.connection));
         if (
           !conn ||
+          conn.catalogId !== offer.catalogId ||
+          conn.handle.toLowerCase() !== offer.handle ||
           !entry ||
           !isProposableEntry(entry) ||
           conn.status !== 'active' ||
@@ -283,22 +338,25 @@ export const proposeConnectionActions = defineCommand({
           .select()
           .from(connectionTools)
           .where(and(eq(connectionTools.connectionId, conn.id), eq(connectionTools.name, item.tool)));
-        if (!tool || tool.tier === 'off') throw notOffered();
+        if (!tool || tool.origin !== offer.origin || tool.tier === 'off') throw notOffered();
         const call = outsidersCall(entry, conn, tool, item.arguments, item.connection);
         if (!call.ok) throw call.offered === false ? notOffered() : forbidden(call.reason);
         const args = call.args;
         const upload = await proposedUpload(tx, turn.run, args, item.connection, maxUpload);
         if (!upload.ok) throw forbidden(upload.reason);
+        // The sizing answer must not depend on the private label or the length of a server-added account id.
+        const publicArgs =
+          tool.origin === 'request' ? { ...args, path: normaliseRequestArgs(item.arguments).path } : args;
         described.push({
           ...describePlannedAction({
             catalogId: conn.catalogId,
-            label: conn.label,
+            label: item.connection,
             tool,
-            args,
+            args: publicArgs,
             uploadFile: upload.file,
             summary: item.summary,
           }),
-          label: conn.label,
+          label: item.connection,
         });
       }
       // The agent hears now, while it can still propose less, when the card couldn't show it all.
@@ -340,13 +398,18 @@ export const proposeConnectionActions = defineCommand({
  * the shape of its arguments. Never credentials, the person's own connection labels or live data, and the turn still
  * has no `connection_call` or `connection_tools`.
  */
-export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): Promise<string> {
+export async function proposableConnections(
+  db: Db | Tx,
+  burrowId: string,
+): Promise<{ note: string; offeredActions: OfferedAction[] }> {
   const rows = await db
     .select()
     .from(catalogConnections)
     .where(eq(catalogConnections.burrowId, burrowId))
     .orderBy(asc(catalogConnections.createdAt), asc(catalogConnections.id));
-  const lines: string[] = [];
+  const offeredActions: OfferedAction[] = [];
+  let note =
+    'These are the only actions you can propose, each on the connection named first (each waits for the person’s yes on a card that shows every argument, so keep them few and short; a file must be one attached to this message):';
   for (const row of rows) {
     if (row.status !== 'active' || row.access === 'read') continue;
     const entry = catalogEntry(row.catalogId);
@@ -356,21 +419,22 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
       .from(connectionTools)
       .where(eq(connectionTools.connectionId, row.id))
       .orderBy(asc(connectionTools.name));
-    for (const how of listedHowTo(
+    for (const { how, ...action } of listedOffers(
       row.catalogId,
       tools.filter((t) => t.tier !== 'off'),
-    ))
-      lines.push(`- ${row.handle}: ${how}`);
+    )) {
+      const line = `\n- ${row.handle}: ${how}`;
+      if (note.length + line.length > 4000) return { note, offeredActions };
+      note += line;
+      offeredActions.push({
+        ...action,
+        connectionId: row.id,
+        catalogId: row.catalogId,
+        handle: row.handle.toLowerCase(),
+      });
+    }
   }
-  if (!lines.length) return '';
-  // Whole lines only, so an action's shape is never cut off.
-  let note =
-    'These are the only actions you can propose, each on the connection named first (each waits for the person’s yes on a card that shows every argument, so keep them few and short; a file must be one attached to this message):';
-  for (const line of lines) {
-    if (note.length + line.length + 1 > 4000) break;
-    note += `\n${line}`;
-  }
-  return note;
+  return { note: offeredActions.length ? note : '', offeredActions };
 }
 
 /**

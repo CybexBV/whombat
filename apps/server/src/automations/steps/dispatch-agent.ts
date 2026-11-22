@@ -22,7 +22,7 @@ import { publishDispatch } from '../../runtime/activity';
 import { outsidersTurn } from '../../runtime/person';
 import { automationAgent } from '../authority';
 import { turnThreadsOf } from '../mail-text';
-import { proposableConnectionsNote } from '../proposed-actions';
+import { proposableConnections } from '../proposed-actions';
 import {
   type ReusableAssessment,
   reusableAssessment,
@@ -142,8 +142,8 @@ export async function executeDispatchAgent({
     workspace = resolved.workspace;
   }
   const basePrompt = stepInstructions(run.definition, idx, scope);
-  const connectionsNote = step.proposeActions ? await proposableConnectionsNote(tx, run.burrowId) : '';
-  const prompt = connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt;
+  const offers = step.proposeActions ? await proposableConnections(tx, run.burrowId) : null;
+  const prompt = offers?.note ? `${basePrompt}\n\n${offers.note}` : basePrompt;
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
   const reusable = await reusableAssessment(tx, run, step, agent.id, workspace, prompt, ctx.now);
   if (reusable) return reuseAssessment(ctx, run, idx, step, agent, base, prompt, reusable);
@@ -295,6 +295,7 @@ export async function executeDispatchAgent({
       output: {
         agentId: agent.id,
         instructions: prompt,
+        ...(offers ? { offeredActions: offers.offeredActions } : {}),
         ...(triggerFileIds ? { triggerFileIds } : {}),
         turnThreads: [...new Set([...turnThreadsOf(previous), threadRootId])],
         ...(workspace ? { workspace: { ...workspace } } : {}),
