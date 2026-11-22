@@ -34,6 +34,8 @@ export interface ApprovalDraft {
   involvedIds?: string[];
   /** Text of the approval card message the requester posts. */
   cardText?: string;
+  /** The thread of the conversation the card goes in (an earlier card's, when it asks again); absent: its turn's. */
+  threadRootId?: string | null;
 }
 
 /** What a command needs from the keys engine. */
