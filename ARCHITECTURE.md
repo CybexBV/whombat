@@ -851,7 +851,10 @@ published automation details read their definition and publisher from one versio
   proposal is refused when that doesn't fit on one card. The names (a Paperless-ngx tag, a Moneybird contact) are read
   by the run engine as the connection just before the card is made, outside the transaction and bounded
   (`automations/card-names.ts`), once per connection and path, and kept on the step by connection and where its calls go;
-  an id the service doesn't have refuses the card. `connection_actions` runs them after a yes, sending each only while
+  an id the service doesn't have shows as it is with a line that says so, never a refusal, so a later step can't tell
+  from the step whether it exists. While proposing, the turn hears one sentence that names nothing of the person's for
+  any action it wasn't offered (a handle nobody has, a connection signed out or looking only, a tool missing or off);
+  only problems with a listed action's own arguments are said as they are. `connection_actions` runs them after a yes, sending each only while
   its connection still goes where it did then (else nothing is sent and a fresh card asks again, its names read again
   from the new place, “… changed since you said yes.”), settling as `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
   `request_approval` step's details start with its own question. A session below protocol
@@ -1033,10 +1036,13 @@ Setup and operation: `docs/github.md`.
 - **Catalog connections** (`apps/server/src/connections/`): services the person connects (Home Assistant, Proxmox,
   UniFi, Plex, mail over IMAP/SMTP and many more), each the burrow's, at most 50, every change signed. The agent
   calls them in the person's turns through `connection_call` under its keys; calls that change things ask, and a yes
-  is bound to where the call goes and as whom (`connections/call-target.ts`). Every request is signed only as the
-  connection it was checked on: each transport checks the stored connection again before it signs, and pooled MCP
-  sessions are kept per call target (`connections/pool.ts`). A write that worked is recorded for Done recently with
-  its Undo, which keeps where the change went and goes only there. Each
+  is bound to where the call goes and as whom (`connections/call-target.ts`), and to where every other connection it
+  acts through goes (a Servers backup place on a TrueNAS). Every request is signed only as the connection it was
+  checked on: a call, a page's button or setting, its Put it back and a page change the assistant asked for run bound to
+  their connections' call targets (`connections/bound-targets.ts`), and every credential opened for a bound connection
+  is checked against the stored connection once it is in hand and before anything is signed; each transport checks its
+  call's own target too, and pooled MCP sessions are kept per call target (`connections/pool.ts`). A write that worked
+  is recorded for Done recently with its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per
   pass, and Home hears of a change only when what a connection's glance shows changed. A kind may declare the settings
