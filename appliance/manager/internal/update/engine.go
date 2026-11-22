@@ -731,10 +731,11 @@ func (e *Engine) channelRepoFresh(st *State, channel string, version int64) (boo
 			return false, "wrong channel"
 		}
 	}
-	if version > 0 {
-		if prev, ok := st.ChannelVersions[channel]; ok && version < prev {
-			return false, "stale channel metadata"
-		}
+	if version < 0 {
+		return false, "stale channel metadata"
+	}
+	if prev, ok := st.ChannelVersions[channel]; ok && prev > 0 && (version <= 0 || version < prev) {
+		return false, "stale channel metadata"
 	}
 	return true, ""
 }
@@ -792,6 +793,82 @@ func (e *Engine) syncChannelPause(repo *trust.Repo) (changed bool, applied bool,
 		return false, false, err
 	}
 	return prevPaused != st.ChannelPaused, true, nil
+}
+
+// RetireWithdrawn retires any pre-activation candidate or queued assignment from repo's channel (or an unsigned
+// community offer when repo.Channel is empty) that no longer matches offeredDigest. Called before clearing
+// ChannelPaused on resume and whenever an unpaused refresh leaves an existing candidate unreplaced, so a withdrawn
+// release never drains or activates once a pause lifts or an owner approves it. Activations already under way
+// (Activating, Verifying, ForwardRepairRequired) are untouched.
+func (e *Engine) RetireWithdrawn(ctx context.Context, repo *trust.Repo, offeredDigest string) (bool, error) {
+	return retry(func() (bool, error) { return e.retireWithdrawn(ctx, repo, offeredDigest) })
+}
+
+func (e *Engine) retireWithdrawn(ctx context.Context, repo *trust.Repo, offeredDigest string) (bool, error) {
+	if repo == nil || repo.ChannelPaused {
+		return false, nil
+	}
+	st, err := e.Load()
+	if err != nil {
+		return false, err
+	}
+	if repo.Channel != "" {
+		if ok, _ := e.channelRepoFresh(st, repo.Channel, repo.ChannelVersion); !ok {
+			return false, nil
+		}
+	}
+	belongsToRepo := func(channel string, assignmentRaw []byte) bool {
+		if repo.Channel != "" {
+			return channel == repo.Channel
+		}
+		return channel == "" && len(assignmentRaw) == 0
+	}
+	pendingCleared := false
+	if p := st.Pending; p != nil && belongsToRepo(p.Channel, p.Raw) && (offeredDigest == "" || p.Release.Digest != offeredDigest) {
+		st.Pending = nil
+		pendingCleared = true
+	}
+	if c := st.Candidate; c != nil && belongsToRepo(c.Channel, c.AssignmentRaw) && (offeredDigest == "" || c.Tuple.Digest != offeredDigest) {
+		switch st.Phase {
+		case Assigned, Downloading, Verified, Staged, WaitingForSafeBoundary, Failed:
+			if st.Phase == Failed && c.Failure != nil && c.Failure.Blocked {
+				break // already retired; nothing retries it
+			}
+			if st.Approved == c.Tuple.ReleaseID {
+				st.Approved = ""
+			}
+			if repo.Channel != "" && st.LastOffer == offerKey(repo.Channel, c.Tuple.Digest) {
+				st.LastOffer = ""
+			}
+			if c.Deferral != nil && c.Deferral.Draining && e.Runtime != nil {
+				if err := e.Runtime.Resume(ctx, c.DrainRequestID); err == nil {
+					c.Deferral.Draining = false
+				}
+			}
+			draining := c.Deferral != nil && c.Deferral.Draining
+			recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+			msg := fmt.Sprintf("%s is no longer offered by the %s channel, so it isn't installed", c.Tuple.ReleaseID, repo.Channel)
+			if repo.Channel == "" {
+				msg = fmt.Sprintf("%s is no longer offered by the update repository, so it isn't installed", c.Tuple.ReleaseID)
+			}
+			return true, e.fail(st, &Failure{Stage: st.Phase, Code: "not_assigned", Message: msg, Blocked: true, ResumeRequired: draining})
+		case RolledBack:
+			if st.Approved == c.Tuple.ReleaseID {
+				st.Approved = ""
+			}
+			if repo.Channel != "" && st.LastOffer == offerKey(repo.Channel, c.Tuple.Digest) {
+				st.LastOffer = ""
+			}
+			st.Candidate = nil
+			recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+			return true, e.persist(st, RolledBack, "withdrawn release retired")
+		}
+	}
+	if pendingCleared {
+		recordChannelVersion(st, repo.Channel, repo.ChannelVersion)
+		return true, e.persist(st, st.Phase, "withdrawn queued release")
+	}
+	return false, nil
 }
 
 // channelPaused reports whether a candidate belongs to a channel that is currently paused.

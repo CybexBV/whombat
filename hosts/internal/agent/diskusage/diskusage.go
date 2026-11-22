@@ -89,6 +89,8 @@ type Runner struct {
 	readDir        func(logicalPath string) ([]fs.DirEntry, error)
 	statMountID    func(logicalPath string) (uint64, bool)
 	checkStandby   func(ctx context.Context, dev string) standbyState
+	lookProbeTool  func(name string) (string, error)
+	probeCmd       func(ctx context.Context, path string, args ...string) ([]byte, error)
 	runCmd         func(ctx context.Context, name string, args ...string) ([]byte, error)
 	now            func() time.Time
 	maxEntries     int
@@ -109,12 +111,14 @@ func New(inv agent.InventoryFunc, log *slog.Logger) *Runner {
 		dockerSockets:  []string{"/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock"},
 		listMounts:     hostMounts,
 		statfs:         hostStatfs,
-		checkStandby:   hostDiskStandby,
+		lookProbeTool:  lookTool,
+		probeCmd:       runStandbyProbeCmd,
 		runCmd:         runLowPriorityCmd,
 		now:            time.Now,
 		maxEntries:     DefaultMaxEntries,
 		setLowPriority: setThreadLowPriority,
 	}
+	r.checkStandby = r.hostDiskStandby
 	r.isUnraid = r.detectUnraid
 	return r
 }
@@ -372,6 +376,13 @@ func (r *Runner) isDarwin() bool {
 		return r.goos == "darwin"
 	}
 	return runtime.GOOS == "darwin"
+}
+
+func (r *Runner) isLinux() bool {
+	if r.goos != "" {
+		return r.goos == "linux"
+	}
+	return runtime.GOOS == "linux"
 }
 
 func (r *Runner) hostPath(p string) string {

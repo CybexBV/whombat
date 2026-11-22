@@ -516,23 +516,134 @@ func TestPickLargestFoldersDrillsWrapperDirs(t *testing.T) {
 }
 
 func TestStandbyFromSmartctl(t *testing.T) {
-	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in STANDBY mode, exit(2)"}]}}`), os.ErrInvalid); got != standbyAsleep {
-		t.Errorf("expected STANDBY JSON -> standbyAsleep, got %v", got)
+	cases := []struct {
+		name string
+		out  string
+		err  error
+		want standbyState
+	}{
+		{
+			name: "standby exit 3",
+			out:  `{"smartctl":{"exit_status":3,"messages":[{"string":"Device is in STANDBY mode, exit(3)","severity":"information"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyAsleep,
+		},
+		{
+			name: "standby OS mode exit 3",
+			out:  `{"smartctl":{"exit_status":3,"messages":[{"string":"Device is in STANDBY (OS) mode, exit(3)","severity":"information"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyAsleep,
+		},
+		{
+			name: "sleep exit 3",
+			out:  `{"smartctl":{"exit_status":3,"messages":[{"string":"Device is in SLEEP mode, exit(3)","severity":"information"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyAsleep,
+		},
+		{
+			name: "legacy standby exit 2",
+			out:  `{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in STANDBY mode, exit(2)"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyAsleep,
+		},
+		{
+			name: "active or idle exit 0",
+			out:  `{"power_mode":"ACTIVE or IDLE","smartctl":{"exit_status":0,"messages":[]}}`,
+			err:  nil,
+			want: standbyAwake,
+		},
+		{
+			name: "active exit 0 without power_mode field",
+			out:  `{"smartctl":{"exit_status":0,"messages":[]}}`,
+			err:  nil,
+			want: standbyAwake,
+		},
+		{
+			name: "not implemented STATUS2 exit 5",
+			out:  `{"smartctl":{"exit_status":5,"messages":[{"string":"CHECK POWER MODE not implemented, exit(5)","severity":"information"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
+		{
+			name: "unknown power mode value STATUS2 exit 5",
+			out:  `{"smartctl":{"exit_status":5,"messages":[{"string":"CHECK POWER MODE returned unknown value 0x99, exit(5)","severity":"information"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
+		{
+			name: "incomplete response exit 5",
+			out:  `{"smartctl":{"exit_status":5,"messages":[{"string":"CHECK POWER MODE: incomplete response, ATA output registers missing","severity":"warning"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
+		{
+			name: "not implemented ignoring -n even with exit 0",
+			out:  `{"smartctl":{"exit_status":0,"messages":[{"string":"CHECK POWER MODE not implemented, ignoring -n option","severity":"warning"}]}}`,
+			err:  nil,
+			want: standbyUnknown,
+		},
+		{
+			name: "older smartctl rejects STATUS2 exit 1",
+			out:  `{"smartctl":{"exit_status":1,"messages":[{"string":"=======> INVALID ARGUMENT TO -n: standby,3,5","severity":"error"}]}}`,
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
+		{
+			name: "permission error exit 2",
+			out:  `{"smartctl":{"exit_status":2,"messages":[{"string":"Open device failed: Permission denied","severity":"error"}]}}`,
+			err:  os.ErrPermission,
+			want: standbyUnknown,
+		},
+		{
+			name: "unrecognized power_mode even with exit 0",
+			out:  `{"power_mode":"UNKNOWN","smartctl":{"exit_status":0,"messages":[]}}`,
+			err:  nil,
+			want: standbyUnknown,
+		},
+		{
+			name: "non-JSON standby text",
+			out:  "Device is in STANDBY mode, exit(3)\n",
+			err:  os.ErrInvalid,
+			want: standbyAsleep,
+		},
+		{
+			name: "non-JSON error mentioning standby flag must not look asleep",
+			out:  "=======> INVALID ARGUMENT TO -n: standby,3,5\nUse smartctl -h to get a usage summary\n",
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
+		{
+			name: "empty output",
+			out:  "",
+			err:  os.ErrInvalid,
+			want: standbyUnknown,
+		},
 	}
-	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":0,"messages":[]}}`), nil); got != standbyAwake {
-		t.Errorf("active disk -> %v, want standbyAwake", got)
+	for _, tc := range cases {
+		if got := standbyFromSmartctl([]byte(tc.out), tc.err); got != tc.want {
+			t.Errorf("standbyFromSmartctl(%s) = %v, want %v", tc.name, got, tc.want)
+		}
 	}
-	if got := standbyFromSmartctl([]byte(`{"smartctl":{"exit_status":2,"messages":[{"string":"Open device failed: Permission denied"}]}}`), os.ErrPermission); got != standbyUnknown {
-		t.Errorf("permission error -> %v, want standbyUnknown", got)
+
+	hdCases := []struct {
+		name string
+		out  string
+		err  error
+		want standbyState
+	}{
+		{"standby", "/dev/sda:\n drive state is:  standby\n", nil, standbyAsleep},
+		{"sleeping", "/dev/sda:\n drive state is:  sleeping\n", nil, standbyAsleep},
+		{"active/idle", "/dev/sda:\n drive state is:  active/idle\n", nil, standbyAwake},
+		{"unknown", "/dev/sda:\n drive state is:  unknown\n", nil, standbyUnknown},
+		{"sg_io error then unknown", "/dev/sda:\n SG_IO: bad/missing sense data, sb[]: 70 00 05\n drive state is:  unknown\n", nil, standbyUnknown},
+		{"active/idle with command error", "/dev/sda:\n drive state is:  active/idle\n", os.ErrPermission, standbyUnknown},
+		{"permission denied mentioning active", "/dev/sda: Permission denied (not active)\n", os.ErrPermission, standbyUnknown},
+		{"empty output", "", nil, standbyUnknown},
 	}
-	if got := standbyFromHdparm([]byte(" drive state is:  standby\n")); got != standbyAsleep {
-		t.Errorf("hdparm standby -> %v", got)
-	}
-	if got := standbyFromHdparm([]byte(" drive state is:  active/idle\n")); got != standbyAwake {
-		t.Errorf("hdparm active/idle -> %v", got)
-	}
-	if got := standbyFromHdparm([]byte(" drive state is:  unknown\n")); got != standbyUnknown {
-		t.Errorf("hdparm unknown -> %v", got)
+	for _, tc := range hdCases {
+		if got := standbyFromHdparm([]byte(tc.out), tc.err); got != tc.want {
+			t.Errorf("standbyFromHdparm(%s) = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -1876,5 +1987,269 @@ func TestMultiDeviceClassBcachefsLVMmdraidZFSUnionAndDevPaths(t *testing.T) {
 		if resp.Code != CodeStandbyUnknown || statfsCalled.Load() != 0 {
 			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
 		}
+	}
+}
+
+func TestHostDiskStandbyCommandLinesAndNonWakingRules(t *testing.T) {
+	type cmdCall struct {
+		path string
+		args []string
+	}
+	mkSysBlock := func(t *testing.T, root, dev, targetRel, vendor, driver, runtimeStatus, devState, rotational string) {
+		t.Helper()
+		devDir := filepath.Join(root, "sys", "devices", filepath.FromSlash(strings.TrimPrefix(targetRel, "../devices/")))
+		if err := os.MkdirAll(filepath.Join(devDir, "queue"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(devDir, "device", "power"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(root, "sys/block"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(targetRel, filepath.Join(root, "sys/block", dev)); err != nil {
+			t.Fatal(err)
+		}
+		if rotational != "" {
+			if err := os.WriteFile(filepath.Join(devDir, "queue/rotational"), []byte(rotational+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if vendor != "" {
+			if err := os.WriteFile(filepath.Join(devDir, "device/vendor"), []byte(vendor+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if driver != "" {
+			if err := os.Symlink("../../bus/scsi/drivers/"+driver, filepath.Join(devDir, "device/driver")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if runtimeStatus != "" {
+			if err := os.WriteFile(filepath.Join(devDir, "device/power/runtime_status"), []byte(runtimeStatus+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if devState != "" {
+			if err := os.WriteFile(filepath.Join(devDir, "device/state"), []byte(devState+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	root := t.TempDir()
+	// 1. Direct libata SATA HDD (sda)
+	mkSysBlock(t, root, "sda", "../devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0/block/sda", "ATA     ", "sd", "active", "running", "1")
+	// 2. SATA HDD behind a SAS HBA SATL/STP (sdb)
+	mkSysBlock(t, root, "sdb", "../devices/pci0000:00/0000:00:01.0/host1/port-1:0/end_device-1:0/target1:0:0/1:0:0:0/block/sdb", "ATA     ", "sd", "unsupported", "running", "1")
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/sas_device/end_device-1:0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/class/sas_device/end_device-1:0/target_port_protocols"), []byte("stp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 3. Legacy IDE HDD (hda)
+	mkSysBlock(t, root, "hda", "../devices/pci0000:00/ide0/0.0/block/hda", "", "ide-disk", "", "", "1")
+	// 4. Kernel runtime-suspended SATA HDD (sdc) -> must NOT invoke any command
+	mkSysBlock(t, root, "sdc", "../devices/pci0000:00/0000:00:17.0/ata2/host1/target1:0:0/1:0:0:0/block/sdc", "ATA     ", "sd", "suspended", "running", "1")
+	// 5. Offline SCSI SATA HDD (sdd) -> must NOT invoke any command
+	mkSysBlock(t, root, "sdd", "../devices/pci0000:00/0000:00:17.0/ata3/host2/target2:0:0/2:0:0:0/block/sdd", "ATA     ", "sd", "active", "offline", "1")
+	// 6. Native SAS HDD (sde, vendor SEAGATE, SSP) -> no verified non-waking probe -> standbyUnknown, zero commands
+	mkSysBlock(t, root, "sde", "../devices/pci0000:00/0000:00:01.0/host1/port-1:1/end_device-1:1/target1:0:1/1:0:1:0/block/sde", "SEAGATE ", "sd", "active", "running", "1")
+	if err := os.MkdirAll(filepath.Join(root, "sys/class/sas_device/end_device-1:1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/class/sas_device/end_device-1:1/target_port_protocols"), []byte("ssp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 7. USB-attached HDD even if vendor spoofs "ATA" (sdf) -> standbyUnknown, zero commands
+	mkSysBlock(t, root, "sdf", "../devices/pci0000:00/0000:00:14.0/usb2/2-1/2-1:1.0/host5/target5:0:0/5:0:0:0/block/sdf", "ATA     ", "uas", "active", "running", "1")
+	// 8. Hardware RAID virtual disk (sdg, vendor DELL) -> standbyUnknown, zero commands
+	mkSysBlock(t, root, "sdg", "../devices/pci0000:00/0000:00:03.0/host6/target6:2:0/6:2:0:0/block/sdg", "DELL    ", "sd", "active", "running", "1")
+	// 9. Unknown disk with no sysfs device metadata (sdh) -> standbyUnknown, zero commands
+	if err := os.MkdirAll(filepath.Join(root, "sys/block/sdh/queue"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdh/queue/rotational"), []byte("1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 10. Disk with vendor "ATA" but no sysfs bus symlink to rule out USB (sdi) -> standbyUnknown, zero commands
+	if err := os.MkdirAll(filepath.Join(root, "sys/block/sdi/device"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sys/block/sdi/device/vendor"), []byte("ATA     \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls []cmdCall
+	newRunner := func(goos string, tools map[string]string, fn func(path string, args ...string) ([]byte, error)) *Runner {
+		r := &Runner{
+			root: root,
+			goos: goos,
+			lookProbeTool: func(name string) (string, error) {
+				if p, ok := tools[name]; ok {
+					return p, nil
+				}
+				return "", os.ErrNotExist
+			},
+			probeCmd: func(_ context.Context, path string, args ...string) ([]byte, error) {
+				calls = append(calls, cmdCall{path: path, args: append([]string(nil), args...)})
+				return fn(path, args...)
+			},
+		}
+		return r
+	}
+
+	// Primary: hdparm -C on direct libata SATA (sda), SAS-HBA SATL SATA (sdb), legacy IDE (hda).
+	r := newRunner("linux", map[string]string{"hdparm": "/sbin/hdparm", "smartctl": "/usr/sbin/smartctl"}, func(path string, args ...string) ([]byte, error) {
+		switch args[len(args)-1] {
+		case "/dev/sda":
+			return []byte("/dev/sda:\n drive state is:  active/idle\n"), nil
+		case "/dev/sdb":
+			return []byte("/dev/sdb:\n drive state is:  standby\n"), nil
+		case "/dev/hda":
+			return []byte("/dev/hda:\n drive state is:  unknown\n"), nil
+		default:
+			return nil, os.ErrInvalid
+		}
+	})
+	if got := r.hostDiskStandby(context.Background(), "sda"); got != standbyAwake {
+		t.Fatalf("hdparm sda = %v, want standbyAwake", got)
+	}
+	if got := r.hostDiskStandby(context.Background(), "sdb"); got != standbyAsleep {
+		t.Fatalf("hdparm sdb = %v, want standbyAsleep", got)
+	}
+	// When hdparm explicitly answers "unknown" (not supported), do not fall back to smartctl.
+	if got := r.hostDiskStandby(context.Background(), "hda"); got != standbyUnknown {
+		t.Fatalf("hdparm hda unknown = %v, want standbyUnknown", got)
+	}
+	wantHdparmCalls := []cmdCall{
+		{path: "/sbin/hdparm", args: []string{"-C", "/dev/sda"}},
+		{path: "/sbin/hdparm", args: []string{"-C", "/dev/sdb"}},
+		{path: "/sbin/hdparm", args: []string{"-C", "/dev/hda"}},
+	}
+	if len(calls) != len(wantHdparmCalls) {
+		t.Fatalf("hdparm calls = %+v, want %+v", calls, wantHdparmCalls)
+	}
+	for i, w := range wantHdparmCalls {
+		if calls[i].path != w.path || !slices.Equal(calls[i].args, w.args) {
+			t.Errorf("call[%d] = %+v, want %+v", i, calls[i], w)
+		}
+	}
+
+	// Fallback when hdparm is absent: smartctl with explicit -d type and -n standby,3,5 (never autodetection).
+	calls = nil
+	r = newRunner("linux", map[string]string{"smartctl": "/usr/sbin/smartctl"}, func(path string, args ...string) ([]byte, error) {
+		switch args[len(args)-1] {
+		case "/dev/sda":
+			return []byte(`{"power_mode":"ACTIVE or IDLE","smartctl":{"exit_status":0,"messages":[]}}`), nil
+		case "/dev/sdb":
+			return []byte(`{"smartctl":{"exit_status":3,"messages":[{"string":"Device is in STANDBY mode, exit(3)","severity":"information"}]}}`), os.ErrInvalid
+		case "/dev/hda":
+			return []byte(`{"smartctl":{"exit_status":5,"messages":[{"string":"CHECK POWER MODE not implemented, exit(5)","severity":"information"}]}}`), os.ErrInvalid
+		default:
+			return nil, os.ErrInvalid
+		}
+	})
+	if got := r.hostDiskStandby(context.Background(), "sda"); got != standbyAwake {
+		t.Fatalf("smartctl sda = %v, want standbyAwake", got)
+	}
+	if got := r.hostDiskStandby(context.Background(), "sdb"); got != standbyAsleep {
+		t.Fatalf("smartctl sdb = %v, want standbyAsleep", got)
+	}
+	if got := r.hostDiskStandby(context.Background(), "hda"); got != standbyUnknown {
+		t.Fatalf("smartctl hda unsupported = %v, want standbyUnknown", got)
+	}
+	wantSmartCalls := []cmdCall{
+		{path: "/usr/sbin/smartctl", args: []string{"--json=c", "-d", "sat", "-n", "standby,3,5", "-i", "/dev/sda"}},
+		{path: "/usr/sbin/smartctl", args: []string{"--json=c", "-d", "sat", "-n", "standby,3,5", "-i", "/dev/sdb"}},
+		{path: "/usr/sbin/smartctl", args: []string{"--json=c", "-d", "ata", "-n", "standby,3,5", "-i", "/dev/hda"}},
+	}
+	if len(calls) != len(wantSmartCalls) {
+		t.Fatalf("smartctl calls = %+v, want %+v", calls, wantSmartCalls)
+	}
+	for i, w := range wantSmartCalls {
+		if calls[i].path != w.path || !slices.Equal(calls[i].args, w.args) {
+			t.Errorf("smartctl call[%d] = %+v, want %+v", i, calls[i], w)
+		}
+	}
+
+	// Kernel sysfs short-circuits and unverified device types must invoke ZERO commands.
+	calls = nil
+	r = newRunner("linux", map[string]string{"hdparm": "/sbin/hdparm", "smartctl": "/usr/sbin/smartctl"}, func(string, ...string) ([]byte, error) {
+		t.Fatalf("unexpected command execution")
+		return nil, nil
+	})
+	if got := r.hostDiskStandby(context.Background(), "sdc"); got != standbyAsleep {
+		t.Fatalf("kernel runtime_status=suspended sdc = %v, want standbyAsleep", got)
+	}
+	for _, tc := range []struct {
+		name string
+		dev  string
+	}{
+		{"offline state", "sdd"},
+		{"native SAS", "sde"},
+		{"USB bridge", "sdf"},
+		{"hardware RAID", "sdg"},
+		{"missing sysfs device", "sdh"},
+		{"ATA vendor without bus symlink", "sdi"},
+		{"NVMe", "nvme0n1"},
+		{"MMC", "mmcblk0"},
+	} {
+		if got := r.hostDiskStandby(context.Background(), tc.dev); got != standbyUnknown {
+			t.Errorf("%s (%s) = %v, want standbyUnknown", tc.name, tc.dev, got)
+		}
+	}
+	// macOS rotational disks must never run Linux hdparm/smartctl probes.
+	rMac := newRunner("darwin", map[string]string{"hdparm": "/sbin/hdparm", "smartctl": "/usr/sbin/smartctl"}, func(string, ...string) ([]byte, error) {
+		t.Fatalf("unexpected command execution on darwin")
+		return nil, nil
+	})
+	if got := rMac.hostDiskStandby(context.Background(), "disk2"); got != standbyUnknown {
+		t.Fatalf("darwin disk2 = %v, want standbyUnknown", got)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("unexpected probe commands executed: %+v", calls)
+	}
+
+	// End-to-end DiskUsage wiring with live r.hostDiskStandby:
+	// - suspended sdc skips as spun_down without running any probe or touching mount
+	// - native SAS sde and USB sdf skip as standby_unknown without running any probe or touching mount
+	// - NVMe skips probing completely and walks
+	writeBytes(t, filepath.Join(root, "mnt/nvme/data.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "mnt/susp/data.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "mnt/sas/data.bin"), 16*1024)
+	writeBytes(t, filepath.Join(root, "mnt/usb/data.bin"), 16*1024)
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/mnt/nvme", FSType: "ext4", Source: "/dev/nvme0n1p1"},
+		{ID: 2, MountPoint: "/mnt/susp", FSType: "ext4", Source: "/dev/sdc1"},
+		{ID: 3, MountPoint: "/mnt/sas", FSType: "ext4", Source: "/dev/sde1"},
+		{ID: 4, MountPoint: "/mnt/usb", FSType: "ext4", Source: "/dev/sdf1"},
+	}
+	var statfsCalled atomic.Int32
+	e2e := newTestRunner(t, root, mounts, nil)
+	e2e.goos = "linux"
+	e2e.checkStandby = e2e.hostDiskStandby
+	e2e.lookProbeTool = func(name string) (string, error) { return "/sbin/" + name, nil }
+	e2e.probeCmd = func(_ context.Context, path string, args ...string) ([]byte, error) {
+		t.Fatalf("unexpected external probe command: %s %v", path, args)
+		return nil, nil
+	}
+	e2e.statfs = func(string) (fsStat, error) {
+		statfsCalled.Add(1)
+		return fsStat{TotalBytes: 100 << 30, UsedBytes: 10 << 30}, nil
+	}
+
+	if resp := e2e.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/susp"}); resp.Code != CodeSpunDown || !slices.Equal(resp.SkippedSpunDown, []string{"sdc"}) || statfsCalled.Load() != 0 {
+		t.Fatalf("/mnt/susp: resp=%+v statfs=%d", resp, statfsCalled.Load())
+	}
+	for _, mp := range []string{"/mnt/sas", "/mnt/usb"} {
+		statfsCalled.Store(0)
+		if resp := e2e.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: mp}); resp.Code != CodeStandbyUnknown || len(resp.SkippedSpunDown) != 0 || statfsCalled.Load() != 0 {
+			t.Fatalf("%s: resp=%+v statfs=%d", mp, resp, statfsCalled.Load())
+		}
+	}
+	if resp := e2e.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/nvme"}); resp.Code != "" {
+		t.Fatalf("/mnt/nvme: %+v", resp)
 	}
 }

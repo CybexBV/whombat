@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -506,7 +507,7 @@ func (r *Runner) rotationalStateOf(dev string, rotational map[string]bool, diskM
 			return rotationalNo
 		}
 	}
-	if strings.HasPrefix(dev, "nvme") {
+	if strings.HasPrefix(dev, "nvme") || strings.HasPrefix(dev, "mmcblk") || strings.HasPrefix(dev, "pmem") {
 		return rotationalNo
 	}
 	// Reading /sys/block/<dev>/queue/rotational reads kernel state only.
@@ -1332,32 +1333,341 @@ func parseSimpleINI(b []byte) map[string]map[string]string {
 	return out
 }
 
-// hostDiskStandby checks whether a block device (e.g. "sda") is awake or in ATA
-// standby/sleep without waking it, using smartctl -n standby and falling back to
-// hdparm -C. Returns standbyUnknown if neither tool can confirm the drive state.
-func hostDiskStandby(ctx context.Context, dev string) standbyState {
+type diskProbeKind int
+
+const (
+	diskProbeNone diskProbeKind = iota
+	diskProbeSAT
+	diskProbeATA
+)
+
+const (
+	// smartctl -n standby,3,5 exit statuses documented in smartctl(8):
+	// STATUS=3 when the device is in SLEEP or STANDBY mode, and [ATA only]
+	// STATUS2=5 when CHECK POWER MODE is unsupported or returns an unknown value.
+	smartctlStandbyExit     = 3
+	smartctlUnsupportedExit = 5
+)
+
+func runStandbyProbeCmd(ctx context.Context, path string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Dir = "/"
+	cmd.Env = []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LC_ALL=C",
+	}
+	return cmd.CombinedOutput()
+}
+
+// hostDiskStandby checks whether a rotational block device (e.g. "sda") is
+// awake or asleep without waking it.
+//
+// Why each step cannot wake a sleeping disk:
+//  1. Kernel sysfs check first (RAM only, zero device I/O):
+//     - /sys/block/<dev>/device/power/runtime_status (Linux Runtime PM,
+//     Documentation/power/runtime_pm.rst): if "suspended" or "suspending",
+//     the kernel already knows the device is runtime-suspended; returning
+//     standbyAsleep immediately avoids even opening /dev/<dev>, which could
+//     trigger a kernel runtime resume and spin up the drive.
+//     - /sys/block/<dev>/device/state (drivers/scsi/scsi_sysfs.c): if present
+//     and not "running" (e.g. "quiesce", "offline", "blocked"), return
+//     standbyUnknown without running any command.
+//  2. Bus/protocol classification from sysfs (RAM only, zero device I/O):
+//     only disks confirmed to speak ATA (direct Linux libata SATA/PATA under
+//     /ata<N>/, SATA behind a SAS HBA SATL whose T10 SAT INQUIRY vendor is
+//     "ATA" and not native SAS SSP, or legacy IDE ide-disk) are probed. USB
+//     bridges (whose pass-through chips vary and can spin up on SAT queries),
+//     native SCSI/SAS disks (smartctl(8) documents STATUS2 as [ATA only], so an
+//     unsupported SCSI power check falls through and reads the disk; hdparm -C
+//     is ATA-only), hardware RAID logical volumes, non-Linux platforms (macOS
+//     has no hdparm and smartctl has no SAT/SCSI non-waking standby check for
+//     external drives), and devices with missing sysfs metadata return
+//     standbyUnknown without running any command.
+//  3. Verified non-waking ATA CHECK POWER MODE probes (ATA/SAT disks only):
+//     - Primary: `hdparm -C /dev/<dev>`. Per hdparm(8), `-C` issues only the
+//     ATA CHECK POWER MODE command (0xE5, via SG_IO SAT pass-through on
+//     libata/SATL or HDIO_DRIVE_CMD on legacy IDE) and reports `active/idle`,
+//     `standby`, `sleeping`, or `unknown` (command not supported) without
+//     reading sectors, IDENTIFY DEVICE, or SMART pages.
+//     - Fallback when hdparm is unavailable:
+//     `smartctl --json=c -d <sat|ata> -n standby,3,5 -i /dev/<dev>`.
+//     Per smartctl(8) (`-d` and `-n POWERMODE[,STATUS[,STATUS2]]`):
+//     explicit `-d sat` (without `,auto`) or `-d ata` disables device-type
+//     autodetection, which smartctl(8) warns can otherwise spin up a sleeping
+//     disk before `-n` is checked; `-n standby,3,5` sets STATUS=3 for
+//     SLEEP/STANDBY and [ATA only] STATUS2=5 so smartctl exits immediately
+//     if CHECK POWER MODE is unsupported or returns an unknown value instead
+//     of ignoring `-n` and continuing to `-i`. Older smartctl binaries that
+//     do not parse STATUS2 exit with bit 0 (status 1) before opening the
+//     device, which also returns standbyUnknown.
+func (r *Runner) hostDiskStandby(ctx context.Context, dev string) standbyState {
 	if dev == "" || strings.ContainsAny(dev, "/\\ \t\n\r") {
 		return standbyUnknown
 	}
+	// Only Linux has verified non-waking kernel/ATA standby probes. On macOS
+	// and other platforms, skip rotational disks conservatively as unknown.
+	if !r.isLinux() {
+		return standbyUnknown
+	}
+
+	// 1. Check what the kernel already knows in sysfs before running any command.
+	if st, decided := r.kernelStandbyState(dev); decided {
+		return st
+	}
+
+	// 2. Only probe device types with a verified non-waking ATA CHECK POWER MODE path.
+	kind := r.classifyLinuxDiskProbe(dev)
+	if kind == diskProbeNone {
+		return standbyUnknown
+	}
+
+	look := r.lookProbeTool
+	if look == nil {
+		look = lookTool
+	}
+	run := r.probeCmd
+	if run == nil {
+		run = runStandbyProbeCmd
+	}
 	devPath := "/dev/" + dev
-	if path, err := lookTool("smartctl"); err == nil {
-		out, cmdErr := exec.CommandContext(ctx, path, "--json=c", "-i", "-n", "standby", devPath).CombinedOutput()
-		if st := standbyFromSmartctl(out, cmdErr); st != standbyUnknown {
-			return st
-		}
+
+	// 3a. Prefer hdparm -C: sends only ATA CHECK POWER MODE (0xE5).
+	if path, err := look("hdparm"); err == nil {
+		out, cmdErr := run(ctx, path, "-C", devPath)
+		return standbyFromHdparm(out, cmdErr)
 	}
-	if path, err := lookTool("hdparm"); err == nil {
-		out, err := exec.CommandContext(ctx, path, "-C", devPath).CombinedOutput()
-		if err == nil {
-			if st := standbyFromHdparm(out); st != standbyUnknown {
-				return st
-			}
+
+	// 3b. Fall back to smartctl with explicit -d and STATUS2 when hdparm is absent.
+	if path, err := look("smartctl"); err == nil {
+		devType := "sat"
+		if kind == diskProbeATA {
+			devType = "ata"
 		}
+		out, cmdErr := run(ctx, path, "--json=c", "-d", devType, "-n", "standby,3,5", "-i", devPath)
+		return standbyFromSmartctl(out, cmdErr)
 	}
+
 	return standbyUnknown
 }
 
+// kernelStandbyState inspects Linux sysfs power and device state in kernel RAM
+// without issuing any I/O to the disk. It returns decided=true only when the
+// kernel already settles the outcome without running a userspace probe.
+func (r *Runner) kernelStandbyState(dev string) (standbyState, bool) {
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev, "device/power/runtime_status"),
+		filepath.Join("/sys/class/block", dev, "device/power/runtime_status"),
+	} {
+		if status := strings.ToLower(r.readSysfsTrimmed(p)); status != "" {
+			switch status {
+			case "suspended", "suspending":
+				return standbyAsleep, true
+			}
+			break
+		}
+	}
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev, "device/state"),
+		filepath.Join("/sys/class/block", dev, "device/state"),
+	} {
+		if state := strings.ToLower(r.readSysfsTrimmed(p)); state != "" {
+			if state != "running" {
+				return standbyUnknown, true
+			}
+			break
+		}
+	}
+	return standbyUnknown, false
+}
+
+// classifyLinuxDiskProbe determines from sysfs metadata alone (RAM only, zero
+// device I/O) whether dev is a confirmed ATA/SAT disk with a verified
+// non-waking probe path. Any other bus or missing metadata returns diskProbeNone.
+func (r *Runner) classifyLinuxDiskProbe(dev string) diskProbeKind {
+	if strings.HasPrefix(dev, "nvme") || strings.HasPrefix(dev, "mmcblk") || strings.HasPrefix(dev, "pmem") {
+		return diskProbeNone
+	}
+	if r.readSysfsTrimmed(filepath.Join("/sys/block", dev, "queue/rotational")) == "0" {
+		return diskProbeNone
+	}
+	if r.isVirtualGuestDisk(dev, nil) {
+		return diskProbeNone
+	}
+
+	var links []string
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev),
+		filepath.Join("/sys/class/block", dev),
+		filepath.Join("/sys/block", dev, "device"),
+		filepath.Join("/sys/class/block", dev, "device"),
+	} {
+		if link, err := os.Readlink(r.hostPath(p)); err == nil && link != "" {
+			links = append(links, link)
+		}
+	}
+
+	if len(links) == 0 {
+		// Without a sysfs bus symlink we cannot rule out a USB bridge or confirm
+		// an ATA/SAT host transport; fail closed without running any command.
+		return diskProbeNone
+	}
+
+	driver := ""
+	for _, p := range []string{
+		filepath.Join("/sys/block", dev, "device/driver"),
+		filepath.Join("/sys/class/block", dev, "device/driver"),
+	} {
+		if link, err := os.Readlink(r.hostPath(p)); err == nil && link != "" {
+			driver = strings.ToLower(filepath.Base(filepath.Clean(link)))
+			break
+		}
+	}
+
+	// Never probe USB bridges (they vary in pass-through protocol and can wake
+	// drives on SAT queries) or non-ATA subsystems.
+	if driver == "usb-storage" || driver == "uas" {
+		return diskProbeNone
+	}
+	hasATAHost := false
+	hasIDEHost := false
+	var sasEndDevice string
+	for _, link := range links {
+		for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(link)), "/") {
+			low := strings.ToLower(seg)
+			switch {
+			case low == "usb" || (strings.HasPrefix(low, "usb") && allDigits(low[3:])):
+				return diskProbeNone
+			case low == "nvme" || (strings.HasPrefix(low, "nvme") && allDigits(low[4:])):
+				return diskProbeNone
+			case low == "mmc" || strings.HasPrefix(low, "mmc"):
+				return diskProbeNone
+			case strings.HasPrefix(low, "ata") && allDigits(low[3:]):
+				hasATAHost = true
+			case strings.HasPrefix(low, "ide") && allDigits(low[3:]):
+				hasIDEHost = true
+			case strings.HasPrefix(low, "end_device-"):
+				sasEndDevice = seg
+			}
+		}
+	}
+
+	// Legacy IDE disk (/dev/hd[a-z]+ with ide-disk driver or ide<N> bus).
+	if strings.HasPrefix(dev, "hd") && allLowerLetters(dev[2:]) {
+		if driver == "ide-disk" || hasIDEHost {
+			return diskProbeATA
+		}
+		return diskProbeNone
+	}
+
+	// Linux SCSI-layer disks (/dev/sd[a-z]+): only direct libata or a SATL
+	// reporting T10 SAT vendor "ATA" (e.g. SATA behind an IT-mode SAS HBA).
+	if !strings.HasPrefix(dev, "sd") || !allLowerLetters(dev[2:]) {
+		return diskProbeNone
+	}
+
+	vendor := r.readSysfsTrimmed(filepath.Join("/sys/block", dev, "device/vendor"))
+	if vendor == "" {
+		vendor = r.readSysfsTrimmed(filepath.Join("/sys/class/block", dev, "device/vendor"))
+	}
+
+	if hasATAHost {
+		if vendor == "" || strings.EqualFold(vendor, "ATA") {
+			return diskProbeSAT
+		}
+		return diskProbeNone
+	}
+
+	if strings.EqualFold(vendor, "ATA") {
+		if protos := r.sasTargetProtocols(dev, sasEndDevice); protos != "" {
+			if hasSSPWithoutSATA(protos) {
+				return diskProbeNone
+			}
+		}
+		return diskProbeSAT
+	}
+
+	return diskProbeNone
+}
+
+func (r *Runner) sasTargetProtocols(dev, endDevice string) string {
+	candidates := []string{
+		filepath.Join("/sys/block", dev, "device/sas_device/target_port_protocols"),
+	}
+	if endDevice != "" {
+		candidates = append(candidates, filepath.Join("/sys/class/sas_device", endDevice, "target_port_protocols"))
+	}
+	for _, p := range candidates {
+		if v := strings.ToLower(r.readSysfsTrimmed(p)); v != "" {
+			return v
+		}
+	}
+	if ents, err := os.ReadDir(r.hostPath(filepath.Join("/sys/block", dev, "device/sas_device"))); err == nil {
+		for _, e := range ents {
+			p := filepath.Join("/sys/block", dev, "device/sas_device", e.Name(), "target_port_protocols")
+			if v := strings.ToLower(r.readSysfsTrimmed(p)); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+func hasSSPWithoutSATA(protos string) bool {
+	hasSSP := false
+	hasSATA := false
+	for _, tok := range strings.FieldsFunc(strings.ToLower(protos), func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}) {
+		switch tok {
+		case "ssp":
+			hasSSP = true
+		case "stp", "sata":
+			hasSATA = true
+		}
+	}
+	return hasSSP && !hasSATA
+}
+
+func exitCodeOf(err error) (int, bool) {
+	if err == nil {
+		return 0, true
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), true
+	}
+	return 0, false
+}
+
+func smartctlMessageUnsupportedOrError(upper string) bool {
+	for _, needle := range []string{
+		"NOT IMPLEMENTED",
+		"NOT SUPPORTED",
+		"UNKNOWN VALUE",
+		"INCOMPLETE RESPONSE",
+		"IGNORING -N",
+		"FAILED",
+		"PERMISSION DENIED",
+		"INVALID ARGUMENT",
+		"UNABLE TO DETECT",
+		"NO SUCH FILE",
+		"UNRECOGNIZED OPTION",
+	} {
+		if strings.Contains(upper, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func smartctlMessageStandby(upper string) bool {
+	return strings.Contains(upper, "DEVICE IS IN STANDBY") || strings.Contains(upper, "DEVICE IS IN SLEEP")
+}
+
 func standbyFromSmartctl(b []byte, cmdErr error) standbyState {
+	if code, ok := exitCodeOf(cmdErr); ok && code == smartctlUnsupportedExit {
+		return standbyUnknown
+	}
 	if len(b) == 0 {
 		return standbyUnknown
 	}
@@ -1366,30 +1676,53 @@ func standbyFromSmartctl(b []byte, cmdErr error) standbyState {
 		Smartctl  struct {
 			ExitStatus int `json:"exit_status"`
 			Messages   []struct {
-				String string `json:"string"`
+				String   string `json:"string"`
+				Severity string `json:"severity"`
 			} `json:"messages"`
 		} `json:"smartctl"`
 	}
 	if err := json.Unmarshal(b, &j); err != nil {
 		s := strings.ToUpper(string(b))
-		if strings.Contains(s, "STANDBY") || strings.Contains(s, "SLEEP") {
+		if smartctlMessageUnsupportedOrError(s) {
+			return standbyUnknown
+		}
+		if smartctlMessageStandby(s) {
 			return standbyAsleep
 		}
 		return standbyUnknown
 	}
+	if j.Smartctl.ExitStatus == smartctlUnsupportedExit {
+		return standbyUnknown
+	}
+	standbyMsg := false
 	for _, m := range j.Smartctl.Messages {
 		s := strings.ToUpper(m.String)
-		if strings.Contains(s, "STANDBY") || strings.Contains(s, "SLEEP") {
-			return standbyAsleep
+		if strings.EqualFold(m.Severity, "error") || smartctlMessageUnsupportedOrError(s) {
+			return standbyUnknown
+		}
+		if smartctlMessageStandby(s) {
+			standbyMsg = true
 		}
 	}
-	if pm := strings.ToUpper(j.PowerMode); pm != "" {
-		if strings.Contains(pm, "STANDBY") || strings.Contains(pm, "SLEEP") {
+	if standbyMsg {
+		return standbyAsleep
+	}
+	if pm := strings.ToUpper(strings.TrimSpace(j.PowerMode)); pm != "" {
+		if strings.HasPrefix(pm, "STANDBY") || strings.HasPrefix(pm, "SLEEP") {
 			return standbyAsleep
 		}
-		if strings.Contains(pm, "ACTIVE") || strings.Contains(pm, "IDLE") {
-			return standbyAwake
+		switch pm {
+		case "ACTIVE", "ACTIVE OR IDLE", "ACTIVE_NV_UP", "ACTIVE_NV_DOWN", "IDLE", "IDLE_A", "IDLE_B", "IDLE_C":
+			if cmdErr == nil && j.Smartctl.ExitStatus == 0 {
+				return standbyAwake
+			}
+			return standbyUnknown
+		default:
+			return standbyUnknown
 		}
+	}
+	if j.Smartctl.ExitStatus == smartctlStandbyExit {
+		return standbyAsleep
 	}
 	if cmdErr == nil && j.Smartctl.ExitStatus == 0 {
 		return standbyAwake
@@ -1397,16 +1730,26 @@ func standbyFromSmartctl(b []byte, cmdErr error) standbyState {
 	return standbyUnknown
 }
 
-func standbyFromHdparm(b []byte) standbyState {
-	s := strings.ToLower(string(b))
-	if strings.Contains(s, "standby") || strings.Contains(s, "sleeping") {
-		return standbyAsleep
-	}
-	if strings.Contains(s, "unknown") {
-		return standbyUnknown
-	}
-	if strings.Contains(s, "active/idle") || strings.Contains(s, "active") || strings.Contains(s, "idle") {
-		return standbyAwake
+func standbyFromHdparm(b []byte, cmdErr error) standbyState {
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		line := strings.ToLower(sc.Text())
+		_, rest, ok := strings.Cut(line, "drive state is:")
+		if !ok {
+			continue
+		}
+		state := strings.TrimSpace(rest)
+		switch state {
+		case "standby", "sleeping":
+			return standbyAsleep
+		case "active/idle":
+			if cmdErr == nil {
+				return standbyAwake
+			}
+			return standbyUnknown
+		default:
+			return standbyUnknown
+		}
 	}
 	return standbyUnknown
 }

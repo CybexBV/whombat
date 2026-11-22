@@ -48,6 +48,15 @@ package main
 // The gh- commands that talk to GitHub take --owner (CybexBV) --repo (whombat-releases) --api
 // (https://api.github.com) --branch (main) and the token from the environment variable --token-env
 // (WHOMBAT_RELEASES_TOKEN).
+//
+// Operating note on channel role versions: boxes persist the highest verified signed role version per channel
+// (N.production.json, N.development.json) and quietly refuse any lower, zero, or missing version — for offers,
+// pauses and resumes alike. Never reset a channel role's version by rebuilding the repository from scratch,
+// restoring an older clone, or force-pushing whombat-releases; always pull and evolve the existing clone (which
+// gh-publish, gh-promote, gh-pause and gh-resume do automatically), keep branch protection against force-pushes
+// enabled, and if a repository is ever rebuilt for existing boxes, carry each channel role's version strictly
+// above the highest published version in snapshot.json (gh-continue --version-gap only shifts top-level targets,
+// snapshot and timestamp, not channel roles).
 
 import (
 	"context"

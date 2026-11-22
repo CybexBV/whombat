@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -663,5 +665,297 @@ func TestServerV1RollbackCompatibility(t *testing.T) {
 		if _, err := parsePrevRuntime(rec.Body.Bytes()); err == nil {
 			t.Fatalf("%s unexpectedly accepted by previous runtime schema", tc.name)
 		}
+	}
+}
+
+// gatedTransport lets a test pause a specific download attempt mid-body (or right before EOF) until Remove and Fetch
+// have run, reproducing the race deterministically without depending on timing.
+type gatedTransport struct {
+	base    http.RoundTripper
+	gateURL string // suffix match, empty matches every URL
+	chunk   int    // bytes to deliver before blocking (<=0 delivers the whole body before blocking at EOF)
+	atGate  chan struct{}
+	release chan struct{}
+	once    sync.Once
+	armed   atomic.Bool
+	reqs    atomic.Int32
+}
+
+func (g *gatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	g.reqs.Add(1)
+	resp, err := g.base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	if (g.gateURL == "" || strings.HasSuffix(req.URL.Path, g.gateURL)) && g.armed.CompareAndSwap(false, true) {
+		resp.Body = &gatedBody{
+			rc:      resp.Body,
+			ctx:     req.Context(),
+			chunk:   g.chunk,
+			atGate:  g.atGate,
+			release: g.release,
+			once:    &g.once,
+		}
+	}
+	return resp, nil
+}
+
+type gatedBody struct {
+	rc      io.ReadCloser
+	ctx     context.Context
+	chunk   int
+	sent    int
+	atGate  chan struct{}
+	release chan struct{}
+	once    *sync.Once
+	gated   bool
+}
+
+func (b *gatedBody) Read(p []byte) (int, error) {
+	if b.chunk > 0 {
+		if b.sent < b.chunk {
+			if rem := b.chunk - b.sent; len(p) > rem {
+				p = p[:rem]
+			}
+			n, err := b.rc.Read(p)
+			b.sent += n
+			return n, err
+		}
+		if !b.gated {
+			b.gated = true
+			b.once.Do(func() { close(b.atGate) })
+			<-b.release
+		}
+		if err := b.ctx.Err(); err != nil {
+			return 0, err
+		}
+		return b.rc.Read(p)
+	}
+	n, err := b.rc.Read(p)
+	if err == io.EOF && !b.gated {
+		b.gated = true
+		b.once.Do(func() { close(b.atGate) })
+		<-b.release
+	}
+	return n, err
+}
+
+func (b *gatedBody) Close() error { return b.rc.Close() }
+
+func TestRemoveThenFetchDuringDownloadRestartsImmediately(t *testing.T) {
+	t.Run("supertonic multi-file", func(t *testing.T) {
+		files := map[string]*source{
+			"a.onnx": {body: body(64 << 10)},
+			"b.onnx": {body: body(256 << 10)},
+		}
+		f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+		defer stop()
+		gt := &gatedTransport{
+			base:    f.Client.Transport,
+			gateURL: "/b.onnx",
+			chunk:   32 << 10,
+			atGate:  make(chan struct{}),
+			release: make(chan struct{}),
+		}
+		if gt.base == nil {
+			gt.base = http.DefaultTransport
+		}
+		f.Client = &http.Client{Transport: gt}
+		f.Idle = time.Hour
+		var backoffCalls atomic.Int32
+		f.Backoff = func(int) time.Duration {
+			backoffCalls.Add(1)
+			return 30 * time.Second
+		}
+		start(t, f)
+
+		if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+			t.Fatal(err)
+		}
+		<-gt.atGate
+
+		// Quickly toggle off then on while the first attempt is still unwinding.
+		if err := f.Remove(local.VoiceModelSupertonic); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+			t.Fatal(err)
+		}
+		close(gt.release)
+
+		s := until(t, f, local.VoiceModelStateReady)
+		if backoffCalls.Load() != 0 {
+			t.Fatalf("expected 0 backoff calls after Remove+Fetch, got %d", backoffCalls.Load())
+		}
+		if s.Problem != nil || s.Received != m.TotalSize() || !models.Present(f.Dir, m) {
+			t.Fatalf("unexpected ready state: %+v", s)
+		}
+		if _, err := os.Stat(models.PartPath(f.Dir, m)); !os.IsNotExist(err) {
+			t.Fatal("staging dir left behind")
+		}
+		for name, src := range files {
+			got, err := os.ReadFile(filepath.Join(models.Path(f.Dir, m), name))
+			if err != nil || !bytes.Equal(got, src.body) {
+				t.Fatalf("%s: err=%v len=%d", name, err, len(got))
+			}
+		}
+	})
+
+	t.Run("parakeet single-file", func(t *testing.T) {
+		src := &source{body: body(256 << 10)}
+		f, m, stop := newFetcher(t, src, 1<<40)
+		defer stop()
+		gt := &gatedTransport{
+			base:    f.Client.Transport,
+			chunk:   32 << 10,
+			atGate:  make(chan struct{}),
+			release: make(chan struct{}),
+		}
+		if gt.base == nil {
+			gt.base = http.DefaultTransport
+		}
+		f.Client = &http.Client{Transport: gt}
+		f.Idle = time.Hour
+		var backoffCalls atomic.Int32
+		f.Backoff = func(int) time.Duration {
+			backoffCalls.Add(1)
+			return 30 * time.Second
+		}
+		start(t, f)
+
+		if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+			t.Fatal(err)
+		}
+		<-gt.atGate
+
+		if err := f.Remove(local.VoiceModelParakeet); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+			t.Fatal(err)
+		}
+		close(gt.release)
+
+		s := until(t, f, local.VoiceModelStateReady)
+		if backoffCalls.Load() != 0 {
+			t.Fatalf("expected 0 backoff calls after Remove+Fetch, got %d", backoffCalls.Load())
+		}
+		if s.Problem != nil || s.Received != m.Size || !models.Present(f.Dir, m) {
+			t.Fatalf("unexpected ready state: %+v", s)
+		}
+		if got, err := os.ReadFile(models.Path(f.Dir, m)); err != nil || !bytes.Equal(got, src.body) {
+			t.Fatalf("downloaded bytes mismatch: err=%v len=%d", err, len(got))
+		}
+	})
+}
+
+// If an old attempt has already finished reading all bytes when Remove+Fetch runs, it must neither commit the removed
+// model's files nor mark it ready prematurely; the fresh Fetch downloads cleanly with no backoff.
+func TestRemoveThenFetchRaceAtDownloadCompletion(t *testing.T) {
+	src := &source{body: body(128 << 10)}
+	f, m, stop := newFetcher(t, src, 1<<40)
+	defer stop()
+	gt := &gatedTransport{
+		base:    f.Client.Transport,
+		chunk:   0, // pause right at EOF after all bytes were read
+		atGate:  make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	if gt.base == nil {
+		gt.base = http.DefaultTransport
+	}
+	f.Client = &http.Client{Transport: gt}
+	f.Idle = time.Hour
+	var backoffCalls atomic.Int32
+	f.Backoff = func(int) time.Duration {
+		backoffCalls.Add(1)
+		return 30 * time.Second
+	}
+	start(t, f)
+
+	if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	<-gt.atGate
+
+	if err := f.Remove(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	close(gt.release)
+
+	s := until(t, f, local.VoiceModelStateReady)
+	if backoffCalls.Load() != 0 {
+		t.Fatalf("expected 0 backoff calls, got %d", backoffCalls.Load())
+	}
+	if gt.reqs.Load() != 2 {
+		t.Fatalf("expected fresh second request after Remove+Fetch at EOF, got %d", gt.reqs.Load())
+	}
+	if s.Problem != nil || !models.Present(f.Dir, m) {
+		t.Fatalf("unexpected state: %+v", s)
+	}
+}
+
+// Toggling off, on, and off again while the first attempt is still unwinding leaves the model absent with no stray
+// files and no extra download started.
+func TestRemoveThenFetchThenRemoveDuringDownload(t *testing.T) {
+	src := &source{body: body(256 << 10)}
+	f, m, stop := newFetcher(t, src, 1<<40)
+	defer stop()
+	gt := &gatedTransport{
+		base:    f.Client.Transport,
+		chunk:   32 << 10,
+		atGate:  make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	if gt.base == nil {
+		gt.base = http.DefaultTransport
+	}
+	f.Client = &http.Client{Transport: gt}
+	f.Idle = time.Hour
+	var backoffCalls atomic.Int32
+	f.Backoff = func(int) time.Duration {
+		backoffCalls.Add(1)
+		return 30 * time.Second
+	}
+	start(t, f)
+
+	if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	<-gt.atGate
+
+	if err := f.Remove(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Fetch(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Remove(local.VoiceModelParakeet); err != nil {
+		t.Fatal(err)
+	}
+	close(gt.release)
+
+	// Wait until the loop has settled after unwinding the cancelled attempt.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(models.PartPath(f.Dir, m)); os.IsNotExist(err) {
+			if _, err2 := os.Stat(models.Path(f.Dir, m)); os.IsNotExist(err2) {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("files left behind after Remove+Fetch+Remove")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	s := f.State().Models[0]
+	if s.State != local.VoiceModelStateAbsent || s.Received != 0 || s.Problem != nil {
+		t.Fatalf("unexpected state after Remove+Fetch+Remove: %+v", s)
+	}
+	if backoffCalls.Load() != 0 || gt.reqs.Load() != 1 {
+		t.Fatalf("unexpected backoff=%d reqs=%d", backoffCalls.Load(), gt.reqs.Load())
 	}
 }

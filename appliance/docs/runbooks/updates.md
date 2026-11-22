@@ -471,10 +471,24 @@ redirect, and the account `CybexHQ` must stay Cybex's.
 | a box's channel | the helper keeps it (`/var/lib/whombat-update-helper/channel.json`); the owner changes it in Settings → This Whombat → Updates (the runtime's `updateChannelSet`); root: `whombat-update-helper --config /etc/whombat/update-helper.json set-channel development` |
 | a release into development (Beta) | `tufrepo gh-publish --dir <clone> --release-dir <release>`; the maintainers' `candidate` does it for every release (the clone and token from `~/.config/whombat/releases.env`); the token in `WHOMBAT_RELEASES_TOKEN` |
 | promote to production | `tufrepo gh-promote --dir <clone> --release <id>`: the same files, nothing uploaded, signed with the repository's online production key (ONE-05; `--key-file` for an offline copy); the maintainers' `promote <id> --yes` runs it on John's word and then puts the installer on the download site (IN-835, PI-25) |
-| pause / resume a channel | `tufrepo gh-pause --dir <clone> [--channel production\|development] [--key-file F]` and `tufrepo gh-resume --dir <clone> [--channel production\|development] [--key-file F]` (local repository: `tufrepo pause` / `tufrepo resume`; `--channel` defaults to `production`): signs the pause marker in the channel's own role metadata with the channel's key, nothing uploaded; keeps all listed releases for rollbacks and stays paused across publishes/promotions until resumed. **Scope:** a pause only holds boxes that already run a pause-aware release; older boxes ignore the marker and keep updating |
+| pause / resume a channel | `tufrepo gh-pause --dir <clone> [--channel production\|development] [--key-file F]` and `tufrepo gh-resume --dir <clone> [--channel production\|development] [--key-file F]` (local repository: `tufrepo pause` / `tufrepo resume`; `--channel` defaults to `production`): signs the pause marker in the channel's own role metadata with the channel's key, nothing uploaded; keeps all listed releases for rollbacks and stays paused across publishes/promotions until resumed. **Scope:** a pause only holds boxes that already run a pause-aware release; older boxes ignore the marker and keep updating. See **Channel role versions** below before rebuilding or restoring metadata |
 | the client channel | `tufrepo gh-clients --dir <clone>` after the channel publisher signed it |
 | freshness | the whombat-releases workflow re-signs snapshot and timestamp every 6 h and on each push (3 days); an issue opens 30 days before a role expires |
 | set up from DEV's repository | the bridge procedure below |
+
+**Channel role versions must never go backward.** Every box records the highest verified TUF role version it has applied
+per channel (`ChannelVersions` in the manager journal) and refuses metadata for that channel with a lower, zero, or
+missing role version (in addition to TUF's own rollback check). If a channel's signed role version
+(`N.production.json` or `N.development.json`) is ever reset — for example by rebuilding the repository from scratch,
+restoring an older clone or backup, re-creating channel roles at version 1, or force-pushing `whombat-releases` —
+existing boxes on that channel will quietly refuse every offer, pause and resume until the channel role's signed
+version reaches or exceeds the highest version those boxes saw. To avoid this: always pull and evolve the existing
+repository clone (`tufrepo gh-publish`, `gh-promote`, `gh-pause` and `gh-resume` pull first and advance the role version
+monotonically), keep force-push protection enabled on `whombat-releases` `main`, and if a repository ever has to be
+migrated or rebuilt for existing boxes, read the highest published channel versions from
+`https://releases.whombat.com/snapshot.json` (or `tufrepo status --dir <clone>`) first and ensure each channel role is
+signed strictly above them (`gh-continue --version-gap` advances `targets`, `snapshot` and `timestamp`, not channel
+roles).
 
 A box on the GitHub repository verifies it in folders of its own: the manager's `tuf/github/cache` and
 `tuf/github/mirror` under `/persist/manager`, the helper's `/var/lib/whombat-update-helper/tuf-github` (UP-X35). The
