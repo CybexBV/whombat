@@ -250,7 +250,9 @@ describe('cross-language subset', () => {
 });
 
 describe('generated artifacts', () => {
-  it('schema/ and vectors/ match the contracts (run `pnpm gen`)', async () => {
+  // Generating all 580 files takes about a second and a half alone, and longer than Vitest's 5 s beside the whole unit
+  // suite in CI.
+  it('schema/ and vectors/ match the contracts (run `pnpm gen`)', { timeout: 30_000 }, async () => {
     for (const [path, text] of await generate()) {
       if (path.endsWith('.go')) continue;
       expect(readFileSync(join(ROOT, path), 'utf8'), path).toBe(text);

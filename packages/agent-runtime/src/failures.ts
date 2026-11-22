@@ -149,9 +149,11 @@ const TEXT_RULES: [TurnFailureCode, RegExp][] = [
     /\bgit (clone|fetch|push|checkout|worktree|switch|merge)\b|worktree|not a git repository|uncommitted changes|could not read from remote|repository not found|non-fast-forward|working directory/i,
   ],
   ['timeout', /wall[_ ]time|ran longer than a turn may/i],
+  // A Fusebox that is restarting: its 503 before an answer, and the error ending an answer it cut short (Fusebox
+  // 0.17). A hiccup of the gateway's, like an outage; the turn's retry goes through once it is back.
   [
     'provider',
-    /overloaded|\b5\d\d\b|internal server error|bad gateway|service unavailable|gateway time-?out|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|fetch failed|connection (error|refused|reset)|stream disconnected|error sending request|timed out|rate[_ ]limit|\b429\b|too many requests|flex capacity|upstream for \S+ stalled|\bENOENT\b|executable not found|command not found/i,
+    /Fusebox is restarting|Fusebox stopped before the answer was complete|overloaded|\b5\d\d\b|internal server error|bad gateway|service unavailable|gateway time-?out|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|fetch failed|connection (error|refused|reset)|stream disconnected|error sending request|timed out|rate[_ ]limit|\b429\b|too many requests|flex capacity|upstream for \S+ stalled|\bENOENT\b|executable not found|command not found/i,
   ],
   ['runner', /No \S+ provider on this runner|lost contact with Whombat/i],
 ];
