@@ -571,6 +571,13 @@ const TABLE = {
   // never resent; `account.set` carries the Mac's password (secret). The screenshot is a read.
   'hosts.screen': DESTRUCTIVE_NEVER,
   'hosts.screenLook': READ,
+  // Find My on a Mac's page: a read or a picture unlocks and drives the Mac's screen, so it is never resent; what was
+  // read, the map and the picture are reads.
+  'hosts.findMy': READ,
+  'hosts.findMyRefresh': NEVER,
+  'hosts.findMyExact': NEVER,
+  'hosts.findMyMap': READ,
+  'hosts.findMyPicture': READ,
 
   'spend.overview': READ,
   'spend.week': READ,

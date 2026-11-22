@@ -1217,6 +1217,8 @@ export const HostMacHelper = z.object({
   running: z.boolean(),
   ax: z.boolean().nullable(),
   user: z.string().nullable(),
+  /** Seconds since someone last used the Mac's keyboard or mouse (helper 1.1.0 and later; null: unknown). */
+  idleS: z.number().int().nonnegative().nullable().optional(),
 });
 export type HostMacHelper = z.infer<typeof HostMacHelper>;
 
@@ -2144,7 +2146,8 @@ export type HostInspectResult = z.infer<typeof HostInspectResult>;
  * `keys`; `unlock` (types the Mac's own password the agent keeps); `password` (types it into a macOS password prompt
  * that is in front, never into anything else); the screen account (`account.set`,
  * `account.check`, `account.clear`); and by name through Whombat Helper (`ui.apps`, `ui.list`, `ui.press`, `ui.set`,
- * `ui.menu`, `ui.focus`, `ui.open`).
+ * `ui.menu`, `ui.focus`, `ui.open`, `ui.action` (an element's own named action, “Play”), `ui.quit`), and the Mac's maps
+ * (`map.geocode`: places for addresses, `map.snapshot`: a map picture; docs/implementation/macos/findmy.md).
  */
 export const HOST_SCREEN_OPS = [
   'status',
@@ -2166,6 +2169,10 @@ export const HOST_SCREEN_OPS = [
   'ui.menu',
   'ui.focus',
   'ui.open',
+  'ui.action',
+  'ui.quit',
+  'map.geocode',
+  'map.snapshot',
 ] as const;
 export const HostScreenOp = z.enum(HOST_SCREEN_OPS);
 export type HostScreenOp = z.infer<typeof HostScreenOp>;
@@ -2233,6 +2240,12 @@ export const HOST_SCREEN_LIMITS = {
   list: 1000,
   /** The account's user and password, each in UTF-8 bytes. */
   accountBytes: 63,
+  /** `map.geocode`: at most this many addresses, each at most `query` characters. */
+  queries: 8,
+  query: 300,
+  /** `map.snapshot`: at most this many pins, a picture of `mapSide` points a side at most (64 at least). */
+  pins: 20,
+  mapSide: 1600,
 } as const;
 
 /** The longest text `ui.set` takes (`type` takes `HOST_SCREEN_LIMITS.typeText`). */
@@ -2243,6 +2256,11 @@ export const HOST_SCREEN_LIST_MAX = HOST_SCREEN_LIMITS.list;
 const L = HOST_SCREEN_LIMITS;
 const Px = z.number().int().min(0).max(L.position);
 const ScreenName = z.string().min(1).max(L.name);
+const Lat = z.number().min(-90).max(90);
+const Lon = z.number().min(-180).max(180);
+/** A map's span: its shorter side in metres, from a street to half the earth. */
+const SpanM = z.number().min(50).max(20_000_000);
+const MapSide = z.number().int().min(64).max(L.mapSide);
 const AccountPart = z
   .string()
   .min(1)
@@ -2285,6 +2303,26 @@ export const HostScreenBody = z
     /** `ui.open`: `accessibility`, an app's name or an https address. */
     target: z.string().min(1).max(L.target).optional(),
     account: z.strictObject({ user: AccountPart, password: AccountPart }).optional(),
+    /** `ui.action`: the element's own action, by its name (“Play”, “Directions”). */
+    action: ScreenName.optional(),
+    /** `map.geocode`: the addresses to find, in order. */
+    queries: z.array(z.string().min(1).max(L.query)).min(1).max(L.queries).optional(),
+    /** `map.snapshot`: the places to pin (their points come back in order). */
+    pins: z
+      .array(z.strictObject({ lat: Lat, lon: Lon }))
+      .max(L.pins)
+      .optional(),
+    /** `map.snapshot`: the map's centre and span; absent, the map fits the pins. */
+    lat: Lat.optional(),
+    lon: Lon.optional(),
+    spanM: SpanM.optional(),
+    /** `map.snapshot`: the picture's size in points, and 1 or 2 pixels a point. */
+    w: MapSide.optional(),
+    h: MapSide.optional(),
+    scale: z.union([z.literal(1), z.literal(2)]).optional(),
+    dark: z.boolean().optional(),
+    /** `look`: only this part of the screen, in its pixels (cut before `maxW` scales it). */
+    crop: z.strictObject({ x: Px, y: Px, w: Px.min(1), h: Px.min(1) }).optional(),
   })
   .superRefine((b, ctx) => {
     const need = (...fields: (keyof typeof b)[]) => {
@@ -2310,6 +2348,19 @@ export const HostScreenBody = z
     if (b.op === 'ui.menu') need('path');
     if (b.op === 'ui.focus') need('app');
     if (b.op === 'ui.open') need('target');
+    if (b.op === 'ui.action') need('name', 'action');
+    if (b.op === 'ui.quit') need('app');
+    if (b.op === 'map.geocode') need('queries');
+    if (b.op === 'map.snapshot') {
+      need('w', 'h');
+      const centred = b.lat !== undefined && b.lon !== undefined && b.spanM !== undefined;
+      if (!centred && !b.pins?.length)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['pins'],
+          message: 'map.snapshot needs pins, or lat, lon and spanM.',
+        });
+    }
     // The Mac types its own password: nothing typed comes along with the step.
     if (b.op === 'password' && b.text !== undefined)
       ctx.addIssue({ code: 'custom', path: ['text'], message: 'password types the Mac’s own password.' });
@@ -2353,6 +2404,18 @@ export const HostUiApp = z.object({
 });
 export type HostUiApp = z.infer<typeof HostUiApp>;
 
+/** A place the Mac's geocoder found for an address: about `accuracyM` metres. */
+export const HostMapPlace = z.object({
+  lat: z.number(),
+  lon: z.number(),
+  accuracyM: z.number().nonnegative(),
+});
+export type HostMapPlace = z.infer<typeof HostMapPlace>;
+
+/** Where a pin falls in a map picture, in the points the picture was asked in. */
+export const HostMapPoint = z.object({ x: z.number(), y: z.number() });
+export type HostMapPoint = z.infer<typeof HostMapPoint>;
+
 /** The largest screenshot `hosts.screen` answers (base64 characters). */
 export const HOST_SCREEN_IMAGE_MAX = 12_000_000;
 
@@ -2384,6 +2447,14 @@ export const HostScreenResult = z.object({
   status: HostMacScreen.optional(),
   helper: HostMacHelper.optional(),
   truncated: z.boolean().optional(),
+  /** `map.geocode`: a place for each address, in order; null where the Mac found none. */
+  places: z.array(HostMapPlace.nullable()).max(L.queries).optional(),
+  /** `map.snapshot`: where each pin is in the picture, in the asked points; null where it falls outside. */
+  points: z.array(HostMapPoint.nullable()).max(L.pins).optional(),
+  /** `map.snapshot`: the region drawn (its centre and its shorter side in metres). */
+  lat: z.number().optional(),
+  lon: z.number().optional(),
+  spanM: z.number().optional(),
   auditId: z.string().max(200).optional(),
 });
 export type HostScreenResult = z.infer<typeof HostScreenResult>;
