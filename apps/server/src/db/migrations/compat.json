@@ -68,7 +68,7 @@
       "class": "expand",
       "readers": "0000_baseline",
       "writers": "0000_baseline",
-      "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them."
+      "note": "Mail-arrives automation triggers (docs/decisions/automation-recipes.md): two new tables mail_cursors and mail_trigger_items; the release before it never reads or writes them. Mail runs themselves live in automation_runs, which that release does advance, and it would ask the agent for one as the person: so a mail run, and a run with a connection_actions step, is stored with deadline_at at the epoch, which that release checks before any step of a started run and fails it (AR-68). Writer floors stay at the baseline: a rollback stays read-write."
     },
     "0010_dutch_voice": {
       "class": "expand",

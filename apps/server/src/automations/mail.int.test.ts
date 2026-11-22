@@ -50,11 +50,13 @@ import {
   createAutomation,
   deleteAutomation,
   publishAutomationDraft,
+  runAutomationNow,
   saveAutomationDraft,
   setAutomationEnabled,
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
-import { loadAutomationRow, toAutomation } from './store';
+import { PREVIOUS_RELEASE_STOPS_AT, previousReleaseStops, runDeadline } from './runs';
+import { loadAutomationRow, loadRunRow, toAutomation } from './store';
 
 const w = useAutomationWorld();
 let maraChat: PersonalSetup;
@@ -2574,6 +2576,88 @@ describe('mail-arrives automations', () => {
     } finally {
       attSpy.mockRestore();
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
+
+  it('stores the runs the previous release can’t run safely so it stops them before any step, and runs them to their own deadline here', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['rollback-check'],
+    });
+    const limits = { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 };
+    const actionsId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'manual' }],
+        steps: [
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Propose a change.', proposeActions: true },
+          { id: 'act', kind: 'connection_actions', from: 'ask' },
+        ],
+        limits,
+      },
+      { name: 'Manual actions' },
+    );
+    const plainId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'manual' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Hello' }],
+        limits,
+      },
+      { name: 'Plain note' },
+    );
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_rollback_check',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'rollback-check invoice',
+        body: 'Please pay.',
+        messageId: '<rollback-check@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [mailRun] = await runsOf(autoId);
+      if (!mailRun) throw new Error('no mail run');
+      // The previous release fails a started run whose `deadline_at` has passed before it looks at any step, so it
+      // never asks the agent as the person: a mail run is stored with the epoch there.
+      expect(previousReleaseStops(mailRun)).toBe(true);
+      expect(mailRun.deadlineAt.getTime()).toBe(PREVIOUS_RELEASE_STOPS_AT.getTime());
+      // This release runs it: its agent step is asked for nobody, and it gives up only at its own limit.
+      expect(mailRun.status).toBe('waiting');
+      expect(runDeadline(mailRun).getTime()).toBe(
+        mailRun.createdAt.getTime() + mailRun.definition.limits.runTimeoutMinutes * 60_000,
+      );
+
+      // A person's own run with a step the previous release doesn't have is stopped there too; any other keeps its
+      // deadline as it was.
+      const { runId: actionsRunId } = await w.ok(IDS.mara, runAutomationNow, { automationId: actionsId });
+      const { runId: plainRunId } = await w.ok(IDS.mara, runAutomationNow, { automationId: plainId });
+      const actionsRun = await loadRunRow(w.services.db, actionsRunId as string);
+      const plainRun = await loadRunRow(w.services.db, plainRunId as string);
+      expect(actionsRun.deadlineAt.getTime()).toBe(PREVIOUS_RELEASE_STOPS_AT.getTime());
+      expect(plainRun.deadlineAt.getTime()).toBe(plainRun.createdAt.getTime() + 30 * 60_000);
+      expect(runDeadline(plainRun)).toEqual(plainRun.deadlineAt);
+
+      // Past its own time limit, this release fails the mail run.
+      w.advance(mailRun.definition.limits.runTimeoutMinutes * 60_000 + 60_000);
+      await w.settle();
+      const after = await loadRunRow(w.services.db, mailRun.id);
+      expect(after.status).toBe('failed');
+      expect(after.error).toContain('ran out of time');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: actionsId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: plainId });
       await pollAndSettle();
     }
   });

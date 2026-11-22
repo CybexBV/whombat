@@ -825,7 +825,10 @@ published automation details read their definition and publisher from one versio
   agent step's time counts from its first turn's claim (a turn after a handed T3 Code wait keeps it): while the turn is
   queued only the run's own deadline bounds it, and a step queued behind another outsiders' turn says so in its summary (“Waiting for another customer report to finish”). A
   failed turn's step says why when the turn does (“Dusty couldn’t finish because it took too long.”,
-  `steps/turn-words.ts`).
+  `steps/turn-words.ts`). A run started by incoming mail, or one with a `connection_actions` step, is stored with
+  `deadline_at` at the epoch: the release before mail triggers checks a started run's deadline before any step, so after
+  a rollback it fails such a run instead of asking the agent as the person; here its deadline is its own time limit after
+  it was created (`runDeadline`, docs/decisions/automation-recipes.md).
 - **Identity**: each automation signs as its own system principal, with authority = its grants ∩ the publisher's
   current authority, checked before every step and inside approval execution; the rooms a step uses must still be the
   burrow's. The agent can only draft until the
