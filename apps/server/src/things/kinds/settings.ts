@@ -69,15 +69,9 @@ export interface SettingSpec<S> {
    * unrelated sections. Absent: `DeclaredSettings.read`.
    */
   readFresh?: (services: Services, row: CatalogConnectionRow) => Promise<S>;
-  /**
-   * For a whole-object write, returns the fields of the written object that this setting does not mean to change.
-   * After writing, `settingAction` checks that every untouched field still matches what was read before writing, and
-   * reports an uncertain outcome instead of done if anything else changed.
-   */
-  untouched?: (s: S) => unknown;
   /** A line under the sheet's choices, from what Whombat knows. */
   hint?: (s: S) => string | undefined;
-  /** Where it is changed instead (`elsewhere`, SST-05): the service's own page for it. */
+  /** Where it is changed instead (`elsewhere`): the service's own page for it. */
   elsewhere?: (base: string) => string;
 }
 
@@ -161,32 +155,6 @@ function wanted<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, s: S, input: Ki
   return choice.value;
 }
 
-/** Returns a copy of `raw` with the named keys omitted (for checking untouched fields of a whole-object write). */
-export function omitFields(raw: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
-  const copy = structuredClone(raw);
-  for (const key of keys) delete copy[key];
-  return copy;
-}
-
-/** Deep structural equality for JSON values returned by a whole-object settings read. */
-function sameSnapshot(a: unknown, b: unknown): boolean {
-  if (a === b || (Number.isNaN(a) && Number.isNaN(b))) return true;
-  if (typeof a !== typeof b || a === null || b === null) return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-    return a.every((v, i) => sameSnapshot(v, b[i]));
-  }
-  if (typeof a === 'object') {
-    const ra = a as Record<string, unknown>;
-    const rb = b as Record<string, unknown>;
-    const ka = Object.keys(ra);
-    const kb = Object.keys(rb);
-    if (ka.length !== kb.length) return false;
-    return ka.every((k) => Object.hasOwn(rb, k) && sameSnapshot(ra[k], rb[k]));
-  }
-  return false;
-}
-
 async function readNow<S>(d: DeclaredSettings<S>, spec: SettingSpec<S>, ctx: KindActionCtx): Promise<S> {
   const load = spec.readFresh ?? d.read;
   try {
@@ -202,9 +170,9 @@ function lower(label: string): string {
 }
 
 /**
- * The `setting` action: reads the setting right before writing, takes only a value it offers, writes it, and reads it
- * back. Done only when the service reports the new value and (for whole-object writes) every untouched field still
- * matches what was read before writing; the change can then be put back.
+ * The `setting` action: reads the setting right before writing, takes only a value it offers, writes that single
+ * setting (via a field-only or conditional update), and reads it back. Done only when the service reports the new
+ * value; the change can then be put back.
  */
 export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
   return async (ctx, input) => {
@@ -236,24 +204,6 @@ export function settingAction<S>(d: DeclaredSettings<S>): KindAction {
         title: `Asked ${d.name} to set ${spec.label} to ${shortWords(spec, value, before)} (not checked)`,
         uncertain: true,
       };
-    if (spec.untouched) {
-      const untouchedBefore = spec.untouched(before);
-      const untouchedAfter = spec.untouched(after);
-      if (
-        untouchedBefore === undefined ||
-        untouchedAfter === undefined ||
-        !sameSnapshot(untouchedBefore, untouchedAfter)
-      )
-        return {
-          message:
-            `Another setting in ${d.name} changed while Whombat updated ${spec.label}. Check ${d.name}’s settings.`.slice(
-              0,
-              200,
-            ),
-          title: `Updated ${spec.label} in ${d.name} (another setting also changed)`,
-          uncertain: true,
-        };
-    }
     if (!sameValue(now, value)) {
       if (sameValue(now, old))
         throw new ApiError(

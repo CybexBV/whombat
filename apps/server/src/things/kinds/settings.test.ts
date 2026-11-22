@@ -9,7 +9,6 @@ import { rowOf } from './media/testing';
 import {
   type DeclaredSettings,
   declaredSettings,
-  omitFields,
   SERVICE_SETTINGS_TAB_KEY,
   settingAction,
   settingsPanels,
@@ -286,7 +285,7 @@ describe('settingAction read-back verification', () => {
     expect(confirmed.message).toContain('Checked with Demo');
   });
 
-  it('keeps concurrent sibling changes on field-only writes, rejects 412 on conditional writes, and marks whole-object sibling changes uncertain', async () => {
+  it('keeps concurrent sibling changes on field-only writes and rejects 412 on conditional writes', async () => {
     // 1. Field-only write (PATCH): a concurrent change to a sibling field between read and write is preserved.
     let fieldState = { flag: true, level: 'high', sibling: 'before' };
     let patchReads = 0;
@@ -386,44 +385,6 @@ describe('settingAction read-back verification', () => {
         /Something else changed/,
       );
       expect(condState).toEqual({ level: 'high', sibling: 'concurrent' });
-
-      // 3. Whole-object write (`untouched`): if any untouched field differs on read-back, report uncertain (never done).
-      let wholeState: Record<string, unknown> = { level: 'high', sibling: 'before', nested: { keep: 1 } };
-      mockHttp.handler = (req) => {
-        if (req.method === 'PUT' && req.body) {
-          wholeState = JSON.parse(req.body) as Record<string, unknown>;
-          // Simulate a concurrent change to a sibling field visible on read-back.
-          wholeState.sibling = 'other-writer';
-        }
-        return { status: 200, headers: {}, body: Buffer.from('{}') };
-      };
-      const wholeAct = settingAction<Record<string, unknown>>({
-        ...makeDeclared(),
-        specs: [
-          {
-            id: 'level',
-            group: 'main',
-            label: 'Level',
-            help: 'Level',
-            kind: 'choice',
-            read: (s) => String(s.level),
-            untouched: (s) => omitFields(s, 'level'),
-            choices: () => [
-              { value: 'low', label: 'Low' },
-              { value: 'high', label: 'High' },
-            ],
-            write: (v, s) => ({ method: 'PUT', path: '/config', body: { ...s, level: String(v) } }),
-          },
-        ],
-        read: async () => structuredClone(wholeState),
-      });
-      const wholeOut = await wholeAct(actionCtx(), { target: 'level', value: 'low' });
-      expect(wholeOut.uncertain).toBe(true);
-      expect(wholeOut.undo).toBeUndefined();
-      expect(wholeOut.changeKind).toBeUndefined();
-      expect(wholeOut.title).not.toMatch(/Changed/);
-      expect(wholeOut.message).toMatch(/Another setting.*changed/i);
-      expect(wholeOut.message).not.toMatch(/Checked with/);
     } finally {
       mockHttp.handler = null;
     }

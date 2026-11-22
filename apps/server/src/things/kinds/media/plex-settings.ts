@@ -1,8 +1,9 @@
 /**
- * Plex's settings that matter (docs/decisions/service-settings.md SST-07): read from `/:/prefs`, written with
- * `PUT /:/prefs?<id>=<value>`, in four groups — watching away from home, converting video, libraries, upkeep. Emptying
- * the trash and updates stay in Plex (SST-05): the first can drop a whole library when a drive is away for a moment,
- * the second restarts the server.
+ * Plex's settings that matter: read from `/:/prefs`, written with field-only `PUT /:/prefs?<id>=<value>`, in four
+ * groups — watching away from home, converting video, libraries, upkeep. Secure connections, emptying the trash and
+ * updates stay in Plex: requiring encryption immediately refuses plain HTTP on port 32400 (cutting off plain-HTTP
+ * local access and Whombat's default HTTP connection), emptying the trash can drop a library when a drive is briefly
+ * away, and installing an update restarts the server.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -151,25 +152,12 @@ export const PLEX_SETTING_SPECS: readonly SettingSpec<PlexPrefs>[] = [
     id: 'secure_connections',
     group: 'away',
     label: 'Secure connections',
-    help: 'Whether Plex only accepts encrypted connections.',
-    kind: 'choice',
+    // Requiring encryption (`secureConnections=0`) makes Plex refuse plain HTTP on port 32400 from non-localhost
+    // addresses, cutting off plain-HTTP LAN access and Whombat's default HTTP connection before Undo can run.
+    help: 'Whether Plex only accepts encrypted connections. Requiring encryption stops plain HTTP access on port 32400, so it stays in Plex.',
+    kind: 'elsewhere',
     read: (p) => prefNum(p, 'secureConnections'),
-    // Off is never offered: it can only make Plex less safe.
-    choices: (p) =>
-      withCurrent(
-        [
-          { value: 0, label: 'Required', note: 'only encrypted connections' },
-          { value: 1, label: 'Preferred', note: 'encrypted when the player can' },
-        ],
-        prefNum(p, 'secureConnections'),
-        (v) => SECURE_WORDS[String(v)] ?? String(v),
-      ),
     words: (v) => SECURE_WORDS[String(v)] ?? String(v),
-    sentence: (v) =>
-      Number(v) === 0
-        ? 'Plex now only accepts encrypted connections.'
-        : 'Plex now prefers encrypted connections.',
-    write: (v) => put({ secureConnections: String(Number(v)) }),
   },
   {
     id: 'graphics_chip',

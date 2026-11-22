@@ -1,9 +1,20 @@
 /**
  * AdGuard Home's declared settings: read from `/control/filtering/status`, `/control/safebrowsing/status`,
  * `/control/parental/status`, `/control/safesearch/status`, `/control/querylog/config` and `/control/stats/config`.
- * Every row stays read-only (“In AdGuard Home”): DNS filtering switches, log and statistics switches, retention,
- * upstream DNS, encryption and access stay in AdGuard Home, and block-list update interval stays there too because
- * `POST /control/filtering/config` always resends `enabled` and could overwrite a concurrent DNS filtering change.
+ *
+ * Only Safe browsing and Parental control are writable here:
+ * - Single-field writes: in AdGuard Home (`internal/filtering/http.go`), `POST /control/safebrowsing/{enable,disable}`
+ *   only toggles `SafeBrowsingEnabled` and `POST /control/parental/{enable,disable}` only toggles `ParentalEnabled`,
+ *   with no request body and no sibling fields sent.
+ * - Non-destructive: neither deletes or replaces any stored data.
+ * - Cannot cut the person off: in AdGuard Home (`internal/filtering/filtering.go`, `internal/filtering/hashprefix/`,
+ *   `internal/dnsforward/process.go`), both check SHA-256 hash prefixes against AdGuard's phishing/malware or
+ *   adult-domain feeds only, are disabled for private reverse DNS, and stay separate from user block lists and custom
+ *   rules.
+ *
+ * Every other row stays in AdGuard Home: `/control/filtering/config`, `/control/safesearch/settings`,
+ * `/control/querylog/config/update` and `/control/stats/config/update` all take whole-section payloads (and block
+ * lists, retention intervals, upstream DNS, encryption and access also carry cut-off or deletion risk).
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -93,6 +104,36 @@ export async function readAdGuardSettings(
   return parseAdGuardSettings({ filtering, safebrowsing, parental, safesearch, querylog, stats });
 }
 
+async function readAdGuardSafeBrowsing(
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<AdGuardSettingsState> {
+  const safebrowsing = await getJson(services, row, NAME, '/control/safebrowsing/status');
+  return parseAdGuardSettings({
+    filtering: null,
+    safebrowsing,
+    parental: null,
+    safesearch: null,
+    querylog: null,
+    stats: null,
+  });
+}
+
+async function readAdGuardParental(
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<AdGuardSettingsState> {
+  const parental = await getJson(services, row, NAME, '/control/parental/status');
+  return parseAdGuardSettings({
+    filtering: null,
+    safebrowsing: null,
+    parental,
+    safesearch: null,
+    querylog: null,
+    stats: null,
+  });
+}
+
 const FILTER_INTERVAL_LABELS: Record<number, string> = {
   0: 'Never automatically',
   1: 'Every hour',
@@ -145,27 +186,39 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'safebrowsing',
     group: 'protection',
     label: 'Safe browsing',
-    help: 'Block known phishing and malware websites. Because DNS filtering can block addresses you rely on, it stays in AdGuard Home.',
-    kind: 'elsewhere',
+    help: 'Block known phishing and malware websites.',
+    kind: 'switch',
     read: (s) => s.safebrowsing ?? undefined,
-    words: (v) => (asBool(v) ? 'On' : 'Off'),
-    elsewhere: (base) => `${base}/#settings`,
+    readFresh: readAdGuardSafeBrowsing,
+    write: (v) => ({
+      method: 'POST',
+      path: asBool(v) ? '/control/safebrowsing/enable' : '/control/safebrowsing/disable',
+    }),
+    sentence: (v) =>
+      asBool(v) ? 'Safe browsing is now on in AdGuard Home.' : 'Safe browsing is now off in AdGuard Home.',
   },
   {
     id: 'parental',
     group: 'protection',
     label: 'Parental control',
-    help: 'Block adult websites across devices that use AdGuard Home. Because DNS filtering can block addresses you rely on, it stays in AdGuard Home.',
-    kind: 'elsewhere',
+    help: 'Block adult websites across devices that use AdGuard Home.',
+    kind: 'switch',
     read: (s) => s.parental ?? undefined,
-    words: (v) => (asBool(v) ? 'On' : 'Off'),
-    elsewhere: (base) => `${base}/#settings`,
+    readFresh: readAdGuardParental,
+    write: (v) => ({
+      method: 'POST',
+      path: asBool(v) ? '/control/parental/enable' : '/control/parental/disable',
+    }),
+    sentence: (v) =>
+      asBool(v)
+        ? 'Parental control is now on in AdGuard Home.'
+        : 'Parental control is now off in AdGuard Home.',
   },
   {
     id: 'safesearch',
     group: 'protection',
     label: 'Safe search',
-    help: 'Keep explicit results out of Google, YouTube and other search engines. Engine choices stay in AdGuard Home.',
+    help: 'Keep explicit results out of Google, YouTube and other search engines. Engine choices are saved together, so it stays in AdGuard Home.',
     kind: 'elsewhere',
     read: (s) => s.safesearch ?? undefined,
     words: (v) => (asBool(v) ? 'On' : 'Off'),
@@ -174,7 +227,7 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'querylog_enabled',
     group: 'logs',
     label: 'Query log',
-    help: 'Record DNS lookups so you can see what was allowed or blocked. Turning it off stops keeping lookup logs, so it stays in AdGuard Home.',
+    help: 'Record DNS lookups so you can see what was allowed or blocked. AdGuard Home saves all query-log settings together, so it stays in AdGuard Home.',
     kind: 'elsewhere',
     read: (s) => s.querylog?.enabled,
     words: (v) => (asBool(v) ? 'On' : 'Off'),
@@ -193,7 +246,7 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'anonymize_ip',
     group: 'logs',
     label: 'Anonymise device addresses',
-    help: 'Leave client IP addresses out of the query log. Turning it on stops keeping device addresses in new logs, so it stays in AdGuard Home.',
+    help: 'Leave client IP addresses out of the query log. AdGuard Home saves all query-log settings together, so it stays in AdGuard Home.',
     kind: 'elsewhere',
     read: (s) => s.querylog?.anonymizeIp,
     words: (v) => (asBool(v) ? 'On' : 'Off'),
@@ -203,7 +256,7 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'stats_enabled',
     group: 'logs',
     label: 'Statistics',
-    help: 'Keep counts of lookups, blocked domains and busiest devices. Turning it off stops keeping statistics, so it stays in AdGuard Home.',
+    help: 'Keep counts of lookups, blocked domains and busiest devices. AdGuard Home saves all statistics settings together, so it stays in AdGuard Home.',
     kind: 'elsewhere',
     read: (s) => s.stats?.enabled,
     words: (v) => (asBool(v) ? 'On' : 'Off'),
