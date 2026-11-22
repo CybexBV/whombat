@@ -358,7 +358,8 @@ func (rt *Runtime) serveExec(ctx context.Context, st streamConn) {
 // serveScreen runs one step on a Mac's screen. Driving the signed-in
 // person's desktop is as powerful as a root shell, so it needs host_shell;
 // reading the state ("status") is a check, so diagnose is enough for it.
-// The password of account.set and typed text are never logged.
+// The password of account.set and typed text are never logged, nor the
+// places map.geocode looks up or map.snapshot draws.
 func (rt *Runtime) serveScreen(ctx context.Context, st streamConn) {
 	var req proto.ScreenRequest
 	if err := wire.ReadMsg(st, &req); err != nil {
@@ -396,10 +397,15 @@ func (rt *Runtime) serveScreen(ctx context.Context, st streamConn) {
 		}
 	case proto.ScreenUIPress, proto.ScreenUIMenu, proto.ScreenUIFocus, proto.ScreenUIOpen:
 		attrs = append(attrs, "app", logCommand(req.App), "name", logCommand(req.Name), "path", logCommand(strings.Join(req.Path, " > ")), "target", logCommand(req.Target))
+	case proto.ScreenUIAction:
+		attrs = append(attrs, "app", logCommand(req.App), "name", logCommand(req.Name), "action", logCommand(req.Action))
+	case proto.ScreenUIQuit:
+		attrs = append(attrs, "app", logCommand(req.App))
 	}
-	if req.Op == proto.ScreenStatus || req.Op == proto.ScreenLook || req.Op == proto.ScreenUIList || req.Op == proto.ScreenUIApps {
+	switch req.Op {
+	case proto.ScreenStatus, proto.ScreenLook, proto.ScreenUIList, proto.ScreenUIApps, proto.ScreenMapGeocode, proto.ScreenMapSnapshot:
 		rt.Log.Debug("screen", attrs...)
-	} else {
+	default:
 		rt.Log.Info("screen", attrs...)
 	}
 	writeReply(st, resp)

@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,13 +22,16 @@ import (
 
 // CLIUsage is `whombat-agent screen`'s help.
 const CLIUsage = `whombat-agent screen OP [flags]     a Mac's screen, here and now (as root)
-  status | look --out FILE [--max-width N] [--format png|jpeg]
+  status | look --out FILE [--max-width N] [--format png|jpeg] [--crop X,Y,W,H]
   click --x X --y Y [--button left|right|middle] [--clicks N] | drag --x X --y Y --to-x X --to-y Y
   scroll [--x X --y Y] [--dx N] [--dy N] | type --text TEXT | keys --keys "cmd+q tab" | unlock
   password                            the stored password into macOS's own password prompt in front
   account set --user USER --password-file FILE|- | account check | account clear
   ui apps | ui list [--app A] [--window W] [--limit N] | ui press --name N [--role R] [--index I]
   ui set [--name N] --value V | ui menu --app A --path "File>Save…" | ui focus --app A | ui open --target T
+  ui action --name N --action A [--app A] [--role R] [--index I] | ui quit --app A
+  map geocode --query Q [--query Q …]  places for addresses (Apple's geocoder)
+  map snapshot --out FILE (--pin LAT,LON … | --lat L --lon L --span-m M) [--w W --h H] [--scale 1|2] [--dark] [--format jpeg|png]
   console-test --out FILE [--encodings raw|browser]   the host vnc console, as the browser sees it
   common: [--config-dir DIR] [--addr 127.0.0.1:5900] [--ui-root DIR] [--helper-app APP]`
 
@@ -41,11 +45,12 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 	}
 	op := args[0]
 	args = args[1:]
-	if (op == "account" || op == "ui") && len(args) > 0 && !isHelpWord(args[0]) {
+	group := op == "account" || op == "ui" || op == "map"
+	if group && len(args) > 0 && !isHelpWord(args[0]) {
 		op = op + "." + args[0]
 		args = args[1:]
 	}
-	if op == "account" || op == "ui" {
+	if op == "account" || op == "ui" || op == "map" {
 		fmt.Fprintln(stdout, CLIUsage)
 		return nil
 	}
@@ -60,9 +65,10 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 	addr := fs.String("addr", DefaultAddr, "Screen Sharing")
 	uiRoot := fs.String("ui-root", DefaultUIRoot, "the helpers' folders")
 	helperApp := fs.String("helper-app", DefaultHelperApp, "the Whombat Helper app whose process alone is trusted on the socket")
-	out := fs.String("out", "", "look, console-test: write the picture here")
+	out := fs.String("out", "", "look, map snapshot, console-test: write the picture here")
 	maxW := fs.Int("max-width", 0, "look: scale down to this width")
-	format := fs.String("format", "", "look: png or jpeg")
+	format := fs.String("format", "", "look, map snapshot: png or jpeg")
+	crop := fs.String("crop", "", "look: X,Y,W,H of the screen to take (pixels)")
 	var req proto.ScreenRequest
 	fs.IntVar(&req.X, "x", 0, "x (framebuffer pixels)")
 	fs.IntVar(&req.Y, "y", 0, "y")
@@ -82,6 +88,20 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 	fs.IntVar(&req.Index, "index", 0, "ui press/set: the n-th match")
 	fs.IntVar(&req.Limit, "limit", 0, "ui list: at most this many")
 	fs.StringVar(&req.Target, "target", "", "ui open: accessibility, an app or an https address")
+	fs.StringVar(&req.Action, "action", "", "ui action: the action's name (\"Open Details\")")
+	fs.Var((*stringList)(&req.Queries), "query", "map geocode: an address (again for more, up to 8)")
+	var pins pinList
+	fs.Var(&pins, "pin", "map snapshot: LAT,LON of a pin (again for more, up to 20)")
+	if op == "map.snapshot" {
+		// Only here: elsewhere -h asks for help.
+		fs.IntVar(&req.W, "w", 0, "map snapshot: width in points (64 to 1600; 600)")
+		fs.IntVar(&req.H, "h", 0, "map snapshot: height in points (64 to 1600; 400)")
+	}
+	fs.IntVar(&req.Scale, "scale", 0, "map snapshot: pixels per point, 1 or 2 (2)")
+	fs.BoolVar(&req.Dark, "dark", false, "map snapshot: the dark map")
+	lat := fs.String("lat", "", "map snapshot: the middle's latitude (with --lon and --span-m)")
+	lon := fs.String("lon", "", "map snapshot: the middle's longitude")
+	fs.Float64Var(&req.SpanM, "span-m", 0, "map snapshot: metres across the shorter side")
 	path := fs.String("path", "", "ui menu: items separated by >")
 	user := fs.String("user", "", "account set: the Mac's user")
 	pwFile := fs.String("password-file", "", "account set: a file with the password, or - for stdin")
@@ -112,6 +132,28 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 		req.Account = &proto.ScreenAccount{User: *user, Password: pw}
 	case "look":
 		req.MaxW, req.Format = *maxW, *format
+		if *crop != "" {
+			c, err := parseInts(*crop, 4)
+			if err != nil {
+				return fmt.Errorf("--crop is X,Y,W,H: %w", err)
+			}
+			req.Crop = &proto.ScreenCrop{X: c[0], Y: c[1], W: c[2], H: c[3]}
+		}
+	case "map.snapshot":
+		req.Format, req.Pins = *format, pins
+		for _, f := range []struct {
+			v   string
+			dst **float64
+		}{{*lat, &req.Lat}, {*lon, &req.Lon}} {
+			if f.v == "" {
+				continue
+			}
+			n, err := strconv.ParseFloat(f.v, 64)
+			if err != nil {
+				return fmt.Errorf("--lat and --lon are degrees: %w", err)
+			}
+			*f.dst = &n
+		}
 	case "ui.menu":
 		for _, p := range strings.Split(*path, ">") {
 			if p = strings.TrimSpace(p); p != "" {
@@ -123,7 +165,7 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 	resp := s.Screen(ctx, req)
 	if len(resp.Image) > 0 {
 		if *out == "" {
-			return errors.New("look: give --out FILE")
+			return fmt.Errorf("%s: give --out FILE", op)
 		}
 		if err := os.WriteFile(*out, resp.Image, 0o600); err != nil {
 			return err
@@ -140,6 +182,55 @@ func CLI(args []string, configDir string, stdout io.Writer, log *slog.Logger) er
 		return fmt.Errorf("%s: %s", resp.Code, resp.Message)
 	}
 	return nil
+}
+
+// stringList is a flag given again for each value.
+type stringList []string
+
+func (l *stringList) String() string { return strings.Join(*l, "; ") }
+
+func (l *stringList) Set(v string) error {
+	*l = append(*l, v)
+	return nil
+}
+
+// pinList is --pin LAT,LON, again for each pin.
+type pinList []proto.MapPin
+
+func (l *pinList) String() string { return fmt.Sprint(len(*l), " pins") }
+
+func (l *pinList) Set(v string) error {
+	parts := strings.Split(v, ",")
+	if len(parts) != 2 {
+		return errors.New("a pin is LAT,LON")
+	}
+	var ll [2]float64
+	for i, p := range parts {
+		n, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
+		if err != nil {
+			return errors.New("a pin is LAT,LON in degrees")
+		}
+		ll[i] = n
+	}
+	*l = append(*l, proto.MapPin{Lat: ll[0], Lon: ll[1]})
+	return nil
+}
+
+// parseInts reads n whole numbers separated by commas.
+func parseInts(v string, n int) ([]int, error) {
+	parts := strings.Split(v, ",")
+	if len(parts) != n {
+		return nil, fmt.Errorf("give %d numbers separated by commas", n)
+	}
+	out := make([]int, n)
+	for i, p := range parts {
+		x, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = x
+	}
+	return out, nil
 }
 
 func isHelpWord(s string) bool {

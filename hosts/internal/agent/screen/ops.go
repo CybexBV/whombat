@@ -1,11 +1,15 @@
 package screen
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg" // DecodeConfig of the helper's map pictures
+	_ "image/png"
 	"io/fs"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -52,7 +56,8 @@ func (s *Screen) Screen(ctx context.Context, req proto.ScreenRequest) proto.Scre
 	case proto.ScreenAccountClear:
 		resp, err = s.opAccountClear(ctx)
 	case proto.ScreenUIApps, proto.ScreenUIList, proto.ScreenUIPress, proto.ScreenUISet,
-		proto.ScreenUIMenu, proto.ScreenUIFocus, proto.ScreenUIOpen:
+		proto.ScreenUIMenu, proto.ScreenUIFocus, proto.ScreenUIOpen, proto.ScreenUIAction, proto.ScreenUIQuit,
+		proto.ScreenMapGeocode, proto.ScreenMapSnapshot:
 		resp, err = s.opUI(ctx, req)
 	default:
 		err = invalidError(fmt.Sprintf("unknown screen step %q", clip(req.Op, 40)))
@@ -77,11 +82,13 @@ func (e *codeError) Error() string { return e.msg }
 func (s *Screen) opStatus(ctx context.Context) proto.ScreenResponse {
 	s.refresh(ctx, true)
 	st, h := s.snapshot()
+	h.IdleS = s.idleNow()
 	return proto.ScreenResponse{Status: &st, Helper: &h}
 }
 
-// look takes the screen and returns it encoded, scaled to maxW.
-func (s *Screen) look(ctx context.Context, maxW int, format string) (data []byte, w, h, sw, sh int, err error) {
+// look takes the screen and returns it encoded, scaled to maxW; crop (nil:
+// all of it) is cut first, in framebuffer pixels, clamped to the screen.
+func (s *Screen) look(ctx context.Context, maxW int, format string, crop *proto.ScreenCrop) (data []byte, w, h, sw, sh int, err error) {
 	var img *image.RGBA
 	err = s.step(ctx, func(c *rfbConn) error {
 		var e error
@@ -91,20 +98,29 @@ func (s *Screen) look(ctx context.Context, maxW int, format string) (data []byte
 	if err != nil {
 		return nil, 0, 0, 0, 0, err
 	}
-	b := img.Bounds()
+	screen := img.Bounds()
+	var part image.Image = img
+	if crop != nil {
+		r := image.Rect(crop.X, crop.Y, crop.X+crop.W, crop.Y+crop.H).Intersect(screen)
+		if r.Empty() {
+			return nil, 0, 0, 0, 0, invalidError(fmt.Sprintf("the crop is outside the %d×%d screen", screen.Dx(), screen.Dy()))
+		}
+		part = img.SubImage(r)
+	}
+	b := part.Bounds()
 	if maxW <= 0 || maxW > b.Dx() {
 		maxW = b.Dx()
 	}
 	// A picture must fit one message to the hub: a big screen's PNG is
 	// made smaller until it does (the click space stays the screen's).
 	for {
-		out := scaleTo(img, maxW)
+		out := scaleTo(part, maxW)
 		data, err = encodeImage(out, format)
 		if err != nil {
 			return nil, 0, 0, 0, 0, err
 		}
 		if len(data) <= maxImageBytes || maxW <= minImageW {
-			return data, out.Bounds().Dx(), out.Bounds().Dy(), b.Dx(), b.Dy(), nil
+			return data, out.Bounds().Dx(), out.Bounds().Dy(), screen.Dx(), screen.Dy(), nil
 		}
 		maxW = maxW * 3 / 4
 	}
@@ -122,7 +138,11 @@ func (s *Screen) opLook(ctx context.Context, req proto.ScreenRequest) (proto.Scr
 	if req.MaxW < 0 || req.MaxW > maxFramebuffer {
 		return proto.ScreenResponse{}, invalidError("max_w is 0 (full size) to 8192")
 	}
-	data, w, h, sw, sh, err := s.look(ctx, req.MaxW, format)
+	if c := req.Crop; c != nil && (c.X < 0 || c.Y < 0 || c.W < 1 || c.H < 1 || c.X > maxFramebuffer || c.Y > maxFramebuffer ||
+		c.W > maxFramebuffer || c.H > maxFramebuffer) {
+		return proto.ScreenResponse{}, invalidError("crop is x and y (0 or more) and w and h (1 or more), in the screen's pixels")
+	}
+	data, w, h, sw, sh, err := s.look(ctx, req.MaxW, format, req.Crop)
 	if err != nil {
 		return proto.ScreenResponse{}, err
 	}
@@ -780,10 +800,14 @@ func checkText(field, v string, n int, required bool) error {
 	return nil
 }
 
-// uiRequest builds the helper's request for a ui.* step.
+// uiRequest builds the helper's request for a ui.* or map.* step.
 func uiRequest(req proto.ScreenRequest) (map[string]any, error) {
+	switch req.Op {
+	case proto.ScreenMapGeocode, proto.ScreenMapSnapshot:
+		return mapRequest(req)
+	}
 	m := map[string]any{}
-	if err := checkText("app", req.App, uiTextMax, req.Op == proto.ScreenUIFocus); err != nil {
+	if err := checkText("app", req.App, uiTextMax, req.Op == proto.ScreenUIFocus || req.Op == proto.ScreenUIQuit); err != nil {
 		return nil, err
 	}
 	if req.App != "" {
@@ -815,16 +839,23 @@ func uiRequest(req proto.ScreenRequest) (map[string]any, error) {
 		if req.Window != "" {
 			m["window"] = req.Window
 		}
-	case proto.ScreenUIPress, proto.ScreenUISet:
+	case proto.ScreenUIPress, proto.ScreenUISet, proto.ScreenUIAction:
 		m["op"] = "press"
-		if req.Op == proto.ScreenUISet {
+		switch req.Op {
+		case proto.ScreenUISet:
 			m["op"] = "set"
 			if err := checkText("the value", req.Text, uiValueMax, false); err != nil {
 				return nil, err
 			}
 			m["value"] = req.Text
+		case proto.ScreenUIAction:
+			m["op"] = "action"
+			if err := checkText("the action", req.Action, uiTextMax, true); err != nil {
+				return nil, err
+			}
+			m["action"] = strings.TrimSpace(req.Action)
 		}
-		if err := checkText("the name", req.Name, uiTextMax, req.Op == proto.ScreenUIPress); err != nil {
+		if err := checkText("the name", req.Name, uiTextMax, req.Op != proto.ScreenUISet); err != nil {
 			return nil, err
 		}
 		if req.Name != "" {
@@ -849,6 +880,8 @@ func uiRequest(req proto.ScreenRequest) (map[string]any, error) {
 		m["path"] = req.Path
 	case proto.ScreenUIFocus:
 		m["op"] = "focus"
+	case proto.ScreenUIQuit:
+		m["op"] = "quit"
 	case proto.ScreenUIOpen:
 		m["op"] = "open"
 		t := strings.TrimSpace(req.Target)
@@ -868,13 +901,123 @@ func uiRequest(req proto.ScreenRequest) (map[string]any, error) {
 	return m, nil
 }
 
+// The map steps' limits (Whombat docs/implementation/macos/findmy.md).
+const (
+	mapQueriesMax = 8
+	mapQueryMax   = 300
+	mapSideMin    = 64
+	mapSideMax    = 1600
+	mapPinsMax    = 20
+	mapSpanMin    = 50.0
+	mapSpanMax    = 20_000_000.0
+)
+
+// mapRequest builds the helper's request for map.geocode or map.snapshot.
+func mapRequest(req proto.ScreenRequest) (map[string]any, error) {
+	if req.Op == proto.ScreenMapGeocode {
+		if len(req.Queries) < 1 || len(req.Queries) > mapQueriesMax {
+			return nil, invalidError(fmt.Sprintf("queries are 1 to %d places to find", mapQueriesMax))
+		}
+		qs := make([]string, 0, len(req.Queries))
+		for _, q := range req.Queries {
+			q = strings.TrimSpace(q)
+			if err := checkText("a place to find", q, mapQueryMax, true); err != nil {
+				return nil, err
+			}
+			qs = append(qs, q)
+		}
+		return map[string]any{"op": "geocode", "queries": qs}, nil
+	}
+	m := map[string]any{"op": "map"}
+	for _, side := range []struct {
+		name string
+		v    int
+	}{{"w", req.W}, {"h", req.H}} {
+		if side.v == 0 {
+			continue
+		}
+		if side.v < mapSideMin || side.v > mapSideMax {
+			return nil, invalidError(fmt.Sprintf("%s is %d to %d points", side.name, mapSideMin, mapSideMax))
+		}
+		m[side.name] = side.v
+	}
+	switch req.Scale {
+	case 0:
+	case 1, 2:
+		m["scale"] = req.Scale
+	default:
+		return nil, invalidError("scale is 1 or 2")
+	}
+	if req.Dark {
+		m["dark"] = true
+	}
+	format, ok := imageFormat(req.Format, "jpeg")
+	if !ok {
+		return nil, invalidError("format is png or jpeg")
+	}
+	m["format"] = format
+	if len(req.Pins) > mapPinsMax {
+		return nil, invalidError(fmt.Sprintf("at most %d pins", mapPinsMax))
+	}
+	pins := make([]map[string]float64, 0, len(req.Pins))
+	for _, p := range req.Pins {
+		if !validPlace(p.Lat, p.Lon) {
+			return nil, invalidError("a pin's lat is −90 to 90 and its lon −180 to 180")
+		}
+		pins = append(pins, map[string]float64{"lat": p.Lat, "lon": p.Lon})
+	}
+	if len(pins) > 0 {
+		m["pins"] = pins
+	}
+	switch {
+	case req.Lat == nil && req.Lon == nil && req.SpanM == 0:
+		if len(pins) == 0 {
+			return nil, invalidError("give pins, or lat, lon and span_m")
+		}
+	case req.Lat != nil && req.Lon != nil && req.SpanM != 0:
+		if !validPlace(*req.Lat, *req.Lon) {
+			return nil, invalidError("lat is −90 to 90 and lon −180 to 180")
+		}
+		if math.IsNaN(req.SpanM) || req.SpanM < mapSpanMin || req.SpanM > mapSpanMax {
+			return nil, invalidError(fmt.Sprintf("span_m is %.0f to %.0f metres", mapSpanMin, mapSpanMax))
+		}
+		m["lat"], m["lon"], m["span_m"] = *req.Lat, *req.Lon, req.SpanM
+	default:
+		return nil, invalidError("give lat, lon and span_m together")
+	}
+	return m, nil
+}
+
+func validPlace(lat, lon float64) bool {
+	return !math.IsNaN(lat) && !math.IsNaN(lon) && math.Abs(lat) <= 90 && math.Abs(lon) <= 180
+}
+
 // uiNeedsAccess: the steps that read or drive other apps' controls.
 func uiNeedsAccess(op string) bool {
 	switch op {
-	case proto.ScreenUIList, proto.ScreenUIPress, proto.ScreenUISet, proto.ScreenUIMenu:
+	case proto.ScreenUIList, proto.ScreenUIPress, proto.ScreenUISet, proto.ScreenUIMenu, proto.ScreenUIAction:
 		return true
 	}
 	return false
+}
+
+// uiWhileLocked: the steps that don't touch what is on the screen, so they
+// run while it is locked (Whombat reads Find My, then locks the Mac again
+// and quits Find My; the map is drawn whenever someone looks).
+func uiWhileLocked(op string) bool {
+	switch op {
+	case proto.ScreenUIQuit, proto.ScreenMapGeocode, proto.ScreenMapSnapshot:
+		return true
+	}
+	return false
+}
+
+// helperWait is how long the helper may take for a step.
+func helperWait(op string) time.Duration {
+	if op == proto.ScreenMapGeocode || op == proto.ScreenMapSnapshot {
+		return helperMapTimeout
+	}
+	return helperTimeout
 }
 
 func (s *Screen) opUI(ctx context.Context, req proto.ScreenRequest) (proto.ScreenResponse, error) {
@@ -901,13 +1044,13 @@ func (s *Screen) opUI(ctx context.Context, req proto.ScreenRequest) (proto.Scree
 		return proto.ScreenResponse{}, helperError(st)
 	}
 	s.noteHelper(st)
-	if st.Locked {
+	if st.Locked && !uiWhileLocked(req.Op) {
 		return proto.ScreenResponse{}, &codeError{proto.ScreenCodeLocked, "The Mac's screen is locked. Unlock it first."}
 	}
 	if uiNeedsAccess(req.Op) && !st.AX {
 		return proto.ScreenResponse{}, &codeError{proto.ScreenCodeNoAccess, "Whombat Helper doesn't have Accessibility yet. Switch it on in System Settings → Privacy & Security → Accessibility."}
 	}
-	a, err := s.helper.call(ctx, uid, hreq)
+	a, err := s.helper.callWithin(ctx, uid, hreq, helperWait(req.Op))
 	if err != nil {
 		if ctx.Err() != nil {
 			return proto.ScreenResponse{}, ctx.Err()
@@ -917,6 +1060,9 @@ func (s *Screen) opUI(ctx context.Context, req proto.ScreenRequest) (proto.Scree
 	// The screen is in use: a session that holds an unlock stays open.
 	s.touchConnection()
 	if !a.OK {
+		if a.Code == "invalid_request" && strings.HasPrefix(a.Message, "unknown op") {
+			return proto.ScreenResponse{}, &codeError{proto.ScreenCodeUnsupported, helperOlderMsg}
+		}
 		return proto.ScreenResponse{}, helperError(a)
 	}
 	fbW, _ := s.fbSize()
@@ -940,12 +1086,76 @@ func (s *Screen) opUI(ctx context.Context, req proto.ScreenRequest) (proto.Scree
 			resp.Elements = append(resp.Elements, pm.element(e))
 		}
 		resp.Truncated = resp.Truncated || a.Truncated
+	case proto.ScreenMapGeocode:
+		places, err := mapPlaces(a, len(hreq["queries"].([]string)))
+		if err != nil {
+			return proto.ScreenResponse{}, err
+		}
+		resp.Places = places
+	case proto.ScreenMapSnapshot:
+		if err := mapPicture(a, len(req.Pins), &resp); err != nil {
+			return proto.ScreenResponse{}, err
+		}
 	}
 	if a.Element != nil {
 		e := pm.element(*a.Element)
 		resp.Element = &e
 	}
 	return resp, nil
+}
+
+// errHelperAnswer: an answer that doesn't fit the request.
+var errHelperAnswer = &codeError{"failed", "Whombat Helper's answer didn't fit the request."}
+
+// mapPlaces checks geocode's answer: one place or nil per query, each a
+// real place.
+func mapPlaces(a *helperAnswer, n int) ([]*proto.MapPlace, error) {
+	if len(a.Places) != n {
+		return nil, errHelperAnswer
+	}
+	out := make([]*proto.MapPlace, n)
+	for i, p := range a.Places {
+		if p == nil {
+			continue
+		}
+		if !validPlace(p.Lat, p.Lon) || math.IsNaN(p.AccuracyM) || p.AccuracyM < 0 || p.AccuracyM > 1e7 {
+			return nil, errHelperAnswer
+		}
+		out[i] = &proto.MapPlace{Lat: p.Lat, Lon: p.Lon, AccuracyM: p.AccuracyM}
+	}
+	return out, nil
+}
+
+// mapPicture checks map's answer and puts it in resp: a JPEG or PNG of the
+// size it says, small enough for one message to the hub, a point or nil
+// per pin, and the region drawn.
+func mapPicture(a *helperAnswer, pins int, resp *proto.ScreenResponse) error {
+	if len(a.Points) != pins || a.Lat == nil || a.Lon == nil || !validPlace(*a.Lat, *a.Lon) ||
+		math.IsNaN(a.SpanM) || a.SpanM <= 0 || a.SpanM > 4*mapSpanMax {
+		return errHelperAnswer
+	}
+	format, ok := imageFormat(a.Format, "")
+	if !ok || format == "" {
+		return errHelperAnswer
+	}
+	if len(a.Image) > maxImageBytes {
+		return &codeError{"failed", "The map picture is too big for one answer; ask for a smaller one."}
+	}
+	cfg, got, err := image.DecodeConfig(bytes.NewReader(a.Image))
+	if err != nil || got != format || cfg.Width != a.W || cfg.Height != a.H {
+		return errHelperAnswer
+	}
+	resp.Image, resp.Format, resp.W, resp.H = a.Image, format, a.W, a.H
+	resp.Points = make([]*proto.MapPoint, pins)
+	for i, p := range a.Points {
+		if p == nil || math.IsNaN(p.X) || math.IsNaN(p.Y) || p.X < 0 || p.Y < 0 || p.X > mapSideMax || p.Y > mapSideMax {
+			continue
+		}
+		resp.Points[i] = &proto.MapPoint{X: p.X, Y: p.Y}
+	}
+	lat, lon := *a.Lat, *a.Lon
+	resp.Lat, resp.Lon, resp.SpanM = &lat, &lon, a.SpanM
+	return nil
 }
 
 // helperError maps the helper's own codes.

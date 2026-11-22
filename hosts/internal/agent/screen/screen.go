@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -162,6 +163,8 @@ type Screen struct {
 	locked      *bool
 	helperInfo  proto.MacHelper // Version, Accessibility, User of the last answer
 	displays    []helperDisplay
+	idleS       *int // the last status answer's idle_s, kept out of the report
+	idleAt      time.Time
 	helperAt    time.Time // the last answer
 	helperTried time.Time
 	bundleVer   string
@@ -454,6 +457,25 @@ func (s *Screen) noteHelper(a *helperAnswer) {
 	s.helperAt = s.now()
 	s.helperInfo = proto.MacHelper{Version: clip(a.Version, 64), User: clip(a.User, 64), Accessibility: &ax}
 	s.displays = a.Displays
+	s.idleS = nil
+	if v := a.IdleS; v != nil && *v >= 0 && *v < math.MaxInt32 {
+		n := int(*v)
+		s.idleS = &n
+	}
+	s.idleAt = s.now()
+}
+
+// idleNow is the helper's idle_s when it answered within the last few
+// seconds (the status step asks it first), else nil: an old one would say
+// nobody is at the Mac when someone just sat down.
+func (s *Screen) idleNow() *int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.idleS == nil || s.now().Sub(s.idleAt) > 5*time.Second {
+		return nil
+	}
+	n := *s.idleS
+	return &n
 }
 
 func (s *Screen) markSharing(on bool) {
@@ -663,7 +685,7 @@ func (s *Screen) Thumbnail(ctx context.Context, req proto.ThumbnailRequest) prot
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.stepTimeout)
 	defer cancel()
-	data, w, h, _, _, err := s.look(ctx, req.MaxWidth, format)
+	data, w, h, _, _, err := s.look(ctx, req.MaxWidth, format, nil)
 	if err != nil {
 		code, msg := errorCode(err)
 		return proto.ThumbnailResponse{Code: code, Message: msg}

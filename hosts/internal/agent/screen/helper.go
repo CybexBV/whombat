@@ -30,6 +30,9 @@ const (
 	helperSocketName = "helper.sock"
 	helperMaxAnswer  = 16 << 20
 	helperTimeout    = 12 * time.Second // the helper bounds itself to 10 s
+	// helperMapTimeout: geocode and map ask Apple's map service, and the
+	// helper gives them 20 s.
+	helperMapTimeout = 22 * time.Second
 )
 
 // errNoHelper: the helper isn't there or isn't the console user's.
@@ -48,6 +51,10 @@ var (
 	helperGuardedKeys = [3]int{1, 0, 4} // unlock sends each key only while the field has the keyboard
 	helperFieldToken  = [3]int{1, 0, 5} // `focused` names the element (token)
 )
+
+// helperOlderMsg answers a step the helper doesn't know yet (an op of a
+// newer helper): it takes the new version with the agent's next update.
+const helperOlderMsg = "Whombat Helper on this Mac is older than this step; it updates itself."
 
 // helperAtLeast says whether a helper's version (X.Y.Z) is at least want;
 // anything else ("dev", empty) isn't.
@@ -150,6 +157,33 @@ type helperAnswer struct {
 	// focused (1.0.3 on): the process whose element has the keyboard focus.
 	PID      int    `json:"pid"`
 	BundleID string `json:"bundle_id"`
+
+	// status (1.1.0 on): seconds since the last input at the Mac itself;
+	// nil when unknown.
+	IdleS *float64 `json:"idle_s"`
+	// geocode (1.1.0 on): one per query, nil where nothing was found.
+	Places []*helperPlace `json:"places"`
+	// map (1.1.0 on): the picture (base64 in the JSON), its size in
+	// pixels, one point per pin (nil: outside it) and the region drawn.
+	Image  []byte         `json:"image"`
+	Format string         `json:"format"`
+	W      int            `json:"w"`
+	H      int            `json:"h"`
+	Points []*helperPoint `json:"points"`
+	Lat    *float64       `json:"lat"`
+	Lon    *float64       `json:"lon"`
+	SpanM  float64        `json:"span_m"`
+}
+
+type helperPlace struct {
+	Lat       float64 `json:"lat"`
+	Lon       float64 `json:"lon"`
+	AccuracyM float64 `json:"accuracy_m"`
+}
+
+type helperPoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 // helperClient talks to the helper of one user.
@@ -170,12 +204,17 @@ func (h helperClient) socket(uid int) string {
 // helper (check): the folder is the user's, so any of their programs could
 // listen there, and a request may carry the password.
 func (h helperClient) call(ctx context.Context, uid int, req map[string]any) (*helperAnswer, error) {
+	return h.callWithin(ctx, uid, req, helperTimeout)
+}
+
+// callWithin is call with the helper given wait to answer.
+func (h helperClient) callWithin(ctx context.Context, uid int, req map[string]any, wait time.Duration) (*helperAnswer, error) {
 	path := h.socket(uid)
 	fi, err := os.Lstat(path)
 	if err != nil || fi.Mode()&fs.ModeSocket == 0 {
 		return nil, errNoHelper
 	}
-	ctx, cancel := context.WithTimeout(ctx, helperTimeout)
+	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
@@ -387,8 +426,28 @@ func (m pointMap) element(e helperElement) proto.UIElement {
 		Description: clip(e.Description, 200), Value: clip(e.Value, 200), Identifier: clip(e.Identifier, 200),
 		Enabled: e.Enabled, Focused: e.Focused,
 		X: x, Y: y, W: m.px(e.X+e.W, m.ox) - x, H: m.px(e.Y+e.H, m.oy) - y,
-		Actions: clipList(e.Actions, 16, 64), App: clip(e.App, 200), Window: clip(e.Window, 200),
+		Actions: clipList(actionNames(e.Actions), 16, 64), App: clip(e.App, 200), Window: clip(e.Window, 200),
 	}
+}
+
+// actionNames are an element's actions as a person names them: an app's
+// own action is listed by Accessibility as "Name:Play\nTarget:0x0\n
+// Selector:(null)" and named by the words after "Name:" up to the line's
+// end; an AX action keeps its name ("AXPress").
+func actionNames(raw []string) []string {
+	out := make([]string, 0, len(raw))
+	for _, a := range raw {
+		if rest, ok := strings.CutPrefix(a, "Name:"); ok {
+			if i := strings.IndexAny(rest, "\r\n"); i >= 0 {
+				rest = rest[:i]
+			}
+			a = strings.TrimSpace(rest)
+		}
+		if a != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func clip(s string, n int) string {
