@@ -4,20 +4,32 @@
  * `request`, its method and path), a strict schema for every argument (unknown keys refused, sizes bounded) and the
  * headers it may carry. The server writes the parts that keep it create-only itself — `If-None-Match: *` on a WebDAV
  * PUT, Dropbox's `mode: add`, `overwrite: false` — and sets `Content-Type`, so what the agent wrote can't replace,
- * move, delete or share anything, whatever it is called.
+ * move, delete or share anything, whatever it is called. The agent never knows the person's account ids (an outsiders'
+ * turn can't look anything up), so its paths leave them out and the server writes the connection's own in.
  */
-import { AttachmentId, type CatalogEntry, REQUEST_TOOL_NAME } from '@whombat/core';
+import { AttachmentId, type CatalogEntry, REQUEST_TOOL_NAME, vaultPathProblem } from '@whombat/core';
 import { z } from 'zod';
 import { ConnectionArgumentError, repeatedHeader } from '../connections/request';
 import type { ConnectionToolRow } from '../connections/types';
 
 type Args = Record<string, unknown>;
 type Tool = Pick<ConnectionToolRow, 'name' | 'origin'>;
+type Fields = Readonly<Record<string, unknown>>;
 
 /** Whombat's words for a listed action: what a card asks and what the thread says once it ran. */
 export interface ListedWords {
   ask: string;
   done: string;
+}
+
+/** An id an action's arguments name (a Paperless-ngx tag, a Moneybird contact): the card shows its name beside it. */
+export interface ListedRef {
+  /** Where it sits in the arguments as the card reads them (`upload.fields.tags`). */
+  at: RegExp;
+  /** What kind of thing it is, as the server looks it up (`tag`). */
+  kind: string;
+  /** Its word in a sentence (“document type”). */
+  what: string;
 }
 
 interface ListedAction {
@@ -34,8 +46,16 @@ interface ListedAction {
   /** For `request`: the method and the path it takes. */
   method?: string;
   path?: RegExp;
+  /** For `request`: whether its body is JSON (a body written as JSON text is read as the JSON it says). */
+  jsonBody?: boolean;
   /** The arguments as they are sent, or why they can't be (strict: anything not listed is refused). */
-  settle(args: Args, fields: Readonly<Record<string, unknown>>): Args;
+  settle(args: Args, fields: Fields): Args;
+  /** The ids its arguments name, which the card shows by name. */
+  refs?: readonly ListedRef[];
+  /** What else it does, as lines the card shows right after its words (`quote` writes a value as the card does). */
+  notes?(args: Readonly<Args>, quote: (text: string) => string): string[];
+  /** An answer that means it was there already, so nothing changed: the status and what the thread says then. */
+  there?: { status: number; done: string };
 }
 
 /** Why a listed action's arguments can't be used, in words the agent can act on. */
@@ -204,6 +224,57 @@ function request(args: Args, parts: Args, base?: string): Args {
   return { method: args.method, path: args.path, ...(base ? { base } : {}), ...sent, ...rest };
 }
 
+const looksLikeJson = (text: string) => /^\s*[[{]/.test(text);
+
+/** A number JSON can't hold exactly (a Moneybird id written without quotes): shown and sent differently. */
+function hasInexactNumber(value: unknown, depth = 0): boolean {
+  if (depth > 16) return false;
+  if (typeof value === 'number') return Number.isInteger(value) && !Number.isSafeInteger(value);
+  if (value && typeof value === 'object')
+    return Object.values(value as Args).some((v) => hasInexactNumber(v, depth + 1));
+  return false;
+}
+
+/**
+ * The body of an action whose body is JSON: written as JSON text, it is the JSON it says, so what runs is what the card
+ * shows (anything else stays as it is, for its schema to refuse). Only these bodies are read as JSON: a text file or a
+ * note that starts with `{` stays text.
+ */
+function jsonBody(body: unknown): unknown {
+  let value = body;
+  if (typeof body === 'string' && looksLikeJson(body)) {
+    try {
+      value = JSON.parse(body);
+    } catch {
+      // Not JSON after all: the action's schema says what it takes.
+    }
+  }
+  if (hasInexactNumber(value))
+    throw new ListedArgumentError(
+      'A number in this request is too large to send exactly: write it as text, in quotes.',
+    );
+  return value;
+}
+
+function decodeURIComponentSafe(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+const fieldText = (fields: Fields, id: string) => {
+  const value = fields[id];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+/** A path the server made from the connection's own fields, refused (without saying it) when it can't be sent. */
+function ownPath(path: string, problem: string): string {
+  if (vaultPathProblem(path)) throw new ListedArgumentError(problem);
+  return path;
+}
+
 /* The list --------------------------------------------------------------------------------------- */
 
 const paperlessFields = z
@@ -250,15 +321,52 @@ const moneybirdDocument = (due: boolean) =>
     })
     .strict();
 
+/**
+ * A Moneybird document path in the connection's administration. The agent writes it from `/documents/` (it can't know
+ * the administration's id); the server puts the connection's administration in front. A path that already starts with
+ * it (one the server settled) stays as it is; one with any other administration is refused without naming the right one.
+ */
+function moneybirdPath(path: string, fields: Fields): string {
+  const administration = fieldText(fields, 'administration');
+  if (!administration)
+    throw new ListedArgumentError(
+      'This Moneybird connection has no administration chosen yet, so nothing can be added to it.',
+    );
+  const m = /^\/(?:([^/]+)\/)?(documents\/.+)$/.exec(path);
+  const given = m?.[1];
+  if (!m || (given !== undefined && decodeURIComponentSafe(given) !== administration))
+    throw new ListedArgumentError(
+      'path: start it at /documents/, like /documents/purchase_invoices.json: Whombat adds the administration.',
+    );
+  return ownPath(
+    `/${encodeURIComponent(administration)}/${m[2]}`,
+    'This Moneybird connection’s administration can’t be written in a path.',
+  );
+}
+
 function moneybird(kind: 'purchase_invoice' | 'receipt'): ListedAction['settle'] {
   const schema = z.object({ [kind]: moneybirdDocument(kind === 'purchase_invoice') }).strict();
-  return (args) => {
+  return (args, fields) => {
+    const path = moneybirdPath(String(args.path), fields);
     const { body } = requestParts(args, { body: true });
-    return request(args, {
-      headers: settledHeaders(args.headers, JSON_TYPE),
-      body: parsed(schema, body, 'body'),
-    });
+    return request(
+      { ...args, path },
+      {
+        headers: settledHeaders(args.headers, JSON_TYPE),
+        body: parsed(schema, jsonBody(body), 'body'),
+      },
+    );
   };
+}
+
+/** The ids a Moneybird document names: its contact, and each line's tax rate and ledger account. */
+function moneybirdRefs(kind: 'purchase_invoice' | 'receipt'): ListedRef[] {
+  const line = `^body\\.${kind}\\.details_attributes\\[\\d+\\]\\.`;
+  return [
+    { at: new RegExp(`^body\\.${kind}\\.contact_id$`), kind: 'contact', what: 'contact' },
+    { at: new RegExp(`${line}tax_rate_id$`), kind: 'tax_rate', what: 'tax rate' },
+    { at: new RegExp(`${line}ledger_account_id$`), kind: 'ledger_account', what: 'ledger account' },
+  ];
 }
 
 const dropboxArg = z
@@ -304,28 +412,64 @@ function textOrFile(body: unknown, upload: unknown): Args {
   return { body: parsed(text(LISTED_TEXT_MAX), body, 'body') };
 }
 
-const NEXTCLOUD_FILES = /^\/remote\.php\/dav\/files\/([^/]+)\/(.+)$/;
-
-/** A Nextcloud WebDAV path in the connection's own files, whose user is the connection's user when it is known. */
-function nextcloudPath(path: string, fields: Readonly<Record<string, unknown>>, folder: boolean): void {
-  const m = NEXTCLOUD_FILES.exec(path);
-  const users = [fields.userId, fields.username].filter((u): u is string => typeof u === 'string' && !!u);
-  const rest = m?.[2] ?? '';
-  if (!m || (users.length > 0 && !users.includes(decodeURIComponentSafe(m[1] as string))))
-    throw new ListedArgumentError(
-      `path: under /remote.php/dav/files/${users[0] ?? '<user id>'}/, in the person’s own files.`,
-    );
-  const file = folder ? rest.replace(/\/$/, '') : rest;
-  if (!filePath.safeParse(`/${file}`).success || path.length > 300)
-    throw new ListedArgumentError('path: a file path of at most 200 characters, without . or ..');
+/** The folder a Dropbox upload to `path` goes into, when it isn't the root: Dropbox makes it if it isn't there. */
+function dropboxFolderNotes(path: unknown, quote: (text: string) => string): string[] {
+  if (typeof path !== 'string') return [];
+  const folder = path.slice(0, path.lastIndexOf('/'));
+  return folder ? [`And the folder ${quote(folder)}, if it doesn’t exist`] : [];
 }
 
-function decodeURIComponentSafe(segment: string): string {
+/** The path in Dropbox's argument header as the upload settled it. */
+function dropboxArgPath(headers: unknown): unknown {
+  const value = headers && typeof headers === 'object' ? (headers as Args)['Dropbox-API-Arg'] : undefined;
+  if (typeof value !== 'string') return undefined;
   try {
-    return decodeURIComponent(segment);
+    return (JSON.parse(value) as { path?: unknown }).path;
   } catch {
-    return segment;
+    return undefined;
   }
+}
+
+/** WebDAV's path of the connection's own files: `/remote.php/dav/files/<user>/…`. */
+const NEXTCLOUD_DAV_FILES = /^\/remote\.php\/dav\/files\/([^/]+)(\/.*)$/;
+/**
+ * A path a listed Nextcloud action takes: one in the person's files (`/Invoices/acme.pdf`), or the WebDAV path the
+ * server made of one. Anything else under `/remote.php/` (calendars, contacts) is no listed action.
+ */
+const NEXTCLOUD_PATH = /^\/(?:remote\.php\/dav\/files\/[^/]+\/.+|(?!remote\.php(?:\/|$))[^/].*)$/;
+
+/** Whose files the WebDAV paths name, as the Nextcloud file tools say (its user id, else its login name). */
+function nextcloudUsers(fields: Fields): string[] {
+  return ['userId', 'username', 'loginName'].map((id) => fieldText(fields, id)).filter(Boolean);
+}
+
+/**
+ * A path in the person's Nextcloud files as WebDAV takes it. The agent writes it from the root of their files
+ * (`/Invoices/acme.pdf`: it can't know their user id); the server puts `/remote.php/dav/files/<user>` in front. A path
+ * that already has it (one the server settled) is kept with the connection's own user; one naming anyone else is
+ * refused without naming the user.
+ */
+function nextcloudPath(path: string, fields: Fields, folder: boolean): string {
+  const users = nextcloudUsers(fields);
+  const user = users[0];
+  if (!user)
+    throw new ListedArgumentError(
+      'This Nextcloud connection doesn’t know its user yet, so nothing can be saved in it.',
+    );
+  const dav = NEXTCLOUD_DAV_FILES.exec(path);
+  if (dav && !users.includes(decodeURIComponentSafe(dav[1] as string)))
+    throw new ListedArgumentError(
+      'path: a path in the person’s files, like /Invoices/acme.pdf: Whombat adds the rest.',
+    );
+  const rest = dav ? (dav[2] as string) : path;
+  if (!filePath.safeParse(folder ? rest.replace(/\/$/, '') : rest).success)
+    throw new ListedArgumentError(
+      'path: a path in the person’s files of at most 200 characters, without . or .., like /Invoices/acme.pdf.',
+    );
+  return ownPath(
+    `/remote.php/dav/files/${encodeURIComponent(user)}${rest}`,
+    'This Nextcloud connection’s user can’t be written in a path.',
+  );
 }
 
 const filesWrite = z
@@ -411,30 +555,39 @@ const LISTED: readonly ListedAction[] = [
         },
       });
     },
+    refs: [
+      { at: /^upload\.fields\.tags$/, kind: 'tag', what: 'tag' },
+      { at: /^upload\.fields\.correspondent$/, kind: 'correspondent', what: 'correspondent' },
+      { at: /^upload\.fields\.document_type$/, kind: 'document_type', what: 'document type' },
+    ],
   },
   {
     catalogId: 'moneybird',
     ask: 'Add a purchase invoice to {label}',
     done: 'added a purchase invoice to {label}',
     can: 'add a purchase invoice to Moneybird',
-    how: 'tool request, POST /<administration>/documents/purchase_invoices.json, body {purchase_invoice: {contact_id, reference, date, due_date, currency, prices_are_incl_tax, details_attributes: [{description, price, amount, tax_rate_id, ledger_account_id, period}]}}',
+    how: 'tool request, POST /documents/purchase_invoices.json (Whombat adds the administration), body {purchase_invoice: {contact_id, reference, date, due_date, currency, prices_are_incl_tax, details_attributes: [{description, price, amount, tax_rate_id, ledger_account_id, period}]}}',
     tool: REQUEST_TOOL_NAME,
     origin: 'request',
     method: 'POST',
-    path: /^\/[^/]+\/documents\/purchase_invoices(\.json)?$/,
+    path: /^\/(?:[^/]+\/)?documents\/purchase_invoices(\.json)?$/,
+    jsonBody: true,
     settle: moneybird('purchase_invoice'),
+    refs: moneybirdRefs('purchase_invoice'),
   },
   {
     catalogId: 'moneybird',
     ask: 'Add a receipt to {label}',
     done: 'added a receipt to {label}',
     can: 'add a receipt to Moneybird',
-    how: 'tool request, POST /<administration>/documents/receipts.json, body {receipt: {contact_id, reference, date, currency, prices_are_incl_tax, details_attributes: [{description, price, amount, tax_rate_id, ledger_account_id, period}]}}',
+    how: 'tool request, POST /documents/receipts.json (Whombat adds the administration), body {receipt: {contact_id, reference, date, currency, prices_are_incl_tax, details_attributes: [{description, price, amount, tax_rate_id, ledger_account_id, period}]}}',
     tool: REQUEST_TOOL_NAME,
     origin: 'request',
     method: 'POST',
-    path: /^\/[^/]+\/documents\/receipts(\.json)?$/,
+    path: /^\/(?:[^/]+\/)?documents\/receipts(\.json)?$/,
+    jsonBody: true,
     settle: moneybird('receipt'),
+    refs: moneybirdRefs('receipt'),
   },
   {
     catalogId: 'dropbox',
@@ -459,6 +612,8 @@ const LISTED: readonly ListedAction[] = [
         );
       return request(args, { headers, ...textOrFile(body, upload) }, 'content');
     },
+    // Dropbox makes the folders on the way to a new file itself.
+    notes: (args, quote) => dropboxFolderNotes(dropboxArgPath(args.headers), quote),
   },
   {
     catalogId: 'dropbox',
@@ -469,26 +624,27 @@ const LISTED: readonly ListedAction[] = [
     tool: 'files_write',
     origin: 'adapter',
     settle: settleFilesWrite,
+    notes: (args, quote) => dropboxFolderNotes(args.path, quote),
   },
   {
     catalogId: 'nextcloud',
     ask: 'Save a new file in {label}',
     done: 'saved a new file in {label}',
     can: 'save a new file in Nextcloud',
-    how: `tool request, PUT /remote.php/dav/files/<user id>/<folder>/<name>, with ${FILE_FROM_EMAIL} or body (text)`,
+    how: `tool request, PUT /<folder>/<name> (from the root of the person’s files; Whombat adds the rest; the folder must exist), with ${FILE_FROM_EMAIL} or body (text)`,
     tool: REQUEST_TOOL_NAME,
     origin: 'request',
     method: 'PUT',
-    path: NEXTCLOUD_FILES,
+    path: NEXTCLOUD_PATH,
     settle(args, fields) {
       if (String(args.path).endsWith('/')) throw new ListedArgumentError('path: name a file, not a folder.');
-      nextcloudPath(String(args.path), fields, false);
+      const path = nextcloudPath(String(args.path), fields, false);
       const { body, upload } = requestParts(args, { body: true, upload: true });
       const content = textOrFile(body, upload);
       // Never over a file that is there already: the server refuses the PUT then (412).
       const sets: Record<string, string> = { 'If-None-Match': '*' };
       if (content.body !== undefined) sets['Content-Type'] = TEXT_TYPE;
-      return request(args, { headers: settledHeaders(args.headers, sets), ...content });
+      return request({ ...args, path }, { headers: settledHeaders(args.headers, sets), ...content });
     },
   },
   {
@@ -496,26 +652,19 @@ const LISTED: readonly ListedAction[] = [
     ask: 'Make a folder in {label}',
     done: 'made a folder in {label}',
     can: 'make a new folder in Nextcloud',
-    how: 'tool request, MKCOL /remote.php/dav/files/<user id>/<folder>/',
+    how: 'tool request, MKCOL /<folder>/ (from the root of the person’s files; one level each, before the file that goes in it; nothing changes when it is there already)',
     tool: REQUEST_TOOL_NAME,
     origin: 'request',
     method: 'MKCOL',
-    path: NEXTCLOUD_FILES,
+    path: NEXTCLOUD_PATH,
     settle(args, fields) {
-      nextcloudPath(String(args.path), fields, true);
+      const path = nextcloudPath(String(args.path), fields, true);
       requestParts(args, {});
-      return request(args, { headers: settledHeaders(args.headers, {}) });
+      return request({ ...args, path }, { headers: settledHeaders(args.headers, {}) });
     },
-  },
-  {
-    catalogId: 'nextcloud',
-    ask: 'Save a new file in {label}',
-    done: 'saved a new file in {label}',
-    can: 'save a new file in Nextcloud',
-    how: 'tool files_write, {path, content} (a new text file)',
-    tool: 'files_write',
-    origin: 'adapter',
-    settle: settleFilesWrite,
+    notes: () => ['If the folder is there already, nothing changes.'],
+    // WebDAV answers 405 to a folder that is there already: nothing was made, and the file after it can go in.
+    there: { status: 405, done: 'found the folder already in {label}' },
   },
   {
     catalogId: 'todoist',
@@ -540,13 +689,15 @@ const LISTED: readonly ListedAction[] = [
     origin: 'request',
     method: 'POST',
     path: /^\/api\/v1\/tasks\/?$/,
+    jsonBody: true,
     settle(args) {
       const { body } = requestParts(args, { body: true });
       return request(args, {
         headers: settledHeaders(args.headers, JSON_TYPE),
-        body: parsed(todoistRequestTask, body, 'body'),
+        body: parsed(todoistRequestTask, jsonBody(body), 'body'),
       });
     },
+    refs: [{ at: /^body\.project_id$/, kind: 'project', what: 'project' }],
   },
   {
     catalogId: 'homeassistant',
@@ -558,11 +709,12 @@ const LISTED: readonly ListedAction[] = [
     origin: 'request',
     method: 'POST',
     path: /^\/api\/services\/persistent_notification\/create$/,
+    jsonBody: true,
     settle(args) {
       const { body } = requestParts(args, { body: true });
       return request(args, {
         headers: settledHeaders(args.headers, JSON_TYPE),
-        body: parsed(haNotification, body, 'body'),
+        body: parsed(haNotification, jsonBody(body), 'body'),
       });
     },
   },
@@ -617,11 +769,40 @@ export function listedWords(input: {
   return { ask: named(ask), done: named(done) };
 }
 
-/** The listed actions a connection offers, as the agent proposes them: “upload … : tool request, POST …”. */
+/**
+ * The listed actions a connection offers, as the agent proposes them: “upload … : tool request, POST …”. Never the
+ * connection's own fields: the paths leave out the person's account ids, which the server fills in.
+ */
 export function listedHowTo(catalogId: string, tools: readonly Tool[]): string[] {
   return LISTED.filter(
     (a) => a.catalogId === catalogId && tools.some((t) => t.name === a.tool && t.origin === a.origin),
   ).map((a) => `${a.can}: ${a.how}`);
+}
+
+/** The ids a proposed action's arguments name, which its card shows by name (none when it isn't listed). */
+export function listedRefs(catalogId: string, tool: Tool, args: Readonly<Args>): readonly ListedRef[] {
+  return listedFor(catalogId, tool, args)?.refs ?? [];
+}
+
+/** What else a proposed action does, as lines its card shows right after its words. */
+export function listedNotes(
+  catalogId: string,
+  tool: Tool,
+  args: Readonly<Args>,
+  quote: (text: string) => string,
+): string[] {
+  return listedFor(catalogId, tool, args)?.notes?.(args, quote) ?? [];
+}
+
+/** The answer that means a proposed action's thing was there already, and what the thread says then; else null. */
+export function listedThere(input: {
+  catalogId: string;
+  label: string;
+  tool: Tool;
+  args: Readonly<Args>;
+}): { status: number; done: string } | null {
+  const there = listedFor(input.catalogId, input.tool, input.args)?.there;
+  return there ? { status: there.status, done: there.done.replace('{label}', () => input.label) } : null;
 }
 
 /* Secrets ---------------------------------------------------------------------------------------- */
@@ -663,17 +844,9 @@ export function isSecretKey(key: string): boolean {
   return words.some((w) => SECRET_WORDS.has(w)) || SECRET_JOINED.test(words.join(''));
 }
 
-/** The first key named like a secret anywhere in the arguments, JSON written as text included, or null. */
+/** The first key named like a secret anywhere in a value, or null. Text is never read as JSON here. */
 function secretKeyIn(value: unknown, depth = 0): string | null {
   if (depth > 16) return null;
-  if (typeof value === 'string') {
-    if (!/^\s*[[{]/.test(value)) return null;
-    try {
-      return secretKeyIn(JSON.parse(value), depth + 1);
-    } catch {
-      return null;
-    }
-  }
   if (Array.isArray(value)) {
     for (const v of value) {
       const found = secretKeyIn(v, depth + 1);
@@ -691,25 +864,61 @@ function secretKeyIn(value: unknown, depth = 0): string | null {
   return null;
 }
 
-/* Deciding ----------------------------------------------------------------------------------------- */
-
-/** The first key named like a secret anywhere in a call's arguments (JSON written as text included), or null. */
-export function secretKeyOf(args: Readonly<Args>): string | null {
-  return secretKeyIn(args);
+/** A text that holds JSON, as that JSON; anything else as it is. */
+function asJson(value: unknown): unknown {
+  if (typeof value !== 'string' || !looksLikeJson(value)) return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 /**
- * A call (its request arguments already normalised) as its listed action sends it, with the create-only parts set by
- * Whombat; `listed: false` when no listed action is this call, else why its arguments can't be used.
+ * The first key named like a secret in a listed action's arguments, or null: at any depth, and inside JSON written as
+ * text where the action reads it as JSON (a JSON body, Dropbox's argument header). A text file, a note or a task's
+ * description is text, whatever it starts with.
+ */
+function listedSecretKey(action: ListedAction, args: Readonly<Args>): string | null {
+  for (const [key, value] of Object.entries(args)) {
+    if (isSecretKey(key)) return key;
+    let found: string | null;
+    if (action.origin === 'request' && key === 'headers' && value && typeof value === 'object') {
+      found = null;
+      for (const [name, header] of Object.entries(value as Args)) {
+        found = isSecretKey(name) ? name : secretKeyIn(asJson(header));
+        if (found) break;
+      }
+    } else if (action.origin === 'request' && key === 'body' && action.jsonBody) {
+      found = secretKeyIn(asJson(value));
+    } else found = secretKeyIn(value);
+    if (found) return found;
+  }
+  return null;
+}
+
+/* Deciding ----------------------------------------------------------------------------------------- */
+
+/**
+ * A call (its request arguments already normalised) as its listed action sends it, with the create-only parts and the
+ * person's account ids set by Whombat; `listed: false` when no listed action is this call, else why its arguments
+ * can't be used. Settling what it settled gives the same arguments again.
  */
 export function settleListed(
   catalogId: string,
   tool: Tool,
   args: Readonly<Args>,
-  fields: Readonly<Record<string, unknown>>,
+  fields: Fields,
 ): { ok: true; args: Args } | { ok: false; listed: boolean; reason: string } {
   const listed = listedFor(catalogId, tool, args);
   if (!listed) return { ok: false, listed: false, reason: whatMailCanDo(catalogId) };
+  const secret = listedSecretKey(listed, args);
+  if (secret)
+    return {
+      ok: false,
+      listed: true,
+      reason: `an outsiders’ run has no passwords or keys, so it can’t propose a value named “${secret}”: it could only have come from the email.`,
+    };
   try {
     return { ok: true, args: listed.settle({ ...args }, fields) };
   } catch (err) {

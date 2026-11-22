@@ -1134,6 +1134,13 @@ describe('mail-arrives automations', () => {
         res.end(JSON.stringify({ detail: 'Invalid token' }));
         return;
       }
+      // The names the card shows: tag 7 is there, any other isn't.
+      if (req.method === 'GET') {
+        const tag = req.url === '/api/tags/7/';
+        res.writeHead(tag ? 200 : 404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(tag ? { id: 7, name: 'Invoices' } : { detail: 'Not found.' }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify('task-pl-2042'));
     });
@@ -1150,6 +1157,12 @@ describe('mail-arrives automations', () => {
       if (req.headers.authorization !== `Bearer ${MB_TOKEN}`) {
         res.writeHead(401, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
+      // Reading a name fails here: the card shows the id and says so.
+      if (req.method === 'GET') {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Internal error' }));
         return;
       }
       res.writeHead(201, { 'content-type': 'application/json' });
@@ -1272,6 +1285,9 @@ describe('mail-arrives automations', () => {
       expect(askCtx.attachments).toHaveLength(1);
       expect(askCtx.trigger?.text).toContain('paperless');
       expect(askCtx.trigger?.text).toContain('moneybird');
+      // Its paths leave out the administration: the turn can't know it, and never hears it.
+      expect(askCtx.trigger?.text).toContain('POST /documents/purchase_invoices.json');
+      expect(askCtx.trigger?.text).not.toMatch(/12345|<administration>/);
       const promptPdfId = askCtx.attachments[0]?.id as string;
 
       // Agent reads the PDF via read_attachment and proposes Paperless upload + Moneybird draft.
@@ -1297,7 +1313,7 @@ describe('mail-arrives automations', () => {
               upload: {
                 field: 'document',
                 attachmentId: promptPdfId,
-                fields: { title: 'Invoice INV-2042' },
+                fields: { title: 'Invoice INV-2042', tags: ['7'] },
               },
             },
           },
@@ -1306,10 +1322,12 @@ describe('mail-arrives automations', () => {
             tool: 'request',
             summary: 'Create a purchase invoice draft for INV-2042 (€420) in Moneybird',
             arguments: {
+              // The agent's own form: the server puts the connection's administration in front.
               method: 'POST',
-              path: '/12345/documents/purchase_invoices.json',
+              path: '/documents/purchase_invoices.json',
               body: {
                 purchase_invoice: {
+                  contact_id: '424242',
                   reference: 'INV-2042',
                   date: '2026-09-24',
                   details_attributes: [{ description: 'Invoice INV-2042', price: '420.00' }],
@@ -1343,15 +1361,19 @@ describe('mail-arrives automations', () => {
       expect(cardRow?.state).toBe('pending');
       expect(cardRow?.title).toBe('Make 2 changes in Paperless-ngx and Moneybird');
       expect(cardRow?.question).toBe('Make 2 changes in Paperless-ngx and Moneybird?');
-      // WHAT HAPPENS shows every action whole: Whombat's words, the request, the file and every argument.
+      // WHAT HAPPENS shows every action whole: Whombat's words, the request as sent (the administration filled in),
+      // the file and every argument, an id by its name when the server could read it.
       expect(cardRow?.whatHappens).toEqual(
         expect.arrayContaining([
           'Action 1 of 2: Upload a document to Paperless-ngx',
           'Request: POST /api/documents/post_document/',
           `File from this email: "invoice-2042.pdf" (application/pdf, ${pdfBytes.length} bytes), sent as form field "document"`,
           'upload.fields.title: "Invoice INV-2042"',
+          'upload.fields.tags: ["Invoices" (7)]',
           'Action 2 of 2: Add a purchase invoice to Moneybird',
           'Request: POST /12345/documents/purchase_invoices.json',
+          'body.purchase_invoice.contact_id: "424242"',
+          'Whombat couldn’t look up some names in Moneybird, so their ids are shown.',
           'body.purchase_invoice.reference: "INV-2042"',
           'body.purchase_invoice.date: "2026-09-24"',
           'body.purchase_invoice.details_attributes[0].description: "Invoice INV-2042"',
@@ -1359,9 +1381,11 @@ describe('mail-arrives automations', () => {
         ]),
       );
       expect(cardRow?.whatHappens.filter((l) => l.startsWith('Agent’s note: '))).toHaveLength(2);
-      // Still ZERO outbound calls while the card waits!
-      expect(seenPaperless).toHaveLength(0);
-      expect(seenMoneybird).toHaveLength(0);
+      expect(cardRow?.whatHappens.some((l) => l.includes('Paperless-ngx, so their ids'))).toBe(false);
+      // While the card waits, only the server's reads of the names it shows, once each: nothing written.
+      const calls = (seen: { method: string; url: string }[]) => seen.map((r) => `${r.method} ${r.url}`);
+      expect(calls(seenPaperless)).toEqual(['GET /api/tags/7/']);
+      expect(calls(seenMoneybird)).toEqual(['GET /api/v2/12345/contacts/424242.json']);
 
       // Mara approves the card -> Step 2 executes both calls against the fake services!
       const decided = await w.ok(IDS.mara, decideApproval, {
@@ -1375,24 +1399,31 @@ describe('mail-arrives automations', () => {
       expect(runDone.status).toBe('succeeded');
       expect(runDone.steps[1]?.state).toBe('succeeded');
 
+      // The names weren't read again once approved.
+      const writes = <T extends { method: string }>(seen: T[]) => seen.filter((r) => r.method !== 'GET');
+      expect(seenPaperless.filter((r) => r.method === 'GET')).toHaveLength(1);
+      expect(seenMoneybird.filter((r) => r.method === 'GET')).toHaveLength(1);
       // Fake Paperless-ngx received the multipart PDF upload with the exact PDF bytes and metadata.
-      expect(seenPaperless).toHaveLength(1);
-      expect(seenPaperless[0]?.method).toBe('POST');
-      expect(seenPaperless[0]?.url).toBe('/api/documents/post_document/');
-      expect(seenPaperless[0]?.auth).toBe(`Token ${PL_TOKEN}`);
-      expect(seenPaperless[0]?.contentType).toContain('multipart/form-data');
-      const plText = seenPaperless[0]?.body.toString('utf8') ?? '';
+      const [plWrite] = writes(seenPaperless);
+      expect(writes(seenPaperless)).toHaveLength(1);
+      expect(plWrite?.method).toBe('POST');
+      expect(plWrite?.url).toBe('/api/documents/post_document/');
+      expect(plWrite?.auth).toBe(`Token ${PL_TOKEN}`);
+      expect(plWrite?.contentType).toContain('multipart/form-data');
+      const plText = plWrite?.body.toString('utf8') ?? '';
       expect(plText).toContain('name="title"\r\n\r\nInvoice INV-2042');
+      expect(plText).toContain('name="tags"\r\n\r\n7');
       expect(plText).toContain('name="document"; filename="invoice-2042.pdf"');
-      expect(seenPaperless[0]?.body.includes(pdfBytes)).toBe(true);
+      expect(plWrite?.body.includes(pdfBytes)).toBe(true);
 
-      // Fake Moneybird received the purchase invoice draft JSON POST.
-      expect(seenMoneybird).toHaveLength(1);
-      expect(seenMoneybird[0]?.method).toBe('POST');
-      expect(seenMoneybird[0]?.url).toBe('/api/v2/12345/documents/purchase_invoices.json');
-      expect(seenMoneybird[0]?.auth).toBe(`Bearer ${MB_TOKEN}`);
-      expect(JSON.parse(seenMoneybird[0]?.body ?? '{}')).toMatchObject({
-        purchase_invoice: { reference: 'INV-2042' },
+      // Fake Moneybird received the purchase invoice draft JSON POST, in the connection's administration.
+      const [mbWrite] = writes(seenMoneybird);
+      expect(writes(seenMoneybird)).toHaveLength(1);
+      expect(mbWrite?.method).toBe('POST');
+      expect(mbWrite?.url).toBe('/api/v2/12345/documents/purchase_invoices.json');
+      expect(mbWrite?.auth).toBe(`Bearer ${MB_TOKEN}`);
+      expect(JSON.parse(mbWrite?.body ?? '{}')).toMatchObject({
+        purchase_invoice: { contact_id: '424242', reference: 'INV-2042' },
       });
 
       // A concise confirmation message was posted in the run thread.
@@ -1445,7 +1476,7 @@ describe('mail-arrives automations', () => {
               summary: 'Draft INV-2043 in Moneybird',
               arguments: {
                 method: 'POST',
-                path: '/12345/documents/purchase_invoices.json',
+                path: '/documents/purchase_invoices.json',
                 body: { purchase_invoice: { reference: 'INV-2043' } },
               },
             },
@@ -1466,7 +1497,7 @@ describe('mail-arrives automations', () => {
       await w.settle();
       const declineSettled = await w.run(runsAfterSecond[1]?.id as string);
       expect(declineSettled.steps[1]?.state).toBe('skipped');
-      expect(seenMoneybird).toHaveLength(1);
+      expect(writes(seenMoneybird)).toHaveLength(1);
 
       // Verify a prompt-injected proposal naming another thread's attachment is refused before asking.
       const otherFileId = newId('attachment');
@@ -1545,7 +1576,85 @@ describe('mail-arrives automations', () => {
       const exfilSettled = await w.run(runsAfterExfil[2]?.id as string);
       expect(exfilSettled.steps[1]?.state).toBe('skipped');
       expect(exfilSettled.steps[1]?.approvalId).toBeNull();
-      expect(seenPaperless).toHaveLength(1);
+      expect(writes(seenPaperless)).toHaveLength(1);
+
+      // A tag the person's Paperless-ngx doesn't have: no card, and the run page says why in plain words.
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_invoice_no_tag',
+        from: 'Acme Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'Invoice INV-2044',
+        body: 'Attached is invoice INV-2044.',
+        messageId: '<inv-2044@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [
+          {
+            id: 'att_inv_2044',
+            name: 'invoice-2044.pdf',
+            mimeType: 'application/pdf',
+            size: pdfBytes.length,
+            contentBase64: pdfBytes.toString('base64'),
+          },
+        ],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const noTagRun = await w.run((await runsOf(autoId))[3]?.id as string);
+      const noTagDispatchId = noTagRun.steps[0]?.dispatchId as string;
+      const [noTagDispatch] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, noTagDispatchId));
+      const noTagCtx = await buildDispatchContext(
+        w.services,
+        noTagDispatch as NonNullable<typeof noTagDispatch>,
+      );
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, noTagDispatchId));
+      const noTag = await callTool(
+        w.services,
+        { dispatchId: noTagDispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'paperless',
+              tool: 'request',
+              summary: 'Upload invoice-2044.pdf',
+              arguments: {
+                method: 'POST',
+                path: '/api/documents/post_document/',
+                upload: {
+                  field: 'document',
+                  attachmentId: noTagCtx.attachments[0]?.id as string,
+                  fields: { tags: ['99'] },
+                },
+              },
+            },
+          ],
+        },
+      );
+      expect(noTag.isError, JSON.stringify(noTag.content)).not.toBe(true);
+      await w.fakeAgentReply(noTagDispatchId, 'Proposed uploading INV-2044.');
+      await w.settle();
+      const noTagSettled = await w.run(noTagRun.id);
+      expect(noTagSettled.steps[1]?.state).toBe('skipped');
+      expect(noTagSettled.steps[1]?.approvalId).toBeNull();
+      const [noTagStep] = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(and(eq(automationRunSteps.runId, noTagRun.id), eq(automationRunSteps.idx, 1)));
+      expect((noTagStep?.output as { reason?: string } | undefined)?.reason).toBe(
+        'Paperless-ngx has no tag 99.',
+      );
+      expect(calls(seenPaperless).filter((c) => c.startsWith('GET'))).toEqual([
+        'GET /api/tags/7/',
+        'GET /api/tags/99/',
+      ]);
+      expect(writes(seenPaperless)).toHaveLength(1);
     } finally {
       await new Promise<void>((r) => paperlessServer.close(() => r()));
       await new Promise<void>((r) => moneybirdServer.close(() => r()));
@@ -1572,7 +1681,8 @@ describe('mail-arrives automations', () => {
           contentType: String(req.headers['content-type'] ?? ''),
           body: Buffer.concat(chunks),
         });
-        res.writeHead(201);
+        // The folder is there already: WebDAV answers 405 to making it again.
+        res.writeHead(req.method === 'MKCOL' ? 405 : 201);
         res.end();
       });
     });
@@ -1663,7 +1773,10 @@ describe('mail-arrives automations', () => {
       expect(ctx.attachments.map((a) => a.name)).toEqual(['invoice-77.pdf']);
       const emailFileId = ctx.attachments[0]?.id as string;
       expect(run.steps[1]?.output).toMatchObject({ triggerFileIds: [emailFileId] });
-      expect(ctx.trigger?.text).toContain('PUT /remote.php/dav/files/<user id>/');
+      // Paths from the root of the person's files: the turn never hears their user id.
+      expect(ctx.trigger?.text).toContain('PUT /<folder>/<name>');
+      expect(ctx.trigger?.text).toContain('MKCOL /<folder>/');
+      expect(ctx.trigger?.text).not.toMatch(/remote\.php|<user id>|files_write/);
 
       // The person adds a file of the same name to the run's thread.
       const [loaded] = await w.services.db.select().from(automationRuns).where(eq(automationRuns.id, run.id));
@@ -1707,12 +1820,14 @@ describe('mail-arrives automations', () => {
           {
             connection: 'nextcloud',
             tool: 'request',
+            summary: 'Make sure the folder is there',
+            arguments: { method: 'MKCOL', path: '/Invoices/' },
+          },
+          {
+            connection: 'nextcloud',
+            tool: 'request',
             summary: 'Save the invoice',
-            arguments: {
-              method: 'PUT',
-              path: '/remote.php/dav/files/mara/Invoices/invoice-77.pdf',
-              upload: { attachmentId },
-            },
+            arguments: { method: 'PUT', path: '/Invoices/invoice-77.pdf', upload: { attachmentId } },
           },
         ],
       });
@@ -1729,9 +1844,14 @@ describe('mail-arrives automations', () => {
         .select()
         .from(approvals)
         .where(eq(approvals.id, waiting.steps[2]?.approvalId as string));
-      expect(card?.title).toBe('Save a new file in Nextcloud');
+      expect(card?.title).toBe('Make 2 changes in Nextcloud');
+      // The card shows each path as sent, the user filled in by the server.
       expect(card?.whatHappens).toEqual(
         expect.arrayContaining([
+          'Action 1 of 2: Make a folder in Nextcloud',
+          'If the folder is there already, nothing changes.',
+          'Request: MKCOL /remote.php/dav/files/mara/Invoices/',
+          'Action 2 of 2: Save a new file in Nextcloud',
           'Request: PUT /remote.php/dav/files/mara/Invoices/invoice-77.pdf',
           `File from this email: "invoice-77.pdf" (application/pdf, ${pdf.length} bytes), sent as the whole request body`,
           'headers.If-None-Match: "*"',
@@ -1741,16 +1861,22 @@ describe('mail-arrives automations', () => {
       await w.ok(IDS.mara, decideApproval, { number: card?.number as number, decision: 'approve' });
       await w.settle();
 
-      // On the wire: a create-only PUT of exactly the email's bytes.
+      // On the wire: the folder (there already, so nothing changed), then a create-only PUT of exactly the email's bytes.
       expect((await w.run(run.id)).steps[2]?.state).toBe('succeeded');
-      expect(seen).toHaveLength(1);
-      expect(seen[0]).toMatchObject({
+      expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual([
+        'MKCOL /remote.php/dav/files/mara/Invoices/',
+        'PUT /remote.php/dav/files/mara/Invoices/invoice-77.pdf',
+      ]);
+      const done = (await w.runThread(run.id)).find((m) => m.text.startsWith('Done:'));
+      expect(done?.text).toContain('found the folder already in Nextcloud');
+      expect(done?.text).toContain('saved a new file in Nextcloud');
+      expect(seen[1]).toMatchObject({
         method: 'PUT',
         url: '/remote.php/dav/files/mara/Invoices/invoice-77.pdf',
         ifNoneMatch: '*',
         contentType: 'application/pdf',
       });
-      expect(seen[0]?.body.equals(pdf)).toBe(true);
+      expect(seen[1]?.body.equals(pdf)).toBe(true);
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
@@ -2059,6 +2185,13 @@ describe('mail-arrives automations', () => {
       from: 'example.com',
       subjectContains: ['misleading-card'],
     });
+    // No service answers here: the card can't read the contact's name, so it shows the id and says so.
+    useVaultNetForTests(w.services, {
+      resolve: async (host) => {
+        throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+      },
+      deadlineMs: 3000,
+    });
     try {
       await pollAndSettle();
       w.advance(10_000);
@@ -2144,6 +2277,7 @@ describe('mail-arrives automations', () => {
         'Request: POST /12345/documents/purchase_invoices.json',
       ]);
       expect(lines.slice(2, -1).sort()).toEqual([
+        'Whombat couldn’t look up some names in Moneybird Accounting, so their ids are shown.',
         'body.purchase_invoice.contact_id: "666"',
         'body.purchase_invoice.details_attributes[0].description: "Consulting"',
         'body.purchase_invoice.details_attributes[0].price: "9500.00"',

@@ -47,14 +47,17 @@ import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
-import { isProposableEntry, listedHowTo, secretKeyOf, settleListed, whatMailCanDo } from './listed-actions';
+import { isProposableEntry, listedHowTo, settleListed, whatMailCanDo } from './listed-actions';
 import {
   type CardFile,
+  type CardNames,
+  cardNameKey,
+  cardRefs,
   type DescribedAction,
   describePlannedAction,
+  keptCardNames,
   type ProposalCard,
   proposalCard,
-  settledRequestArgs,
   TOO_MUCH_FOR_ONE_CARD,
 } from './proposed-card';
 import { type AutomationRunRow, type AutomationStepRow, publishRun } from './store';
@@ -65,12 +68,13 @@ export type OutsidersCall = { ok: true; args: Record<string, unknown> } | { ok: 
 
 /**
  * A call an outsiders' run proposes, as Whombat would send it, or why it can't be: only a listed action
- * (`listed-actions.ts`) on a kind of connection that has them, with every argument as its schema says and the
- * create-only parts set by Whombat; never a value named like a password or key (an outsiders' turn has none, so it could
- * only come from the email); and, as a second check, never what the connection always asks about, what can cut the
- * person off, or a read. Checked when the agent proposes, when the card is made and again before anything runs, so
- * the same arguments come out each time. `name` is how a refusal names the connection: the handle the agent used, or
- * the person's own label on their run page.
+ * (`listed-actions.ts`) on a kind of connection that has them, with every argument as its schema says, the create-only
+ * parts and the person's account ids (a Moneybird administration, a Nextcloud user) set by Whombat; never a value named
+ * like a password or key (an outsiders' turn has none, so it could only come from the email); and, as a second check,
+ * never what the connection always asks about, what can cut the person off, or a read. Checked when the agent proposes,
+ * when the card is made and again before anything runs, so the same arguments come out each time. `name` is how a
+ * refusal names the connection: the handle the agent used, or the person's own label on their run page, and the path
+ * as the call gave it, so what the agent hears never holds an account id the server filled in.
  */
 export function outsidersCall(
   entry: CatalogEntry,
@@ -84,16 +88,10 @@ export function outsidersCall(
       ok: false,
       reason: `Actions on ${name} can’t be proposed from an outsiders’ run. ${whatMailCanDo()}`,
     };
-  const secret = secretKeyOf(raw);
-  if (secret)
-    return {
-      ok: false,
-      reason: `${name}: an outsiders’ run has no passwords or keys, so it can’t propose a value named “${secret}”: it could only have come from the email.`,
-    };
   let args: Record<string, unknown> = { ...raw };
   if (tool.origin === 'request') {
     try {
-      args = settledRequestArgs(normaliseRequestArgs(raw));
+      args = normaliseRequestArgs(raw);
     } catch (err) {
       return {
         ok: false,
@@ -101,6 +99,7 @@ export function outsidersCall(
       };
     }
   }
+  const given = args;
   const settled = settleListed(entry.id, tool, args, conn.fields);
   if (!settled.ok)
     return {
@@ -114,7 +113,7 @@ export function outsidersCall(
     tool.origin === 'request' &&
     !requestAllowed(entry, conn.fields, String(args.method), String(args.path))
   )
-    return { ok: false, reason: `${name} doesn’t allow ${String(args.method)} ${String(args.path)}.` };
+    return { ok: false, reason: `${name} doesn’t allow ${String(given.method)} ${String(given.path)}.` };
   // The second check reads what the call is (its method and path, or its tool), never the text in its values: those are
   // the listed action's own (a notification that mentions a door unlocks nothing).
   const what = tool.origin === 'request' ? { method: args.method, path: args.path } : {};
@@ -417,26 +416,38 @@ export type ConnectionActionsPlan =
       proposal: { title: string; details: string };
       /** The approval card: everything it shows (empty when nothing was proposed). */
       card: Extract<ProposalCard, { ok: true }> | null;
+      /** The names of the ids the card shows, to keep on the step with it. */
+      names: CardNames;
     }
   | { ok: false; fatal: boolean; reason: string };
 
 /**
  * Validates every proposed connection action from step `from`, ensuring each is a listed action (`outsidersCall`) and
  * its connection, tool, limit, key (not `cannot`) and file (one the server handed over from this run's email) are
- * permitted. Returns a deterministic
- * `actionsHash` and plain-English approval proposal.
+ * permitted, and that every id it names exists where the server could read it. Returns a deterministic `actionsHash`
+ * and plain-English approval proposal. `names` are the ids' names the server just read (`card-names.ts`); without
+ * them, the ones kept on the step when its card was made, so the card reads the same each time it is made.
  */
 export async function planConnectionActions(
   db: Db | Tx,
   services: Services,
   run: AutomationRunRow,
   steps: readonly AutomationStepRow[],
-  step: { from: string },
+  step: { id: string; from: string },
+  names?: CardNames,
 ): Promise<ConnectionActionsPlan> {
   const fromRow = steps.find((s) => s.stepId === step.from);
   const proposed = reportedProposedActions((fromRow?.output as JsonObject | undefined)?.proposedActions);
+  const known = names ?? keptCardNames(steps.find((s) => s.stepId === step.id)?.output);
   if (proposed.length === 0) {
-    return { ok: true, actions: [], actionsHash: '', proposal: { title: '', details: '' }, card: null };
+    return {
+      ok: true,
+      actions: [],
+      actionsHash: '',
+      proposal: { title: '', details: '' },
+      card: null,
+      names: {},
+    };
   }
   const agent = await automationAgent(db, run.burrowId);
   if (!agent) return { ok: false, fatal: true, reason: 'The burrow’s agent isn’t available.' };
@@ -488,6 +499,15 @@ export async function planConnectionActions(
     const outside = limitsProblem(tool.limits, args, await limitWordsFor(db, row, tool));
     if (outside) return { ok: false, fatal: false, reason: outside };
 
+    // An id the service says it doesn't have is refused; one it couldn't read shows as it is.
+    const named: Record<string, string> = {};
+    for (const ref of cardRefs(row.catalogId, tool, args)) {
+      const found = known[cardNameKey(row.id, ref.kind, ref.id)];
+      if (found && 'missing' in found)
+        return { ok: false, fatal: false, reason: `${row.label} has no ${ref.what} ${ref.id}.` };
+      if (found) named[`${ref.kind}:${ref.id}`] = found.name;
+    }
+
     const summary = singleLine(item.summary);
     const described = describePlannedAction({
       catalogId: row.catalogId,
@@ -496,6 +516,7 @@ export async function planConnectionActions(
       args,
       uploadFile: upload.file,
       summary,
+      names: named,
     });
 
     planned.push({
@@ -523,6 +544,7 @@ export async function planConnectionActions(
     actionsHash,
     proposal: { title: card.title, details: card.details },
     card,
+    names: known,
   };
 }
 

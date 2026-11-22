@@ -4,6 +4,7 @@ import {
   actionsDoneLine,
   CARD_LINE_MAX,
   CARD_LINES_MAX,
+  cardRefs,
   describePlannedAction,
   proposalCard,
   TOO_MUCH_FOR_ONE_CARD,
@@ -313,6 +314,115 @@ describe('the approval card of proposed actions', () => {
         { done: 'added a purchase invoice to Moneybird', label: 'Moneybird' },
       ]),
     ).toBe('Done: uploaded a document to Paperless-ngx and added a purchase invoice to Moneybird.');
+  });
+});
+
+describe('the ids, folders and nothing-changes an action’s card names', () => {
+  const upload = (fields: Record<string, unknown>) => ({
+    method: 'POST',
+    path: '/api/documents/post_document/',
+    upload: { field: 'document', attachmentId: 'att_1', fields },
+  });
+  const invoice = {
+    method: 'POST',
+    path: '/12345/documents/purchase_invoices.json',
+    body: {
+      purchase_invoice: {
+        contact_id: '4242',
+        reference: 'INV-1',
+        details_attributes: [
+          { description: 'Coffee', price: '3.50', tax_rate_id: '11', ledger_account_id: '21' },
+          { description: 'Tea', price: '2.50', tax_rate_id: '11' },
+        ],
+      },
+    },
+  };
+
+  it('lists the ids an action names, as sent', () => {
+    expect(
+      cardRefs('paperless', REQUEST, upload({ tags: ['3', '7'], correspondent: '4', title: 'A' })),
+    ).toEqual([
+      { kind: 'tag', what: 'tag', id: '3' },
+      { kind: 'tag', what: 'tag', id: '7' },
+      { kind: 'correspondent', what: 'correspondent', id: '4' },
+    ]);
+    expect(cardRefs('moneybird', REQUEST, invoice).map((r) => `${r.kind}:${r.id}`)).toEqual([
+      'contact:4242',
+      'tax_rate:11',
+      'ledger_account:21',
+      'tax_rate:11',
+    ]);
+    expect(
+      cardRefs('todoist', REQUEST, { method: 'POST', path: '/api/v1/tasks', body: { project_id: '6Jf8' } }),
+    ).toEqual([{ kind: 'project', what: 'project', id: '6Jf8' }]);
+    // Nothing for what isn't listed, and nothing for a value that only looks like one.
+    expect(
+      cardRefs('paperless', REQUEST, { method: 'POST', path: '/api/tags/', body: { tags: [1] } }),
+    ).toEqual([]);
+  });
+
+  it('shows each id with its name, and says so when it couldn’t look one up', () => {
+    const named = linesOf('paperless', 'Paperless-ngx', upload({ tags: ['3', '7'], correspondent: '4' }), {
+      names: { 'tag:3': 'Invoices', 'tag:7': 'Paid "late"', 'correspondent:4': 'Acme BV' },
+    });
+    expect(named).toContain('upload.fields.tags: ["Invoices" (3), "Paid \\"late\\"" (7)]');
+    expect(named).toContain('upload.fields.correspondent: "Acme BV" (4)');
+    expect(named.some((l) => l.includes('couldn’t look up'))).toBe(false);
+    const partly = linesOf('moneybird', 'Moneybird', invoice, {
+      names: { 'contact:4242': 'Acme BV', 'tax_rate:11': '21% btw' },
+      summary: 'Draft it',
+    });
+    expect(partly).toContain('body.purchase_invoice.contact_id: "Acme BV" (4242)');
+    expect(partly).toContain('body.purchase_invoice.details_attributes[0].tax_rate_id: "21% btw" (11)');
+    expect(partly).toContain('body.purchase_invoice.details_attributes[1].tax_rate_id: "21% btw" (11)');
+    // The one it couldn't read shows as it is, and a line says so, before the agent's note.
+    expect(partly).toContain('body.purchase_invoice.details_attributes[0].ledger_account_id: "21"');
+    expect(partly.at(-2)).toBe('Whombat couldn’t look up some names in Moneybird, so their ids are shown.');
+    expect(partly.at(-1)).toBe('Agent’s note: "Draft it"');
+    // A long name is shortened, and a name that could disguise itself is escaped.
+    const odd = linesOf('paperless', 'Paperless-ngx', upload({ tags: '3' }), {
+      names: { 'tag:3': `\u202e${'x'.repeat(200)}` },
+    });
+    const tags = odd.find((l) => l.startsWith('upload.fields.tags: ')) ?? '';
+    expect(tags).toMatch(/^upload\.fields\.tags: "\\u202ex+…" \(3\)$/);
+    expect(tags.length).toBeLessThan(CARD_LINE_MAX);
+  });
+
+  it('says the folder Dropbox makes on the way, and that a folder there already changes nothing', () => {
+    const dropbox = linesOf('dropbox', 'Dropbox', {
+      method: 'POST',
+      path: '/2/files/upload',
+      base: 'content',
+      headers: { 'Dropbox-API-Arg': '{"path":"/Invoices/2026/acme.pdf","mode":"add"}' },
+      upload: { attachmentId: 'att_1' },
+    });
+    expect(dropbox.slice(0, 2)).toEqual([
+      'Save a new file in Dropbox',
+      'And the folder "/Invoices/2026", if it doesn’t exist',
+    ]);
+    const written = describePlannedAction({
+      catalogId: 'dropbox',
+      label: 'Dropbox',
+      tool: { name: 'files_write', origin: 'adapter' },
+      args: { path: '/Notes/acme.txt', content: 'Paid.', overwrite: false },
+    }).lines;
+    expect(written[1]).toBe('And the folder "/Notes", if it doesn’t exist');
+    // In the root, there is no folder to make.
+    const root = describePlannedAction({
+      catalogId: 'dropbox',
+      label: 'Dropbox',
+      tool: { name: 'files_write', origin: 'adapter' },
+      args: { path: '/acme.txt', content: 'Paid.', overwrite: false },
+    }).lines;
+    expect(root.some((l) => l.startsWith('And the folder'))).toBe(false);
+    const mkcol = linesOf('nextcloud', 'Nextcloud', {
+      method: 'MKCOL',
+      path: '/remote.php/dav/files/mara/Invoices/',
+    });
+    expect(mkcol.slice(0, 2)).toEqual([
+      'Make a folder in Nextcloud',
+      'If the folder is there already, nothing changes.',
+    ]);
   });
 });
 

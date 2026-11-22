@@ -7,10 +7,11 @@
  * refused. Nothing is ever cut.
  */
 import { catalogEntry } from '@whombat/core';
+import { z } from 'zod';
 import { asQuestion } from '../approvals/create';
-import { ConnectionArgumentError, formatBytes } from '../connections/request';
+import { formatBytes } from '../connections/request';
 import type { ConnectionToolRow } from '../connections/types';
-import { listedWords } from './listed-actions';
+import { listedNotes, listedRefs, listedWords } from './listed-actions';
 
 /** The longest line a card shows (an approval's WHAT HAPPENS item, AR-D02). */
 export const CARD_LINE_MAX = 280;
@@ -28,6 +29,36 @@ const TITLE_MAX = 160;
 
 /** What the agent hears when the proposal can't be shown in full. */
 export const TOO_MUCH_FOR_ONE_CARD = `Too much to show on one card (at most ${CARD_LINES_MAX} lines): propose fewer or shorter actions.`;
+
+/* Names of the ids an action names ---------------------------------------------------------------- */
+
+/** The most ids one card looks up by name. */
+export const CARD_NAMES_MAX = 24;
+
+/**
+ * What the server read of the ids a card's actions name, by `connectionId:kind:id`: each one's name, or that the service
+ * has no such thing. An id it couldn't read is left out (the card shows it as it is, and says so). Read outside any
+ * transaction before the card is made, and kept on the step so every later look at the card shows the same.
+ */
+export const CardNamesInput = z
+  .record(
+    z.string().max(300),
+    z.union([
+      z.object({ name: z.string().max(200) }).strict(),
+      z.object({ missing: z.literal(true) }).strict(),
+    ]),
+  )
+  .refine((names) => Object.keys(names).length <= CARD_NAMES_MAX, 'too many names');
+export type CardNames = z.infer<typeof CardNamesInput>;
+
+export const cardNameKey = (connectionId: string, kind: string, id: string) =>
+  `${connectionId}:${kind}:${id}`;
+
+/** The names kept on a step's output when its card was made (none when there are none, or they don't parse). */
+export function keptCardNames(output: unknown): CardNames {
+  const parsed = CardNamesInput.safeParse((output as { cardNames?: unknown } | null)?.cardNames);
+  return parsed.success ? parsed.data : {};
+}
 
 /* Reading the arguments -------------------------------------------------------------------------- */
 
@@ -141,46 +172,6 @@ function parsedJson(text: string): object | null {
   }
 }
 
-/** A number JSON can't hold exactly (a Moneybird id written without quotes): shown and sent differently. */
-function hasInexactNumber(value: unknown, depth = 0): boolean {
-  if (depth > DEPTH_MAX) return false;
-  if (typeof value === 'number') return Number.isInteger(value) && !Number.isSafeInteger(value);
-  if (value && typeof value === 'object')
-    return Object.values(value as Record<string, unknown>).some((v) => hasInexactNumber(v, depth + 1));
-  return false;
-}
-
-/**
- * A proposed `request` call's arguments as they are shown and sent: a body written as JSON text becomes the JSON it
- * says (so what runs is exactly what the card shows, duplicate keys and all), and a header holding JSON (Dropbox's
- * `Dropbox-API-Arg`) is written out again the same way. Throws `ConnectionArgumentError` for a number too large to
- * send exactly.
- */
-export function settledRequestArgs(args: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...args };
-  const inexact = () =>
-    new ConnectionArgumentError(
-      'A number in this request is too large to send exactly: write it as text, in quotes.',
-    );
-  if (typeof args.body === 'string' && readsAsJson(args.body, headerValue(args.headers, 'content-type'))) {
-    const parsed = parsedJson(args.body);
-    if (parsed) {
-      if (hasInexactNumber(parsed)) throw inexact();
-      out.body = parsed;
-    }
-  } else if (hasInexactNumber(args.body)) throw inexact();
-  if (args.headers && typeof args.headers === 'object' && !Array.isArray(args.headers)) {
-    const headers: Record<string, unknown> = {};
-    for (const [name, value] of Object.entries(args.headers as Record<string, unknown>)) {
-      const parsed = typeof value === 'string' && /^\s*[[{]/.test(value) ? parsedJson(value) : null;
-      if (parsed && hasInexactNumber(parsed)) throw inexact();
-      headers[name] = parsed ? JSON.stringify(parsed) : value;
-    }
-    out.headers = headers;
-  }
-  return out;
-}
-
 const REQUEST_ARGS = new Set(['method', 'path', 'base', 'query', 'headers', 'body', 'upload']);
 
 /** Every value of a call's arguments, raw text bodies and JSON headers read as what they hold. */
@@ -227,7 +218,13 @@ function readArgs(origin: ConnectionToolRow['origin'], args: Readonly<Record<str
 
 /* The card ---------------------------------------------------------------------------------------- */
 
+/** A value already written as the card shows it (an id with its name beside it). */
+class Written {
+  constructor(readonly text: string) {}
+}
+
 function shown(value: unknown): string {
+  if (value instanceof Written) return value.text;
   if (typeof value === 'string') return quoted(value);
   if (Array.isArray(value)) return `[${value.map(shown).join(', ')}]`;
   if (value && typeof value === 'object') return '{}';
@@ -304,10 +301,40 @@ function fileLines(file: CardFile | null | undefined, field: unknown): string[] 
   ];
 }
 
+/** The longest name of an id the card shows (a tag's, a contact's); a longer one is shortened with “…”. */
+const NAME_MAX = 80;
+
+/** The name of an id as the card shows it, quoted, before the id: `"Invoices" (7)`. */
+function namedId(name: string, id: unknown): Written {
+  const short = [...name].length > NAME_MAX ? `${[...name].slice(0, NAME_MAX - 1).join('')}…` : name;
+  return new Written(`${quoted(short)} (${visible(String(id))})`);
+}
+
+/** The ids an action names that its card shows by name: what they are and each one's id, as sent. */
+export function cardRefs(
+  catalogId: string,
+  tool: Pick<ConnectionToolRow, 'name' | 'origin'>,
+  args: Readonly<Record<string, unknown>>,
+): { kind: string; what: string; id: string }[] {
+  const refs = listedRefs(catalogId, tool, args);
+  if (!refs.length) return [];
+  const out: { kind: string; what: string; id: string }[] = [];
+  for (const v of readArgs(tool.origin, args).values) {
+    const ref = refs.find((r) => r.at.test(v.path));
+    if (!ref) continue;
+    for (const id of Array.isArray(v.value) ? v.value : [v.value])
+      if (typeof id === 'string' || typeof id === 'number')
+        out.push({ kind: ref.kind, what: ref.what, id: String(id) });
+  }
+  return out;
+}
+
 /**
- * One validated action as the card shows it: Whombat's words, then the method and path (or socket method, or tool),
- * the base, the email's file, every argument as `where: value`, and the agent's own note last. `uploadFile` is the
- * email's file the call sends; `summary` the agent's words, shown only as its note.
+ * One validated action as the card shows it: Whombat's words and what else it does, then the method and path (or socket
+ * method, or tool), the base, the email's file, every argument as `where: value` (an id the action names with its
+ * name beside it, from `names`: `kind:id` → name), and the agent's own note last. An id without a name shows as it is,
+ * with a line that says so. `uploadFile` is the email's file the call sends; `summary` the agent's words, shown only as
+ * its note.
  */
 export function describePlannedAction(input: {
   catalogId: string;
@@ -316,11 +343,12 @@ export function describePlannedAction(input: {
   args: Readonly<Record<string, unknown>>;
   uploadFile?: CardFile | null;
   summary?: string;
+  names?: Readonly<Record<string, string>>;
 }): DescribedAction {
   const { tool, args } = input;
   const label = input.label.replace(/\s+/g, ' ').trim() || 'the service';
   const words = listedWords({ catalogId: input.catalogId, label, tool, args });
-  const lines = [words.ask];
+  const lines = [words.ask, ...listedNotes(input.catalogId, tool, args, quoted)];
   if (tool.origin === 'request') {
     lines.push(`Request: ${visible(String(args.method ?? ''))} ${visible(String(args.path ?? ''))}`);
     if (typeof args.base === 'string' && args.base) {
@@ -333,7 +361,22 @@ export function describePlannedAction(input: {
   } else if (tool.origin === 'socket') lines.push(`Method: ${visible(String(args.method ?? ''))}`);
   else lines.push(`Tool: ${visible(tool.name)}`);
   const reading = readArgs(tool.origin, args);
-  for (const v of reading.values) lines.push(...valueLines(v.path, v.value));
+  const refs = listedRefs(input.catalogId, tool, args);
+  let unnamed = false;
+  for (const v of reading.values) {
+    const ref = refs.find((r) => r.at.test(v.path));
+    if (!ref) {
+      lines.push(...valueLines(v.path, v.value));
+      continue;
+    }
+    const withName = (id: unknown) => {
+      const name = input.names?.[`${ref.kind}:${String(id)}`];
+      if (name === undefined) unnamed = true;
+      return name === undefined ? id : namedId(name, id);
+    };
+    lines.push(...valueLines(v.path, Array.isArray(v.value) ? v.value.map(withName) : withName(v.value)));
+  }
+  if (unnamed) lines.push(`Whombat couldn’t look up some names in ${label}, so their ids are shown.`);
   const note = (input.summary ?? '').replace(/\s+/g, ' ').trim();
   if (note) lines.push(...valueLines('Agent’s note', note));
   return { ask: words.ask, done: words.done, lines, overflow: reading.overflow };
