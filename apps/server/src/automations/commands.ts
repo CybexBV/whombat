@@ -20,6 +20,7 @@ import {
   definitionHash,
   type JsonObject,
   JsonObject as JsonObjectSchema,
+  mailDefinitionProblems,
   NewAutomationSource,
   NumberParam,
   newId,
@@ -149,7 +150,7 @@ export async function referenceProblems(
   def: AutomationDefinition,
   forPublish: boolean,
 ): Promise<string[]> {
-  const problems: string[] = [];
+  const problems: string[] = [...mailDefinitionProblems(def)];
   if (hasWebhookTrigger(def)) problems.push(NO_WEBHOOK_TRIGGER_TEXT);
   // A tracker trigger listens to one of the burrow's tracker connections; a mail trigger to one of the person's mailboxes.
   for (const t of def.triggers) {

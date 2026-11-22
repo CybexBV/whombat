@@ -24,6 +24,7 @@ import {
 import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { BurrowAccess } from '../auth/request';
+import { runProvenanceOf } from '../automations/runs';
 import { type AutomationRunRow, activeRunCount, publishRun } from '../automations/store';
 import { roomByKey } from '../chats/rooms';
 import { type ApplyContext, defineCommand, type TxSession } from '../commit/types';
@@ -409,6 +410,7 @@ export async function openFeatureRequest(ctx: ApplyContext, args: OpenRequest): 
     dispatch: false,
     // The person hears through the notification below, once.
     notifyDmPerson: false,
+    provenance: runProvenanceOf(run),
   });
   await tx.update(featureRequests).set({ messageId: posted.id }).where(eq(featureRequests.id, id));
   await ctx.emit({

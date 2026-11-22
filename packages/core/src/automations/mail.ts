@@ -2,7 +2,11 @@
  * Mail-arrives automation triggers: pure address/domain parsing, attachment-type matching, validation and
  * plain-English trigger phrases shared by the server, web and mobile.
  */
-import type { MailTrigger } from '../domain/automation.js';
+import type {
+  MailTrigger,
+  MissingMailAttachment,
+  MissingMailAttachmentReason,
+} from '../domain/automation.js';
 
 /** Fallback name when a mail connection's address isn't available to the viewer. */
 export const UNKNOWN_MAIL_CONNECTION = 'a mail account';
@@ -336,4 +340,27 @@ export function mailRecipeName(
   if (trigger.subjectContains?.[0]) return `Handle “${trigger.subjectContains[0]}” mail`;
   if (mailbox) return `Handle mail in ${mailbox}`;
   return 'Handle incoming mail';
+}
+
+/** Short plain-English reason why a mail attachment couldn't be handed over to an automation run. */
+export function missingAttachmentReasonText(reason: MissingMailAttachmentReason): string {
+  switch (reason) {
+    case 'too_large':
+      return 'too large';
+    case 'unsupported_type':
+      return 'unknown file type';
+    case 'download_failed':
+      return 'couldn’t be downloaded';
+    case 'too_many':
+      return 'attachment limit reached';
+  }
+}
+
+/** Plain-English notice for mail attachments that didn't come along with a run (for the run page and summaries). */
+export function missingAttachmentsText(missing: readonly MissingMailAttachment[]): string {
+  if (missing.length === 0) return '';
+  const items = missing.slice(0, 10).map((m) => `“${m.name}” (${missingAttachmentReasonText(m.reason)})`);
+  const extra = missing.length > 10 ? ` and ${missing.length - 10} more` : '';
+  if (missing.length === 1) return `Attachment didn’t come along: ${items[0]}.`;
+  return `These attachments didn’t come along: ${items.join(', ')}${extra}.`;
 }

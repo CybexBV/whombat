@@ -6,6 +6,7 @@ import { postMessage } from '../../domain/messages';
 import { linkAttachments } from '../../files/commands';
 import { type AttachmentRow, lockBlob } from '../../files/service';
 import { loadConversationRow } from '../../read/conversations';
+import { runProvenanceOf } from '../runs';
 import type { AutomationRunRow } from '../store';
 import { block, updateStep } from './state';
 import { placeFor } from './thread';
@@ -122,6 +123,7 @@ export async function executePostMessage({
     threadRootId: place.threadRootId,
     mentions: [],
     dispatch: false,
+    provenance: runProvenanceOf(run),
     ...(attachmentIds.length ? { attachmentIds } : {}),
   });
   await linkAttachments(tx, ctx, posted.id, copies);

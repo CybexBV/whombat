@@ -1,4 +1,12 @@
-import { type AutomationStep, blockedEventFields, type JsonObject, keyLabel, newId } from '@whombat/core';
+import {
+  type AutomationStep,
+  blockedEventFields,
+  type JsonObject,
+  keyLabel,
+  MissingMailAttachment,
+  missingAttachmentsText,
+  newId,
+} from '@whombat/core';
 import { and, asc, eq, gt, inArray, lte, ne, sql } from 'drizzle-orm';
 import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
@@ -7,6 +15,7 @@ import { automationRunSteps, automationRuns, dispatches, messages } from '../../
 import { postMessage } from '../../domain/messages';
 import { billedTokensSum } from '../../domain/turn-usage';
 import { linkAttachments } from '../../files/commands';
+import { stripMailScopeContent } from '../../mail-triggers/index';
 import { loadConversationRow } from '../../read/conversations';
 import { loadMessageRow } from '../../read/messages';
 import { agentRuntimeOf } from '../../read/principals';
@@ -20,7 +29,7 @@ import {
   reusedOutput,
   reusedSummary,
 } from '../reuse';
-import { runPersonOf } from '../runs';
+import { runPersonOf, runProvenanceOf } from '../runs';
 import {
   type AutomationRunRow,
   type AutomationStepRow,
@@ -109,9 +118,17 @@ export async function executeDispatchAgent({
     if (!resolved.ok) return block(ctx, run, idx, resolved.reason);
     workspace = resolved.workspace;
   }
+  const previousInstructions =
+    attempt > 0 &&
+    run.trigger.kind === 'mail' &&
+    typeof previous.instructions === 'string' &&
+    previous.instructions.trim()
+      ? previous.instructions
+      : null;
   const basePrompt = stepInstructions(run.definition, idx, scope);
   const connectionsNote = step.proposeActions ? await proposableConnectionsNote(tx, run.burrowId) : '';
-  const prompt = connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt;
+  const prompt =
+    previousInstructions ?? (connectionsNote ? `${basePrompt}\n\n${connectionsNote}` : basePrompt);
   // A test run about a report or issue an earlier run just assessed the same way uses that assessment (RN-S2).
   const reusable = await reusableAssessment(tx, run, step, agent.id, workspace, prompt, ctx.now);
   if (reusable) return reuseAssessment(ctx, run, idx, step, agent, base, prompt, reusable);
@@ -174,6 +191,7 @@ export async function executeDispatchAgent({
     threadRootId: place.threadRootId,
     mentions: [agent.id],
     dispatch: false,
+    provenance: runProvenanceOf(run),
     ...(files.length ? { attachmentIds: files.map((f) => f.id) } : {}),
   });
   if (files.length) await linkAttachments(tx, ctx, posted.id, files);
@@ -220,6 +238,16 @@ export async function executeDispatchAgent({
       runId: run.id,
     },
   });
+  const missingParsed = MissingMailAttachment.array()
+    .max(20)
+    .safeParse((run.scope as { missingAttachments?: unknown } | null)?.missingAttachments);
+  const missingNote =
+    missingParsed.success && missingParsed.data.length > 0 ? missingAttachmentsText(missingParsed.data) : '';
+  const stepInputSummary = workspace
+    ? `Asked ${agent.name} · ${checkoutWords(workspace)}`
+    : missingNote
+      ? `Asked ${agent.name} · ${missingNote}`
+      : `Asked ${agent.name}`;
   await updateStep(
     tx,
     run.id,
@@ -229,7 +257,7 @@ export async function executeDispatchAgent({
       state: 'waiting',
       dispatchId,
       promptMessageId: posted.id,
-      inputSummary: workspace ? `Asked ${agent.name} · ${checkoutWords(workspace)}` : `Asked ${agent.name}`,
+      inputSummary: stepInputSummary,
       output: {
         agentId: agent.id,
         instructions: prompt,
@@ -239,9 +267,14 @@ export async function executeDispatchAgent({
     },
     ctx.now,
   );
+  const strippedScope = stripMailScopeContent(run.scope as JsonObject);
   await tx
     .update(automationRuns)
-    .set({ status: 'waiting', updatedAt: ctx.now })
+    .set({
+      status: 'waiting',
+      ...(strippedScope ? { scope: strippedScope } : {}),
+      updatedAt: ctx.now,
+    })
     .where(eq(automationRuns.id, run.id));
   const services = ctx.services;
   ctx.after(async () => {
@@ -351,6 +384,7 @@ async function reuseAssessment(
     threadRootId: place.threadRootId,
     mentions: [],
     dispatch: false,
+    provenance: runProvenanceOf(run),
   });
   if (place.startsThread)
     await tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));
@@ -370,9 +404,14 @@ async function reuseAssessment(
     },
     ctx.now,
   );
+  const strippedScope = stripMailScopeContent(run.scope as JsonObject);
   await tx
     .update(automationRuns)
-    .set({ status: 'running', updatedAt: ctx.now })
+    .set({
+      status: 'running',
+      ...(strippedScope ? { scope: strippedScope } : {}),
+      updatedAt: ctx.now,
+    })
     .where(eq(automationRuns.id, run.id));
 }
 

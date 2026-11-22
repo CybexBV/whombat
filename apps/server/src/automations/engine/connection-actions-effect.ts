@@ -16,6 +16,7 @@ import { isCallableEntry } from '../../connections/callable';
 import { keyTierOf } from '../../connections/context';
 import { limitsProblem } from '../../connections/limits';
 import { ConnectionArgumentError, normaliseRequestArgs, parseRequestUpload } from '../../connections/request';
+import { normaliseSocketArgs } from '../../connections/socket/call';
 import { catalogConnections, connectionTools } from '../../db/schema/index';
 import { limitWordsFor } from '../../devices/store';
 import { thePerson } from '../../domain/the-person';
@@ -23,10 +24,16 @@ import { readAll } from '../../files/previews';
 import { callServerOf } from '../../hosts/asks';
 import { loadGrants } from '../../read/principals';
 import { automationAgent, publisherCheck } from '../authority';
-import { actionsDoneLine, threadAttachment } from '../proposed-actions';
+import {
+  actionsDoneLine,
+  approvedActionsRequest,
+  hashPlannedActions,
+  isProposableEntry,
+  proposeCallRefusal,
+  threadAttachment,
+} from '../proposed-actions';
 import { stepRoomsCheck } from '../steps';
 import type { AutomationStepRow } from '../store';
-import { approvedBranchRequest } from '../workspace';
 import type { LeasedRun } from './step-ops';
 
 interface PreparedAction {
@@ -36,6 +43,7 @@ interface PreparedAction {
   label: string;
   tool: string;
   toolHash: string;
+  description?: string;
   summary: string;
   argsEnc: string;
 }
@@ -49,6 +57,7 @@ export async function runConnectionActions(
   const db = services.db;
   const out = row.output as {
     actionsApprovalId?: string;
+    actionsHash?: string;
     actions?: PreparedAction[];
   };
   const refuse = (error: string) =>
@@ -59,12 +68,13 @@ export async function runConnectionActions(
   const rooms = await stepRoomsCheck(db, run, row.idx, who.publisher);
   if (!rooms.ok) return void (await refuse(rooms.reason));
 
-  // Belt-and-braces: never execute without a verified approved approval row for this exact run, step and attempt.
+  // Belt-and-braces: never execute without a verified approved approval row matching this run, step, attempt and hash.
   if (
     !out.actionsApprovalId ||
-    !(await approvedBranchRequest(db, out.actionsApprovalId, run.id, step, row.attempt))
+    !out.actionsHash ||
+    !(await approvedActionsRequest(db, out.actionsApprovalId, run.id, step, row.attempt, out.actionsHash))
   ) {
-    return void (await refuse('These actions need your approval before they can run.'));
+    return void (await refuse('These actions changed since you approved them, so they need a new approval.'));
   }
 
   const actions = Array.isArray(out.actions) ? out.actions : [];
@@ -98,6 +108,8 @@ export async function runConnectionActions(
     const entry = conn ? catalogEntry(conn.catalogId) : null;
     if (!conn || !entry || !isCallableEntry(entry))
       return void (await refuse(`${action.label} isn’t connected any more.`));
+    if (!isProposableEntry(entry))
+      return void (await refuse(`Actions on ${conn.label} can’t be proposed from an outsiders’ run.`));
     if (conn.status !== 'active') return void (await refuse(needsReauthText(conn)));
     const [tool] = await db
       .select()
@@ -122,6 +134,8 @@ export async function runConnectionActions(
           `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
         ));
       }
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
       if (!requestAllowed(entry, conn.fields, String(args.method), String(args.path)))
         return void (await refuse(`${conn.label} no longer allows that request.`));
       const upload = parseRequestUpload(args.upload);
@@ -130,6 +144,19 @@ export async function runConnectionActions(
         if (!att?.blobKey || att.size > maxUpload)
           return void (await refuse(`The attachment to upload to ${conn.label} isn’t available any more.`));
       }
+    } else if (tool.origin === 'socket') {
+      try {
+        args = normaliseSocketArgs(entry, args, conn.label);
+      } catch (err) {
+        return void (await refuse(
+          `${conn.label}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid socket arguments.'}`,
+        ));
+      }
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
+    } else {
+      const refused = proposeCallRefusal(entry, tool, args, conn.label);
+      if (refused) return void (await refuse(refused));
     }
     const server = await callServerOf(db, services, conn.burrowId, conn.catalogId, args);
     const decided = callTier(
@@ -150,6 +177,21 @@ export async function runConnectionActions(
     ready.push({ action, args });
   }
 
+  // Re-verify the exact batch hash against what was approved before sending any network call.
+  const openedHash = hashPlannedActions(
+    ready.map(({ action, args }) => ({
+      connectionId: action.connectionId,
+      tool: action.tool,
+      toolHash: action.toolHash,
+      description: action.description ?? action.summary,
+      summary: action.summary,
+      args,
+    })),
+  );
+  if (openedHash !== out.actionsHash) {
+    return void (await refuse('These actions changed since you approved them, so they need a new approval.'));
+  }
+
   // Resolver scoped strictly to ready attachments on THIS run's thread.
   const uploadAttachment = async (attachmentId: string) => {
     const att = await threadAttachment(db, run, attachmentId);
@@ -161,6 +203,7 @@ export async function runConnectionActions(
 
   const results: { handle: string; label: string; summary: string; ok: boolean; status?: number }[] = [];
   for (const { action, args } of ready) {
+    const shown = action.description ?? action.summary;
     const res = await executeConnectionCall(services, {
       burrowId: run.burrowId,
       agentId: agent.id,
@@ -173,11 +216,13 @@ export async function runConnectionActions(
       conversationId: run.conversationId,
       personId: person?.id ?? null,
       threadRootId: run.threadRootId,
-      change: action.summary,
+      change: shown,
       approvalId: out.actionsApprovalId,
       uploadAttachment,
     });
     if (res.kind === 'failed' || res.output.isError) {
+      const timedOut = res.kind === 'failed' && res.reason === 'timeout';
+      const earlierSucceeded = results.some((r) => r.ok);
       const reason =
         res.kind === 'failed'
           ? res.message
@@ -187,16 +232,27 @@ export async function runConnectionActions(
       results.push({
         handle: action.handle,
         label: action.label,
-        summary: action.summary,
+        summary: shown,
         ok: false,
         ...(res.kind === 'ok' && res.output.httpStatus ? { status: res.output.httpStatus } : {}),
       });
+      const succeededCount = results.filter((r) => r.ok).length;
+      // A timed-out call may have taken effect, and a batch that already ran earlier actions left partial state:
+      // settle as `uncertain` (needs_review) so the person can check instead of seeing a misleading “failed”.
+      const uncertain = timedOut || earlierSucceeded;
+      const error = timedOut
+        ? earlierSucceeded
+          ? `${succeededCount} earlier ${succeededCount === 1 ? 'action' : 'actions'} succeeded, and ${action.label} didn’t answer in time for “${shown}”, so it may or may not have happened. Check, then say what happened.`
+          : `${action.label} didn’t answer in time for “${shown}”, so it may or may not have happened. Check, then say what happened.`
+        : earlierSucceeded
+          ? `${succeededCount} earlier ${succeededCount === 1 ? 'action' : 'actions'} already succeeded before ${action.label} failed on “${shown}”: ${reason} Check what ran, then say what happened.`
+          : `${action.label} couldn’t complete “${shown}”: ${reason}`;
       await lease.commit({
         op: 'settle',
         idx: row.idx,
-        state: 'failed',
-        error: `${action.label} couldn’t complete “${action.summary}”: ${reason}`.slice(0, 1000),
-        output: { ran: results.some((r) => r.ok), count: results.filter((r) => r.ok).length, results },
+        state: uncertain ? 'uncertain' : 'failed',
+        error: error.slice(0, 1000),
+        output: { ran: earlierSucceeded, count: succeededCount, results },
         from: ['running'],
       });
       return;
@@ -204,13 +260,19 @@ export async function runConnectionActions(
     results.push({
       handle: action.handle,
       label: action.label,
-      summary: action.summary,
+      summary: shown,
       ok: true,
       ...(res.output.httpStatus ? { status: res.output.httpStatus } : {}),
     });
   }
 
-  const doneLine = actionsDoneLine(ready.map((r) => ({ label: r.action.label, summary: r.action.summary })));
+  const doneLine = actionsDoneLine(
+    ready.map((r) => ({
+      label: r.action.label,
+      description: r.action.description,
+      summary: r.action.summary,
+    })),
+  );
   await lease.commit({
     op: 'settle',
     idx: row.idx,

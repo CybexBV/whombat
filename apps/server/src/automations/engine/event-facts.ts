@@ -94,9 +94,9 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
     if (!m || m.deletedAt) return null;
     if (event.type === 'message.reacted' && payload.on !== true) return null;
     const threadRootId = m.threadRootId ?? m.id;
-    // An assessor's output and an approved handoff's message carry a website visitor's words (or what an agent made
-    // of them) onwards, whoever posted them: a message with a Feedback provenance starts nothing, and neither does a
-    // reaction to it (feedback.md FB-D11, review-2 F1).
+    // Messages stamped with provenance come from outsiders (Feedback assessments/handoffs, or mail/tracker outsiders'
+    // runs): they carry outsider-influenced content onwards, so neither those messages nor reactions to them ever start
+    // another automation (docs/decisions/feedback.md, docs/decisions/outsiders-turns.md).
     if (m.provenance) return null;
     // An agent in a feedback report's thread is assessing (or answering about) what a website visitor sent: its
     // messages carry that visitor's words onwards, so they start nothing either (feedback.md FB-21, FB-23).

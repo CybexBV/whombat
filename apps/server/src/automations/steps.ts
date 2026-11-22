@@ -7,7 +7,7 @@
  * `uncertain` for a person) if the process dies in between.
  */
 
-import { type JsonObject, renderTemplate, trackerAccessAsked } from '@whombat/core';
+import { type JsonObject, mailStepProblem, renderTemplate, trackerAccessAsked } from '@whombat/core';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { openPr } from '../commands/agent-tools';
@@ -29,6 +29,7 @@ import { replyLine } from '../trackers/reply';
 import { assessmentOutput, assessmentReported } from './assessment';
 import { keyDecision, publisherCheck } from './authority';
 import { MERGE_RERUN_MAX_CHECKS, MERGE_WORDS, mergeOutputOf } from './merge';
+import { runProvenanceOf } from './runs';
 import { CONTINUE_STEP } from './steps/approval';
 import { stepRoomsCheck } from './steps/checks';
 import { executeConnectionActions } from './steps/connection-actions';
@@ -511,6 +512,10 @@ export async function executeStep(
   const publisher = who.publisher;
   const inRooms = await stepRoomsCheck(tx, run, idx, publisher);
   if (!inRooms.ok) return block(ctx, run, idx, inRooms.reason);
+  if (run.trigger.kind === 'mail' || run.definition.triggers.some((t) => t.kind === 'mail')) {
+    const unsafe = mailStepProblem(step);
+    if (unsafe) return block(ctx, run, idx, unsafe);
+  }
   const execution = { ctx, run, steps, idx, attempt, scope, publisher, base };
   switch (step.kind) {
     case 'dispatch_agent':
@@ -875,6 +880,7 @@ export const mergePrStep = defineCommand({
           threadRootId: place.threadRootId,
           mentions: [],
           dispatch: false,
+          provenance: runProvenanceOf(run),
         })
       : null;
     if (posted && place.startsThread)

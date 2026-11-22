@@ -52,6 +52,8 @@ export interface FencedMailAttachment {
   name: string;
   mimeType: string;
   size: number;
+  /** Present when the attachment couldn't be handed over to the run (e.g. "too large"). */
+  notAttached?: string | undefined;
 }
 
 export interface FencedMailInput {
@@ -105,10 +107,18 @@ export function fenceMailContent(mail: FencedMailInput, options: { maxBody?: num
   } else {
     const items = attachments.slice(0, 20).map((a) => {
       const id = a.id ? `, id ${line(a.id)}` : '';
-      return `${line(a.name) || 'attachment'} (${line(a.mimeType)}, ${a.size} bytes${id})`;
+      const missing = a.notAttached ? ` — not attached: ${line(a.notAttached)}` : '';
+      return `${line(a.name) || 'attachment'} (${line(a.mimeType)}, ${a.size} bytes${id}${missing})`;
     });
     const extra = attachments.length > 20 ? ` and ${attachments.length - 20} more` : '';
     lines.push(`Attachments: ${items.join('; ')}${extra}`);
+    const missing = attachments.filter((a) => a.notAttached);
+    if (missing.length > 0) {
+      const missingItems = missing
+        .slice(0, 20)
+        .map((a) => `${line(a.name) || 'attachment'} (${line(a.notAttached as string)})`);
+      lines.push(`Not attached (didn’t come along): ${missingItems.join('; ')}`);
+    }
   }
   const body = clipText(mail.body, maxBody);
   if (body.text) {
