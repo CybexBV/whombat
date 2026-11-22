@@ -474,7 +474,7 @@ export const ProposedConnectionAction = z
     connection: z.string().trim().min(1).max(40),
     /** Tool to call on that connection (e.g. `request`). */
     tool: z.string().trim().min(1).max(200),
-    /** Tool arguments. For `request`, `upload: { field, attachmentId, fields? }` uploads an attachment from this run's thread. */
+    /** Tool arguments. For `request`, `upload: { attachmentId, field?, fields? }` sends a file that came with this run's email. */
     arguments: z.record(z.string(), z.unknown()).default({}),
     /** Short plain-English summary shown to the person on the approval card. */
     summary: z.string().trim().min(1).max(200),
