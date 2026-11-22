@@ -19,6 +19,7 @@ import { loadMessage } from '../read/messages';
 import type { BusFrame } from '../realtime/bus';
 import { fillFrame } from '../realtime/fill';
 import { personalize } from '../realtime/hub';
+import { dispatchScopeOf, runInDispatchScope } from '../runtime/dispatch-scope';
 import { inProcessApi } from '../test/api';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { sessionFor } from '../test/tokens';
@@ -87,12 +88,14 @@ async function replyWithFile(dispatchId: string, text: string) {
   const [d] = await s.db.select().from(dispatches).where(eq(dispatches.id, dispatchId));
   if (!d) throw new Error('no dispatch');
   const file = await upload(d.agentId, d.conversationId);
-  await w.ok(d.agentId, sendMessage, {
-    conversationId: d.conversationId,
-    text,
-    attachmentIds: [file],
-    ...(d.threadRootId ? { threadRootId: d.threadRootId } : {}),
-  });
+  await runInDispatchScope(dispatchScopeOf(d), () =>
+    w.ok(d.agentId, sendMessage, {
+      conversationId: d.conversationId,
+      text,
+      attachmentIds: [file],
+      ...(d.threadRootId ? { threadRootId: d.threadRootId } : {}),
+    }),
+  );
   await s.runtime.finalize(dispatchId, { outcome: 'done' });
   return file;
 }

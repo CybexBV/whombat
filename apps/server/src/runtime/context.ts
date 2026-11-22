@@ -76,7 +76,7 @@ import { vaultContextFor } from '../vault/context';
 import { webSearchDispatch } from '../web-search/store';
 import { contextThreadCandidates, contextWindowCandidates } from './context-selection';
 import { notifyContextOf } from './job-notify';
-import { forOutsiders } from './outsiders-view';
+import { forOutsiders, forPersonTurn, hasOutsidersMessages } from './outsiders-view';
 import { dispatchPerson, outsidersTurn } from './person';
 import { sessionSince, turnSession } from './sessions';
 
@@ -217,6 +217,7 @@ export async function buildDispatchContext(
   let window: DispatchContextType['window'];
   let thread: DispatchContextType['thread'];
   let session: DispatchContextType['session'] = null;
+  let runnerRow = row;
   if (assessing) {
     trigger = assessing.trigger;
     window = [];
@@ -232,7 +233,12 @@ export async function buildDispatchContext(
     trigger = message ?? null;
     // The thread's Hermes session (HE-18, HE-40): a resumed one has the conversation already and gets only what is new
     // since its last turn — the request always — a new one the window.
-    const since = await sessionSince(db, row, trigger ? new Date(trigger.createdAt) : null);
+    const fresh =
+      !outside &&
+      (row.threadRootId || roomWindow) &&
+      (await hasOutsidersMessages(db, row.conversationId, row.threadRootId));
+    if (fresh) runnerRow = { ...row, providerSessionId: null };
+    const since = await sessionSince(db, runnerRow, trigger ? new Date(trigger.createdAt) : null);
     const shown = (m: MessageCandidate) =>
       m.id === trigger?.id ||
       !since ||
@@ -247,7 +253,7 @@ export async function buildDispatchContext(
     const selected = await hydrateMessageCandidates(db, [...selectedWindow, ...selectedReplies], agent.id);
     window = selected.slice(0, selectedWindow.length);
     thread = fullThread ? { root: fullThread.root, replies: selected.slice(selectedWindow.length) } : null;
-    session = turnSession(row, since);
+    session = turnSession(runnerRow, since);
   }
 
   // An automation's request reads one line in the conversation; the agent gets its step's instructions (CNR-08) —
@@ -279,18 +285,22 @@ export async function buildDispatchContext(
   }
 
   // Use the same view as read_conversation, including what the turn may learn about the messages’ files.
-  if (outside) {
-    const shown = await forOutsiders(
-      db,
-      [...(trigger ? [trigger] : []), ...window, ...(thread ? [thread.root, ...thread.replies] : [])],
-      { files: await outsidersFileIds(db, row), reportRootId: assessing ? row.threadRootId : null },
-    );
-    let at = 0;
-    if (trigger) trigger = shown[at++] as Message;
-    window = shown.slice(at, at + window.length);
-    at += window.length;
-    if (thread) thread = { ...thread, root: shown[at++] as Message, replies: shown.slice(at) };
-  }
+  const shown = [
+    ...(trigger ? [trigger] : []),
+    ...window,
+    ...(thread ? [thread.root, ...thread.replies] : []),
+  ];
+  const projected = outside
+    ? await forOutsiders(db, shown, {
+        files: await outsidersFileIds(db, row),
+        reportRootId: assessing ? row.threadRootId : null,
+      })
+    : await forPersonTurn(db, shown);
+  let at = 0;
+  if (trigger) trigger = projected[at++] as Message;
+  window = projected.slice(at, at + window.length);
+  at += window.length;
+  if (thread) thread = { root: projected[at++] as Message, replies: projected.slice(at) };
 
   // Whombat's own signers are `system` (one-agent.md OA-17).
   const shownAuthors = new Set([
@@ -305,7 +315,7 @@ export async function buildDispatchContext(
       id: p.id,
       kind: p.kind === 'agent' && p.system ? 'system' : p.kind,
       name: p.name,
-      handle: p.handle,
+      handle: outside ? '' : p.handle,
       title: outside ? null : (p.title ?? null),
     }));
 
@@ -461,7 +471,7 @@ export async function buildDispatchContext(
   const token = await issueDispatchToken(services, row.id);
   const tracker = await trackerPart(services, row);
   const context: DispatchContextType = {
-    dispatch: toDispatch(row),
+    dispatch: toDispatch(runnerRow),
     burrow: { id: burrowRow.id, slug: burrowRow.slug, name: burrowRow.name, timeZone: burrowRow.timeZone },
     agent: {
       id: agent.id,

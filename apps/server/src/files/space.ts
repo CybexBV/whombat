@@ -25,7 +25,7 @@ import { type AttachmentRow, toAttachment } from './service';
 export function inFiles(forAgents = false) {
   const live = sql`(${messages.id} is not null and ${messages.deletedAt} is null and ${messages.conversationId} = ${attachments.conversationId})`;
   const shared = forAgents
-    ? live
+    ? sql`(${live} and not ${messages.outsidersRun})`
     : sql`(${live} and exists (select 1 from ${principals} as uploader where uploader.id = ${attachments.uploadedById} and uploader.kind = 'person'))`;
   const visitor = forAgents
     ? sql` and (${messages.id} is null or ${messages.card} is null or ${messages.card}->>'kind' <> 'report')`

@@ -129,7 +129,10 @@ export async function loadShareThread(
   return {
     conversationId: conv.id,
     rootId: root.id,
-    title: threadTitleOf(root.text, root.subjectName ?? null).slice(0, 200),
+    title:
+      root.outsidersRun || root.provenance
+        ? threadTitleOf(shown[0]?.row.text ?? '', null).slice(0, 200)
+        : threadTitleOf(root.text, root.subjectName ?? null).slice(0, 200),
     person: { name: person ? firstName(person) : 'Someone' },
     assistant: {
       name: agent ? (agent.shortName ?? agent.name) : 'Whombat',

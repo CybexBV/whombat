@@ -302,7 +302,7 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
   const services = ctx.services;
   const authorKind = actor.kind;
   const dispatchWanted = !outsidersRun && (args.dispatch ?? true);
-  const notifyMentions = args.notifyMentions ?? true;
+  const notifyMentions = !outsidersRun && (args.notifyMentions ?? true);
   const trigger = args.dispatchTrigger;
   // A person's top-level message in a channel, or in their Chat or Feedback room in the assistant shell (CHT-02).
   const opensThread = authorKind === 'person' && !rootId && threadedRoom(conv);

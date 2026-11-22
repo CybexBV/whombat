@@ -73,7 +73,7 @@ import { canvasDetail, readableCanvas } from '../read/work-views';
 import { checkoutBlocker, startRunRefusalText } from '../runtime/checkout-access';
 import { completionEvidence } from '../runtime/completion-evidence';
 import { type DispatchRow, dispatchCheckout } from '../runtime/context';
-import { forOutsiders } from '../runtime/outsiders-view';
+import { forOutsiders, forPersonTurn } from '../runtime/outsiders-view';
 import { outsidersTurn } from '../runtime/person';
 import { scheduleTool } from '../schedules/tool';
 import type { Services } from '../services';
@@ -298,6 +298,12 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     // An assessor replies only in its report's thread, inert (docs/decisions/feedback.md FB-21).
     if (ctx.dispatch.trigger === 'feedback') return assessorReplyTool(ctx, input);
     const root = await loadMessageRow(ctx.services.db, input.messageId);
+    if (outsidersTurn(ctx.dispatch))
+      keepInTurn(
+        ctx,
+        root?.conversationId ?? ctx.dispatch.conversationId,
+        root?.threadRootId ?? root?.id ?? null,
+      );
     if (!root || root.burrowId !== ctx.burrowId) throw notFound('Message');
     keepInTurn(ctx, root.conversationId, root.threadRootId ?? root.id);
     // It can't upload, so a file it names could only be one it didn't make here.
@@ -326,8 +332,11 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
 
   read_conversation: async (ctx, input) => {
     // A thread named with the wrong room: the answer names the right one.
-    if (input.threadRootId) await refuseThreadElsewhere(ctx, input.conversationId, input.threadRootId);
+    const outside = outsidersTurn(ctx.dispatch);
+    if (input.threadRootId && !outside)
+      await refuseThreadElsewhere(ctx, input.conversationId, input.threadRootId);
     const root = input.threadRootId ? await loadMessageRow(ctx.services.db, input.threadRootId) : null;
+    if (outside) keepInTurn(ctx, input.conversationId, root?.threadRootId ?? root?.id ?? null);
     const conversation = await readableBy(
       ctx,
       input.conversationId,
@@ -349,12 +358,12 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
     }
     // An automation run's outsiders' turn is told only of the files handed over from what started its run, and reads an
     // approval card, and what a step told the person of the calls they approved, only as a line.
-    const outside = outsidersTurn(ctx.dispatch);
     if (outside)
       messages = await forOutsiders(ctx.services.db, messages, {
         files: await outsidersFileIds(ctx.services.db, ctx.dispatch),
         reportRootId: ctx.dispatch.trigger === 'feedback' ? ctx.dispatch.threadRootId : null,
       });
+    else messages = await forPersonTurn(ctx.services.db, messages, true);
     return {
       status: 'ok',
       conversation: {

@@ -58,7 +58,9 @@ import { outsidersTurn } from './person';
 
 /** Turns whose failure gets the card and Try again: not a Feedback assessment, an automation step or a search answer. */
 export function retryable(row: Pick<DispatchRow, 'trigger' | 'mode' | 'onBehalfOfAccountId'>): boolean {
-  return !outsidersTurn(row) && row.trigger !== 'automation' && row.mode !== 'answer';
+  return (
+    !outsidersTurn(row) && row.trigger !== 'feedback' && row.trigger !== 'automation' && row.mode !== 'answer'
+  );
 }
 
 /** The failure as the runner reported it, else classified from what the server has (EA-08). */

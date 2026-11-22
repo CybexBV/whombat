@@ -141,7 +141,9 @@ export async function notifyForMessage(services: Services, input: NotifyForMessa
     input.again?.text ??
     (plainMessageText(said) || said || (message.attachmentIds.length ? 'Shared a file.' : ''));
   // A push preview never shows code: fenced blocks read “(code)” there (NT-14).
-  const previewText = input.again?.text ?? (plainMessageText(withoutCodeBlocks(said)) || text);
+  const previewText = message.outsidersRun
+    ? 'There’s an update in your conversation.'
+    : (input.again?.text ?? (plainMessageText(withoutCodeBlocks(said)) || text));
   const group = threadPushGroup(conversation.id, rootId);
   const drafts: NotificationDraft[] = planned.map((p) => ({
     burrowId: input.burrow.id,

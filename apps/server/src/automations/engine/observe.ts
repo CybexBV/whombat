@@ -283,6 +283,7 @@ async function observeTurn(
         ...extra,
         agentId: d.agentId,
         dispatchState: 'done',
+        resultDispatchId: d.id,
         ...(tokens !== null ? { tokens } : {}),
       },
       from: ['waiting'],

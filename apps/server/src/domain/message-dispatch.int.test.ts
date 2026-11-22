@@ -1,4 +1,5 @@
 /** Needs Postgres: message markers, resumed runs, signed queue events and jobs must survive or roll back together. */
+import { AGENT_PROVIDERS } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { requestMore, sendMessage } from '../commands/messages';
@@ -127,6 +128,21 @@ describe('durable message dispatch', () => {
       'no more detail',
     );
     expect(await jobs(messageId)).toEqual([]);
+
+    // Simulate a More detail request queued before the source was marked by an upgrade.
+    const mark = (outsidersRun: boolean) =>
+      t.services.pipeline.transact(t.burrowId, ({ tx }) =>
+        tx.update(messages).set({ outsidersRun }).where(eq(messages.id, messageId)),
+      );
+    await mark(false);
+    await t.services.pipeline.commit(requestMore, { messageId }, options);
+    await mark(true);
+    for (let i = 0; i < 20 && (await jobs(messageId))[0]?.state === 'queued'; i++) {
+      const claim = await t.services.runtime.claimOne('rnr_old_more', AGENT_PROVIDERS);
+      expect(claim?.messageId).not.toBe(messageId);
+      if (claim) await t.services.runtime.finalize(claim.id, { outcome: 'done' });
+    }
+    expect(await jobs(messageId)).toMatchObject([{ trigger: 'expand', state: 'cancelled' }]);
   });
 
   it('commits the answer, cleared attention and resumed run job together', async () => {

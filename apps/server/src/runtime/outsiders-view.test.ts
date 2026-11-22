@@ -76,8 +76,12 @@ describe('what an outsiders’ turn reads of a message', () => {
 
   it('keeps an approval card’s answer and a step’s report as their own lines', () => {
     const approval = { kind: 'approval', approval: { state: 'approved', title: SECRET } } as never;
-    expect(outsidersMessage(message({ card: approval }), {}).text).toBe(OUTSIDERS_CARD_LINE.approved);
-    expect(outsidersMessage(message({ earlierCard: approval }), {}).text).toBe(OUTSIDERS_CARD_LINE.approved);
+    expect(outsidersMessage(message({ card: approval }), { own: true }).text).toBe(
+      OUTSIDERS_CARD_LINE.approved,
+    );
+    expect(outsidersMessage(message({ earlierCard: approval }), { own: true }).text).toBe(
+      OUTSIDERS_CARD_LINE.approved,
+    );
     expect(outsidersMessage(message(), { told: true }).text).toBe(OUTSIDERS_ACTIONS_LINE);
   });
 

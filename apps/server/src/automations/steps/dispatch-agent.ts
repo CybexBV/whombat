@@ -7,7 +7,7 @@ import {
   missingAttachmentsText,
   newId,
 } from '@whombat/core';
-import { and, asc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { automationDispatchRuntime } from '../../chats/runtime-rules';
 import type { ApplyContext } from '../../commit/types';
 import type { Db, Tx } from '../../db/client';
@@ -530,7 +530,7 @@ export async function dispatchResult(tx: Db, step: AutomationStepRow, agentId: s
       ? and(
           isNull(messages.dispatchId),
           eq(messages.outsidersRun, true),
-          gte(messages.createdAt, dispatch.claimedAt),
+          gt(messages.createdAt, dispatch.claimedAt),
         )
       : undefined;
   const root = prompt.threadRootId ?? prompt.id;

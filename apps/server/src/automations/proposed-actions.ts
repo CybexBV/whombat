@@ -263,7 +263,9 @@ function offeredAction(
         args = normaliseRequestArgs(args);
       } catch (err) {
         // This handle and tool were offered. Explain malformed input before looking up the connection.
-        throw forbidden(`${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`);
+        throw forbidden(
+          `${item.connection}: ${err instanceof ConnectionArgumentError ? err.message : 'invalid request arguments.'}`,
+        );
       }
     }
     return (

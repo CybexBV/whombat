@@ -64,6 +64,7 @@ import {
   OUTSIDERS_CARD_LINE,
   outsidersCardLine,
 } from '../runtime/outsiders-view';
+import { loadShareThread } from '../shares/snapshot';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
@@ -2073,6 +2074,13 @@ describe('mail-arrives automations', () => {
         }),
       );
       await w.fakeAgentReply(person.id, 'Private invoice 8830');
+      // An old migration could mark an unlinked reply posted after the outsider was queued, before it claimed.
+      const personalReply = (await w.runThread(run.id)).find((m) => m.text === 'Private invoice 8830');
+      expect(personalReply?.dispatchId).toBe(person.id);
+      await w.services.db
+        .update(messages)
+        .set({ outsidersRun: true, dispatchId: null })
+        .where(eq(messages.id, personalReply?.id ?? ''));
       expect(await loadMessageRow(w.services.db, cardId)).toMatchObject({
         dispatchId: person.id,
         outsidersRun: false,
@@ -2084,6 +2092,21 @@ describe('mail-arrives automations', () => {
 
       w.advance(1000);
       const own = await claimedTurn(outside.id);
+      expect(JSON.stringify(own.context)).not.toContain('Private invoice');
+      const viewed = await callTool(w.services, own.auth, 'read_conversation', place);
+      expect(viewed.isError).not.toBe(true);
+      expect(JSON.stringify(viewed.content)).not.toContain('Private invoice');
+      expect(JSON.stringify(viewed.content)).toContain('Check my invoice.');
+
+      const refusedCard = await callTool(w.services, own.auth, 'post_card', {
+        conversationId: place.conversationId,
+        threadRootId: place.threadRootId,
+        text: 'Go ahead',
+        card: { kind: 'pill', text: 'Do it', tone: 'ok' },
+      });
+      expect(refusedCard.isError).toBe(true);
+
+      w.advance(10);
       const { id: earlier } = await runInDispatchScope(dispatchScopeOf(own.row), () =>
         w.ok(IDS.dusty, sendMessage, { ...place, text: 'Legacy outside answer' }),
       );
@@ -2101,6 +2124,27 @@ describe('mail-arrives automations', () => {
       });
       expect(result?.messageIds).toHaveLength(2);
       expect(result?.messageIds).not.toContain(cardId);
+      const personal = await buildDispatchContext(w.services, {
+        ...person,
+        providerSessionId: 'hermes:before-boundary',
+      });
+      expect(personal.dispatch.providerSessionId).toBeNull();
+      expect(personal.session?.resumed).toBe(false);
+      expect(personal.thread?.replies.find((m) => m.text.includes('Outside final answer'))?.text).toContain(
+        '[[untrusted',
+      );
+      expect(personal.attachments).toEqual([]);
+
+      // A share of this thread can contain the person's words, but also needs a title of their own.
+      await w.services.db
+        .update(messages)
+        .set({ text: 'Outside root title' })
+        .where(eq(messages.id, place.threadRootId));
+      const snapshot = await loadShareThread(w.services.db, w.burrowId, IDS.mara, {
+        rootId: place.threadRootId,
+      });
+      expect(snapshot.title).toBe('Check my invoice.');
+      expect(snapshot.shown.map((m) => m.row.text)).not.toContain('Outside root title');
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId });
     }

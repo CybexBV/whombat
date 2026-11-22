@@ -611,6 +611,14 @@ export async function executeConnectionCall(
       });
       prepared = value.change;
       const output = value.output;
+      // A write's HTTP response confirms completion only in the 2xx range, including for typed adapters.
+      const status = output.httpStatus;
+      if (
+        status !== undefined &&
+        (status < 200 || status >= 300) &&
+        connectionCallAccess(entry, tool, call.args) !== 'read'
+      )
+        output.isError = true;
       // A tool that answered in its own words for a connection refused as changed (a TrueNAS that “didn’t answer”):
       // it changed, and nothing was signed as it.
       if (changed && output.isError) throw new ConnectionChangedError(changed);
