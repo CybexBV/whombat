@@ -150,14 +150,29 @@ describe('AdGuard Home declared settings', () => {
     const enabledRows = panels().flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
     expect(enabledRows.find((r) => r.id === 'safesearch')?.value).toBe('On');
     ag.store.safesearch.enabled = false;
-    expect(by('querylog_enabled')).toMatchObject({ value: 'On', on: true });
+    expect(by('querylog_enabled')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('querylog_enabled')?.toggle).toBeUndefined();
+    expect(by('querylog_enabled')?.on).toBeUndefined();
     expect(by('querylog_interval')).toMatchObject({
       value: '7 days',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
     });
     expect(by('querylog_interval')?.choose).toBeUndefined();
-    expect(by('anonymize_ip')).toMatchObject({ value: 'Off', on: false });
-    expect(by('stats_enabled')).toMatchObject({ value: 'On', on: true });
+    expect(by('anonymize_ip')).toMatchObject({
+      value: 'Off',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('anonymize_ip')?.toggle).toBeUndefined();
+    expect(by('anonymize_ip')?.on).toBeUndefined();
+    expect(by('stats_enabled')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
+    });
+    expect(by('stats_enabled')?.toggle).toBeUndefined();
+    expect(by('stats_enabled')?.on).toBeUndefined();
     expect(by('stats_interval')).toMatchObject({
       value: '24 hours',
       elsewhere: { label: 'In AdGuard Home', url: 'http://192.0.2.15:3000/#settings' },
@@ -169,57 +184,51 @@ describe('AdGuard Home declared settings', () => {
     });
 
     const look = panels('read').flatMap((p) => (p.kind === 'settings' ? p.rows : [])) as ThingSetting[];
-    expect(look.find((r) => r.id === 'querylog_enabled')?.toggle?.allowed).toBe(false);
-    expect(look.find((r) => r.id === 'querylog_enabled')?.toggle?.reason).toMatch(/Look only/);
     expect(look.find((r) => r.id === 'filter_update_interval')?.choose?.button.allowed).toBe(false);
+    expect(look.find((r) => r.id === 'filter_update_interval')?.choose?.button.reason).toMatch(/Look only/);
   });
 
-  it('writes settings, preserves sibling querylog fields, and reads back to verify', async () => {
+  it('writes block-list update interval preserving filtering.enabled and reads back to verify', async () => {
     reset();
-    const done = await act(ctx, { target: 'anonymize_ip', value: true });
-    expect(done.message).toContain('leaves device addresses out');
-    expect(done.message).toContain('Checked with AdGuard Home');
-    expect(done).toMatchObject({
-      changeKind: 'setting.anonymize_ip',
-      detail: 'Off',
-      undo: { target: 'anonymize_ip', value: false, expect: true },
-    });
-    const put = ag.store.calls.find(
-      (c) => c.method === 'PUT' && c.path === '/control/querylog/config/update',
-    );
-    expect(put?.body).toMatchObject({
-      enabled: true,
-      interval: 604_800_000,
-      anonymize_client_ip: true,
-      ignored: ['example.com'],
-    });
-
-    await act(ctx, { target: 'stats_enabled', value: false });
-    expect(ag.store.stats.enabled).toBe(false);
-
     // Changing the block list update schedule never flips filtering on when it is off.
     ag.store.filtering.enabled = false;
-    await act(ctx, { target: 'filter_update_interval', value: 12 });
+    const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
+    expect(done.message).toContain('every 12 hours');
+    expect(done.message).toContain('Checked with AdGuard Home');
+    expect(done).toMatchObject({
+      changeKind: 'setting.filter_update_interval',
+      detail: 'every day',
+      undo: { target: 'filter_update_interval', value: 24, expect: 12 },
+    });
     expect(ag.store.filtering).toEqual({ enabled: false, interval: 12 });
+    const post = ag.store.calls.find((c) => c.method === 'POST' && c.path === '/control/filtering/config');
+    expect(post?.body).toEqual({ enabled: false, interval: 12 });
   });
 
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
-    await expect(act(ctx, { target: 'dns_and_access', value: true })).rejects.toThrow();
-    await expect(act(ctx, { target: 'filtering_enabled', value: false })).rejects.toThrow();
-    await expect(act(ctx, { target: 'safebrowsing', value: false })).rejects.toThrow();
-    await expect(act(ctx, { target: 'parental', value: true })).rejects.toThrow();
-    await expect(act(ctx, { target: 'safesearch', value: true })).rejects.toThrow();
-    await expect(act(ctx, { target: 'querylog_interval', value: 2_592_000_000 })).rejects.toThrow();
-    await expect(act(ctx, { target: 'stats_interval', value: 604_800_000 })).rejects.toThrow();
-    await expect(act(ctx, { target: 'filter_update_interval', value: 999 })).rejects.toThrow();
-    await expect(act(ctx, { target: 'nope', value: true })).rejects.toThrow();
+    for (const [target, value] of [
+      ['dns_and_access', true],
+      ['filtering_enabled', false],
+      ['safebrowsing', false],
+      ['parental', true],
+      ['safesearch', true],
+      ['querylog_enabled', false],
+      ['querylog_interval', 2_592_000_000],
+      ['anonymize_ip', true],
+      ['stats_enabled', false],
+      ['stats_interval', 604_800_000],
+      ['filter_update_interval', 999],
+      ['nope', true],
+    ] as const) {
+      await expect(act(ctx, { target, value })).rejects.toThrow();
+    }
 
-    const same = await act(ctx, { target: 'querylog_enabled', value: true });
+    const same = await act(ctx, { target: 'filter_update_interval', value: 24 });
     expect(same.unchanged).toBe(true);
 
     ag.store.deaf = true;
-    await expect(act(ctx, { target: 'querylog_enabled', value: false })).rejects.toThrow(/didn’t take/);
+    await expect(act(ctx, { target: 'filter_update_interval', value: 12 })).rejects.toThrow(/didn’t take/);
 
     ag.store.deaf = false;
     const done = await act(ctx, { target: 'filter_update_interval', value: 12 });
@@ -243,11 +252,16 @@ describe('AdGuard Home declared settings', () => {
     expect(
       await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filter_update_interval', value: 5 }),
     ).toBeNull();
-    expect(
-      await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'filtering_enabled', value: false }),
-    ).toBeNull();
-    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'safebrowsing', value: false })).toBeNull();
-    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'parental', value: true })).toBeNull();
-    expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target: 'safesearch', value: true })).toBeNull();
+    for (const [target, value] of [
+      ['filtering_enabled', false],
+      ['safebrowsing', false],
+      ['parental', true],
+      ['safesearch', true],
+      ['querylog_enabled', false],
+      ['anonymize_ip', true],
+      ['stats_enabled', false],
+    ] as const) {
+      expect(await describeSetting(ADGUARD_SETTINGS, ctx, { target, value })).toBeNull();
+    }
   });
 });

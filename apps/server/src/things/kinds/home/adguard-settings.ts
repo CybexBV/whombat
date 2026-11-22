@@ -1,8 +1,9 @@
 /**
  * AdGuard Home's declared settings: read from `/control/filtering/status`, `/control/safebrowsing/status`,
  * `/control/parental/status`, `/control/safesearch/status`, `/control/querylog/config` and `/control/stats/config`.
- * DNS filtering switches (block lists, safe browsing, parental control), upstream DNS, encryption and access stay in
- * AdGuard Home so nothing here can block lookups or cut off access.
+ * DNS filtering switches (block lists, safe browsing, parental control), log and statistics collection switches,
+ * retention, upstream DNS, encryption and access stay in AdGuard Home so nothing here can block lookups, cut off
+ * access or stop keeping logs and statistics.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -190,16 +191,11 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'querylog_enabled',
     group: 'logs',
     label: 'Query log',
-    help: 'Record DNS lookups so you can see what was allowed or blocked.',
-    kind: 'switch',
+    help: 'Record DNS lookups so you can see what was allowed or blocked. Turning it off stops keeping lookup logs, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.querylog?.enabled,
-    write: (v, s) => ({
-      method: 'PUT',
-      path: '/control/querylog/config/update',
-      body: { ...(s.querylog?.raw ?? {}), enabled: asBool(v) === true },
-    }),
-    sentence: (v) =>
-      asBool(v) ? 'AdGuard Home is now recording DNS lookups.' : 'AdGuard Home’s query log is now off.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#settings`,
   },
   {
     id: 'querylog_interval',
@@ -214,33 +210,21 @@ export const ADGUARD_SETTING_SPECS: readonly SettingSpec<AdGuardSettingsState>[]
     id: 'anonymize_ip',
     group: 'logs',
     label: 'Anonymise device addresses',
-    help: 'Leave client IP addresses out of the query log.',
-    kind: 'switch',
+    help: 'Leave client IP addresses out of the query log. Turning it on stops keeping device addresses in new logs, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.querylog?.anonymizeIp,
-    write: (v, s) => ({
-      method: 'PUT',
-      path: '/control/querylog/config/update',
-      body: { ...(s.querylog?.raw ?? {}), anonymize_client_ip: asBool(v) === true },
-    }),
-    sentence: (v) =>
-      asBool(v)
-        ? 'AdGuard Home now leaves device addresses out of its query log.'
-        : 'AdGuard Home now shows device addresses in its query log.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#settings`,
   },
   {
     id: 'stats_enabled',
     group: 'logs',
     label: 'Statistics',
-    help: 'Keep counts of lookups, blocked domains and busiest devices.',
-    kind: 'switch',
+    help: 'Keep counts of lookups, blocked domains and busiest devices. Turning it off stops keeping statistics, so it stays in AdGuard Home.',
+    kind: 'elsewhere',
     read: (s) => s.stats?.enabled,
-    write: (v, s) => ({
-      method: 'PUT',
-      path: '/control/stats/config/update',
-      body: { ...(s.stats?.raw ?? {}), enabled: asBool(v) === true },
-    }),
-    sentence: (v) =>
-      asBool(v) ? 'Statistics are now on in AdGuard Home.' : 'Statistics are now off in AdGuard Home.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/#settings`,
   },
   {
     id: 'stats_interval',

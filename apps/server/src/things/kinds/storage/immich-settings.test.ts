@@ -99,7 +99,12 @@ describe('Immich declared settings', () => {
       elsewhere: { label: 'In Immich', url: 'http://192.0.2.30:2283/admin/system-settings' },
     });
     expect(by('trash_days')?.choose).toBeUndefined();
-    expect(by('db_backup_enabled')).toMatchObject({ value: 'On', on: true });
+    expect(by('db_backup_enabled')).toMatchObject({
+      value: 'On',
+      elsewhere: { label: 'In Immich', url: 'http://192.0.2.30:2283/admin/system-settings' },
+    });
+    expect(by('db_backup_enabled')?.toggle).toBeUndefined();
+    expect(by('db_backup_enabled')?.on).toBeUndefined();
     expect(by('db_backup_keep')).toMatchObject({
       value: '14 backups',
       elsewhere: { label: 'In Immich', url: 'http://192.0.2.30:2283/admin/system-settings' },
@@ -177,7 +182,11 @@ describe('Immich declared settings', () => {
     reset();
     await expect(act(ctx, { target: 'auth_and_users', value: true })).rejects.toThrow();
     await expect(act(ctx, { target: 'trash_days', value: 60 })).rejects.toThrow();
+    await expect(act(ctx, { target: 'db_backup_enabled', value: false })).rejects.toThrow();
     await expect(act(ctx, { target: 'db_backup_keep', value: 7 })).rejects.toThrow();
+    expect(
+      await describeSetting(IMMICH_SETTINGS, ctx, { target: 'db_backup_enabled', value: false }),
+    ).toBeNull();
     await expect(act(ctx, { target: 'video_resolution', value: '999' })).rejects.toThrow();
     expect((await act(ctx, { target: 'machine_learning', value: true })).unchanged).toBe(true);
 

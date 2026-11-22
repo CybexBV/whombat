@@ -1,7 +1,7 @@
 /**
  * Pi-hole v6's declared settings: read from `/api/config/dns`, `/api/config/database` and `/api/config/misc`, written
- * via `PATCH /api/config`. Never touches `/api/config/webserver`, upstream DNS, DNSSEC, or DHCP so nothing here can
- * break name lookups or cut off access.
+ * via `PATCH /api/config`. Never touches `/api/config/webserver`, upstream DNS, DNSSEC, DHCP or query-log/privacy
+ * recording so nothing here can break name lookups, cut off access or stop keeping lookup history.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -84,12 +84,12 @@ const BLOCKING_SHORT: Record<string, string> = {
   NODATA: 'NODATA',
 };
 
-const PRIVACY_LEVELS: SettingChoice[] = [
-  { value: 0, label: 'Show everything', note: 'domains and devices' },
-  { value: 1, label: 'Hide domains', note: 'counts and devices only' },
-  { value: 2, label: 'Hide domains and devices', note: 'counts only' },
-  { value: 3, label: 'Anonymous', note: 'no lookup history' },
-];
+const PRIVACY_WORDS: Record<string, string> = {
+  '0': 'Show everything',
+  '1': 'Hide domains',
+  '2': 'Hide domains and devices',
+  '3': 'Anonymous',
+};
 
 function daysWords(v: SettingValue): string {
   const d = Number(v);
@@ -133,26 +133,19 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     id: 'query_logging',
     group: 'logs',
     label: 'Query log',
-    help: 'Record DNS lookups so you can see what was allowed or blocked.',
-    kind: 'switch',
+    help: 'Record DNS lookups so you can see what was allowed or blocked. Turning it off stops keeping lookup logs, so it stays in Pi-hole.',
+    kind: 'elsewhere',
     read: (s) => s.queryLogging ?? undefined,
-    write: (v) => patchConfig({ dns: { queryLogging: asBool(v) === true } }),
-    sentence: (v) =>
-      asBool(v) ? 'Pi-hole is now recording DNS lookups.' : 'Pi-hole’s query log is now off.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
   },
   {
     id: 'privacy_level',
     group: 'logs',
     label: 'Privacy level',
-    help: 'How much detail Pi-hole keeps about lookups and devices.',
-    kind: 'choice',
+    help: 'How much detail Pi-hole keeps about lookups and devices. Raising it stops keeping domains, devices or lookup history, so it stays in Pi-hole.',
+    kind: 'elsewhere',
     read: (s) => s.privacyLevel ?? undefined,
-    choices: (s) => withCurrent(PRIVACY_LEVELS, s.privacyLevel ?? undefined, (v) => `Level ${String(v)}`),
-    write: (v) => patchConfig({ misc: { privacylevel: Number(v) } }),
-    sentence: (v) => {
-      const label = PRIVACY_LEVELS.find((c) => c.value === Number(v))?.label ?? `level ${String(v)}`;
-      return `Pi-hole’s privacy level is now set to ${label.toLowerCase()}.`;
-    },
+    words: (v) => PRIVACY_WORDS[String(v)] ?? `Level ${String(v)}`,
   },
   {
     id: 'max_db_days',

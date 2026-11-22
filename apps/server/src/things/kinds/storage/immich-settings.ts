@@ -223,14 +223,11 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     id: 'db_backup_enabled',
     group: 'safety',
     label: 'Automatic database backups',
-    help: 'Save a regular backup of Immich’s database.',
-    kind: 'switch',
+    help: 'Save a regular backup of Immich’s database. Turning it off stops keeping backups, and running it prunes older ones, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => boolAt(s, ['backup', 'database', 'enabled']),
-    write: (v, s) => putAt(s, ['backup', 'database', 'enabled'], asBool(v) === true),
-    sentence: (v) =>
-      asBool(v)
-        ? 'Automatic database backups are now on in Immich.'
-        : 'Automatic database backups are now off in Immich.',
+    words: (v) => (asBool(v) ? 'On' : 'Off'),
+    elsewhere: (base) => `${base}/admin/system-settings`,
   },
   {
     id: 'db_backup_keep',
