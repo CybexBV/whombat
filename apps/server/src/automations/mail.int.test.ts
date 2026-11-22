@@ -20,6 +20,7 @@ import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import Fastify from 'fastify';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
+import { postCard } from '../commands/agent-tools';
 import { decideApproval } from '../commands/approvals';
 import { reactToMessage, sendMessage } from '../commands/messages';
 import { loadBurrowRow } from '../commit/pipeline';
@@ -52,11 +53,16 @@ import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
 import { callTool, mcpToolList } from '../mcp/server';
-import { loadMessageRow, loadMessages } from '../read/messages';
+import { loadMessage, loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
 import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
-import { forOutsiders, OUTSIDERS_ACTIONS_LINE, OUTSIDERS_CARD_LINE } from '../runtime/outsiders-view';
+import {
+  forOutsiders,
+  OUTSIDERS_ACTIONS_LINE,
+  OUTSIDERS_CARD_LINE,
+  outsidersCardLine,
+} from '../runtime/outsiders-view';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
@@ -2220,8 +2226,19 @@ describe('mail-arrives automations', () => {
       expect(note?.text).toContain('Filed 3:');
       expect(leaks(note?.text ?? '')).toEqual([]);
 
+      // The person asks their own agent about it in the thread, and its card names what it found: a later outsiders'
+      // turn reads that card only as a line that says what kind of card it was.
+      const runRoot = (await loadRunRow(w.services.db, run.id)).threadRootId as string;
+      const { messageId: pillId } = await w.ok(IDS.dusty, postCard, {
+        conversationId: maraChat.dmId,
+        threadRootId: runRoot,
+        text: 'Here is what Mara Office Archive holds.',
+        card: { kind: 'pill', text: 'Office Receipts · Acme Holding Private BV', tone: 'ok' },
+      });
+
       const after = await claimedTurn(done.steps[3]?.dispatchId as string);
       expect(after.context.outside).toBe(true);
+      expect(shownIn(after.context).find((m) => m.id === pillId)?.text).toBe(outsidersCardLine('pill'));
       expect(after.context.trigger?.text).toContain('Ran=true count=3 state=succeeded');
       const shown = shownIn(after.context);
       expect(leaks(JSON.stringify(shown))).toEqual([]);
@@ -2233,6 +2250,13 @@ describe('mail-arrives automations', () => {
       const read = await readThread(after.auth);
       expect(leaks(read)).toEqual([]);
       expect(read).toContain(OUTSIDERS_ACTIONS_LINE);
+      expect(read).toContain(outsidersCardLine('pill'));
+      // The person still sees their agent's card whole.
+      const personPill = await loadMessage(w.services.db, pillId, IDS.mara);
+      expect(personPill?.card).toMatchObject({
+        kind: 'pill',
+        text: 'Office Receipts · Acme Holding Private BV',
+      });
     } finally {
       await home.close();
       await office.close();
