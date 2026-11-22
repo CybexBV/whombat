@@ -80,6 +80,20 @@ export const entry = {
       reason: 'Restarts a device; restarting the gateway takes the whole network down',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/v1/sites/[^/]+/(networks|wans|dns/policies|vpn)(/|$)',
+      reason: 'Changes a network, the internet connection, DNS or VPN',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST'],
+      path: '^/v1/sites/[^/]+/devices/[^/]+/interfaces/ports/[^/]+/actions/?$',
+      reason: 'Restarts a port: what is plugged into it goes off for a moment',
+    },
+  ],
   docsUrl: 'https://developer.ui.com/network',
   tokenUrl: null,
   handle: 'unifi',

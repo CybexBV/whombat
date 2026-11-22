@@ -122,6 +122,14 @@ export const entry = {
       reason: 'Empties the query log or the network table',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['PUT', 'PATCH', 'POST'],
+      path: '^/api/config(/|$)',
+      reason: 'Changes Pi-hole’s settings, such as its DNS servers or DHCP',
+    },
+  ],
   docsUrl: 'https://docs.pi-hole.net/api/',
   tokenUrl: '{url}/admin/settings/api',
   handle: 'pihole',

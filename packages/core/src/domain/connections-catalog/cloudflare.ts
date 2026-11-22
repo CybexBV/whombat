@@ -125,6 +125,20 @@ export const entry = {
       reason: 'Creates a tunnel or changes what it exposes',
     },
   ],
+  cutsOff: [
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/client/v4/zones/[^/]+/(dns_records|dnssec)(/|$)',
+      reason: 'Changes your domain’s DNS, which decides where its websites and mail go',
+    },
+    {
+      tools: [REQUEST_TOOL_NAME],
+      methods: ['POST', 'PUT', 'PATCH'],
+      path: '^/client/v4/zones/[^/]+/settings(/|$)',
+      reason: 'Changes how Cloudflare serves your domain',
+    },
+  ],
   docsUrl: 'https://developers.cloudflare.com/api/',
   tokenUrl: 'https://dash.cloudflare.com/?to=/:account/api-tokens',
   handle: 'cloudflare',

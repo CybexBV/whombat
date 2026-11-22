@@ -35,6 +35,7 @@ import {
   connectionPromptLine,
   connectionTransport,
   cookieHeaderValue,
+  cutsOffReason,
   defaultConnectionLabel,
   defaultToolTier,
   deletesByName,
@@ -491,6 +492,56 @@ describe('sensitive calls (CX-31)', () => {
     expect(toolAlwaysAsks(entry('dropbox'), 'files_delete')).toBe(true);
     expect(toolAlwaysAsks(entry('dropbox'), 'files_list')).toBe(false);
     expect(toolAlwaysAsks(ha, 'HassTurnOn')).toBe(false);
+  });
+});
+describe('changes that can cut the person off', () => {
+  const call = (id: string, method: string, path: string, body?: unknown) =>
+    cutsOffReason(entry(id), 'request', { method, path, ...(body !== undefined ? { body } : {}) });
+
+  it('names DNS, DHCP, firewall and network changes, which outsiders’ runs can’t propose', () => {
+    expect(
+      call('pihole', 'PATCH', '/api/config', { config: { dns: { upstreams: ['203.0.113.9'] } } }),
+    ).toContain('DNS');
+    expect(call('pihole', 'PUT', '/api/config/dns/hosts/203.0.113.9%20bank.example.com')).toContain('DNS');
+    expect(call('adguard', 'POST', '/control/dns_config', { upstream_dns: ['203.0.113.9'] })).toContain(
+      'DNS',
+    );
+    expect(
+      call('adguard', 'POST', '/control/rewrite/add', { domain: 'a.example.com', answer: '203.0.113.9' }),
+    ).toBeTruthy();
+    expect(call('adguard', 'POST', '/control/filtering/set_rules', { rules: [] })).toBeTruthy();
+    expect(call('tailscale', 'POST', '/api/v2/tailnet/-/dns/nameservers', { dns: [] })).toContain('DNS');
+    expect(call('tailscale', 'POST', '/api/v2/device/n1/expire')).toBeTruthy();
+    expect(call('opnsense', 'POST', '/api/unbound/settings/add_host_override', {})).toContain('DNS');
+    expect(call('opnsense', 'POST', '/api/core/service/stop/unbound', {})).toBeTruthy();
+    expect(call('unifi_network', 'PATCH', '/v1/sites/s1/networks/n1', {})).toBeTruthy();
+    expect(call('cloudflare', 'POST', '/client/v4/zones/z1/dns_records', { type: 'A' })).toContain('DNS');
+    expect(call('hetzner', 'POST', '/v1/firewalls/1/actions/apply_to_resources', {})).toBeTruthy();
+    expect(call('nginx_proxy_manager', 'PUT', '/api/nginx/proxy-hosts/3', {})).toBeTruthy();
+  });
+
+  it('leaves ordinary changes alone, and the person’s own calls don’t ask for them', () => {
+    expect(
+      call('adguard', 'POST', '/control/filtering/add_url', { name: 'x', url: 'https://example.com/l.txt' }),
+    ).toBeNull();
+    expect(call('pihole', 'POST', '/api/domains/deny/exact', { domain: 'ads.example.com' })).toBeNull();
+    expect(call('opnsense', 'POST', '/api/unbound/settings/search_host_override', {})).toBeNull();
+    expect(call('cloudflare', 'GET', '/client/v4/zones/z1/dns_records')).toBeNull();
+    // The rules only ever keep an outsiders' run out: they don't make the person's own call ask.
+    expect(
+      isSensitiveCall(entry('tailscale'), 'request', {
+        method: 'POST',
+        path: '/api/v2/tailnet/-/dns/nameservers',
+      }),
+    ).toBe(false);
+    expect(
+      isSensitiveCall(entry('cloudflare'), 'request', {
+        method: 'POST',
+        path: '/client/v4/zones/z1/dns_records',
+      }),
+    ).toBe(false);
+    // Every entry has them, if only as none.
+    for (const e of CATALOG) expect(Array.isArray(e.cutsOff)).toBe(true);
   });
 });
 
