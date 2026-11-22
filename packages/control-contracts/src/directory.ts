@@ -42,14 +42,27 @@ export const DirectoryDevice = z.object({
 export type DirectoryDevice = z.infer<typeof DirectoryDevice>;
 
 /**
- * The version of the Whombat Appliance Terms a claimer accepts in `claims.start` (LC-17, LC-18). Control accepts only
- * this version; changing the terms means a new id, and so a contracts release. The text is the hosted app's
+ * The version of the Whombat Appliance Terms a claimer accepts in `claims.start` (LC-17, LC-18): the one an app shows
+ * and sends. Changing the terms means a new id, and so a contracts release; control also accepts the versions in
+ * `APPLIANCE_TERMS_ACCEPTED`, so an app that hasn't updated yet keeps working. The text is the hosted app's
  * `/legal/appliance-terms`. `2026-11-19`: for people and businesses; the Whombat software is open source (AGPL-3.0,
  * Cybex BV) and works fully without Whombat Link, which adds the address, push and the apps away from home; updates
  * come from Production or Beta, and Ask before updating holds them. `2026-11-22` adds the seller's details, Claude Code
  * downloaded from Anthropic, only the keys a self-installed Whombat has, and the Dutch voice's use restrictions.
  */
 export const APPLIANCE_TERMS_VERSION = '2026-11-22';
+
+/**
+ * Every Appliance Terms version control accepts, the current one first. A new version keeps the one before it here, so
+ * control can go out first and the apps follow at their own pace: an app that still shows the earlier text sends that
+ * version, and control records the version the person accepted. An older version leaves the list once the apps that
+ * send it are gone.
+ */
+export const APPLIANCE_TERMS_ACCEPTED: readonly string[] = [APPLIANCE_TERMS_VERSION, '2026-11-19'];
+
+/** Does control take this Appliance Terms version at a claim or a Whombat link code? */
+export const applianceTermsAccepted = (version: string): boolean =>
+  APPLIANCE_TERMS_ACCEPTED.includes(version);
 
 /** A terms version id: the date, optionally followed by a qualifier (`2026-09-26-draft`). */
 export const TermsVersion = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[a-z0-9]{1,16})?$/);
