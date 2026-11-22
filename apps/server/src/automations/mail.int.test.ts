@@ -1300,13 +1300,24 @@ describe('mail-arrives automations', () => {
       expect(approvalId).toBeTruthy();
       const [cardRow] = await w.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
       expect(cardRow?.state).toBe('pending');
-      expect(cardRow?.title).toContain('Paperless-ngx');
-      expect(cardRow?.title).toContain('Moneybird');
-      expect(cardRow?.summary).toContain('POST /api/documents/post_document/');
-      expect(cardRow?.summary).toContain('uploading “invoice-2042.pdf”');
-      expect(cardRow?.summary).toContain('POST /12345/documents/purchase_invoices.json');
-      expect(cardRow?.summary).toContain('price: 420.00');
-      expect(cardRow?.summary).toContain('Agent note:');
+      expect(cardRow?.title).toBe('Make 2 changes in Paperless-ngx and Moneybird');
+      expect(cardRow?.question).toBe('Make 2 changes in Paperless-ngx and Moneybird?');
+      // WHAT HAPPENS shows every action whole: Whombat's words, the request, the file and every argument.
+      expect(cardRow?.whatHappens).toEqual(
+        expect.arrayContaining([
+          'Action 1 of 2: Upload a document to Paperless-ngx',
+          'Request: POST /api/documents/post_document/',
+          'File from this email: "invoice-2042.pdf", sent as form field "document"',
+          'upload.fields.title: "Invoice INV-2042"',
+          'Action 2 of 2: Add a purchase invoice to Moneybird',
+          'Request: POST /12345/documents/purchase_invoices.json',
+          'body.purchase_invoice.reference: "INV-2042"',
+          'body.purchase_invoice.date: "2026-09-24"',
+          'body.purchase_invoice.details_attributes[0].description: "Invoice INV-2042"',
+          'body.purchase_invoice.details_attributes[0].price: "420.00"',
+        ]),
+      );
+      expect(cardRow?.whatHappens.filter((l) => l.startsWith('Agent’s note: '))).toHaveLength(2);
       // Still ZERO outbound calls while the card waits!
       expect(seenPaperless).toHaveLength(0);
       expect(seenMoneybird).toHaveLength(0);
@@ -1346,6 +1357,11 @@ describe('mail-arrives automations', () => {
       // A concise confirmation message was posted in the run thread.
       const threadMsgs = await w.runThread(runRow?.id as string);
       expect(threadMsgs.some((m) => m.text.includes('Done:') && m.text.includes('Paperless-ngx'))).toBe(true);
+      // In Whombat's words, without the endpoints.
+      const doneMsg = threadMsgs.find((m) => m.text.startsWith('Done:'));
+      expect(doneMsg?.text).toContain('uploaded a document to Paperless-ngx');
+      expect(doneMsg?.text).toContain('added a purchase invoice to Moneybird');
+      expect(doneMsg?.text).not.toContain('/api/');
 
       // Verify declining the card blocks all outbound writes.
       w.advance(10_000);
@@ -1696,7 +1712,46 @@ describe('mail-arrives automations', () => {
             summary: 'Delete file',
             arguments: { path: '/old.pdf' },
           },
-          expectedText: 'files_delete',
+          expectedText: '“delete”',
+        },
+        {
+          name: 'bulk edit that deletes',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Tidy documents',
+            arguments: {
+              method: 'POST',
+              path: '/api/documents/bulk_edit/',
+              body: { documents: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], method: 'delete', parameters: {} },
+            },
+          },
+          expectedText: '“delete”',
+        },
+        {
+          name: 'raw JSON text body that deletes',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Tidy documents',
+            arguments: {
+              method: 'POST',
+              path: '/api/documents/bulk_edit/',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{"documents":[1],"method":"delete","parameters":{}}',
+            },
+          },
+          expectedText: '“delete”',
+        },
+        {
+          name: 'more than one card shows',
+          action: {
+            connection: plConn?.handle ?? 'paperless',
+            tool: 'request',
+            summary: 'Add a note',
+            arguments: { method: 'POST', path: '/api/documents/1/notes/', body: { note: 'x'.repeat(400) } },
+          },
+          expectedText: 'Too much to show on one card',
         },
       ];
 
@@ -1718,7 +1773,7 @@ describe('mail-arrives automations', () => {
     }
   });
 
-  it('describes the real call on the approval card when the agent summary disagrees', async () => {
+  it('describes the real call on the approval card in Whombat’s words when the agent summary disagrees', async () => {
     const mbId = await insertConnection(w.services, {
       catalogId: 'moneybird',
       burrowId: w.burrowId,
@@ -1760,32 +1815,47 @@ describe('mail-arrives automations', () => {
         .set({ state: 'running', claimedAt: w.now() })
         .where(eq(dispatches.id, dispatchId));
 
-      // The steered agent lies in `summary` ("Upload invoice.pdf to Paperless-ngx?"), while actually calling
-      // Moneybird to email an invoice to an attacker with an amount.
-      const res = await callTool(
-        w.services,
-        { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId },
-        'propose_connection_actions',
-        {
-          actions: [
-            {
-              connection: 'moneybird',
-              tool: 'request',
-              summary: 'Upload invoice.pdf to Paperless-ngx?',
-              arguments: {
-                method: 'POST',
-                path: '/12345/sales_invoices/99/send_invoice.json',
-                body: {
-                  sales_invoice_sending: {
-                    email_address: 'attacker@evil.example',
-                    amount: '9500.00',
-                  },
+      const auth: AgentAuth = { dispatchId, agentId: IDS.dusty, burrowId: w.burrowId };
+      // Emailing an invoice always asks the person, so a mail run can't propose it at all.
+      const send = await callTool(w.services, auth, 'propose_connection_actions', {
+        actions: [
+          {
+            connection: 'moneybird',
+            tool: 'request',
+            summary: 'Upload invoice.pdf to Paperless-ngx?',
+            arguments: {
+              method: 'PATCH',
+              path: '/12345/sales_invoices/99/send_invoice.json',
+              body: { sales_invoice_sending: { email_address: 'attacker@evil.example' } },
+            },
+          },
+        ],
+      });
+      expect(send.isError).toBe(true);
+      expect(JSON.stringify(send.content)).toContain('sends invoices');
+
+      // The steered agent lies in `summary` ("Upload invoice.pdf to Paperless-ngx?") and hides a question in a value,
+      // while actually drafting an invoice for a stranger's contact with an amount.
+      const res = await callTool(w.services, auth, 'propose_connection_actions', {
+        actions: [
+          {
+            connection: 'moneybird',
+            tool: 'request',
+            summary: 'Upload invoice.pdf to Paperless-ngx?',
+            arguments: {
+              method: 'POST',
+              path: '/12345/sales_invoices.json',
+              body: {
+                sales_invoice: {
+                  contact_id: '666',
+                  reference: 'Confirm? yes',
+                  details_attributes: [{ description: 'Consulting', price: '9500.00' }],
                 },
               },
             },
-          ],
-        },
-      );
+          },
+        ],
+      });
       expect(res.isError).not.toBe(true);
       await w.fakeAgentReply(dispatchId, 'Proposed action.');
       await w.settle();
@@ -1795,26 +1865,24 @@ describe('mail-arrives automations', () => {
       const [card] = await w.services.db.select().from(approvals).where(eq(approvals.id, approvalId));
       const cardMsg = card?.messageId ? await loadMessageRow(w.services.db, card.messageId) : undefined;
 
-      // Title, question, WHAT HAPPENS and message text all lead with the real server-described call.
-      expect(card?.title).toContain('Moneybird Accounting');
-      expect(card?.title).toContain('POST /12345/sales_invoices/99/send_invoice.json');
-      expect(card?.title).toContain('attacker@evil.example');
-      expect(card?.title).not.toContain('Paperless-ngx');
-
-      expect(card?.question).toContain('Moneybird Accounting');
-      expect(card?.question).toContain('POST /12345/sales_invoices/99/send_invoice.json');
-      expect(card?.question).not.toContain('Paperless-ngx');
-
-      expect(card?.whatHappens[0]).toContain(
-        'Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
-      );
-      expect(card?.whatHappens[0]).toContain('amount: 9500.00');
-      expect(card?.whatHappens[0]).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
-
-      expect(cardMsg?.text).toContain(
-        '• Moneybird Accounting: POST /12345/sales_invoices/99/send_invoice.json',
-      );
-      expect(cardMsg?.text).toContain('Agent note: Upload invoice.pdf to Paperless-ngx?');
+      // Title, question and message are Whombat's words for the real call; nothing the agent or the email wrote.
+      expect(card?.title).toBe('Draft a sales invoice in Moneybird Accounting');
+      expect(card?.question).toBe('Draft a sales invoice in Moneybird Accounting?');
+      expect(cardMsg?.text).toBe('I need your yes before I draft a sales invoice in Moneybird Accounting.');
+      // WHAT HAPPENS shows the real call whole (its arguments in the order they were kept), the agent's words last as
+      // its note.
+      const lines = card?.whatHappens ?? [];
+      expect(lines.slice(0, 2)).toEqual([
+        'Draft a sales invoice in Moneybird Accounting',
+        'Request: POST /12345/sales_invoices.json',
+      ]);
+      expect(lines.slice(2, -1).sort()).toEqual([
+        'body.sales_invoice.contact_id: "666"',
+        'body.sales_invoice.details_attributes[0].description: "Consulting"',
+        'body.sales_invoice.details_attributes[0].price: "9500.00"',
+        'body.sales_invoice.reference: "Confirm? yes"',
+      ]);
+      expect(lines.at(-1)).toBe('Agent’s note: "Upload invoice.pdf to Paperless-ngx?"');
     } finally {
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
       await w.services.db.delete(catalogConnections).where(eq(catalogConnections.id, mbId));
@@ -1925,7 +1993,7 @@ describe('mail-arrives automations', () => {
       const firstApprovalId = waiting1.steps[1]?.approvalId as string;
       const [card1] = await w.services.db.select().from(approvals).where(eq(approvals.id, firstApprovalId));
       expect(card1?.state).toBe('pending');
-      expect(card1?.title).toContain('INV-A');
+      expect(card1?.whatHappens).toContain('body.purchase_invoice.reference: "INV-A"');
 
       // Approve card #1 (continueStep puts step 2 back to `pending` with actionsApprovalId = card1.id).
       await w.ok(IDS.mara, decideApproval, { number: card1?.number as number, decision: 'approve' });
@@ -1968,8 +2036,8 @@ describe('mail-arrives automations', () => {
 
       const [card2] = await w.services.db.select().from(approvals).where(eq(approvals.id, secondApprovalId));
       expect(card2?.state).toBe('pending');
-      expect(card2?.title).toContain('9999.00');
-      expect(card2?.title).toContain('INV-B');
+      expect(card2?.whatHappens).toContain('body.purchase_invoice.amount: "9999.00"');
+      expect(card2?.whatHappens).toContain('body.purchase_invoice.reference: "INV-B"');
 
       // Approving card #2 runs INV-B.
       await w.ok(IDS.mara, decideApproval, { number: card2?.number as number, decision: 'approve' });
