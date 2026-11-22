@@ -72,6 +72,9 @@ export const REMOTE_HELP_POLL_MS = 10_000;
 export const REMOTE_HELP_TEXT = {
   /** The owner has a passkey, and this device can't use passkeys at all. */
   passkeyHere: 'This device can’t use your passkey. Turn remote help on from a device that can.',
+  /** The owner has a passkey, and this page (the box's own address) can't run its ceremony. */
+  passkeyPage:
+    'Your passkey doesn’t work on this page. Turn remote help on in the Whombat app or at app.whombat.com.',
   /** A visit with more steps than are shown (`truncated`): the oldest are left out. */
   earlier: 'Earlier steps aren’t shown.',
   /** A transcript that didn't load. */
@@ -261,6 +264,7 @@ export function remoteHelpErrorText(error: unknown): string | null {
     const reason = operationReason(error);
     // An owner with a passkey who sent none: the same words as one that didn't verify.
     if (reason === 'passkey_required') return W.refusals.passkey_failed;
+    if (reason === 'passkeys_unavailable_here') return REMOTE_HELP_TEXT.passkeyPage;
     return remoteHelpRefusalText(reason) ?? REMOTE_HELP_TEXT.failed;
   }
   if (error instanceof NeedsNewerAppError) return REMOTE_HELP_TEXT.loadError;

@@ -62,7 +62,7 @@ import type { SessionScope } from './claim';
 import type { DiagnosticsService } from './diagnostics';
 import { DIRECT_SESSION_HANDLERS } from './direct/ops';
 import type { TailscaleService } from './direct/tailscale';
-import { PAGE_PASSKEY_OPS, PASSKEYS_UNAVAILABLE_HERE, passkeysUnavailable } from './direct/transport';
+import { PAGE_PASSKEY_OPS, passkeysWorkHere } from './direct/transport';
 import { DISPLAY_SESSION_HANDLERS } from './display';
 import { applianceHermes } from './hermes-version';
 import {
@@ -94,7 +94,7 @@ import { LOCAL_SESSION_HANDLERS } from './local-ops';
 import type { ManagedExplanation } from './ops';
 import { OWN_ADDRESS_SESSION_HANDLERS } from './own-address/ops';
 import type { OwnAddressService } from './own-address/state';
-import { COMMUNITY_TEXT, feedbackIntakeGuard, managedPolicy, managedRefusal } from './policy';
+import { feedbackIntakeGuard, managedPolicy, managedRefusal, passkeysUnavailableHere } from './policy';
 import type { ManagerPort } from './ports';
 import { RunnerBridgeError } from './providers/bridge';
 import { PROVIDER_SESSION_HANDLERS } from './providers/handlers';
@@ -992,19 +992,8 @@ export class SessionDispatcher {
     if (!handler) throw new ApiError('not_implemented', `${spec.op} isn’t available on this appliance yet.`);
     // A page the box serves can't run a passkey ceremony (direct-connection.md DC-11): say so rather than fail later.
     // A community box's passkeys work only on its Tailscale page while that has HTTPS (HE-S230).
-    const relyingParty = PAGE_PASSKEY_OPS.has(spec.op) ? this.trust.relyingParty() : null;
-    if (
-      PAGE_PASSKEY_OPS.has(spec.op) &&
-      (!relyingParty || passkeysUnavailable(session?.transport, relyingParty.origins))
-    )
-      throw new ApiError(
-        'forbidden',
-        // A community box has no Whombat on the web: its Tailscale page is the one place (HE-S219, HE-S224).
-        this.trust.community
-          ? COMMUNITY_TEXT.passkeys
-          : 'Passkeys don’t work on this page. Use the Whombat app, or Whombat on the web, for this.',
-        { details: { code: PASSKEYS_UNAVAILABLE_HERE } },
-      );
+    if (PAGE_PASSKEY_OPS.has(spec.op) && !passkeysWorkHere(session?.transport, this.trust.relyingParty()))
+      throw passkeysUnavailableHere(this.trust.community);
     return handler(
       {
         principal,

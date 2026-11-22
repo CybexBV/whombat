@@ -64,9 +64,10 @@ import { ApiError, notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { appendApplianceEvent } from './audit';
 import type { SessionScope } from './claim';
+import { passkeysWorkHere } from './direct/transport';
 import { FakeSupport } from './fake-support';
 import type { PasskeyService } from './passkeys';
-import { COMMUNITY_TEXT } from './policy';
+import { COMMUNITY_TEXT, passkeysUnavailableHere } from './policy';
 import type { ControlPush } from './push';
 import {
   SupportCallError,
@@ -78,7 +79,7 @@ import {
 import { cleanTranscriptStream } from './remote-help-transcript';
 import { remoteHelpVisitNotice, SECURITY_NOTICES, type SecurityNotice } from './security-push';
 import { SessionOpError } from './session-error';
-import { requireEnrolled, type SessionPrincipal } from './trust';
+import { requireEnrolled, type SessionPrincipal, type TrustService } from './trust';
 
 type ConfirmBeginInput = z.infer<typeof RemoteHelpConfirmBeginInput>;
 type StartInput = z.infer<typeof RemoteHelpStartInput>;
@@ -699,12 +700,17 @@ export class RemoteHelpService {
     principal: SessionPrincipal,
     session: SessionScope | null,
     input: ConfirmBeginInput,
+    /** The refusal when this session can't run a passkey ceremony (a page of the box's own name); null when it can. */
+    noPasskeysHere: ApiError | null = null,
   ): Promise<RemoteHelpConfirmBeginOutput> {
     const { account, endpoint } = requireEnrolled(principal);
     if (!session) throw new ApiError('bad_request', 'Turn on remote help over a session.');
     session.remoteHelpBegin = null;
     const passkeys = this.options.passkeys;
     if (!passkeys || !(await passkeys.hasPasskey(account.id))) return { nonce: null, options: null };
+    // Someone with a passkey confirms with it, which this page can't do: they turn it on in the app instead. Someone
+    // without one confirms in the dialog, which works on any page (direct-connection.md DC-22).
+    if (noPasskeysHere) throw noPasskeysHere;
     const nonce = randomBytes(32).toString('hex');
     const challenge = passkeyRemoteHelpChallengeBase64url({
       nonce,
@@ -892,6 +898,14 @@ interface RemoteHelpOpContext {
    * grace; it says so, not “yet” (HE-S224). Absent: a runtime without Link (tests of remote help alone).
    */
   link?: { state: string } | undefined;
+  /** Whether a passkey ceremony can run in this session (its relying party). Absent: tests of remote help alone. */
+  trust?: Pick<TrustService, 'relyingParty' | 'community'>;
+}
+
+/** The refusal for someone with a passkey on a page that can't run its ceremony; null where passkeys work. */
+function noPasskeysHere(c: RemoteHelpOpContext): ApiError | null {
+  if (!c.trust || passkeysWorkHere(c.session?.transport, c.trust.relyingParty())) return null;
+  return passkeysUnavailableHere(c.trust.community);
 }
 
 /** Whether remote help's switches show: Link on or in grace (LNK-07). Stopping and the visits always work. */
@@ -920,7 +934,7 @@ export const REMOTE_HELP_SESSION_HANDLERS: Readonly<Record<string, RemoteHelpHan
     return remoteHelpOffered(c) ? state : { ...state, available: false, foreverAllowed: false };
   },
   'remoteHelp.confirmBegin': async (c, i: ConfirmBeginInput) =>
-    serviceOf(c).confirmBegin(c.principal, c.session, i),
+    serviceOf(c).confirmBegin(c.principal, c.session, i, noPasskeysHere(c)),
   'remoteHelp.start': async (c, i: StartInput) => serviceOf(c).start(c.principal, c.session, i),
   'remoteHelp.stop': async (c) => {
     requireEnrolled(c.principal);

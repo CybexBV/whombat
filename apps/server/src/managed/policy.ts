@@ -6,6 +6,7 @@
 import { FEEDBACK_DROP_TEXT } from '@whombat/core';
 import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
+import { PASSKEYS_UNAVAILABLE_HERE } from './direct/transport';
 import { registeredAtControl } from './link/origin';
 import { linkOf } from './link/service';
 import { MANAGED_EXPLANATIONS, type ManagedExplanation, type PolicyItem } from './ops';
@@ -40,6 +41,20 @@ export const COMMUNITY_TEXT = {
   remoteHelp: 'Remote help from Whombat support needs Whombat Link.',
   passkeys: 'Passkeys work only when you open this Whombat through Tailscale.',
 } as const;
+
+/**
+ * A passkey ceremony this session can't run (direct-connection.md DC-11): a page of the box's own name, or a community
+ * box without its Tailscale page. A community box has no Whombat on the web, so it names the one place that works.
+ */
+export function passkeysUnavailableHere(community: boolean): ApiError {
+  return new ApiError(
+    'forbidden',
+    community
+      ? COMMUNITY_TEXT.passkeys
+      : 'Passkeys don’t work on this page. Use the Whombat app, or Whombat on the web, for this.',
+    { details: { code: PASSKEYS_UNAVAILABLE_HERE } },
+  );
+}
 
 /** Website feedback without Whombat Link (HE-S203, LNK-05): its drop is control's. */
 export const COMMUNITY_FEEDBACK_TEXT = COMMUNITY_TEXT.feedbackIntake;
