@@ -102,14 +102,22 @@ export const WHOMBAT_LINK_TEXT = {
   doneNext: 'It gets its own address in a moment. Its screen then shows where to open it.',
   doneNeedsPlan: 'It turns on once you subscribe to Whombat Link.',
   /**
-   * After linking, the page waits for the Whombat's own address, then opens its page (`pollLinkAddress`): the person
-   * types only the letters its screen shows there.
+   * After linking, the page waits for the Whombat's own address, then opens its page by itself (`pollLinkAddress`):
+   * the person types only the letters its screen shows there. While it waits, what it is doing now, step by step.
    */
-  addressWaiting: 'Getting your Whombat’s web address… this usually takes a minute or two.',
-  addressReady: 'Its web address is ready. Claim it there with the letters on its screen.',
+  addressWaiting: 'Getting your Whombat ready to open from anywhere. This usually takes a minute or two.',
+  addressOpening: 'Opening your Whombat’s page…',
   addressOpen: 'Its web address is ready.',
   addressSlow: 'This is taking longer than usual. Its screen shows where to open it once it’s ready.',
-  addressNotYet: 'If its page doesn’t open yet, give it a minute and try again.',
+  /** The wait, step by step: linked, its web address, its page answering. */
+  progress: {
+    linked: 'Linked to your account',
+    address: 'Getting its web address',
+    page: 'Waiting for its page to answer',
+    open: 'Opening its page',
+  },
+  /** Only when the page didn't open by itself. */
+  openNotYet: 'Didn’t open? Use the button.',
   claimNow: 'Claim it now',
   toAccount: 'Your Whombats',
 
@@ -549,10 +557,16 @@ export const LINK_ADDRESS_POLL_FOR_MS = 5 * 60_000;
 /**
  * How long the wait goes on for a Whombat's claim link once its address is known. The box reports the link once its
  * page works, which takes its certificate, a minute or so after the address; until then the page wouldn't open anyway.
- * A box or a control from before the claim link never sends it: then its page opens after this, asking for the six
- * letters too.
+ * A slow box can take longer, and the claim link saves the person typing six letters, so the wait is generous. A box or
+ * a control from before the claim link never sends it: then its page opens after this, asking for the six letters too.
  */
-export const LINK_CLAIM_URL_GRACE_MS = 90_000;
+export const LINK_CLAIM_URL_GRACE_MS = 3 * 60_000;
+
+/** How long the page stays after opening the Whombat's page by itself before it offers a button (a slow page load). */
+export const LINK_OPEN_FALLBACK_MS = 10_000;
+
+/** Where the wait after linking stands: no address yet, or the address is there and its page doesn't answer yet. */
+export type LinkAddressStage = 'address' | 'page';
 
 /**
  * The claim link control gave for this Whombat (`https://<host>/c/<six letters>`): only while its address works, and
@@ -570,6 +584,8 @@ export function linkBoxClaimUrl(box: Pick<LinkedBox, 'host' | 'state' | 'claimUr
 export async function pollLinkAddress(input: {
   device: string;
   load: () => Promise<LinkAccount>;
+  /** Hears where the wait stands each time it asked. */
+  onStage?: (stage: LinkAddressStage) => void;
   live?: () => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -588,6 +604,7 @@ export async function pollLinkAddress(input: {
     const claimUrl = box ? linkBoxClaimUrl(box) : null;
     if (box && claimUrl) return { url: claimUrl, box, claim: true };
     const last = now() - started + LINK_ADDRESS_POLL_EVERY_MS > LINK_ADDRESS_POLL_FOR_MS;
+    input.onStage?.(box && open ? 'page' : 'address');
     if (box && open) {
       addressAt ??= now();
       // A Whombat nobody set up yet: a little longer for its claim link, so the person types only the four letters.
