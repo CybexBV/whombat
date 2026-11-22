@@ -3002,3 +3002,71 @@ func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
 		t.Fatal("errWrongMount must not match fs.ErrPermission")
 	}
 }
+
+func TestDarwinDataVolumeCategoryRoots(t *testing.T) {
+	root := t.TempDir()
+	// Modern macOS: "/" is the sealed system volume and mutable data sits under /System/Volumes/Data.
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/Library/Caches/Homebrew/downloads/foo.tar.gz"), 24*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/opt/homebrew/Caches/bar.bottle.tar.gz"), 16*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/private/var/lib/docker/volumes/pg/data.bin"), 20*1024)
+	writeBytes(t, filepath.Join(root, "System/Volumes/Data/private/var/lib/docker/containers/c1/c1-json.log"), 12*1024)
+
+	mounts := []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s3s1"},
+		{ID: 2, MountPoint: "/System/Volumes/Data", FSType: "apfs", Source: "/dev/disk3s1"},
+	}
+	inv := &proto.Report{
+		Filesystems: []proto.Filesystem{
+			{Mount: "/", Device: "/dev/disk3", FSType: "apfs", Disks: []string{"disk0"}},
+		},
+		Disks: []proto.Disk{
+			{Device: "disk0", Type: "nvme", Model: "APPLE SSD AP1024Z"},
+		},
+	}
+
+	r := newTestRunner(t, root, mounts, inv)
+	r.goos = "darwin"
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/System/Volumes/Data"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error scanning /System/Volumes/Data: %+v", resp)
+	}
+	byKey := map[string]proto.DiskUsageCategory{}
+	for _, c := range resp.Categories {
+		byKey[c.Key] = c
+	}
+	pkg := byKey[proto.DiskCatPackageCache]
+	if pkg.Bytes < 40*1024 || pkg.Bytes >= 128*1024 {
+		t.Errorf("package_cache on /System/Volumes/Data = %+v, want ~40 KiB (both Homebrew roots)", pkg)
+	}
+	if pkg.Detail != "Homebrew" {
+		t.Errorf("package_cache detail = %q, want %q", pkg.Detail, "Homebrew")
+	}
+	if vol := byKey[proto.DiskCatContainerVolumes]; vol.Bytes < 20*1024 {
+		t.Errorf("container_volumes on /System/Volumes/Data = %+v, want >= 20 KiB", vol)
+	}
+	if logs := byKey[proto.DiskCatContainerLogs]; logs.Bytes < 12*1024 {
+		t.Errorf("container_logs on /System/Volumes/Data = %+v, want >= 12 KiB", logs)
+	}
+
+	// Pre-Catalina single-volume Mac (or direct "/" mount) still finds /Library/Caches/Homebrew and /opt/homebrew/Caches.
+	rootSingle := t.TempDir()
+	writeBytes(t, filepath.Join(rootSingle, "Library/Caches/Homebrew/legacy.tar.gz"), 20*1024)
+	writeBytes(t, filepath.Join(rootSingle, "opt/homebrew/Caches/opt.tar.gz"), 12*1024)
+	rSingle := newTestRunner(t, rootSingle, []mountInfo{
+		{ID: 1, MountPoint: "/", FSType: "apfs", Source: "/dev/disk3s1"},
+	}, inv)
+	rSingle.goos = "darwin"
+	respSingle := rSingle.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if respSingle.Code != "" {
+		t.Fatalf("unexpected error scanning single-volume /: %+v", respSingle)
+	}
+	var pkgSingle proto.DiskUsageCategory
+	for _, c := range respSingle.Categories {
+		if c.Key == proto.DiskCatPackageCache {
+			pkgSingle = c
+		}
+	}
+	if pkgSingle.Bytes < 32*1024 || pkgSingle.Detail != "Homebrew" {
+		t.Errorf("package_cache on single-volume / = %+v, want >= 32 KiB Homebrew", pkgSingle)
+	}
+}

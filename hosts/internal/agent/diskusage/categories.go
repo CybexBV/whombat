@@ -85,7 +85,7 @@ func (r *Runner) collectCategories(ctx context.Context, rootDir scanDir, scope m
 				partial = true
 				break
 			}
-			b, p := r.walkDirBytes(ctx, rootDir, scope, pd.path, rootDev, rootMntID, 5, seen)
+			b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, pd.path), rootDev, rootMntID, 5, seen)
 			if p {
 				partial = true
 			}
@@ -149,7 +149,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 	var out []proto.DiskUsageCategory
 	partial := false
 
-	dockerRoot := "/var/lib/docker"
+	dockerRoot := categoryPathForScope(scope, "/var/lib/docker")
 	sock := r.findDockerSocket()
 	var df *dockerSystemDF
 	var rootOnMount bool
@@ -158,7 +158,7 @@ func (r *Runner) collectDocker(ctx context.Context, rootDir scanDir, scope mount
 		client := unixHTTPClient(sock, 10*time.Second)
 		var info dockerInfo
 		if err := dockerGet(ctx, client, "/info", &info); err == nil && info.DockerRootDir != "" {
-			dockerRoot = filepath.Clean(info.DockerRootDir)
+			dockerRoot = categoryPathForScope(scope, info.DockerRootDir)
 		}
 		// Resolve dockerRoot strictly relative to rootDir without crossing mounts
 		// or following symlinks before querying dockerd. Request only images and
@@ -390,7 +390,7 @@ func (r *Runner) collectContainerLogs(ctx context.Context, rootDir scanDir, scop
 
 	// Kubernetes / CRI container logs if present on this mount.
 	if ctx.Err() == nil {
-		b, p := r.walkDirBytes(ctx, rootDir, scope, "/var/log/pods", rootDev, rootMntID, 4, seen)
+		b, p := r.walkDirBytes(ctx, rootDir, scope, categoryPathForScope(scope, "/var/log/pods"), rootDev, rootMntID, 4, seen)
 		total += b
 		if p {
 			partial = true
@@ -457,7 +457,7 @@ func (r *Runner) collectVMAndSnapshots(ctx context.Context, rootDir scanDir, sco
 	// File-backed VM disk directories on this mount.
 	vmDirSet := map[string]bool{}
 	addVMDir := func(p string) {
-		p = filepath.Clean(p)
+		p = categoryPathForScope(scope, p)
 		if p != "" && strings.HasPrefix(p, "/") {
 			vmDirSet[p] = true
 		}
@@ -600,6 +600,42 @@ func runLowPriorityCmd(ctx context.Context, name string, args ...string) ([]byte
 		"LC_ALL=C",
 	}
 	return cmd.Output()
+}
+
+const darwinDataVolumeMount = "/System/Volumes/Data"
+
+// darwinDataPrefixes are root paths on macOS whose storage lives on the
+// mutable Data volume (/System/Volumes/Data) via APFS firmlinks rather than on
+// the sealed read-only system volume (/).
+var darwinDataPrefixes = []string{
+	"/Applications",
+	"/Library",
+	"/Users",
+	"/opt",
+	"/private",
+	"/usr/local",
+}
+
+// categoryPathForScope resolves a logical category root onto the target mount
+// when scanning macOS's /System/Volumes/Data volume.
+func categoryPathForScope(scope mountScope, p string) string {
+	clean := filepath.Clean(p)
+	if scope.target.MountPoint != darwinDataVolumeMount {
+		return clean
+	}
+	if hasPathPrefix(clean, darwinDataVolumeMount) {
+		return clean
+	}
+	for _, pref := range darwinDataPrefixes {
+		if hasPathPrefix(clean, pref) {
+			return darwinDataVolumeMount + clean
+		}
+	}
+	// On macOS, /var is a symlink to private/var on the Data volume.
+	if hasPathPrefix(clean, "/var") {
+		return darwinDataVolumeMount + "/private" + clean
+	}
+	return clean
 }
 
 func plural(n int, one, many string) string {
