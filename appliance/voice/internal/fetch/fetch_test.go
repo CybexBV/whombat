@@ -959,3 +959,155 @@ func TestRemoveThenFetchThenRemoveDuringDownload(t *testing.T) {
 		t.Fatalf("unexpected backoff=%d reqs=%d", backoffCalls.Load(), gt.reqs.Load())
 	}
 }
+
+func TestRemoveDoesNotHoldLockWhileDeleting(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+		"b.onnx": {body: body(64 << 10)},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+	defer stop()
+	entered := make(chan string, 2)
+	release := make(chan struct{})
+	var gateOnce sync.Once
+	f.removeAll = func(p string) error {
+		gateOnce.Do(func() {
+			entered <- p
+			<-release
+		})
+		return os.RemoveAll(p)
+	}
+	start(t, f)
+	if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, local.VoiceModelStateReady)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- f.Remove(local.VoiceModelSupertonic)
+	}()
+
+	trashPath := <-entered
+	if !strings.HasPrefix(filepath.Base(trashPath), trashPrefix) {
+		t.Fatalf("expected renamed-aside trash path, got %q", trashPath)
+	}
+	// While os.RemoveAll is blocked, State and progress updates must not stall waiting on f.mu, and the model path is
+	// already gone.
+	stateDone := make(chan local.VoiceModelsState, 1)
+	go func() {
+		f.progress(f.entries[local.VoiceModelSupertonic], 0, 123)
+		stateDone <- f.State()
+	}()
+	select {
+	case st := <-stateDone:
+		if st.Models[0].State != local.VoiceModelStateAbsent || st.Models[0].Received != 0 {
+			t.Fatalf("unexpected state during delete: %+v", st.Models[0])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("State or progress stalled while Remove was deleting files")
+	}
+	if models.Present(f.Dir, m) {
+		t.Fatal("model still present at final path during Remove deletion")
+	}
+
+	close(release)
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(trashPath); !os.IsNotExist(err) {
+		t.Fatalf("trash path left behind: %v", err)
+	}
+}
+
+func TestCommitRenameDoesNotHoldLockWhileDeletingStaleDest(t *testing.T) {
+	files := map[string]*source{
+		"a.onnx": {body: body(64 << 10)},
+		"b.onnx": {body: body(64 << 10)},
+	}
+	f, m, stop := newMultiFetcher(t, files, []string{"a.onnx", "b.onnx"}, 1<<40)
+	defer stop()
+	// Pre-create an incomplete directory at the final path so commitRename must displace and delete it.
+	stale := models.Path(f.Dir, m)
+	if err := os.MkdirAll(stale, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stale, "stale.tmp"), []byte("leftover"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	entered := make(chan string, 1)
+	release := make(chan struct{})
+	var gateOnce sync.Once
+	f.removeAll = func(p string) error {
+		if strings.HasPrefix(filepath.Base(p), trashPrefix) {
+			gateOnce.Do(func() {
+				entered <- p
+				<-release
+			})
+		}
+		return os.RemoveAll(p)
+	}
+	start(t, f)
+	if err := f.Fetch(local.VoiceModelSupertonic); err != nil {
+		t.Fatal(err)
+	}
+
+	trashPath := <-entered
+	// While the stale destination folder is being deleted, f.mu is unlocked and the verified model is already in place.
+	stateDone := make(chan local.VoiceModelsState, 1)
+	go func() { stateDone <- f.State() }()
+	select {
+	case <-stateDone:
+	case <-time.After(time.Second):
+		t.Fatal("State stalled while commitRename was deleting stale destination")
+	}
+	if !models.Present(f.Dir, m) {
+		t.Fatal("verified model not yet in place during stale destination cleanup")
+	}
+
+	close(release)
+	until(t, f, local.VoiceModelStateReady)
+	if _, err := os.Stat(trashPath); !os.IsNotExist(err) {
+		t.Fatalf("stale trash path left behind: %v", err)
+	}
+}
+
+func TestStartCleansLeftoverTrash(t *testing.T) {
+	src := &source{body: body(64 << 10)}
+	f, m, stop := newFetcher(t, src, 1<<40)
+	defer stop()
+
+	// Seed a ready model, a partial file, .wanted.json, and two leftover .removing-* entries (a file and a folder).
+	if err := os.WriteFile(models.Path(f.Dir, m), src.body, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	trashDir := filepath.Join(f.Dir, trashPrefix+"1-1")
+	if err := os.MkdirAll(filepath.Join(trashDir, "nested"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(trashDir, "nested", "old.onnx"), []byte("stale"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	trashFile := filepath.Join(f.Dir, trashPrefix+"1-2")
+	if err := os.WriteFile(trashFile, []byte("stale"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.Dir, wantedFile), []byte("[]"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	start(t, f)
+
+	for _, p := range []string{trashDir, trashFile} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Fatalf("leftover trash %s was not cleaned at Start: %v", p, err)
+		}
+	}
+	if !models.Present(f.Dir, m) {
+		t.Fatal("ready model removed by startup cleanup")
+	}
+	if _, err := os.Stat(filepath.Join(f.Dir, wantedFile)); err != nil {
+		t.Fatalf("wanted file removed by startup cleanup: %v", err)
+	}
+}
