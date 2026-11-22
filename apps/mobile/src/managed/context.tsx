@@ -8,6 +8,7 @@ import type { ControlApi, ManagedWhombats, PushState } from '@whombat/client/man
 import type { ApplianceSession, ConnectionState } from '@whombat/client/session';
 import { createContext, useContext } from 'react';
 import type { PushTap } from '../navigation/routes';
+import type { AppUpdateSource } from './appUpdate';
 
 export interface ManagedPush {
   state: PushState;
@@ -128,6 +129,11 @@ export interface ManagedContextValue {
    * Control and this appliance's organization. A community box has no control (AP-5470): absent there.
    */
   control?: ControlApi;
+  /**
+   * Where this app looks for a newer build of itself: control's public download list, asked with no sign-in. Present on
+   * a community box too, which otherwise makes no control calls: without it the phone never hears of an update.
+   */
+  updates?: AppUpdateSource;
   orgId: string;
   /**
    * The box is the community edition (HE-58; AP-5470): no relay, control, remote help, licence or phone push — the

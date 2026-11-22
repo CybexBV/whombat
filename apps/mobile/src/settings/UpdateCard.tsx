@@ -41,7 +41,7 @@ export function UpdateRow({ update, first = false }: { update: AndroidDownload; 
 }
 
 export function UpdateCard() {
-  const update = useAppUpdate(useManaged()?.control);
+  const update = useAppUpdate(useManaged()?.updates);
   if (!update) return null;
   return (
     <Card>

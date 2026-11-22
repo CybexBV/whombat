@@ -187,6 +187,19 @@ describe('control over HTTPS', () => {
     expect(await control.pushVapidKey()).toBeNull();
   });
 
+  it('asks for a newer app with no sign-in, even when signed in', async () => {
+    const seen: (string | null)[] = [];
+    const control = createHttpControl('http://control.test', {
+      tokens: { get: () => 'x'.repeat(40), set: () => {}, remove: () => {} },
+      fetch: async (_url, init) => {
+        seen.push(((init?.headers ?? {}) as Record<string, string>).authorization ?? null);
+        return new Response(JSON.stringify({ android: null }));
+      },
+    });
+    expect(await control.androidDownload()).toBeNull();
+    expect(seen).toEqual([null]);
+  });
+
   it('asks for a sign-in link with a same-origin next only (CT-48)', async () => {
     const bodies: unknown[] = [];
     const control = createHttpControl('http://control.test', {

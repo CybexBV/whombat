@@ -86,10 +86,15 @@ export function createUpdateCheck(
   };
 }
 
+/** What the check asks: control's public download list (the control client). */
+export interface AppUpdateSource {
+  androidDownload(): Promise<AndroidDownload | null>;
+}
+
 const checks = new WeakMap<object, UpdateCheck>();
 
 /** The one check per control client (it outlives a session: switching Whombats doesn't ask again). */
-export function updateCheckFor(control: { androidDownload(): Promise<AndroidDownload | null> }): UpdateCheck {
+export function updateCheckFor(control: AppUpdateSource): UpdateCheck {
   let check = checks.get(control);
   if (!check) {
     check = createUpdateCheck(() => control.androidDownload());

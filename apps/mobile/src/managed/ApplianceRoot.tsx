@@ -82,6 +82,7 @@ import { useTheme } from '../theme/theme';
 import { Screen, ScreenStripContext } from '../ui/headers';
 import { Button, ErrorState, Loading } from '../ui/primitives';
 import { StartHold } from '../ui/StartHold';
+import type { AppUpdateSource } from './appUpdate';
 import {
   createBackgroundRelease,
   createBoxReach,
@@ -538,6 +539,7 @@ function Shell({ setup, state, ...props }: ApplianceRootProps & { setup: Setup; 
       showNote: setNote,
       links: props.links,
       ...(!community && { control: props.env.control }),
+      updates: props.env.control,
       orgId: props.orgId,
       community,
       ...actions,
@@ -560,7 +562,7 @@ function Shell({ setup, state, ...props }: ApplianceRootProps & { setup: Setup; 
   );
   // The strip and the passkey nudge are asked for here, once for the app; every screen shows the same view of them
   // (AP-931).
-  const line = useStrip({ state, session: setup.raw, control: community ? null : props.env.control, note });
+  const line = useStrip({ state, session: setup.raw, updates: props.env.control, note });
   const nudge = usePasskeyNudge({
     session: setup.raw,
     control: community ? null : props.env.control,
@@ -854,13 +856,13 @@ interface Strip {
 function useStrip({
   state,
   session,
-  control,
+  updates,
   note,
 }: {
   state: ConnectionState;
   session: ApplianceSession;
-  /** Null on a community box: no licence to ask about, no app update through control (AP-5470). */
-  control: ControlApi | null;
+  /** Where a newer build of this app is announced: asked on every box, one reached directly too. */
+  updates: AppUpdateSource;
   note: string | null;
 }): Strip | null {
   const [shown, setShown] = useState(false);
@@ -898,7 +900,7 @@ function useStrip({
     : null;
   const banner = linkBanner ? { text: tailscale.note ?? linkBanner.text, tone: linkBanner.tone } : null;
   // Whether a newer build of this app is out (AP-701): asked as a session opens and back in front (AP-2971).
-  const newer = useAppUpdate(control ?? undefined, open) !== null;
+  const newer = useAppUpdate(updates, open) !== null;
   // Nothing left out silently (AP-266): items only a newer app can show, or a security view it can't read.
   const left = useSyncExternalStore(leftOut.subscribe, leftOut.get, leftOut.get);
   const leftOutText =
