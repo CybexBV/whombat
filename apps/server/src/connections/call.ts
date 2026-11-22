@@ -711,6 +711,7 @@ async function runTool(
                 threadRootId: call.threadRootId ?? null,
                 personId: call.personId ?? null,
                 approvalId: call.approvalId ?? null,
+                target,
               },
             }
           : {}),

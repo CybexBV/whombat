@@ -20,6 +20,7 @@ import {
   widgets,
 } from '../db/schema/index';
 import { listChanges } from '../home/changes';
+import { openChange } from '../home/registry';
 import { pinWidget, refreshWidget } from '../home/widgets';
 import { loadPrincipalRow } from '../read/principals';
 import type { BusFrame } from '../realtime/bus';
@@ -637,6 +638,36 @@ describe('the Servers connection', () => {
     expect(undo).toMatchObject({ status: 200, body: { state: 'asked' } });
     // The inverse (stop) is sensitive: it asks a person instead of running.
     expect(fake.calls('POST', '/api/v1/servers/basalt/guests/docker:backup-job/actions').length).toBe(before);
+  });
+
+  it('undoes the agent’s change only where it went', async () => {
+    const change = await lastChange('hosts.guest_power');
+    const recorded = change ? openChange(t.services.custody, change) : null;
+    expect(recorded?.undo.payload).toMatchObject({ serverId: 'basalt', destination: expect.any(String) });
+    const [servers] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.catalogId, 'whombat_servers'));
+    if (!servers) throw new Error('no Servers connection');
+    // The Servers connection goes elsewhere since: the inverse would go there, so Undo refuses and nothing is sent.
+    await t.services.db
+      .update(catalogConnections)
+      .set({ credentialVersion: servers.credentialVersion + 1 })
+      .where(eq(catalogConnections.id, servers.id));
+    try {
+      const before = fake.calls('POST', '/api/v1/servers/basalt/guests/docker:backup-job/actions').length;
+      const undo = await pressUndo(change?.id as string);
+      expect(undo.status).toBe(409);
+      expect(undo.body.error?.message).toContain('changed since, so this can’t be undone here');
+      expect(fake.calls('POST', '/api/v1/servers/basalt/guests/docker:backup-job/actions').length).toBe(
+        before,
+      );
+    } finally {
+      await t.services.db
+        .update(catalogConnections)
+        .set({ credentialVersion: servers.credentialVersion })
+        .where(eq(catalogConnections.id, servers.id));
+    }
   });
 
   it('runs read-only checks and says why a tool can’t be used', async () => {

@@ -86,6 +86,8 @@ export const finishConnectionTool = defineCommand({
             connectionId: z.string(),
             tool: z.string().max(200),
             args: z.record(z.string(), z.unknown()),
+            /** Where the change went and as whom (`callTarget`): its Undo goes there only. */
+            destination: z.string().max(64).optional(),
           })
           .optional(),
         conversationId: z.string().nullable(),
@@ -131,7 +133,14 @@ async function recordConnectionChange(
   change: {
     title: string;
     detail?: string | undefined;
-    undo?: { connectionId: string; tool: string; args: Record<string, unknown> } | undefined;
+    undo?:
+      | {
+          connectionId: string;
+          tool: string;
+          args: Record<string, unknown>;
+          destination?: string | undefined;
+        }
+      | undefined;
     conversationId: string | null;
   },
 ): Promise<void> {

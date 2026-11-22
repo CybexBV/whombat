@@ -16,7 +16,7 @@ import {
   executeConnectionCall,
   newCallId,
 } from '../connections/call';
-import { callTarget } from '../connections/call-target';
+import { callTarget, changedSinceChangeText, undoGoesWhereChangeWent } from '../connections/call-target';
 import { keyTierOf } from '../connections/context';
 import { limitsProblem } from '../connections/limits';
 import { catalogConnections, connectionTools } from '../db/schema/index';
@@ -71,6 +71,11 @@ export async function undoDeviceChange(
     await say(services, change, 'That device’s skill changed since, so I can’t undo this.');
     return;
   }
+  // Given another address or another device's skill since: the old value would go elsewhere.
+  if (!undoGoesWhereChangeWent(row, undo.destination)) {
+    await say(services, change, changedSinceChangeText(row.label));
+    return;
+  }
   const now = await readActionValue(services, skill.profile, addressOf(skill), action).catch(() => null);
   if (now === null) {
     await say(services, change, `I couldn’t read ${deviceNoun(skill.name)} just now, so I didn’t undo it.`);
@@ -103,7 +108,8 @@ export async function undoDeviceChange(
   }
   const callId = newCallId();
   linkUndo(callId, change.id, byId);
-  const target = callTarget(row);
+  // Bound to where the change went: a device repointed while it starts gets nothing.
+  const target = undo.destination ?? callTarget(row);
   const res = await services.pipeline.commit(
     callConnectionTool,
     {
@@ -155,6 +161,12 @@ export function registerDeviceUndo(): void {
     if (!skill) return { ok: false, reason: 'That device isn’t switched on any more.' };
     if (skill.profileHash !== undo.profileHash)
       return { ok: false, reason: 'That device’s skill changed since, so this can’t be undone.' };
+    const [row] = await ctx.tx
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, undo.connectionId));
+    if (row && !undoGoesWhereChangeWent(row, undo.destination))
+      return { ok: false, reason: changedSinceChangeText(row.label) };
     const services = ctx.services;
     // Not waited for: Undo answers at once, the device is read and set after (ONE-DD09).
     ctx.background('device undo', () => undoDeviceChange(services, change, actor.id));

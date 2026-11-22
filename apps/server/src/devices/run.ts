@@ -9,7 +9,7 @@ import { CHANGE_UNDO_WINDOW_S, type JsonObject } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { defineCommand } from '../commit/types';
-import { ConnectionChangedError } from '../connections/call-target';
+import { ConnectionChangedError, callTarget } from '../connections/call-target';
 import { type CallOutput, ConnectionArgumentError } from '../connections/request';
 import type { CatalogConnectionRow, ConnectionToolRow } from '../connections/types';
 import { deviceSkills } from '../db/schema/index';
@@ -41,6 +41,11 @@ export interface DeviceUndo {
   value: ReadingValue;
   setTo: ReadingValue;
   profileHash: string;
+  /**
+   * Where the change went (`callTarget` of the device's connection: its skill and address) when it was made: Undo puts
+   * the old value back only there. Absent on changes recorded before it was kept.
+   */
+  destination?: string;
 }
 
 /** Who a device call is for, as the connection call knows it. */
@@ -288,6 +293,7 @@ export async function runDeviceTool(
                 value: before,
                 setTo: value,
                 profileHash: skill.profileHash,
+                destination: callTarget(row),
               }
             : null,
         undoes,
