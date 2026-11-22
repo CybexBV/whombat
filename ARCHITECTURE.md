@@ -818,8 +818,9 @@ published automation details read their definition and publisher from one versio
   Proposed writes (`propose_connection_actions`, prompts listing handles and tools only) are narrow: writable
   non-built-in services other than `whombat_servers` and `t3code`, never a read, never deleting, removing or emptying
   (`DELETE`, or said in a tool name, a path segment, a method- or action-like value, a delete switch or code a service
-  runs), never what the connection's `sensitive` rules always ask about or its `cutsOff` rules mark as able to cut the
-  person off (DNS, DHCP, firewalls, networks). They always ask the person on an approval card bound to the exact
+  runs), never a change to who can get in or what they may see (users, permissions, sharing, passwords, keys), never
+  what the connection's `sensitive` rules always ask about or its `cutsOff` rules mark as able to cut the person off
+  (DNS, DHCP, firewalls, networks). They always ask the person on an approval card bound to the exact
   `actionsHash` regardless of standing settings, built only by the server (`automations/proposed-card.ts`): Whombat's
   own words for each action (`action-words.ts`) as its title, question, message and “Done:” line, then every line that
   decides what happens — method and path or tool, base, uploaded file, every argument and header, secrets masked — or
