@@ -53,6 +53,7 @@ import { registerFileRoutes } from '../files/routes';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
+import { listenedMailConnections } from '../mail-triggers/store';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadMessage, loadMessageRow, loadMessages } from '../read/messages';
 import { loadPrincipalRow } from '../read/principals';
@@ -1081,6 +1082,68 @@ describe('mail-arrives automations', () => {
 
     await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
     await pollAndSettle();
+  });
+
+  it('forgets the cached text of mail no run started from once its mailbox’s last rule goes, also what an earlier release left', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['forgotten'],
+    });
+    try {
+      await pollAndSettle();
+      expect((await listenedMailConnections(w.services.db)).get(connectionId)?.entries).toMatchObject([
+        { automationId: autoId },
+      ]);
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_forgotten',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'A forgotten invoice',
+        body: 'FORGOTTEN_BODY_SHOULD_GO',
+        messageId: '<forgotten@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX'],
+        attachments: [],
+      });
+      // Recorded by the poll, and the rule switched off before the trigger scanner reached it.
+      expect(await w.services.mailTriggers.pollOnce()).toBe(1);
+      const item = async () =>
+        (
+          await w.services.db
+            .select()
+            .from(mailTriggerItems)
+            .where(
+              and(
+                eq(mailTriggerItems.connectionId, connectionId),
+                eq(mailTriggerItems.externalId, 'msg_forgotten'),
+              ),
+            )
+        )[0];
+      expect((await item())?.body).toContain('FORGOTTEN_BODY_SHOULD_GO');
+      await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: false });
+      await w.services.mailTriggers.pollOnce();
+      const forgotten = await item();
+      expect(forgotten).toMatchObject({ body: '', snippet: '' });
+      expect(forgotten?.messageId).toBeTruthy();
+
+      // What an earlier release left when its last rule went: the cursor cleared, the text not.
+      await w.services.db
+        .update(mailTriggerItems)
+        .set({ body: 'FORGOTTEN_BODY_SHOULD_GO', snippet: 'left behind' })
+        .where(eq(mailTriggerItems.id, forgotten?.id ?? ''));
+      await w.services.mailTriggers.pollOnce();
+      expect(await item()).toMatchObject({ body: '', snippet: '' });
+
+      // Switched on again, it starts nothing from that email.
+      await w.ok(IDS.mara, setAutomationEnabled, { automationId: autoId, enabled: true });
+      await pollAndSettle();
+      expect(await runsOf(autoId)).toHaveLength(0);
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+    }
   });
 
   it('keeps GitHub-triggered automation steps at not_owner for personal mail, calendar and files tools', async () => {

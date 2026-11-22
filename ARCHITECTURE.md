@@ -827,7 +827,7 @@ published automation details read their definition and publisher from one versio
   after three failed attempts with a plain-English problem so a mailbox never stalls; attachment metadata is capped at
   100 per email (recording how many were left out) and attachments that cannot be handed over (too large, unknown type,
   download failed, too many) are marked on the run scope so both the prompt and the run page say they didn't come along. High-water marks (`mail_cursors`) and deduplicated matched items (`mail_trigger_items`, whose
-  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows and rows skipped by the cursor, and whose rows are pruned after 30 days) commit through the
+  cached body and snippet are cleared when the trigger cursor consumes the event, with a mail poll sweep for old consumed rows, rows skipped by the cursor and the rows of a mailbox no live rule watches any more, and whose rows are pruned after 30 days) commit through the
   pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
   nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
   runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail

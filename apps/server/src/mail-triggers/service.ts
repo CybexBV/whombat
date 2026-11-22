@@ -48,6 +48,7 @@ import {
   type ListenedMailbox,
   type ListenedMailEntry,
   listenedMailConnections,
+  unwatchedMailText,
 } from './store';
 
 const DEFAULT_POLL_MS = 60_000;
@@ -642,7 +643,7 @@ export class MailTriggerService {
     const burrows = await this.services.db
       .selectDistinct({ burrowId: mailTriggerItems.burrowId })
       .from(mailTriggerItems)
-      .where(or(lt(mailTriggerItems.mirroredAt, cutoff), consumedMailText()));
+      .where(or(lt(mailTriggerItems.mirroredAt, cutoff), consumedMailText(), unwatchedMailText()));
     let deleted = 0;
     for (const { burrowId } of burrows) {
       const actorId = await mailPrincipal.ensure(this.services, burrowId);
