@@ -51,6 +51,7 @@ import {
   HostMetricsResponse,
   LicenceRenewNowRequest,
   LicenceRenewNowResult,
+  LinkClaimRequest,
   LinkOffRequest,
   LinkOnRequest,
   LinkStateRequest,
@@ -532,6 +533,11 @@ export class ManagerSocketClient implements ManagerPort {
     return LinkStateResponse.parse(
       await this.call(MANAGER_PATHS.linkOff, LinkOffRequest.parse(body), KIT_ENVELOPES_TIMEOUT_MS),
     );
+  }
+
+  /** The claim link is a secret: the request is never logged. */
+  async linkClaim(body: z.input<typeof LinkClaimRequest>) {
+    LocalOk.parse(await this.call(MANAGER_PATHS.linkClaim, LinkClaimRequest.parse(body)));
   }
 
   async updateChannel() {

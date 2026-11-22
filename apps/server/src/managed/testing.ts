@@ -515,6 +515,17 @@ export class FakeManager implements ManagerPort {
     this.setLink('off');
     return this.link;
   }
+  /**
+   * The claim links the runtime handed over (4.13), null for “none”; `linkClaimMissing` answers 404, as a manager from
+   * before the route.
+   */
+  linkClaims: (string | null)[] = [];
+  linkClaimMissing = false;
+  async linkClaim(request: { claimLink?: string | undefined }): Promise<void> {
+    if (this.linkClaimMissing)
+      throw new ManagerCallError(MANAGER_PATHS.linkClaim, 404, 'not_found', 'manager: 404 not found');
+    this.linkClaims.push(request.claimLink ?? null);
+  }
   /** The update channel the helper keeps (4.4); null answers 404 `update.channel_unavailable`. */
   channel: { channel: 'production' | 'development'; staysOn?: string } | null = null;
   /** What a switch to production leaves the box on until production passes it (tests set it). */

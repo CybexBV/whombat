@@ -6,6 +6,7 @@ import type {
   HostMetricsRequest,
   HostMetricsResponse,
   LicenceRenewNowResult,
+  LinkClaimRequest,
   LinkOffRequest,
   LinkOnRequest,
   LinkStateResponse,
@@ -202,6 +203,11 @@ export interface ManagerPort extends TailscalePort {
   linkState?(): Promise<LinkStateResponse>;
   linkOn?(request: z.input<typeof LinkOnRequest>): Promise<LinkStateResponse>;
   linkOff?(request?: z.input<typeof LinkOffRequest>): Promise<LinkStateResponse>;
+  /**
+   * The claim link the box shows (4.13), for the manager to send with `link.status`; without `claimLink` it forgets the
+   * one it had. 404 from an older manager.
+   */
+  linkClaim?(request: z.input<typeof LinkClaimRequest>): Promise<void>;
   /** The update channel (4.4): read and the owner's change. 404 `update.channel_unavailable`; 409 `busy`. */
   updateChannel?(): Promise<UpdateChannelResponse>;
   updateChannelSet?(request: z.input<typeof UpdateChannelSetRequest>): Promise<UpdateChannelResponse>;
