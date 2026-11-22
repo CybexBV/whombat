@@ -1058,7 +1058,8 @@ Setup and operation: `docs/github.md`.
   words and the target its yes is bound to come from one read of the connection, and the card is saved only while the
   connection is still stored so (`heldChanged`, held until the card commits); a page change's card names the
   connection by its label. A yes to a card saved without its binding (by the previous release) runs nothing: a fresh
-  card bound now asks again in its place (`approvals/ask-again.ts`). A write that worked
+  card bound now asks again in its place (`approvals/ask-again.ts`). A write, a call's or a page button's, is done only
+  on a 2xx answer, never on a redirect (`things/kinds/act.ts` `writeDone`). A write that worked
   is recorded for Done recently with its Undo, which keeps where the change went and goes only there. Each
   connection and device has a page (`apps/server/src/things/`) with generic panels and a kind's own part where
   Whombat has one, and Home checks their health every five minutes: one read of the quiet rows and the person per

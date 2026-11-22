@@ -23,6 +23,7 @@ import type { Services } from '../../../services';
 import { VaultCallError } from '../../../vault/net';
 import type { KindCheck, KindNotice } from '../../quiet/types';
 import { clip, clock, dateOf, line, list, plural, rec, str, thousands, when } from '../../words';
+import { notConfirmed, writeDone } from '../act';
 import {
   cachedRead,
   getJson,
@@ -1015,9 +1016,9 @@ export async function accessSeen(
 
 /**
  * One write as the connection; Access documents `PUT` for unlocking where some versions answer `POST`, so a 405 is tried
- * once more with `POST`. Its answer's code must be `SUCCESS`.
+ * once more with `POST`. Its answer must be a 2xx and its code, when it has one, `SUCCESS`.
  */
-async function accessWrite(
+export async function accessWrite(
   services: Services,
   row: CatalogConnectionRow,
   path: string,
@@ -1068,6 +1069,7 @@ async function accessWrite(
       );
     if (res.status >= 400 || (code !== null && code !== 'SUCCESS'))
       throw new ApiError('unavailable', 'UniFi Access answered with an error and didn’t do it.');
+    if (!writeDone(res.status)) throw notConfirmed('UniFi Access');
     return;
   }
 }
