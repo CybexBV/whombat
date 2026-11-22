@@ -239,6 +239,8 @@ you? with it; the person can change both. Open on Your Whombats carries nothing.
 
 ## AP-9773 Claim it now opens the claim link control gives (2026-11-22; John; own-address.md OWA-39, LNK-79)
 
+*In part superseded by whombat-link.md LNK-80…LNK-83: the page opens the claim link by itself (the button only if it didn't go), waits three minutes for it, shows the wait step by step and counts “STEP 1 OF 4”.*
+
 Control now answers a Whombat nobody claimed yet with its claim link (`LinkedBox.claimUrl`, contracts 4.13), only to
 the account it is linked to. After the confirm, `pollLinkAddress` returns that link as soon as control has it, and
 Claim it now opens `https://<host>/c/<six letters>#name=…&email=…`: the box's page reads the fragment on its claim link

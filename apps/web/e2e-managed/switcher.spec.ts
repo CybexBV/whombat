@@ -3,16 +3,7 @@
  * is the name alone; with two, its menu lists both, the open one ticked, and choosing the other opens it in place.
  */
 import { expect, type Page, test } from '@playwright/test';
-import {
-  agreeToTerms,
-  type Console,
-  claimFresh,
-  consoles,
-  fake,
-  fresh,
-  signIn,
-  skipProtect,
-} from './support';
+import { agreeToTerms, type Console, claimFresh, consoles, fake, fresh, signIn, skipToApp } from './support';
 
 /** Where the review screenshots go (`MANAGED_SHOTS_DIR`, default the repository's `tmp/shots`). */
 const SHOTS = process.env.MANAGED_SHOTS_DIR ?? '../../tmp/shots';
@@ -30,7 +21,7 @@ async function claimSpare(page: Page) {
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
   // No kit step (BX-01): straight into the Whombat.
-  await skipProtect(page);
+  await skipToApp(page);
   await expect(page.locator('[data-screen]').first()).toBeVisible({ timeout: 20_000 });
 }
 

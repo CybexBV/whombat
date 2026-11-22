@@ -1,5 +1,6 @@
 /** The installer's flow (CG-14): which screen shows, which wizard steps exist, what each one needs. */
 import {
+  type Check,
   type Disk,
   INSTALL_STEPS,
   type InstallerState,
@@ -65,10 +66,12 @@ export function preflightRequest(s: InstallerState, w: Wizard): Record<string, u
   return reach ? { reach } : undefined;
 }
 
-/** `POST /api/install`: the disk, its typed name and the reach step's choice. */
+/**
+ * `POST /api/install`: the disk, its name (typed, or the button's on an empty disk) and the reach step's choice.
+ */
 export function installRequest(s: InstallerState, w: Wizard, disk: Disk, typed: string): InstallRequest {
   const reach = asksReach(s) ? reachChoice(w) : null;
-  return { disk: disk.path, confirm: typed.trim(), ...(reach ? { reach } : {}) };
+  return { disk: disk.path, confirm: disk.empty ? disk.name : typed.trim(), ...(reach ? { reach } : {}) };
 }
 
 /**
@@ -133,6 +136,15 @@ export function stepOf(s: InstallerState, step: WizardStep): { n: number; of: nu
 
 export type ChecksVerdict = 'running' | 'ok' | 'warn' | 'fail';
 
+/**
+ * Which check rows show and which fold behind Details: the ones that aren't ok show, unfolded, so their plain words are
+ * read; the rest (all of them when every check passed or while they run) fold under one line.
+ */
+export function checksFolded(checks: Check[]): { shown: Check[]; folded: Check[] } {
+  const problem = (c: Check) => c.status === 'warn' || c.status === 'fail';
+  return { shown: checks.filter(problem), folded: checks.filter((c) => !problem(c)) };
+}
+
 /** The checks as a whole: any fail blocks Continue (CG-13), warnings don't. */
 export function checksVerdict(s: InstallerState): ChecksVerdict {
   const c = s.preflight.checks;
@@ -151,9 +163,12 @@ export function chosenDisk(s: InstallerState, picked: string | null): Disk | nul
   return eligible.length === 1 ? (eligible[0] ?? null) : null;
 }
 
-/** The Erase button needs the disk's name typed exactly (surrounding spaces forgiven). */
+/**
+ * The Erase button: on an empty disk at once (nothing on it is lost); on one that holds something only with the disk's
+ * name typed exactly (surrounding spaces forgiven).
+ */
 export const eraseConfirmed = (typed: string, disk: Disk | null): boolean =>
-  disk !== null && typed.trim() === disk.name;
+  disk !== null && (disk.empty === true || typed.trim() === disk.name);
 
 export type StepState = 'done' | 'current' | 'pending' | 'failed';
 

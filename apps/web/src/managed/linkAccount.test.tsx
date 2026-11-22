@@ -9,6 +9,7 @@ import {
   ControlError,
   type ControlSession,
   LINK_CLAIM_URL_GRACE_MS,
+  LINK_OPEN_FALLBACK_MS,
   type LinkAccount,
   SUBSCRIPTION_TERMS_VERSION,
   WHOMBAT_LINK_TEXT as T,
@@ -195,39 +196,74 @@ describe('/link once it is linked: its own page', () => {
   }
   afterEach(() => vi.useRealTimers());
 
-  it('waits for its claim link, then Claim it now opens it with the name and email in the fragment', async () => {
+  it('waits for its claim link, showing what it is doing, then opens it by itself with the name and email', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     // The lookup's own load, then the first wait's answer: still no address; then the address before its claim link.
     const withLink = { ...ready, claimUrl: 'https://calm-otter-reef.box.whombat.app/c/pqrtvw' };
     const { control } = linking([starting, starting, ready], withLink);
-    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    const openPage = vi.fn();
+    render(
+      <LinkCodeFlow
+        control={control}
+        session={session}
+        initialCode="KXQM-TRVW"
+        onAccount={vi.fn()}
+        openPage={openPage}
+      />,
+    );
+    // A new Whombat: linking it is the setup's first step of four.
+    expect(await screen.findByText('STEP 1 OF 4')).toBeTruthy();
+    expect(within(screen.getByTestId('auth-steps')).getAllByRole('listitem')).toHaveLength(4);
     await user.click(await screen.findByRole('button', { name: T.confirm }));
     expect(await screen.findByText(T.addressWaiting)).toBeTruthy();
+    const progress = screen.getByTestId('link-progress');
+    expect(within(progress).getByText(T.progress.address).closest('li')?.dataset.state).toBe('current');
+    await vi.advanceTimersByTimeAsync(6_000);
+    // The address alone: still waiting, for its page to answer; nothing opened, no button.
+    await vi.waitFor(() =>
+      expect(within(progress).getByText(T.progress.page).closest('li')?.dataset.state).toBe('current'),
+    );
+    expect(openPage).not.toHaveBeenCalled();
     expect(screen.queryByTestId('link-claim-now')).toBeNull();
     await vi.advanceTimersByTimeAsync(6_000);
-    // The address alone: still waiting, for the claim link.
-    expect(screen.queryByRole('link', { name: T.claimNow })).toBeNull();
-    await vi.advanceTimersByTimeAsync(6_000);
-    const claim = await screen.findByRole('link', { name: T.claimNow });
-    const url = new URL(claim.getAttribute('href') ?? '');
+    await vi.waitFor(() => expect(openPage).toHaveBeenCalledTimes(1));
+    const url = new URL(openPage.mock.calls[0]?.[0] as string);
     expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');
     expect(url.pathname).toBe('/c/pqrtvw');
     expect(Object.fromEntries(new URLSearchParams(url.hash.slice(1)))).toEqual({
       name: 'Mara',
       email: 'mara@burrowhq.example',
+      from: 'link',
     });
+    expect(await screen.findByText(T.addressOpening)).toBeTruthy();
+    // The button only when the page is still here a while later.
+    expect(screen.queryByTestId('link-claim-now')).toBeNull();
+    await vi.advanceTimersByTimeAsync(LINK_OPEN_FALLBACK_MS + 1_000);
+    const claim = await screen.findByRole('link', { name: T.claimNow });
+    expect(claim.getAttribute('href')).toBe(openPage.mock.calls[0]?.[0]);
   });
 
   it('opens its page with the fragment when no claim link comes (an older Whombat or control)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { control } = linking([starting, starting]);
-    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    const openPage = vi.fn();
+    render(
+      <LinkCodeFlow
+        control={control}
+        session={session}
+        initialCode="KXQM-TRVW"
+        onAccount={vi.fn()}
+        openPage={openPage}
+      />,
+    );
     await user.click(await screen.findByRole('button', { name: T.confirm }));
-    await vi.advanceTimersByTimeAsync(6_000 + LINK_CLAIM_URL_GRACE_MS + 5_000);
-    const claim = await screen.findByRole('link', { name: T.claimNow });
-    const url = new URL(claim.getAttribute('href') ?? '');
+    await vi.advanceTimersByTimeAsync(6_000 + LINK_CLAIM_URL_GRACE_MS - 30_000);
+    expect(openPage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40_000);
+    await vi.waitFor(() => expect(openPage).toHaveBeenCalledTimes(1));
+    const url = new URL(openPage.mock.calls[0]?.[0] as string);
     expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');
     expect(url.pathname).toBe('/');
     expect(new URLSearchParams(url.hash.slice(1)).get('email')).toBe('mara@burrowhq.example');
@@ -251,14 +287,27 @@ describe('/link once it is linked: its own page', () => {
     expect(linkAccount.mock.calls.length).toBe(asked);
   });
 
-  it('a Whombat already set up (it has a name) is opened, with nothing in the fragment', async () => {
+  it('a Whombat already set up (it has a name) waits for its owner’s Open, with nothing in the fragment', async () => {
     const user = userEvent.setup();
     const home = { ...ready, name: 'Home' };
     const { control } = linking([], home, home);
-    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    const openPage = vi.fn();
+    render(
+      <LinkCodeFlow
+        control={control}
+        session={session}
+        initialCode="KXQM-TRVW"
+        onAccount={vi.fn()}
+        openPage={openPage}
+      />,
+    );
     await user.click(await screen.findByRole('button', { name: T.confirm }));
     const open = await screen.findByRole('link', { name: T.openName('Home') });
     expect(open.getAttribute('href')).toBe('https://calm-otter-reef.box.whombat.app/');
+    expect(openPage).not.toHaveBeenCalled();
+    // Not a new Whombat's setup: no step count here.
+    expect(screen.queryByText('STEP 1 OF 4')).toBeNull();
+    expect(screen.queryByTestId('auth-steps')).toBeNull();
   });
 });
 

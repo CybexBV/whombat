@@ -56,12 +56,11 @@ export async function claim(
   });
 }
 
-/** The setup after the claim, Tailscale, Link, backups and the AI left for later: ends in the app. */
+/** The setup after the claim, Tailscale, Link and the AI left for later (no backups step): ends in the app. */
 export async function finishSetup(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('button', { name: 'Skip for now' }).click();
   await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('STEP 4 OF 4')).toBeVisible();
   await page.getByRole('button', { name: 'Later' }).click();
   await inTheApp(page);
 }

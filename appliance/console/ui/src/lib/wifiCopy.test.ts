@@ -58,6 +58,9 @@ describe('the Wi-Fi words (HD-11)', () => {
       warn: false,
     });
     expect(chipView({ online: false, via: 'cable', ssid: null, wifiMissing: null }).warn).toBe(true);
+    // Alone on top of the screen, the cable says it is the network.
+    expect(chipView({ online: true, via: 'cable', ssid: null, wifiMissing: null }).text).toBe(WIFI.chipCable);
+    expect(WIFI.chipCable).toMatch(/network/i);
     expect(chipView({ online: false, via: 'none', ssid: null, wifiMissing: null }).text).toBe(WIFI.noNetwork);
     expect(chipLabel({ online: false, via: 'wifi', ssid: 'Home', wifiMissing: null })).toContain('Home');
     expect(chipLabel({ online: false, via: 'wifi', ssid: 'Home', wifiMissing: null })).toContain(

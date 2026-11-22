@@ -492,3 +492,24 @@ func woken(k *Keeper) bool {
 		return false
 	}
 }
+
+// Confirmed, but the address waits: the box asks again soon while the person who confirmed it still watches, then once a
+// minute, so a box that waits for hours doesn't keep asking every few seconds.
+func TestWaitingForTheAddressAsksSoonThenEveryMinute(t *testing.T) {
+	b := newBox(t, false)
+	if _, err := b.keep.On(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateStarting, Since: b.now.Unix(), WaitingForAddress: ptr(true)})
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollWaitingSoon || wait > 15*time.Second {
+		t.Fatal(wait, err)
+	}
+	b.now = b.now.Add(pollWaitingFor - time.Second)
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollWaitingSoon {
+		t.Fatal(wait, err)
+	}
+	b.now = b.now.Add(time.Second)
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollWaiting {
+		t.Fatal(wait, err)
+	}
+}

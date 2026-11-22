@@ -17,6 +17,13 @@
   # and 26.05 asserts it: no installer ISO built before this (NX-62).
   isoImage.volumeID = lib.mkForce "WHOMBAT-INSTALLER";
   image.baseName = lib.mkOverride 60 "whombat-installer"; # the flake names each ISO (installerWith)
+  # The boot menu says what the stick is: “Whombat Installer”, not “NixOS 26.05.20260924.c508844 Installer” (its entry
+  # is distroName, a space, the label and the appended word). This is the installer's own system only; the appliance it
+  # installs keeps its names. Memtest86+ goes: a person installing a Whombat has no use for it in the menu.
+  system.nixos.distroName = lib.mkForce "Whombat";
+  system.nixos.label = lib.mkForce "Installer";
+  isoImage.appendToMenuLabel = lib.mkForce "";
+  boot.loader.grub.memtest86.enable = lib.mkForce false;
   services.openssh.enable = lib.mkForce false;
 
   # The network as on the appliance (NX-242): networkd gives a cable (route metric 100) and Wi-Fi (600, wifi.nix) their

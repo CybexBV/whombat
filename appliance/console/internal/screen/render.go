@@ -18,6 +18,16 @@ const Banner = `Whombat appliance. There is no login on this console.
 For local recovery, restart and hold Space to open the boot menu, then choose
 "Whombat Recovery" (you will need your disk recovery key).`
 
+// FooterShown reports whether the footer (the console and recovery note) shows under this screen: not while the person
+// is setting the box up (the claim, or Link's code and its wait on a box nobody claimed), where it is words they don't
+// need yet; on every other screen, as before. Both consoles use this rule.
+func (s Screen) FooterShown(now time.Time) bool {
+	if s.State == Claimed {
+		return true
+	}
+	return s.State != Claimable && s.State != Backoff && s.LinkShown(now) == nil
+}
+
 // Words of CC-08, verbatim.
 const (
 	wordStarting      = "Starting Whombat…"
@@ -287,6 +297,9 @@ func MinutesLeft(retryAt, now time.Time) int {
 func Render(s Screen, now time.Time, width, height int, footer []string) string {
 	if width < minWidth {
 		width = defaultWidth
+	}
+	if !s.FooterShown(now) {
+		footer = nil
 	}
 	text, code := body(s, now)
 	var top []string

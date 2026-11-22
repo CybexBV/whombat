@@ -80,7 +80,7 @@ import {
   delegationThreads,
   pressDelegation,
 } from './delegationFixtures';
-import { type FirstDayFixture, firstDayWelcome } from './firstDayFixtures';
+import { FIRST_DAY_ROOT_ID, type FirstDayFixture, firstDayWelcome } from './firstDayFixtures';
 import { ASSISTANT_NAME, DEFAULT_CHAT_ID, WHOMBAT_ID } from './oneFixtures';
 
 const API = '/api/v1';
@@ -972,6 +972,7 @@ export function createChatChannelFixtures(
     messages = firstDayWelcome(options.firstDay, { person: 'Mara', assistant: ASSISTANT_NAME }).map((m, i) =>
       message({
         id: `msg_first-day-${i + 1}` as Message['id'],
+        threadRootId: i > 0 ? (FIRST_DAY_ROOT_ID as Message['id']) : null,
         authorId: bot,
         createdAt: at(0, `09:0${i}`),
         text: m.text,

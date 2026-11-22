@@ -119,8 +119,8 @@ func TestParseClaimFallbackKeepsTheScreen(t *testing.T) {
 	}
 }
 
-// With the second way the claim screen still fits a text console: every word above the footer, the footer last, and
-// on the usual 80×25 the letters still drawn large.
+// With the second way the claim screen still fits a text console: every word, no footer (it gives way during the
+// claim), and on the usual 80×25 the letters still drawn large.
 func TestRenderClaimFallbackGeometry(t *testing.T) {
 	footer := strings.Split(Banner, "\n")
 	sc := mustParse(t, `{"v":1,`+ownClaim+`,"fallbackUrl":"http://192.0.2.10:4480/","newLetters":true}`)
@@ -131,10 +131,13 @@ func TestRenderClaimFallbackGeometry(t *testing.T) {
 			t.Errorf("%v: %d lines", size, len(lines))
 		}
 		flat := strings.Join(strings.Fields(f), " ")
-		for _, w := range []string{"Claim this Whombat", "KXQM", "Press N for new letters.", elseInApp, "There is no login on this console."} {
+		for _, w := range []string{"Claim this Whombat", "KXQM", "Press N for new letters.", elseInApp} {
 			if !strings.Contains(flat, w) {
 				t.Errorf("%v: %q missing from\n%s", size, w, f)
 			}
+		}
+		if strings.Contains(flat, "There is no login on this console.") {
+			t.Errorf("%v: the footer shows during the claim\n%s", size, f)
 		}
 		if strings.Index(flat, elseInApp) < strings.Index(flat, "Press N for new letters.") {
 			t.Errorf("%v: the second way isn't last\n%s", size, f)

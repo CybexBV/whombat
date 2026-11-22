@@ -414,54 +414,95 @@ export function channelView(c: UpdatesChannelOutput): {
 
 /* The setup on the box's page (LNK-40) ------------------------------------------------------------------------------ */
 
-/** The claim's own steps, on the box's page before the app opens. */
-export type BoxClaimStep = 'claim' | 'account' | 'passkey' | 'reach' | 'backups';
-/** The app's own setup (onboarding: Name your Whombat → Set up your AI → Meet your agent), which carries on the count. */
-export type BoxAppStep = 'name' | 'ai' | 'agent';
+/**
+ * The setup's steps before the app opens: Link your Whombat (done on the account site, when the page came from there),
+ * the claim, who you are (only when the account site didn't send the email along) and the box's passkey or, away from
+ * its own address, how to reach it.
+ */
+export type BoxClaimStep = 'link' | 'claim' | 'account' | 'passkey' | 'reach';
+/** The app's own setup that follows on the box's page: only Set up your AI (the Whombat and its agent get defaults). */
+export type BoxAppStep = 'ai';
 export type BoxSetupStep = BoxClaimStep | BoxAppStep;
 
-/** The app's setup steps, in onboarding's order. */
-export const BOX_APP_STEPS: readonly BoxAppStep[] = ['name', 'ai', 'agent'];
+/** The app's setup steps on the box's page. */
+export const BOX_APP_STEPS: readonly BoxAppStep[] = ['ai'];
 
-/**
- * The claim's steps: claim (the letters, or the `/c/` link) → name and e-mail → the box's passkey (at its own address,
- * the passkey's name) or, elsewhere, how to reach it (Tailscale's advice and the Link offer) → backups.
- */
-export function boxClaimSteps(page: { atAddress: boolean }): BoxClaimStep[] {
-  return ['claim', 'account', page.atAddress ? 'passkey' : 'reach', 'backups'];
+/** How the box's page was opened, which decides the steps it counts. */
+export interface BoxSetupPage {
+  /** The page is the box's own address: the passkey step is here; elsewhere, Reach it from anywhere. */
+  atAddress: boolean;
+  /** Opened from the account site's link page: Link your Whombat counts as the first step, done. */
+  fromLink?: boolean;
+  /** The account site sent the person's email along: Who are you? isn't asked. */
+  knowsAccount?: boolean;
 }
 
 /**
- * The one setup's steps, one count from the claim to the agent (first-day.md FDY-32): the claim's, then the app's own
- * setup, which the box's page opens next. A box has no Whombat (burrow) yet when it is claimed, so the app starts with
- * Name your Whombat; its steps carry on the count rather than start one of their own.
+ * The claim's steps on the box's page: (Link your Whombat, done) → the letters → (who you are) → the box's passkey or
+ * how to reach it.
  */
-export function boxSetupSteps(page: { atAddress: boolean }): BoxSetupStep[] {
+export function boxClaimSteps(page: BoxSetupPage): BoxClaimStep[] {
+  return [
+    ...(page.fromLink ? (['link'] as const) : []),
+    'claim',
+    ...(page.knowsAccount ? [] : (['account'] as const)),
+    page.atAddress ? 'passkey' : 'reach',
+  ];
+}
+
+/**
+ * The one setup's steps, one count from the link page to Chat: the claim's, then Set up your AI in the app, which the
+ * box's page opens next. Whatever way the page was opened, the count is the same length (four).
+ */
+export function boxSetupSteps(page: BoxSetupPage): BoxSetupStep[] {
   return [...boxClaimSteps(page), ...BOX_APP_STEPS];
 }
 
 /**
+ * The link page's own steps while it links a new Whombat: the box's page that opens next carries on this count.
+ */
+export const LINK_JOURNEY_STEPS: readonly BoxSetupStep[] = boxSetupSteps({
+  atAddress: true,
+  fromLink: true,
+  knowsAccount: true,
+});
+
+/**
  * Connect your AI's kicker when it follows the box's setup on a box that already has a Whombat: Set up your AI's place
- * in the setup's count. Every way through the setup has the same number of steps.
+ * in the setup's count, the last.
  */
 export function boxSetupAiKicker(): string {
   const steps = boxSetupSteps({ atAddress: false });
   return BOX_SETUP_TEXT.stepLabel(steps.indexOf('ai'), steps.length);
 }
 
+/**
+ * The Whombat's name when the setup gives it one by itself: “Mara’s Whombat” from the person's first name, else “My
+ * Whombat”. The person can change it in Settings.
+ */
+export function defaultWhombatName(personName: string | null | undefined): string {
+  const first = (personName ?? '').trim().split(/\s+/)[0]?.slice(0, 60) ?? '';
+  return first ? `${first}’s Whombat` : 'My Whombat';
+}
+
 export const BOX_SETUP_TEXT = {
   steps: {
+    link: { t: 'Link your Whombat', d: 'With Whombat Link' },
     claim: { t: 'Claim your Whombat', d: 'The letters on its screen' },
     account: { t: 'Who are you?', d: 'It stays on this Whombat' },
     passkey: { t: 'Make its passkey', d: 'For this Whombat only' },
     reach: { t: 'Reach it from anywhere', d: 'Tailscale or Whombat Link' },
-    backups: { t: 'Protect your Whombat', d: 'Where its backups go' },
-  } satisfies Record<BoxClaimStep, { t: string; d: string }>,
+    ai: { t: 'Set up your AI', d: 'Pick and sign in' },
+  } satisfies Record<BoxSetupStep, { t: string; d: string }>,
   stepLabel: (i: number, of: number) => `STEP ${i + 1} OF ${of}`,
   account: {
     title: 'Who are you?',
     sub: 'This Whombat is yours alone. Your name is how your agent greets you.',
     tip: 'Your name and email stay on this Whombat.',
+  },
+  /** The claim's own field when the account site sent the email but not the name. */
+  name: {
+    hint: 'How your agent greets you.',
   },
   reach: {
     title: 'Reach it from anywhere',
@@ -469,9 +510,9 @@ export const BOX_SETUP_TEXT = {
     tip: 'You can change this later in Settings → This Whombat.',
     onTailscale: (name: string) => `This Whombat is ${name} on your tailnet.`,
   },
-  backups: {
-    tip: 'Backups are encrypted on your Whombat before they leave it.',
-  },
+  /** Set up your AI on the box's page: the names the setup gave, and where they change. */
+  named: (whombat: string, agent: string) =>
+    `Your Whombat is called ${whombat} and your agent is ${agent}. You can change both in Settings.`,
   next: 'Continue',
 } as const;
 

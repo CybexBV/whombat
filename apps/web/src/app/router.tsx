@@ -259,8 +259,10 @@ const onboardingRoute = createRoute({
   component: withScreens([OnboardingScreen], function OnboardingRoute() {
     const navigate = useNavigate();
     const { burrow, step } = onboardingRoute.useSearch();
+    const { session } = onboardingRoute.useRouteContext();
     return (
       <OnboardingScreen
+        personName={session.account.name}
         onDone={(burrow) => navigate({ to: '/', search: { burrow } })}
         onSkip={() => navigate({ to: '/' })}
         resumeBurrow={burrow}
@@ -271,9 +273,9 @@ const onboardingRoute = createRoute({
 });
 
 /**
- * Connect your AI (Whombat first-day.md): the claim's third step, where the hosted claim goes after Protect your
- * Whombat; outside the shell, as the claim's other steps are. Without a burrow there is nothing to connect yet: on to
- * the Whombat.
+ * Connect your AI (Whombat first-day.md): the claim's last step, where the hosted claim and the box's setup go next;
+ * outside the shell, as the claim's other steps are. Without a burrow there is nothing to connect yet: on to the
+ * Whombat (on the box's page its onboarding asks Set up your AI there).
  */
 const connectAiRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -283,7 +285,16 @@ const connectAiRoute = createRoute({
     const burrow = chooseBurrow(session.memberships, context.services.burrowMemory.get());
     if (!burrow) throw redirect({ to: '/', replace: true });
     // On the box's own page this step ends the box's setup: it carries on that count.
-    return { burrow, afterBoxSetup: context.services.managed?.page?.kind === 'box' };
+    const page = context.services.managed?.page;
+    const afterBoxSetup =
+      page?.kind === 'box'
+        ? {
+            atAddress: page.atAddress ?? false,
+            fromLink: page.fromLink ?? false,
+            knowsAccount: page.knowsAccount ?? false,
+          }
+        : null;
+    return { burrow, afterBoxSetup };
   },
   component: withScreens([ConnectAiScreen], function ConnectAiRoute() {
     const navigate = useNavigate();

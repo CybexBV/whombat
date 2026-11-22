@@ -9,7 +9,6 @@ import {
   type ApplianceSummary,
   agoText,
   appliancesEmptyText,
-  BACKUP_SETUP_TEXT,
   type ClaimCard,
   type ClaimRequest,
   type ControlApi,
@@ -49,15 +48,12 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
-import { Screen } from '../ui/headers';
 import { Button, Loading } from '../ui/primitives';
-import { savedNotes } from './BackupDestination';
 import { PHONE_COMMUNITY_TEXT } from './community';
 import { UI_ORIGINS } from './config';
 import { COPY } from './copy';
 import { type KitPrinter, KitWays } from './KitWays';
 import { OrDivider, PhoneHero, PhoneScanner, ScanButton } from './PhoneSignInScreens';
-import { ProtectPlaces } from './ProtectPlaces';
 import { QrScanner } from './QrScanner';
 import { ScreenWayRow } from './ScreenSignInScreens';
 import { Card, ErrorLine, Field, Frame, Note, Row } from './ui';
@@ -889,62 +885,6 @@ export interface KitSaver {
   save(fileName: string, text: string): Promise<void>;
   /** Removes any copy the app wrote for the share sheet. */
   discard(): void;
-}
-
-/**
- * After the claim, before Connect your AI: where backups go (UP-F1, AP-260), what is there first (`ProtectPlaces`,
- * Whombat first-day.md). Skippable; a Whombat that has a destination already, or whose status can't be read, goes
- * straight on.
- */
-export function ProtectScreen({ session, onDone }: { session: ApplianceSession; onDone: () => void }) {
-  const T = BACKUP_SETUP_TEXT;
-  const [needed, setNeeded] = useState<boolean | null>(null);
-  const [saved, setSaved] = useState<string[] | null>(null);
-  /** “Let {assistant} set it up”: the yes is kept, said before going on. */
-  const [said, setSaid] = useState<string | null>(null);
-  const done = useRef(onDone);
-  done.current = onDone;
-  useEffect(() => {
-    let live = true;
-    sessionOps.applianceStatus(session).then(
-      (s) => {
-        if (!live) return;
-        if (s.backup.state === 'unprotected') setNeeded(true);
-        else done.current();
-      },
-      () => live && done.current(),
-    );
-    return () => {
-      live = false;
-    };
-  }, [session]);
-  if (!needed)
-    return (
-      <Screen>
-        <Loading />
-      </Screen>
-    );
-  return (
-    <Frame kicker={T.kicker} title={T.title} sub={saved ? T.saved : (said ?? T.sub)} tip={T.tip}>
-      {said ? (
-        <Button label={T.continue} size="lg" onPress={onDone} />
-      ) : saved ? (
-        <>
-          {saved.map((note) => (
-            <Note key={note} text={note} />
-          ))}
-          <Button label={T.continue} size="lg" onPress={onDone} />
-        </>
-      ) : (
-        <ProtectPlaces
-          session={session}
-          onSaved={(result) => setSaved(savedNotes(result))}
-          onAssistant={setSaid}
-          onDone={onDone}
-        />
-      )}
-    </Frame>
-  );
 }
 
 /**

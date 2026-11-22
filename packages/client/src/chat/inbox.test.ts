@@ -1,6 +1,7 @@
 import type { ChatThread, Message } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  INBOX_WORDS,
   type InboxRow,
   inboxCounts,
   inboxFiltered,
@@ -14,7 +15,7 @@ import {
   rowStep,
   splitRepoTitle,
 } from './inbox';
-import { threadPagesWithMessage } from './threads';
+import { rootTitle, threadOfMessage, threadPagesWithMessage } from './threads';
 
 const now = new Date('2026-11-14T11:22:00.000Z');
 const tz = 'Europe/Amsterdam';
@@ -79,6 +80,45 @@ describe('inbox rows', () => {
       [null, ''],
       [null, 'From Dusty'],
     ]);
+  });
+
+  it('never calls a thread “No reply yet”: a card-only first message is called by its card', () => {
+    const card = {
+      kind: 'guide',
+      guide: 'welcome',
+      node: 'mail',
+      title: 'Your email',
+      body: '',
+      blocks: [],
+      state: 'open',
+      answer: null,
+    } as unknown as Message['card'];
+    const root = {
+      id: 'msg_m',
+      conversationId: 'cnv_chat',
+      threadRootId: null,
+      authorId: AGENT,
+      text: '',
+      card,
+      attachments: [],
+      createdAt: '2026-11-14T10:00:00.000Z',
+      replyCount: 0,
+      lastReplyAt: null,
+    } as unknown as Message;
+    const live = threadOfMessage(root, 'chat');
+    const [fromCard, older, mine] = inboxRows(
+      [live, thread({ rootId: 'msg_o', authorId: AGENT, text: '' }), thread({ rootId: 'msg_p', text: '' })],
+      new Map(),
+      opts,
+    );
+    expect(fromCard?.title).toBe('Your email');
+    expect(older?.title).toContain('Dusty');
+    expect(mine?.title).not.toBe(INBOX_WORDS.noReply);
+    for (const row of [fromCard, older, mine]) expect(row?.title).not.toBe(INBOX_WORDS.noReply);
+    // The open thread's head says the same.
+    expect(rootTitle(root)).toBe('Your email');
+    // A card without a title of its own is called by its kind.
+    expect(rootTitle({ ...root, card: { kind: 'approval' } as unknown as Message['card'] })).not.toBe('');
   });
 
   it('never shows the open thread as new', () => {

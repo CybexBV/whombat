@@ -5,16 +5,7 @@
  * doesn't list for the organization is retried with its own words; a real network loss still says “You’re offline”.
  */
 import { expect, type Page, test } from '@playwright/test';
-import {
-  agreeToTerms,
-  type Console,
-  claimFresh,
-  consoles,
-  fake,
-  fresh,
-  signIn,
-  skipProtect,
-} from './support';
+import { agreeToTerms, type Console, claimFresh, consoles, fake, fresh, signIn, skipToApp } from './support';
 
 const NOTICE = 'Burrow HQ was retired. It can’t be opened any more.';
 const NONE_IN_USE = 'No Whombats in use. Plug in another one, then claim it with the code on its screen.';
@@ -31,13 +22,13 @@ async function setup(page: Page) {
 
 const row = (page: Page, name: string) => page.getByRole('listitem').filter({ hasText: name });
 
-/** From the claim found on this network: the letters, the terms, protect skipped; ends in the app (no kit, BX-01). */
+/** From the claim found on this network: the letters, the terms, Connect your AI skipped; ends in the app (no kit, BX-01). */
 async function claimFound(page: Page, box: 'spare') {
   const screen = (await consoles(page))[box] as Console;
   await page.getByLabel('Enter the 4 letters from its screen').fill(screen.letters);
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
-  await skipProtect(page);
+  await skipToApp(page);
   await expect(page.locator('[data-screen]').first()).toBeVisible({ timeout: 20_000 });
 }
 

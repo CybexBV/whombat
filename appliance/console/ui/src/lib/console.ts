@@ -151,6 +151,17 @@ export function waitingInApp(s: ConsoleState): { address: string; letters: strin
   return { address: c.inApp, letters: c.code };
 }
 
+/**
+ * Whether the footer (the console and recovery note) shows, the text console's rule (screen.FooterShown): not while the
+ * person sets the box up (the claim, or Link's code and its wait on a box nobody claimed), where it is words they don't
+ * need yet; under every other screen.
+ */
+export function footerShown(s: ConsoleState, link: LinkScreen | null): boolean {
+  const scene = consoleScene(s);
+  if (scene === 'claimed') return true;
+  return scene !== 'claimable' && scene !== 'backoff' && link === null;
+}
+
 /** The Link screen at `now` (server clock), or null for the claim's own screen. */
 export function linkScreen(s: ConsoleState, now: number): LinkScreen | null {
   const l = s.reach?.link;

@@ -20,7 +20,22 @@ type Disk struct {
 	SizeBytes int64  `json:"sizeBytes"`
 	Eligible  bool   `json:"eligible"`
 	Reason    string `json:"reason"` // "" | too-small | installer-medium | in-use | usb
+	// Empty: no partitions and no file system on it, so erasing it loses nothing; the page then asks for a button
+	// press instead of the disk's name typed. Parts is what is on a disk that isn't empty, for the page to say.
+	Empty bool   `json:"empty"`
+	Parts []Part `json:"parts"`
 }
+
+// Part is one partition on a disk (or the disk's own file system when it has no partitions): its label and file
+// system type as blkid found them ("" when none), cleaned for display.
+type Part struct {
+	Label     string `json:"label"`
+	FSType    string `json:"fsType"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
+// maxParts bounds what a disk's list carries; the page names a few and counts the rest.
+const maxParts = 16
 
 // lsblk --json --bytes --tree --output NAME,PATH,TYPE,SIZE,MODEL,MOUNTPOINTS,LABEL,FSTYPE,RO,TRAN
 type blockDev struct {
@@ -66,7 +81,8 @@ func parseDisks(data []byte, mediumLabel string, minimum int64) ([]Disk, error) 
 		if err != nil {
 			continue
 		}
-		disk := Disk{Path: screen.Clean(d.Path), Name: screen.Clean(d.Name), SizeBytes: size}
+		disk := Disk{Path: screen.Clean(d.Path), Name: screen.Clean(d.Name), SizeBytes: size, Parts: parts(d, size)}
+		disk.Empty = len(disk.Parts) == 0
 		if d.Model != nil {
 			disk.Model = strings.TrimSpace(screen.CleanName(*d.Model))
 		}
@@ -104,6 +120,33 @@ func CheckDisk(data []byte, path, mediumLabel string, minimum int64) error {
 		return nil
 	}
 	return fmt.Errorf("%s is not a whole installation disk", path)
+}
+
+// parts is what is on a disk: its partitions, or its own file system when it has no partition table. A disk with
+// neither is empty, as far as anyone can tell without reading its blocks.
+func parts(d blockDev, size int64) []Part {
+	text := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return strings.TrimSpace(screen.CleanName(*p))
+	}
+	out := []Part{}
+	for _, c := range d.Children {
+		if c.Type != "part" {
+			continue
+		}
+		n, _ := c.Size.Int64()
+		out = append(out, Part{Label: text(c.Label), FSType: text(c.FSType), SizeBytes: n})
+	}
+	if len(out) == 0 && (text(d.FSType) != "" || len(d.Children) > 0) {
+		// A file system, LVM or RAID member on the whole disk, or a device on top of it.
+		out = append(out, Part{Label: text(d.Label), FSType: text(d.FSType), SizeBytes: size})
+	}
+	if len(out) > maxParts {
+		out = out[:maxParts]
+	}
+	return out
 }
 
 func medium(d blockDev, label string) bool {

@@ -1,6 +1,6 @@
 /**
  * Setting up a backup destination (AP-260, updates.md UP-F1; contracts 0.22 CT-142): the kinds the person chooses from,
- * the fields each needs, the restic repository they make and the words of the “Protect your Whombat” step. Pure and
+ * the fields each needs, the restic repository they make and the words of setting one up in Settings. Pure and
  * shared by the web and the phone; the secrets typed here only ever travel in the `secret` op
  * `backup.configureDestination` (no digest in its receipt) and are never shown again.
  *
@@ -14,43 +14,12 @@
  * Runtimes before contracts 0.22 (without the `backup.destinations` feature) take the REST server only.
  */
 import { type BackupDestinationInput, OperationError } from '../session/managed-ops';
-import { claimStepKicker } from './claim-steps';
 import { ACCOUNTS_TEXT } from './status-copy';
 
 export type BackupKind = 's3' | 'sftp' | 'rest' | 'disk';
 
 /** Every kind, in the order the step offers them. */
 export const BACKUP_KINDS: readonly BackupKind[] = ['s3', 'sftp', 'rest', 'disk'];
-
-/**
- * The claim's backup step offers what is there first (Whombat first-day.md): a NAS the network scan found (the assistant
- * sets it up with the person once the AI is connected: its proposal in Needs you names the same place), then a USB disk
- * in one tap; a bucket, SFTP and a restic REST server stay under “Other places”.
- */
-export const PROTECT_OTHER_KINDS: readonly BackupKind[] = ['s3', 'sftp', 'rest'];
-
-/**
- * NAS boxes the scan finds, in the order the assistant proposes them (the scan's own order, desk-found.md DF-03); the
- * scan's answer is by address, so the first of an entry is its lowest address, as the proposal's.
- */
-const NAS_IDS = ['unraid', 'truenas', 'synology', 'qnap'];
-const NAS_SAID: Record<string, string> = {
-  synology: 'The Synology NAS',
-  qnap: 'The QNAP NAS',
-  truenas: 'The TrueNAS server',
-  unraid: 'The Unraid server',
-};
-
-/** A NAS the scan found that isn't hidden or added as a server: what the step offers first, or null. */
-export function protectFoundPlace(
-  found: readonly { catalogId: string; host: string; hidden?: boolean; serverIds?: readonly string[] }[],
-): { title: string; host: string } | null {
-  for (const id of NAS_IDS) {
-    const f = found.find((x) => x.catalogId === id && !x.hidden && !x.serverIds?.length);
-    if (f) return { title: `${NAS_SAID[id]} at ${f.host}`, host: f.host };
-  }
-  return null;
-}
 
 export interface BackupForm {
   kind: BackupKind;
@@ -94,7 +63,6 @@ export function emptyBackupForm(kind: BackupKind = 's3'): BackupForm {
 }
 
 export const BACKUP_SETUP_TEXT = {
-  kicker: claimStepKicker('protect'),
   title: 'Protect your Whombat',
   sub: 'Choose where its backups go. If this Whombat ever breaks, your passkey brings everything back from there.',
   tip: 'Backups are encrypted on your Whombat before they leave it. Whoever runs the place they go to can’t read them.',
@@ -158,24 +126,6 @@ export const BACKUP_SETUP_TEXT = {
   saving: 'Checking…',
   skip: 'Skip for now',
   /** What is there, first (first-day.md). */
-  places: {
-    diskTitle: 'A USB disk',
-    diskMeta:
-      'Name a USB disk WHOMBAT-BACKUP and plug it into your Whombat. An empty disk is prepared the first time.',
-    useDisk: 'Use the disk',
-    usingDisk: 'Preparing the disk…',
-    foundMeta: 'Found on your network',
-    foundBody: (assistant: string) =>
-      `${assistant} sets it up once your AI is connected and tells you when the first backup is done.`,
-    /** After “Let {assistant} set it up”: the yes is kept. */
-    letAssistantSaid: (assistant: string) => `${assistant} sets it up once your AI is connected.`,
-    letAssistant: (assistant: string) => `Let ${assistant} set it up`.slice(0, 60),
-    other: 'Other places',
-    otherMeta: 'A storage bucket, a server over SFTP or a restic REST server.',
-    later: (assistant: string) =>
-      `Or skip: ${assistant} suggests a place once it has looked around your network.`,
-  },
-  skipped: 'You can set up backups later in Settings → This Whombat.',
   /** On into the Whombat: the claim has no kit step any more (BX-01, AP-3507). */
   continue: 'Continue',
   onlyRest: 'Update your Whombat to back up to a bucket, a NAS or a disk.',

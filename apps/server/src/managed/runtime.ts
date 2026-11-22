@@ -405,7 +405,8 @@ export class ManagedRuntime {
   }
 
   /**
-   * What follows Link when it moves (LNK-05): the own address reads its state again, phones' tokens are registered,
+   * What follows Link when it moves (LNK-05): the own address reads its state again (and keeps reading it every few
+   * seconds for a while, so the address the person who just linked the box waits for is served soon), phones' tokens are registered,
    * remote help and the screen show it, and website feedback starts once Link runs. The relay endpoint follows it in
    * the boot.
    */
@@ -414,6 +415,7 @@ export class ManagedRuntime {
       this.trust.ceremony.refresh();
       return;
     }
+    this.ownAddress?.soon();
     void this.ownAddress?.poll().catch(() => {});
     void this.pushTokens
       .sync()

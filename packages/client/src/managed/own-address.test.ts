@@ -257,6 +257,14 @@ describe('the name and email carried to the claim', () => {
       readOwnClaimPrefill({ pathname: '/', hash: ownClaimPrefillHash({ email: 'mara@burrowhq.example' }) }),
     ).toEqual({ name: '', email: 'mara@burrowhq.example' });
     expect(ownClaimPrefillHash({ name: ' ', email: '' })).toBe('');
+    // From the link page: the mark that the setup's count goes on from there.
+    const fromLink = ownClaimPrefillHash({ name: '', email: 'mara@burrowhq.example', fromLink: true });
+    expect(readOwnClaimPrefill({ pathname: '/c/kxmprt', hash: fromLink })).toEqual({
+      name: '',
+      email: 'mara@burrowhq.example',
+      fromLink: true,
+    });
+    expect(ownClaimPrefillHash({ fromLink: true })).toBe('');
     expect(readOwnClaimPrefill({ pathname: '/', hash: '' })).toBeNull();
     expect(readOwnClaimPrefill({ pathname: '/', hash: '#other=1' })).toBeNull();
   });

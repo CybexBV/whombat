@@ -139,7 +139,16 @@ describe('parseState', () => {
           { id: 'teleport', status: 'ok' },
         ],
         disks: [
-          { path: '/dev/sda', name: 'sda', model: 'QEMU', sizeBytes: 1, eligible: true, reason: '' },
+          {
+            path: '/dev/sda',
+            name: 'sda',
+            model: 'QEMU',
+            sizeBytes: 1,
+            eligible: true,
+            reason: '',
+            empty: false,
+            parts: [{ label: 'OS', fsType: 'ntfs', sizeBytes: 1 }, 'odd'],
+          },
           {
             path: '/dev/sdb',
             name: 'sdb',
@@ -157,6 +166,9 @@ describe('parseState', () => {
     if (s?.mode !== 'installer') throw new Error('not an installer state');
     expect(s.preflight.checks).toEqual([{ id: 'uefi', status: 'ok', value: 'UEFI' }]);
     expect(s.preflight.disks.map((d) => d.reason)).toEqual(['', 'usb', '']);
+    // What is on a disk; a server from before says nothing, which is never “empty”.
+    expect(s.preflight.disks[0]?.parts).toEqual([{ label: 'OS', fsType: 'ntfs', sizeBytes: 1 }]);
+    expect(s.preflight.disks.map((d) => d.empty)).toEqual([false, false, false]);
     expect(s.install.percent).toBe(100);
     expect(s.install.step).toBe('copy');
   });

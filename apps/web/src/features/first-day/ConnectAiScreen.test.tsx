@@ -1,9 +1,9 @@
 /**
- * Connect your AI, the claim's third step (Whombat first-day.md), against the fixture world's fake AI: asked while
+ * Connect your AI, the claim's last step (Whombat first-day.md), against the fixture world's fake AI: asked while
  * nothing is ready, the sign-in rows of Settings → AI once a provider is picked, Later and Continue into the Whombat,
  * and straight on when a provider is ready already.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createWebFixtureFetch } from '../../app/fixtureFetch';
@@ -27,7 +27,7 @@ describe('Connect your AI (first-day.md)', () => {
       services({ installed: { claude: '2.1.278' }, signedIn: [] }),
     );
     expect(await screen.findByRole('heading', { name: 'Connect your AI' })).toBeTruthy();
-    expect(screen.getByText('CLAIM · STEP 3 OF 3')).toBeTruthy();
+    expect(screen.getByText('CLAIM · STEP 2 OF 2')).toBeTruthy();
     // Nothing is signed in to until a provider is picked.
     expect(screen.queryByRole('region', { name: 'ChatGPT' })).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'Use ChatGPT' }));
@@ -57,8 +57,11 @@ describe('Connect your AI (first-day.md)', () => {
       ),
     );
     expect(await screen.findByRole('heading', { name: 'Connect your AI' })).toBeTruthy();
-    expect(screen.getByText('STEP 6 OF 7')).toBeTruthy();
-    expect(screen.queryByText('CLAIM · STEP 3 OF 3')).toBeNull();
+    expect(screen.getByText('STEP 4 OF 4')).toBeTruthy();
+    expect(screen.queryByText('CLAIM · STEP 2 OF 2')).toBeNull();
+    // The setup's steps before it, done, in the aside.
+    const steps = within(screen.getByTestId('auth-steps')).getAllByRole('listitem');
+    expect(steps.map((s) => s.textContent?.slice(0, 1))).toEqual(['✓', '✓', '✓', '4']);
   });
 
   it('opens the Whombat at once when a provider is ready already', async () => {

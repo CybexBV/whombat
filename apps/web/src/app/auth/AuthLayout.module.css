@@ -120,3 +120,10 @@
   gap: 12px;
   padding-top: 8px;
 }
+
+/* The setup's steps, when this page is one of them: onboarding's aside list. */
+.stepList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

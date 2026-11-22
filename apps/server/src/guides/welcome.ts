@@ -5,6 +5,8 @@
  * connect form filled in, or Add a server — the same places the assistant's own connect card opens. Mail comes
  * second, other email (IMAP) before Google, which still needs the person's own Google app. When nothing was found
  * yet, a short welcome says what the assistant can do, and the finds come later as one message (`foundLaterSteps`).
+ * The welcome is one thread: its first step is the thread, mail and the later finds reply in it, so a new person's
+ * Chat starts with one thread from the assistant rather than three.
  *
  * The finds' buttons are links: a guide card locks at its first answer, and every find must stay one tap away.
  */
@@ -183,7 +185,7 @@ export const mailStep: Step = (_f, id) => ({
   }),
 });
 
-/** The welcome: the finds (or what it can do), then mail. */
+/** The welcome: the finds (or what it can do), then mail, which `postSteps` puts in the first one's thread. */
 export function welcomeSteps(found: FoundNow): Step[] {
   const { finds } = found;
   if (finds.length > 0)
@@ -205,7 +207,7 @@ export function welcomeSteps(found: FoundNow): Step[] {
   return [hello, mailStep];
 }
 
-/** The scan's finds after the welcome went out without them: one message with the same buttons. */
+/** The scan's finds after the welcome went out without them: one message with the same buttons, in its thread. */
 export function foundLaterSteps(finds: readonly WelcomeFind[]): Step[] {
   if (finds.length === 0) return [];
   return [foundStep(copy.foundLaterText(foundPhrase(finds), finds.length === 1), finds)];

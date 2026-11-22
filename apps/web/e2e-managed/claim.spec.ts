@@ -68,8 +68,8 @@ test('the found box shows its model and id; letters are taken in any case and sp
   await expect(lettersField(page)).toHaveValue(letters);
   await claimIt(page).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
-  await expect(page.getByText('CLAIM · STEP 2 OF 3')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('CLAIM · STEP 2 OF 2')).toBeVisible();
 });
 
 test('no kit is a quiet row in Settings; “Make a kit” makes one for a box without a screen', async ({
@@ -103,7 +103,7 @@ test('wrong letters: refused, the Whombat shows new ones, and those work', async
   await lettersField(page).fill(after.letters);
   await claimIt(page).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
 });
 
 test('too many wrong codes: the Whombat waits, and says for how long', async ({ page }) => {
@@ -136,7 +136,7 @@ test('nothing on this network: we couldn’t find it; look again once this devic
   await lettersField(page).fill((await screenOf(page, 'fresh')).letters);
   await claimIt(page).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
 });
 
 test('anything but four letters is caught before anything is sent', async ({ page }) => {
@@ -159,7 +159,7 @@ test('several on this network: pick one, then its letters', async ({ page }) => 
   await lettersField(page).fill((await screenOf(page, 'fresh')).letters);
   await claimIt(page).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
 });
 
 test('“Not this one?” and “None of these?”: we couldn’t find it', async ({ page }) => {
@@ -187,7 +187,7 @@ test('a found box that left this network: we couldn’t find it, then look again
   await lettersField(page).fill((await screenOf(page, 'fresh')).letters);
   await claimIt(page).click();
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
 });
 
 test('something that isn’t the Whombat on the screen answers: stopped, nothing trusted', async ({ page }) => {
@@ -195,7 +195,7 @@ test('something that isn’t the Whombat on the screen answers: stopped, nothing
   await lettersField(page).fill((await screenOf(page, 'mismatched')).letters);
   await claimIt(page).click();
   await expect(page.getByText('This isn’t the Whombat on your screen.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Connect your AI' })).toHaveCount(0);
   const known = await page.evaluate(() =>
     Object.keys(localStorage)
       .filter((k) => k.startsWith('whombat:appliances:'))

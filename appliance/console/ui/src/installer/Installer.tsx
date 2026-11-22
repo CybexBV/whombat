@@ -1,8 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { INSTALL_STEPS, type InstallerState } from '../lib/api';
+import { type Check, INSTALL_STEPS, type InstallerState } from '../lib/api';
 import type { Client } from '../lib/client';
-import { CHECK_LABEL, checkNote, DISK_REASON, STEP_LABEL, STEP_SAY, INSTALLER as T } from '../lib/copy';
 import {
+  CHECK_LABEL,
+  checkNote,
+  DISK_REASON,
+  diskHolds,
+  STEP_LABEL,
+  STEP_SAY,
+  INSTALLER as T,
+} from '../lib/copy';
+import {
+  checksFolded,
   checksVerdict,
   chosenDisk,
   eligibleDisks,
@@ -181,12 +190,10 @@ function Checks({
     if (verdict === 'ok' || verdict === 'warn') next.current?.focus();
     if (verdict === 'fail') again.current?.focus();
   }, [verdict]);
-  const summary = {
-    running: T.checksRunning,
-    ok: T.checksOk,
-    warn: T.checksWarn,
-    fail: T.checksFail,
-  }[verdict];
+  // The line says it while the checks run and once all passed; the bar under it only what needs reading.
+  const summary = verdict === 'warn' ? T.checksWarn : verdict === 'fail' ? T.checksFail : null;
+  const { shown, folded } = checksFolded(state.preflight.checks);
+  const [details, setDetails] = useState(false);
   const recheck = async () => {
     await client.post('/api/preflight').catch(() => null);
     refresh();
@@ -215,20 +222,54 @@ function Checks({
         </>
       }
     >
-      <ul className={styles.checks} aria-live="polite">
-        {state.preflight.checks.map((c) => {
-          const note = checkNote(c.id, c.status, c.value, state.preflight.disks);
-          return (
-            <li key={c.id} className={styles.check}>
-              <StatusIcon status={c.status} />
-              <span className={styles.checkLabel}>{CHECK_LABEL[c.id]}</span>
-              <span className={styles.checkValue}>{c.value}</span>
-              {note && <span className={`${styles.checkNote} ${styles[c.status]}`}>{note}</span>}
-            </li>
-          );
-        })}
-      </ul>
+      {(verdict === 'ok' || verdict === 'running') && (
+        <p className={styles.checksLine} aria-live="polite">
+          <StatusIcon status={verdict} />
+          {verdict === 'ok' ? T.checksAllGood : T.checksLooking}
+        </p>
+      )}
+      {shown.length > 0 && <CheckRows checks={shown} state={state} live />}
+      {folded.length > 0 && (
+        <>
+          <button
+            type="button"
+            className={styles.detailsToggle}
+            aria-expanded={details}
+            onClick={() => setDetails((d) => !d)}
+          >
+            {details ? T.checksHideDetails : T.checksDetails}
+          </button>
+          {details && <CheckRows checks={folded} state={state} />}
+        </>
+      )}
     </Frame>
+  );
+}
+
+/** The checks' rows: what each looked at, its value, and under one that isn't ok what to do in plain words. */
+function CheckRows({
+  checks,
+  state,
+  live = false,
+}: {
+  checks: Check[];
+  state: InstallerState;
+  live?: boolean;
+}) {
+  return (
+    <ul className={styles.checks} aria-live={live ? 'polite' : undefined}>
+      {checks.map((c) => {
+        const note = checkNote(c.id, c.status, c.value, state.preflight.disks);
+        return (
+          <li key={c.id} className={styles.check}>
+            <StatusIcon status={c.status} />
+            <span className={styles.checkLabel}>{CHECK_LABEL[c.id]}</span>
+            <span className={styles.checkValue}>{c.value}</span>
+            {note && <span className={`${styles.checkNote} ${styles[c.status]}`}>{note}</span>}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -337,11 +378,14 @@ function Erase({
   };
   const name = disk?.name ?? '';
   const what = disk ? [disk.model, formatSize(disk.sizeBytes)].filter(Boolean).join(', ') : '';
+  // An empty disk loses nothing: the button confirms (Enter on it). One that holds something: its name typed.
+  const empty = disk?.empty === true;
+  const holds = disk ? diskHolds(disk) : null;
   return (
     <Frame
       kicker={kickerFor(state, 'erase')}
       title={T.eraseTitle}
-      sub={disk ? T.eraseSub(name, what) : T.diskNone}
+      sub={!disk ? T.diskNone : empty ? T.eraseEmptySub(name, what) : T.eraseSub(name, what)}
       guide={{ say: T.eraseSay }}
       meta={meta}
       actions={
@@ -350,40 +394,49 @@ function Erase({
             {T.back}
           </Button>
           <span className={styles.grow} />
-          <Button kind="danger" onClick={install} disabled={!ok}>
-            {busy ? T.erasing : T.erase(name)}
+          <Button kind="danger" onClick={install} disabled={!ok} autoFocus={empty}>
+            {busy ? T.erasing : empty ? T.eraseEmpty : T.erase(name)}
           </Button>
         </>
       }
     >
-      <form
-        className={styles.confirm}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void install();
-        }}
-      >
-        <label htmlFor="erase-confirm" className={styles.label}>
-          {fill(T.eraseLabel, <span className={styles.name}>{name}</span>)}
-        </label>
-        <input
-          id="erase-confirm"
-          className={styles.confirmInput}
-          value={typed}
-          onChange={(e) => setTyped(e.target.value.slice(0, 32))}
-          autoFocus
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          placeholder={name}
-          disabled={busy || !disk}
-        />
-        {error && (
+      {empty ? (
+        error && (
           <p className={`${styles.summary} ${styles.fail}`} role="alert">
             {error}
           </p>
-        )}
-      </form>
+        )
+      ) : (
+        <form
+          className={styles.confirm}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void install();
+          }}
+        >
+          {holds && <p className={styles.holds}>{holds}</p>}
+          <label htmlFor="erase-confirm" className={styles.label}>
+            {fill(T.eraseLabel, <span className={styles.name}>{name}</span>)}
+          </label>
+          <input
+            id="erase-confirm"
+            className={styles.confirmInput}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value.slice(0, 32))}
+            autoFocus
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            placeholder={name}
+            disabled={busy || !disk}
+          />
+          {error && (
+            <p className={`${styles.summary} ${styles.fail}`} role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      )}
     </Frame>
   );
 }

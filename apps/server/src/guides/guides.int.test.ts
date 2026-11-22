@@ -113,14 +113,16 @@ beforeAll(async () => {
 });
 
 describe('the welcome (AG-04)', () => {
-  it('is posted once in a new person’s empty DM, by their assistant: hello, then mail', async () => {
+  it('is posted once in a new person’s empty DM, by their assistant, as one thread: hello, then mail', async () => {
     const rows = await dmMessages(moss.maraDm);
     expect(rows).toHaveLength(2);
     const [hello, mail] = rows;
     expect(hello?.authorId).toBe(moss.maraAgent);
     expect(hello?.text).toMatch(/^Hi Mara, I’m \w+\./);
     expect(hello?.card).toBeNull();
+    expect(hello?.threadRootId).toBeNull();
     expect(mail?.card).toMatchObject({ kind: 'guide', guide: 'welcome', node: 'mail', state: 'open' });
+    expect(mail?.threadRootId).toBe(hello?.id);
   });
 });
 
@@ -136,8 +138,9 @@ describe('acting on a card (AG-03)', () => {
     });
     const next = await lastCard(moss.maraDm);
     expect(next.card).toMatchObject({ guide: 'email', node: 'connect', state: 'open' });
-    // In a thread under the welcome card, not at the top of the Chat.
-    expect(next.threadRootId).toBe(welcome.id);
+    // In the welcome's thread, not at the top of the Chat.
+    expect(welcome.threadRootId).not.toBeNull();
+    expect(next.threadRootId).toBe(welcome.threadRootId);
     const rows = await dmMessages(moss.maraDm);
     expect(rows.at(-1)?.authorId).toBe(moss.maraAgent);
     // Nobody was woken.
@@ -433,6 +436,7 @@ describe('the welcome from what the box found (first-day.md)', () => {
       '/things/servers?add=1&address=192.168.77.30',
     ]);
     expect(mail?.card).toMatchObject({ node: 'mail', state: 'open' });
+    expect(mail?.threadRootId).toBe(found?.id);
     expect((await foundStateOf(t.services.db, fern.burrowId)).toldAt).not.toBeNull();
     expect(await tellFound(t.services, fern.burrowId, fern.personId, { finishedAt: at, found: [ha] })).toBe(
       false,
@@ -440,7 +444,7 @@ describe('the welcome from what the box found (first-day.md)', () => {
     expect(await dmMessages(fern.dmId)).toHaveLength(2);
   });
 
-  it('with nothing found at the welcome, the scan’s finds come later as one message', async () => {
+  it('with nothing found at the welcome, the scan’s finds come later as one message in its thread', async () => {
     const reed = await newBurrow('Reed Co');
     const [hello, mail] = await dmMessages(reed.dmId);
     expect(hello?.card).toBeNull();
@@ -453,9 +457,28 @@ describe('the welcome from what the box found (first-day.md)', () => {
     expect(later?.authorId).toBe(reed.agentId);
     expect(later?.text).toContain('Home Assistant');
     expect(later?.text).not.toContain('Hi Mara');
+    expect(later?.threadRootId).toBe(hello?.id);
     expect(linksOf(later?.card)).toHaveLength(1);
     // Once.
     expect(await tellFound(t.services, reed.burrowId, reed.personId, scan)).toBe(false);
     expect(await dmMessages(reed.dmId)).toHaveLength(3);
+  });
+
+  it('a welcome from before it was one thread gets the finds in its first message’s thread', async () => {
+    const sedge = await newBurrow('Sedge Co');
+    const [hello, mail] = await dmMessages(sedge.dmId);
+    // As an older Whombat posted it: the mail card at the top of the Chat, a thread of its own.
+    await t.services.db
+      .update(messages)
+      .set({ threadRootId: null })
+      .where(eq(messages.id, mail?.id ?? ''));
+    await t.services.db
+      .update(messages)
+      .set({ replyCount: 0, lastReplyAt: null })
+      .where(eq(messages.id, hello?.id ?? ''));
+
+    const scan = { finishedAt: t.services.clock(), found: [ha] };
+    expect(await tellFound(t.services, sedge.burrowId, sedge.personId, scan)).toBe(true);
+    expect((await dmMessages(sedge.dmId)).at(-1)?.threadRootId).toBe(hello?.id);
   });
 });

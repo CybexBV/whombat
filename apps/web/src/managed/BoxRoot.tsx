@@ -116,8 +116,37 @@ function takeClaimPrefill(): OwnClaimPrefill | null {
   if (read) {
     claimPrefill = read;
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    keepSetupWay({ fromLink: read.fromLink ?? false, knowsAccount: Boolean(read.email) });
   }
   return claimPrefill;
+}
+
+/**
+ * Which steps the setup counted (from the link page, with the account's email), kept for this tab so Set up your AI
+ * counts the same after a reload. A convenience: without it the count is still four, with other steps' names.
+ */
+const SETUP_WAY_KEY = 'whombat:setup-way';
+type SetupWay = { fromLink: boolean; knowsAccount: boolean };
+
+function keepSetupWay(way: SetupWay) {
+  try {
+    window.sessionStorage.setItem(SETUP_WAY_KEY, JSON.stringify(way));
+  } catch {
+    // Blocked site data: the count after a reload names the other way's steps.
+  }
+}
+
+function setupWay(): SetupWay {
+  if (claimPrefill)
+    return { fromLink: claimPrefill.fromLink ?? false, knowsAccount: Boolean(claimPrefill.email) };
+  try {
+    const kept = JSON.parse(
+      window.sessionStorage.getItem(SETUP_WAY_KEY) ?? 'null',
+    ) as Partial<SetupWay> | null;
+    return { fromLink: kept?.fromLink === true, knowsAccount: kept?.knowsAccount === true };
+  } catch {
+    return { fromLink: false, knowsAccount: false };
+  }
 }
 
 /** Leaves the claim link's page once it is spent (the secret changes after a claim). */
@@ -373,7 +402,12 @@ export function BoxRoot({ env }: { env: BoxEnvironment }) {
       onGone={() => setAttempt((n) => n + 1)}
       onAccount={(accountId) => registry().put({ ...known, enrolled: true, accountId })}
       hasOthers={false}
-      page={{ kind: 'box', secure: env.secure(), atAddress: (env.ownAddress?.() ?? null) !== null }}
+      page={{
+        kind: 'box',
+        secure: env.secure(),
+        atAddress: (env.ownAddress?.() ?? null) !== null,
+        ...setupWay(),
+      }}
       edition={box.edition ?? 'commercial'}
     />
   );

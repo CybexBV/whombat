@@ -183,8 +183,18 @@ function OpenHead({
         <h1 className={styles.claimTitle}>{title}</h1>
         <p className={styles.claimOpen}>{line}</p>
       </div>
-      <Qr rows={qr} size={132} label={CONSOLE.qr(url)} />
+      <ScanQr rows={qr} size={132} url={url} />
     </div>
+  );
+}
+
+/** A QR code with what to do with it under it. */
+function ScanQr({ rows, size, url }: { rows: string[]; size: number; url: string }) {
+  return (
+    <figure className={styles.scan}>
+      <Qr rows={rows} size={size} label={CONSOLE.qr(url)} />
+      <figcaption className={styles.scanCaption}>{CONSOLE.scan}</figcaption>
+    </figure>
   );
 }
 
@@ -257,7 +267,7 @@ export function ReachNotes({ notes }: { notes: ReachNote[] }) {
               {step && <strong className={styles.step}>{step}</strong>}
               {words}
             </span>
-            {qr && <Qr rows={qr.qr} size={112} label={CONSOLE.qr(qr.url)} />}
+            {qr && <ScanQr rows={qr.qr} size={112} url={qr.url} />}
           </li>
         );
       })}

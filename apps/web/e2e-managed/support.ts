@@ -98,17 +98,15 @@ export async function startFresh(page: Page): Promise<void> {
 }
 
 /**
- * After a claim: “Protect your Whombat” (UP-F1, AP-260), skipped for now; then “Connect your AI” (Whombat
- * first-day.md), Later; the Whombat opens next (no kit, BX-01).
+ * After a claim: Start fresh, then “Connect your AI” (Whombat first-day.md), Later; the Whombat opens next (no backups
+ * step: Needs you proposes a place; no kit, BX-01).
  */
-export async function skipProtect(page: Page): Promise<void> {
+export async function skipToApp(page: Page): Promise<void> {
   await startFresh(page);
-  await expect(page.getByRole('heading', { name: 'Protect your Whombat' })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip for now' }).click();
   await skipConnectAi(page);
 }
 
-/** “Connect your AI” (CLAIM · STEP 3 OF 3), Later: the Whombat opens with the line that the assistant can't work yet. */
+/** “Connect your AI” (CLAIM · STEP 2 OF 2), Later: the Whombat opens with the line that the assistant can't work yet. */
 export async function skipConnectAi(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: 'Later' }).click();
@@ -116,7 +114,7 @@ export async function skipConnectAi(page: Page): Promise<void> {
 
 /**
  * Claims the fresh appliance the way most people will (CC-09): it is found on this network, so its four letters
- * are enough; Protect skipped; ends in the burrow app (the claim has no kit step any more, BX-01).
+ * are enough; Connect your AI skipped; ends in the burrow app (the claim has no kit step any more, BX-01).
  */
 export async function claimFresh(page: Page): Promise<Card> {
   const c = (await cards(page)).fresh;
@@ -126,7 +124,7 @@ export async function claimFresh(page: Page): Promise<Card> {
   await page.getByLabel('Enter the 4 letters from its screen').fill(screen.letters);
   await agreeToTerms(page);
   await page.getByRole('button', { name: 'Claim it' }).click();
-  await skipProtect(page);
+  await skipToApp(page);
   await expect(page.locator('[data-screen]').first()).toBeVisible({ timeout: 20_000 });
   return c;
 }

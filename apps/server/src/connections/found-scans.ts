@@ -15,9 +15,9 @@
  * The state is the burrow's own, not anyone's decision: written in the burrow's transaction, without an event (like a
  * read marker; the screen's Not now can come from a locked screen, which isn't anyone).
  */
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
-import { assistantStates, connectionFoundState } from '../db/schema/index';
+import { assistantStates, connectionFoundState, messages } from '../db/schema/index';
 import { personPlaces } from '../desk/person';
 import { loadDeskRow } from '../desk/store';
 import { personalPlace } from '../guides/place';
@@ -149,7 +149,9 @@ export async function foundNowFor(services: Services, burrowId: string, personId
 /**
  * The assistant's one message (DF-05): to `personId` in their Chat, when the scan found something new for them and
  * nobody was told yet and the view wasn't put away — one button per find (first-day.md). Not before the person's
- * welcome: the welcome names the finds itself when it comes after the scan. True when it posted.
+ * welcome: the welcome names the finds itself when it comes after the scan. It goes in the welcome's thread, so a new
+ * person's Chat holds one thread from the assistant, not one per message; at the top of the Chat when the welcome is
+ * gone. True when it posted.
  */
 export async function tellFound(
   services: Services,
@@ -165,14 +167,31 @@ export async function tellFound(
   const ids = await services.guides.postTo(
     burrowId,
     personId,
-    async (ctx) => {
+    async (ctx, place) => {
       if (!(await welcomed(ctx.tx, burrowId, personId))) return null;
       if (!(await claimFoundTold(ctx.tx, burrowId, ctx.now))) return null;
-      return foundLaterSteps(fresh);
+      return {
+        steps: foundLaterSteps(fresh),
+        threadRootId: await welcomeThread(ctx.tx, place.dm.id, place.agent.id),
+      };
     },
     { notify: true },
   );
   return ids.length > 0;
+}
+
+/**
+ * The welcome's thread: the Chat's first top-level message, when the assistant wrote it and it is still there (the
+ * welcome goes out only into an empty Chat). A welcome from before it was one thread is its first message too.
+ */
+async function welcomeThread(tx: Tx, conversationId: string, agentId: string): Promise<string | null> {
+  const [first] = await tx
+    .select({ id: messages.id, authorId: messages.authorId, deletedAt: messages.deletedAt })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), isNull(messages.threadRootId)))
+    .orderBy(asc(messages.ord))
+    .limit(1);
+  return first && first.authorId === agentId && !first.deletedAt ? first.id : null;
 }
 
 /** Whether the person's welcome went out (it names the finds itself when it comes after the scan). */
