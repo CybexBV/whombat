@@ -3,6 +3,7 @@ package diskusage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net"
 	"net/http"
@@ -698,19 +699,15 @@ func TestStaysInsideRequestedMountNestedAndBindMounts(t *testing.T) {
 
 	r := newTestRunner(t, root, mounts, inv)
 	var mu sync.Mutex
-	var statted []string
-	r.lstat = func(path string) (fs.FileInfo, error) {
-		rel, err := filepath.Rel(root, path)
-		if err == nil {
-			logical := "/" + filepath.ToSlash(rel)
-			if rel == "." {
-				logical = "/"
-			}
-			mu.Lock()
-			statted = append(statted, logical)
-			mu.Unlock()
-		}
-		return os.Lstat(path)
+	var touched []string
+	recordTouch := func(logical string) {
+		mu.Lock()
+		touched = append(touched, logical)
+		mu.Unlock()
+	}
+	r.scanFS = &recordingScanFS{
+		inner: newDefaultScanFS(r),
+		onOp:  recordTouch,
 	}
 
 	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/cache"})
@@ -718,19 +715,22 @@ func TestStaysInsideRequestedMountNestedAndBindMounts(t *testing.T) {
 		t.Fatalf("unexpected error: %+v", resp)
 	}
 
-	// No stat may ever touch paths outside /mnt/cache or beneath nested/bind mounts.
-	for _, p := range statted {
+	if len(touched) == 0 {
+		t.Fatal("expected recordingScanFS to observe filesystem operations inside /mnt/cache")
+	}
+	// No open, stat, or readdir may ever touch paths outside /mnt/cache or beneath nested/bind mounts.
+	for _, p := range touched {
 		if !hasPathPrefix(p, "/mnt/cache") {
-			t.Errorf("lstat escaped /mnt/cache to %q", p)
+			t.Errorf("scan escaped /mnt/cache to %q", p)
 		}
 		if hasPathPrefix(p, "/mnt/cache/nested") {
-			t.Errorf("lstat touched nested mount %q", p)
+			t.Errorf("scan touched nested mount %q", p)
 		}
 		if hasPathPrefix(p, "/mnt/cache/bind") {
-			t.Errorf("lstat touched bind mount %q", p)
+			t.Errorf("scan touched bind mount %q", p)
 		}
 		if p == "/mnt/cache/esc/domains" {
-			t.Errorf("lstat followed intermediate symlink to %q", p)
+			t.Errorf("scan followed intermediate symlink to %q", p)
 		}
 	}
 
@@ -2251,5 +2251,754 @@ func TestHostDiskStandbyCommandLinesAndNonWakingRules(t *testing.T) {
 	}
 	if resp := e2e.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/nvme"}); resp.Code != "" {
 		t.Fatalf("/mnt/nvme: %+v", resp)
+	}
+}
+
+// unknownTypeDirEntry wraps a real fs.DirEntry to report Type() == 0 and
+// IsDir() == false, simulating filesystems without d_type (XFS without ftype=1, FUSE).
+type unknownTypeDirEntry struct {
+	inner fs.DirEntry
+}
+
+func (u unknownTypeDirEntry) Name() string               { return u.inner.Name() }
+func (u unknownTypeDirEntry) IsDir() bool                { return false }
+func (u unknownTypeDirEntry) Type() fs.FileMode          { return 0 }
+func (u unknownTypeDirEntry) Info() (fs.FileInfo, error) { return u.inner.Info() }
+
+func TestCategoriesAndWalkWithoutDType(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	// Container logs on a filesystem without d_type:
+	// - real container dir + json log + rotated log
+	// - plain regular file inside containers/ (must be ignored cleanly, not Partial)
+	// - symlink dir and symlink log pointing outside (must never be followed)
+	// - mounted child dir inside containers/ (must never be crossed)
+	// - /var/log/pods CRI log
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/c1/c1-json.log"), 24*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/c1/c1-json.log.1"), 8*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/c1/subdir.log/nested.log"), 128*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/readme.txt"), 4*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/mounted-c/mounted-json.log"), 256*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/docker/containers/raced-c/raced-json.log"), 256*1024)
+	writeBytes(t, filepath.Join(root, "var/log/pods/app/0.log"), 12*1024)
+
+	writeBytes(t, filepath.Join(outside, "ext-json.log"), 512*1024)
+	if err := os.Symlink(outside, filepath.Join(root, "var/lib/docker/containers/sym-c")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "ext-json.log"), filepath.Join(root, "var/lib/docker/containers/c1/sym-json.log")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Other category collectors and general folders on the same DT_UNKNOWN filesystem.
+	writeBytes(t, filepath.Join(root, "var/lib/docker/volumes/pg/data.bin"), 20*1024)
+	writeBytes(t, filepath.Join(root, "var/log/journal/m1/system.journal"), 36*1024)
+	writeBytes(t, filepath.Join(root, "var/cache/apt/archives/pkg.deb"), 16*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/libvirt/images/vm.qcow2"), 48*1024)
+	writeBytes(t, filepath.Join(root, "var/lib/libvirt/qemu/save/vm.save"), 16*1024)
+	writeBytes(t, filepath.Join(root, "srv/app/blob.bin"), 32*1024)
+
+	mounts := []mountInfo{
+		{ID: 10, ParentID: 1, MountPoint: "/", FSType: "xfs", Source: "/dev/nvme0n1p2"},
+		{ID: 11, ParentID: 10, MountPoint: "/var/lib/docker/containers/mounted-c", FSType: "xfs", Source: "/dev/sdb1"},
+	}
+
+	r := newTestRunner(t, root, mounts, nil)
+	r.statMountID = func(logicalPath string) (uint64, bool) {
+		if hasPathPrefix(logicalPath, "/var/lib/docker/containers/raced-c") {
+			return 99, true
+		}
+		return 10, true
+	}
+	r.readDir = func(logicalPath string) ([]fs.DirEntry, error) {
+		if hasPathPrefix(logicalPath, "/var/lib/docker/containers/mounted-c") {
+			t.Errorf("readDir crossed known child mount %q", logicalPath)
+			return nil, fs.ErrPermission
+		}
+		if hasPathPrefix(logicalPath, "/var/lib/docker/containers/raced-c") {
+			t.Errorf("readDir crossed mount-ID-mismatched dir %q", logicalPath)
+			return nil, fs.ErrPermission
+		}
+		raw, err := os.ReadDir(r.hostPath(logicalPath))
+		if err != nil {
+			return nil, err
+		}
+		out := make([]fs.DirEntry, len(raw))
+		for i, e := range raw {
+			out[i] = unknownTypeDirEntry{inner: e}
+		}
+		return out, nil
+	}
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+	if resp.Partial {
+		t.Errorf("expected Partial=false on readable DT_UNKNOWN tree, got Partial=true")
+	}
+
+	byKey := map[string]proto.DiskUsageCategory{}
+	for _, c := range resp.Categories {
+		byKey[c.Key] = c
+	}
+
+	// Container logs: 24 KiB + 8 KiB + 12 KiB (pods) = ~44 KiB; must NOT include subdir.log (128 KiB),
+	// mounted-c (256 KiB), raced-c (256 KiB), or symlinks (512 KiB).
+	if c := byKey[proto.DiskCatContainerLogs]; c.Bytes < 44*1024 || c.Bytes >= 128*1024 {
+		t.Errorf("container_logs = %+v, want ~44 KiB", c)
+	}
+	if c := byKey[proto.DiskCatContainerVolumes]; c.Bytes < 20*1024 || c.Bytes >= 64*1024 {
+		t.Errorf("container_volumes = %+v, want ~20 KiB", c)
+	}
+	if c := byKey[proto.DiskCatJournal]; c.Bytes < 36*1024 || c.Bytes >= 64*1024 {
+		t.Errorf("journal = %+v, want ~36 KiB", c)
+	}
+	if c := byKey[proto.DiskCatPackageCache]; c.Bytes < 16*1024 || c.Bytes >= 64*1024 {
+		t.Errorf("package_cache = %+v, want ~16 KiB", c)
+	}
+	if c := byKey[proto.DiskCatVMDisks]; c.Bytes < 48*1024 || c.Bytes >= 128*1024 {
+		t.Errorf("vm_disks = %+v, want ~48 KiB", c)
+	}
+	if c := byKey[proto.DiskCatVMSnapshots]; c.Bytes < 16*1024 || c.Bytes >= 64*1024 {
+		t.Errorf("vm_snapshots = %+v, want ~16 KiB", c)
+	}
+	var foundSrv bool
+	for _, f := range resp.Folders {
+		if hasPathPrefix(f.Path, "/srv") && f.Bytes >= 32*1024 {
+			foundSrv = true
+		}
+	}
+	if !foundSrv {
+		t.Errorf("expected /srv folder in walk result on DT_UNKNOWN tree, got %+v", resp.Folders)
+	}
+}
+
+type recordingScanFS struct {
+	inner scanFS
+	onOp  func(logicalPath string)
+}
+
+func (f *recordingScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
+	f.onOp(logicalMount)
+	d, err := f.inner.OpenRoot(hostPath, logicalMount)
+	if err != nil {
+		return nil, err
+	}
+	return &recordingScanDir{inner: d, logicalPath: logicalMount, onOp: f.onOp}, nil
+}
+
+type recordingScanDir struct {
+	inner       scanDir
+	logicalPath string
+	onOp        func(logicalPath string)
+}
+
+func (d *recordingScanDir) Stat() (entryStat, error) { return d.inner.Stat() }
+func (d *recordingScanDir) Statfs() (fsStat, error)  { return d.inner.Statfs() }
+func (d *recordingScanDir) Close() error             { return d.inner.Close() }
+
+func (d *recordingScanDir) OpenSelf() (scanDir, error) {
+	sub, err := d.inner.OpenSelf()
+	if err != nil {
+		return nil, err
+	}
+	return &recordingScanDir{inner: sub, logicalPath: d.logicalPath, onOp: d.onOp}, nil
+}
+
+func (d *recordingScanDir) ReadDir() ([]dirEntryInfo, error) {
+	d.onOp(d.logicalPath)
+	return d.inner.ReadDir()
+}
+
+func (d *recordingScanDir) OpenDir(name, logicalPath string, searchOnly bool) (scanDir, error) {
+	d.onOp(logicalPath)
+	sub, err := d.inner.OpenDir(name, logicalPath, searchOnly)
+	if err != nil {
+		return nil, err
+	}
+	return &recordingScanDir{inner: sub, logicalPath: logicalPath, onOp: d.onOp}, nil
+}
+
+func (d *recordingScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
+	d.onOp(logicalPath)
+	return d.inner.StatEntry(name, logicalPath)
+}
+
+// ---- In-memory fake filesystem for testing mid-walk mounts -------------------
+
+type fakeFSMode int
+
+const (
+	fakeModeOpenat2  fakeFSMode = iota // Linux openat2(RESOLVE_NO_XDEV): refuses mount crossings before touching the mounted fs
+	fakeModeFallback                   // Linux ENOSYS fallback / macOS: checks st_dev and mount ID before ReadDir
+)
+
+type fakeMountTracker struct {
+	name        string
+	touched     atomic.Int32 // any stat or open that entered the mounted filesystem
+	dataReads   atomic.Int32 // any ReadDir or inner-entry access on the mounted filesystem
+	statfsCalls atomic.Int32
+}
+
+type fakeNode struct {
+	mode       fs.FileMode
+	allocBytes uint64
+	dev        uint64
+	mntID      uint64
+	ino        uint64
+	nlink      uint64
+	children   map[string]*fakeNode
+	tracker    *fakeMountTracker
+}
+
+type fakeScanFS struct {
+	mu         sync.Mutex
+	mode       fakeFSMode
+	noDType    bool
+	root       *fakeNode
+	onReadDir  func(logicalPath string, fs *fakeScanFS)
+	onOpenRoot func(logicalMount string, fs *fakeScanFS)
+	rootDev    uint64
+	rootMntID  uint64
+	nextIno    uint64
+}
+
+func newFakeScanFS(mode fakeFSMode, noDType bool, rootDev, rootMntID uint64) *fakeScanFS {
+	return &fakeScanFS{
+		mode:    mode,
+		noDType: noDType,
+		root: &fakeNode{
+			mode:     fs.ModeDir | 0o755,
+			dev:      rootDev,
+			mntID:    rootMntID,
+			ino:      1,
+			nlink:    2,
+			children: map[string]*fakeNode{},
+		},
+		nextIno: 2,
+	}
+}
+
+func (f *fakeScanFS) addDir(logicalPath string) *fakeNode {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ensureDirLocked(f.root, logicalPath, f.root.dev, f.root.mntID, nil)
+}
+
+func (f *fakeScanFS) addFile(logicalPath string, allocBytes uint64) *fakeNode {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	parent := f.ensureDirLocked(f.root, filepath.Dir(logicalPath), f.root.dev, f.root.mntID, nil)
+	name := filepath.Base(logicalPath)
+	n := &fakeNode{
+		mode:       0o644,
+		allocBytes: allocBytes,
+		dev:        f.root.dev,
+		mntID:      f.root.mntID,
+		ino:        f.nextIno,
+		nlink:      1,
+	}
+	f.nextIno++
+	parent.children[name] = n
+	return n
+}
+
+func (f *fakeScanFS) addSymlink(logicalPath string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	parent := f.ensureDirLocked(f.root, filepath.Dir(logicalPath), f.root.dev, f.root.mntID, nil)
+	n := &fakeNode{
+		mode:  fs.ModeSymlink | 0o777,
+		dev:   f.root.dev,
+		mntID: f.root.mntID,
+		ino:   f.nextIno,
+		nlink: 1,
+	}
+	f.nextIno++
+	parent.children[filepath.Base(logicalPath)] = n
+}
+
+func (f *fakeScanFS) mountDirAt(logicalPath string, dev, mntID uint64, tracker *fakeMountTracker, files map[string]uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	parent := f.ensureDirLocked(f.root, filepath.Dir(logicalPath), f.root.dev, f.root.mntID, nil)
+	mntRoot := &fakeNode{
+		mode:     fs.ModeDir | 0o755,
+		dev:      dev,
+		mntID:    mntID,
+		ino:      f.nextIno,
+		nlink:    2,
+		children: map[string]*fakeNode{},
+		tracker:  tracker,
+	}
+	f.nextIno++
+	for rel, sz := range files {
+		dir := mntRoot
+		if d := filepath.Dir(rel); d != "." && d != "/" {
+			dir = f.ensureDirLocked(mntRoot, "/"+d, dev, mntID, tracker)
+		}
+		dir.children[filepath.Base(rel)] = &fakeNode{
+			mode:       0o644,
+			allocBytes: sz,
+			dev:        dev,
+			mntID:      mntID,
+			ino:        f.nextIno,
+			nlink:      1,
+			tracker:    tracker,
+		}
+		f.nextIno++
+	}
+	parent.children[filepath.Base(logicalPath)] = mntRoot
+}
+
+func (f *fakeScanFS) mountFileAt(logicalPath string, dev, mntID uint64, allocBytes uint64, tracker *fakeMountTracker) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	parent := f.ensureDirLocked(f.root, filepath.Dir(logicalPath), f.root.dev, f.root.mntID, nil)
+	parent.children[filepath.Base(logicalPath)] = &fakeNode{
+		mode:       0o644,
+		allocBytes: allocBytes,
+		dev:        dev,
+		mntID:      mntID,
+		ino:        f.nextIno,
+		nlink:      1,
+		tracker:    tracker,
+	}
+	f.nextIno++
+}
+
+func (f *fakeScanFS) overmountRoot(dev, mntID uint64, tracker *fakeMountTracker) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.root = &fakeNode{
+		mode:     fs.ModeDir | 0o755,
+		dev:      dev,
+		mntID:    mntID,
+		ino:      f.nextIno,
+		nlink:    2,
+		children: map[string]*fakeNode{},
+		tracker:  tracker,
+	}
+	f.nextIno++
+}
+
+func (f *fakeScanFS) ensureDirLocked(base *fakeNode, logicalPath string, dev, mntID uint64, tracker *fakeMountTracker) *fakeNode {
+	clean := filepath.Clean(logicalPath)
+	if clean == "/" || clean == "." {
+		return base
+	}
+	cur := base
+	for _, seg := range strings.Split(strings.TrimPrefix(clean, "/"), "/") {
+		if seg == "" {
+			continue
+		}
+		next, ok := cur.children[seg]
+		if !ok {
+			next = &fakeNode{
+				mode:     fs.ModeDir | 0o755,
+				dev:      dev,
+				mntID:    mntID,
+				ino:      f.nextIno,
+				nlink:    2,
+				children: map[string]*fakeNode{},
+				tracker:  tracker,
+			}
+			f.nextIno++
+			cur.children[seg] = next
+		}
+		cur = next
+	}
+	return cur
+}
+
+func (f *fakeScanFS) OpenRoot(_ string, logicalMount string) (scanDir, error) {
+	if f.onOpenRoot != nil {
+		f.onOpenRoot(logicalMount, f)
+	}
+	f.mu.Lock()
+	root := f.root
+	f.rootDev = root.dev
+	f.rootMntID = root.mntID
+	f.mu.Unlock()
+	return &fakeScanDir{fs: f, node: root, logicalPath: logicalMount}, nil
+}
+
+type fakeScanDir struct {
+	fs          *fakeScanFS
+	node        *fakeNode
+	logicalPath string
+}
+
+func (d *fakeScanDir) Stat() (entryStat, error) {
+	d.fs.mu.Lock()
+	n := d.node
+	d.fs.mu.Unlock()
+	return entryStat{
+		Mode:       n.mode,
+		Size:       int64(n.allocBytes),
+		AllocBytes: n.allocBytes,
+		Dev:        n.dev,
+		HasDev:     true,
+		Ino:        n.ino,
+		Nlink:      n.nlink,
+		HasInode:   true,
+		MntID:      n.mntID,
+		HasMntID:   true,
+	}, nil
+}
+
+func (d *fakeScanDir) Statfs() (fsStat, error) {
+	if d.node.tracker != nil {
+		d.node.tracker.statfsCalls.Add(1)
+	}
+	return fsStat{TotalBytes: 200 << 30, UsedBytes: 50 << 30}, nil
+}
+
+func (d *fakeScanDir) OpenSelf() (scanDir, error) {
+	return &fakeScanDir{fs: d.fs, node: d.node, logicalPath: d.logicalPath}, nil
+}
+
+func (d *fakeScanDir) ReadDir() ([]dirEntryInfo, error) {
+	if d.node.tracker != nil {
+		d.node.tracker.touched.Add(1)
+		d.node.tracker.dataReads.Add(1)
+	}
+	if d.fs.onReadDir != nil {
+		d.fs.onReadDir(d.logicalPath, d.fs)
+	}
+	d.fs.mu.Lock()
+	defer d.fs.mu.Unlock()
+	names := make([]string, 0, len(d.node.children))
+	for name := range d.node.children {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	out := make([]dirEntryInfo, 0, len(names))
+	for _, name := range names {
+		ch := d.node.children[name]
+		kind := entryUnknown
+		if !d.fs.noDType {
+			switch {
+			case ch.mode&fs.ModeSymlink != 0:
+				kind = entrySymlink
+			case ch.mode.IsDir():
+				kind = entryDir
+			case ch.mode.IsRegular():
+				kind = entryRegular
+			default:
+				kind = entryOther
+			}
+		}
+		out = append(out, dirEntryInfo{Name: name, Kind: kind})
+	}
+	return out, nil
+}
+
+func (d *fakeScanDir) OpenDir(name, logicalPath string, _ bool) (scanDir, error) {
+	if !isSafeChildName(name) {
+		return nil, errWrongMount
+	}
+	d.fs.mu.Lock()
+	ch, ok := d.node.children[name]
+	parentDev, parentMnt := d.node.dev, d.node.mntID
+	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
+	d.fs.mu.Unlock()
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	if ch.mode&fs.ModeSymlink != 0 {
+		return nil, errNotDir
+	}
+	if !ch.mode.IsDir() {
+		return nil, errNotDir
+	}
+	if d.fs.mode == fakeModeOpenat2 {
+		// Linux openat2(RESOLVE_NO_XDEV) refuses the mount crossing in VFS
+		// BEFORE touching the mounted filesystem's root inode.
+		if ch.dev != parentDev || ch.mntID != parentMnt {
+			return nil, errWrongMount
+		}
+		return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
+	}
+	// Fallback (Linux ENOSYS / macOS): openat binds the mounted root inode
+	// (no data/directory read), then checks st_dev and mount ID before returning.
+	if ch.tracker != nil {
+		ch.tracker.touched.Add(1)
+	}
+	if ch.dev != rootDev || ch.mntID != rootMnt {
+		return nil, errWrongMount
+	}
+	return &fakeScanDir{fs: d.fs, node: ch, logicalPath: logicalPath}, nil
+}
+
+func (d *fakeScanDir) StatEntry(name, _ string) (entryStat, error) {
+	if !isSafeChildName(name) {
+		return entryStat{}, errWrongMount
+	}
+	d.fs.mu.Lock()
+	ch, ok := d.node.children[name]
+	parentDev, parentMnt := d.node.dev, d.node.mntID
+	rootDev, rootMnt := d.fs.rootDev, d.fs.rootMntID
+	d.fs.mu.Unlock()
+	if !ok {
+		return entryStat{}, fs.ErrNotExist
+	}
+	if d.fs.mode == fakeModeOpenat2 {
+		// Linux openat2(O_PATH, RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS) rejects
+		// symlinks and mount crossings before calling getattr on the mounted fs.
+		if ch.mode&fs.ModeSymlink != 0 {
+			return entryStat{}, errWrongMount
+		}
+		if ch.dev != parentDev || ch.mntID != parentMnt {
+			return entryStat{}, errWrongMount
+		}
+	} else {
+		if ch.tracker != nil {
+			ch.tracker.touched.Add(1)
+		}
+		if ch.mode&fs.ModeSymlink == 0 && (ch.dev != rootDev || ch.mntID != rootMnt) {
+			return entryStat{}, errWrongMount
+		}
+	}
+	return entryStat{
+		Mode:       ch.mode,
+		Size:       int64(ch.allocBytes),
+		AllocBytes: ch.allocBytes,
+		Dev:        ch.dev,
+		HasDev:     true,
+		Ino:        ch.ino,
+		Nlink:      ch.nlink,
+		HasInode:   true,
+		MntID:      ch.mntID,
+		HasMntID:   true,
+	}, nil
+}
+
+func (d *fakeScanDir) Close() error { return nil }
+
+func TestMidWalkMountNeverTouchedOrReadFakeFS(t *testing.T) {
+	cases := []struct {
+		name    string
+		mode    fakeFSMode
+		noDType bool
+	}{
+		{"openat2_with_dtype", fakeModeOpenat2, false},
+		{"openat2_without_dtype", fakeModeOpenat2, true},
+		{"fallback_with_dtype", fakeModeFallback, false},
+		{"fallback_without_dtype", fakeModeFallback, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			const (
+				rootDev   = 100
+				rootMntID = 10
+			)
+			ffs := newFakeScanFS(tc.mode, tc.noDType, rootDev, rootMntID)
+
+			// Target-mount files and empty mountpoint directories (NOT mounted when listMounts runs!).
+			ffs.addFile("/srv/app/keep.bin", 32*1024)
+			ffs.addDir("/mnt/sleeping")
+			ffs.addDir("/deep/lvl2") // sits at maxDepth=2
+			ffs.addFile("/srv/bound.bin", 4*1024)
+			ffs.addFile("/var/lib/docker/containers/c1/c1-json.log", 24*1024)
+			ffs.addFile("/var/lib/docker/containers/c1/bound-json.log", 4*1024)
+			ffs.addDir("/var/lib/docker/containers/c2")
+			ffs.addFile("/var/log/journal/m1/system.journal", 16*1024)
+			ffs.addDir("/var/log/journal/late-mount")
+			ffs.addFile("/var/lib/libvirt/images/vm1.qcow2", 48*1024)
+			ffs.addDir("/var/lib/libvirt/images/late-pool")
+			ffs.addSymlink("/var/lib/docker/containers/sym")
+
+			trackWalk := &fakeMountTracker{name: "/mnt/sleeping"}
+			trackMaxDepth := &fakeMountTracker{name: "/deep/lvl2"}
+			trackBindFile := &fakeMountTracker{name: "/srv/bound.bin"}
+			trackContainerDir := &fakeMountTracker{name: "/var/lib/docker/containers/c2"}
+			trackContainerLog := &fakeMountTracker{name: "/var/lib/docker/containers/c1/bound-json.log"}
+			trackJournal := &fakeMountTracker{name: "/var/log/journal/late-mount"}
+			trackVM := &fakeMountTracker{name: "/var/lib/libvirt/images/late-pool"}
+
+			var mountedWalk, mountedSrv, mountedDocker, mountedC1, mountedJournal, mountedVM atomic.Bool
+			ffs.onReadDir = func(logicalPath string, fs *fakeScanFS) {
+				switch logicalPath {
+				case "/":
+					if mountedWalk.CompareAndSwap(false, true) {
+						fs.mountDirAt("/mnt/sleeping", 200, 91, trackWalk, map[string]uint64{
+							"secret.mkv": 512 * 1024,
+						})
+						fs.mountDirAt("/deep/lvl2", 201, 92, trackMaxDepth, map[string]uint64{
+							"deep.bin": 512 * 1024,
+						})
+					}
+				case "/srv":
+					if mountedSrv.CompareAndSwap(false, true) {
+						// Same-device bind mount on a regular file (same st_dev, different mntID).
+						fs.mountFileAt("/srv/bound.bin", rootDev, 93, 512*1024, trackBindFile)
+					}
+				case "/var/lib/docker/containers":
+					if mountedDocker.CompareAndSwap(false, true) {
+						fs.mountDirAt("/var/lib/docker/containers/c2", 202, 94, trackContainerDir, map[string]uint64{
+							"c2-json.log": 512 * 1024,
+						})
+					}
+				case "/var/lib/docker/containers/c1":
+					if mountedC1.CompareAndSwap(false, true) {
+						fs.mountFileAt("/var/lib/docker/containers/c1/bound-json.log", rootDev, 95, 512*1024, trackContainerLog)
+					}
+				case "/var/log/journal":
+					if mountedJournal.CompareAndSwap(false, true) {
+						fs.mountDirAt("/var/log/journal/late-mount", 203, 96, trackJournal, map[string]uint64{
+							"ext.journal": 512 * 1024,
+						})
+					}
+				case "/var/lib/libvirt/images":
+					if mountedVM.CompareAndSwap(false, true) {
+						fs.mountDirAt("/var/lib/libvirt/images/late-pool", 204, 97, trackVM, map[string]uint64{
+							"ext.qcow2": 512 * 1024,
+						})
+					}
+				}
+			}
+
+			mounts := []mountInfo{
+				{ID: rootMntID, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"},
+			}
+			r := newTestRunner(t, t.TempDir(), mounts, nil)
+			r.scanFS = ffs
+			r.statfs = nil // exercise rootDir.Statfs() as well
+
+			resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/", MaxDepth: 2})
+			if resp.Code != "" {
+				t.Fatalf("unexpected error: %+v", resp)
+			}
+
+			allTrackers := []*fakeMountTracker{
+				trackWalk, trackMaxDepth, trackBindFile,
+				trackContainerDir, trackContainerLog, trackJournal, trackVM,
+			}
+			for _, tr := range allTrackers {
+				if tr.dataReads.Load() != 0 {
+					t.Errorf("%s: newly mounted filesystem had %d data/readdir reads, want 0", tr.name, tr.dataReads.Load())
+				}
+				if tc.mode == fakeModeOpenat2 && tr.touched.Load() != 0 {
+					t.Errorf("%s: openat2 mode touched newly mounted filesystem %d times, want 0", tr.name, tr.touched.Load())
+				}
+			}
+
+			// Verify none of the 512 KiB files on newly mounted filesystems leaked into folders or categories.
+			for _, f := range resp.Folders {
+				if hasPathPrefix(f.Path, "/mnt/sleeping") || hasPathPrefix(f.Path, "/deep") {
+					t.Errorf("folder leaked from mid-walk mount: %+v", f)
+				}
+				if f.Bytes >= 256*1024 {
+					t.Errorf("folder %q bytes=%d includes data from mid-walk mount", f.Path, f.Bytes)
+				}
+			}
+			byKey := map[string]proto.DiskUsageCategory{}
+			for _, c := range resp.Categories {
+				byKey[c.Key] = c
+			}
+			if c := byKey[proto.DiskCatContainerLogs]; c.Bytes != 24*1024 {
+				t.Errorf("container_logs = %d, want exactly 24 KiB", c.Bytes)
+			}
+			if c := byKey[proto.DiskCatJournal]; c.Bytes != 16*1024 {
+				t.Errorf("journal = %d, want exactly 16 KiB", c.Bytes)
+			}
+			if c := byKey[proto.DiskCatVMDisks]; c.Bytes != 48*1024 {
+				t.Errorf("vm_disks = %d, want exactly 48 KiB", c.Bytes)
+			}
+		})
+	}
+}
+
+func TestOvermountedRootRefusedBeforeStatfsOrReadDir(t *testing.T) {
+	ffs := newFakeScanFS(fakeModeOpenat2, false, 100, 30)
+	overTracker := &fakeMountTracker{name: "/mnt/data overmount"}
+	ffs.onOpenRoot = func(_ string, fs *fakeScanFS) {
+		// Simulate another filesystem (mntID=45) being mounted over /mnt/data
+		// after listMounts() saw mntID=30 and before OpenRoot runs.
+		fs.overmountRoot(250, 45, overTracker)
+	}
+
+	mounts := []mountInfo{
+		{ID: 30, ParentID: 1, MountPoint: "/mnt/data", FSType: "ext4", Source: "/dev/nvme0n1p1"},
+	}
+	r := newTestRunner(t, t.TempDir(), mounts, nil)
+	r.scanFS = ffs
+	r.statfs = nil // must NOT call rootDir.Statfs() after detecting root mount ID change
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/mnt/data"})
+	if resp.Code != CodeFailed {
+		t.Fatalf("overmounted root: resp = %+v, want CodeFailed", resp)
+	}
+	if overTracker.statfsCalls.Load() != 0 {
+		t.Errorf("Statfs called %d times on overmounted root, want 0", overTracker.statfsCalls.Load())
+	}
+	if overTracker.dataReads.Load() != 0 {
+		t.Errorf("ReadDir called %d times on overmounted root, want 0", overTracker.dataReads.Load())
+	}
+}
+
+func TestMidWalkMountOnDockerRootSkipsDockerDF(t *testing.T) {
+	root := t.TempDir()
+	sockDir, err := os.MkdirTemp("", "du-race-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sockPath := filepath.Join(sockDir, "d.sock")
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dfCalls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"DockerRootDir": "/var/lib/docker"})
+	})
+	mux.HandleFunc("/system/df", func(w http.ResponseWriter, r *http.Request) {
+		dfCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"LayersSize": 500_000_000})
+	})
+	srv := &http.Server{Handler: mux}
+	go srv.Serve(ln)
+	t.Cleanup(func() {
+		srv.Close()
+		ln.Close()
+	})
+	inRootSock := filepath.Join(root, "var/run/docker.sock")
+	if err := os.MkdirAll(filepath.Dir(inRootSock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sockPath, inRootSock); err != nil {
+		t.Fatal(err)
+	}
+
+	ffs := newFakeScanFS(fakeModeOpenat2, false, 100, 10)
+	dockerTracker := &fakeMountTracker{name: "/var/lib/docker"}
+	// /var/lib/docker is NOT in mounts (listMounts snapshot), but is mounted before collectDocker probes it.
+	ffs.mountDirAt("/var/lib/docker", 205, 98, dockerTracker, map[string]uint64{
+		"volumes/v1/data.bin": 512 * 1024,
+	})
+
+	mounts := []mountInfo{{ID: 10, ParentID: 1, MountPoint: "/", FSType: "ext4", Source: "/dev/nvme0n1p2"}}
+	r := newTestRunner(t, root, mounts, nil)
+	r.dockerSockets = []string{"/var/run/docker.sock"}
+	r.scanFS = ffs
+
+	resp := r.DiskUsage(context.Background(), proto.DiskUsageRequest{Mount: "/"})
+	if resp.Code != "" {
+		t.Fatalf("unexpected error: %+v", resp)
+	}
+	if dfCalls.Load() != 0 {
+		t.Errorf("/system/df called %d times when /var/lib/docker was mounted mid-scan, want 0", dfCalls.Load())
+	}
+	if dockerTracker.touched.Load() != 0 || dockerTracker.dataReads.Load() != 0 {
+		t.Errorf("mid-scan /var/lib/docker mount touched=%d dataReads=%d, want 0/0", dockerTracker.touched.Load(), dockerTracker.dataReads.Load())
+	}
+	if errors.Is(errWrongMount, fs.ErrPermission) {
+		t.Fatal("errWrongMount must not match fs.ErrPermission")
 	}
 }

@@ -84,8 +84,8 @@ type Runner struct {
 	goos           string // optional OS override in tests ("" = runtime.GOOS)
 	dockerSockets  []string
 	listMounts     func() ([]mountInfo, error)
-	statfs         func(path string) (fsStat, error)
-	lstat          func(path string) (fs.FileInfo, error)
+	statfs         func(path string) (fsStat, error) // optional override; nil uses fstatfs on the open root fd
+	scanFS         scanFS                            // optional override; nil uses the platform descriptor-based FS
 	readDir        func(logicalPath string) ([]fs.DirEntry, error)
 	statMountID    func(logicalPath string) (uint64, bool)
 	checkStandby   func(ctx context.Context, dev string) standbyState
@@ -110,7 +110,6 @@ func New(inv agent.InventoryFunc, log *slog.Logger) *Runner {
 		goos:           runtime.GOOS,
 		dockerSockets:  []string{"/var/run/docker.sock", "/run/docker.sock", "/run/podman/podman.sock"},
 		listMounts:     hostMounts,
-		statfs:         hostStatfs,
 		lookProbeTool:  lookTool,
 		probeCmd:       runStandbyProbeCmd,
 		runCmd:         runLowPriorityCmd,
@@ -240,23 +239,45 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		if r.setLowPriority != nil {
 			r.setLowPriority()
 		}
-		rootInfo, err := r.doLstat(hostPath)
+		sfs := r.scanFS
+		if sfs == nil {
+			sfs = newDefaultScanFS(r)
+		}
+		rootDir, err := sfs.OpenRoot(hostPath, mount)
 		if err != nil {
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
 			return
 		}
-		rootDev, ok := statDev(rootInfo)
-		if !ok {
+		defer rootDir.Close()
+
+		rootMeta, err := rootDir.Stat()
+		if err != nil {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
+			return
+		}
+		if !rootMeta.HasDev {
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not identify the filesystem device for %s.", mount)}
 			return
 		}
+		rootDev := rootMeta.Dev
 		var rootMntID uint64
-		if id, ok := r.mountIDAt(mount, 0, false); ok {
-			rootMntID = id
+		if rootMeta.HasMntID {
+			rootMntID = rootMeta.MntID
+			// Refuse if the mount point itself was overmounted or replaced between
+			// reading mountinfo and opening the root descriptor, before fstatfs or
+			// any directory read.
+			if scope.target.ID > 0 && rootMntID != uint64(scope.target.ID) {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
+				return
+			}
 		}
 
 		var totalBytes, usedBytes uint64
-		if st, err := r.statfs(hostPath); err == nil {
+		if r.statfs != nil {
+			if st, err := r.statfs(hostPath); err == nil {
+				totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
+			}
+		} else if st, err := rootDir.Statfs(); err == nil {
 			totalBytes, usedBytes = st.TotalBytes, st.UsedBytes
 		}
 
@@ -268,10 +289,10 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 			catBudget = min(4*time.Second, timeout)
 		}
 		cctx, ccancel := context.WithTimeout(wctx, catBudget)
-		cats, catPartial := r.collectCategories(cctx, scope, rootDev, rootMntID)
+		cats, catPartial := r.collectCategories(cctx, rootDir, scope, rootDev, rootMntID)
 		ccancel()
 
-		w := r.walkMount(wctx, scope, rootDev, rootMntID, maxDepth)
+		w := r.walkMount(wctx, rootDir, scope, rootDev, rootMntID, maxDepth)
 		done <- scanOut{
 			totalBytes: totalBytes,
 			usedBytes:  usedBytes,
@@ -405,13 +426,6 @@ func (r *Runner) detectUnraid() bool {
 		return true
 	}
 	return false
-}
-
-func (r *Runner) doLstat(path string) (fs.FileInfo, error) {
-	if r.lstat != nil {
-		return r.lstat(path)
-	}
-	return os.Lstat(path)
 }
 
 func buildMountScope(mounts []mountInfo, targetMount string) (mountScope, bool) {
