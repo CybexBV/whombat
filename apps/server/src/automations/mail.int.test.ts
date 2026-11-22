@@ -2930,7 +2930,11 @@ describe('mail-arrives automations', () => {
       const [ended] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, lateTurn));
       expect(ended?.state).toBe('cancelled');
       expect(ended?.providerSessionId).toBeNull();
-      await w.services.runtime.progress(lateTurn, { providerSessionId: 'hermes:late-beat' });
+      await w.services.runtime.progress(lateTurn, {
+        state: 'running',
+        thinking: false,
+        providerSessionId: 'hermes:late-beat',
+      });
       expect(await dropped('late-beat')).toBe(1);
       await w.services.runtime.finalize(lateTurn, {
         outcome: 'cancelled',
