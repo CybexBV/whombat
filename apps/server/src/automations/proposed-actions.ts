@@ -47,6 +47,7 @@ import { badRequest, conflict, forbidden } from '../lib/errors';
 import { loadGrants } from '../read/principals';
 import type { Services } from '../services';
 import { automationAgent } from './authority';
+import { handedOverFileIds } from './handed-files';
 import { isProposableEntry, listedHowTo, settleListed, whatMailCanDo } from './listed-actions';
 import {
   type CardFile,
@@ -351,31 +352,18 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
   return note;
 }
 
-/** The attachment ids a step's output says the server handed over from what started the run. */
-function handedOverIds(output: unknown): string[] | null {
-  const ids = (output as { triggerFileIds?: unknown } | null)?.triggerFileIds;
-  return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
-}
-
 /**
- * Loads an attachment ONLY when the server handed it over from what started THIS run (the email's files, copied onto
- * the run's first agent prompt and recorded there by id), so neither a prompt-injected email nor a file the person
- * added to the thread with the same name can be uploaded. A run started before the handover was recorded counts the
- * files on its first prompt when that prompt started the run's thread, as the server put them there.
+ * Loads an attachment ONLY when the server handed it over from what started THIS run (`handedOverFileIds`: the email's
+ * files, copied onto the run's first agent prompt and recorded there by id), so neither a prompt-injected email nor a
+ * file the person added to the thread with the same name can be uploaded. The same rule decides what the run's
+ * outsiders' turns are shown and may read (`files/access.ts`).
  */
 export async function emailFile(
   db: Db | Tx,
   run: Pick<AutomationRunRow, 'id' | 'burrowId' | 'threadRootId'>,
   attachmentId: string,
 ): Promise<AttachmentRow | null> {
-  const steps = await db
-    .select({ output: automationRunSteps.output, promptMessageId: automationRunSteps.promptMessageId })
-    .from(automationRunSteps)
-    .where(eq(automationRunSteps.runId, run.id));
-  const recorded = steps.map((s) => handedOverIds(s.output)).filter((ids): ids is string[] => ids !== null);
-  const fromRoot =
-    recorded.length === 0 && !!run.threadRootId && steps.some((s) => s.promptMessageId === run.threadRootId);
-  if (!fromRoot && !recorded.some((ids) => ids.includes(attachmentId))) return null;
+  if (!(await handedOverFileIds(db, run)).includes(attachmentId)) return null;
   const [found] = await db
     .select()
     .from(attachments)
@@ -384,7 +372,6 @@ export async function emailFile(
         eq(attachments.id, attachmentId),
         eq(attachments.burrowId, run.burrowId),
         eq(attachments.state, 'ready'),
-        ...(fromRoot ? [eq(attachments.messageId, run.threadRootId as string)] : []),
       ),
     )
     .limit(1);
