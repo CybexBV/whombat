@@ -3,9 +3,8 @@
 package diskusage
 
 import (
-	"bufio"
 	"bytes"
-	"os"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -41,21 +40,50 @@ func entryStatFromStatx(stx *unix.Statx_t) entryStat {
 }
 
 // fdinfoMountID reads the mount ID of an open descriptor (including O_PATH
-// descriptors) from /proc/self/fdinfo/<fd>. Used as a fallback on Linux 5.6
-// and 5.7, which have openat2(2) and statx(2) but predated STATX_MNT_ID (5.8).
+// descriptors) from /proc/self/fdinfo/<fd>. In Linux (fs/proc/fd.c: seq_show),
+// procfs prints real_mount(file->f_path.mnt)->mnt_id purely from kernel VFS
+// memory without invoking any method on the descriptor's filesystem. Checking
+// it before statx(2), fstatfs(2), or a readable open guarantees an overmounted
+// or foreign filesystem never receives a metadata request.
 func fdinfoMountID(fd int) (uint64, bool) {
-	b, err := os.ReadFile("/proc/self/fdinfo/" + strconv.Itoa(fd))
+	infofd, err := openNoEINTR("/proc/self/fdinfo/"+strconv.Itoa(fd), unix.O_RDONLY|unix.O_CLOEXEC)
 	if err != nil {
 		return 0, false
 	}
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	for sc.Scan() {
-		line := sc.Text()
-		val, ok := strings.CutPrefix(line, "mnt_id:")
+	defer unix.Close(infofd)
+
+	var buf [512]byte
+	total := 0
+	for total < len(buf) {
+		n, rerr := unix.Read(infofd, buf[total:])
+		if errors.Is(rerr, unix.EINTR) {
+			continue
+		}
+		if n > 0 {
+			total += n
+		}
+		if rerr != nil || n == 0 {
+			break
+		}
+	}
+	return parseFDInfoMountID(buf[:total])
+}
+
+func parseFDInfoMountID(b []byte) (uint64, bool) {
+	for len(b) > 0 {
+		var line []byte
+		if idx := bytes.IndexByte(b, '\n'); idx >= 0 {
+			line = b[:idx]
+			b = b[idx+1:]
+		} else {
+			line = b
+			b = nil
+		}
+		val, ok := bytes.CutPrefix(line, []byte("mnt_id:"))
 		if !ok {
 			continue
 		}
-		id, err := strconv.ParseUint(strings.TrimSpace(val), 10, 64)
+		id, err := strconv.ParseUint(strings.TrimSpace(string(val)), 10, 64)
 		if err != nil {
 			return 0, false
 		}
