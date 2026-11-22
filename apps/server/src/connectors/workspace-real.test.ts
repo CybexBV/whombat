@@ -686,7 +686,9 @@ describe('mail', () => {
             return {
               json: {
                 historyId: '700',
-                history: [{ id: '601', messagesAdded: [{ message: { id: 'm_early', labelIds: ['INBOX'] } }] }],
+                history: [
+                  { id: '601', messagesAdded: [{ message: { id: 'm_early', labelIds: ['INBOX'] } }] },
+                ],
                 nextPageToken: 'mp_1',
               },
             };

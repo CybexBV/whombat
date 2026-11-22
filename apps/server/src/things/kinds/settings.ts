@@ -244,7 +244,8 @@ export async function describeSetting<S>(
   if (!spec?.write || input.value === undefined) return null;
   const s = await (spec.readFresh ?? d.read)(ctx.services, ctx.row).catch(() => null);
   if (!s) {
-    const b = spec.kind === 'switch' ? asBool(input.value) : typeof input.value === 'boolean' ? input.value : null;
+    const b =
+      spec.kind === 'switch' ? asBool(input.value) : typeof input.value === 'boolean' ? input.value : null;
     const fallback = b !== null ? (b ? 'On' : 'Off') : String(input.value);
     return { title: `Change a ${d.name} setting`, lines: [`${spec.label}: ${fallback}`] };
   }

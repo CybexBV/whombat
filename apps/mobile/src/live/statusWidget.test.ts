@@ -393,11 +393,7 @@ describe('home-screen status widget bridge model', () => {
     expect(await pComm).toBe(true);
     await pCloudClear;
     expect(stored).toEqual(boxB);
-    expect(nativeEvents).toEqual([
-      'set:wb-a:All good',
-      'clear:*:cloud',
-      'set:wb-b:1 thing needs you',
-    ]);
+    expect(nativeEvents).toEqual(['set:wb-a:All good', 'clear:*:cloud', 'set:wb-b:1 thing needs you']);
 
     // 3. A push queued AFTER sync.clear() is not cancelled by sync.clear()'s own clear notification.
     nativeEvents.length = 0;

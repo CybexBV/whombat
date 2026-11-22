@@ -724,7 +724,11 @@ describe('Microsoft mail change feed', () => {
     });
 
     const ws = new MicrosoftWorkspace(fetcher);
-    const p1 = await ws.mailChanges('tok', { kind: 'microsoft', deltaLink: startDelta }, { since: activation });
+    const p1 = await ws.mailChanges(
+      'tok',
+      { kind: 'microsoft', deltaLink: startDelta },
+      { since: activation },
+    );
     expect(p1.headers).toEqual([]);
     expect(p1.more).toBe(true);
     expect(p1.cursor).toEqual({ kind: 'microsoft', deltaLink: nextUrl(20) });
