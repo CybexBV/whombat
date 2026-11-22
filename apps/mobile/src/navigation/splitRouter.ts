@@ -58,6 +58,18 @@ function sameParams(a: object | undefined, b: object | undefined): boolean {
   return true;
 }
 
+/**
+ * The options of a screen on the right page, by its place there (0 is the first). What the list opens replaces the
+ * right page's first screen, and that swap shows at once, as a mail app's reading pane does: the phone's slide would
+ * carry the old thread out to the left, across the list. What opens on top of it there still slides in.
+ */
+export function besideOptions<Options extends { animation?: string }>(
+  options: Options,
+  place: number,
+): Options {
+  return place === 0 ? { ...options, animation: 'none' } : options;
+}
+
 /** The overrides for the stack's router; `twoPages` says whether the window shows two pages right now. */
 export function splitRouter<Action extends NavigationAction>(
   original: Router<State, Action>,

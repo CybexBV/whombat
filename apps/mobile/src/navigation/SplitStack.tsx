@@ -61,7 +61,7 @@ import {
   type RestingPage,
   RestingPageContext,
 } from './panes';
-import { LIST_ROUTE, splitRouter } from './splitRouter';
+import { besideOptions, LIST_ROUTE, splitRouter } from './splitRouter';
 import { SideBar } from './TabBar';
 
 type State = StackNavigationState<ParamListBase>;
@@ -332,7 +332,7 @@ function TwoPages({
         : null,
     [state],
   );
-  // The right page's first screen closes instead of going back; the ones on top of it go back.
+  // The right page's first screen closes instead of going back and comes without a slide; the ones on top of it go back.
   const besideDescriptors = useMemo(() => {
     const out: Descriptors = { ...descriptors };
     besideState?.routes.forEach((route, i) => {
@@ -341,6 +341,7 @@ function TwoPages({
       const role: PaneRole = i === 0 ? 'beside-first' : 'beside';
       out[route.key] = {
         ...d,
+        options: besideOptions(d.options, i),
         render: () => <PaneRoleContext.Provider value={role}>{d.render()}</PaneRoleContext.Provider>,
       };
     });
@@ -379,7 +380,8 @@ function TwoPages({
                       grip={theme.colors.mut}
                     />
                   )}
-                  <View style={{ flex: 1 }}>
+                  {/* Clipped, so nothing sliding on the right page draws over the list (Android doesn't clip by itself). */}
+                  <View style={{ flex: 1, overflow: 'hidden' }}>
                     <PageSideContext.Provider value="beside">
                       {besideState ? (
                         <NativeStackView
