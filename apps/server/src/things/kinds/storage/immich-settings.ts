@@ -1,20 +1,15 @@
 /**
- * Immich's declared settings: read from `/api/system-config` (falling back to `/api/admin/config` on 404), written
- * back with `PUT` to the same path while preserving every untouched field (auth, storage template, server URLs).
- * Non-admin API keys get a plain explanation in the settings tab.
+ * Immich's declared settings: read from `/api/system-config` (falling back to `/api/admin/config` on 404). Every row
+ * stays read-only (“In Immich”): Immich only accepts a full-object `PUT` with no conditional write, and that object
+ * carries password sign-in, OAuth, server URLs, trash and database backups — so any write could overwrite a concurrent
+ * change to sign-in or data keeping. Changing “Convert videos” can also make the next transcode job delete converted
+ * copies. Non-admin API keys get a plain explanation in the settings tab.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
 import { num, rec, str } from '../../words';
 import { getJson, ReadProblem } from '../read';
-import {
-  asBool,
-  type DeclaredSettings,
-  type SettingChoice,
-  type SettingSpec,
-  type SettingValue,
-  withCurrent,
-} from '../settings';
+import { asBool, type DeclaredSettings, type SettingSpec, type SettingValue } from '../settings';
 
 const NAME = 'Immich';
 
@@ -62,25 +57,6 @@ function atPath(raw: Record<string, unknown>, keys: readonly string[]): unknown 
   return cur;
 }
 
-/** Returns a deep copy of `raw` with only the nested leaf at `keys` changed. */
-function setPath(
-  raw: Record<string, unknown>,
-  keys: readonly string[],
-  value: unknown,
-): Record<string, unknown> {
-  const copy = structuredClone(raw);
-  let cur: Record<string, unknown> = copy;
-  for (let i = 0; i < keys.length - 1; i++) {
-    const k = keys[i] as string;
-    const next = cur[k];
-    if (!next || typeof next !== 'object' || Array.isArray(next)) cur[k] = {};
-    cur = cur[k] as Record<string, unknown>;
-  }
-  const leaf = keys[keys.length - 1] as string;
-  cur[leaf] = value;
-  return copy;
-}
-
 const boolAt = (s: ImmichSettingsState, keys: readonly string[]): boolean | undefined => {
   const v = atPath(s.raw, keys);
   return typeof v === 'boolean' ? v : undefined;
@@ -94,12 +70,6 @@ const numAt = (s: ImmichSettingsState, keys: readonly string[]): number | undefi
 const strAt = (s: ImmichSettingsState, keys: readonly string[]): string | undefined =>
   str(atPath(s.raw, keys)) ?? undefined;
 
-const putAt = (s: ImmichSettingsState, keys: readonly string[], value: unknown) => ({
-  method: 'PUT' as const,
-  path: s.path,
-  body: setPath(s.raw, keys, value),
-});
-
 /** Detects whether this Immich config names smart search `clip` (v1/v2) or `smartSearch`. */
 function smartSearchKey(s: ImmichSettingsState): 'clip' | 'smartSearch' | null {
   const ml = rec(s.raw.machineLearning);
@@ -108,106 +78,100 @@ function smartSearchKey(s: ImmichSettingsState): 'clip' | 'smartSearch' | null {
   return null;
 }
 
-const TRANSCODE_CHOICES: SettingChoice[] = [
-  { value: 'required', label: 'Only when needed', note: 'plays on every device' },
-  { value: 'bitrate', label: 'High-bitrate videos', note: 'when over the bitrate limit' },
-  { value: 'all', label: 'Every video', note: 'uses more disk space' },
-  { value: 'disabled', label: 'Off', note: 'original files only' },
-];
+const TRANSCODE_WORDS: Record<string, string> = {
+  required: 'Only when needed',
+  bitrate: 'High-bitrate videos',
+  all: 'Every video',
+  disabled: 'Off',
+};
 
-const RESOLUTION_CHOICES: SettingChoice[] = [
-  { value: 'original', label: 'Original size' },
-  { value: '2160', label: '4K · 2160p' },
-  { value: '1440', label: '1440p' },
-  { value: '1080', label: '1080p' },
-  { value: '720', label: '720p' },
-  { value: '480', label: '480p' },
-];
+const RESOLUTION_WORDS: Record<string, string> = {
+  original: 'Original size',
+  '2160': '4K · 2160p',
+  '1440': '1440p',
+  '1080': '1080p',
+  '720': '720p',
+  '480': '480p',
+};
+
+function transcodeWords(v: SettingValue): string {
+  const s = String(v);
+  return TRANSCODE_WORDS[s] ?? s;
+}
 
 function resolutionWords(v: SettingValue): string {
   const s = String(v);
-  return RESOLUTION_CHOICES.find((c) => c.value === s)?.label ?? `${s}p`;
+  return RESOLUTION_WORDS[s] ?? `${s}p`;
 }
 
+const onOff = (v: SettingValue) => (asBool(v) ? 'On' : 'Off');
 const daysWords = (v: SettingValue) => (Number(v) === 1 ? '1 day' : `${Number(v)} days`);
 const backupsWords = (v: SettingValue) => (Number(v) === 1 ? '1 backup' : `${Number(v)} backups`);
+const settingsPage = (base: string) => `${base}/admin/system-settings`;
 
 export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] = [
   {
     id: 'video_transcode',
     group: 'video',
     label: 'Convert videos',
-    help: 'When Immich makes a smaller web-friendly copy of a video.',
-    kind: 'choice',
+    help: 'When Immich makes a smaller copy of a video. Changing it can delete converted copies on the next transcode job, and Immich saves all settings together, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => strAt(s, ['ffmpeg', 'transcode']),
-    choices: (s) => withCurrent(TRANSCODE_CHOICES, strAt(s, ['ffmpeg', 'transcode']), (v) => String(v)),
-    write: (v, s) => putAt(s, ['ffmpeg', 'transcode'], String(v)),
-    sentence: (v) => {
-      const label = TRANSCODE_CHOICES.find((c) => c.value === String(v))?.label ?? String(v);
-      return `Immich now converts videos: ${label.toLowerCase()}.`;
-    },
+    words: transcodeWords,
+    elsewhere: settingsPage,
   },
   {
     id: 'video_resolution',
     group: 'video',
     label: 'Converted video size',
-    help: 'The highest resolution Immich converts videos to.',
-    kind: 'choice',
+    help: 'The highest resolution Immich converts videos to. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => strAt(s, ['ffmpeg', 'targetResolution']),
-    choices: (s) =>
-      withCurrent(RESOLUTION_CHOICES, strAt(s, ['ffmpeg', 'targetResolution']), resolutionWords),
     words: resolutionWords,
-    write: (v, s) => putAt(s, ['ffmpeg', 'targetResolution'], String(v)),
-    sentence: (v) => `Immich now converts videos up to ${resolutionWords(v)}.`,
+    elsewhere: settingsPage,
   },
   {
     id: 'machine_learning',
     group: 'ml',
     label: 'Smart features',
-    help: 'Run smart search, face recognition and duplicate checks on new uploads.',
-    kind: 'switch',
+    help: 'Run smart search, face recognition and duplicate checks on new uploads. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => boolAt(s, ['machineLearning', 'enabled']),
-    write: (v, s) => putAt(s, ['machineLearning', 'enabled'], asBool(v) === true),
-    sentence: (v) =>
-      asBool(v) ? 'Smart features are now on in Immich.' : 'Smart features are now off in Immich.',
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'smart_search',
     group: 'ml',
     label: 'Smart search',
-    help: 'Search your photos by what is in them.',
-    kind: 'switch',
+    help: 'Search your photos by what is in them. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => {
       const key = smartSearchKey(s);
       return key ? boolAt(s, ['machineLearning', key, 'enabled']) : undefined;
     },
-    write: (v, s) => {
-      const key = smartSearchKey(s) ?? 'clip';
-      return putAt(s, ['machineLearning', key, 'enabled'], asBool(v) === true);
-    },
-    sentence: (v) => (asBool(v) ? 'Smart search is now on in Immich.' : 'Smart search is now off in Immich.'),
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'face_recognition',
     group: 'ml',
     label: 'Face recognition',
-    help: 'Group photos by the people in them.',
-    kind: 'switch',
+    help: 'Group photos by the people in them. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => boolAt(s, ['machineLearning', 'facialRecognition', 'enabled']),
-    write: (v, s) => putAt(s, ['machineLearning', 'facialRecognition', 'enabled'], asBool(v) === true),
-    sentence: (v) =>
-      asBool(v) ? 'Face recognition is now on in Immich.' : 'Face recognition is now off in Immich.',
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'duplicate_detection',
     group: 'ml',
     label: 'Find duplicates',
-    help: 'Spot duplicate photos and videos automatically.',
-    kind: 'switch',
+    help: 'Spot duplicate photos and videos automatically. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => boolAt(s, ['machineLearning', 'duplicateDetection', 'enabled']),
-    write: (v, s) => putAt(s, ['machineLearning', 'duplicateDetection', 'enabled'], asBool(v) === true),
-    sentence: (v) =>
-      asBool(v) ? 'Duplicate detection is now on in Immich.' : 'Duplicate detection is now off in Immich.',
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'trash_days',
@@ -217,7 +181,7 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     kind: 'elsewhere',
     read: (s) => (boolAt(s, ['trash', 'enabled']) === false ? undefined : numAt(s, ['trash', 'days'])),
     words: daysWords,
-    elsewhere: (base) => `${base}/admin/system-settings`,
+    elsewhere: settingsPage,
   },
   {
     id: 'db_backup_enabled',
@@ -226,8 +190,8 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     help: 'Save a regular backup of Immich’s database. Turning it off stops keeping backups, and running it prunes older ones, so it stays in Immich.',
     kind: 'elsewhere',
     read: (s) => boolAt(s, ['backup', 'database', 'enabled']),
-    words: (v) => (asBool(v) ? 'On' : 'Off'),
-    elsewhere: (base) => `${base}/admin/system-settings`,
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'db_backup_keep',
@@ -237,17 +201,17 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     kind: 'elsewhere',
     read: (s) => numAt(s, ['backup', 'database', 'keepLastAmount']),
     words: backupsWords,
-    elsewhere: (base) => `${base}/admin/system-settings`,
+    elsewhere: settingsPage,
   },
   {
     id: 'version_check',
     group: 'upkeep',
     label: 'Check for updates',
-    help: 'Let Immich check whether a newer version is out.',
-    kind: 'switch',
+    help: 'Let Immich check whether a newer version is out. Immich saves all server settings together, including sign-in, so it stays in Immich.',
+    kind: 'elsewhere',
     read: (s) => boolAt(s, ['newVersionCheck', 'enabled']),
-    write: (v, s) => putAt(s, ['newVersionCheck', 'enabled'], asBool(v) === true),
-    sentence: (v) => (asBool(v) ? 'Immich now checks for updates.' : 'Immich no longer checks for updates.'),
+    words: onOff,
+    elsewhere: settingsPage,
   },
   {
     id: 'auth_and_users',
@@ -256,16 +220,16 @@ export const IMMICH_SETTING_SPECS: readonly SettingSpec<ImmichSettingsState>[] =
     help: 'Passwords, single sign-on, storage folders and user accounts stay in Immich.',
     kind: 'elsewhere',
     read: () => 'Managed in Immich',
-    elsewhere: (base) => `${base}/admin/system-settings`,
+    elsewhere: settingsPage,
   },
 ];
 
 export const IMMICH_SETTINGS: DeclaredSettings<ImmichSettingsState> = {
   name: NAME,
-  url: (base) => `${base}/admin/system-settings`,
+  url: settingsPage,
   unread: (err) =>
     err instanceof ReadProblem && err.httpStatus === 403
-      ? 'Only an Immich administrator’s API key can read and change server settings. You can still change them in Immich.'
+      ? 'Only an Immich administrator’s API key can read server settings. You can still view and change them in Immich.'
       : undefined,
   groups: [
     {

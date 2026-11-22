@@ -1016,8 +1016,10 @@ Setup and operation: `docs/github.md`.
   of its service that matter through `KindModule.settings` (`declaredSettings` in `things/kinds/settings.ts` — Plex,
   AdGuard Home, Pi-hole, Sonarr, Radarr and Immich): `connectionPage` adds their `service-settings` tab right after
   Summary, and a switch, a sheet's choice and the assistant's approved card all run the kind's `setting` action through
-  `actions.ts`, which reads the setting back from the service before it says done and records the change with how to
-  put it back (undo kind `thing.action`). The settings tools give that card Whombat's words through
+  `actions.ts`, using field-only updates where supported or a fresh single-section read and untouched-field read-back
+  check for whole-object writes (recording the change with undo kind `thing.action` only when the target matches and no
+  untouched field changed; whole-object endpoints that carry sign-in, access, network or data-keeping fields stay
+  read-only “In {Service}”, so AdGuard Home and Immich show read-only tabs). The settings tools give that card Whombat's words through
   `kind.settings.describe`, and the dispatcher marks an op run for the assistant (`managed/acting-assistant.ts`) so the
   change names it ([service-settings.md](docs/decisions/service-settings.md)). A kind that sets `slots` (Plex, Seerr, SABnzbd, Home Assistant, Pi-hole…) lays its Summary out
   in the slots every screen shares: Worth a look as a strip on top, then rows of three columns by `span` (Live rows,

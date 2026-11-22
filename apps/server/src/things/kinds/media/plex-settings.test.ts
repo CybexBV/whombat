@@ -187,6 +187,32 @@ describe('changing one (SST-02, SST-03)', () => {
     await act(ctx, back);
     expect(plex.prefs.get('WanPerStreamMaxUploadRate')).toBe(8000);
   });
+
+  it('preserves concurrent changes to other Plex preferences between read and field-only PUT', async () => {
+    reset();
+    let reads = 0;
+    const declared = {
+      ...PLEX_SETTINGS,
+      read: async (services: Services, r: typeof row) => {
+        const snap = await PLEX_SETTINGS.read(services, r);
+        reads += 1;
+        // Another actor changes unrelated Plex preferences right after Whombat reads and before it writes.
+        if (reads === 1) {
+          plex.prefs.set('autoEmptyTrash', true);
+          plex.prefs.set('PublishServerOnPlexOnlineKey', false);
+          plex.prefs.set('TranscoderQuality', 2);
+        }
+        return snap;
+      },
+    };
+    const done = await settingAction(declared)(ctx, { target: 'remote_quality', value: 20000 });
+    expect(done.uncertain).toBeUndefined();
+    expect(done.message).toContain('Checked with Plex');
+    expect(plex.prefs.get('WanPerStreamMaxUploadRate')).toBe(20000);
+    expect(plex.prefs.get('autoEmptyTrash')).toBe(true);
+    expect(plex.prefs.get('PublishServerOnPlexOnlineKey')).toBe(false);
+    expect(plex.prefs.get('TranscoderQuality')).toBe(2);
+  });
 });
 
 describe('the approval card (SST-04)', () => {

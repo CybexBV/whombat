@@ -163,6 +163,43 @@ describe('Pi-hole declared settings', () => {
     expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('IP_NODATA_AAAA');
   });
 
+  it('preserves concurrent changes to other Pi-hole settings between read and field-only PATCH', async () => {
+    reset();
+    let reads = 0;
+    const origDns = ph.store.dns;
+    // Inject a concurrent change between Whombat's pre-write GET and its PATCH by wrapping the first GET read.
+    const declared = {
+      ...PIHOLE_SETTINGS,
+      specs: PIHOLE_SETTINGS.specs.map((s) =>
+        s.id === 'blocking_mode' && s.readFresh
+          ? {
+              ...s,
+              readFresh: async (services: Services, r: typeof row) => {
+                const snap = await (s.readFresh as NonNullable<typeof s.readFresh>)(services, r);
+                reads += 1;
+                if (reads === 1) {
+                  ph.store.dns.dnssec = true;
+                  ph.store.dns.upstreams = ['1.1.1.1'];
+                  ph.store.dns.queryLogging = false;
+                }
+                return snap;
+              },
+            }
+          : s,
+      ),
+    };
+    const done = await settingAction(declared)(ctx, { target: 'blocking_mode', value: 'NXDOMAIN' });
+    expect(done.uncertain).toBeUndefined();
+    expect(done.message).toContain('Checked with Pi-hole');
+    expect(origDns).toBe(ph.store.dns);
+    expect((ph.store.dns.blocking as Record<string, unknown>).mode).toBe('NXDOMAIN');
+    expect(ph.store.dns.dnssec).toBe(true);
+    expect(ph.store.dns.upstreams).toEqual(['1.1.1.1']);
+    expect(ph.store.dns.queryLogging).toBe(false);
+    const patch = ph.store.calls.find((c) => c.method === 'PATCH');
+    expect(patch?.body).toEqual({ config: { dns: { blocking: { mode: 'NXDOMAIN' } } } });
+  });
+
   it('refuses unknown/elsewhere/invalid values, detects deaf writes, and enforces undo guard', async () => {
     reset();
     await expect(act(ctx, { target: 'dns_and_dhcp', value: true })).rejects.toThrow();

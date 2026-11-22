@@ -87,6 +87,10 @@ export async function actAs(
   }
   if (res.status === 401 || res.status === 403)
     throw forbidden(`${name} refused: Whombat’s account there may not do that.`);
+  if (res.status === 412)
+    throw conflict(
+      `Something else changed in ${name} at the same time, so Whombat didn’t save it. Try again.`,
+    );
   if (res.status >= 400)
     throw new ApiError('unavailable', `${name} answered with an error and didn’t do it.`);
   let json: unknown = null;

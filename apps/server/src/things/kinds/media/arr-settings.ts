@@ -1,8 +1,10 @@
 /**
  * Sonarr's and Radarr's declared settings: read from `/api/v3/config/mediamanagement`, `/api/v3/config/naming`,
- * `/api/v3/config/downloadclient` and `/api/v3/config/indexer`, written back with `PUT /api/v3/config/<section>/<id>`
- * preserving every untouched field. Never reads or writes `/api/v3/config/host` (API key, auth, ports, TLS).
- * Anything that can delete, replace or stop keeping files or monitoring state stays in Sonarr/Radarr.
+ * `/api/v3/config/downloadclient` and `/api/v3/config/indexer`. Only `naming` and `indexer` (which hold no sign-in,
+ * access, network or data-keeping fields) are written via `PUT /api/v3/config/<section>/<id>`, reading that section
+ * fresh right before writing and verifying every untouched field still matches afterwards. Never reads or writes
+ * `/api/v3/config/host` (API key, auth, ports, TLS), `/api/v3/config/mediamanagement` (holds the recycle bin and
+ * import/unmonitor controls) or `/api/v3/config/downloadclient`.
  */
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
@@ -11,6 +13,7 @@ import { getJson, ReadProblem } from '../read';
 import {
   asBool,
   type DeclaredSettings,
+  omitFields,
   type SettingChoice,
   type SettingSpec,
   type SettingValue,
@@ -40,7 +43,7 @@ function parseSection(body: unknown): ConfigSection | null {
   const r = rec(body);
   const id = num(r.id);
   if (id === null) return null;
-  return { id, raw: { ...r } };
+  return { id, raw: structuredClone(r) };
 }
 
 /** Parses Sonarr or Radarr v3 config sections; any section that didn't answer is null and left out. */
@@ -74,6 +77,24 @@ export async function readArrSettings(
   if (mediamanagement === null && naming === null && downloadclient === null && indexer === null)
     throw new ReadProblem(`Whombat couldn’t read ${name}’s settings just now.`);
   return parseArrSettings({ mediamanagement, naming, downloadclient, indexer });
+}
+
+/** Reads only the target config section fresh right before and after a whole-object PUT. */
+async function readArrSection(
+  app: ArrSettingsApp,
+  section: keyof ArrSettingsState,
+  services: Services,
+  row: CatalogConnectionRow,
+): Promise<ArrSettingsState> {
+  const name = APP_NAME[app];
+  const body = await getJson(services, row, name, `/api/v3/config/${section}`);
+  return {
+    mediamanagement: null,
+    naming: null,
+    downloadclient: null,
+    indexer: null,
+    [section]: parseSection(body),
+  };
 }
 
 const boolField = (section: ConfigSection | null, key: string): boolean | undefined => {
@@ -146,6 +167,8 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       help: `Rename imported ${unitPlural} to match your naming format.`,
       kind: 'switch',
       read: (s) => boolField(s.naming, renameField),
+      readFresh: (services, row) => readArrSection(app, 'naming', services, row),
+      untouched: (s) => (s.naming ? omitFields(s.naming.raw, renameField) : undefined),
       write: (v, s) => putSection('naming', s.naming as ConfigSection, { [renameField]: asBool(v) === true }),
       sentence: (v) =>
         asBool(v)
@@ -229,6 +252,8 @@ export function arrSettings(app: ArrSettingsApp): DeclaredSettings<ArrSettingsSt
       help: `How often ${name} checks your indexers for new uploads.`,
       kind: 'choice',
       read: (s) => numField(s.indexer, 'rssSyncInterval'),
+      readFresh: (services, row) => readArrSection(app, 'indexer', services, row),
+      untouched: (s) => (s.indexer ? omitFields(s.indexer.raw, 'rssSyncInterval') : undefined),
       // When RSS sync is off (0), turning it on could grab upgrades and replace files; keep that in Sonarr/Radarr.
       choices: (s) => {
         const cur = numField(s.indexer, 'rssSyncInterval');

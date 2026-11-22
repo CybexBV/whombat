@@ -62,6 +62,11 @@ export async function readPiholeSettings(
   return parsePiholeSettings({ dns, database, misc });
 }
 
+async function readPiholeDns(services: Services, row: CatalogConnectionRow): Promise<PiholeSettingsState> {
+  const dns = await getJson(services, row, NAME, '/api/config/dns');
+  return parsePiholeSettings({ dns, database: null, misc: null });
+}
+
 const patchConfig = (config: Record<string, unknown>) => ({
   method: 'PATCH' as const,
   path: '/api/config',
@@ -105,6 +110,7 @@ export const PIHOLE_SETTING_SPECS: readonly SettingSpec<PiholeSettingsState>[] =
     help: 'What Pi-hole sends back when a domain is on a block list.',
     kind: 'choice',
     read: (s) => s.blockingMode ?? undefined,
+    readFresh: readPiholeDns,
     choices: (s) => withCurrent(BLOCKING_MODES, s.blockingMode ?? undefined, (v) => String(v)),
     short: (v) => BLOCKING_SHORT[String(v)] ?? String(v),
     write: (v) => patchConfig({ dns: { blocking: { mode: String(v) } } }),

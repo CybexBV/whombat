@@ -9,18 +9,34 @@ import { rowOf } from './media/testing';
 import {
   type DeclaredSettings,
   declaredSettings,
+  omitFields,
   SERVICE_SETTINGS_TAB_KEY,
   settingAction,
+  settingsPanels,
   settingsTab,
   withCurrent,
 } from './settings';
 import type { KindCtx } from './types';
 
+const mockHttp = vi.hoisted(() => ({
+  handler: null as
+    | ((req: { method: string; url: string; headers?: Record<string, string>; body?: string }) => {
+        status: number;
+        headers: Record<string, string>;
+        body: Buffer;
+      })
+    | null,
+}));
+
 vi.mock('../../connections/http', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../connections/http')>();
   return {
     ...real,
-    signedConnectionFetch: async () => ({ status: 200, headers: {}, body: Buffer.from('{}') }),
+    signedConnectionFetch: async (
+      _s: unknown,
+      _r: unknown,
+      req: { method: string; url: string; headers?: Record<string, string>; body?: string },
+    ) => (mockHttp.handler ? mockHttp.handler(req) : { status: 200, headers: {}, body: Buffer.from('{}') }),
   };
 });
 
@@ -268,5 +284,160 @@ describe('settingAction read-back verification', () => {
     expect(confirmed.changeKind).toBe('setting.level');
     expect(confirmed.undo).toEqual({ target: 'level', value: 'high', expect: 'low' });
     expect(confirmed.message).toContain('Checked with Demo');
+  });
+
+  it('keeps concurrent sibling changes on field-only writes, rejects 412 on conditional writes, and marks whole-object sibling changes uncertain', async () => {
+    // 1. Field-only write (PATCH): a concurrent change to a sibling field between read and write is preserved.
+    let fieldState = { flag: true, level: 'high', sibling: 'before' };
+    let patchReads = 0;
+    mockHttp.handler = (req) => {
+      if (req.method === 'PATCH' && req.body) {
+        const patch = JSON.parse(req.body) as Partial<typeof fieldState>;
+        fieldState = { ...fieldState, ...patch };
+      }
+      return { status: 200, headers: {}, body: Buffer.from('{}') };
+    };
+    try {
+      const patchAct = settingAction<typeof fieldState>({
+        ...makeDeclared(),
+        specs: [
+          {
+            id: 'level',
+            group: 'main',
+            label: 'Level',
+            help: 'Level',
+            kind: 'choice',
+            read: (s) => s.level,
+            choices: () => [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' },
+            ],
+            write: (v) => ({ method: 'PATCH', path: '/config', body: { level: String(v) } }),
+          },
+        ],
+        read: async () => {
+          patchReads += 1;
+          const snap = { ...fieldState };
+          // Another actor changes `sibling` right after Whombat reads and before it writes.
+          if (patchReads === 1) fieldState.sibling = 'changed-concurrently';
+          return snap;
+        },
+      });
+      const patchDone = await patchAct(actionCtx(), { target: 'level', value: 'low' });
+      expect(patchDone.uncertain).toBeUndefined();
+      expect(patchDone.message).toContain('Checked with Demo');
+      expect(fieldState).toEqual({ flag: true, level: 'low', sibling: 'changed-concurrently' });
+
+      // 2. Conditional write (If-Match / ETag): a concurrent change between read and write gets 412 and saves nothing.
+      let etag = '"v1"';
+      let condState = { level: 'high', sibling: 'before' };
+      let condReads = 0;
+      mockHttp.handler = (req) => {
+        if (req.method === 'PUT') {
+          if (req.headers?.['If-Match'] !== etag)
+            return { status: 412, headers: {}, body: Buffer.from('{"error":"precondition_failed"}') };
+          condState = JSON.parse(req.body ?? '{}') as typeof condState;
+          etag = '"v2"';
+        }
+        return { status: 200, headers: { etag }, body: Buffer.from(JSON.stringify(condState)) };
+      };
+      const condAct = settingAction<{ etag: string; raw: typeof condState }>({
+        ...makeDeclared(),
+        specs: [
+          {
+            id: 'level',
+            group: 'main',
+            label: 'Level',
+            help: 'Level',
+            kind: 'choice',
+            read: (s) => s.raw.level,
+            choices: () => [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' },
+            ],
+            write: (v, s) => ({
+              method: 'PUT',
+              path: '/config',
+              headers: { 'If-Match': s.etag },
+              body: { ...s.raw, level: String(v) },
+            }),
+          },
+        ],
+        read: async () => {
+          condReads += 1;
+          const snap = { etag, raw: { ...condState } };
+          // Concurrent change bumps the ETag between read and write.
+          if (condReads === 1) {
+            condState.sibling = 'concurrent';
+            etag = '"v2"';
+          }
+          return snap;
+        },
+      });
+      await expect(condAct(actionCtx(), { target: 'level', value: 'low' })).rejects.toThrow(
+        /Something else changed/,
+      );
+      expect(condState).toEqual({ level: 'high', sibling: 'concurrent' });
+
+      // 3. Whole-object write (`untouched`): if any untouched field differs on read-back, report uncertain (never done).
+      let wholeState: Record<string, unknown> = { level: 'high', sibling: 'before', nested: { keep: 1 } };
+      mockHttp.handler = (req) => {
+        if (req.method === 'PUT' && req.body) {
+          wholeState = JSON.parse(req.body) as Record<string, unknown>;
+          // Simulate a concurrent change to a sibling field visible on read-back.
+          wholeState.sibling = 'other-writer';
+        }
+        return { status: 200, headers: {}, body: Buffer.from('{}') };
+      };
+      const wholeAct = settingAction<Record<string, unknown>>({
+        ...makeDeclared(),
+        specs: [
+          {
+            id: 'level',
+            group: 'main',
+            label: 'Level',
+            help: 'Level',
+            kind: 'choice',
+            read: (s) => String(s.level),
+            untouched: (s) => omitFields(s, 'level'),
+            choices: () => [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' },
+            ],
+            write: (v, s) => ({ method: 'PUT', path: '/config', body: { ...s, level: String(v) } }),
+          },
+        ],
+        read: async () => structuredClone(wholeState),
+      });
+      const wholeOut = await wholeAct(actionCtx(), { target: 'level', value: 'low' });
+      expect(wholeOut.uncertain).toBe(true);
+      expect(wholeOut.undo).toBeUndefined();
+      expect(wholeOut.changeKind).toBeUndefined();
+      expect(wholeOut.title).not.toMatch(/Changed/);
+      expect(wholeOut.message).toMatch(/Another setting.*changed/i);
+      expect(wholeOut.message).not.toMatch(/Checked with/);
+    } finally {
+      mockHttp.handler = null;
+    }
+  });
+
+  it('explains in settingsPanels intro when all declared settings stay in the service', () => {
+    const readOnlyDeclared = makeDeclared({
+      specs: makeDeclared().specs.filter((s) => s.kind === 'elsewhere'),
+    });
+    const panels = settingsPanels({
+      declared: readOnlyDeclared,
+      settings: { flag: true, level: 'high' },
+      who: { row: rowOf('plex', { id: 'con_ro', baseUrl: 'http://192.0.2.10:8080/' }) },
+      url: 'http://192.0.2.10:8080/settings',
+      baseUrl: 'http://192.0.2.10:8080',
+      changed: new Map(),
+      assistant: 'Dusty',
+      now: new Date('2026-11-04T20:13:00Z'),
+      timeZone: 'UTC',
+    });
+    const intro = panels.find((p) => p.id === 'settings-intro');
+    expect(intro?.kind === 'text' ? intro.body : '').not.toContain('Change one here');
+    expect(intro?.kind === 'text' ? intro.body : '').toContain('stay in Demo');
   });
 });
