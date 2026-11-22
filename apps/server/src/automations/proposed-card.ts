@@ -105,8 +105,6 @@ const CODE_KEYS: ReadonlySet<string> = new Set([
   'code',
   'script',
   'sql',
-  'source',
-  'program',
   'javascript',
   'js',
   'python',
@@ -461,7 +459,8 @@ export function describePlannedAction(input: {
   if (tool.origin === 'request') {
     lines.push(`Request: ${visible(String(args.method ?? ''))} ${visible(String(args.path ?? ''))}`);
     if (typeof args.base === 'string' && args.base) {
-      const url = catalogEntry(input.catalogId)?.request?.bases[args.base];
+      const bases = catalogEntry(input.catalogId)?.request?.bases ?? {};
+      const url = Object.hasOwn(bases, args.base) ? bases[args.base] : undefined;
       lines.push(`Base: ${quoted(args.base)}${url ? ` (${visible(url)})` : ''}`);
     }
     const upload = args.upload as { field?: unknown } | undefined;

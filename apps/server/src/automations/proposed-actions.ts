@@ -150,15 +150,6 @@ export function proposedRequestArgs(
   return { ok: true, args };
 }
 
-/** At most `max` characters, cut at a word boundary when possible. */
-export function clipTitle(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, max - 1);
-  const space = /\s/.test(text.charAt(max - 1)) ? cut.length : cut.search(/\s\S*$/);
-  const kept = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:]+$/, '');
-  return `${kept}…`;
-}
-
 /** Collapses line breaks and repeated whitespace so untrusted text stays on one line. */
 function singleLine(text: string): string {
   return text
