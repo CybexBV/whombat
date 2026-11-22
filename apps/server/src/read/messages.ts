@@ -332,9 +332,7 @@ export async function loadMessages(
     lastReplyAt: isoOrNull(row.lastReplyAt),
     threadParticipantIds: row.threadParticipantIds,
     clientId: row.clientId,
-    // The outsiders' mark stays on the box (it only keeps automations from starting on such a message); apps already
-    // on phones know only the Feedback kinds and would refuse a message carrying it.
-    ...(row.provenance && row.provenance !== 'outsiders_run' ? { provenance: row.provenance } : {}),
+    ...(row.provenance ? { provenance: row.provenance } : {}),
     // 0.26 (docs/decisions/essentials-conversations.md): only when set, so older answers read as before.
     ...(row.deletedAt ? { deletedAt: iso(row.deletedAt) } : {}),
     ...(row.pinnedAt ? { pinnedAt: iso(row.pinnedAt), pinnedById: row.pinnedById ?? null } : {}),

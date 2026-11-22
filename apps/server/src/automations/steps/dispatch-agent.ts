@@ -29,7 +29,7 @@ import {
   reusedOutput,
   reusedSummary,
 } from '../reuse';
-import { runPersonOf, runProvenanceOf } from '../runs';
+import { outsidersRun, runPersonOf } from '../runs';
 import {
   type AutomationRunRow,
   type AutomationStepRow,
@@ -191,7 +191,7 @@ export async function executeDispatchAgent({
     threadRootId: place.threadRootId,
     mentions: [agent.id],
     dispatch: false,
-    provenance: runProvenanceOf(run),
+    outsidersRun: outsidersRun(run.trigger),
     ...(files.length ? { attachmentIds: files.map((f) => f.id) } : {}),
   });
   if (files.length) await linkAttachments(tx, ctx, posted.id, files);
@@ -384,7 +384,7 @@ async function reuseAssessment(
     threadRootId: place.threadRootId,
     mentions: [],
     dispatch: false,
-    provenance: runProvenanceOf(run),
+    outsidersRun: outsidersRun(run.trigger),
   });
   if (place.startsThread)
     await tx.update(automationRuns).set({ threadRootId: posted.id }).where(eq(automationRuns.id, run.id));

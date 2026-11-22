@@ -3,7 +3,6 @@ import {
   type AutomationDefinition,
   type AutomationTriggerInfo,
   type JsonObject,
-  type MessageProvenance,
   newId,
   stepKindLabel,
 } from '@whombat/core';
@@ -213,11 +212,6 @@ export function runDeadline(
  */
 export function outsidersRun(trigger: { kind: string }): boolean {
   return trigger.kind === 'tracker' || trigger.kind === 'mail';
-}
-
-/** Provenance stamped on messages posted by an outsiders' run (mail or tracker), so triggers skip them. */
-export function runProvenanceOf(run: { trigger: { kind: string } }): MessageProvenance | null {
-  return outsidersRun(run.trigger) ? 'outsiders_run' : null;
 }
 
 /** The account a run's work is for: the person's (their automations are theirs, OP-17), null for outsiders' input. */

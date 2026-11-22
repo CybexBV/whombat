@@ -5,12 +5,12 @@
  * makes the link. Needs Postgres: the link's row, the thread's messages and the approval go through the commit pipeline.
  */
 import { openSnapshot, parseShareLocation, shareFromBase64url } from '@whombat/core/share';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { decideApproval } from '../commands/approvals';
 import { deleteMessage } from '../commands/message-edits';
 import { sendMessage } from '../commands/messages';
-import { approvals, dispatches, events, shares } from '../db/schema/index';
+import { approvals, dispatches, events, messages, shares } from '../db/schema/index';
 import { ManagerCallError } from '../managed/ports';
 import { FakeManager } from '../managed/testing';
 import { IDS } from '../seed/test-world';
@@ -84,6 +84,17 @@ describe('shared links', () => {
       fits: { withPictures: true, withoutPictures: true },
     });
     expect(p.warnings.map((w: { kind: string }) => w.kind)).toEqual(['address']);
+  });
+
+  it('leaves out what an outsiders’ run posted', async () => {
+    const rootId = await thread('Any mail today?', 'Yes: an invoice came in.', 'Thanks');
+    await t.services.db
+      .update(messages)
+      .set({ outsidersRun: true })
+      .where(and(eq(messages.threadRootId, rootId), eq(messages.authorId, mine.agentId)));
+    const res = await req('POST', '/shares/preview', { rootId });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().messages).toBe(2);
   });
 
   it('shares a thread: control keeps a sealed copy only the link opens, for seven days', async () => {

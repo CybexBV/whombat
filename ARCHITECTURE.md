@@ -810,8 +810,9 @@ published automation details read their definition and publisher from one versio
   cached body and snippet are cleared once the run starts and whose rows are pruned after 30 days) commit through the
   pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
   nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
-  runs stamped `outsiders_run` so message and reaction triggers skip them): mail definitions may not use repository
-  workspaces or external steps other than `connection_actions`, sender-controlled fields reach the agent only inside
+  runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail
+  definitions may not use repository workspaces or external steps other than `connection_actions`, sender-controlled
+  fields reach the agent only inside
   defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
   email's files attached to the prompt message (`read_attachment`), and once the agent prompt is rendered, `body`,
   `snippet` and `text` are stripped from `automation_runs.scope` while sender, subject and attachment metadata stay.

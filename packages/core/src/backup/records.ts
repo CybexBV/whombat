@@ -796,6 +796,11 @@ export const BackupMessageRecord = rec('message', {
   /** A deleted thread root kept for its replies (text and files gone). */
   deleted: z.boolean().default(false),
   provenance: MessageProvenance.nullable().default(null),
+  /**
+   * Posted by a run outsiders' input started (`messages.outsiders_run` on the server). A release before it drops the
+   * key, as every record drops a member it doesn't know.
+   */
+  outsidersRun: z.boolean().default(false),
   /** Link previews as shown (`LinkPreview[]`). */
   previews: z.array(JsonObject).max(3).nullable().default(null),
   /** What a Chat thread is about (0.117, CT-904): its first message's subject chip. */

@@ -6,7 +6,7 @@ import { automations, messages } from '../../db/schema/index';
 import { notFound } from '../../lib/errors';
 import { loadConversationRow } from '../../read/conversations';
 import { loadPrincipalRow, shortName } from '../../read/principals';
-import { runPersonOf, runProvenanceOf } from '../runs';
+import { outsidersRun, runPersonOf } from '../runs';
 import type { AutomationRunRow } from '../store';
 import { stepBinding } from './binding';
 import { startsRunThread } from './thread';
@@ -61,7 +61,7 @@ export async function requestStepApproval(
     where: null,
     // What it continues is the run's work: the person's, or apart for outsiders' input (OP-17).
     onBehalfOfAccountId: await runPersonOf(ctx.tx, run),
-    provenance: runProvenanceOf(run),
+    outsidersRun: outsidersRun(run.trigger),
     command,
     binding,
   });

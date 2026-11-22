@@ -10,6 +10,7 @@ import {
   type AutomationPlanCard,
   type AutomationRecipeInput,
   agentDefaultGrants,
+  Message,
   newId,
 } from '@whombat/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
@@ -2176,7 +2177,7 @@ describe('mail-arrives automations', () => {
     }
   });
 
-  it('stamps outsiders_run provenance on mail run messages so message_posted and reaction_added automations never fire on them', async () => {
+  it('marks mail run messages as an outsiders’ run’s so message_posted and reaction_added automations never fire on them, and apps never see the mark', async () => {
     const mbId = await insertConnection(w.services, {
       catalogId: 'moneybird',
       burrowId: w.burrowId,
@@ -2268,11 +2269,19 @@ describe('mail-arrives automations', () => {
       await w.fakeAgentReply(dispatchId, 'Here is TRIGGER_PHRASE from the incoming email.');
       await w.settle();
 
-      // Every message in the mail run thread (prompt root, agent reply, approval card) has `outsiders_run` provenance.
+      // Every message in the mail run thread (prompt root, agent reply, approval card) carries the outsiders' mark, in
+      // its own column: `provenance` keeps the Feedback kinds only, so a release before the mark reads these rows too.
       const threadMsgs = await w.runThread(runId);
       expect(threadMsgs.length).toBeGreaterThanOrEqual(3);
       for (const m of threadMsgs) {
-        expect(m.provenance, m.text).toBe('outsiders_run');
+        expect(m.outsidersRun, m.text).toBe(true);
+        expect(m.provenance, m.text).toBeNull();
+      }
+      // Apps get these messages without any mark, in a form the Message contract (and older apps') reads.
+      for (const m of await loadMessages(w.services.db, threadMsgs, IDS.mara)) {
+        expect(m).not.toHaveProperty('outsidersRun');
+        expect(m.provenance ?? null).toBeNull();
+        expect(Message.safeParse(m).success).toBe(true);
       }
 
       // Neither the message_posted watcher (even with includeAgents + includeReplies) nor reaction_added fired.

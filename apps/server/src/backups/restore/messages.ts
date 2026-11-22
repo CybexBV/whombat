@@ -264,6 +264,7 @@ async function message(run: RestoreRun, r: BackupMessageRecord): Promise<RecordO
     attachmentIds: files,
     threadRootId: threadRoot,
     provenance: r.provenance,
+    outsidersRun: r.outsidersRun,
     deletedAt: r.deleted ? createdAt : null,
     pinnedAt: r.pinned && pinnedBy && !run.isStandIn(pinnedBy) ? new Date(r.pinned.at) : null,
     pinnedById: r.pinned && pinnedBy && !run.isStandIn(pinnedBy) ? pinnedBy : null,

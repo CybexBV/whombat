@@ -196,7 +196,7 @@ export const recordTurnFailure = defineCommand({
           // Quiet: no mentions, no follow-up work.
           mentions: [],
           dispatch: false,
-          provenance: outsidersTurn(row) ? 'outsiders_run' : null,
+          outsidersRun: outsidersTurn(row),
         });
         messageId = posted.id;
       }

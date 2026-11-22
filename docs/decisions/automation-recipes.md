@@ -333,10 +333,11 @@ Taken while building the server side of AR-51…AR-54 (2026-10-10, contracts 0.7
   draft in fake Moneybird gated behind a mandatory server-described approval card even with standing `can` settings,
   decline & cross-thread attachment refusal, narrow proposable surface & label omission, misleading summary vs real call
   card, hash-bound re-asking when proposed actions change after approval, honest `uncertain` outcomes on timeout or
-  partial-batch failure, `outsiders_run` provenance blocking `message_posted`/`reaction_added` chains, workspace and
+  partial-batch failure, the outsiders' mark (`messages.outsiders_run`, never sent to apps) blocking
+  `message_posted`/`reaction_added` chains, workspace and
   disallowed external-step refusal at publish and execution, run-scope body/snippet/text stripping after prompt
   rendering, missing attachment visibility in scope/prompt/run detail, activation backfill/resync/Message-ID dedup, gone
   & 3-failure skip, privacy clearing of `body`/`snippet` and 30-day pruning, `automation_read`'s `mailConnections` and
   plan-card drafting, mail runs and runs with a `connection_actions` step stored with `deadline_at` at the epoch for the
-  previous release while this one runs them to their own deadline) and `trackers/trackers.int.test.ts` (`outsiders_run`
-  provenance on tracker runs); server unit `automations/runs.test.ts` (`previousReleaseStops`, `runDeadline`).
+  previous release while this one runs them to their own deadline) and `trackers/trackers.int.test.ts` (the outsiders'
+  mark on tracker runs, and the migration marking what earlier runs posted); server unit `automations/runs.test.ts` (`previousReleaseStops`, `runDeadline`).

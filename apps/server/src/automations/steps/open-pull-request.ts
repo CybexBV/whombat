@@ -14,7 +14,7 @@ import { postMessage } from '../../domain/messages';
 import { loadConversationRow } from '../../read/conversations';
 import { withTrackerLine } from '../../trackers/pr-line';
 import { keyDecision } from '../authority';
-import { runProvenanceOf } from '../runs';
+import { outsidersRun } from '../runs';
 import type { AutomationRunRow } from '../store';
 import { requestStepApproval } from './approval';
 import { automationPrincipal } from './checks';
@@ -194,7 +194,7 @@ export async function postPreparedPr(
     threadRootId: run.threadRootId,
     mentions: [],
     dispatch: false,
-    provenance: runProvenanceOf(run),
+    outsidersRun: outsidersRun(run.trigger),
   });
   if (!run.threadRootId) await startsRunThread(ctx.tx, run.id, posted.id);
   await updateStep(

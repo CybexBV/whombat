@@ -94,10 +94,10 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
     if (!m || m.deletedAt) return null;
     if (event.type === 'message.reacted' && payload.on !== true) return null;
     const threadRootId = m.threadRootId ?? m.id;
-    // Messages stamped with provenance come from outsiders (Feedback assessments/handoffs, or mail/tracker outsiders'
-    // runs): they carry outsider-influenced content onwards, so neither those messages nor reactions to them ever start
-    // another automation (docs/decisions/feedback.md, docs/decisions/outsiders-turns.md).
-    if (m.provenance) return null;
+    // A Feedback assessment or handoff, or a message an outsiders' run posted (an email's, a tracker customer's): it
+    // carries what outsiders wrote onwards, so neither it nor a reaction to it ever starts another automation
+    // (docs/decisions/feedback.md, docs/decisions/outsiders-turns.md).
+    if (m.provenance || m.outsidersRun) return null;
     // An agent in a feedback report's thread is assessing (or answering about) what a website visitor sent: its
     // messages carry that visitor's words onwards, so they start nothing either (feedback.md FB-21, FB-23).
     if (actorKind(actor.kind) === 'agent' && (await isReportThread(tx, threadRootId))) return null;

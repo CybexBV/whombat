@@ -137,6 +137,12 @@ export const messages = pgTable(
      * review-2 F1): an assessor's output, or an approved feedback handoff. Null for everything else.
      */
     provenance: text('provenance').$type<MessageProvenance>(),
+    /**
+     * Posted by a run that outsiders' input started (an incoming email, a tracker customer's report): its words may be
+     * steered by them, so automations never start on it or a reaction to it, and Search leaves it out. Kept on the box
+     * only: apps never get it (docs/decisions/outsiders-turns.md).
+     */
+    outsidersRun: boolean('outsiders_run').notNull().default(false),
     /** A deleted thread root kept for its replies (EC-02): text, card, attachments and previews are gone. */
     deletedAt: ts('deleted_at'),
     /** Pinned in its conversation since then, by whom (EC-14). */

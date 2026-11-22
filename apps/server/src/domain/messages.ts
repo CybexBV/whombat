@@ -89,6 +89,11 @@ export interface PostMessageArgs {
   onBehalfOfAccountId?: string | null;
   /** Where the text came from when it isn't simply the author's own (core `MessageProvenance`). */
   provenance?: MessageProvenance | null;
+  /**
+   * Posted by a run outsiders' input started (`messages.outsiders_run`). Absent: when an agent posts it in an outsiders'
+   * turn (queued for nobody).
+   */
+  outsidersRun?: boolean;
   /** The message hands a plan step to its agent owner (work-supervision WS-04): its dispatch is linked to the step. */
   planStep?: { planId: string; stepId: string; agentId: string };
   /** The message is the result of a job handed to T3 Code (`Message.jobResult`): its text is T3 Code's report. */
@@ -195,8 +200,7 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     scope?.agentId === actor.id &&
     scope.dispatchId !== null &&
     scope.onBehalfOfAccountId === null;
-  const provenance =
-    args.provenance !== undefined ? args.provenance : outsidersAgentPost ? 'outsiders_run' : null;
+  const outsidersRun = args.outsidersRun ?? outsidersAgentPost;
 
   await tx.insert(messages).values({
     id,
@@ -216,7 +220,8 @@ export async function postMessage(ctx: ApplyContext, args: PostMessageArgs): Pro
     attachmentIds: args.attachmentIds ?? [],
     threadRootId: rootId,
     clientId: args.clientId ?? null,
-    provenance,
+    provenance: args.provenance ?? null,
+    outsidersRun,
     jobResult: args.jobResult ?? null,
     // A thread's subject is on its first message only (CHT-05).
     ...(args.subject && !rootId
