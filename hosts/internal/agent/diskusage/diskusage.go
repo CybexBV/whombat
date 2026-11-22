@@ -9,6 +9,7 @@ package diskusage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -30,6 +31,7 @@ const (
 	CodeSpunDown       = "spun_down"
 	CodeStandbyUnknown = "standby_unknown"
 	CodeBusy           = "busy"
+	CodeUnsupported    = "unsupported"
 	CodeFailed         = "failed"
 )
 
@@ -244,8 +246,17 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 		if sfs == nil {
 			sfs = newDefaultScanFS(r)
 		}
-		rootDir, err := sfs.OpenRoot(hostPath, mount)
+		rootDir, err := sfs.OpenRoot(hostPath, mount, scope.target)
 		if err != nil {
+			var unsup *scanUnsupportedError
+			if errors.As(err, &unsup) {
+				done <- scanOut{errCode: CodeUnsupported, errMsg: unsup.msg}
+				return
+			}
+			if errors.Is(err, errRootChanged) {
+				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
+				return
+			}
 			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not read %s.", mount)}
 			return
 		}
@@ -271,6 +282,9 @@ func (r *Runner) DiskUsage(ctx context.Context, req proto.DiskUsageRequest) prot
 				done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("The filesystem at %s changed before the scan started.", mount)}
 				return
 			}
+		} else if r.isLinux() && r.root == "" && r.scanFS == nil && scope.target.ID > 0 {
+			done <- scanOut{errCode: CodeFailed, errMsg: fmt.Sprintf("Could not confirm the mounted filesystem at %s.", mount)}
+			return
 		}
 
 		var totalBytes, usedBytes uint64

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -16,100 +15,204 @@ import (
 const linuxOpenat2Resolve = unix.RESOLVE_NO_XDEV | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS
 
 type openat2Func func(dirfd int, path string, how *unix.OpenHow) (int, error)
+type statxFunc func(dirfd int, path string, flags int, mask int, stat *unix.Statx_t) error
+type fdinfoMountIDFunc func(fd int) (uint64, bool)
 
+// linuxScanFS requires Linux openat2(RESOLVE_NO_XDEV|RESOLVE_NO_SYMLINKS|
+// RESOLVE_NO_MAGICLINKS) and statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT).
+//
+// Kernels before 5.6 (ENOSYS) and seccomp profiles blocking openat2/statx
+// (EPERM) are refused cleanly instead of falling back to openat/fstatat:
+// without RESOLVE_NO_XDEV, any path lookup can cross into a filesystem mounted
+// mid-walk and send metadata requests (such as NFS GETATTR/OPEN or waking a
+// sleeping drive) before user space can inspect st_dev or mount ID.
 type linuxScanFS struct {
-	r       *Runner
-	openat2 openat2Func
+	r             *Runner
+	openat2       openat2Func
+	statx         statxFunc
+	fdinfoMountID fdinfoMountIDFunc
 }
 
 func newDefaultScanFS(r *Runner) scanFS {
-	return &linuxScanFS{r: r, openat2: unix.Openat2}
+	return &linuxScanFS{
+		r:             r,
+		openat2:       unix.Openat2,
+		statx:         unix.Statx,
+		fdinfoMountID: fdinfoMountID,
+	}
 }
 
 func newLinuxScanFSWithOpenat2(r *Runner, fn openat2Func) scanFS {
 	if fn == nil {
 		fn = unix.Openat2
 	}
-	return &linuxScanFS{r: r, openat2: fn}
+	return &linuxScanFS{
+		r:             r,
+		openat2:       fn,
+		statx:         unix.Statx,
+		fdinfoMountID: fdinfoMountID,
+	}
 }
 
 type linuxFSState struct {
-	openat2      openat2Func
-	openat2Works atomic.Bool
-	rootDev      uint64
-	rootMntID    uint64
-	hasRootMntID bool
-	readDirHook  func(logicalPath string) ([]fs.DirEntry, error)
-	statMountID  func(logicalPath string) (uint64, bool)
-	isTestRoot   bool
+	openat2       openat2Func
+	statx         statxFunc
+	fdinfoMountID fdinfoMountIDFunc
+	rootDev       uint64
+	rootMntID     uint64
+	hasRootMntID  bool
+	readDirHook   func(logicalPath string) ([]fs.DirEntry, error)
+	statMountID   func(logicalPath string) (uint64, bool)
+	isTestRoot    bool
 }
 
-func (s *linuxFSState) mountIDForFD(fd int, logicalPath string) (uint64, bool) {
+// inspectFD reads metadata for an already-pinned descriptor (O_PATH or open
+// directory) via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT). It rejects automount
+// trigger dentries (STATX_ATTR_AUTOMOUNT) and, for child entries, mount roots
+// (STATX_ATTR_MOUNT_ROOT). On Linux 5.6-5.7 where STATX_MNT_ID is absent, it
+// falls back to /proc/self/fdinfo/<fd>.
+func (s *linuxFSState) inspectFD(fd int, logicalPath string, rejectMountRoot bool) (entryStat, error) {
+	var stx unix.Statx_t
+	if err := statxNoEINTR(s.statx, fd, "", unix.AT_EMPTY_PATH|unix.AT_NO_AUTOMOUNT, unix.STATX_BASIC_STATS|unix.STATX_MNT_ID, &stx); err != nil {
+		return entryStat{}, err
+	}
+	if stx.Attributes&unix.STATX_ATTR_AUTOMOUNT != 0 {
+		return entryStat{}, errWrongMount
+	}
+	if rejectMountRoot && stx.Attributes&unix.STATX_ATTR_MOUNT_ROOT != 0 {
+		return entryStat{}, errWrongMount
+	}
+	es := entryStatFromStatx(&stx)
 	if s.statMountID != nil {
-		return s.statMountID(logicalPath)
+		es.MntID, es.HasMntID = s.statMountID(logicalPath)
+	} else if s.isTestRoot {
+		es.MntID, es.HasMntID = 0, false
+	} else if !es.HasMntID && s.fdinfoMountID != nil {
+		es.MntID, es.HasMntID = s.fdinfoMountID(fd)
 	}
-	if s.isTestRoot {
-		return 0, false
-	}
-	return fdStatMountID(fd)
+	return es, nil
 }
 
-func (s *linuxFSState) verifyChildDirFD(fd int, logicalPath string) error {
-	var st unix.Stat_t
-	if err := fstatNoEINTR(fd, &st); err != nil {
-		return err
+func (s *linuxFSState) verifyDirFD(fd int, logicalPath string, rejectMountRoot bool) (entryStat, error) {
+	es, err := s.inspectFD(fd, logicalPath, rejectMountRoot)
+	if err != nil {
+		return entryStat{}, err
 	}
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
-		return errNotDir
+	if !es.Mode.IsDir() {
+		return entryStat{}, errNotDir
 	}
-	if uint64(st.Dev) != s.rootDev {
-		return errWrongMount
+	if !es.HasDev || es.Dev != s.rootDev {
+		return entryStat{}, errWrongMount
 	}
 	if s.hasRootMntID && s.rootMntID != 0 {
-		mntID, ok := s.mountIDForFD(fd, logicalPath)
-		if !ok || mntID != s.rootMntID {
-			return errWrongMount
+		if !es.HasMntID || es.MntID != s.rootMntID {
+			return entryStat{}, errWrongMount
 		}
 	}
-	return nil
+	return es, nil
 }
 
-func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
-	fd, err := openNoEINTR(hostPath, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK)
+func (f *linuxScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
+	// Pin hostPath with O_PATH and no O_DIRECTORY so opening the root never
+	// triggers an automount or calls the filesystem's open() before we check
+	// that openat2 works and the mount ID still matches what standby checked.
+	pathFD, err := openNoEINTR(hostPath, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC)
 	if err != nil {
 		return nil, err
 	}
-	var st unix.Stat_t
-	if err := fstatNoEINTR(fd, &st); err != nil {
-		_ = unix.Close(fd)
-		return nil, err
+
+	openat2Fn := f.openat2
+	if openat2Fn == nil {
+		openat2Fn = unix.Openat2
 	}
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
-		_ = unix.Close(fd)
-		return nil, errNotDir
+	statxFn := f.statx
+	if statxFn == nil {
+		statxFn = unix.Statx
+	}
+	fdinfoFn := f.fdinfoMountID
+	if fdinfoFn == nil {
+		fdinfoFn = fdinfoMountID
 	}
 
-	state := &linuxFSState{
-		openat2:     f.openat2,
-		rootDev:     uint64(st.Dev),
-		readDirHook: f.r.readDir,
-		statMountID: f.r.statMountID,
-		isTestRoot:  f.r.root != "",
-	}
-	state.rootMntID, state.hasRootMntID = state.mountIDForFD(fd, logicalMount)
-
-	// Probe openat2 once on the open root descriptor itself so kernels before 5.6
-	// (ENOSYS) or seccomp filters blocking openat2 (ENOSYS/EPERM) fall back once
-	// instead of paying a failed syscall on every entry.
-	probeFD, perr := openat2NoEINTR(state.openat2, fd, ".", &unix.OpenHow{
+	// Probe openat2 once on the pinned descriptor. Refuse cleanly on kernels
+	// before 5.6 (ENOSYS) or seccomp policies blocking openat2 (EPERM/EACCES).
+	probeFD, perr := openat2NoEINTR(openat2Fn, pathFD, ".", &unix.OpenHow{
 		Flags:   unix.O_PATH | unix.O_CLOEXEC,
 		Resolve: linuxOpenat2Resolve,
 	})
-	if perr == nil {
-		_ = unix.Close(probeFD)
-		state.openat2Works.Store(true)
-	} else {
-		state.openat2Works.Store(false)
+	if perr != nil {
+		_ = unix.Close(pathFD)
+		if errors.Is(perr, unix.ENOSYS) {
+			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+		}
+		if errors.Is(perr, unix.EPERM) || errors.Is(perr, unix.EACCES) {
+			return nil, &scanUnsupportedError{msg: "This server does not allow a safe disk scan."}
+		}
+		return nil, perr
+	}
+	_ = unix.Close(probeFD)
+
+	state := &linuxFSState{
+		openat2:       openat2Fn,
+		statx:         statxFn,
+		fdinfoMountID: fdinfoFn,
+		readDirHook:   f.r.readDir,
+		statMountID:   f.r.statMountID,
+		isTestRoot:    f.r.root != "",
+	}
+
+	rootMeta, serr := state.inspectFD(pathFD, logicalMount, false)
+	if serr != nil {
+		_ = unix.Close(pathFD)
+		if errors.Is(serr, unix.ENOSYS) {
+			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+		}
+		if errors.Is(serr, unix.EPERM) {
+			return nil, &scanUnsupportedError{msg: "This server does not allow a safe disk scan."}
+		}
+		if errors.Is(serr, errWrongMount) {
+			return nil, errRootChanged
+		}
+		return nil, serr
+	}
+	if !rootMeta.Mode.IsDir() {
+		_ = unix.Close(pathFD)
+		return nil, errNotDir
+	}
+	state.rootDev = rootMeta.Dev
+	state.rootMntID = rootMeta.MntID
+	state.hasRootMntID = rootMeta.HasMntID
+
+	if expected.ID > 0 {
+		if !state.isTestRoot && !state.hasRootMntID {
+			_ = unix.Close(pathFD)
+			return nil, &scanUnsupportedError{msg: "This server's system is too old for a safe scan."}
+		}
+		if state.hasRootMntID && state.rootMntID != uint64(expected.ID) {
+			_ = unix.Close(pathFD)
+			return nil, errRootChanged
+		}
+	}
+
+	// Now that the pinned descriptor is confirmed to be the expected mount and
+	// not an automount trigger, open "." from it for directory reading.
+	fd, err := openat2NoEINTR(openat2Fn, pathFD, ".", &unix.OpenHow{
+		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NONBLOCK,
+		Resolve: linuxOpenat2Resolve,
+	})
+	_ = unix.Close(pathFD)
+	if err != nil {
+		if errors.Is(err, unix.EXDEV) {
+			return nil, errRootChanged
+		}
+		return nil, err
+	}
+	if _, verr := state.verifyDirFD(fd, logicalMount, false); verr != nil {
+		_ = unix.Close(fd)
+		if errors.Is(verr, errWrongMount) {
+			return nil, errRootChanged
+		}
+		return nil, verr
 	}
 
 	return &linuxScanDir{fd: fd, logicalPath: logicalMount, state: state}, nil
@@ -131,13 +234,7 @@ type linuxScanDir struct {
 }
 
 func (d *linuxScanDir) Stat() (entryStat, error) {
-	var st unix.Stat_t
-	if err := fstatNoEINTR(d.fd, &st); err != nil {
-		return entryStat{}, err
-	}
-	es := entryStatFromUnix(&st)
-	es.MntID, es.HasMntID = d.state.mountIDForFD(d.fd, d.logicalPath)
-	return es, nil
+	return d.state.inspectFD(d.fd, d.logicalPath, false)
 }
 
 func (d *linuxScanDir) Statfs() (fsStat, error) {
@@ -145,34 +242,19 @@ func (d *linuxScanDir) Statfs() (fsStat, error) {
 }
 
 func (d *linuxScanDir) OpenSelf() (scanDir, error) {
-	if d.state.openat2Works.Load() {
-		fd, err := openat2NoEINTR(d.state.openat2, d.fd, ".", &unix.OpenHow{
-			Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NONBLOCK,
-			Resolve: linuxOpenat2Resolve,
-		})
-		switch {
-		case err == nil:
-			if verr := d.state.verifyChildDirFD(fd, d.logicalPath); verr != nil {
-				_ = unix.Close(fd)
-				return nil, verr
-			}
-			return &linuxScanDir{fd: fd, logicalPath: d.logicalPath, state: d.state}, nil
-		case errors.Is(err, unix.ENOSYS):
-			d.state.openat2Works.Store(false)
-		case errors.Is(err, unix.EXDEV):
-			return nil, errWrongMount
-		default:
-			return nil, err
-		}
-	}
-
-	fd, err := openatNoEINTR(d.fd, ".", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NONBLOCK)
+	fd, err := openat2NoEINTR(d.state.openat2, d.fd, ".", &unix.OpenHow{
+		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NONBLOCK,
+		Resolve: linuxOpenat2Resolve,
+	})
 	if err != nil {
+		if errors.Is(err, unix.EXDEV) {
+			return nil, errWrongMount
+		}
 		return nil, err
 	}
-	if err := d.state.verifyChildDirFD(fd, d.logicalPath); err != nil {
+	if _, verr := d.state.verifyDirFD(fd, d.logicalPath, false); verr != nil {
 		_ = unix.Close(fd)
-		return nil, err
+		return nil, verr
 	}
 	return &linuxScanDir{fd: fd, logicalPath: d.logicalPath, state: d.state}, nil
 }
@@ -207,53 +289,54 @@ func (d *linuxScanDir) OpenDir(name, logicalPath string, searchOnly, _ bool) (sc
 		return nil, errWrongMount
 	}
 
-	if d.state.openat2Works.Load() {
-		flags := uint64(unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC | unix.O_NONBLOCK)
-		if searchOnly {
-			// O_PATH without O_NOFOLLOW lets RESOLVE_NO_SYMLINKS reject symlinks
-			// with ELOOP while allowing search-only traversal of execute-only dirs.
-			flags = uint64(unix.O_PATH | unix.O_DIRECTORY | unix.O_CLOEXEC)
-		}
-		fd, err := openat2NoEINTR(d.state.openat2, d.fd, name, &unix.OpenHow{
-			Flags:   flags,
-			Resolve: linuxOpenat2Resolve,
-		})
-		switch {
-		case err == nil:
-			if verr := d.state.verifyChildDirFD(fd, logicalPath); verr != nil {
-				_ = unix.Close(fd)
-				return nil, verr
-			}
-			return &linuxScanDir{fd: fd, logicalPath: logicalPath, state: d.state}, nil
-		case errors.Is(err, unix.ENOSYS):
-			d.state.openat2Works.Store(false)
-		case errors.Is(err, unix.EXDEV):
+	// Step 1: pin the child with O_PATH and NO O_DIRECTORY.
+	// On Linux 5.6 through 6.11+, passing O_DIRECTORY or O_RDONLY sets
+	// LOOKUP_DIRECTORY/LOOKUP_OPEN in VFS, which makes follow_automount()
+	// trigger an automount before RESOLVE_NO_XDEV refuses the crossing.
+	// O_PATH without O_DIRECTORY sets none of those flags, so already-mounted
+	// filesystems fail with EXDEV in VFS and uncovered automount triggers stop
+	// without invoking d_automount().
+	pathFD, err := openat2NoEINTR(d.state.openat2, d.fd, name, &unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: linuxOpenat2Resolve,
+	})
+	if err != nil {
+		if errors.Is(err, unix.EXDEV) {
 			return nil, errWrongMount
-		default:
-			return nil, err
 		}
+		return nil, err
 	}
 
-	// Fallback when openat2 is unavailable (kernels before 5.6 returning ENOSYS,
-	// or seccomp filters refusing openat2): open the child directory relative to
-	// its open parent descriptor with O_NOFOLLOW|O_DIRECTORY, then verify both
-	// fstat's st_dev and the open descriptor's mount ID (statx STATX_MNT_ID or
-	// /proc/self/fdinfo/<fd>) against the mount root BEFORE returning it or
-	// calling getdents. Opening a newly mounted directory only binds the mount's
-	// already-cached root inode in VFS and does not read directory blocks or
-	// file data; any mismatch closes the descriptor immediately so the newly
-	// mounted filesystem's data is never read.
-	flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC | unix.O_NONBLOCK
+	// Step 2: verify the pinned descriptor via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT)
+	// (rejecting STATX_ATTR_AUTOMOUNT, STATX_ATTR_MOUNT_ROOT, non-directories,
+	// different st_dev, and missing or mismatched mount IDs) BEFORE opening it.
+	if _, verr := d.state.verifyDirFD(pathFD, logicalPath, true); verr != nil {
+		_ = unix.Close(pathFD)
+		return nil, verr
+	}
+
+	// Search-only callers only traverse deeper or confirm mount identity; the
+	// verified O_PATH descriptor supports openat2 on children (even on 0111 dirs)
+	// without needing a readable open.
 	if searchOnly {
-		flags = unix.O_PATH | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC
+		return &linuxScanDir{fd: pathFD, logicalPath: logicalPath, state: d.state}, nil
 	}
-	fd, err := openatNoEINTR(d.fd, name, flags)
+
+	// Step 3: open "." from the already-pinned and verified descriptor for reading.
+	fd, err := openat2NoEINTR(d.state.openat2, pathFD, ".", &unix.OpenHow{
+		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NONBLOCK,
+		Resolve: linuxOpenat2Resolve,
+	})
+	_ = unix.Close(pathFD)
 	if err != nil {
+		if errors.Is(err, unix.EXDEV) {
+			return nil, errWrongMount
+		}
 		return nil, err
 	}
-	if err := d.state.verifyChildDirFD(fd, logicalPath); err != nil {
+	if _, verr := d.state.verifyDirFD(fd, logicalPath, true); verr != nil {
 		_ = unix.Close(fd)
-		return nil, err
+		return nil, verr
 	}
 	return &linuxScanDir{fd: fd, logicalPath: logicalPath, state: d.state}, nil
 }
@@ -263,47 +346,26 @@ func (d *linuxScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 		return entryStat{}, errWrongMount
 	}
 
-	if d.state.openat2Works.Load() {
-		// Pin the child entry with O_PATH and RESOLVE_NO_XDEV|NO_SYMLINKS|NO_MAGICLINKS
-		// first, then stat that exact descriptor via fstatat(fd, "", AT_EMPTY_PATH).
-		// If a filesystem (directory mount or file bind mount) was mounted at name
-		// mid-walk, openat2 refuses with EXDEV in VFS before any getattr on the
-		// mounted filesystem.
-		entryFD, err := openat2NoEINTR(d.state.openat2, d.fd, name, &unix.OpenHow{
-			Flags:   unix.O_PATH | unix.O_CLOEXEC,
-			Resolve: linuxOpenat2Resolve,
-		})
-		switch {
-		case err == nil:
-			var st unix.Stat_t
-			serr := fstatatNoEINTR(entryFD, "", &st, unix.AT_EMPTY_PATH)
-			_ = unix.Close(entryFD)
-			if serr != nil {
-				return entryStat{}, serr
-			}
-			es := entryStatFromUnix(&st)
-			if d.state.statMountID != nil {
-				es.MntID, es.HasMntID = d.state.statMountID(logicalPath)
-			} else if d.state.hasRootMntID {
-				es.MntID, es.HasMntID = d.state.rootMntID, true
-			}
-			return es, nil
-		case errors.Is(err, unix.ENOSYS):
-			d.state.openat2Works.Store(false)
-		case errors.Is(err, unix.EXDEV):
-			return entryStat{}, errWrongMount
-		default:
-			return entryStat{}, err
-		}
-	}
-
-	// Fallback when openat2 is unavailable: stat relative to the open parent
-	// descriptor in one syscall without following symlinks or triggering
-	// automounts (statx gets both basic stats and STATX_MNT_ID in one call;
-	// kernels before 4.11 fall back to fstatat), then check st_dev and mount ID.
-	es, err := statxOrFstatat(d.fd, name)
+	// Pin the child entry with O_PATH (no O_DIRECTORY) and RESOLVE_NO_XDEV |
+	// RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS, then stat that exact
+	// descriptor via statx(AT_EMPTY_PATH|AT_NO_AUTOMOUNT). A filesystem or bind
+	// mount at name fails with EXDEV in VFS before any getattr touches it, and
+	// an automount trigger is pinned without triggering and rejected via
+	// STATX_ATTR_AUTOMOUNT.
+	entryFD, err := openat2NoEINTR(d.state.openat2, d.fd, name, &unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: linuxOpenat2Resolve,
+	})
 	if err != nil {
+		if errors.Is(err, unix.EXDEV) {
+			return entryStat{}, errWrongMount
+		}
 		return entryStat{}, err
+	}
+	es, serr := d.state.inspectFD(entryFD, logicalPath, true)
+	_ = unix.Close(entryFD)
+	if serr != nil {
+		return entryStat{}, serr
 	}
 	if es.Mode&fs.ModeSymlink != 0 {
 		return es, nil
@@ -312,10 +374,7 @@ func (d *linuxScanDir) StatEntry(name, logicalPath string) (entryStat, error) {
 		return entryStat{}, errWrongMount
 	}
 	if d.state.hasRootMntID && d.state.rootMntID != 0 {
-		if d.state.statMountID != nil {
-			es.MntID, es.HasMntID = d.state.statMountID(logicalPath)
-		}
-		if es.HasMntID && es.MntID != d.state.rootMntID {
+		if !es.HasMntID || es.MntID != d.state.rootMntID {
 			return entryStat{}, errWrongMount
 		}
 	}
@@ -444,29 +503,9 @@ func openNoEINTR(path string, flags int) (int, error) {
 	}
 }
 
-func openatNoEINTR(dirfd int, path string, flags int) (int, error) {
+func statxNoEINTR(fn statxFunc, dirfd int, path string, flags int, mask int, stx *unix.Statx_t) error {
 	for {
-		fd, err := unix.Openat(dirfd, path, flags, 0)
-		if errors.Is(err, unix.EINTR) {
-			continue
-		}
-		return fd, err
-	}
-}
-
-func fstatNoEINTR(fd int, st *unix.Stat_t) error {
-	for {
-		err := unix.Fstat(fd, st)
-		if errors.Is(err, unix.EINTR) {
-			continue
-		}
-		return err
-	}
-}
-
-func fstatatNoEINTR(dirfd int, path string, st *unix.Stat_t, flags int) error {
-	for {
-		err := unix.Fstatat(dirfd, path, st, flags)
+		err := fn(dirfd, path, flags, mask, stx)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}

@@ -18,7 +18,7 @@ func newDefaultScanFS(r *Runner) scanFS {
 	return &otherScanFS{r: r}
 }
 
-func (f *otherScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
+func (f *otherScanFS) OpenRoot(hostPath, logicalMount string, _ mountInfo) (scanDir, error) {
 	fi, err := os.Lstat(hostPath)
 	if err != nil {
 		return nil, err

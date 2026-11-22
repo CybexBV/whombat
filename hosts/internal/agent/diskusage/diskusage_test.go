@@ -2382,9 +2382,9 @@ type recordingScanFS struct {
 	onOp  func(logicalPath string)
 }
 
-func (f *recordingScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
+func (f *recordingScanFS) OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error) {
 	f.onOp(logicalMount)
-	d, err := f.inner.OpenRoot(hostPath, logicalMount)
+	d, err := f.inner.OpenRoot(hostPath, logicalMount, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -2615,7 +2615,7 @@ func (f *fakeScanFS) ensureDirLocked(base *fakeNode, logicalPath string, dev, mn
 	return cur
 }
 
-func (f *fakeScanFS) OpenRoot(_ string, logicalMount string) (scanDir, error) {
+func (f *fakeScanFS) OpenRoot(_ string, logicalMount string, _ mountInfo) (scanDir, error) {
 	if f.onOpenRoot != nil {
 		f.onOpenRoot(logicalMount, f)
 	}
@@ -3103,7 +3103,7 @@ type hugeBatchScanFS struct {
 	maxBatchAsked atomic.Int64
 }
 
-func (f *hugeBatchScanFS) OpenRoot(_ string, logicalMount string) (scanDir, error) {
+func (f *hugeBatchScanFS) OpenRoot(_ string, logicalMount string, _ mountInfo) (scanDir, error) {
 	return &hugeBatchDir{fs: f, logicalPath: logicalMount}, nil
 }
 

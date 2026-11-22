@@ -40,7 +40,7 @@ type unixFSState struct {
 	statMountID  func(logicalPath string) (uint64, bool)
 }
 
-func (f *unixScanFS) OpenRoot(hostPath, logicalMount string) (scanDir, error) {
+func (f *unixScanFS) OpenRoot(hostPath, logicalMount string, _ mountInfo) (scanDir, error) {
 	fd, err := openNoEINTR(hostPath, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC|unix.O_NONBLOCK)
 	if err != nil {
 		return nil, err

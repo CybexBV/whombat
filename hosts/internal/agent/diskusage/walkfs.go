@@ -8,9 +8,19 @@ import (
 )
 
 var (
-	errWrongMount = errors.New("path is outside target mount")
-	errNotDir     = errors.New("not a directory")
+	errWrongMount  = errors.New("path is outside target mount")
+	errNotDir      = errors.New("not a directory")
+	errRootChanged = errors.New("mount root changed before scan started")
 )
+
+// scanUnsupportedError indicates that this host's kernel, security policy, or
+// operating system cannot enforce safe mount-boundary isolation without sending
+// metadata requests to unchecked filesystems.
+type scanUnsupportedError struct {
+	msg string
+}
+
+func (e *scanUnsupportedError) Error() string { return e.msg }
 
 // entryKind is the coarse entry type reported by directory iteration (d_type on
 // Linux) before any per-entry stat. entryUnknown means the filesystem did not
@@ -99,9 +109,10 @@ func clampBatchSize(maxEntries int) int {
 }
 
 // scanFS anchors a disk usage scan to an open directory descriptor of the
-// target mount root.
+// target mount root, verifying that it still matches the mount selected and
+// checked for standby.
 type scanFS interface {
-	OpenRoot(hostPath, logicalMount string) (scanDir, error)
+	OpenRoot(hostPath, logicalMount string, expected mountInfo) (scanDir, error)
 }
 
 func isSafeChildName(name string) bool {
