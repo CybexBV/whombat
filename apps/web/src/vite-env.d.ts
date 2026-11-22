@@ -57,7 +57,7 @@ interface ImportMetaEnv {
   readonly VITE_FIXTURE_BACKUPS?: string;
   /** `assistant`: fixture mode draws the one-Whombat shell (one-whombat-shell.md AP-1257); the crew shell otherwise. */
   readonly VITE_FIXTURE_SHELL?: string;
-  /** What answers in Chat in fixture mode (chat-runtime.md AP-2711): `codex-off`, `gateway`, `off`. */
+  /** What answers in Chat in fixture mode (chat-runtime.md AP-2711): `codex-off`, `gateway`, `off`, `none` (no AI signed in). */
   readonly VITE_FIXTURE_CHAT_RUNTIME?: string;
   /** `1`: a Chat thread with server tasks running, done, with warnings and failed (task-feedback.md AP-4304). */
   readonly VITE_FIXTURE_TASKS?: string;

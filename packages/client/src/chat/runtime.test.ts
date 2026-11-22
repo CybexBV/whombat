@@ -19,6 +19,7 @@ import {
   chatMadeDefaultText,
   chatMakeDefaultShown,
   chatModelRows,
+  chatNoAi,
   chatProviderHints,
   chatProviderSegments,
   chatRuntimeButton,
@@ -209,6 +210,7 @@ describe('the button (CR-01)', () => {
       label: 'Opus · Automatic',
       fast: false,
       ariaLabel: 'Choose how Neo answers',
+      noAi: false,
     });
     const sol = chatRuntimeButton(view(), { provider: 'codex', effort: 'high' });
     expect([sol.label, sol.fast, sol.providerLabel]).toEqual(['GPT-6.1 Sol · High', true, 'ChatGPT']);
@@ -221,6 +223,20 @@ describe('the button (CR-01)', () => {
     expect(chatRuntimeLine(opus, 'For this thread')).toBe('Opus · Automatic · For this thread');
     const sol = chatRuntimeButton(view(), { provider: 'codex', effort: 'high' });
     expect(chatRuntimeLine(sol)).toBe('GPT-6.1 Sol · High · Fast replies');
+  });
+});
+
+describe('no AI yet', () => {
+  it('says so only while no provider can answer (Set up your AI skipped)', () => {
+    const none = view({ providers: view().providers.map((p) => ({ ...p, ready: false })) });
+    expect(chatRuntimeButton(none, { provider: 'codex' }).noAi).toBe(true);
+    expect(chatNoAi(none)).toBe(true);
+    const one = view({
+      providers: view().providers.map((p) => ({ ...p, ready: p.provider === 'claude' })),
+    });
+    expect(chatRuntimeButton(one, { provider: 'codex' }).noAi).toBe(false);
+    // A list not known yet isn't “none”.
+    expect(chatNoAi(view({ providers: [] }))).toBe(false);
   });
 });
 

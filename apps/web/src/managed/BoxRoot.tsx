@@ -16,6 +16,7 @@ import {
   COMMUNITY_TEXT,
   COPY,
   claimSecretOfPath,
+  claimSecretOfTyped,
   createRegistry,
   isCommunity,
   joinWithBoxPasskey,
@@ -24,6 +25,7 @@ import {
   type LocalLinkParts,
   linkErrorText,
   OWN_ADDRESS_TEXT,
+  type OwnClaimPrefill,
   type OwnClaimProbe,
   ownAddressText,
   ownClaimHere,
@@ -32,6 +34,7 @@ import {
   pinnedRecord,
   probeOwnClaim,
   readLocalLink,
+  readOwnClaimPrefill,
   recoveryEnrollRequest,
   recoveryErrorKey,
   tailscalePageName,
@@ -103,6 +106,20 @@ function claimLinkOnThisPage(): string | null {
   return claimSecretOfPath(window.location.pathname);
 }
 
+/**
+ * The name and email the account site sent along in the fragment (“Claim it now”), read once per page load and taken
+ * out of the address at once, so they don't stay in it or in its history entry.
+ */
+let claimPrefill: OwnClaimPrefill | null = null;
+function takeClaimPrefill(): OwnClaimPrefill | null {
+  const read = readOwnClaimPrefill(window.location);
+  if (read) {
+    claimPrefill = read;
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+  }
+  return claimPrefill;
+}
+
 /** Leaves the claim link's page once it is spent (the secret changes after a claim). */
 function leaveClaimLinkPage() {
   if (claimLinkOnThisPage()) window.history.replaceState(null, '', '/');
@@ -129,6 +146,8 @@ export function BoxRoot({ env }: { env: BoxEnvironment }) {
   const [attempt, setAttempt] = useState(0);
   // What the claim's letters screen says after the box was asked again in the middle of a claim.
   const [claimNotice, setClaimNotice] = useState<string | null>(null);
+  // Out of the address before anything else reads it, whether or not the box still needs claiming.
+  useState(takeClaimPrefill);
 
   const clearEnrollment = useCallback(() => {
     const r = registry();
@@ -595,7 +614,10 @@ function ClaimGate({
   fallback: ReactNode;
 }) {
   const [probe, setProbe] = useState<OwnClaimProbe | null>(null);
-  const [claimLink] = useState(claimLinkOnThisPage);
+  const [claimLink, setClaimLink] = useState(claimLinkOnThisPage);
+  // The claim link typed on this page (the box's address opened without it): a refusal now means it was wrong.
+  const [typed, setTyped] = useState(false);
+  const [prefill] = useState(takeClaimPrefill);
   const ownHost = env.ownAddress?.() ?? null;
   useEffect(() => {
     let live = true;
@@ -622,10 +644,19 @@ function ClaimGate({
     if (probe === 'claimed') onOther();
   }, [probe, onOther]);
   if (probe === null || probe === 'claimed') return null;
-  if (probe === 'needs_link') {
-    const t = OWN_ADDRESS_TEXT.openOnScreen;
-    return <AuthLayout kicker={t.kicker} title={t.title} sub={t.sub} tip={COMMUNITY_TEXT.claim.tip} />;
-  }
+  if (probe === 'needs_link')
+    return (
+      <ClaimLinkForm
+        wrong={typed}
+        onLink={(secret) => {
+          // The page becomes the claim link's own, as if opened from the screen; the box is asked again with it.
+          window.history.replaceState(null, '', `/c/${secret}`);
+          setTyped(true);
+          setProbe(null);
+          setClaimLink(secret);
+        }}
+      />
+    );
   if (!ownClaimHere(probe)) return <>{fallback}</>;
   return (
     <BoxSetup
@@ -634,6 +665,7 @@ function ClaimGate({
       known={known}
       atAddress={ownHost !== null}
       claimLink={claimLink}
+      prefill={prefill}
       // Too many tries on the letters showing: the setup stays, and says what to do at the box.
       notice={probe === 'new_letters' ? COMMUNITY_TEXT.claim.errors.newLetters : notice}
       onReread={onReread}
@@ -645,6 +677,55 @@ function ClaimGate({
       onTaken={onOther}
       onDone={onDone}
     />
+  );
+}
+
+/**
+ * The box's address opened without its claim link (from Your Whombats, or typed without `/c/…`): the six letters after
+ * `/c/` on its screen are asked here, so nobody has to type the whole address again. A wrong one is the box's to count,
+ * as a wrong link in the address is.
+ */
+function ClaimLinkForm({ wrong, onLink }: { wrong: boolean; onLink: (secret: string) => void }) {
+  const t = OWN_ADDRESS_TEXT.openOnScreen;
+  const [value, setValue] = useState('');
+  const [problem, setProblem] = useState<string | null>(wrong ? t.wrong : null);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const secret = claimSecretOfTyped(value);
+    if (!secret) return setProblem(t.notLetters);
+    setProblem(null);
+    onLink(secret);
+  };
+  return (
+    <AuthLayout kicker={t.kicker} title={t.title} sub={t.typeSub} tip={COMMUNITY_TEXT.claim.tip}>
+      <form className={styles.form} onSubmit={submit}>
+        <Field label={t.label}>
+          {(id) => (
+            <Input
+              id={id}
+              size="lg"
+              className={styles.codeInput}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder={t.placeholder}
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                setProblem(null);
+              }}
+              autoFocus
+            />
+          )}
+        </Field>
+        <ErrorLine text={problem} />
+        <div className={styles.actions}>
+          <Button variant="primary" size="lg" type="submit" disabled={!value.trim()}>
+            {t.next}
+          </Button>
+        </div>
+      </form>
+    </AuthLayout>
   );
 }
 

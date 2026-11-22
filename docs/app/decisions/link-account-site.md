@@ -1,4 +1,4 @@
-# The account site under Whombat Link (AP-9700 … AP-9712, AP-9714 … AP-9723)
+# The account site under Whombat Link (AP-9700 … AP-9712, AP-9714 … AP-9723, AP-9770 … AP-9771)
 
 Phase 1 of Whombat Link in the hosted app at app.whombat.com (and dev.whombat.com): Whombat
 `docs/decisions/whombat-link.md` LNK-13, LNK-32 … LNK-35 and LNK-06 on the account's side. Control's routes are
@@ -210,4 +210,28 @@ only sold in EU countries for now. Your Whombat keeps working at home without it
 Otherwise the row's hint says “Buying for a business? Add your VAT number on the payment page.” The chosen country goes
 to `link.checkout` as `country`; control's `link_country` gets the same words. Manage subscription asks nothing. Not in
 the mocks: the plan card's row with the label beside a native select, like Quiet hours' times.
+
+## AP-9770 After linking, `/link` waits for the Whombat's page and opens it (2026-11-22; the Easy-path install test)
+
+The Easy path asked for two codes on two sites: the link code here, then, a minute or two later, the long address and
+four letters from the box's screen. Now “… is linked” waits for that Whombat's own address: it asks control's
+`link.boxes` every 5 s (`pollLinkAddress`) and says “Getting your Whombat’s web address… this usually takes a minute or
+two.”; after 5 minutes it says it is taking longer than usual, with Check again; it stops asking when the page closes.
+Once the Whombat has its address (`linkBoxOpenUrl`), a Whombat without a name (nobody set it up yet: an Easy box links
+before its setup asks for one) gets **Claim it now**, which opens `https://<host>/` in this tab, and one with a name
+gets Open it. Your Whombats is a link beside it. A line under the button says to try again in a minute if the page
+doesn't open yet.
+
+What it can't do with what control gives today: open the claim itself. The claim at the address needs the claim link
+(`/c/<6 letters>`, own-address.md OWA-12, OWA-36), which only the box holds, in memory, and shows on its screen; control
+doesn't have it. So the page at the address asks for the six letters after `/c/` (own-address.md AP-9772 in the apps),
+then the four letters. Control also doesn't say whether the box serves its page yet (its certificate comes a minute or
+so after its address), hence the line under the button. Both would need a box and contracts change.
+
+## AP-9771 The claim takes the account's name and email along, in the fragment
+
+Claim it now carries the signed-in account's name and email in the URL fragment (`#name=…&email=…`,
+`ownClaimPrefillHash`), which never reaches a server: not control, not the relay's door, not the box. The box's page reads
+it once on its root or its claim link (`readOwnClaimPrefill`), takes it out of the address at once, and fills Who are
+you? with it; the person can change both. Open on Your Whombats carries nothing.
 

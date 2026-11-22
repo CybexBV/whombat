@@ -169,6 +169,80 @@ describe('/link', () => {
   });
 });
 
+describe('/link once it is linked: its own page', () => {
+  const easy = (patch: Partial<LinkAccount['boxes'][number]>) => ({
+    ...(account().boxes[0] as LinkAccount['boxes'][number]),
+    name: null,
+    ...patch,
+  });
+  const starting = easy({ state: 'starting', label: null, host: null });
+  const ready = easy({});
+  function linking(answers: LinkAccount['boxes'][number][], then = ready, confirmed = starting) {
+    const linkAccount = vi.fn(async () => ({ ...account(), boxes: [answers.shift() ?? then] }));
+    const control = {
+      linkLookup: async () => ({
+        code: 'KXQM-TRVW',
+        name: null,
+        expiresAt: now + 600,
+        linked: false,
+        trial: true,
+      }),
+      linkConfirm: async () => confirmed,
+      linkAccount,
+    };
+    return { control: control as unknown as ControlApi, linkAccount };
+  }
+  afterEach(() => vi.useRealTimers());
+
+  it('waits for its address, then Claim it now opens its page with the name and email in the fragment', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    // The lookup's own load, then the first wait's answer: still no address.
+    const { control } = linking([starting, starting]);
+    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: T.confirm }));
+    expect(await screen.findByText(T.addressWaiting)).toBeTruthy();
+    expect(screen.queryByTestId('link-claim-now')).toBeNull();
+    await vi.advanceTimersByTimeAsync(6_000);
+    const claim = await screen.findByRole('link', { name: T.claimNow });
+    const url = new URL(claim.getAttribute('href') ?? '');
+    expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');
+    expect(url.pathname).toBe('/');
+    expect(Object.fromEntries(new URLSearchParams(url.hash.slice(1)))).toEqual({
+      name: 'Mara',
+      email: 'mara@burrowhq.example',
+    });
+  });
+
+  it('says when it takes long, asks again on Check again, and stops asking once the page closes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { control, linkAccount } = linking(Array.from({ length: 200 }, () => starting));
+    const page = render(
+      <LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await user.click(await screen.findByRole('button', { name: T.confirm }));
+    await vi.advanceTimersByTimeAsync(6 * 60_000);
+    expect(await screen.findByText(T.addressSlow)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: T.checkAgain }));
+    expect(await screen.findByText(T.addressWaiting)).toBeTruthy();
+    page.unmount();
+    const asked = linkAccount.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(linkAccount.mock.calls.length).toBe(asked);
+  });
+
+  it('a Whombat already set up (it has a name) is opened, with nothing in the fragment', async () => {
+    const user = userEvent.setup();
+    const home = { ...ready, name: 'Home' };
+    const { control } = linking([], home, home);
+    render(<LinkCodeFlow control={control} session={session} initialCode="KXQM-TRVW" onAccount={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: T.confirm }));
+    const open = await screen.findByRole('link', { name: T.openName('Home') });
+    expect(open.getAttribute('href')).toBe('https://calm-otter-reef.box.whombat.app/');
+  });
+});
+
 describe('Your Whombats', () => {
   const props = {
     session,

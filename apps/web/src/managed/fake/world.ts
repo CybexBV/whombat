@@ -557,6 +557,8 @@ interface FakeLink {
   manual?: boolean;
   /** A card was added in Checkout: the free month's two-box limit is gone. */
   card?: boolean;
+  /** Boxes linked from now on wait for their address (`starting`) until `linkAddress` gives it. */
+  addressLater?: boolean;
 }
 
 interface WorldState {
@@ -1025,6 +1027,10 @@ export interface FakeFaults {
   paymentPageOpen(interval: 'month' | 'year' | null): void;
   /** Change one of the account's Link boxes (its state, grace end, address). */
   linkBox(device: string, patch: Partial<LinkedBox>): void;
+  /** Boxes linked from now on wait for their own address, as a real box does for a minute or two. */
+  linkAddressLater(on: boolean): void;
+  /** Every box still waiting gets its address now. */
+  linkAddress(): void;
   /** How long Stripe's webhook takes after a checkout (default 3 s). */
   checkoutLag(ms: number): void;
   /** This Whombat already had a free trial in another org (BL-17). */
@@ -3341,7 +3347,8 @@ export async function createFakeWorld(): Promise<FakeWorld> {
   };
   const linkOn = (b: LinkedBox) => {
     Object.assign(b, { state: 'on', since: nowS(), graceEndsAt: null });
-    if (!b.label) {
+    if (!b.label && linkNow().addressLater) Object.assign(b, { state: 'starting' });
+    else if (!b.label) {
       const taken = linkNow().boxes.filter((x) => x.label).length;
       b.label = FAKE_LINK_LABELS[taken % FAKE_LINK_LABELS.length] ?? 'calm-otter-reef';
       b.host = `${b.label}.box.whombat.app`;
@@ -4638,6 +4645,18 @@ export async function createFakeWorld(): Promise<FakeWorld> {
       linkBox(device, patch) {
         const b = linkNow().boxes.find((x) => x.device === device);
         if (b) Object.assign(b, patch);
+        save();
+      },
+      linkAddressLater(on) {
+        linkNow().addressLater = on;
+        save();
+      },
+      linkAddress() {
+        const l = linkNow();
+        const later = l.addressLater;
+        l.addressLater = false;
+        for (const b of l.boxes) if (b.state === 'starting') linkOn(b);
+        l.addressLater = later;
         save();
       },
       trialUsed(device) {

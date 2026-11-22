@@ -5,7 +5,8 @@
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { CHAT_RUNTIME_COPY } from '@whombat/core/text';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
 beforeAll(() => {
@@ -149,5 +150,22 @@ describe('Custom in the picker', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: BUTTON })).toBeNull());
     expect(described(button)).toBe('Custom · gemma3:27b');
+  });
+});
+
+describe('no AI signed in yet (Set up your AI skipped)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('says “No AI yet” instead of a provider, and leads to Settings → AI', async () => {
+    vi.stubEnv('VITE_FIXTURE_CHAT_RUNTIME', 'none');
+    const user = userEvent.setup();
+    const { location } = renderApp('/chat?new=1', chatShell());
+    const room = await screen.findByRole('region', { name: 'Chat' });
+    const noAi = await within(room).findByRole('link', { name: CHAT_RUNTIME_COPY.noAiLabel('Neo') });
+    expect(noAi.textContent).toBe(CHAT_RUNTIME_COPY.noAi);
+    expect(within(room).queryByRole('button', { name: BUTTON })).toBeNull();
+    await user.click(noAi);
+    // Settings → AI (the AI tab is the agent’s AI part now).
+    await waitFor(() => expect(location()).toMatch(/^\/settings\?.*\bai\b/));
   });
 });

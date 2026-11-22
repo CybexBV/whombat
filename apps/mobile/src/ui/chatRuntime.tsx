@@ -14,7 +14,7 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BrandMark } from './BrandMark';
 import { haptic } from './haptics';
-import { Server, Zap } from './icons';
+import { CircleDashed, Server, Zap } from './icons';
 import { Touchable } from './Touchable';
 import { hitSlopFor } from './touchTarget';
 
@@ -139,6 +139,37 @@ export function RanOnNote({ text, fast }: { text: string; fast: boolean }) {
         {text}
       </Text>
     </View>
+  );
+}
+
+/**
+ * The composer's icon while no AI is signed in: a dashed circle in the text colour, no provider's mark. A tap opens
+ * Settings → AI; a long press says “No AI yet”.
+ */
+export function NoAiIcon({ label, line, onPress }: { label: string; line: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Touchable
+      onPress={onPress}
+      onLongPress={() => {
+        haptic('menu');
+        showNotice(line);
+      }}
+      feedback="wash"
+      ringRadius={16}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={hitSlopFor(32)}
+      style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <CircleDashed
+        size={18}
+        color={theme.colors.ink2}
+        strokeWidth={1.75}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
+    </Touchable>
   );
 }
 

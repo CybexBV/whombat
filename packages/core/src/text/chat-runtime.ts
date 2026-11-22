@@ -46,6 +46,9 @@ export const CHAT_RUNTIME_COPY = {
   madeDefault: (name: string, choice: string) => `${name} now answers with ${choice} by default.`,
   /** The button's aria-label. */
   buttonLabel: (name: string) => `Choose how ${name} answers`,
+  /** No AI signed in yet (Set up your AI skipped): the button says so and leads to signing one in. */
+  noAi: 'No AI yet',
+  noAiLabel: (name: string) => `No AI yet. Set one up so ${name} can answer.`,
 } as const;
 
 /** A model by its own label (“Opus”, never “Default (Opus)”): the named one, else the tool's default; else its id. */

@@ -59,7 +59,7 @@ import { useTheAgentHere } from '../data/useAgent';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
-import { ChatRuntimeIcon, FastBolt, ProviderMark } from '../ui/chatRuntime';
+import { ChatRuntimeIcon, FastBolt, NoAiIcon, ProviderMark } from '../ui/chatRuntime';
 import { FormField } from '../ui/formField';
 import { Button } from '../ui/primitives';
 import { Sheet } from '../ui/sheet';
@@ -143,8 +143,18 @@ export function useChatRuntimeChoice({
 /** The icon in the pill and its sheet (AP-2715, AP-2716, chat-runtime-icon.md AP-2962). */
 export function ChatRuntimeControl({ choice }: { choice: ChatRuntimeChoice }) {
   const [open, setOpen] = useState(false);
+  const navigation = useAppNavigation();
   const button = chatRuntimeButton(choice.view, choice.runtime);
   const scope = chatRuntimeScope(choice.inThread);
+  // No AI signed in yet: the icon names none and goes where one is signed in, not to a sheet of models nobody chose.
+  if (button.noAi)
+    return (
+      <NoAiIcon
+        label={CHAT_RUNTIME_COPY.noAiLabel(choice.view.assistantName)}
+        line={CHAT_RUNTIME_COPY.noAi}
+        onPress={() => navigation.navigate('SettingsAgent', { part: 'ai' })}
+      />
+    );
   return (
     <>
       <ChatRuntimeIcon

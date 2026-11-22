@@ -20,6 +20,7 @@ import {
 } from '@whombat/client';
 import type { ChatProvider, ChatRuntime, ChatRuntimeView } from '@whombat/core';
 import { CHAT_RUNTIME_COPY } from '@whombat/core/text';
+import { CircleDashed } from 'lucide-react';
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -100,6 +101,22 @@ export function ChatRuntimeButton({
     setOpen(false);
     if (restore) buttonRef.current?.focus();
   }, []);
+  // No AI signed in yet: naming a provider and model here would read as if one were chosen. It says so in words and
+  // goes where one is signed in.
+  if (button.noAi)
+    return (
+      <Link
+        to={setUpHref.to}
+        search={setUpHref.search as never}
+        className={styles.noAi}
+        aria-label={CHAT_RUNTIME_COPY.noAiLabel(view.assistantName)}
+        title={CHAT_RUNTIME_COPY.noAiLabel(view.assistantName)}
+        data-chat-runtime="none"
+      >
+        <Icon icon={CircleDashed} size={16} />
+        <span>{CHAT_RUNTIME_COPY.noAi}</span>
+      </Link>
+    );
   return (
     <>
       <button

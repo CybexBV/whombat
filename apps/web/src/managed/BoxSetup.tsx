@@ -41,6 +41,7 @@ import {
   localClaimLettersReady,
   localClaimNext,
   OWN_ADDRESS_TEXT,
+  type OwnClaimPrefill,
   ownClaimProbeOf,
   PasskeyCancelled,
   type PasskeySetupStep,
@@ -88,6 +89,7 @@ export function BoxSetup({
   known,
   atAddress,
   claimLink,
+  prefill,
   notice,
   tailscaleName,
   onClaimed,
@@ -102,6 +104,8 @@ export function BoxSetup({
   atAddress: boolean;
   /** The claim link's secret from the address bar (`/c/<secret>`), at the address. */
   claimLink: string | null;
+  /** The name and email the account site sent along (the page's fragment); the person can still change them. */
+  prefill?: OwnClaimPrefill | null;
   /** What the letters screen says when the setup opens: why it is back here, or that new letters must be asked for. */
   notice?: string | null;
   /** This page's Tailscale name (`<name>.<tailnet>.ts.net`), or null. */
@@ -121,8 +125,8 @@ export function BoxSetup({
   const steps = boxSetupSteps({ atAddress });
   const [stage, setStage] = useState<Stage>('letters');
   const [letters, setLetters] = useState('');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(prefill?.name ?? '');
+  const [email, setEmail] = useState(prefill?.email ?? '');
   const [lettersProblem, setLettersProblem] = useState<string | null>(notice ?? null);
   const [claimProblem, setClaimProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

@@ -216,6 +216,16 @@ export interface ChatRuntimeButton {
   fast: boolean;
   /** “Choose how Neo answers”. */
   ariaLabel: string;
+  /**
+   * No AI can answer yet (none signed in, no model on the network): the button says “No AI yet” and leads to signing one
+   * in, instead of naming a provider nobody chose.
+   */
+  noAi: boolean;
+}
+
+/** No provider the view lists can run turns yet. An empty list (not known) isn't “none”. */
+export function chatNoAi(view: Pick<ChatRuntimeView, 'providers'>): boolean {
+  return view.providers.length > 0 && view.providers.every((p) => !p.ready);
 }
 
 /** The composer's button (CR-01): the provider's mark, the model's label, “· <effort>” and a bolt with fast replies on. */
@@ -234,6 +244,7 @@ export function chatRuntimeButton(
     label: choiceLabel(runtime, models),
     fast: !local && chip.fast,
     ariaLabel: CHAT_RUNTIME_COPY.buttonLabel(view.assistantName),
+    noAi: chatNoAi(view),
   };
 }
 

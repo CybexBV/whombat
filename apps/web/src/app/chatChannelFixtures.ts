@@ -884,17 +884,19 @@ export function createChatChannelFixtures(
       providers: [
         {
           provider: 'claude',
-          ready: true,
+          // `none`: no AI signed in yet (Set up your AI skipped).
+          ready: runtimeMode !== 'none',
           models: CHAT_CLAUDE_MODELS,
           fastBlocked: runtimeMode === 'gateway' ? 'gateway' : null,
           usage: runtimeMode === 'gateway' ? null : { usedPct: 38, resetsAt: null },
         },
         {
           provider: 'codex',
-          ready: runtimeMode !== 'codex-off',
+          ready: runtimeMode !== 'codex-off' && runtimeMode !== 'none',
           models: CHAT_CODEX_MODELS,
           fastBlocked: null,
-          usage: runtimeMode === 'codex-off' ? null : { usedPct: 12, resetsAt: null },
+          usage:
+            runtimeMode === 'codex-off' || runtimeMode === 'none' ? null : { usedPct: 12, resetsAt: null },
         },
       ],
     };

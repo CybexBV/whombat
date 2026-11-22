@@ -9,6 +9,8 @@ import {
 } from './control';
 import {
   hostedOrgOf,
+  LINK_ADDRESS_POLL_EVERY_MS,
+  LINK_ADDRESS_POLL_FOR_MS,
   LINK_ORG_NAME,
   linkAccountErrorText,
   linkBoxesInOrder,
@@ -36,6 +38,7 @@ import {
   linkPriceLine,
   linkSubscribed,
   linkYearly,
+  pollLinkAddress,
   pollLinkCheckout,
   WHOMBAT_LINK_TEXT as T,
 } from './link';
@@ -521,6 +524,74 @@ describe('back from Checkout', () => {
       now: () => t,
     });
     expect(out).toBe('timeout');
+  });
+});
+
+describe('after linking, waiting for the Whombat’s own address', () => {
+  const clock = () => {
+    let t = 0;
+    return {
+      sleep: async (ms: number) => {
+        t += ms;
+      },
+      now: () => t,
+    };
+  };
+  const starting = box({ name: null, state: 'starting' });
+  const ready = box({ name: null, label: 'calm-otter-reef', host: 'calm-otter-reef.box.whombat.app' });
+
+  it('asks until this Whombat has its address, through a failed answer, then gives its page', async () => {
+    const answers: (LinkAccount['boxes'][number] | 'fail')[] = [starting, 'fail', ready];
+    let asked = 0;
+    const out = await pollLinkAddress({
+      device: ready.device,
+      load: async () => {
+        asked += 1;
+        const next = answers.shift() ?? ready;
+        if (next === 'fail') throw new ControlError('unavailable', 'down');
+        return { plan: plan({ state: 'trialing' }), boxes: [box({ device: 'dev_OTHER123' }), next] };
+      },
+      ...clock(),
+    });
+    expect(out).toMatchObject({
+      url: 'https://calm-otter-reef.box.whombat.app/',
+      box: { device: ready.device },
+    });
+    expect(asked).toBe(3);
+  });
+
+  it('gives up after a while', async () => {
+    let asked = 0;
+    const out = await pollLinkAddress({
+      device: starting.device,
+      load: async () => {
+        asked += 1;
+        return { plan: plan(), boxes: [starting] };
+      },
+      ...clock(),
+    });
+    expect(out).toBe('timeout');
+    // Once at the start, then after each wait that still fits.
+    expect(asked).toBe(LINK_ADDRESS_POLL_FOR_MS / LINK_ADDRESS_POLL_EVERY_MS + 1);
+  });
+
+  it('stops asking once the page is gone', async () => {
+    let live = true;
+    let asked = 0;
+    const out = await pollLinkAddress({
+      device: starting.device,
+      load: async () => {
+        asked += 1;
+        return { plan: plan(), boxes: [starting] };
+      },
+      live: () => live,
+      sleep: async () => {
+        live = false;
+      },
+      now: () => 0,
+    });
+    expect(out).toBe('stopped');
+    expect(asked).toBe(1);
   });
 });
 

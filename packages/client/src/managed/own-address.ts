@@ -33,6 +33,50 @@ export function claimSecretOfPath(pathname: string): string | null {
   return OwnAddressClaimSecret.safeParse(secret).success ? secret : null;
 }
 
+/**
+ * The claim link's secret as typed on the page at the address: the six letters after `/c/` on the box's screen, or the
+ * whole address pasted (upper case, spaces and anything around them don't matter). Null when it isn't one.
+ */
+export function claimSecretOfTyped(typed: string): string | null {
+  const text = typed.trim().toLowerCase();
+  const at = text.lastIndexOf(OWN_ADDRESS_CLAIM_PATH);
+  const letters = (at < 0 ? text : text.slice(at + OWN_ADDRESS_CLAIM_PATH.length)).replace(/[^a-z]/g, '');
+  return OwnAddressClaimSecret.safeParse(letters).success ? letters : null;
+}
+
+/** The name and email the account site already has, carried to the box's claim so the person needn't type them. */
+export interface OwnClaimPrefill {
+  name: string;
+  email: string;
+}
+
+/** Longer than the box takes: anything past it isn't something the account site sent. */
+const PREFILL_MAX = 320;
+
+/**
+ * The fragment that carries them (`#name=…&email=…`): a fragment never reaches a server, not the door's and not the
+ * box's, and the box's page takes it out of the address as soon as it read it.
+ */
+export function ownClaimPrefillHash(prefill: Partial<OwnClaimPrefill>): string {
+  const params = new URLSearchParams();
+  const name = prefill.name?.trim();
+  const email = prefill.email?.trim();
+  if (name) params.set('name', name.slice(0, PREFILL_MAX));
+  if (email) params.set('email', email.slice(0, PREFILL_MAX));
+  const text = params.toString();
+  return text ? `#${text}` : '';
+}
+
+/** The name and email in a claim page's fragment, or null; only on the page's root and its claim link. */
+export function readOwnClaimPrefill(loc: { pathname: string; hash: string }): OwnClaimPrefill | null {
+  if (loc.pathname !== '/' && !claimSecretOfPath(loc.pathname)) return null;
+  if (!loc.hash || loc.hash.length > PREFILL_MAX * 4) return null;
+  const params = new URLSearchParams(loc.hash.replace(/^#/, ''));
+  const name = (params.get('name') ?? '').trim().slice(0, PREFILL_MAX);
+  const email = (params.get('email') ?? '').trim().slice(0, PREFILL_MAX);
+  return name || email ? { name, email } : null;
+}
+
 /** The address as people read it: the host, without `https://` or a trailing slash. */
 export function ownAddressText(urlOrHost: string): string {
   return urlOrHost.replace(/^https:\/\//, '').replace(/\/$/, '');
@@ -266,6 +310,14 @@ export const OWN_ADDRESS_TEXT = {
     kicker: 'THIS WHOMBAT',
     title: 'Set up your Whombat',
     sub: 'Open the address on your Whombat’s screen to set it up.',
+    /** The form on that page: the six letters after `/c/` in the address on its screen. */
+    typeSub: 'Your Whombat’s screen shows its address. Type the six letters after /c/ to set it up.',
+    label: 'Letters after /c/',
+    placeholder: 'abcdef',
+    next: 'Continue',
+    checking: 'Checking…',
+    notLetters: 'Type the six letters after /c/ on its screen.',
+    wrong: 'That’s not it. Check the letters after /c/ on its screen.',
   },
   steps: {
     claim: { t: 'Claim your Whombat', d: 'The letters on its screen' },

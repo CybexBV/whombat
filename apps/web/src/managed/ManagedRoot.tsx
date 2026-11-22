@@ -565,6 +565,7 @@ function accountRoute({
         // A new code in the address starts the page afresh.
         key={search}
         control={env.control}
+        session={cloud}
         initialCode={linkCodeOf(search)}
         {...(env.billingRedirectOrigins && { billingRedirectOrigins: env.billingRedirectOrigins })}
         onAccount={() => navigate('/account')}
