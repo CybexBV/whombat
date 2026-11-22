@@ -244,9 +244,10 @@ export async function runConnectionActions(
       return;
     }
     // A folder that is there already: nothing changed, and what comes after it can go on.
-    const wasThere =
-      there !== null && res.kind === 'ok' && res.output.isError && res.output.httpStatus === there.status;
-    if (!wasThere && (res.kind === 'failed' || res.output.isError)) {
+    const status = res.kind === 'ok' ? res.output.httpStatus : undefined;
+    const wasThere = there !== null && status === there.status;
+    const badHttpStatus = status !== undefined && (status < 200 || status >= 300);
+    if (!wasThere && (res.kind === 'failed' || res.output.isError || badHttpStatus)) {
       const timedOut = res.kind === 'failed' && res.reason === 'timeout';
       const earlierSucceeded = results.some((r) => r.ok);
       const reason =

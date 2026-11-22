@@ -3258,7 +3258,7 @@ describe('mail-arrives automations', () => {
 
   it('settles connection_actions as uncertain on timeout or partial-batch failure, and failed on clean first-call error', async () => {
     const openResponses: ServerResponse[] = [];
-    let mode: 'timeout' | 'partial' | 'first_fail' | 'ok' = 'timeout';
+    let mode: 'timeout' | 'partial' | 'first_fail' | 'redirect' | 'ok' = 'timeout';
     let hitCount = 0;
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       req.resume();
@@ -3271,6 +3271,11 @@ describe('mail-arrives automations', () => {
         if (mode === 'ok' || (mode === 'partial' && hitCount === 1)) {
           res.writeHead(201, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ id: 'first-ok' }));
+          return;
+        }
+        if (mode === 'redirect') {
+          res.writeHead(302, { location: '/sign-in' });
+          res.end();
           return;
         }
         res.writeHead(422, { 'content-type': 'application/json' });
@@ -3383,6 +3388,28 @@ describe('mail-arrives automations', () => {
       ]);
       expect(cleanFailRun.steps[1]?.state).toBe('failed');
       expect(cleanFailRun.status).toBe('failed');
+
+      mode = 'redirect';
+      hitCount = 0;
+      const create = {
+        connection: 'moneybird',
+        tool: 'request',
+        summary: 'Draft redirected invoice',
+        arguments: {
+          method: 'POST',
+          path: '/documents/purchase_invoices.json',
+          body: { purchase_invoice: { reference: 'INV-REDIRECT' } },
+        },
+      };
+      const redirected = await runWithActions('msg_outcome_redirect', [
+        create,
+        { ...create, summary: 'Draft second invoice' },
+      ]);
+      expect(redirected.steps[1]).toMatchObject({
+        state: 'failed',
+        output: { ran: false, count: 0, results: [{ ok: false, status: 302 }] },
+      });
+      expect(hitCount).toBe(1);
 
       // 2. Timeout on a call settles as uncertain (needs_review), not failed.
       mode = 'timeout';

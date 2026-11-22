@@ -17,6 +17,7 @@ import {
   CONNECTION_OUTPUT_MAX,
   CONNECTOR_BINARY_MAX_BYTES,
   type ConnectionToolAccess,
+  callAccess,
   filterVaultResponseHeaders,
   type JsonObject,
   REQUEST_TOOL_NAME,
@@ -481,7 +482,10 @@ export async function runRequest(
   const head = [`HTTP ${res.status}`, ...Object.entries(shown).map(([k, v]) => `${k}: ${v}`)].join('\n');
   return {
     content: `${head}\n\n${rendered.text}`,
-    isError: res.status >= 400,
+    isError:
+      res.status >= 400 ||
+      (callAccess(entry, REQUEST_TOOL_NAME, args, 'write') !== 'read' &&
+        (res.status < 200 || res.status >= 300)),
     truncated: rendered.truncated,
     httpStatus: res.status,
     bytes: res.body.length,
