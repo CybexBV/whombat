@@ -8,7 +8,6 @@ import type { AddressInfo } from 'node:net';
 import { turnPrompt } from '@whombat/agent-runtime';
 import type { UpdateFacts } from '@whombat/control-contracts/local';
 import {
-  AGENT_PROVIDERS,
   type AutomationPlanCard,
   type AutomationRecipeInput,
   agentDefaultGrants,
@@ -2284,23 +2283,7 @@ describe('mail-arrives automations', () => {
       expect(await outsidersWrote(w.services.db, answer.id)).toBe(false);
       expect(await outsidersWrote(w.services.db, personAsked)).toBe(false);
       await expect(w.commit(IDS.mara, requestMore, { messageId: reply })).rejects.toThrow('no more detail');
-      // A person's turn on it that the previous release queued, or that failed, never runs.
-      const queued = await w.turn(IDS.dusty, place.conversationId, {
-        trigger: 'expand',
-        threadRootId: place.threadRootId,
-        messageId: reply,
-        state: 'queued',
-      });
-      for (let i = 0; i < 20; i++) {
-        const [q] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, queued));
-        if (q?.state !== 'queued') break;
-        const claim = await w.services.runtime.claimOne('rnr_mark_repair', AGENT_PROVIDERS);
-        expect(claim?.id).not.toBe(queued);
-        if (claim) await w.services.runtime.finalize(claim.id, { outcome: 'done' });
-      }
-      expect(
-        (await w.services.db.select().from(dispatches).where(eq(dispatches.id, queued)))[0],
-      ).toMatchObject({ state: 'cancelled', error: 'outside_message' });
+      // A person's turn on it that failed is never tried again (the claim's own check: message-dispatch.int.test.ts).
       const failed = await w.turn(IDS.dusty, place.conversationId, {
         trigger: 'mention',
         threadRootId: place.threadRootId,

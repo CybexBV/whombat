@@ -459,7 +459,7 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
     });
 
     it('asks again on a fresh card, bound now, for a yes to a card the previous release saved unbound', async () => {
-      await askToTurnOn('cellar-lamp');
+      await askToTurnOn('pantry-lamp');
       const [tool] = await t.services.db
         .select()
         .from(connectionTools)
@@ -473,7 +473,7 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
         tool: 'HassTurnOn',
         toolHash: tool.hash,
         callId,
-        argsEnc: t.services.custody.seal(callArgsAad(callId), JSON.stringify({ name: 'cellar-lamp' })),
+        argsEnc: t.services.custody.seal(callArgsAad(callId), JSON.stringify({ name: 'pantry-lamp' })),
         conversationId: IDS.billing,
       });
       if (asked.status !== 'pending_approval') throw new Error(asked.status);
@@ -494,7 +494,7 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
         ).toBe('ok');
         await expect.poll(async () => (await executionOf(old.id))?.state, { timeout: 10_000 }).toBe('failed');
         expect((await executionOf(old.id))?.error).toContain('asks you again');
-        expect(seenFor('cellar-lamp')).toBe(0);
+        expect(seenFor('pantry-lamp')).toBe(0);
         const fresh = await t.services.db
           .select()
           .from(approvals)
@@ -520,7 +520,7 @@ describe('calls and their tiers (CX-20, CX-21, CX-23, CX-31)', () => {
         await expect
           .poll(async () => (await executionOf(again?.id as string))?.state, { timeout: 10_000 })
           .toBe('succeeded');
-        expect(seenFor('cellar-lamp')).toBe(1);
+        expect(seenFor('pantry-lamp')).toBe(1);
       } finally {
         await t.services.db
           .update(catalogConnections)
