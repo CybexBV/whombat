@@ -1,9 +1,10 @@
-> Version `2026-11-19`.
+> Version `2026-11-22`.
 
 # Whombat Appliance Terms
 
-These terms are between **Cybex BV**, a company in the Netherlands (“Whombat”, “we”, “us”), and you, the person who
-sets up a Whombat, for yourself or for a business. They cover what we provide for your Whombat: signed updates, Whombat
+These terms are between **Cybex BV** (Cybex B.V., James Cookstraat 12G, 7825 AN Emmen, the Netherlands; KvK
+77711815; VAT NL861104432B01; “Whombat”, “we”, “us”) and you, the person who sets up a Whombat, for yourself or for a
+business. They cover what we provide for your Whombat: signed updates, Whombat
 Link if you use it, remote help, notifications and support (together, “the service”) and, if you got it from us, the
 box itself.
 
@@ -54,8 +55,9 @@ A Whombat is **one person's device**: you sign in to it and work with its agent,
   they're fully tested. With Beta, something may break.
 - If you turn on **Ask before updating**, each update waits until you say yes. Say yes soon, so that security fixes
   arrive in time.
-- The Claude Code client your agent uses comes through the same update channel, as the unmodified program its maker
-  publishes.
+- If you choose Claude, your Whombat downloads the Claude Code client straight from Anthropic, its maker, as the
+  unmodified program Anthropic publishes. Our signed updates only name the version, and your Whombat checks that it
+  got exactly that version before it installs it.
 - Keep your Whombat connected to the internet, so it gets security updates in time. We announce in advance when we'll
   stop supporting a release.
 
@@ -71,9 +73,11 @@ A Whombat is **one person's device**: you sign in to it and work with its agent,
 
 Your Whombat protects your data with keys that we never receive and can't restore:
 
-- the **recovery kit**, which lets you get back in and add devices;
-- the **disk recovery key**, which unlocks the Whombat's disk if its hardware changes;
-- the **backup password**, which opens your backups.
+- your **passkey**, which opens your backups, and the paper copy of your backup details if you printed one;
+- the **recovery kit**, if you made one in Settings, which lets you add devices to your Whombat.
+
+A Whombat you install yourself doesn't encrypt its disk: whoever has the disk can read what's on it. Put it on an
+encrypted disk or encrypted virtual machine storage if that matters to you.
 
 **Keep them somewhere safe, apart from the Whombat.** If they're lost, we can't get your data back. If someone else
 gets them, they may be able to get to your data. You're also responsible for your backups: setting up a backup
@@ -100,6 +104,8 @@ Settings → This Whombat → About).
 - Your Whombat's agent runs on AI providers you sign in to with your own subscription or API key. Your Whombat sends
   those providers what the agent needs to do its work. Your agreement with each provider covers that, and you're
   responsible for following its terms.
+- The Dutch voice is a model by Supertone Inc. under its own licence, the BigScience Open RAIL-M License. If you
+  turn it on in Settings, you agree to that licence, including the use restrictions in Attachment A.
 - You decide what the agent may do: which tools and connections it gets, and which actions need your approval. You're
   responsible for what it does with that access, and for checking its output before you rely on it.
 
@@ -145,3 +151,37 @@ gives you.
 If these terms conflict with the Terms of Service about your Whombat or the service for it, these terms apply. The
 Terms of Service's rules on changes, law and disputes apply to these terms as well. We'll ask you to accept a new
 version of these terms before you claim or link your next Whombat.
+
+## Attachment A. The Dutch voice's use restrictions
+
+These are the use restrictions of the BigScience Open RAIL-M License (its paragraph 5 and Attachment A), under which
+Supertone Inc. publishes Supertonic 3, the Dutch voice your Whombat downloads only if you turn it on in Settings. They
+apply to everyone who uses the model, also through a Whombat. The full licence is at
+[huggingface.co/Supertone/supertonic-3](https://huggingface.co/Supertone/supertonic-3/blob/3cadd1ee6394adea1bd021217a0e650ede09a323/LICENSE),
+and your Whombat keeps a copy beside the model.
+
+You agree not to use the Model or Derivatives of the Model:
+
+- (a) In any way that violates any applicable national, federal, state, local or international law or regulation;
+- (b) For the purpose of exploiting, harming or attempting to exploit or harm minors in any way;
+- (c) To generate or disseminate verifiably false information and/or content with the purpose of harming others;
+- (d) To generate or disseminate personal identifiable information that can be used to harm an individual;
+- (e) To generate or disseminate information and/or content (e.g. images, code, posts, articles), and place the
+  information and/or content in any context (e.g. bot generating tweets) without expressly and intelligibly
+  disclaiming that the information and/or content is machine generated;
+- (f) To defame, disparage or otherwise harass others;
+- (g) To impersonate or attempt to impersonate (e.g. deepfakes) others without their consent;
+- (h) For fully automated decision making that adversely impacts an individual's legal rights or otherwise creates or
+  modifies a binding, enforceable obligation;
+- (i) For any use intended to or which has the effect of discriminating against or harming individuals or groups based
+  on online or offline social behavior or known or predicted personal or personality characteristics;
+- (j) To exploit any of the vulnerabilities of a specific group of persons based on their age, social, physical or
+  mental characteristics, in order to materially distort the behavior of a person pertaining to that group in a manner
+  that causes or is likely to cause that person or another person physical or psychological harm;
+- (k) For any use intended to or which has the effect of discriminating against individuals or groups based on legally
+  protected characteristics or categories;
+- (l) To provide medical advice and medical results interpretation;
+- (m) To generate or disseminate information for the purpose to be used for administration of justice, law
+  enforcement, immigration or asylum processes, such as predicting an individual will commit fraud/crime commitment
+  (e.g. by text profiling, drawing causal relationships between assertions made in documents, indiscriminate and
+  arbitrarily-targeted use).

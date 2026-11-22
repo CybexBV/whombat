@@ -10,7 +10,7 @@ describe('the Whombat Subscription Terms (BL-24, AP-128, ENV-13)', () => {
     expect(LEGAL_PAGES['/legal/subscription-terms']).toBe(text);
     const blocks = parseLegal(text);
     expect(blocks[0]?.type).toBe('quote');
-    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-19');
+    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-22');
     expect(text).toContain(`Version \`${SUBSCRIPTION_TERMS_VERSION}\``);
     expect(blocks.find((b) => b.type === 'heading' && b.level === 1)).toBeTruthy();
   });
@@ -56,5 +56,10 @@ describe('the Whombat Subscription Terms (BL-24, AP-128, ENV-13)', () => {
     const links = [...text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map((m) => m[1]);
     expect(links.length).toBeGreaterThan(0);
     for (const href of links) expect(href).toMatch(/^(https:\/\/|mailto:)/);
+  });
+
+  it('say Whombat Link is sold in EU countries only, and name the seller', () => {
+    expect(text).toContain('countries of the European Union');
+    for (const fact of ['James Cookstraat 12G', 'NL861104432B01']) expect(text).toContain(fact);
   });
 });

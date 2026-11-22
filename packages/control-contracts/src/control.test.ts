@@ -255,7 +255,7 @@ describe('control api', () => {
   it('claims.start requires the appliance terms (LC-18)', () => {
     const body = controlApi.directory.startClaim.body;
     // The open-source terms: Cybex's service and boxes, not the right to run the software.
-    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-19');
+    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-22');
     expect(body.safeParse({ method: 'code', device: 'dev_1' }).success).toBe(false);
     for (const terms of [{}, { version: 'latest' }, { version: APPLIANCE_TERMS_VERSION, accepted: true }])
       expect(body.safeParse({ method: 'code', device: 'dev_1', terms }).success, JSON.stringify(terms)).toBe(

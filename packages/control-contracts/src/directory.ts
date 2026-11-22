@@ -46,9 +46,10 @@ export type DirectoryDevice = z.infer<typeof DirectoryDevice>;
  * this version; changing the terms means a new id, and so a contracts release. The text is the hosted app's
  * `/legal/appliance-terms`. `2026-11-19`: for people and businesses; the Whombat software is open source (AGPL-3.0,
  * Cybex BV) and works fully without Whombat Link, which adds the address, push and the apps away from home; updates
- * come from Production or Beta, and Ask before updating holds them.
+ * come from Production or Beta, and Ask before updating holds them. `2026-11-22` adds the seller's details, Claude Code
+ * downloaded from Anthropic, only the keys a self-installed Whombat has, and the Dutch voice's use restrictions.
  */
-export const APPLIANCE_TERMS_VERSION = '2026-11-19';
+export const APPLIANCE_TERMS_VERSION = '2026-11-22';
 
 /** A terms version id: the date, optionally followed by a qualifier (`2026-09-26-draft`). */
 export const TermsVersion = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[a-z0-9]{1,16})?$/);

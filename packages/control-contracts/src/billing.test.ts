@@ -67,7 +67,7 @@ describe('orgs.create (BL-21, BL-24)', () => {
   const terms = { version: SUBSCRIPTION_TERMS_VERSION };
 
   it('requires the terms and takes an optional normalised code', () => {
-    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-19');
+    expect(SUBSCRIPTION_TERMS_VERSION).toBe('2026-11-22');
     expect(body.parse({ name: ' Lumio BV ', terms })).toEqual({ name: 'Lumio BV', terms });
     expect(body.safeParse({ name: 'Lumio', terms, code: 'AB12-CD34' }).success).toBe(true);
     expect(body.safeParse({ name: 'Lumio', terms, code: 'AB12CD34' }).success).toBe(true);

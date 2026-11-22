@@ -1,11 +1,15 @@
-> Version `2026-11-19`.
+> Version `2026-11-22`.
 
 # Whombat Subscription Terms
 
-These terms are between **Cybex BV**, a company in the Netherlands (“we”, “us”), and you. They cover **Whombat
+These terms are between **Cybex BV** (Cybex B.V., James Cookstraat 12G, 7825 AN Emmen, the Netherlands; KvK
+77711815; VAT NL861104432B01; “we”, “us”) and you. They cover **Whombat
 Link**, the subscription for your Whombat: what it gives you, what it costs, the free month, paying, cancelling and
 what happens when it ends. You accept them when you add a Whombat to Whombat Link at app.whombat.com. You can take
 Whombat Link for yourself or for a business.
+
+For now we sell Whombat Link only to people and businesses in the countries of the European Union. Before you pay,
+you tell us where you live, and we can't take a subscription from somewhere else.
 
 Whombat Link pays for our service, not for the software. The software that runs on a Whombat is open source under the
 AGPL-3.0, and it works without Whombat Link: at home, and away from home with Tailscale or Headscale.

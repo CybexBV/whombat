@@ -6,7 +6,7 @@ import { LEGAL_PAGES } from './LegalPage';
 describe('the Whombat Appliance Terms (LC-17, LC-20)', () => {
   it('are served and name the version a claim sends', () => {
     expect(LEGAL_PAGES['/legal/appliance-terms']).toBe(text);
-    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-19');
+    expect(APPLIANCE_TERMS_VERSION).toBe('2026-11-22');
     expect(text).toContain(`Version \`${APPLIANCE_TERMS_VERSION}\``);
   });
 
@@ -47,5 +47,21 @@ describe('the Whombat Appliance Terms (LC-17, LC-20)', () => {
   it('are for one person’s device, with no member limit (CT-1563, AP-5679)', () => {
     expect(text).toContain("**one person's device**");
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\bteam\b/i);
+  });
+
+  it('name the seller, install Claude Code from Anthropic and list only the keys a Whombat has', () => {
+    for (const fact of ['James Cookstraat 12G', 'KvK\n77711815', 'NL861104432B01'])
+      expect(text).toContain(fact);
+    expect(text).toContain('straight from Anthropic');
+    expect(text).not.toContain('comes through the same update channel');
+    expect(text).not.toContain('disk recovery key');
+    expect(text).toContain('**passkey**');
+    expect(text).toContain('**recovery kit**');
+  });
+
+  it('carry the Dutch voice’s use restrictions as Attachment A', () => {
+    expect(text).toContain('## Attachment A.');
+    expect(text).toContain('Open RAIL-M');
+    for (const item of ['(a) ', '(g) ', '(m) ']) expect(text).toContain(item);
   });
 });
