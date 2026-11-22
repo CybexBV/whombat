@@ -342,10 +342,14 @@ export async function proposableConnectionsNote(db: Db | Tx, burrowId: string): 
       lines.push(`- ${row.handle}: ${how}`);
   }
   if (!lines.length) return '';
-  return `These are the only actions you can propose, each on the connection named first (each waits for the person’s yes on a card that shows every argument, so keep them few and short; a file must be one attached to this message):\n${lines.join('\n')}`.slice(
-    0,
-    4000,
-  );
+  // Whole lines only, so an action's shape is never cut off.
+  let note =
+    'These are the only actions you can propose, each on the connection named first (each waits for the person’s yes on a card that shows every argument, so keep them few and short; a file must be one attached to this message):';
+  for (const line of lines) {
+    if (note.length + line.length + 1 > 4000) break;
+    note += `\n${line}`;
+  }
+  return note;
 }
 
 /** The attachment ids a step's output says the server handed over from what started the run. */
