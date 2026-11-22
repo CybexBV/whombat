@@ -968,6 +968,22 @@ describe('a report’s turn looks into the code through T3 Code (outsiders-turns
         wakes: false,
         armedAt: w.now(),
       });
+      // The person's own turn can hand over work in the same chat thread. It stays theirs.
+      await w.services.db.insert(t3Watches).values({
+        burrowId: w.burrowId,
+        connectionId: t3,
+        threadId: 'mcp:person-in-same-thread',
+        title: 'Private follow-up',
+        conversationId: turn?.conversationId as string,
+        threadRootId: turn?.threadRootId ?? null,
+        agentId: IDS.dusty,
+        personId: IDS.mara,
+        wakes: false,
+        armedAt: w.now(),
+      });
+      expect(
+        (await call('t3_thread_send', { threadId: 'mcp:person-in-same-thread', message: 'Hi' })).body.status,
+      ).toBe('blocked');
       // A thread started from this report passes the check (this T3 Code is unreachable, so it then lists no tools).
       expect((await call('t3_thread_read', { threadId: 'mcp:started-here' })).body.status).not.toBe(
         'blocked',

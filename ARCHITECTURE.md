@@ -594,7 +594,8 @@ Automations. Code finds it by kind
   The one exception is T3 Code: a turn on a tracker's report sees the
   T3 Code connection and nothing else (`connections/context.ts`), and hands looking into the code to a T3 Code thread,
   which runs with full access on the person's computer. There it may only list projects, start a thread in a new
-  worktree and follow the threads started from its own thread; the person's other threads, schedules, environments
+  worktree and follow its report’s own hand-overs. The turn’s context lists those hand-overs, and the same ownership
+  checks apply to every call. The person's threads, schedules, environments
   and projects are refused before T3 Code is asked (`connections/report-turn.ts`).
 
 - **Settings for the person** (`apps/server/src/settings/`): in the person's own turns (never an automation's step or an
