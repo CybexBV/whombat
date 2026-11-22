@@ -450,6 +450,27 @@ describe('backup records (CT-335)', () => {
     expect(parseBackupRecord('memories', null).ok).toBe(false);
   });
 
+  it('carries the outsiders’ mark as a member an older release drops, and reads older messages as unmarked', () => {
+    const message = RECORDS.messages.find((r) => (r as { type: string }).type === 'message') as object;
+    // A message of a release before the mark: none.
+    const older = parseBackupRecord('messages', message);
+    if (!older.ok || older.record.type !== 'message') throw new Error('message');
+    expect(older.record.outsidersRun).toBe(false);
+    // This release keeps it.
+    const marked = parseBackupRecord('messages', { ...message, outsidersRun: true });
+    if (!marked.ok || marked.record.type !== 'message') throw new Error('message');
+    expect(marked.record.outsidersRun).toBe(true);
+    // A release before the mark reads the record without the member (records drop what they don't know), and its
+    // provenance is one of the two kinds that release has.
+    const before = backup.BackupMessageRecord.omit({ outsidersRun: true }).safeParse({
+      ...message,
+      outsidersRun: true,
+    });
+    expect(before.success).toBe(true);
+    expect(before.data).not.toHaveProperty('outsidersRun');
+    expect(root.MessageProvenance.options).toEqual(['feedback_assessment', 'feedback_handoff']);
+  });
+
   it('every counted type exists in its category', () => {
     for (const id of BACKUP_CATEGORY_IDS) {
       const types = new Set(

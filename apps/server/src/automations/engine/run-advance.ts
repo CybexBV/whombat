@@ -10,6 +10,7 @@ import type { Db } from '../../db/client';
 import { automationRuns, automations } from '../../db/schema/index';
 import type { Services } from '../../services';
 import { type GateFacts, gateFacts, readsGateFacts } from '../github-items';
+import { runDeadline } from '../runs';
 import { automationStep, definitionStep, type StepOp } from '../steps';
 import {
   type AutomationRunRow,
@@ -77,7 +78,7 @@ export class RunAdvancer {
         await this.commit(run, fence, { op: 'start' });
         continue;
       }
-      if (now > run.deadlineAt) {
+      if (now > runDeadline(run)) {
         await this.commit(run, fence, {
           op: 'finish',
           status: 'failed',

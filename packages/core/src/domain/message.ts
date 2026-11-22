@@ -148,7 +148,7 @@ export type MessageMore = z.infer<typeof MessageMore>;
  * development handoff; the developer agent gets the report and the assessment as data with it, and automations
  * ignore it too.
  */
-export const MessageProvenance = z.enum(['feedback_assessment', 'feedback_handoff', 'outsiders_run']);
+export const MessageProvenance = z.enum(['feedback_assessment', 'feedback_handoff']);
 export type MessageProvenance = z.infer<typeof MessageProvenance>;
 
 /** Most link previews under one message (0.26, CT-174). */

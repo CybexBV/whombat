@@ -810,11 +810,15 @@ published automation details read their definition and publisher from one versio
   cached body and snippet are cleared once the run starts and whose rows are pruned after 30 days) commit through the
   pipeline with content-free signed `mail.received` events. Mail-triggered runs execute as outsiders' turns (queued for
   nobody, never reading the person's mailbox or connections directly, with messages from mail and tracker outsiders'
-  runs stamped `outsiders_run` so message and reaction triggers skip them): mail definitions may not use repository
-  workspaces or external steps other than `connection_actions`, sender-controlled fields reach the agent only inside
+  runs marked in `messages.outsiders_run`, a column apps never get, so message and reaction triggers skip them): mail
+  definitions may not use repository workspaces or external steps other than `connection_actions`, sender-controlled
+  fields reach the agent only inside
   defused `[[mail …]] … [[/mail]]` outsider fences (`packages/core/src/text/fence.ts`, never cut mid-fence) with the
-  email's files attached to the prompt message (`read_attachment`), and once the agent prompt is rendered, `body`,
-  `snippet` and `text` are stripped from `automation_runs.scope` while sender, subject and attachment metadata stay.
+  email's files attached to the prompt message (`read_attachment`). A run keeps the email's text (`body`, `snippet`,
+  `text` in `automation_runs.scope`) only while a step that reads the trigger may still render it; then, and whenever
+  the run ends, it goes from the scope, from what settled steps stored (their fenced copies become a short note) and
+  from the Hermes sessions the run's turns ran in (`automations/mail-text.ts`), while sender, subject and attachment
+  metadata stay.
   Proposed writes (`propose_connection_actions`, prompts listing handles and tools only) are narrow: writable
   non-built-in services other than `whombat_servers` and `t3code`, never a read, never deleting, removing or emptying
   (`DELETE`, or said in a tool name, a path segment, a method- or action-like value, a delete switch or code a service
@@ -826,14 +830,19 @@ published automation details read their definition and publisher from one versio
   decides what happens — method and path or tool, base, uploaded file, every argument and header, secrets masked — or
   the proposal is refused when that doesn't fit on one card. `connection_actions` runs them after a yes, settling as
   `uncertain` on timeout or partial-batch failure. Any other automation card asks its title as a question unless a
-  `request_approval` step's details start with its own question.
+  `request_approval` step's details start with its own question. A session below protocol
+  minor 3 (an older app) gets a mail run's trigger as a message, a `connection_actions` step as an earlier step and such
+  an automation without its definition (`automations/older-apps.ts`).
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
   agent step's time counts from its first turn's claim (a turn after a handed T3 Code wait keeps it): while the turn is
   queued only the run's own deadline bounds it, and a step queued behind another outsiders' turn says so in its summary (“Waiting for another customer report to finish”). A
   failed turn's step says why when the turn does (“Dusty couldn’t finish because it took too long.”,
-  `steps/turn-words.ts`).
+  `steps/turn-words.ts`). A run started by incoming mail, or one with a `connection_actions` step, is stored with
+  `deadline_at` at the epoch: the release before mail triggers checks a started run's deadline before any step, so after
+  a rollback it fails such a run instead of asking the agent as the person; here its deadline is its own time limit after
+  it was created (`runDeadline`, docs/decisions/automation-recipes.md).
 - **Identity**: each automation signs as its own system principal, with authority = its grants ∩ the publisher's
   current authority, checked before every step and inside approval execution; the rooms a step uses must still be the
   burrow's. The agent can only draft until the
@@ -1404,7 +1413,9 @@ Setup and operation: `docs/github.md`.
 - **Search** (`read/search.ts`): Postgres full-text search over `search_documents` (English stems and the words as
   written), kept in sync by the pipeline and paged by a keyset cursor. What the asker may open is part of the query
   and every row is re-checked: the person sees every room, the agent every room but the branch rooms of switched-off
-  repositories; an outsiders' turn searches nothing.
+  repositories; an outsiders' turn searches nothing. What outsiders can steer is never indexed: an assessor's
+  output, what an outsiders' run posted (`messages.outsiders_run`), an approval asked on such a run's card, and such a
+  run's error.
 - **Canvas**: Hocuspocus in the server, one Yjs document per canvas persisted to Postgres, reached through the
   session's collaboration stream; the agent edits server-side with `canvas_edit`.
 - **Files** (`apps/server/src/files/`): an upload is reserved for one conversation, sent over a resumable session

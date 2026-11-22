@@ -10,13 +10,16 @@ import {
   type AutomationPlanCard,
   type AutomationRecipeInput,
   agentDefaultGrants,
+  MAIL_TEXT_REMOVED,
+  Message,
   newId,
 } from '@whombat/core';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AgentAuth } from '../auth/agent-tokens';
 import { decideApproval } from '../commands/approvals';
 import { reactToMessage, sendMessage } from '../commands/messages';
+import { loadBurrowRow } from '../commit/pipeline';
 import { syncTools } from '../connections/sync';
 import { GoogleApiError } from '../connectors/types';
 import type { FakeGoogleWorkspace } from '../connectors/workspace-fake';
@@ -31,30 +34,38 @@ import {
   connectionTools,
   dispatches,
   events,
+  hermesSessionDrops,
   mailCursors,
   mailTriggerItems,
   messages,
+  searchDocuments,
   vaultNetworks,
 } from '../db/schema/index';
+import { indexAutomationRun, indexMessage } from '../domain/search-index';
 import { blobKey } from '../files/store';
 import { ApiError } from '../lib/errors';
 import { mailPrincipal, recordMailReceived } from '../mail-triggers/index';
 import { callTool, mcpToolList } from '../mcp/server';
 import { loadMessageRow, loadMessages } from '../read/messages';
+import { loadPrincipalRow } from '../read/principals';
+import { searchResults } from '../read/search';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection, setConnectionKeys } from '../test/connections';
 import { addPersonalAgent, FAKE_ACCESS_TOKEN, type PersonalSetup } from '../test/personal';
 import { useVaultNetForTests } from '../vault/net';
 import {
+  controlAutomationRun,
   createAutomation,
   deleteAutomation,
   publishAutomationDraft,
+  runAutomationNow,
   saveAutomationDraft,
   setAutomationEnabled,
 } from './commands';
 import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
-import { loadAutomationRow, toAutomation } from './store';
+import { PREVIOUS_RELEASE_STOPS_AT, previousReleaseStops, runDeadline } from './runs';
+import { loadAutomationRow, loadRunRow, toAutomation } from './store';
 
 const w = useAutomationWorld();
 let maraChat: PersonalSetup;
@@ -907,12 +918,29 @@ describe('mail-arrives automations', () => {
     expect(beforeRun?.body).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
     expect(beforeRun?.snippet.length).toBeGreaterThan(0);
 
-    // Once the agent step renders its prompt, the rendered prompt has the fenced body, while BOTH mail_trigger_items
-    // AND automation_runs.scope strip body/snippet/text — keeping sender, subject and attachment names on the run.
+    // Once the run starts, the mirrored item's cached body and snippet are cleared; the run keeps the email's text only
+    // while its agent step works on it (its prompt has the fenced body).
     await w.settle();
     const runs = await runsOf(autoId);
     expect(runs).toHaveLength(1);
-    const runScope = (runs[0]?.scope ?? {}) as Record<string, unknown>;
+    expect(JSON.stringify(runs[0]?.scope)).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+
+    const runDetail = await w.run(runs[0]?.id as string);
+    const f6DispatchId = runDetail.steps[0]?.dispatchId as string;
+    const [f6Dispatch] = await w.services.db.select().from(dispatches).where(eq(dispatches.id, f6DispatchId));
+    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
+    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+
+    // Its step settled: the run's scope and the step's stored instructions keep none of the email's text (sender,
+    // subject and attachment names stay), and the Hermes session its turn ran in is forgotten.
+    await w.services.db
+      .update(dispatches)
+      .set({ providerSessionId: 'hermes:f6-session' })
+      .where(eq(dispatches.id, f6DispatchId));
+    await w.fakeAgentReply(f6DispatchId, 'Nothing to do.');
+    await w.settle();
+    const [settled] = await runsOf(autoId);
+    const runScope = (settled?.scope ?? {}) as Record<string, unknown>;
     expect(runScope).not.toHaveProperty('body');
     expect(runScope).not.toHaveProperty('snippet');
     expect(runScope).not.toHaveProperty('text');
@@ -920,14 +948,19 @@ describe('mail-arrives automations', () => {
     expect(String(runScope.from ?? '')).toContain('billing@example.com');
     expect(String(runScope.subject ?? '')).toContain('Privacy invoice #1');
     expect(String(runScope.attachments ?? '')).toContain('privacy-invoice.pdf');
-
-    const runDetail = await w.run(runs[0]?.id as string);
-    const [f6Dispatch] = await w.services.db
+    const settledSteps = await w.services.db
       .select()
-      .from(dispatches)
-      .where(eq(dispatches.id, runDetail.steps[0]?.dispatchId as string));
-    const f6Ctx = await buildDispatchContext(w.services, f6Dispatch as NonNullable<typeof f6Dispatch>);
-    expect(f6Ctx.trigger?.text).toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+      .from(automationRunSteps)
+      .where(eq(automationRunSteps.runId, settled?.id as string));
+    expect(JSON.stringify(settledSteps)).not.toContain('CONFIDENTIAL_BODY_F6_SHOULD_BE_CLEARED');
+    const askOutput = (settledSteps.find((r) => r.idx === 0)?.output ?? {}) as { instructions?: unknown };
+    expect(String(askOutput.instructions)).toContain(MAIL_TEXT_REMOVED);
+    expect(
+      await w.services.db
+        .select()
+        .from(hermesSessionDrops)
+        .where(eq(hermesSessionDrops.sessionId, 'f6-session')),
+    ).toHaveLength(1);
     const [afterRun] = await w.services.db
       .select()
       .from(mailTriggerItems)
@@ -2242,7 +2275,7 @@ describe('mail-arrives automations', () => {
     }
   });
 
-  it('stamps outsiders_run provenance on mail run messages so message_posted and reaction_added automations never fire on them', async () => {
+  it('marks mail run messages as an outsiders’ run’s so message_posted and reaction_added automations never fire on them, and apps never see the mark', async () => {
     const mbId = await insertConnection(w.services, {
       catalogId: 'moneybird',
       burrowId: w.burrowId,
@@ -2334,12 +2367,73 @@ describe('mail-arrives automations', () => {
       await w.fakeAgentReply(dispatchId, 'Here is TRIGGER_PHRASE from the incoming email.');
       await w.settle();
 
-      // Every message in the mail run thread (prompt root, agent reply, approval card) has `outsiders_run` provenance.
+      // Every message in the mail run thread (prompt root, agent reply, approval card) carries the outsiders' mark, in
+      // its own column: `provenance` keeps the Feedback kinds only, so a release before the mark reads these rows too.
       const threadMsgs = await w.runThread(runId);
       expect(threadMsgs.length).toBeGreaterThanOrEqual(3);
       for (const m of threadMsgs) {
-        expect(m.provenance, m.text).toBe('outsiders_run');
+        expect(m.outsidersRun, m.text).toBe(true);
+        expect(m.provenance, m.text).toBeNull();
       }
+      // Apps get these messages without any mark, in a form the Message contract (and older apps') reads.
+      for (const m of await loadMessages(w.services.db, threadMsgs, IDS.mara)) {
+        expect(m).not.toHaveProperty('outsidersRun');
+        expect(m.provenance ?? null).toBeNull();
+        expect(Message.safeParse(m).success).toBe(true);
+      }
+
+      // Search has none of it: no document for the thread's messages or the run's approval card, and the run's own
+      // document carries none of its error words (they can quote the agent).
+      const approvalIds = (
+        await w.services.db
+          .select({ id: approvals.id })
+          .from(approvals)
+          .where(
+            inArray(
+              approvals.messageId,
+              threadMsgs.map((m) => m.id),
+            ),
+          )
+      ).map((a) => a.id);
+      expect(approvalIds.length).toBeGreaterThan(0);
+      expect(
+        await w.services.db
+          .select()
+          .from(searchDocuments)
+          .where(inArray(searchDocuments.id, [...threadMsgs.map((m) => m.id), ...approvalIds])),
+      ).toEqual([]);
+      await w.services.db
+        .update(automationRuns)
+        .set({ error: 'It said: “TRIGGER_PHRASE”' })
+        .where(eq(automationRuns.id, runId));
+      await indexAutomationRun(w.services.db, runId);
+      const [runDoc] = await w.services.db
+        .select()
+        .from(searchDocuments)
+        .where(eq(searchDocuments.id, runId));
+      expect(runDoc?.text).toBeDefined();
+      expect(runDoc?.text).not.toContain('TRIGGER_PHRASE');
+      // A reply indexed before it was marked isn't found, and indexing it again drops its document.
+      const reply = threadMsgs.find((m) => m.authorId === IDS.dusty);
+      if (!reply) throw new Error('no agent reply');
+      await w.services.db.update(messages).set({ outsidersRun: false }).where(eq(messages.id, reply.id));
+      await indexMessage(w.services.db, reply.id);
+      await w.services.db.update(messages).set({ outsidersRun: true }).where(eq(messages.id, reply.id));
+      const viewer = await loadPrincipalRow(w.services.db, IDS.mara);
+      const burrow = await loadBurrowRow(w.services.db, w.burrowId);
+      if (!viewer || !burrow) throw new Error('no viewer');
+      const found = await searchResults(
+        w.services.db,
+        viewer,
+        burrow,
+        { q: 'TRIGGER_PHRASE', type: 'all', limit: 20 },
+        w.now(),
+      );
+      expect(found.map((r) => r.id)).not.toContain(reply.id);
+      await indexMessage(w.services.db, reply.id);
+      expect(
+        await w.services.db.select().from(searchDocuments).where(eq(searchDocuments.id, reply.id)),
+      ).toEqual([]);
 
       // Neither the message_posted watcher (even with includeAgents + includeReplies) nor reaction_added fired.
       expect(await runsOf(msgWatcherId)).toHaveLength(0);
@@ -2642,6 +2736,189 @@ describe('mail-arrives automations', () => {
     } finally {
       attSpy.mockRestore();
       await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await pollAndSettle();
+    }
+  });
+
+  it('stores the runs the previous release can’t run safely so it stops them before any step, and runs them to their own deadline here', async () => {
+    const autoId = await createMailAutomation({
+      kind: 'mail',
+      connectionId,
+      from: 'example.com',
+      subjectContains: ['rollback-check'],
+    });
+    const limits = { runTimeoutMinutes: 30, maxConcurrentRuns: 2, maxRunsPerDay: 20 };
+    const actionsId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'manual' }],
+        steps: [
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Propose a change.', proposeActions: true },
+          { id: 'act', kind: 'connection_actions', from: 'ask' },
+        ],
+        limits,
+      },
+      { name: 'Manual actions' },
+    );
+    const plainId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [{ kind: 'manual' }],
+        steps: [{ id: 'note', kind: 'post_message', text: 'Hello' }],
+        limits,
+      },
+      { name: 'Plain note' },
+    );
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id: 'msg_rollback_check',
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject: 'rollback-check invoice',
+        body: 'Please pay.',
+        messageId: '<rollback-check@example.com>',
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+      expect(await pollAndSettle()).toBe(1);
+      const [mailRun] = await runsOf(autoId);
+      if (!mailRun) throw new Error('no mail run');
+      // The previous release fails a started run whose `deadline_at` has passed before it looks at any step, so it
+      // never asks the agent as the person: a mail run is stored with the epoch there.
+      expect(previousReleaseStops(mailRun)).toBe(true);
+      expect(mailRun.deadlineAt.getTime()).toBe(PREVIOUS_RELEASE_STOPS_AT.getTime());
+      // This release runs it: its agent step is asked for nobody, and it gives up only at its own limit.
+      expect(mailRun.status).toBe('waiting');
+      expect(runDeadline(mailRun).getTime()).toBe(
+        mailRun.createdAt.getTime() + mailRun.definition.limits.runTimeoutMinutes * 60_000,
+      );
+
+      // A person's own run with a step the previous release doesn't have is stopped there too; any other keeps its
+      // deadline as it was.
+      const { runId: actionsRunId } = await w.ok(IDS.mara, runAutomationNow, { automationId: actionsId });
+      const { runId: plainRunId } = await w.ok(IDS.mara, runAutomationNow, { automationId: plainId });
+      const actionsRun = await loadRunRow(w.services.db, actionsRunId as string);
+      const plainRun = await loadRunRow(w.services.db, plainRunId as string);
+      expect(actionsRun.deadlineAt.getTime()).toBe(PREVIOUS_RELEASE_STOPS_AT.getTime());
+      expect(plainRun.deadlineAt.getTime()).toBe(plainRun.createdAt.getTime() + 30 * 60_000);
+      expect(runDeadline(plainRun)).toEqual(plainRun.deadlineAt);
+
+      // Past its own time limit, this release fails the mail run.
+      w.advance(mailRun.definition.limits.runTimeoutMinutes * 60_000 + 60_000);
+      await w.settle();
+      const after = await loadRunRow(w.services.db, mailRun.id);
+      expect(after.status).toBe('failed');
+      expect(after.error).toContain('ran out of time');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: autoId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: actionsId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: plainId });
+      await pollAndSettle();
+    }
+  });
+
+  it('keeps the email’s text until the last step that reads it has rendered, and forgets it when the run ends', async () => {
+    const limits = { runTimeoutMinutes: 60, maxConcurrentRuns: 2, maxRunsPerDay: 20 };
+    const trigger = (word: string) => ({
+      kind: 'mail' as const,
+      connectionId,
+      from: 'example.com',
+      subjectContains: [word],
+    });
+    // An agent step and, after it, a post that reads the body again.
+    const twoStepsId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [trigger('keep-two')],
+        steps: [
+          { id: 'ask', kind: 'dispatch_agent', prompt: 'Read {{trigger.text}}' },
+          { id: 'note', kind: 'post_message', text: 'The body: {{trigger.body}}' },
+        ],
+        limits,
+      },
+      { name: 'Two steps read the mail' },
+    );
+    // No agent step at all.
+    const noAgentId = await w.publish(
+      {
+        version: 1,
+        conversationId: maraChat.dmId,
+        triggers: [trigger('keep-none')],
+        steps: [{ id: 'note', kind: 'post_message', text: 'New mail: {{trigger.subject}}' }],
+        limits,
+      },
+      { name: 'No agent step' },
+    );
+    const deliver = (id: string, subject: string, body: string) =>
+      fake.deliverMail(FAKE_ACCESS_TOKEN, {
+        id,
+        from: 'Billing <billing@example.com>',
+        to: ['you@example.com'],
+        subject,
+        body,
+        messageId: `<${id}@example.com>`,
+        date: w.now(),
+        labelIds: ['INBOX', 'UNREAD'],
+        attachments: [],
+      });
+    const scopeOf = async (automationId: string) => JSON.stringify((await runsOf(automationId))[0]?.scope);
+    try {
+      await pollAndSettle();
+      w.advance(10_000);
+      deliver('msg_keep_two', 'keep-two invoice', 'BODY_FOR_TWO_STEPS');
+      deliver('msg_keep_none', 'keep-none invoice', 'BODY_WITHOUT_AGENT');
+      expect(await pollAndSettle()).toBe(2);
+
+      // A run without an agent step ends at once and keeps no text.
+      const [noAgentRun] = await runsOf(noAgentId);
+      expect(noAgentRun?.status).toBe('succeeded');
+      expect(await scopeOf(noAgentId)).not.toContain('BODY_WITHOUT_AGENT');
+
+      // The agent step works on it: the run keeps it.
+      const [twoRun] = await runsOf(twoStepsId);
+      const runId = twoRun?.id as string;
+      expect(await scopeOf(twoStepsId)).toContain('BODY_FOR_TWO_STEPS');
+      const asked = await w.run(runId);
+      const dispatchId = asked.steps[0]?.dispatchId as string;
+      // The agent's step settled: the post after it still renders the body, then the run keeps it nowhere but that post.
+      await w.fakeAgentReply(dispatchId, 'Read it.');
+      await w.settle();
+      const done = await loadRunRow(w.services.db, runId);
+      expect(done.status).toBe('succeeded');
+      expect(JSON.stringify(done.scope)).not.toContain('BODY_FOR_TWO_STEPS');
+      const stepRows = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(eq(automationRunSteps.runId, runId));
+      expect(JSON.stringify(stepRows)).not.toContain('BODY_FOR_TWO_STEPS');
+      const posted = stepRows.find((r) => r.stepId === 'note')?.messageIds[0] as string;
+      expect((await loadMessageRow(w.services.db, posted))?.text).toContain('BODY_FOR_TWO_STEPS');
+
+      // A run stopped while its agent works forgets it too.
+      w.advance(10_000);
+      deliver('msg_keep_cancel', 'keep-two again', 'BODY_OF_CANCELLED_RUN');
+      expect(await pollAndSettle()).toBe(1);
+      const cancelled = (await runsOf(twoStepsId)).find((r) => r.id !== runId);
+      if (!cancelled) throw new Error('no second run');
+      expect(JSON.stringify(cancelled.scope)).toContain('BODY_OF_CANCELLED_RUN');
+      await w.ok(IDS.mara, controlAutomationRun, { number: cancelled.number, action: 'cancel' });
+      const after = await loadRunRow(w.services.db, cancelled.id);
+      expect(after.status).toBe('cancelled');
+      expect(JSON.stringify(after.scope)).not.toContain('BODY_OF_CANCELLED_RUN');
+      const cancelledSteps = await w.services.db
+        .select()
+        .from(automationRunSteps)
+        .where(eq(automationRunSteps.runId, cancelled.id));
+      expect(JSON.stringify(cancelledSteps)).not.toContain('BODY_OF_CANCELLED_RUN');
+    } finally {
+      await w.ok(IDS.mara, deleteAutomation, { automationId: twoStepsId });
+      await w.ok(IDS.mara, deleteAutomation, { automationId: noAgentId });
       await pollAndSettle();
     }
   });

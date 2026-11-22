@@ -10,6 +10,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import {
   type AutomationDefinition,
   type AutomationRecipeInput,
@@ -19,7 +20,7 @@ import {
   recipeInstructions,
   recipeIsCurrent,
 } from '@whombat/core';
-import { and, desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BurrowAccess } from '../auth/request';
 import {
@@ -47,11 +48,13 @@ import {
   events,
   messages,
   notifications,
+  searchDocuments,
   t3Watches,
   trackerCursors,
   trackerItems,
   vaultNetworks,
 } from '../db/schema/index';
+import { indexMessage } from '../domain/search-index';
 import { checkConnectionHealth } from '../home/health';
 import { OUTSIDERS_TOOLS } from '../mcp/served';
 import { callTool, mcpToolList } from '../mcp/server';
@@ -1170,7 +1173,7 @@ describe('a stuck intake tells the person', () => {
     await done(id);
   });
 
-  it('stamps outsiders_run provenance on tracker run messages so message and reaction automations skip them', async () => {
+  it('marks tracker run messages as an outsiders’ run’s so message and reaction automations skip them', async () => {
     const trackerAutoId = await recipe({ writeBack: false });
     await poll();
 
@@ -1220,13 +1223,52 @@ describe('a stuck intake tells the person', () => {
       const threadMsgs = await w.runThread(run?.id as string);
       expect(threadMsgs.length).toBeGreaterThanOrEqual(2);
       for (const m of threadMsgs) {
-        expect(m.provenance, m.text).toBe('outsiders_run');
+        expect(m.outsidersRun, m.text).toBe(true);
+        expect(m.provenance, m.text).toBeNull();
         await w.ok(IDS.mara, reactToMessage, { messageId: m.id, value: '👍', on: true });
       }
       await w.settle();
 
       expect(await w.runs(msgWatcherId)).toHaveLength(0);
       expect(await w.runs(reactWatcherId)).toHaveLength(0);
+
+      // The migration that brought the column marks what tracker runs posted before it (what no person wrote in the
+      // run's thread while it went on), and moves a mark a newer build kept in `provenance` to the column.
+      const ids = threadMsgs.map((m) => m.id);
+      const root = threadMsgs.find((m) => !m.threadRootId) ?? threadMsgs[0];
+      if (!root) throw new Error('no thread root');
+      const own = await w.ok(IDS.mara, sendMessage, {
+        conversationId: root.conversationId,
+        text: 'Thanks',
+        threadRootId: root.id,
+      });
+      await w.services.db.update(messages).set({ outsidersRun: false }).where(inArray(messages.id, ids));
+      await w.services.db.execute(
+        sql`update messages set provenance = 'outsiders_run' where id = ${root.id}`,
+      );
+      // Indexed while it wasn't marked: the migration takes it out of Search.
+      for (const id of ids) await indexMessage(w.services.db, id);
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).not.toEqual([]);
+      const migration = readFileSync(
+        new URL('../db/migrations/0014_outsiders_run_mark.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint').map((x) => x.trim()))
+        if (statement && !statement.startsWith('ALTER')) await w.services.db.execute(sql.raw(statement));
+      const after = await w.services.db
+        .select()
+        .from(messages)
+        .where(inArray(messages.id, [...ids, own.id]));
+      expect(after).toHaveLength(ids.length + 1);
+      for (const m of after) {
+        expect(m.outsidersRun, m.text).toBe(m.id !== own.id);
+        expect(m.provenance, m.text).toBeNull();
+      }
+      expect(
+        await w.services.db.select().from(searchDocuments).where(inArray(searchDocuments.id, ids)),
+      ).toEqual([]);
     } finally {
       await done(trackerAutoId);
       await done(msgWatcherId);

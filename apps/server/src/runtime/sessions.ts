@@ -227,6 +227,21 @@ export function sessionsSince(db: Queryable, conversationId: string, since: Date
   );
 }
 
+/**
+ * The sessions of the finished automation turns in a thread: what an automation run's agent steps ran in (its turns
+ * answer in the run's thread), once none of them runs any more.
+ */
+export function finishedAutomationSessions(db: Queryable, threadRootId: string) {
+  return sessionsWhere(
+    db,
+    and(
+      eq(dispatches.threadRootId, threadRootId),
+      eq(dispatches.trigger, 'automation'),
+      inArray(dispatches.state, ['done', 'failed', 'cancelled']),
+    ),
+  );
+}
+
 /** The sessions of a room's top level, not its threads' (Clear chats, CHC-04). */
 export function topLevelSessions(db: Queryable, conversationId: string) {
   return sessionsWhere(

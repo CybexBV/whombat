@@ -155,6 +155,7 @@ export async function collectMessages(scope: CollectScope, out: CategoryOut, all
             pinned: m.pinnedAt && m.pinnedById ? { at: iso(m.pinnedAt), by: m.pinnedById } : null,
             deleted: !!m.deletedAt,
             provenance: m.provenance ?? null,
+            outsidersRun: m.outsidersRun,
             previews: m.previews ? (m.previews.slice(0, 3) as unknown as Record<string, never>[]) : null,
             subject,
           }),

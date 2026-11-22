@@ -41,6 +41,7 @@ import { notFound } from '../lib/errors';
 import { iso, isoOrNull } from '../lib/time';
 import { groupRows } from '../read/group';
 import { connectionLabels, definitionConnections } from '../trackers/store';
+import { forgetMailText } from './mail-text';
 import { planFactsOf } from './plan-store';
 import { agentNameIn, definitionRooms, describeAs, glanceAs, roomTitles, summaryAs } from './visibility';
 
@@ -430,7 +431,9 @@ export async function publishAutomation(session: TxSession, burrowId: string, au
  * OP-S69).
  */
 export async function publishRun(session: TxSession, runId: string) {
-  const row = await loadRunRow(session.tx, runId);
+  let row = await loadRunRow(session.tx, runId);
+  // What a mail run no longer needs of the email goes in the commit that made it so (`mail-text.ts`).
+  if (await forgetMailText(session, row)) row = await loadRunRow(session.tx, runId);
   // Its AUTOMATION search document and the plan steps that follow it, in the same commit (WS-05, WS-24).
   await indexAutomationRun(session.tx, runId);
   const burrow = await loadBurrowRow(session.tx, row.burrowId);
