@@ -23,6 +23,8 @@ export const WIFI = {
   title: 'Join a Wi-Fi network',
   readOnlyTitle: 'Wi-Fi',
   cable: 'Cable',
+  /** The chip on top of the screen: a word alone there has to say what it is about. */
+  chipCable: 'Wired network',
   wifi: 'Wi-Fi',
   connected: 'Connected',
   notConnected: 'Not connected',
@@ -135,7 +137,7 @@ export function chipView(s: NetworkSummary): {
   warn: boolean;
 } {
   const warn = !s.online;
-  if (s.via === 'cable') return { icon: 'cable', text: WIFI.cable, warn };
+  if (s.via === 'cable') return { icon: 'cable', text: WIFI.chipCable, warn };
   if (s.via === 'wifi') return { icon: 'wifi', text: s.ssid ?? WIFI.wifi, warn };
   return { icon: 'none', text: WIFI.noNetwork, warn: true };
 }

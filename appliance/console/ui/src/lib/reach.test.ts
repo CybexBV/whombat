@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_QR } from '../demo/qr';
 import { type ConsoleState, parseState, qrRows } from './api';
-import { linkScreen, linkShown, liveLinkCode, noAddressLine, reachNotes, waitingInApp } from './console';
+import {
+  footerShown,
+  linkScreen,
+  linkShown,
+  liveLinkCode,
+  noAddressLine,
+  reachNotes,
+  waitingInApp,
+} from './console';
 import type { DeskState } from './desk';
 import { deskActive } from './deskScene';
 
@@ -129,6 +137,27 @@ describe('the Link screen in place of the claim (the text console’s rule)', ()
       }),
     ).toBe(true);
     expect(deskActive({ ...con('claimed', { link: { state: 'ended' } }), desk: paired })).toBe(true);
+  });
+});
+
+describe('the footer (the text console’s rule)', () => {
+  const shown = (claim: string, reach?: unknown) => {
+    const s = con(claim, reach);
+    return footerShown(s, linkScreen(s, NOW));
+  };
+
+  it('gives way while the box is set up: the claim, and Link’s code or wait before the claim', () => {
+    expect(shown('claimable')).toBe(false);
+    expect(shown('backoff')).toBe(false);
+    expect(shown('starting', { link: CODE })).toBe(false);
+    expect(shown('waiting', { link: { ...CODE, waitingForAddress: true } })).toBe(false);
+  });
+
+  it('shows under every other screen, a claimed box’s Link code included', () => {
+    expect(shown('starting')).toBe(true);
+    expect(shown('waiting')).toBe(true);
+    expect(shown('claimed')).toBe(true);
+    expect(shown('claimed', { link: CODE })).toBe(true);
   });
 });
 

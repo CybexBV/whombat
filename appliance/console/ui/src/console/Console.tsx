@@ -21,6 +21,7 @@ import type { Client } from '../lib/client';
 import {
   type ConsoleScene,
   consoleScene,
+  footerShown,
   justClaimed,
   linkScreen,
   noAddressLine,
@@ -199,7 +200,9 @@ function ClaimScreens({
             </>
           )}
         </main>
-        {state.footer && <footer className={styles.footer}>{state.footer}</footer>}
+        {state.footer && footerShown(state, link) && (
+          <footer className={styles.footer}>{state.footer}</footer>
+        )}
       </div>
       {celebrating && claim && <Celebration claim={claim} />}
       {/* Dims the whole screen, background included, to about 40 % (CG-09). */}

@@ -107,6 +107,8 @@ export const CONSOLE = {
   linkCode: 'Whombat Link code',
   /** A QR code's name for a screen reader: the address it opens. */
   qr: (url: string) => `QR code for ${url}`,
+  /** Under every QR code: what to do with it. */
+  scan: 'Scan with your phone',
   notes: 'How to reach this Whombat',
   retryIn: 'Try again in',
   claimed: 'Claimed!',
