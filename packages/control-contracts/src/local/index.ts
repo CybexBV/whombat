@@ -259,6 +259,13 @@ export const MANAGER_PATHS = {
    * sends with `link.status`; without `claimLink` the manager forgets it.
    */
   linkClaim: '/v1/link/claim',
+  /**
+   * Runtime (4.14): the device op `link.whombats`, body and answer exactly its own (`RuntimeLinkWhombatsRequest`,
+   * `RuntimeLinkWhombatsResponse`): the other Whombats linked to the same account, for the menu under the box's name.
+   * 404 `link.unavailable` while Link doesn't run (or from an older manager); 503 `control_unreachable`; 502
+   * `control_refused`.
+   */
+  linkWhombats: '/v1/link/whombats',
   /** Runtime (4.4): `UpdateChannelRequest` → `UpdateChannelResponse`. 404 `update.channel_unavailable`. */
   updateChannel: '/v1/update/channel',
   /** Runtime (the owner's, 4.4): `UpdateChannelSetRequest` → `UpdateChannelResponse`. 409 `busy` while an update runs. */

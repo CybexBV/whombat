@@ -27,7 +27,7 @@ for (const theme of ['light', 'dark'] as const)
     });
     await shot('list');
 
-    await page.getByRole('button', { name: 'Link a Whombat' }).click();
+    await page.goto('/appliances/link');
     await expect(page.getByRole('heading', { name: 'Link a Whombat' })).toBeVisible();
     await shot('link');
     await page.getByRole('checkbox').check();

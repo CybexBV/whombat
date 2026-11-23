@@ -12,6 +12,7 @@ import {
   BoxPasskeyRegisterInput,
   EnrollClaimLocalStartInput,
   LinkOutput,
+  LinkWhombatsOutput,
   OwnAddressReachSetInput,
   OwnAddressReachSetOutput,
   OwnAddressStatusOutput,
@@ -1038,6 +1039,9 @@ export const sessionOps = {
   linkOn: (s: ApplianceSession, o?: CallOptions) => run(s, 'link.on', {}, LinkOutput, o),
   /** The owner turns Link off. */
   linkOff: (s: ApplianceSession, o?: CallOptions) => run(s, 'link.off', {}, LinkOutput, o),
+  /** The other Whombats of this one's Whombat Link account (4.14): the menu under its name. */
+  linkWhombats: (s: ApplianceSession, o?: CallOptions) =>
+    run(s, 'link.whombats', {}, LinkWhombatsOutput, { ...o, read: true }),
   /** Which channel this Whombat takes its updates from. */
   updatesChannelGet: (s: ApplianceSession, o?: CallOptions) =>
     run(s, 'updates.channel.get', {}, UpdatesChannelOutput, { ...o, read: true }),

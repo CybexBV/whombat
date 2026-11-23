@@ -487,7 +487,7 @@ export function defaultWhombatName(personName: string | null | undefined): strin
 
 export const BOX_SETUP_TEXT = {
   steps: {
-    link: { t: 'Link your Whombat', d: 'With Whombat Link' },
+    link: { t: 'Add your Whombat', d: 'To your account' },
     claim: { t: 'Claim your Whombat', d: 'The letters on its screen' },
     account: { t: 'Who are you?', d: 'It stays on this Whombat' },
     passkey: { t: 'Make its passkey', d: 'For this Whombat only' },

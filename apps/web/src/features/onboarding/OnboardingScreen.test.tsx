@@ -179,7 +179,7 @@ describe('OnboardingScreen (mocked server)', () => {
     const app = renderApp('/onboarding', services);
     await screen.findByRole('heading', { name: 'Set up your AI' });
     expect(screen.getByText('STEP 4 OF 4')).toBeTruthy();
-    for (const done of ['Link your Whombat', 'Claim your Whombat', 'Make its passkey'])
+    for (const done of ['Add your Whombat', 'Claim your Whombat', 'Make its passkey'])
       expect(screen.getByText(done)).toBeTruthy();
     for (const gone of ['Who are you?', 'Protect your Whombat', 'Name your Whombat', 'Meet your agent'])
       expect(screen.queryByText(gone)).toBeNull();

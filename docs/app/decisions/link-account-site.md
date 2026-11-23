@@ -16,6 +16,8 @@ passkey sign-in stays (LNK-51).
 
 ## AP-9701 No organization to name
 
+*In part superseded by [account-home.md](account-home.md) (the home is `/`, AP-9774).*
+
 A new account no longer names an organization. Signed in without an organization this site opens Whombats of, the
 person has Your Whombats (`/account`), `/link`, the phone's QR code (`/mobile`) and deleting the account; every other
 path goes to `/account`. `CreateOrgScreen`, `WaitlistScreen`, the invitation screens and `afterCreateOrgPath` stay in
@@ -33,6 +35,8 @@ only the mark counts; an older control's list is told apart by the fixed name it
 
 ## AP-9703 `/link` (LNK-13)
 
+*In part superseded by [account-home.md](account-home.md) (`/add` is the page, AP-9775).*
+
 “Link your Whombat”: the code the box's screen shows (`ABCD-EFGH`, typed in any case and spacing and shown with its
 dash, `normalizeLinkCode`), also taken from `?code=`. Signed out, the page asks for the code and an email address in one
 form and sends the sign-in link with `next=/link?code=…`, so the link opens the confirm step. Signed in, a code in the
@@ -45,6 +49,8 @@ plain words: a wrong or expired code, another account's box, an unconfirmed e-ma
 free month (`link_trial_boxes`) offers Add a card.
 
 ## AP-9704 Your Whombats (LNK-35)
+
+*In part superseded by [account-home.md](account-home.md) (the home and the account split it, AP-9774, AP-9776).*
 
 `/account`, and `/billing` where Stripe sends the browser back: one card for the subscription (“Whombat Link”, its line
 — Not subscribed, Free month · until …, Active · renews/ends …, Payment problem, Ended, Included — and the price line
@@ -69,6 +75,8 @@ after a minute it says it is taking longer, with Check again. The free month wit
 control doesn't send `cardOnFile`: there any running plan counts (trialing, active, past due, included).
 
 ## AP-9707 Removing a Whombat
+
+*In part superseded by [account-home.md](account-home.md) (Remove is behind ⋯ on the home, AP-9778).*
 
 Remove on a row asks first, in one line (“It keeps working at home, but you can’t open it from elsewhere without
 Tailscale.”), then `link.remove`; the answer is the new list.
@@ -108,6 +116,8 @@ other journeys start from an account with an organization from before Link (`exi
 invite, waitlist and card claim journeys are gone with their screens.
 
 ## AP-9714 Open a Whombat from the account site (one-environment.md ENV-11)
+
+*In part superseded by [account-home.md](account-home.md) (Open is on the home, AP-9774).*
 
 Each Whombat whose own address works (Link on, or in its last week) has **Open**, a real link to `https://<host>/` that
 opens in the same tab. The browser remembers which one was opened last (`localStorage` `whombat:link:last-opened`,

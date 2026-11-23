@@ -24,7 +24,7 @@ import {
   type LocalLinkStatus,
 } from '@whombat/control-contracts/local';
 import type { LinkState } from '@whombat/protocol';
-import type { LinkSummary, TailscaleStatus } from '@whombat/protocol/session';
+import type { LinkSummary, LinkWhombatSummary, TailscaleStatus } from '@whombat/protocol/session';
 import { externalEffect } from '../../commit/scope';
 import type { Services } from '../../services';
 import { appendApplianceEvent } from '../audit';
@@ -80,6 +80,12 @@ export const LINK_UNANSWERED_POLL_MS = 3_000;
  */
 export const LINK_ENDED_POLL_MS = 60_000;
 
+/**
+ * How long the account's other Whombats are kept once asked: the menu under the box's name may open often, and each ask
+ * goes to control. Control hears from a Whombat about once an hour, so a minute-old answer is as good as a new one.
+ */
+export const LINK_WHOMBATS_KEEP_MS = 60_000;
+
 /** Why turning Link on or off didn't happen, as the session op says it (`LINK_ERROR_CODES`). */
 export class LinkRefusal extends Error {
   constructor(
@@ -118,6 +124,10 @@ export class LinkService {
   #nameTold: string | null = null;
   /** The name being given now: one at a time, in order. */
   #telling: Promise<void> = Promise.resolve();
+  /** The account's other Whombats as last asked (an empty list when asking failed), and when. */
+  #whombats: { at: number; list: LinkWhombatSummary[] } | null = null;
+  /** The ask in flight: menus opened at the same moment share it. */
+  #askingWhombats: Promise<LinkWhombatSummary[]> | null = null;
 
   constructor(private readonly options: LinkServiceOptions) {
     this.#view = this.assumedView();
@@ -283,6 +293,8 @@ export class LinkService {
           this.services.log.warn({ err: String(err) }, 'link: the change wasn’t recorded'),
         );
       if (stateMoved) this.services.log.info({ state: this.state }, 'link: state');
+      // Another state may mean another account (or none): the other Whombats are asked again.
+      if (stateMoved) this.#whombats = null;
       for (const listener of this.#listeners) {
         try {
           listener(kept, before);
@@ -366,6 +378,49 @@ export class LinkService {
         at: this.services.clock(),
       });
     });
+  }
+
+  /**
+   * The other Whombats linked to the same account (`link.whombats`), for the menu under the box's name: none while Link
+   * doesn't run or the manager can't ask. Asked at control at most once a minute; a failed ask counts as none for that
+   * minute too, so a menu opened again and again doesn't keep asking a control that is away.
+   */
+  async whombats(): Promise<LinkWhombatSummary[]> {
+    const ask = this.options.manager.linkWhombats?.bind(this.options.manager);
+    if (!ask || !this.active()) return [];
+    const kept = this.#whombats;
+    if (kept && this.services.clock().getTime() - kept.at < LINK_WHOMBATS_KEEP_MS) return kept.list;
+    this.#askingWhombats ??= ask()
+      .then(
+        (answer) =>
+          answer.whombats.map(
+            (w): LinkWhombatSummary => ({
+              device: w.device,
+              name: w.name,
+              state: w.state,
+              host: w.host,
+              lastSeenAt: w.lastSeenAt === null ? null : new Date(w.lastSeenAt * 1000).toISOString(),
+            }),
+          ),
+        (err: unknown) => {
+          this.services.log.info(
+            {
+              status: err instanceof ManagerCallError ? err.status : undefined,
+              err: String(err).slice(0, 200),
+            },
+            'link: the account’s other Whombats weren’t read',
+          );
+          return [];
+        },
+      )
+      .then((list) => {
+        this.#whombats = { at: this.services.clock().getTime(), list };
+        return list;
+      })
+      .finally(() => {
+        this.#askingWhombats = null;
+      });
+    return this.#askingWhombats;
   }
 
   /** Link as the person's devices see it (`reach.get`); null on a box that can't have Link. */

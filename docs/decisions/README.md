@@ -45,6 +45,8 @@ How the split was made: `docs.md`.
 - `../app/decisions/whombat-link-app.md` — Whombat Link in the apps: the one setup on the box's page, Reach and Updates in Settings, the Link-ended strip, joining a box on the phone without a cloud account, push through the box, nothing to buy on the iPhone.
 - `../app/decisions/link-account-site.md` — the account site under Whombat Link: open sign-up, `/link`, Your Whombats
   with the Link subscription, what left the hosted flow.
+- `../app/decisions/account-home.md` — the account site's home (every Whombat, Add a Whombat, the account page) and the
+  menu under a box's name with the account's other Whombats.
 - `../app/decisions/own-address.md` — the own address in the apps: the setup at the address, the box's passkey, the link
   code at the account, the address in Settings, the phone following it.
 - `remote-help.md`, `remote-help-server.md` — support access the person grants and can stop.

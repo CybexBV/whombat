@@ -15,12 +15,14 @@ import { useBoxPageAsApp } from '../../config';
 import { RETURN_ADDRESS_WORDS, returnAddressProblem } from '../../connections/redirect';
 import { ManagerCallError } from '../ports';
 import { LINK_WORDS, linkItems } from './notices';
+import { LINK_SESSION_HANDLERS } from './ops';
 import { contentProofSigner, deviceFileOf, registeredAtControl } from './origin';
 import {
   consoleReach,
   LINK_ENDED_POLL_MS,
   LINK_STARTING_POLL_MS,
   LINK_UNANSWERED_POLL_MS,
+  LINK_WHOMBATS_KEEP_MS,
   LinkService,
   type LinkView,
   linkSummary,
@@ -425,5 +427,112 @@ describe('the box’s name reaches control while Link runs (LNK-56)', () => {
     name = 'Cabin';
     await link.tellName();
     expect(sent).toEqual(['Home', 'Garden shed']);
+  });
+});
+
+describe('the account’s other Whombats, for the menu under the box’s name', () => {
+  const host = 'cedar-lark-meadow.box.whombat.app';
+  const studio = {
+    device: 'dev-studio',
+    name: 'Studio',
+    state: 'on' as const,
+    host,
+    lastSeenAt: 1_795_000_000,
+  };
+  const cabin = { device: 'dev-cabin', name: null, state: 'starting' as const, host: null, lastSeenAt: null };
+
+  function setUp() {
+    let now = Date.parse('2026-11-23T10:00:00Z');
+    let state: LinkView['link']['state'] = 'off';
+    const manager = {
+      calls: 0,
+      fail: null as Error | null,
+      whombats: [studio, cabin],
+      linkState: async () => ({ v: 1, enabled: true, link: { state, since: '2026-11-23T09:00:00Z' } }),
+      linkWhombats: async () => {
+        manager.calls++;
+        if (manager.fail) throw manager.fail;
+        return { whombats: manager.whombats };
+      },
+    };
+    const link = new LinkService({
+      services: {
+        clock: () => new Date(now),
+        log: { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} },
+      } as never,
+      registeredAtControl: false,
+      manager: manager as never,
+      timers: false,
+    });
+    (link as unknown as { record: () => Promise<void> }).record = async () => {};
+    const context = {
+      principal: { account: { id: 'acc-1' }, endpoint: { id: 'ep-1', enrolledVia: 'claim' } },
+      link,
+    } as never;
+    return {
+      link,
+      manager,
+      ask: () => LINK_SESSION_HANDLERS['link.whombats'](context),
+      setState: async (next: LinkView['link']['state']) => {
+        state = next;
+        await link.refresh();
+      },
+      later: (ms: number) => {
+        now += ms;
+      },
+    };
+  }
+
+  it('none while Link doesn’t run: control isn’t asked', async () => {
+    const t = setUp();
+    await t.setState('off');
+    expect(await t.ask()).toEqual({ whombats: [] });
+    await t.setState('ended');
+    expect(await t.ask()).toEqual({ whombats: [] });
+    expect(t.manager.calls).toBe(0);
+  });
+
+  it('while Link runs: control’s list with its times as the session’s', async () => {
+    const t = setUp();
+    await t.setState('on');
+    expect(await t.ask()).toEqual({
+      whombats: [
+        { ...studio, lastSeenAt: new Date(1_795_000_000 * 1000).toISOString() },
+        { ...cabin, lastSeenAt: null },
+      ],
+    });
+  });
+
+  it('asks control at most once a minute, and again once Link changed', async () => {
+    const t = setUp();
+    await t.setState('on');
+    await Promise.all([t.ask(), t.ask()]);
+    await t.ask();
+    expect(t.manager.calls).toBe(1);
+    t.later(LINK_WHOMBATS_KEEP_MS);
+    await t.ask();
+    expect(t.manager.calls).toBe(2);
+    await t.setState('grace');
+    await t.ask();
+    expect(t.manager.calls).toBe(3);
+  });
+
+  it('a manager or control that doesn’t answer: none, and not asked again within the minute', async () => {
+    const t = setUp();
+    await t.setState('on');
+    t.manager.fail = new ManagerCallError('/v1/link/whombats', 503, 'control_unreachable', 'away');
+    expect(await t.ask()).toEqual({ whombats: [] });
+    expect(await t.ask()).toEqual({ whombats: [] });
+    expect(t.manager.calls).toBe(1);
+    t.manager.fail = null;
+    t.later(LINK_WHOMBATS_KEEP_MS);
+    expect((await t.ask()).whombats).toHaveLength(2);
+  });
+
+  it('a manager without the route: none', async () => {
+    const t = setUp();
+    await t.setState('on');
+    t.manager.fail = new ManagerCallError('/v1/link/whombats', 404, 'not_found', 'manager: 404 not found');
+    expect(await t.ask()).toEqual({ whombats: [] });
   });
 });

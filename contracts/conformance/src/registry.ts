@@ -234,6 +234,9 @@ const LOCAL_SCHEMAS = [
   'LinkOnRequest',
   'LinkOffRequest',
   'LinkClaimRequest',
+  // The account's other Whombats (4.14).
+  'RuntimeLinkWhombatsRequest',
+  'RuntimeLinkWhombatsResponse',
   'UpdateChannelRequest',
   'UpdateChannelSetRequest',
   'UpdateChannelResponse',

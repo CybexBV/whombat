@@ -83,6 +83,12 @@ type RuntimeShareViewsRequest = device.ShareDeleteRequest
 // RuntimeShareViewsResponse is the same schema as device.ShareViewsResponse.
 type RuntimeShareViewsResponse = device.ShareViewsResponse
 
+// RuntimeLinkWhombatsRequest is the same schema as device.LinkWhombatsRequest.
+type RuntimeLinkWhombatsRequest = device.LinkWhombatsRequest
+
+// RuntimeLinkWhombatsResponse is the same schema as device.LinkWhombatsResponse.
+type RuntimeLinkWhombatsResponse = device.LinkWhombatsResponse
+
 // RuntimePushRegisterRequest is the same schema as device.PushRegisterRequest.
 type RuntimePushRegisterRequest = device.PushRegisterRequest
 
@@ -4243,6 +4249,28 @@ func ParseLinkClaimRequest(data []byte) (*LinkClaimRequest, error) {
 func (v *LinkClaimRequest) Validate() error { return schemas.ValidateValue("LinkClaimRequest", v) }
 
 var _ = register("LinkClaimRequest", func(data []byte) (any, error) { return ParseLinkClaimRequest(data) })
+
+// ParseRuntimeLinkWhombatsRequest validates data against the RuntimeLinkWhombatsRequest JSON Schema and decodes it.
+func ParseRuntimeLinkWhombatsRequest(data []byte) (*RuntimeLinkWhombatsRequest, error) {
+	v := new(RuntimeLinkWhombatsRequest)
+	if err := schemas.Decode("RuntimeLinkWhombatsRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeLinkWhombatsRequest", func(data []byte) (any, error) { return ParseRuntimeLinkWhombatsRequest(data) })
+
+// ParseRuntimeLinkWhombatsResponse validates data against the RuntimeLinkWhombatsResponse JSON Schema and decodes it.
+func ParseRuntimeLinkWhombatsResponse(data []byte) (*RuntimeLinkWhombatsResponse, error) {
+	v := new(RuntimeLinkWhombatsResponse)
+	if err := schemas.Decode("RuntimeLinkWhombatsResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeLinkWhombatsResponse", func(data []byte) (any, error) { return ParseRuntimeLinkWhombatsResponse(data) })
 
 // ParseUpdateChannelRequest validates data against the UpdateChannelRequest JSON Schema and decodes it.
 func ParseUpdateChannelRequest(data []byte) (*UpdateChannelRequest, error) {

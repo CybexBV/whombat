@@ -94,6 +94,7 @@ import { LEGAL_PAGES, LegalPage } from '../legal/LegalPage';
 import { ApplianceApp } from './ApplianceApp';
 import { BringBackFlow } from './BringBack';
 import { type ConnectTarget, type ManagedEnvironment, WEB_CLIENT } from './connect';
+import { AccountFlow, HomeFlow } from './Home';
 import { forgetHeld, forgetHeldFor, held } from './held';
 import {
   browserLabel,
@@ -103,7 +104,7 @@ import {
   endpointKeysSupportedCheck,
   loadOrCreateEndpointKey,
 } from './keys';
-import { LinkAccountFlow, LinkCodeFlow, LinkSignedOutScreen } from './LinkAccount';
+import { LinkCodeFlow, LinkSignedOutScreen } from './LinkAccount';
 import { LinkWhombatScreen } from './LinkWhombat';
 import { PASSKEY_NUDGE, PASSKEYS, webAuthnExists } from './passkeyEnv';
 import { signInFailure } from './passkeys';
@@ -417,9 +418,9 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
   // “Mobile app” signed out (AP-526): the download for anyone (the phone app's “Update the app” opens it).
   if (!cloud && url.pathname === '/mobile')
     return <PublicMobilePage loadDownload={loadAndroid} onSignIn={() => navigate('/')} />;
-  // Link your Whombat signed out (LNK-13): the code and an email address in one form; the sign-in link comes back
-  // here with the code.
-  if (!cloud && url.pathname === '/link')
+  // Adding a Whombat signed out (LNK-13): the code and an email address in one form; the sign-in link comes back
+  // here with the code. `/link` is what the box's screen shows.
+  if (!cloud && (url.pathname === '/add' || url.pathname === '/link'))
     return (
       <LinkSignedOutScreen
         initialCode={linkCodeOf(url.search)}
@@ -435,8 +436,7 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
         </Suspense>
       );
     // Back to where this page was after signing in (an app path; the control client sends it only when it passes
-    // the contract's `isSafeNext`, CT-48). From the start page: the list, which is Your Whombats for an account whose
-    // Whombats this site doesn't open.
+    // the contract's `isSafeNext`, CT-48). From the start page: the home, the person's Whombats.
     const next = ['/', '/auth/verify', '/signup', '/waitlist'].includes(url.pathname)
       ? undefined
       : url.pathname + url.search;
@@ -445,6 +445,7 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
         onSend={(email) => env.control.requestSignInLink(email, next)}
         {...(passkeySignInProps && { passkey: passkeySignInProps })}
         onLookAround={() => setLookAround(true)}
+        onAdd={() => navigate('/add')}
       />
     );
   }
@@ -486,8 +487,8 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
 }
 
 /**
- * Signed in without an organization this site opens Whombats of (Whombat Link, LNK-35): Your Whombats with the Link
- * subscription, `/link`, the phone's QR code, and deleting the account.
+ * Signed in without an organization this site opens Whombats of (Whombat Link, LNK-35): the home with the person's
+ * Whombats, the account, adding a Whombat, the phone's QR code, and deleting the account.
  */
 function AccountOnly({
   env,
@@ -504,10 +505,20 @@ function AccountOnly({
   navigate: (to: string) => void;
   signOut: () => void;
 }) {
+  if (path === '/')
+    return (
+      <HomeFlow
+        control={env.control}
+        session={cloud}
+        onAdd={(code) => navigate(linkPagePath(code ?? null))}
+        onAccount={() => navigate('/account')}
+        onPhone={() => navigate('/mobile')}
+        onSignOut={signOut}
+      />
+    );
   const account = accountRoute({ env, cloud, path, search, navigate, signOut });
   if (account) return account;
-  if (path === '/mobile')
-    return <AccountMobilePage control={env.control} onBack={() => navigate('/account')} />;
+  if (path === '/mobile') return <AccountMobilePage control={env.control} onBack={() => navigate('/')} />;
   if (path === '/account/delete')
     return (
       <DeleteAccountScreen
@@ -525,10 +536,10 @@ function AccountOnly({
         }}
       />
     );
-  return <GoTo navigate={navigate} to="/account" />;
+  return <GoTo navigate={navigate} to="/" />;
 }
 
-/** Your Whombats (`/account`, and `/billing` where Stripe sends the browser back) and `/link`; null elsewhere. */
+/** The account (`/account`, and `/billing` where Stripe sends the browser back) and adding a Whombat; null elsewhere. */
 function accountRoute({
   env,
   cloud,
@@ -536,7 +547,6 @@ function accountRoute({
   search,
   navigate,
   signOut,
-  onOpenHere,
 }: {
   env: ManagedEnvironment;
   cloud: ControlSession;
@@ -544,21 +554,21 @@ function accountRoute({
   search: string;
   navigate: (to: string) => void;
   signOut: () => void;
-  onOpenHere?: () => void;
 }): React.ReactElement | null {
   if (path === '/account' || path === '/billing')
     return (
-      <LinkAccountFlow
+      <AccountFlow
         control={env.control}
         session={cloud}
         {...(env.billingRedirectOrigins && { billingRedirectOrigins: env.billingRedirectOrigins })}
-        onLink={() => navigate('/link')}
-        {...(onOpenHere && { onOpenHere })}
+        onHome={() => navigate('/')}
+        onPhone={() => navigate('/mobile')}
         onSignOut={signOut}
         onDeleteAccount={() => navigate('/account/delete')}
       />
     );
-  if (path === '/link')
+  // `/link` is what the box's screen shows; the page is the same.
+  if (path === '/add' || path === '/link')
     return (
       <LinkCodeFlow
         // A new code in the address starts the page afresh.
@@ -567,7 +577,7 @@ function accountRoute({
         session={cloud}
         initialCode={linkCodeOf(search)}
         {...(env.billingRedirectOrigins && { billingRedirectOrigins: env.billingRedirectOrigins })}
-        onAccount={() => navigate('/account')}
+        onAccount={() => navigate('/')}
       />
     );
   return null;
@@ -635,6 +645,7 @@ function SignedIn({
       path.startsWith('/appliances/') ||
       path === '/billing' ||
       path === '/account' ||
+      path === '/add' ||
       path === '/link' ||
       path === '/account/delete'
     )
@@ -659,7 +670,7 @@ function SignedIn({
   }, [env, orgId]);
 
   useEffect(() => {
-    if (path === '/appliances') refresh();
+    if (path === '/appliances' || path === '/') refresh();
   }, [path, refresh]);
 
   const rename = async (a: ApplianceSummary, name: string): Promise<string | null> => {
@@ -824,22 +835,14 @@ function SignedIn({
           navigate(decision.kind === 'changed' ? at(a.device, 'identity-changed') : recoverPath(a.device));
         }}
         onDeleteAccount={() => navigate('/account/delete')}
-        // Your Whombats with Whombat Link (LNK-35), and linking one by the code on its screen (LNK-13).
-        onLinkAccount={() => navigate('/account')}
+        // The home with every Whombat (LNK-35), and adding one by the code on its screen (LNK-13).
+        onLinkAccount={() => navigate('/')}
         // Naming a Whombat (AP-3086); the menu and the list show it from then on.
         onRename={rename}
-        onLinkWhombat={() => navigate('/link')}
+        onLinkWhombat={() => navigate('/add')}
       />
     );
-  const account = accountRoute({
-    env,
-    cloud,
-    path,
-    search,
-    navigate,
-    signOut,
-    onOpenHere: () => navigate('/appliances'),
-  });
+  const account = accountRoute({ env, cloud, path, search, navigate, signOut });
   if (account) return account;
   if (path === '/appliances/link')
     return (
@@ -856,7 +859,7 @@ function SignedIn({
     return (
       <DeleteAccountScreen
         email={cloud.account.email}
-        onBack={() => navigate('/appliances')}
+        onBack={() => navigate('/account')}
         onDelete={async (typed) => {
           try {
             await env.control.deleteAccount(typed);
@@ -1108,8 +1111,22 @@ function SignedIn({
   const active = last ? registry.get(last) : undefined;
   // “Mobile app” without a Whombat open (AP-521): the QR code signs the phone in to the account only.
   if (path === '/mobile' && !active)
-    return <AccountMobilePage control={env.control} onBack={() => navigate('/appliances')} />;
-  if (!active) return <GoTo navigate={navigate} to="/appliances" />;
+    return <AccountMobilePage control={env.control} onBack={() => navigate('/')} />;
+  // No Whombat open here: the home, with this organization's Whombats beside the Link ones.
+  if (!active && path === '/')
+    return (
+      <HomeFlow
+        control={env.control}
+        session={cloud}
+        hosted={appliances ?? (listError ? [] : null)}
+        onOpenHere={open}
+        onAdd={(code) => navigate(linkPagePath(code ?? null))}
+        onAccount={() => navigate('/account')}
+        onPhone={() => navigate('/mobile')}
+        onSignOut={signOut}
+      />
+    );
+  if (!active) return <GoTo navigate={navigate} to="/" />;
   if (!active.enrolled)
     return <GoTo navigate={navigate} to={`/appliances/${encodeURIComponent(active.device)}/pair`} />;
   return (

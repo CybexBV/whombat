@@ -40,3 +40,6 @@ Esc, the other one opens in place, All Whombats goes to the list), its screensho
 suite has 16 failures that fail the same on main without this change (they expect the crew shell's `#billing-v2` and
 older Vault words). Not seen on a device: the phone's sheet (typechecked, its rows are the tested model), John's real
 Whombats.
+
+On a box's own page the name opens another menu: the account's Whombats through the box and the way back to the
+account site ([account-home.md](account-home.md) AP-9779).

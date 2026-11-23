@@ -30,6 +30,7 @@ import {
   type RuntimeFeedbackPullResponse,
   type RuntimeFeedbackReportersRequest,
   RuntimeKitEnvelopesRequest,
+  type RuntimeLinkWhombatsResponse,
   RuntimeShareDeleteRequest,
   RuntimeSharePutRequest,
   RuntimeShareViewsRequest,
@@ -525,6 +526,21 @@ export class FakeManager implements ManagerPort {
     if (this.linkClaimMissing)
       throw new ManagerCallError(MANAGER_PATHS.linkClaim, 404, 'not_found', 'manager: 404 not found');
     this.linkClaims.push(request.claimLink ?? null);
+  }
+  /**
+   * The account's other Whombats as control answers them (4.14); answered only while Link runs (404 otherwise, as the
+   * manager). `whombatsFail` answers with that error instead; `whombatsCalls` counts the asks.
+   */
+  whombats: RuntimeLinkWhombatsResponse['whombats'] = [];
+  whombatsFail: ManagerCallError | null = null;
+  whombatsCalls = 0;
+  async linkWhombats(): Promise<RuntimeLinkWhombatsResponse> {
+    this.whombatsCalls++;
+    const state = this.link?.link.state;
+    if (!this.link || !(state === 'starting' || state === 'on' || state === 'grace'))
+      throw new ManagerCallError(MANAGER_PATHS.linkWhombats, 404, 'link.unavailable', 'Link isn’t on');
+    if (this.whombatsFail) throw this.whombatsFail;
+    return { whombats: this.whombats };
   }
   /** The update channel the helper keeps (4.4); null answers 404 `update.channel_unavailable`. */
   channel: { channel: 'production' | 'development'; staysOn?: string } | null = null;

@@ -8,9 +8,9 @@
  * containers talk to control; the screens only show what they are given.
  */
 import {
+  ADD_TEXT,
   BOX_SETUP_TEXT,
   billingRedirectUrl,
-  COPY,
   type ControlApi,
   ControlError,
   type ControlSession,
@@ -25,18 +25,12 @@ import {
   type LinkLookup,
   linkAccountErrorKey,
   linkAccountErrorText,
-  linkBoxesInOrder,
-  linkBoxLine,
-  linkBoxOpenUrl,
-  linkBoxTone,
   linkCheckoutBusyText,
-  linkCheckoutInput,
   linkCountryGuess,
   linkCountryOptions,
   linkCountryReady,
   linkDiscountLine,
   linkNeedsBox,
-  linkNotice,
   linkOpenPageInterval,
   linkPagePath,
   linkPlanAction,
@@ -45,19 +39,19 @@ import {
   linkPlanRuns,
   linkPlanTone,
   linkPriceLine,
-  linkSubscribed,
   linkYearly,
   ownClaimPrefillHash,
   pollLinkAddress,
-  pollLinkCheckout,
   SUBSCRIPTION_TERMS_VERSION,
   signInErrorText,
   WHOMBAT_LINK_TEXT as T,
 } from '@whombat/client/managed';
 import { normalizeLinkCode } from '@whombat/protocol';
+import { Check } from 'lucide-react';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { AuthLayout, type AuthStep } from '../app/auth/AuthLayout';
 import { Button, ButtonLink } from '../components/Button';
+import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { StatusDot } from '../components/StatusDot';
@@ -127,7 +121,7 @@ export function LinkSignedOutScreen({
   };
   if (sent)
     return (
-      <AuthLayout kicker={T.kicker} title={T.sentTitle} sub={T.sent(sent)} tip={T.tip}>
+      <AuthLayout kicker={ADD_TEXT.kicker} title={T.sentTitle} sub={T.sent(sent)} tip={T.tip}>
         <div className={styles.actions}>
           <Button variant="link" onClick={() => setSent(null)}>
             {T.again}
@@ -136,7 +130,7 @@ export function LinkSignedOutScreen({
       </AuthLayout>
     );
   return (
-    <AuthLayout kicker={T.kicker} title={T.linkTitle} sub={T.signedOutSub} tip={T.tip}>
+    <AuthLayout kicker={ADD_TEXT.kicker} title={T.linkTitle} sub={T.signedOutSub} tip={T.tip}>
       <form className={styles.form} onSubmit={(e) => void submit(e)}>
         <CodeField value={code} onChange={setCode} />
         <Field label={T.email}>
@@ -286,7 +280,7 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
     const journey = runs && step.box.name === null ? linkJourney(true) : null;
     return (
       <AuthLayout
-        kicker={journey?.kicker ?? T.kicker}
+        kicker={journey?.kicker ?? ADD_TEXT.kicker}
         title={T.doneTitle(name)}
         sub={<span role="status">{sub}</span>}
         tip={T.tip}
@@ -317,7 +311,6 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
   }
   if (step.kind === 'found') {
     const { lookup, plan } = step;
-    const name = lookup.name ?? T.yourWhombat;
     const runs = plan ? linkPlanRuns(plan) : false;
     const price = plan ? linkPriceLine(plan) : T.priceMonth;
     const after = lookup.trial ? T.trial : runs ? `${T.joins} ${price}` : `${T.needsPlan} ${price}`;
@@ -327,16 +320,32 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
     const journey = !lookup.linked && lookup.name === null ? linkJourney(false) : null;
     return (
       <AuthLayout
-        kicker={journey?.kicker ?? T.kicker}
-        title={lookup.linked ? T.alreadyTitle(lookup.name ?? T.yourWhombatTitle) : T.confirmTitle(name)}
-        sub={lookup.name || lookup.linked ? T.what : `${T.showing(lookup.code)} ${T.what}`}
+        kicker={journey?.kicker ?? ADD_TEXT.kicker}
+        title={
+          lookup.linked
+            ? T.alreadyTitle(lookup.name ?? T.yourWhombatTitle)
+            : lookup.name
+              ? ADD_TEXT.confirmName(lookup.name)
+              : ADD_TEXT.confirmTitle
+        }
+        sub={lookup.linked || lookup.name ? undefined : T.showing(lookup.code)}
         tip={T.tip}
         {...(journey && { steps: journey.steps })}
       >
         {!lookup.linked && (
-          <div className={styles.notice} data-testid="link-terms">
-            <p>{after}</p>
-          </div>
+          <ul className={styles.gets} aria-label={T.what}>
+            {ADD_TEXT.gets.map((g) => (
+              <li key={g}>
+                <Icon icon={Check} size={16} className={styles.getsMark} />
+                {g}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!lookup.linked && (
+          <p className={styles.status} data-testid="link-terms">
+            {after}
+          </p>
         )}
         {askTerms && (
           <TermsCheck
@@ -360,7 +369,7 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
               disabled={busy || (askTerms && !agreed)}
               onClick={() => onConfirm(askTerms && agreed)}
             >
-              {busy ? T.confirming : T.confirm}
+              {busy ? ADD_TEXT.confirming : ADD_TEXT.confirm}
             </Button>
           )}
           <Button variant="link" onClick={onOtherCode}>
@@ -371,7 +380,7 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
     );
   }
   return (
-    <AuthLayout kicker={T.kicker} title={T.linkTitle} sub={T.linkSub} tip={T.tip}>
+    <AuthLayout kicker={ADD_TEXT.kicker} title={ADD_TEXT.title} sub={T.linkSub} tip={T.tip}>
       <form
         className={styles.form}
         onSubmit={(e) => {
@@ -395,7 +404,7 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
 }
 
 /** Sends the browser to Stripe, and only there (AP-160); anything else is refused like a failed request. */
-function goToStripe(url: string, alsoOrigins: readonly string[] | undefined) {
+export function goToStripe(url: string, alsoOrigins: readonly string[] | undefined) {
   const to = billingRedirectUrl(url, alsoOrigins);
   if (!to) throw new Error('not a Stripe page');
   window.location.assign(to);
@@ -411,7 +420,7 @@ const CARD_BUTTON: Partial<Record<string, string>> = {
  * Stripe's payment page for Link, the one way to start paying (`onPage` hears of it before the browser goes there). When
  * Stripe has the subscription already, Checkout answers `subscription_exists` and the portal opens instead.
  */
-async function toCheckout(
+export async function toCheckout(
   control: ControlApi,
   alsoOrigins: readonly string[] | undefined,
   input?: LinkCheckoutInput,
@@ -686,115 +695,18 @@ export interface LinkPlanChoice {
   country?: string;
 }
 
-export interface LinkAccountScreenProps {
-  session: ControlSession;
-  /** Null while loading; `error` when it couldn't be loaded. */
-  account: LinkAccount | null | 'error';
-  /** Back from Stripe Checkout: waiting for the subscription, waited a minute, or it shows. */
-  checkout: 'waiting' | 'slow' | 'done' | null;
-  onRetry: () => void;
-  /** Resolve after the browser was sent on; reject with control's refusal. `interval`: what Checkout charges. */
+/** The Whombat Link subscription: its line, its price and free time, and the one button to pay or manage it. */
+export function PlanCard({
+  account,
+  onPlan,
+  openPage,
+}: {
+  account: LinkAccount;
+  /** Resolve after the browser was sent on; reject with control's refusal. */
   onPlan: (choice: LinkPlanChoice) => Promise<void>;
-  /** The Whombat this device opened last (it comes first), and the one opened now. */
-  lastOpened: string | null;
   /** The interval of a payment page this browser opened that may still be open (31 minutes), or null. */
   openPage?: LinkInterval | null;
-  onOpen: (box: LinkedBox) => void;
-  /** Resolves to why it failed, or null. */
-  onRemove: (box: LinkedBox) => Promise<string | null>;
-  onLink: () => void;
-  /** The Whombats this site still opens (an organization made before Link). */
-  onOpenHere?: () => void;
-  onSignOut: () => void;
-  onDeleteAccount: () => void;
-}
-
-export function LinkAccountScreen(props: LinkAccountScreenProps) {
-  const { session, account, checkout, onRetry, onLink, onOpenHere, onSignOut, onDeleteAccount } = props;
-  const footer = (
-    <div className={styles.actions}>
-      <Button variant="primary" size="lg" onClick={onLink}>
-        {T.linkEntry}
-      </Button>
-      {onOpenHere && (
-        <Button variant="link" onClick={onOpenHere}>
-          {T.openHere}
-        </Button>
-      )}
-      <Button variant="link" onClick={onSignOut}>
-        {COPY.appliances.signOut}
-      </Button>
-      <span className={styles.hint}>{session.account.email}</span>
-      <Button variant="link" onClick={onDeleteAccount}>
-        {COPY.account.deleteEntry}
-      </Button>
-    </div>
-  );
-  const frame = (children: React.ReactNode) => (
-    <AuthLayout kicker={T.kicker} title={T.accountTitle} sub={T.accountSub} tip={T.tip}>
-      {children}
-    </AuthLayout>
-  );
-  if (checkout === 'waiting' || checkout === 'slow')
-    return frame(
-      <>
-        <p className={styles.status} role="status">
-          {checkout === 'waiting' ? T.settingUp : T.slow}
-        </p>
-        {checkout === 'slow' && (
-          <div className={styles.actions}>
-            <Button variant="primary" size="lg" onClick={onRetry}>
-              {T.checkAgain}
-            </Button>
-          </div>
-        )}
-      </>,
-    );
-  if (account === 'error')
-    return frame(
-      <>
-        <ErrorLine text={T.loadFailed} />
-        <div className={styles.actions}>
-          <Button variant="primary" size="lg" onClick={onRetry}>
-            {T.retry}
-          </Button>
-        </div>
-      </>,
-    );
-  if (!account) return frame(null);
-  const notice = checkout === 'done' && linkSubscribed(account.plan) ? T.subscribed : linkNotice(account);
-  // One Whombat with a working address: the page leads with opening it.
-  const only = account.boxes.length === 1 ? account.boxes[0] : undefined;
-  const onlyUrl = only ? linkBoxOpenUrl(only) : null;
-  return frame(
-    <>
-      {notice && (
-        <div className={styles.notice} role="status" data-testid="link-notice">
-          <p>{notice}</p>
-        </div>
-      )}
-      {only && onlyUrl && (
-        <div className={styles.actions}>
-          <ButtonLink
-            variant="primary"
-            size="xl"
-            href={onlyUrl}
-            className={styles.openOnly}
-            data-testid="link-open-only"
-            onClick={() => props.onOpen(only)}
-          >
-            {T.openName(only.name ?? T.yourWhombatTitle)}
-          </ButtonLink>
-        </div>
-      )}
-      <PlanCard {...props} account={account} />
-      <BoxList {...props} account={account} />
-      {footer}
-    </>,
-  );
-}
-
-function PlanCard({ account, onPlan, openPage }: LinkAccountScreenProps & { account: LinkAccount }) {
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A payment page this browser opened may still be open: its interval first, so asking again answers that page.
@@ -930,93 +842,10 @@ function PlanCard({ account, onPlan, openPage }: LinkAccountScreenProps & { acco
   );
 }
 
-function BoxList({
-  account,
-  onRemove,
-  lastOpened,
-  onOpen,
-}: LinkAccountScreenProps & { account: LinkAccount }) {
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  if (account.boxes.length === 0) return <p className={styles.status}>{T.noBoxes}</p>;
-  const remove = async (box: LinkedBox) => {
-    setBusy(true);
-    setError(null);
-    const failed = await onRemove(box);
-    setBusy(false);
-    if (failed) setError(failed);
-    else setRemoving(null);
-  };
-  return (
-    <>
-      <ul className={styles.card} aria-label={T.accountTitle}>
-        {linkBoxesInOrder(account.boxes, lastOpened).map((box) => {
-          const name = box.name ?? T.yourWhombatTitle;
-          const line = linkBoxLine(box, account.plan);
-          // With one Whombat the big Open above leads; the row doesn't repeat it.
-          const open = account.boxes.length > 1 ? linkBoxOpenUrl(box) : null;
-          if (removing === box.device)
-            return (
-              <li key={box.device} className={styles.row}>
-                <div className={styles.rowMain}>
-                  <span className={styles.rowMeta}>{T.removeConfirm(name)}</span>
-                </div>
-                <Button variant="primary" size="sm" disabled={busy} onClick={() => void remove(box)}>
-                  {busy ? T.removing : T.removeIt}
-                </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setRemoving(null)}>
-                  {T.cancel}
-                </Button>
-              </li>
-            );
-          return (
-            <li key={box.device} className={`${styles.row} ${styles.rowWrap}`} data-link-state={box.state}>
-              <StatusDot tone={linkBoxTone(box)} size={8} label={line} />
-              <div className={styles.rowMain}>
-                <span className={styles.rowTitle}>{name}</span>
-                <span className={styles.rowMeta}>
-                  {line}
-                  {box.host && box.state !== 'ended' && ` · ${box.host}`}
-                </span>
-              </div>
-              {open && (
-                <ButtonLink
-                  variant="primary"
-                  size="sm"
-                  href={open}
-                  aria-label={T.openName(name)}
-                  onClick={() => onOpen(box)}
-                >
-                  {T.open}
-                </ButtonLink>
-              )}
-              {box.state !== 'off' && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  aria-label={T.removeLabel(name)}
-                  onClick={() => {
-                    setError(null);
-                    setRemoving(box.device);
-                  }}
-                >
-                  {T.remove}
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <ErrorLine text={error} />
-    </>
-  );
-}
-
 /** Which Whombat this device opened last from here: this browser's own convenience, so a blocked store is no loss. */
 const LAST_OPENED_KEY = 'whombat:link:last-opened';
 
-function readLastOpened(): string | null {
+export function readLastOpened(): string | null {
   try {
     return window.localStorage.getItem(LAST_OPENED_KEY);
   } catch {
@@ -1027,7 +856,7 @@ function readLastOpened(): string | null {
 /** The payment page this browser opened last (its interval and when), so asking again for it answers that page. */
 const OPEN_PAGE_KEY = 'whombat:link:payment-page';
 
-function readOpenPage(): LinkInterval | null {
+export function readOpenPage(): LinkInterval | null {
   try {
     return linkOpenPageInterval(JSON.parse(window.localStorage.getItem(OPEN_PAGE_KEY) ?? 'null'));
   } catch {
@@ -1035,7 +864,7 @@ function readOpenPage(): LinkInterval | null {
   }
 }
 
-function keepOpenPage(interval: LinkInterval) {
+export function keepOpenPage(interval: LinkInterval) {
   try {
     window.localStorage.setItem(OPEN_PAGE_KEY, JSON.stringify({ interval, at: Date.now() }));
   } catch {
@@ -1043,108 +872,10 @@ function keepOpenPage(interval: LinkInterval) {
   }
 }
 
-function writeLastOpened(device: string) {
+export function writeLastOpened(device: string) {
   try {
     window.localStorage.setItem(LAST_OPENED_KEY, device);
   } catch {
     // Private windows and blocked site data: the list keeps control's order.
   }
-}
-
-/**
- * `/account` and `/billing`: loads the account's Link, sends the browser to Stripe, and back from Checkout
- * (`?checkout=done`) asks every 2 s for up to a minute until the subscription shows (webhooks can lag).
- */
-export function LinkAccountFlow({
-  control,
-  session,
-  billingRedirectOrigins,
-  onLink,
-  onOpenHere,
-  onSignOut,
-  onDeleteAccount,
-}: {
-  control: ControlApi;
-  session: ControlSession;
-  billingRedirectOrigins?: readonly string[];
-  onLink: () => void;
-  onOpenHere?: () => void;
-  onSignOut: () => void;
-  onDeleteAccount: () => void;
-}) {
-  const [account, setAccount] = useState<LinkAccount | null | 'error'>(null);
-  const [checkout, setCheckout] = useState<'waiting' | 'slow' | 'done' | null>(() =>
-    new URLSearchParams(window.location.search).get('checkout') === 'done' ? 'waiting' : null,
-  );
-  const [run, setRun] = useState(0);
-  const [lastOpened, setLastOpened] = useState<string | null>(readLastOpened);
-  const [openPage] = useState<LinkInterval | null>(readOpenPage);
-  const checkoutNow = useRef(checkout);
-  checkoutNow.current = checkout;
-  useEffect(() => {
-    let live = true;
-    const load = control.linkAccount;
-    if (!load) {
-      setAccount('error');
-      return;
-    }
-    if (run >= 0 && (checkoutNow.current === 'waiting' || checkoutNow.current === 'slow')) {
-      setCheckout('waiting');
-      void pollLinkCheckout({ load: () => load(), onAccount: setAccount, live: () => live }).then((out) => {
-        if (!live || out === 'stopped') return;
-        if (out === 'timeout') return setCheckout('slow');
-        setCheckout('done');
-        // The address no longer says it came back from Checkout (a reload doesn't wait again).
-        window.history.replaceState(null, '', window.location.pathname);
-      });
-    } else
-      load().then(
-        (a) => live && setAccount(a),
-        () => live && setAccount('error'),
-      );
-    return () => {
-      live = false;
-    };
-  }, [control, run]);
-  const plan = async (choice: LinkPlanChoice) => {
-    if (account === null || account === 'error') return;
-    if (choice.via === 'portal') {
-      if (!control.linkPortal) throw new ControlError('unavailable', 'No Link here.');
-      goToStripe((await control.linkPortal(choice.terms)).url, billingRedirectOrigins);
-    } else
-      await toCheckout(control, billingRedirectOrigins, linkCheckoutInput(account.plan, choice), () =>
-        keepOpenPage(choice.interval),
-      );
-  };
-  return (
-    <LinkAccountScreen
-      session={session}
-      account={account}
-      checkout={checkout}
-      onRetry={() => {
-        if (checkout !== 'slow') setAccount(null);
-        setRun((n) => n + 1);
-      }}
-      onPlan={plan}
-      lastOpened={lastOpened}
-      openPage={openPage}
-      onOpen={(box) => {
-        setLastOpened(box.device);
-        writeLastOpened(box.device);
-      }}
-      onRemove={async (box) => {
-        if (!control.linkRemove) return T.errors.unavailable;
-        try {
-          setAccount(await control.linkRemove(box.device));
-          return null;
-        } catch (e) {
-          return linkAccountErrorText(e);
-        }
-      }}
-      onLink={onLink}
-      {...(onOpenHere && { onOpenHere })}
-      onSignOut={onSignOut}
-      onDeleteAccount={onDeleteAccount}
-    />
-  );
 }

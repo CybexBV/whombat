@@ -11,7 +11,7 @@ describe('the magic link fragment', () => {
     });
     expect(readVerifyFragment({ pathname: '/auth/verify', hash: '#token=abc' })).toEqual({
       token: 'abc',
-      next: '/appliances',
+      next: '/',
     });
     expect(readVerifyFragment({ pathname: '/auth/verify', hash: '' })).toBeNull();
     expect(readVerifyFragment({ pathname: '/', hash: '#token=abc' })).toBeNull();
@@ -22,7 +22,7 @@ describe('the magic link fragment', () => {
       expect(
         readVerifyFragment({ pathname: '/auth/verify', hash: `#token=t&next=${encodeURIComponent(next)}` })
           ?.next,
-      ).toBe('/appliances');
+      ).toBe('/');
   });
 });
 

@@ -18,6 +18,7 @@ export * from './copy';
 export * from './diagnostics';
 export * from './fingerprint';
 export * from './google';
+export * from './home';
 export * from './kit-passkey';
 export * from './licence';
 export * from './link';

@@ -1,7 +1,7 @@
 /**
- * Whombat Link at the account site (Whombat whombat-link.md LNK-13, LNK-32…LNK-35, LNK-06): the code a Whombat's screen
- * shows, entered at `/link` signed out or in, confirmed into the account; Your Whombats with the subscription and each
- * Whombat's Link; Stripe Checkout and back; a Whombat removed; Link ending.
+ * Whombat Link at the account site (Whombat whombat-link.md LNK-13, LNK-32…LNK-35, LNK-06; app account-home.md): the
+ * code a Whombat's screen shows, entered at `/link` or `/add` signed out or in, confirmed into the account; the home with
+ * each Whombat and the account with the subscription; Stripe Checkout and back; a Whombat removed; Link ending.
  */
 import { expect, type Page, test } from '@playwright/test';
 import { fake, fresh } from './support';
@@ -13,7 +13,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sign in to Whombat' })).toBeVisible();
 });
 
-const account = (page: Page) => page.getByRole('heading', { name: 'Your Whombats' });
+const account = (page: Page) => page.getByRole('heading', { name: 'Account' });
+/** The home: the account's Whombats, or how to add the first. */
+const home = (page: Page) => page.getByRole('heading', { name: /^(Your Whombats?|Add your Whombat)$/ });
 /** The Subscription Terms, ticked before a Whombat joins. */
 /** Where the person lives, before Checkout: an EU country, as Link is sold only there. */
 const liveIn = (page: Page, country = 'NL') =>
@@ -21,12 +23,12 @@ const liveIn = (page: Page, country = 'NL') =>
 const agree = (page: Page) =>
   page.getByRole('checkbox', { name: 'I agree to the Whombat Subscription Terms' }).check();
 
-/** Signs in from the start page as a new account: Your Whombats. */
+/** Signs in from the start page as a new account: the home, with how to add the first Whombat. */
 async function signInNew(page: Page) {
   await page.getByLabel('Email').fill('mara@burrowhq.example');
   await page.getByRole('button', { name: 'Email me a link' }).click();
   await page.goto(await fake<string>(page, 'lastLink'));
-  await expect(account(page)).toBeVisible();
+  await expect(home(page)).toBeVisible();
 }
 
 test('signed out, the box’s code and an email: the link comes back to /link, which names the Whombat; the free month starts', async ({
@@ -34,39 +36,38 @@ test('signed out, the box’s code and an email: the link comes back to /link, w
 }) => {
   const code = await fake<string>(page, 'linkCode', 'Home');
   await page.goto(`/link?code=${code.toLowerCase()}`);
-  await expect(page.getByRole('heading', { name: 'Link your Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
   await expect(page.getByLabel('Code from its screen')).toHaveValue(code);
   await page.getByLabel('Email').fill('mara@burrowhq.example');
   await page.getByRole('button', { name: 'Email me a link' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const link = await fake<string>(page, 'lastLink');
-  expect(decodeURIComponent(link)).toContain(`next=/link?code=${code}`);
+  expect(decodeURIComponent(link)).toContain(`next=/add?code=${code}`);
   await page.goto(link);
-  await expect(page.getByRole('heading', { name: 'Add Home to Whombat Link?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Home?' })).toBeVisible();
   await expect(page.getByText('Your first month is free. No card needed.')).toBeVisible();
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
-  await expect(page.getByRole('heading', { name: 'Home is linked' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add it' }).click();
+  await expect(page.getByRole('heading', { name: 'Home is added' })).toBeVisible();
   // Control recorded the Subscription Terms the person ticked.
-  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual(['2026-11-19']);
-  await expect(page.getByText('Its screen then shows where to open it.', { exact: false })).toBeVisible();
+  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual(['2026-11-22']);
   await page.getByRole('button', { name: 'Your Whombats' }).click();
-  await expect(account(page)).toBeVisible();
-  await expect(page.getByText(/^Free month · until /).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your Whombat' })).toBeVisible();
+  await expect(page.getByText(/Whombat Link · Free month · until /)).toBeVisible();
   const row = page.locator('[data-link-state="on"]');
   await expect(row).toContainText('Home');
   await expect(row).toContainText('.box.whombat.app');
   // The account's Link org is in the session now; it is never the hosted list's organization.
   await page.reload();
-  await expect(account(page)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your Whombat' })).toBeVisible();
 });
 
 test('signed in, a typed code in any case and spacing; a wrong one says so; the same code again is already linked', async ({
   page,
 }) => {
   await signInNew(page);
-  await page.getByRole('button', { name: 'Link a Whombat' }).click();
-  await expect(page.getByRole('heading', { name: 'Link your Whombat' })).toBeVisible();
+  await page.goto('/add');
+  await expect(page.getByRole('heading', { name: 'Add a Whombat' })).toBeVisible();
   await page.getByLabel('Code from its screen').fill('ABCD');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('Enter the 8 letters from its screen', { exact: false })).toBeVisible();
@@ -77,12 +78,12 @@ test('signed in, a typed code in any case and spacing; a wrong one says so; the 
   const code = await fake<string>(page, 'linkCode', null);
   await page.getByLabel('Code from its screen').fill(code.replace('-', ' ').toLowerCase());
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'Add your Whombat to Whombat Link?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add this Whombat?' })).toBeVisible();
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
-  await expect(page.getByRole('heading', { name: 'Your Whombat is linked' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add it' }).click();
+  await expect(page.getByRole('heading', { name: 'Your Whombat is added' })).toBeVisible();
   await page.goto(`/link?code=${code}`);
-  await expect(page.getByRole('heading', { name: 'Your Whombat is already linked' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your Whombat is already in your account' })).toBeVisible();
 });
 
 test('a third Whombat in the free month asks for a card; Checkout comes back and the subscription shows', async ({
@@ -92,13 +93,13 @@ test('a third Whombat in the free month asks for a card; Checkout comes back and
   for (const name of ['Home', 'Office']) {
     await page.goto(`/link?code=${await fake<string>(page, 'linkCode', name)}`);
     await agree(page);
-    await page.getByRole('button', { name: 'Link it' }).click();
-    await expect(page.getByRole('heading', { name: `${name} is linked` })).toBeVisible();
+    await page.getByRole('button', { name: 'Add it' }).click();
+    await expect(page.getByRole('heading', { name: `${name} is added` })).toBeVisible();
   }
   await fake(page, 'checkoutLag', 1_500);
   await page.goto(`/link?code=${await fake<string>(page, 'linkCode', 'Cabin')}`);
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
+  await page.getByRole('button', { name: 'Add it' }).click();
   await expect(
     page.getByText('You can link 2 Whombats during the free month.', { exact: false }),
   ).toBeVisible();
@@ -115,18 +116,20 @@ test('a third Whombat in the free month asks for a card; Checkout comes back and
   await expect(page).toHaveURL(/\/billing$/);
 });
 
-test('Subscribe from Your Whombats, a free account, Included, Manage only with a card', async ({ page }) => {
+test('Subscribe from the account, a free account, Included, Manage only with a card', async ({ page }) => {
   await signInNew(page);
+  await page.goto('/account');
   await expect(page.getByText('Not subscribed')).toBeVisible();
   await expect(page.getByText('Your first month is free.', { exact: false })).toBeVisible();
   // Nothing to pay for before a Whombat is linked: the free month starts with the first one, never with Subscribe.
-  await expect(page.getByText('Link a Whombat to start your free month.')).toBeVisible();
+  await expect(page.getByText('Add a Whombat to start your free month.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Subscribe' })).toHaveCount(0);
   await page.goto(`/link?code=${await fake<string>(page, 'linkCode', 'Home')}`);
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
-  await page.getByRole('button', { name: 'Your Whombats' }).click();
-  await expect(page.getByText(/^Free month · until /).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Add it' }).click();
+  await expect(page.getByRole('heading', { name: /is added$/ })).toBeVisible();
+  await page.goto('/account');
+  await expect(page.getByText(/Free month · until /).first()).toBeVisible();
   await fake(page, 'linkPlan', { manual: true });
   await liveIn(page);
   await page.getByRole('button', { name: 'Add a card' }).click();
@@ -158,8 +161,9 @@ test('the free month: Checkout by the year, the code on the payment page; busy s
   await signInNew(page);
   await page.goto(`/link?code=${await fake<string>(page, 'linkCode', 'Home')}`);
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
-  await page.getByRole('button', { name: 'Your Whombats' }).click();
+  await page.getByRole('button', { name: 'Add it' }).click();
+  await expect(page.getByRole('heading', { name: /is added$/ })).toBeVisible();
+  await page.goto('/account');
   await expect(account(page)).toBeVisible();
   await expect(page.getByText('Have a code? Enter it on the payment page.')).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveCount(0);
@@ -193,8 +197,9 @@ test('a Whombat removed from Link after a confirmation; Link ending says until w
   await signInNew(page);
   await page.goto(`/link?code=${await fake<string>(page, 'linkCode', 'Home')}`);
   await agree(page);
-  await page.getByRole('button', { name: 'Link it' }).click();
-  await page.getByRole('button', { name: 'Your Whombats' }).click();
+  await page.getByRole('button', { name: 'Add it' }).click();
+  await expect(page.getByRole('heading', { name: /is added$/ })).toBeVisible();
+  await page.goto('/account');
   const box =
     (await fake<{ link: { boxes: { device: string }[] } }>(page, 'state')).link.boxes[0]?.device ?? '';
   await fake(page, 'linkPlan', { state: 'cancelled' });
@@ -208,10 +213,12 @@ test('a Whombat removed from Link after a confirmation; Link ending says until w
   await fake(page, 'linkBox', box, { state: 'ended', graceEndsAt: null });
   await page.reload();
   await expect(page.getByTestId('link-notice')).toContainText('Whombat Link has ended.');
-  await page.getByRole('button', { name: 'Remove Home from Whombat Link' }).click();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'More for Home' }).click();
+  await page.getByRole('button', { name: 'Remove from Whombat Link' }).click();
   await expect(page.getByText('Remove Home from Whombat Link?', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Remove it' }).click();
-  await expect(page.getByText('No Whombats linked yet.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
 });
 
 test('the legal pages stay public', async ({ page }) => {

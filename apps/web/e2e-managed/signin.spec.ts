@@ -1,5 +1,5 @@
 /**
- * First sign-in the way control sends it (fragment token): a new account lands on Your Whombats (Whombat Link,
+ * First sign-in the way control sends it (fragment token): a new account lands on the home (Whombat Link,
  * LNK-35); an account with an organization from before Link on the hosted list.
  */
 import { expect, test } from '@playwright/test';
@@ -11,40 +11,45 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
-test('the emailed link (#token=…&next=…) signs in, leaves no token in the address, and a new account lands on Your Whombats', async ({
+test('the emailed link (#token=…) signs in, leaves no token in the address, and a new account lands on the home', async ({
   page,
 }) => {
   await page.getByLabel('Email').fill('mara@burrowhq.example');
   await page.getByRole('button', { name: 'Email me a link' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const link = await fake<string>(page, 'lastLink');
-  expect(link).toMatch(/^\/auth\/verify#token=[0-9a-f]+&next=%2Fappliances$/);
+  expect(link).toMatch(/^\/auth\/verify#token=[0-9a-f]+$/);
   await page.goto(link);
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
+  // No Whombat yet: how to add the first, with the code field right there.
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
   expect(page.url()).not.toContain('token');
-  await expect(page).toHaveURL(/\/account$/);
-  await expect(page.getByText('No Whombats linked yet.', { exact: false })).toBeVisible();
-  // No organization naming, no waitlist, no plans: the old addresses show the same page.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel('Code from its screen')).toBeVisible();
+  // No organization naming, no waitlist, no plans: the old addresses show the home or the account.
   await page.goto('/signup');
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await page.goto('/appliances');
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
   await page.goto('/billing');
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
 });
 
-test('an account with an organization from before Link goes to its list', async ({ page }) => {
+test('an account with an organization from before Link lands on the home; its list stays at /appliances', async ({
+  page,
+}) => {
   await page.getByLabel('Email').fill('mara@burrowhq.example');
   await page.getByRole('button', { name: 'Email me a link' }).click();
   await fake(page, 'nearby', []);
   await fake(page, 'existingOrg');
   await page.goto(await fake<string>(page, 'lastLink'));
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/appliances');
   await expect(page.getByRole('heading', { name: 'Pick a Whombat' })).toBeVisible();
-  await expect(page).toHaveURL(/\/appliances$/);
   await page.getByRole('button', { name: 'Whombat Link' }).click();
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open a Whombat here' }).click();
-  await expect(page.getByRole('heading', { name: 'Pick a Whombat' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
 });
 
 test('/waitlist and /signup signed out are the sign-in page', async ({ page }) => {
@@ -71,8 +76,10 @@ test('first run in one page: verify → straight to the Whombat found on this ne
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const link = await fake<string>(page, 'lastLink');
   await fake(page, 'existingOrg');
-  // The link opens in this tab (as an email client would), then everything stays in-page.
+  // The link opens in this tab (as an email client would), then the organization's list.
   await page.goto(link);
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await page.goto('/appliances');
   // No Whombats yet and one on this network: its claim, without “Claim a Whombat” (AP-75).
   await expect(page).toHaveURL(/\/appliances\/claim$/);
   await expect(page.getByRole('heading', { name: 'We found a Whombat on your network' })).toBeVisible();
@@ -92,6 +99,8 @@ test('first run with several Whombats on this network: straight to picking one',
   await fake(page, 'nearby', ['fresh', 'contested']);
   await fake(page, 'existingOrg');
   await page.goto(await fake<string>(page, 'lastLink'));
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await page.goto('/appliances');
   await expect(page.getByRole('heading', { name: 'We found 2 Whombats on your network' })).toBeVisible();
 });
 
@@ -113,6 +122,6 @@ test('the one-use token is sent once, even under StrictMode', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const link = await fake<string>(page, 'lastLink');
   await page.goto(link);
-  await expect(page.getByRole('heading', { name: 'Your Whombats' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
   expect(await fake<number>(page, 'verifyCalls')).toBe(1);
 });

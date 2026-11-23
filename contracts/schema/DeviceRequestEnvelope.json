@@ -47,6 +47,7 @@
         "link.begin",
         "link.status",
         "link.leave",
+        "link.whombats",
         "push.register",
         "push.unregister",
         "support.heartbeat"
