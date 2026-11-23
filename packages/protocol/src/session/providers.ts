@@ -70,6 +70,8 @@ export const APPLIANCE_EVENT_TYPES = [
   'link.off',
   'link.state_changed',
   'update.channel_set',
+  // Email through Whombat Link (4.15; `LinkMailAuditPayload`): the owner changed either choice.
+  'link.mail_set',
   // The owner's own mail server (1.1, CT-1308; `MailAuditPayload`): set or replaced, removed. Never the password.
   'mail.set',
   'mail.removed',

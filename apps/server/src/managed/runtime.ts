@@ -25,6 +25,7 @@ import { HostHardwareService } from './host-hardware';
 import { HostMetricsService } from './host-metrics';
 import { HostNetworkService } from './host-network';
 import { type LicenceOptions, LicenceService } from './licence';
+import { LinkEmail, setLinkEmailFor } from './link/mail';
 import { followLinkNotices, registerLinkSource } from './link/notices';
 import { registeredAtControl } from './link/origin';
 import { PushTokens } from './link/push-tokens';
@@ -83,6 +84,7 @@ export class ManagedRuntime {
   readonly link: LinkService;
   /** Phones' own push tokens, registered at control while Link runs (LNK-36). */
   readonly pushTokens: PushTokens;
+  readonly linkEmail: LinkEmail;
   readonly trust: TrustService;
   readonly receipts: CommandReceipts;
   readonly dispatcher: SessionDispatcher;
@@ -161,6 +163,12 @@ export class ManagedRuntime {
     };
     this.pushTokens = new PushTokens(services, options.manager, this.link);
     this.trust = new TrustService(services, options.manager, options.appliancePeerId, push);
+    // Email through Link: the owner's two choices, told to control, and what goes out by email through it.
+    this.linkEmail = new LinkEmail(services, options.manager, this.link, () =>
+      this.trust.personAccountId(services.db),
+    );
+    setLinkEmailFor(services, this.linkEmail);
+    this.link.mailChoices = () => this.linkEmail.choices();
     // The own address follows Link (LNK-05): the manager answers it only while Link runs, with the label control gave.
     // A manager from before Link has no Link routes: then the runtime draws the label itself, as it did.
     this.ownAddress = new OwnAddressService({
@@ -226,6 +234,7 @@ export class ManagedRuntime {
     this.dispatcher.manager = options.manager;
     this.dispatcher.link = this.link;
     this.dispatcher.pushTokens = this.pushTokens;
+    this.dispatcher.linkEmail = this.linkEmail;
     this.events = new SessionEventLog(services, {
       maxAgeMs: options.events?.maxAgeMs ?? config.WHOMBAT_SESSION_EVENTS_MAX_AGE_HOURS * 3600_000,
       maxCount: options.events?.maxCount ?? config.WHOMBAT_SESSION_EVENTS_MAX_COUNT,
@@ -333,8 +342,13 @@ export class ManagedRuntime {
         return null;
       }),
     );
+    // The owner's choices for email through Link, shown with Link's state from its first read.
+    await this.linkEmail
+      .load()
+      .catch((err) => this.services.log.warn({ err: String(err) }, 'link: the email choices weren’t read'));
     // Whombat Link's state before anything that follows it starts (LNK-02).
     await this.link.start().catch((err) => this.services.log.warn({ err: String(err) }, 'link: not started'));
+    void this.linkEmail.tell();
     registerLinkSource(() => this.link);
     this.offLinkNotices = followLinkNotices(this.services, this.link, this.controlPush, async () => {
       const id = await this.trust.personAccountId(this.services.db).catch(() => null);
@@ -379,6 +393,8 @@ export class ManagedRuntime {
       void this.trust.reportPending();
       // Phones' tokens Link couldn't register yet, and handles of removed devices (LNK-36).
       void this.pushTokens.sync().catch(() => {});
+      // The email choices control hasn't taken yet.
+      void this.linkEmail.tell();
       // Diagnostic bundles older than 7 days go (a signed `diagnostics.expired` each).
       this.diagnostics
         .sweep()
@@ -423,6 +439,8 @@ export class ManagedRuntime {
     void this.pushTokens
       .sync()
       .catch((err) => this.services.log.warn({ err: String(err) }, 'push: tokens not synced'));
+    // Control may not have the email choices (a box it didn't know, Link on again).
+    this.linkEmail.linkMoved();
     void this.remoteHelp?.refresh();
     // Kit envelope copies at control follow Link (LNK-05): the set is declared again once Link runs.
     this.trust.boxPasskeys.declareSoon();

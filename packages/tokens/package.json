@@ -1,7 +1,7 @@
 {
   "name": "@whombat/tokens",
   "license": "AGPL-3.0-only",
-  "version": "4.14.0",
+  "version": "4.15.0",
   "private": true,
   "type": "module",
   "description": "The design tokens: colors, type, spacing, radii, shadows and the faces, for web (tokens.css) and React Native.",

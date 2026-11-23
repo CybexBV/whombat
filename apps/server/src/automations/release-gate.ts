@@ -32,7 +32,7 @@ export const FIND_MY_AUTOMATIONS_LATER = 'Find My automations come with the next
  * The first schema of a release that runs findmy automations (`runtime_releases.schema`): a release the box would go
  * back to knows them when it recorded this migration or a later one.
  */
-export const FIND_MY_SCHEMA = '0016_findmy_places';
+export const FIND_MY_SCHEMA = '0017_findmy_places';
 
 type Json = unknown;
 
@@ -145,7 +145,7 @@ export async function releaseSchema(db: Database, releaseId: string): Promise<st
   return row?.schema ?? null;
 }
 
-/** Whether a recorded schema (`0016_findmy_places`) is `FIND_MY_SCHEMA` or later: migrations are numbered in order. */
+/** Whether a recorded schema (`0017_findmy_places`) is `FIND_MY_SCHEMA` or later: migrations are numbered in order. */
 export const schemaKnowsFindMy = (schema: string | null): boolean =>
   schema !== null && schema >= FIND_MY_SCHEMA;
 

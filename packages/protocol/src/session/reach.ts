@@ -18,6 +18,16 @@ export const LinkPendingSummary = z.object({ code: LinkCode, url: LinkPageUrl, e
 export type LinkPendingSummary = z.infer<typeof LinkPendingSummary>;
 
 /**
+ * Email through Whombat Link (4.15; whombat-link.md, link-email.md): the owner's two choices. `offline` (on unless the
+ * owner turned it off): Whombat Link emails the Link account when it stops hearing from this box. `notifications` (off
+ * unless the owner turned it on): this box's notification emails and notices go out through Whombat Link, to the Link
+ * account's address, saying how many things wait, never what they are. Kept on the box in any Link state; they do
+ * something only while Link runs, and a mail server of the owner's own still sends the notification emails itself.
+ */
+export const LinkMailSummary = z.object({ offline: z.boolean(), notifications: z.boolean() });
+export type LinkMailSummary = z.infer<typeof LinkMailSummary>;
+
+/**
  * The box's Link as the person's devices see it. `pending` only while it starts; `waitingForAddress` when the day's
  * new addresses ran out; `graceEndsAt` only in `grace`; `trialEndsAt` while the free month runs; `email` the account's.
  */
@@ -29,6 +39,8 @@ export const LinkSummary = z.object({
   graceEndsAt: Timestamp.optional(),
   trialEndsAt: Timestamp.optional(),
   email: Email.optional(),
+  /** The owner's choices for email through Link (4.15); absent from a box before 4.15. */
+  mail: LinkMailSummary.optional(),
 });
 export type LinkSummary = z.infer<typeof LinkSummary>;
 
@@ -53,6 +65,16 @@ export const LinkOnInput = z.strictObject({});
 export const LinkOffInput = z.strictObject({});
 export const LinkOutput = z.object({ link: LinkSummary });
 export type LinkOutput = z.infer<typeof LinkOutput>;
+
+/**
+ * `link.mail.set` (owners, 4.15; audited `link.mail_set`): change either choice (a member left out keeps its value),
+ * answers Link with the choices now. The box tells control at once when control knows it, and again later when that
+ * fails. A box before 4.15 answers `unknown_op`.
+ */
+export const LinkMailSetInput = z.strictObject({
+  offline: z.boolean().optional(),
+  notifications: z.boolean().optional(),
+});
 
 /**
  * Why `link.on` or `link.off` was refused (`error.details.code`). `whombat_` because `link_*` already names the device
@@ -109,6 +131,14 @@ export const PushTokenClearInput = z.strictObject({});
 /** Payload of `link.on`, `link.off` (who) and `link.state_changed` (control moved it: no account). */
 export const LinkAuditPayload = z.object({ byAccountId: AccountId.optional(), state: LinkState });
 export type LinkAuditPayload = z.infer<typeof LinkAuditPayload>;
+
+/** Payload of `link.mail_set` (4.15): who, and both choices as they are now. */
+export const LinkMailAuditPayload = z.object({
+  byAccountId: AccountId,
+  offline: z.boolean(),
+  notifications: z.boolean(),
+});
+export type LinkMailAuditPayload = z.infer<typeof LinkMailAuditPayload>;
 
 /** Payload of `update.channel_set`: who chose which channel. */
 export const UpdateChannelAuditPayload = z.object({ byAccountId: AccountId, channel: UpdateChannel });

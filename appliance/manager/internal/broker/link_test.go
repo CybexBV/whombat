@@ -350,3 +350,51 @@ func TestLinkWhombatsRoute(t *testing.T) {
 		t.Fatalf("no keeper: %d %v", resp.StatusCode, m)
 	}
 }
+
+// Email through Link (4.15): the owner's choices and one email go to control as they are whenever control knows the box
+// (never with Link off), a malformed body never leaves the box, and control's refusal or outage is said as usual.
+func TestLinkMailRoutes(t *testing.T) {
+	t.Parallel()
+	fl := &fakeLink{}
+	fc, sock := startLink(t, fl)
+	c := client(sock)
+	choices := `{"offline":true,"notifications":false}`
+	mail := `{"kind":"waiting","ref":"r3fXk2pQ9vLm0aZt","count":2,"cadence":"daily","path":"/home"}`
+	fl.set(protocol.LinkStateOff)
+	for _, path := range []string{local.ManagerPathLinkMail, local.ManagerPathMailSend} {
+		if resp, m := post(t, c, path, map[string]string{local.ManagerPathLinkMail: choices, local.ManagerPathMailSend: mail}[path]); resp.StatusCode != 404 {
+			t.Fatalf("off %s: %d %v", path, resp.StatusCode, m)
+		}
+	}
+	for _, st := range []protocol.LinkState{protocol.LinkStateOn, protocol.LinkStateEnded} {
+		fl.set(st)
+		if resp, m := post(t, c, local.ManagerPathLinkMail, choices); resp.StatusCode != 200 || m["ok"] != true {
+			t.Fatalf("%s choices: %d %v", st, resp.StatusCode, m)
+		}
+	}
+	if resp, m := post(t, c, local.ManagerPathMailSend, mail); resp.StatusCode != 200 || m["ok"] != true {
+		t.Fatalf("mail: %d %v", resp.StatusCode, m)
+	}
+	var got []device.MailSendRequest
+	var chosen []device.LinkMailSetRequest
+	fc.Set(func(c *fakecontrol.Control) { got, chosen = c.Mails, c.MailChoices })
+	if len(chosen) != 2 || !chosen[0].Offline || chosen[0].Notifications {
+		t.Fatalf("choices at control: %+v", chosen)
+	}
+	if len(got) != 1 || got[0].Kind != "waiting" || got[0].Count == nil || *got[0].Count != 2 || got[0].Path == nil {
+		t.Fatalf("mail at control: %+v", got)
+	}
+	for _, bad := range []string{`{"kind":"waiting","ref":"r3fXk2pQ9vLm0aZt","count":2,"cadence":"daily","to":"a@example.com"}`, `{"kind":"text","ref":"r3fXk2pQ9vLm0aZt"}`} {
+		if resp, _ := post(t, c, local.ManagerPathMailSend, bad); resp.StatusCode != 400 {
+			t.Fatalf("%s: %d", bad, resp.StatusCode)
+		}
+	}
+	fc.Set(func(c *fakecontrol.Control) { c.MailRefuse = "mail_off" })
+	if resp, m := post(t, c, local.ManagerPathMailSend, mail); resp.StatusCode != 502 || m["error"].(map[string]any)["code"] != "control_refused" {
+		t.Fatalf("refused: %d %v", resp.StatusCode, m)
+	}
+	fc.SetDown(true)
+	if resp, _ := post(t, c, local.ManagerPathLinkMail, choices); resp.StatusCode != 503 {
+		t.Fatalf("down: %d", resp.StatusCode)
+	}
+}

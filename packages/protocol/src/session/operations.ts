@@ -264,6 +264,7 @@ import {
   PasskeysPolicyInput,
 } from './passkeys.js';
 import {
+  LinkMailSetInput,
   LinkOffInput,
   LinkOnInput,
   LinkOutput,
@@ -659,6 +660,8 @@ const SESSION_SPECS = [
   session('reach.get', ReachGetInput, ReachGetOutput, 'app', false),
   session('link.on', LinkOnInput, LinkOutput, 'app'),
   session('link.off', LinkOffInput, LinkOutput, 'app'),
+  // The owner's choices for email through Whombat Link (4.15).
+  session('link.mail.set', LinkMailSetInput, LinkOutput, 'app'),
   // The account's other Whombats, for the menu under the box's name (4.14).
   session('link.whombats', LinkWhombatsInput, LinkWhombatsOutput, 'app', false),
   session('updates.channel.get', UpdatesChannelGetInput, UpdatesChannelOutput, 'app', false),

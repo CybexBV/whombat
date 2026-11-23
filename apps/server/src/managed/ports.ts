@@ -28,7 +28,9 @@ import type {
   RuntimeKitCredentialsResponse,
   RuntimeKitEnvelopesRequest,
   RuntimeKitEnvelopesResponse,
+  RuntimeLinkMailSetRequest,
   RuntimeLinkWhombatsResponse,
+  RuntimeMailSendRequest,
   RuntimePushRegisterRequest,
   RuntimePushRegisterResponse,
   RuntimePushUnregisterRequest,
@@ -215,6 +217,13 @@ export interface ManagerPort extends TailscalePort {
    * 502 `control_refused`.
    */
   linkWhombats?(): Promise<RuntimeLinkWhombatsResponse>;
+  /**
+   * Email through Whombat Link (4.15): the owner's choices (`link.mail.set`) and one email to the Link account's own
+   * address (`mail.send`). 404 while control doesn't know the box (an older manager answers 404 too); 503 when control
+   * can't be reached; 502 `control_refused` (Link not running, the choice says no, the day's limit).
+   */
+  linkMailSet?(request: z.input<typeof RuntimeLinkMailSetRequest>): Promise<void>;
+  mailSend?(request: z.input<typeof RuntimeMailSendRequest>): Promise<void>;
   /** The update channel (4.4): read and the owner's change. 404 `update.channel_unavailable`; 409 `busy`. */
   updateChannel?(): Promise<UpdateChannelResponse>;
   updateChannelSet?(request: z.input<typeof UpdateChannelSetRequest>): Promise<UpdateChannelResponse>;

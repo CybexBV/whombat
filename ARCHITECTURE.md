@@ -88,7 +88,13 @@ manager (the helper keeps it). Grace is one Inbox item and one push asking to tu
 details' paper copy; once ended, one Inbox item says what still works and how to come back
 (`link/notices.ts`). The screen shows Link's code while it starts and Tailscale's sign-in link (`ConsoleState.reach`). A
 phone gives its own push token to the box (`push.token.set`); the box keeps it on the device's endpoint and registers it
-at control while Link runs (`link/push-tokens.ts`), and pushes go to that handle. A box control registered before Link
+at control while Link runs (`link/push-tokens.ts`), and pushes go to that handle. Email through Link
+(`link/mail.ts`, [link-email.md](docs/decisions/link-email.md)): the owner's two choices (told when the box goes offline,
+on; notification emails through Link, off) are kept on the box, signed (`link.mail_set`) and told to control whenever it
+knows the box (`link.mail.set`); control emails the Link account when it hasn't heard from the box for two hours, and,
+when the owner chose it, the digest sends a count of what waits (`mail.send`, kind `waiting`) unless a mail server of the
+owner's own sends it, and every fixed-word notice goes by email too (kind `notice`). The only recipient is the Link
+account's own email. A box control registered before Link
 (Home, the DEV stack box; `device.json` names an appliance route other than `local`) keeps its claim through control,
 its reports to control and links to the hosted app; every other box is claimed on and linked to its own pages (its own
 address, else an HTTPS way such as its Tailscale name, else its address on the local network; no address at all while
@@ -1403,14 +1409,19 @@ Setup and operation: `docs/github.md`.
   live on the web (the host's `vnc` console), a picture of it on demand on the phone, Unlock, the Mac's password sent
   once to the Mac (sealed in the step's mutation, so no cache keeps it), and Whombat Helper with its Accessibility.
   The Mac's own words about a step (a reason it failed, a note on one that worked) reach the person and the assistant.
-  A Mac's page also shows Find My (`hosts.findMy*`, `hosts/findmy.ts`): Whombat reads the Find My app through Whombat
-  Helper as a person reads it, leaving a Mac someone used in the last minute alone and locking a locked one again
-  afterwards; it reads the People tab and each person's street, finds their places with the Mac's own geocoder
-  (`map.geocode`) and has the Mac draw the map (`map.snapshot`), and “Show exactly” cuts Find My's own map of one person
-  from the screen. What was read lives in the box's memory only and goes an hour after the last look; it is never
-  logged and none of its steps is signed. `mac_ui` also runs an element's own action by name (“Play”) and quits an
+  Find My is a connection of its own that names one Mac (catalog `findmy`, `things/kinds/findmy.ts`,
+  `hosts/findmy-connection.ts`; its check is the hosts fleet's word that the Mac is there with a new enough helper):
+  Whombat reads the Mac's Find My app through Whombat Helper as a person reads it (`hosts.findMy*`, `hosts/findmy.ts`),
+  leaving a Mac someone used in the last minute alone and locking a locked one again afterwards; it reads the People tab
+  and each person's street, finds their places with the Mac's own geocoder (`map.geocode`) and has the Mac draw the map
+  (`map.snapshot`), and “Show exactly” cuts Find My's own map of one person from the screen. It reads while someone looks
+  at the connection's page, and in the background (`hosts/findmy-background.ts`) when the person picked an interval or a
+  `findmy` automation listens. What was read lives in the box's memory; only for a connection an automation listens to
+  does the box keep each person's last place words (`findmy_places`) and sign one `findmy.place_changed` per change,
+  which starts the automations (`hosts/findmy-places.ts`). The assistant asks through the connection's `findmy_people`.
+  `mac_ui` also runs an element's own action by name (“Play”) and quits an
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
-  ([macos-servers.md](docs/decisions/macos-servers.md)).
+  ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md)).
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly

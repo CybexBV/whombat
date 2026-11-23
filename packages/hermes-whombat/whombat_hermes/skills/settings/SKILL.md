@@ -68,7 +68,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 
 ## Where everything is
 
-### You — `references/you.md` (24 settings)
+### You — `references/you.md` (25 settings)
 - `you.profile` Settings → You → Profile: your name, title and photo, and how Chat settles finished threads
 - `you.notifications` Settings → You → Notifications: what Whombat tells you about, by push and by email
 - `you.devices` Settings → You → Devices: the phones and computers signed in, and your passkeys

@@ -109,3 +109,13 @@ export const RuntimePushUnregisterResponse = DEVICE_OPS['push.unregister'].respo
 export const RuntimeLinkWhombatsRequest = DEVICE_OPS['link.whombats'].body;
 export const RuntimeLinkWhombatsResponse = DEVICE_OPS['link.whombats'].response;
 export type RuntimeLinkWhombatsResponse = z.infer<typeof RuntimeLinkWhombatsResponse>;
+
+/**
+ * `POST /v1/link/mail` and `POST /v1/runtime/mail` (4.15): the device ops `link.mail.set` and `mail.send`, bodies and
+ * answers exactly their own (email through Whombat Link).
+ */
+export const RuntimeLinkMailSetRequest = DEVICE_OPS['link.mail.set'].body;
+export const RuntimeLinkMailSetResponse = DEVICE_OPS['link.mail.set'].response;
+export const RuntimeMailSendRequest = DEVICE_OPS['mail.send'].body;
+export type RuntimeMailSendRequest = z.infer<typeof RuntimeMailSendRequest>;
+export const RuntimeMailSendResponse = DEVICE_OPS['mail.send'].response;

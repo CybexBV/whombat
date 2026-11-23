@@ -266,6 +266,18 @@ export const MANAGER_PATHS = {
    * `control_refused`.
    */
   linkWhombats: '/v1/link/whombats',
+  /**
+   * Runtime (4.15): the device op `link.mail.set`, body and answer its own (`RuntimeLinkMailSetRequest`): the owner's
+   * choices for email through Link. 404 `unavailable` while control doesn't know the box (Link off, or an older
+   * manager); 503 `unavailable` when control can't be reached; 502 `control_refused`.
+   */
+  linkMail: '/v1/link/mail',
+  /**
+   * Runtime (4.15): the device op `mail.send`, body and answer its own (`RuntimeMailSendRequest`): one email to the
+   * Link account's own address. 404 `unavailable` while control doesn't know the box (Link off, or an older manager);
+   * 503 `unavailable`; 502 `control_refused` (Link not running, the owner's choice says no, the day's limit).
+   */
+  mailSend: '/v1/runtime/mail',
   /** Runtime (4.4): `UpdateChannelRequest` → `UpdateChannelResponse`. 404 `update.channel_unavailable`. */
   updateChannel: '/v1/update/channel',
   /** Runtime (the owner's, 4.4): `UpdateChannelSetRequest` → `UpdateChannelResponse`. 409 `busy` while an update runs. */

@@ -48,6 +48,8 @@
         "link.status",
         "link.leave",
         "link.whombats",
+        "link.mail.set",
+        "mail.send",
         "push.register",
         "push.unregister",
         "support.heartbeat"

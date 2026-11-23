@@ -209,6 +209,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+local.ManagerPathLinkOff, s.onlyN(rt, linkBodyMax, s.linkOff))
 	mux.HandleFunc("POST "+local.ManagerPathLinkClaim, s.onlyN(rt, linkBodyMax, s.linkClaim))
 	mux.HandleFunc("POST "+local.ManagerPathLinkWhombats, s.onlyN(rt, linkBodyMax, s.linkWhombats))
+	mux.HandleFunc("POST "+local.ManagerPathLinkMail, s.onlyN(rt, linkBodyMax, s.linkMail))
+	mux.HandleFunc("POST "+local.ManagerPathMailSend, s.onlyN(rt, linkBodyMax, s.mailSend))
 	mux.HandleFunc("POST "+local.ManagerPathPushRegister, s.onlyN(rt, linkBodyMax, s.pushRegister))
 	mux.HandleFunc("POST "+local.ManagerPathPushUnregister, s.onlyN(rt, linkBodyMax, s.pushUnregister))
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressState, s.onlyN(rt, ownAddressBodyMax, s.ownAddressState))

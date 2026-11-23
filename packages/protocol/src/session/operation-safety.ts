@@ -662,6 +662,8 @@ const TABLE = {
   'reach.get': READ,
   'link.on': NEVER,
   'link.off': NEVER,
+  // Sets both choices to a value: once committed it holds; telling control follows by itself.
+  'link.mail.set': RECEIPT,
   'link.whombats': READ,
   'updates.channel.get': READ,
   'updates.channel.set': NEVER,

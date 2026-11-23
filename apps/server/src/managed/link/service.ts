@@ -24,7 +24,12 @@ import {
   type LocalLinkStatus,
 } from '@whombat/control-contracts/local';
 import type { LinkState } from '@whombat/protocol';
-import type { LinkSummary, LinkWhombatSummary, TailscaleStatus } from '@whombat/protocol/session';
+import type {
+  LinkMailSummary,
+  LinkSummary,
+  LinkWhombatSummary,
+  TailscaleStatus,
+} from '@whombat/protocol/session';
 import { externalEffect } from '../../commit/scope';
 import type { Services } from '../../services';
 import { appendApplianceEvent } from '../audit';
@@ -128,6 +133,8 @@ export class LinkService {
   #whombats: { at: number; list: LinkWhombatSummary[] } | null = null;
   /** The ask in flight: menus opened at the same moment share it. */
   #askingWhombats: Promise<LinkWhombatSummary[]> | null = null;
+  /** The owner's choices for email through Link (`mail.ts`), shown with Link; null where nothing keeps them. */
+  mailChoices: (() => LinkMailSummary) | null = null;
 
   constructor(private readonly options: LinkServiceOptions) {
     this.#view = this.assumedView();
@@ -426,7 +433,8 @@ export class LinkService {
   /** Link as the person's devices see it (`reach.get`); null on a box that can't have Link. */
   summary(): LinkSummary | null {
     if (!this.#view.enabled) return null;
-    return linkSummary(this.#view.link);
+    const mail = this.mailChoices?.();
+    return { ...linkSummary(this.#view.link), ...(mail ? { mail } : {}) };
   }
 }
 

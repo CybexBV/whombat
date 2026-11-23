@@ -152,6 +152,10 @@ type Control struct {
 	// Whombats: what link.whombats answers (nil: none); WhombatsCalls counts the asks.
 	Whombats      []device.LinkWhombat
 	WhombatsCalls int
+	// MailChoices: the link.mail.set bodies; Mails: the mail.send bodies; MailRefuse: an error code mail.send answers.
+	MailChoices []device.LinkMailSetRequest
+	Mails       []device.MailSendRequest
+	MailRefuse  string
 
 	v6 *http.Server // the IPv6 loopback listener of ServeDualStack
 }
@@ -478,6 +482,28 @@ func (c *Control) serve(w http.ResponseWriter, r *http.Request) {
 			list = []device.LinkWhombat{}
 		}
 		_ = json.NewEncoder(w).Encode(device.LinkWhombatsResponse{Whombats: list})
+	case device.DeviceOpNameLinkMailSet:
+		req, err := device.ParseLinkMailSetRequest(env.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		c.MailChoices = append(c.MailChoices, *req)
+		_ = json.NewEncoder(w).Encode(device.LinkMailSetResponse{Ok: true})
+	case device.DeviceOpNameMailSend:
+		req, err := device.ParseMailSendRequest(env.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if c.MailRefuse != "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": c.MailRefuse, "message": "refused"}})
+			return
+		}
+		c.Mails = append(c.Mails, *req)
+		_ = json.NewEncoder(w).Encode(device.MailSendResponse{Ok: true})
 	case device.DeviceOpNameSupportHeartbeat:
 		req, err := device.ParseSupportHeartbeatRequest(env.Body)
 		if err != nil {

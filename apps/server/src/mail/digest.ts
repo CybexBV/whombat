@@ -23,15 +23,22 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'driz
 import { webOrigin } from '../commands/burrows';
 import { accounts, burrows, notifications, principals } from '../db/schema/index';
 import { zoneOf } from '../domain/notify';
+import { linkEmailOf } from '../managed/link/mail';
 import type { PushSender } from '../push/sender';
 import { shortName } from '../read/principals';
 import type { Services } from '../services';
 import type { BoxMail } from './box';
 import { renderEmailHtml, sentBy } from './template';
 
-/** Whether this Whombat can email notifications: a mail server, configured or the person's own (HE-56, HE-S225). */
-export function emailNotificationsAvailable(mail: Pick<BoxMail, 'availableNow'>): boolean {
-  return mail.availableNow();
+/**
+ * Whether this Whombat can email notifications: a mail server, configured or the person's own (HE-56, HE-S225), or
+ * Whombat Link when the owner chose it (link-email.md).
+ */
+export function emailNotificationsAvailable(
+  mail: Pick<BoxMail, 'availableNow'>,
+  viaLink: { sendsWaiting(): boolean } | null = null,
+): boolean {
+  return mail.availableNow() || Boolean(viaLink?.sendsWaiting());
 }
 
 /**
@@ -47,7 +54,7 @@ export function notificationCapabilities(
   services: Pick<Services, 'boxMail' | 'push'>,
 ): BootstrapCapabilities {
   return {
-    emailNotifications: emailNotificationsAvailable(services.boxMail),
+    emailNotifications: emailNotificationsAvailable(services.boxMail, linkEmailOf(services)),
     webPush: webPushAvailable(services.push),
   };
 }
@@ -208,7 +215,9 @@ export class EmailDigest {
 
   /** One pass (tests call it with a fake clock). Returns how many emails and items went out. */
   async runOnce(now: Date = this.services.clock()): Promise<{ emails: number; items: number }> {
-    if (!(await this.services.boxMail.available())) return { emails: 0, items: 0 };
+    // The box's own mail, else Whombat Link when the owner chose it (a count only, link-email.md).
+    if (!(await this.services.boxMail.available()) && !linkEmailOf(this.services)?.sendsWaiting())
+      return { emails: 0, items: 0 };
     const candidates = await this.candidates(now);
     const byAccount = new Map<string, Candidate[]>();
     for (const c of candidates) byAccount.set(c.accountId, [...(byAccount.get(c.accountId) ?? []), c]);
@@ -316,6 +325,17 @@ export class EmailDigest {
       return rows.map((r) => r.id);
     });
     if (claimed.length === 0) return 0;
+    // Through Whombat Link it says how many things wait, never what they are; the box's page shows them.
+    const viaLink = linkEmailOf(services);
+    if (!(await services.boxMail.available()) && viaLink) {
+      await viaLink.waiting(
+        accountId,
+        claimed.length,
+        prefs.email === 'daily' ? 'daily' : 'hourly',
+        `/${first.burrowSlug}`,
+      );
+      return claimed.length;
+    }
     const chosen = list.filter((c) => claimed.includes(c.id));
     const actors = await services.db
       .select()
