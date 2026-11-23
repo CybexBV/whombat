@@ -21,6 +21,7 @@ import { dispatchEndpoints } from './dispatches.js';
 import type { AnyEndpoint } from './endpoint.js';
 import { feedbackEndpoints } from './feedback.js';
 import { filesEndpoints } from './files.js';
+import { findMyTimelineEndpoints } from './findmy-timeline.js';
 import { githubEndpoints } from './github.js';
 import { guideEndpoints } from './guides.js';
 import { healthEndpoints } from './health.js';
@@ -83,6 +84,7 @@ export * from './endpoint.js';
 export * from './errors.js';
 export * from './feedback.js';
 export * from './files.js';
+export * from './findmy-timeline.js';
 export * from './github.js';
 export * from './guides.js';
 export * from './health.js';
@@ -163,7 +165,9 @@ export interface Api {
   signins: typeof providerSignInEndpoints;
   clients: typeof clientEndpoints;
   connectors: typeof connectorEndpoints & typeof connectorAppEndpoints;
-  connections: typeof connectionEndpoints & typeof connectionCatalogEndpoints;
+  connections: typeof connectionEndpoints &
+    typeof connectionCatalogEndpoints &
+    typeof findMyTimelineEndpoints;
   attachments: typeof attachmentEndpoints;
   memory: typeof memoryEndpoints;
   skills: typeof skillLibraryEndpoints;
@@ -232,9 +236,10 @@ export const api: Api = {
   connectors: { ...connectorEndpoints, ...connectorAppEndpoints },
   /**
    * Google and Microsoft connections; since 0.48 the connections catalog (Whombat connections-catalog.md, CT-266…):
-   * shared and personal connections of catalog entries, their tools and tiers, OAuth and Nextcloud sign-ins.
+   * shared and personal connections of catalog entries, their tools and tiers, OAuth and Nextcloud sign-ins; a Find My
+   * connection's timeline (Whombat findmy-timeline.md).
    */
-  connections: { ...connectionEndpoints, ...connectionCatalogEndpoints },
+  connections: { ...connectionEndpoints, ...connectionCatalogEndpoints, ...findMyTimelineEndpoints },
   // Buzz-parity workstreams (docs/implementation/buzz-parity/PLAN.md): each file is owned by one workstream.
   attachments: attachmentEndpoints,
   memory: memoryEndpoints,
