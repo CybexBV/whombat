@@ -64,7 +64,9 @@ func Resolve(community bool, deviceEnv, envZone string, getenv func(string) stri
 	}
 	zone := protocol.OwnAddressZoneDev
 	if deviceEnv == "prod" {
-		zone = protocol.OwnAddressZoneProd
+		// Prod's zone of the contracts is whombat.app since 4.16, but a box moves there only when control says so
+		// (link.status): without the environment's zone it stays where prod boxes have been.
+		zone = protocol.OwnAddressZoneOldProd
 	}
 	if envZone != "" {
 		zone = envZone

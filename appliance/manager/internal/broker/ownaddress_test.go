@@ -86,7 +86,7 @@ func TestOwnAddressRegister(t *testing.T) {
 	if resp, _ := post(t, c, local.ManagerPathTicket, `{"class":"interactive"}`); resp.StatusCode != 200 {
 		t.Fatal("ticket", resp.StatusCode)
 	}
-	for _, bad := range []string{`{"v":1}`, `{"v":1,"label":"Maple-otter-river"}`, `{"v":1,"label":"maple-otter"}`, `{"v":2,"label":"maple-otter-river"}`, `{"v":1,"label":"maple-otter-river","x":1}`} {
+	for _, bad := range []string{`{"v":1}`, `{"v":1,"label":"Maple-otter-river"}`, `{"v":1,"label":"ma"}`, `{"v":2,"label":"maple-otter-river"}`, `{"v":1,"label":"maple-otter-river","x":1}`} {
 		if resp, _ := post(t, c, local.ManagerPathOwnAddressRegister, bad); resp.StatusCode != 400 {
 			t.Fatalf("%s: %d", bad, resp.StatusCode)
 		}
