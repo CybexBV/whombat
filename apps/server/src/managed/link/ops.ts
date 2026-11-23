@@ -30,6 +30,7 @@ import type { z } from 'zod';
 import { ApiError } from '../../lib/errors';
 import { appendApplianceEvent } from '../audit';
 import type { SessionOpContext } from '../dispatcher';
+import { ownAddressFor, whombatsFor } from '../own-address/older-apps';
 import { ManagerCallError } from '../ports';
 import { requireEnrolled, requirePerson } from '../trust';
 import { LinkRefusal, refusalOf } from './service';
@@ -77,13 +78,14 @@ export const LINK_SESSION_HANDLERS = {
     const tailscale = c.tailscale?.managed ? await c.tailscale.refresh().catch(() => null) : null;
     return {
       link: c.link?.summary() ?? null,
-      ownAddress: c.ownAddress?.summary() ?? null,
+      ownAddress: ownAddressFor(c.ownAddress?.summary() ?? null, c.principal.protocolMinor),
       tailscale: tailscale ?? null,
     };
   },
   'link.whombats': async (c: SessionOpContext): Promise<LinkWhombatsOutput> => {
     requirePerson(c.principal);
-    return { whombats: (await c.link?.whombats()) ?? [] };
+    // An older app reads only the older three-word hosts: a box it can't read is left out of its list.
+    return { whombats: whombatsFor((await c.link?.whombats()) ?? [], c.principal.protocolMinor) };
   },
   'link.on': async (c: SessionOpContext): Promise<LinkOutput> => {
     const { account, endpointId } = requirePerson(c.principal);

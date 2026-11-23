@@ -10,11 +10,14 @@
  * - draws the label (three words of the curated list) and has the manager register it; when control says it was used,
  *   draws again, at most 5 times, then waits an hour;
  * - records each new certificate's serial and public key before it serves it, then swaps the TLS context;
- * - reads the certificate watch every `OWN_ADDRESS_CT_POLL_S` and keeps what is foreign;
+ * - serves the host it is leaving too (after a rename, or the move to `whombat.app`) with that host's last pair, until
+ *   the manager's date (`leaving.until`) or the manager drops it; then it stops answering there (`onHosts`);
+ * - reads the certificate watch every `OWN_ADDRESS_CT_POLL_S` and keeps what is foreign for any host it answers at;
  * - keeps the owner's switch, and says which door classes the box takes: none without a label, `acme` with one, and
  *   `web` too while a certificate is served, the switch is on and browsers may open it (`webOpen`).
  *
- * Whenever what it takes changes, `onChange` tells the relay client, which declares it anew.
+ * Whenever what it takes changes, `onChange` tells the relay client, which declares it anew. Everything a person is
+ * sent to (the screen, device links, the claim link, HTTPS addresses) names the current host only.
  */
 import { createHash, randomInt, X509Certificate } from 'node:crypto';
 import { createSecureContext, type SecureContext } from 'node:tls';
@@ -25,6 +28,7 @@ import {
   type OwnAddressStateResponse,
 } from '@whombat/control-contracts/local';
 import { drawOwnAddressLabel } from '@whombat/core/own-address';
+import { ownAddressOrigin } from '@whombat/protocol/own-address';
 import type { RelayDoorClass } from '@whombat/protocol/relay';
 import type { OwnAddressSummary } from '@whombat/protocol/session';
 import { and, eq, gt, isNull } from 'drizzle-orm';
@@ -32,7 +36,7 @@ import { applianceState, ownAddressCerts, ownAddressForeign } from '../../db/sch
 import type { Services } from '../../services';
 import { ManagerCallError, type ManagerPort } from '../ports';
 import { ClaimLink } from './claim-link';
-import { type ForeignCertificate, foreignCertificates } from './ct';
+import { coversAny, type ForeignCertificate, foreignCertificates, knownZoneCertificate } from './ct';
 
 const STATE_ID = 1;
 
@@ -77,8 +81,9 @@ export const LABEL_PAUSE_MS = 3_600_000;
 /** A register that couldn't reach control is tried again this soon. */
 const REGISTER_RETRY_MS = 60_000;
 
-/** The certificate the box serves now. */
+/** A certificate the box serves now, for one host. */
 interface Served {
+  host: string;
   serial: string;
   spkiSha256: string;
   notBefore: Date;
@@ -106,11 +111,21 @@ export function spkiSha256(certPem: string): string {
   return createHash('sha256').update(der).digest('hex');
 }
 
+/** The host the box is leaving, while it still answers there. */
+export interface OwnAddressLeavingHost {
+  label: string;
+  host: string;
+  until: Date;
+}
+
 export class OwnAddressService {
   /** The manager's last answer; null before the first, or none (404). */
   private state: OwnAddressStateResponse | null = null;
   private ct: OwnAddressCtResponse | null = null;
-  private served: Served | null = null;
+  /** The certificates served now, by host: the current host's and the leaving one's. */
+  private readonly served = new Map<string, Served>();
+  /** The hosts last told to `onHosts` (null before the first definite answer). */
+  private lastHosts: string[] | null = null;
   private reach = true;
   /** The A3 flag: null until decided. */
   private routeOff: boolean | null = null;
@@ -130,6 +145,11 @@ export class OwnAddressService {
   onReady: (() => void) | null = null;
   /** A foreign certificate was found (`notices.ts` tells the person). */
   onForeign: ((found: ForeignCertificate[]) => void) | null = null;
+  /**
+   * The hosts the box answers at changed (a rename, a move, the leaving host stopping): `now` and `before`, current
+   * first. Only between two definite answers of the manager, never while it can't be read or the address is off.
+   */
+  onHosts: ((now: readonly string[], before: readonly string[]) => void) | null = null;
 
   constructor(private readonly options: OwnAddressOptions) {
     this.claimLink = new ClaimLink(() => options.services.clock().getTime());
@@ -175,8 +195,9 @@ export class OwnAddressService {
     this.soonUntil = this.now().getTime() + OWN_ADDRESS_SOON_FOR_MS;
   }
 
-  /** One beat of the read timer: reads the manager's state when it is due. */
+  /** One beat of the read timer: notices the leaving host's end, and reads the manager's state when it is due. */
   tick(): Promise<void> {
+    this.checkHosts();
     const due = ownAddressReadDue({
       at: this.now().getTime(),
       lastPollAt: this.lastPollAt,
@@ -192,7 +213,8 @@ export class OwnAddressService {
    * new one is served, so a short-lived certificate never ends before the runtime saw its renewal.
    */
   private renewing(): boolean {
-    const s = this.served;
+    const host = this.host();
+    const s = host ? this.served.get(host) : undefined;
     if (!s) return false;
     const life = s.notAfter.getTime() - s.notBefore.getTime();
     return this.now().getTime() >= s.notBefore.getTime() + (life * 2) / 3;
@@ -200,7 +222,10 @@ export class OwnAddressService {
 
   /** Whether the box has a label but serves no certificate yet. */
   private waiting(): boolean {
-    return Boolean(this.state?.enabled && (this.state.label === undefined || !this.served));
+    const host = this.host();
+    return Boolean(
+      this.state?.enabled && (this.state.label === undefined || !host || !this.served.has(host)),
+    );
   }
 
   private async load(): Promise<void> {
@@ -255,8 +280,35 @@ export class OwnAddressService {
       (this.sharedRouteOff || (await this.claimed()))
     )
       await this.register();
-    if (this.state?.cert && this.state.cert.serial !== this.served?.serial) await this.serveCertificate();
-    this.changed();
+    await this.settle();
+  }
+
+  /**
+   * After a new state: serves the current host's new certificate, and the leaving host's pair while none is served for
+   * it; forgets pairs of hosts it no longer answers at; tells what changed.
+   */
+  private async settle(): Promise<void> {
+    const host = this.host();
+    if (host && this.state?.cert && this.state.cert.serial !== this.served.get(host)?.serial)
+      await this.serveCertificate(host, false);
+    const leaving = this.leaving();
+    if (leaving && !this.contextFor(leaving.host)) await this.serveCertificate(leaving.host, true);
+    if (this.state) {
+      const hosts = this.hosts();
+      for (const h of [...this.served.keys()]) if (!hosts.includes(h)) this.served.delete(h);
+    }
+    this.checkHosts();
+  }
+
+  /**
+   * Takes a state the manager answered outside the regular read (a rename): serves what it can, tells the relay and
+   * the screen, and reads quickly for the new host's certificate.
+   */
+  async accept(state: OwnAddressStateResponse): Promise<void> {
+    this.state = state.enabled ? state : null;
+    this.soon();
+    await this.settle();
+    this.onReady?.();
   }
 
   /**
@@ -324,29 +376,32 @@ export class OwnAddressService {
     this.services.log.warn({}, 'own address: control called every drawn label used; trying again in an hour');
   }
 
-  /** Fetches the pair the manager hands out now, records it, and only then serves it. */
-  private async serveCertificate(): Promise<void> {
+  /**
+   * Fetches the pair the manager hands out now for `host`, records it, and only then serves it. The current host's is
+   * asked for without a host, as an older manager knows it; the leaving one's by its host.
+   */
+  private async serveCertificate(host: string, leaving: boolean): Promise<void> {
     const fetch = this.options.manager.ownAddressCert?.bind(this.options.manager);
-    const host = this.state?.host;
-    if (!fetch || !host) return;
+    if (!fetch) return;
     try {
-      const pair = await fetch();
+      const pair = await (leaving ? fetch(host) : fetch());
       if (pair.host !== host) throw new Error('the certificate is for another host');
       const spki = spkiSha256(pair.certPem);
       if (spki !== pair.spkiSha256) throw new Error('the certificate’s key isn’t the one named');
       const context = createSecureContext({ cert: pair.certPem, key: pair.keyPem, minVersion: 'TLSv1.2' });
       await this.recordOwn([pair]);
-      this.served = {
+      this.served.set(host, {
+        host,
         serial: pair.serial,
         spkiSha256: spki,
         notBefore: new Date(pair.notBefore),
         notAfter: new Date(pair.notAfter),
         context,
-      };
-      this.services.log.info({ notAfter: pair.notAfter }, 'own address: serving a new certificate');
+      });
+      this.services.log.info({ notAfter: pair.notAfter, leaving }, 'own address: serving a new certificate');
       this.onReady?.();
     } catch (err) {
-      this.services.log.warn({ err: String(err) }, 'own address: the certificate wasn’t taken');
+      this.services.log.warn({ err: String(err), leaving }, 'own address: the certificate wasn’t taken');
     }
   }
 
@@ -373,8 +428,8 @@ export class OwnAddressService {
   /** Reads what the watch found, merges what the manager ordered into the own list, and keeps what is foreign. */
   async readCt(): Promise<void> {
     const read = this.options.manager.ownAddressCt?.bind(this.options.manager);
-    const host = this.state?.host;
-    if (!read || !host) return;
+    const hosts = this.hosts();
+    if (!read || !hosts.length) return;
     let ct: OwnAddressCtResponse;
     try {
       ct = await read();
@@ -389,7 +444,7 @@ export class OwnAddressService {
         (r) => r.spki,
       ),
     );
-    const found = foreignCertificates({ host, own, certs: ct.certs });
+    const found = foreignCertificates({ hosts, own, certs: ct.certs, at: this.now().getTime() });
     const known = new Set(this.foreign.map((f) => f.spkiSha256));
     const fresh = found.filter((f) => !known.has(f.spkiSha256));
     if (!fresh.length) return;
@@ -420,7 +475,23 @@ export class OwnAddressService {
       .from(ownAddressForeign)
       .where(gt(ownAddressForeign.notAfter, now));
     const live = new Set(rows.map((r) => r.spki));
-    return this.foreign.filter((f) => live.has(f.spkiSha256));
+    return this.liveForeign().filter((f) => live.has(f.spkiSha256));
+  }
+
+  /**
+   * The foreign certificates that matter now: still within their dates, not one of Cloudflare's known ones, and for a
+   * host the box still answers at (one found for a host it left is no opening any more). While the hosts aren't known
+   * (the manager unread) every one counts: an alarm never goes quiet for lack of an answer.
+   */
+  private liveForeign(): (typeof this.foreign)[number][] {
+    const now = this.now().getTime();
+    const hosts = this.hosts();
+    return this.foreign.filter(
+      (f) =>
+        Date.parse(f.notAfter) > now &&
+        !knownZoneCertificate(f.spkiSha256, now) &&
+        (!hosts.length || coversAny(f.names, hosts)),
+    );
   }
 
   /* What the box takes ------------------------------------------------------------------------------------------- */
@@ -435,6 +506,7 @@ export class OwnAddressService {
     return this.routeOff === true;
   }
 
+  /** The current host: the one every screen, link and summary names. */
   host(): string | null {
     return this.state?.host ?? null;
   }
@@ -443,9 +515,66 @@ export class OwnAddressService {
     return this.state?.label ?? null;
   }
 
-  /** The certificate for the host while one is served and still valid. */
+  /**
+   * The host the box is leaving while it still answers there: the manager names it, it isn't the current one, and its
+   * date hasn't come.
+   */
+  leaving(): OwnAddressLeavingHost | null {
+    const leaving = this.state?.leaving;
+    const host = this.host();
+    if (!leaving || !host || leaving.host === host) return null;
+    const until = Date.parse(leaving.until);
+    if (!Number.isFinite(until) || until <= this.now().getTime()) return null;
+    return { label: leaving.label, host: leaving.host, until: new Date(until) };
+  }
+
+  /** The hosts the box answers at now: the current one, then the leaving one. Empty while it has none. */
+  hosts(): string[] {
+    const host = this.host();
+    if (!host) return [];
+    const leaving = this.leaving();
+    return leaving ? [host, leaving.host] : [host];
+  }
+
+  /** Whether the box answers at `host` now (the current host, or the leaving one before its date). */
+  servesHost(host: string): boolean {
+    return this.hosts().includes(host);
+  }
+
+  /** The certificate for `host` while the box answers there and one is served and still valid. */
+  contextFor(host: string): SecureContext | null {
+    if (!this.servesHost(host)) return null;
+    const served = this.served.get(host);
+    return served && served.notAfter > this.now() ? served.context : null;
+  }
+
+  /** The certificate for the current host while one is served and still valid. */
   context(): SecureContext | null {
-    return this.served && this.served.notAfter > this.now() ? this.served.context : null;
+    const host = this.host();
+    return host ? this.contextFor(host) : null;
+  }
+
+  /** The hosts a browser can open now: those the box answers at with a valid certificate, current first. */
+  webHosts(): string[] {
+    return this.hosts().filter((h) => this.contextFor(h) !== null);
+  }
+
+  /**
+   * Notices a change of the hosts the box answers at (the leaving one's date came, a new state): tells the relay when
+   * what it takes changed, and `onHosts` when the hosts did. Only a definite answer counts.
+   */
+  checkHosts(): void {
+    this.changed();
+    if (!this.state || !this.host()) return;
+    const hosts = this.hosts();
+    const before = this.lastHosts;
+    if (before && before.join(',') === hosts.join(',')) return;
+    this.lastHosts = hosts;
+    if (before) {
+      this.services.log.info({ hosts: hosts.length }, 'own address: the hosts it answers at changed');
+      this.onHosts?.(hosts, before);
+      this.onReady?.();
+    }
   }
 
   /** Whether the address has what it needs to serve: its host and a valid certificate. */
@@ -478,7 +607,7 @@ export class OwnAddressService {
   /** The door classes this box takes now (declared in the relay's control hello). */
   accepts(): RelayDoorClass[] {
     if (!this.state?.label) return [];
-    return this.context() && this.reach && this.webOpen() ? ['web', 'acme'] : ['acme'];
+    return this.webHosts().length && this.reach && this.webOpen() ? ['web', 'acme'] : ['acme'];
   }
 
   private changed(): void {
@@ -508,9 +637,9 @@ export class OwnAddressService {
   summary(): OwnAddressSummary | null {
     const host = this.host();
     if (!this.state || !host) return null;
-    const now = this.now();
-    const served = this.context() ? this.served : null;
+    const served = this.context() ? (this.served.get(host) ?? null) : null;
     const failure = served ? undefined : summaryFailure(this.state.acme);
+    const leaving = this.leaving();
     return {
       host,
       url: `https://${host}/`,
@@ -521,11 +650,19 @@ export class OwnAddressService {
       watch: {
         lastCheckAt: this.ct?.lastFreshAt ?? null,
         missed: (this.ct?.missed ?? []).slice(-64),
-        foreign: this.foreign
-          .filter((f) => Date.parse(f.notAfter) > now.getTime())
+        foreign: this.liveForeign()
           .slice(-32)
           .map((f) => ({ ...f, names: f.names.slice(0, 20) })),
       },
+      ...(leaving
+        ? {
+            leaving: {
+              host: leaving.host,
+              url: `${ownAddressOrigin(leaving.host)}/`,
+              until: leaving.until.toISOString(),
+            },
+          }
+        : {}),
     };
   }
 
@@ -534,9 +671,11 @@ export class OwnAddressService {
     return this.ct;
   }
 
-  /** The served certificate's end, for the expiring notice. */
+  /** The current host's served certificate's end, for the expiring notice. */
   servedUntil(): { serial: string; notAfter: Date } | null {
-    return this.served ? { serial: this.served.serial, notAfter: this.served.notAfter } : null;
+    const host = this.host();
+    const served = host ? this.served.get(host) : undefined;
+    return served ? { serial: served.serial, notAfter: served.notAfter } : null;
   }
 
   /** The manager's ACME state (the failing notice). */
@@ -546,8 +685,7 @@ export class OwnAddressService {
 
   /** The console's alert while a certificate the box didn't ask for is still valid: since the first one was seen. */
   alert(): { kind: 'own_address_foreign'; since: string } | undefined {
-    const now = this.now().getTime();
-    const live = this.foreign.filter((f) => Date.parse(f.notAfter) > now);
+    const live = this.liveForeign();
     if (!live.length) return undefined;
     const since = live.map((f) => f.firstSeenAt).sort()[0] as string;
     return { kind: 'own_address_foreign', since };

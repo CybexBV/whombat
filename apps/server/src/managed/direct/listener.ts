@@ -84,10 +84,13 @@ export interface DirectMeta extends DirectArrival {
 
 /** The own address's side of a listener made for the relay's door (own-address.md). */
 export interface DirectDoor {
-  /** The box's own host (`<label>.box.whombat.app`), or null while it has none. */
-  host(): string | null;
-  /** The certificate for that host, or null while none is served (every TLS handshake then fails). */
-  context(): SecureContext | null;
+  /**
+   * The hosts a browser can open now (`<name>.whombat.app`): the box's current host and, for a while after a rename or
+   * a move, the one it is leaving; each only while its certificate is served. Empty: every TLS handshake fails.
+   */
+  hosts(): readonly string[];
+  /** The certificate for one of those hosts, or null while none is served. */
+  context(host: string): SecureContext | null;
   /** Answers some paths before the page (the well-known files); true when it answered. */
   routes?(req: IncomingMessage, res: ServerResponse, path: string): boolean;
   /** The page's Content-Security-Policy as a header, in place of the listener's own. */
@@ -345,8 +348,10 @@ export class DirectListener {
     remoteAddress?: string | undefined;
   }): DirectArrival | null {
     if (this.options.door) {
-      const host = this.options.door.host();
-      return host && socket.remoteAddress
+      // The host the visitor's TLS handshake named (`acceptDoor`), while the box still answers there: a connection to
+      // the host it left stops being served with its next request.
+      const host = socket.localAddress;
+      return host && socket.remoteAddress && this.options.door.hosts().includes(host)
         ? { network: 'door', iface: 'door', local: host, remote: socket.remoteAddress }
         : null;
     }
@@ -354,14 +359,13 @@ export class DirectListener {
   }
 
   /**
-   * The own address's Host check (HTTP/2's `:authority`, HTTP/1.1's Host): exactly its host, or with port 443. The port
-   * the browser used is the door's, never this listener's.
+   * The own address's Host check (HTTP/2's `:authority`, HTTP/1.1's Host): exactly the host the connection arrived at
+   * (its TLS name), or with port 443. The port the browser used is the door's, never this listener's.
    */
-  private doorHost(req: IncomingMessage): boolean {
-    const host = this.options.door?.host();
+  private doorHost(req: IncomingMessage, host: string): boolean {
     const raw = req.headers[':authority'] ?? req.headers.host;
     const value = typeof raw === 'string' ? raw.trim().toLowerCase() : null;
-    return Boolean(host && value && (value === host || value === `${host}:443`));
+    return Boolean(value && (value === host || value === `${host}:443`));
   }
 
   /* The own address ---------------------------------------------------------------------------------------------- */
@@ -416,30 +420,36 @@ export class DirectListener {
   }
 
   /**
-   * One `web` door stream (a visitor's TLS connection, raw): counted against `src`, then TLS with the own host's
-   * certificate (any other name fails the handshake) and the server. The TLS socket is made here rather than by the
-   * server, so it carries `src` as its peer address; it is handed over as Node's own TLS server does.
+   * One `web` door stream (a visitor's TLS connection, raw): counted against `src`, then TLS with the certificate of
+   * the host it names (the current one or the one the box is leaving; any other name fails the handshake) and the
+   * server. The TLS socket is made here rather than by the server, so it carries `src` as its peer address and the
+   * host it arrived at as its local one; it is handed over as Node's own TLS server does.
    */
   acceptDoor(stream: Duplex, src: string): void {
     const door = this.options.door;
-    const host = door?.host();
-    if (!door || !host || !this.h2 || !this.guard.openSocket(src)) {
+    if (!door?.hosts().length || !this.h2 || !this.guard.openSocket(src)) {
       stream.destroy();
       return;
     }
+    let arrived: string | undefined;
     const tls = new TLSSocket(stream, {
       isServer: true,
       server: this.h2 as never,
       minVersion: 'TLSv1.2',
       ALPNProtocols: ['h2', 'http/1.1'],
       SNICallback: (name, cb) => {
-        const context = door.context();
-        if (context && name.toLowerCase().replace(/\.$/, '') === host) cb(null, context);
-        else cb(new Error('no certificate for that name'));
+        const host = name.toLowerCase().replace(/\.$/, '');
+        const context = door.hosts().includes(host) ? door.context(host) : null;
+        if (!context) {
+          cb(new Error('no certificate for that name'));
+          return;
+        }
+        arrived = host;
+        cb(null, context);
       },
     } as ConstructorParameters<typeof TLSSocket>[1]);
     Object.defineProperty(tls, 'remoteAddress', { value: src });
-    Object.defineProperty(tls, 'localAddress', { value: host });
+    Object.defineProperty(tls, 'localAddress', { get: () => arrived });
     let open = true;
     const closed = () => {
       if (!open) return;
@@ -541,7 +551,7 @@ export class DirectListener {
 
   private hostAllowed(req: IncomingMessage, where: DirectArrival | null): where is DirectArrival {
     if (!where) return false;
-    if (where.network === 'door') return this.doorHost(req);
+    if (where.network === 'door') return this.doorHost(req, where.local);
     return this.knownHost(hostOf(req.headers.host), where);
   }
 

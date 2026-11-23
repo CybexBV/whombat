@@ -43,7 +43,8 @@ describe('what is foreign', () => {
   it('is a certificate covering the host whose key isn’t the box’s own, one per key', () => {
     const own = new Set([key('a'), key('b')]);
     const found = foreignCertificates({
-      host: HOST,
+      hosts: [HOST],
+      at: Date.parse('2026-11-20T00:00:00Z'),
       own,
       certs: [
         cert(key('a'), [HOST]),

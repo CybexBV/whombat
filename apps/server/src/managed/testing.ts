@@ -22,6 +22,7 @@ import {
   MANAGER_PATHS,
   NetworkStateResponse,
   type OwnAddressCertResponse,
+  type OwnAddressCheckResponse,
   type OwnAddressCtResponse,
   type OwnAddressStateResponse,
   type RuntimeFeedbackAckRequest,
@@ -346,10 +347,52 @@ export class FakeManager implements ManagerPort {
     this.ownAddress = { ...this.ownAddress, label, host: `${label}.dev.whombat.app` };
     return this.ownAddress;
   }
-  async ownAddressCert(): Promise<OwnAddressCertResponse> {
-    if (!this.ownAddressPair)
-      throw new ManagerCallError('/v1/own-address/cert', 409, 'own_address.no_cert', 'none');
-    return this.ownAddressPair;
+  /** The pairs of other hosts (the leaving one), asked for by host; the hosts asked for, in order. */
+  ownAddressPairs = new Map<string, OwnAddressCertResponse>();
+  certAsked: (string | null)[] = [];
+  async ownAddressCert(host?: string): Promise<OwnAddressCertResponse> {
+    this.certAsked.push(host ?? null);
+    const pair = host ? this.ownAddressPairs.get(host) : this.ownAddressPair;
+    if (!pair) throw new ManagerCallError('/v1/own-address/cert', 409, 'own_address.no_cert', 'none');
+    return pair;
+  }
+  /** Control's verdicts of other names (`free` when not set); a refusal answered first; the names checked. */
+  checkVerdicts = new Map<string, OwnAddressCheckResponse['verdict']>();
+  checkRefusal: ManagerCallError | null = null;
+  checked: string[] = [];
+  async ownAddressCheck(label: string): Promise<OwnAddressCheckResponse> {
+    this.checked.push(label);
+    const refusal = this.checkRefusal;
+    this.checkRefusal = null;
+    if (refusal) throw refusal;
+    return { v: 1, label, verdict: this.checkVerdicts.get(label) ?? 'free' };
+  }
+  /**
+   * A rename as control does it: the new name in the current host's zone, no certificate yet, and the earlier host
+   * leaving for 30 days (an address already leaving keeps its date). A refusal answered first; the names asked for.
+   */
+  renameRefusal: ManagerCallError | null = null;
+  renamed: string[] = [];
+  async ownAddressRename(label: string): Promise<OwnAddressStateResponse> {
+    this.renamed.push(label);
+    const before = this.ownAddress;
+    if (!before?.host || !before.label)
+      throw new ManagerCallError('/v1/own-address/rename', 404, 'own_address.off', 'off');
+    const refusal = this.renameRefusal;
+    this.renameRefusal = null;
+    if (refusal) throw refusal;
+    if (label === before.label) return before;
+    const zone = before.host.slice(before.host.indexOf('.') + 1);
+    const until = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const { cert: _cert, ...rest } = before;
+    this.ownAddress = {
+      ...rest,
+      label,
+      host: `${label}.${zone}`,
+      acme: { state: 'probing' },
+      leaving: before.leaving ?? { label: before.label, host: before.host, until },
+    };
+    return this.ownAddress;
   }
   async ownAddressCt(): Promise<OwnAddressCtResponse> {
     if (!this.ownAddressWatch)

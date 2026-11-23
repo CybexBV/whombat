@@ -110,19 +110,26 @@ on the account site (`link.name.check`, `label` on `link.confirm`); the rules fo
 a manager from before Link the runtime draws it), orders the certificate (ACME TLS-ALPN-01) and watches Certificate
 Transparency. The owner changes the name later (`ownAddress.rename` → the manager → control's `address.rename`), and a box
 whose host is under the old zone moves itself to control's zone the same way; either way the earlier host stays served
-for 30 days (`leaving`: tickets carry it as `plbl`, the manager keeps that host's certificate and orders none for it,
-the certificate watch covers both hosts, the box makes new passkeys only at the new host) and then stops;
-the runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
+for 30 days (`leaving`: tickets carry it as `plbl`; the manager keeps that host's certificate and orders none for it,
+and the certificate watch covers both hosts; the runtime serves it with that certificate beside the current host's,
+makes new box passkeys only at the current host, and when the manager's date comes the host stops and the box
+passkeys made for it are removed). Screens, device links (`o=`), the claim link and the HTTPS addresses name the
+current host only. A session below session minor 6 gets no address whose host isn't the older three-word
+`box.`/`dev.` shape (`own-address/older-apps.ts`).
+The runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
 person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch
 calls foreign and raises the notices. The relay's door hands the box raw TLS streams over the relay client
 (`session/relay-client.ts`, `accepts` in the control hello): `web` ones go to a direct listener made for the door (HTTP/2
-with HTTP/1.1 for the page's WebSocket, the host's certificate only, exact `:authority`/Host, the page's CSP as a header,
+with HTTP/1.1 for the page's WebSocket, a certificate per served host chosen by the TLS name, `:authority`/Host and the
+WebSocket's Origin exactly the host the connection arrived at, the page's CSP as a header,
 `assetlinks.json`, limits per visitor address without lockouts), `acme` ones are piped into the manager's ACME socket. A
 box whose first start had the own address on is inside A3 (`appliance_state.shared_route_off`): it is claimed only on a
 page it served (the claim link on its screen at its address, the letters on its local network), never through control,
 code pairing is off, the hosted app's page doesn't open it, and the person links it to their account with a code
-(`account.link`). Box passkeys (`managed/box-passkeys.ts`) have the box's host as RP ID and are declared to control as a
-full set.
+(`account.link`). Box passkeys (`managed/box-passkeys.ts`) have the host a session arrived at as RP ID (the current
+host in the apps), are made only at the current host (`address_moved` at the leaving one) and are declared to control as
+a full set. The certificate watch judges every served host; Cloudflare's two certificates for `*.whombat.app`
+(`OWN_ADDRESS_ZONE_CERTIFICATES`) are known, not foreign, within their dates.
 
 - **Enrolment** (`managed/trust.ts`): a session's endpoint key is enrolled to the person's account, the one that
   claimed the box. A device gets in through the claim (a CPace exchange bound to both Noise keys, with the console's
