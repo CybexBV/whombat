@@ -121,7 +121,7 @@ const reports: FixtureServicePage = {
               meta: 'Per day',
               style: 'bars',
               ...week(ctx),
-              series: [{ key: 'values', label: 'Reports', values: [1, 0, 2, 0, 1, 2, 1], color: 'blue' }],
+              series: [{ key: 'values', label: 'Reports', values: [0, 0, 1, 0, 1, 1, 1], color: 'blue' }],
               figure: { value: '4', rest: 'this week' },
               stats: [[{ text: '−20 %', strong: true }, { text: ' on last week' }]],
               axis: { min: 0 },
