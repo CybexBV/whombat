@@ -480,9 +480,10 @@ describe('the range and the points (DS-03, DS-11)', () => {
         // The response time stays in Settings' checks; the Summary says how it answers.
         expect(panels.find((x) => x.id === 'response')).toBeUndefined();
         const answers = panels.find((x) => x.id === 'answers');
-        expect(answers?.kind === 'list' && answers.items.map((i) => i.title)).toEqual([
-          'Answers',
-          'Answers in',
+        expect(answers?.kind === 'list' && answers.items.map((i) => i.id)).toEqual([
+          'answers',
+          'answer-time',
+          'last-used',
         ]);
         expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toBe('8 didn’t answer');
         const trend = panels.find((x) => x.id === 'week');
