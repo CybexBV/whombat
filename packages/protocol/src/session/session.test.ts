@@ -22,6 +22,7 @@ import {
   SESSION_OPERATIONS,
 } from './operations.js';
 import {
+  ACCOUNT_PAGES_MINOR,
   BACKGROUND_MODEL_MINOR,
   DISK_USAGE_MINOR,
   FIND_MY_MINOR,
@@ -95,7 +96,7 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 6 });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 7 });
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });
@@ -128,6 +129,8 @@ describe('version negotiation', () => {
     expect(FIND_MY_TIMELINE_MINOR).toBe(5);
     expect(protocolAtLeast({ major: 5, minor: 4 }, FIND_MY_TIMELINE_MINOR)).toBe(false);
     expect(protocolAtLeast({ major: 5, minor: 5 }, FIND_MY_TIMELINE_MINOR)).toBe(true);
+    expect(ACCOUNT_PAGES_MINOR).toBe(7);
+    expect(protocolAtLeast({ major: 5, minor: 6 }, ACCOUNT_PAGES_MINOR)).toBe(false);
     expect(protocolAtLeast(null, 3)).toBe(false);
     expect(protocolAtLeast(undefined, 3)).toBe(false);
     expect(protocolAtLeast({ major: 5, minor: 2 }, 3)).toBe(false);

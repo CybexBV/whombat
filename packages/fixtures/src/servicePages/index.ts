@@ -2,6 +2,7 @@
  * Every group's fixture pages (`types.ts` says the shape), in one list for `createServicePages`. A group edits only its
  * own file.
  */
+import { ACCOUNT_PAGES } from './accounts.js';
 import { APPS_PAGES } from './apps.js';
 import { ARR_PAGES } from './arr.js';
 import { BIZ_DEV_PAGES } from './biz-dev.js';
@@ -35,4 +36,5 @@ export const GROUP_SERVICE_PAGES: readonly FixtureServicePage[] = [
   ...PS5_PAGES,
   ...WORKSPACE_PAGES,
   ...SERVER_PAGES,
+  ...ACCOUNT_PAGES,
 ];

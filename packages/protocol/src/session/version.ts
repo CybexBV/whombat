@@ -68,9 +68,17 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * at minor 5 or later (docs/implementation/macos/findmy-timeline.md); minor 6 (contracts 4.16) is own names: an address
  * the person chose or changed (`ownAddress.check`, `ownAddress.rename`, the summary's `leaving`, `address_moved`), and
  * own-address hosts outside the three-word `box.`/`dev.` shape, which a box names only to a session at minor 6 or later
- * (Whombat own-address.md).
+ * (Whombat own-address.md); minor 7 is a page for each account (Google, Microsoft 365, Email, GitHub, Website
+ * feedback): `things.page` answers for them and their things open it, which a box says only to a session at minor 7 or
+ * later (Whombat connection-dashboards.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 6 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 7 };
+
+/**
+ * Session protocol minor (major 5) that opens an account's own page (`things.page` for Google, Microsoft 365, Email,
+ * GitHub and Website feedback); an older session's account things open their page on the Connections tab.
+ */
+export const ACCOUNT_PAGES_MINOR = 7;
 
 /**
  * Session protocol minor (major 5) that reads own-address names of the person's choosing and hosts under `whombat.app`;

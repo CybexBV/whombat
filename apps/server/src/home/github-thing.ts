@@ -3,14 +3,13 @@
  * thing like Google is, by its name, with the account and how many repositories are on. It opens GitHub's page on the
  * Connections tab. Read from the database only: no call to GitHub for a list that is read often.
  */
-import { type ThingSummary, thingId } from '@whombat/core';
+import { GITHUB_THING_ID, type ThingSummary } from '@whombat/core';
 import { and, count, eq } from 'drizzle-orm';
 import { githubConnections, repos } from '../db/schema/index';
 import type { Services } from '../services';
 import { mailThingHref } from './mail-glance';
 
-/** The thing's id: one GitHub connection per Whombat. */
-export const GITHUB_THING_ID = thingId('connection', 'github');
+export { GITHUB_THING_ID };
 
 /** GitHub as a thing, or null while it isn't connected here. */
 export async function githubThing(services: Services, burrowId: string): Promise<ThingSummary | null> {
