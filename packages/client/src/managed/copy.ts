@@ -38,6 +38,10 @@ export const COPY = {
       `If you’re invited or already have an account, we sent a sign-in link to ${email}. Open it on this device.`,
     again: 'Use another email',
     verifying: 'Signing you in…',
+    /** A sign-in link opened in the browser: it's used on a tap, not on opening (mail scanners open links too). */
+    linkSub: 'Tap the button to finish signing in.',
+    useLink: 'Sign in',
+    newLink: 'Ask for a new link',
     badLink: 'That sign-in link doesn’t work any more. Ask for a new one.',
     unreachable: 'Couldn’t reach Whombat. Check your connection and try again.',
     badEmail: 'That email address doesn’t look right. Check it and try again.',

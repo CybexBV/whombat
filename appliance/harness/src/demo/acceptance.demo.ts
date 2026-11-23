@@ -273,6 +273,7 @@ describe('acceptance demo', () => {
           const link = /https?:\/\/\S+\/auth\/verify\S+/.exec(mailText)?.[0] ?? '';
           // Exactly as mailed (`#token=…`, and back to the code's page), on the address the site answers at here.
           await page.goto(accountSitePage(link));
+          await page.getByRole('button', { name: 'Sign in', exact: true }).click();
           await page
             .getByRole('heading', { name: /^Add .+ to Whombat Link\?$/ })
             .waitFor({ timeout: 30_000 });
