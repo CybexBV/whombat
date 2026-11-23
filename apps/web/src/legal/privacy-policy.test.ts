@@ -30,8 +30,8 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
     expect(text).not.toContain('never contains your content');
   });
 
-  it('is version 2026-11-22 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
-    expect(text).toContain('Version `2026-11-22`');
+  it('is version 2026-11-23 and says remote help is there only while you allow it (RH-11, AP-5679)', () => {
+    expect(text).toContain('Version `2026-11-23`');
     expect(text).not.toMatch(/\bowners?\b|\bmembers?\b|\broles?\b/i);
     expect(text).not.toContain('no remote access');
     expect(text).toContain('no standing vendor login');
