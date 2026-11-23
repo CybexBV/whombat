@@ -16,6 +16,10 @@
  * the box's screen in its hello gets a place kept for such visitors alone, so a stranger can't keep the public setup
  * out either.
  *
+ * Whether a page with the claim link is open is the box's screen's to say (`claimPageOpen`): the person who opened it
+ * then only needs the letters there. A page reconnects now and then (an idle session closes, its first look at the box
+ * ends before the claim's own session starts), so it counts as gone only `CLAIM_PAGE_GRACE_MS` after its last session.
+ *
  * A screen elsewhere's key (desk-display.md DK-146) holds at most `MAX_SESSIONS_PER_SCREEN` sessions: a newer one closes
  * its oldest, so a page that reconnects isn't locked out by its dead sessions, and a tablet in someone's kitchen can't
  * take the places of the person's devices.
@@ -38,6 +42,8 @@ export const MAX_UNENROLLED_DOOR_SESSIONS = 8;
 export const UNENROLLED_DOOR_PER_PEER = 4;
 /** Places kept for visitors at the own address who showed the claim link from the box's screen. */
 export const MAX_UNENROLLED_CLAIM_LINK_SESSIONS = 4;
+/** A page with the claim link counts as open this long after its last session closed: it reconnects in that time. */
+export const CLAIM_PAGE_GRACE_MS = 10_000;
 /** An unenrolled session closes after this long without an `enroll`-channel request. */
 export const UNENROLLED_IDLE_MS = 60_000;
 /** …and after this long in any case (a pairing code lives 10 minutes). */
@@ -73,6 +79,10 @@ export class SessionRegistry {
   private readonly unenrolledClaimLink = new Set<SessionConnection>();
   private readonly off: () => void;
   readonly limits: SessionLimits;
+  /** Told when a page with the claim link opens, and when it is gone after the grace: the screen follows it. */
+  onClaimPage: (() => void) | null = null;
+  #claimPageOpen = false;
+  #claimPageGone: NodeJS.Timeout | null = null;
 
   constructor(services: Services, limits: Partial<SessionLimits> = {}) {
     this.limits = {
@@ -129,6 +139,35 @@ export class SessionRegistry {
     return this.unenrolledClaimLink.size;
   }
 
+  /**
+   * A browser has the claim link open: a session through the own address showed it, now or within the grace. The box's
+   * screen then says to type the letters on that page.
+   */
+  get claimPageOpen(): boolean {
+    return this.#claimPageOpen;
+  }
+
+  /** The claim link's sessions changed: open at once, gone only after the grace without one. */
+  private claimLinkMoved(): void {
+    if (this.unenrolledClaimLink.size > 0) {
+      if (this.#claimPageGone) {
+        clearTimeout(this.#claimPageGone);
+        this.#claimPageGone = null;
+      }
+      if (this.#claimPageOpen) return;
+      this.#claimPageOpen = true;
+      this.onClaimPage?.();
+      return;
+    }
+    if (!this.#claimPageOpen || this.#claimPageGone) return;
+    this.#claimPageGone = setTimeout(() => {
+      this.#claimPageGone = null;
+      this.#claimPageOpen = false;
+      this.onClaimPage?.();
+    }, CLAIM_PAGE_GRACE_MS);
+    this.#claimPageGone.unref?.();
+  }
+
   /** Both classes are full: an `incoming` client is refused before its handshake. */
   get full(): boolean {
     return this.enrolled.size >= this.limits.maxSessions && this.unenrolled.size >= this.limits.maxUnenrolled;
@@ -175,6 +214,7 @@ export class SessionRegistry {
       // The claim link's places first; when those are taken, a visitor with the link waits among the others.
       if (way.claimLink && this.unenrolledClaimLink.size < this.limits.maxUnenrolledClaimLink) {
         this.unenrolledClaimLink.add(s);
+        this.claimLinkMoved();
         return true;
       }
       let ofPeer = 0;
@@ -207,6 +247,7 @@ export class SessionRegistry {
       this.unenrolledClaimLink.delete(s),
     ];
     if (held.some(Boolean)) this.enrolled.add(s);
+    if (held[3]) this.claimLinkMoved();
   }
 
   detach(s: SessionConnection): void {
@@ -214,7 +255,7 @@ export class SessionRegistry {
     this.unenrolled.delete(s);
     this.unenrolledDirect.delete(s);
     this.unenrolledDoor.delete(s);
-    this.unenrolledClaimLink.delete(s);
+    if (this.unenrolledClaimLink.delete(s)) this.claimLinkMoved();
   }
 
   /**
@@ -246,5 +287,7 @@ export class SessionRegistry {
 
   close(): void {
     this.off();
+    if (this.#claimPageGone) clearTimeout(this.#claimPageGone);
+    this.#claimPageGone = null;
   }
 }

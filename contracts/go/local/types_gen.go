@@ -199,6 +199,7 @@ type ConsoleState struct {
 	NewLetters   *bool             `json:"newLetters,omitempty"` // always true
 	Ipv6Only     *bool             `json:"ipv6Only,omitempty"`   // always true
 	FallbackURL  *string           `json:"fallbackUrl,omitempty"`
+	PageOpen     *bool             `json:"pageOpen,omitempty"` // always true
 	Burrows      *ConsoleBurrows   `json:"burrows,omitempty"`
 	SignIn       *ConsoleSignIn    `json:"signIn,omitempty"`
 	Alert        *ConsoleAlert     `json:"alert,omitempty"`

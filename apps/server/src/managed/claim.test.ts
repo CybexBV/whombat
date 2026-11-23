@@ -231,6 +231,38 @@ describe('the console of a box that took Whombat Link at its first start (LNK-13
     return c;
   }
 
+  it('says a browser has the claim link open, only beside the claim link and while the letters show', () => {
+    const link = 'https://quiet-river-otter.box.whombat.test/c/kxqmtv';
+    let open = false;
+    const c = atOwnAddress(
+      () => link,
+      () => null,
+    );
+    c.pageOpen = () => open;
+    c.refresh();
+    expect(read().pageOpen).toBeUndefined();
+    open = true;
+    c.refresh();
+    expect(read()).toMatchObject({ state: 'claimable', url: link, pageOpen: true });
+    c.setRetryAt(new Date(now.getTime() + 60_000));
+    expect(read()).toMatchObject({ state: 'backoff' });
+    expect(read().pageOpen).toBeUndefined();
+    c.markClaimed();
+    expect(read().pageOpen).toBeUndefined();
+    expect(consoleStateValid({ state: 'backoff', retryAt: 'x', pageOpen: true })).toBe(false);
+  });
+
+  it('says no page is open beside the box’s plain address on its network', () => {
+    const c = atOwnAddress(
+      () => 'http://192.168.1.20:4480/',
+      () => null,
+    );
+    c.pageOpen = () => true;
+    c.refresh();
+    expect(read()).toMatchObject({ state: 'claimable' });
+    expect(read().pageOpen).toBeUndefined();
+  });
+
   it('names another way in under the claim link, only while the letters show', () => {
     const link = 'https://quiet-river-otter.box.whombat.test/c/kxqmtv';
     let other: string | null = 'http://192.168.1.20:4480/';

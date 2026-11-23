@@ -66,7 +66,7 @@ func main() {
 	}
 	file := flag.String("file", def, "console state file (env WHOMBAT_CONSOLE_FILE)")
 	once := flag.Bool("once", false, "print one frame to stdout and exit")
-	footerFile := flag.String("footer-file", "", "footer text (default: the appliance banner)")
+	footerFile := flag.String("footer-file", "", "footer text (default: the built-in repair line)")
 	width := flag.Int("width", 0, "columns (default: the terminal's, else 80)")
 	height := flag.Int("height", 0, "lines (default: the terminal's; --once: compact)")
 	interval := flag.Duration("interval", time.Second, "poll interval")
@@ -141,6 +141,7 @@ func main() {
 	input := readInput(os.Stdin)
 	var last string
 	var drawn time.Time
+	var wait screen.WaitWatch
 	for {
 		w, h := termSize()
 		if *width > 0 {
@@ -149,8 +150,9 @@ func main() {
 		if *height > 0 {
 			h = *height
 		}
-		shown := textLoad()
-		frame := screen.Render(shown, time.Now(), w, h, footer)
+		shown, now := textLoad(), time.Now()
+		shown.WaitedLong = wait.Long(shown, now)
+		frame := screen.Render(shown, now, w, h, footer)
 		if frame != last || time.Since(drawn) >= refresh {
 			if _, err := io.WriteString(os.Stdout, clearScreen+hideCursor+frame); err != nil {
 				fmt.Fprintln(os.Stderr, "whombat-console:", err)

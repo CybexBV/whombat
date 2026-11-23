@@ -122,7 +122,7 @@ func TestParseClaimFallbackKeepsTheScreen(t *testing.T) {
 // With the second way the claim screen still fits a text console: every word, no footer (it gives way during the
 // claim), and on the usual 80×25 the letters still drawn large.
 func TestRenderClaimFallbackGeometry(t *testing.T) {
-	footer := strings.Split(Banner, "\n")
+	footer := strings.Split(Footer, "\n")
 	sc := mustParse(t, `{"v":1,`+ownClaim+`,"fallbackUrl":"http://192.0.2.10:4480/","newLetters":true}`)
 	for _, size := range [][2]int{{80, 25}, {64, 24}, {160, 45}, {100, 30}} {
 		f := Render(sc, now, size[0], size[1], footer)
@@ -136,7 +136,7 @@ func TestRenderClaimFallbackGeometry(t *testing.T) {
 				t.Errorf("%v: %q missing from\n%s", size, w, f)
 			}
 		}
-		if strings.Contains(flat, "There is no login on this console.") {
+		if strings.Contains(flat, "hold Space") {
 			t.Errorf("%v: the footer shows during the claim\n%s", size, f)
 		}
 		if strings.Index(flat, elseInApp) < strings.Index(flat, "Press N for new letters.") {
@@ -150,5 +150,33 @@ func TestRenderClaimFallbackGeometry(t *testing.T) {
 	}
 	if f := Render(sc, now, 80, 25, footer); !strings.Contains(f, glyphPixel) {
 		t.Errorf("80x25: the letters aren't drawn large\n%s", f)
+	}
+}
+
+// A browser has the claim link open: the screen says to type the letters there, with the letters big, and nothing else
+// to open, scan or try. Only beside an address to open, and only in the claim.
+func TestRenderClaimPageOpen(t *testing.T) {
+	sc := mustParse(t, `{"v":1,`+ownClaim+`,"fallbackUrl":"http://192.0.2.10:4480/","pageOpen":true,"newLetters":true}`)
+	if !sc.PageOpen {
+		t.Fatal("pageOpen not read")
+	}
+	f := Render(sc, now, 80, 0, nil)
+	for _, w := range []string{"page that just opened", "KXQM", "█", "N for new letters"} {
+		if !strings.Contains(f, w) {
+			t.Errorf("%q missing from\n%s", w, f)
+		}
+	}
+	for _, w := range []string{"Claim this Whombat", "/c/kxqmtv", "192.0.2.10"} {
+		if strings.Contains(f, w) {
+			t.Errorf("%q shown while the page is open\n%s", w, f)
+		}
+	}
+	// Without an address to open there is no claim link a browser could have: the screen as before.
+	if mustParse(t, `{"v":1,"state":"claimable","code":"KXQM","url":"http://192.0.2.10:4480/","pageOpen":true}`).PageOpen {
+		t.Error("pageOpen beside a plain-HTTP address")
+	}
+	// Outside the claim the file isn't valid with it: the starting screen.
+	if _, err := Parse([]byte(`{"v":1,"state":"backoff","retryAt":"2026-09-26T12:05:00Z","url":"https://quiet-river-otter.box.whombat.app/c/kxqmtv","pageOpen":true}`)); err == nil {
+		t.Error("pageOpen accepted in backoff")
 	}
 }

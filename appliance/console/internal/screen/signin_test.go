@@ -133,7 +133,7 @@ func TestLiveSignIn(t *testing.T) {
 
 func TestRenderSignIn(t *testing.T) {
 	sc := mustParse(t, signInFile(goodSignIn))
-	f := Render(sc, now, 80, 0, strings.Split(Banner, "\n"))
+	f := Render(sc, now, 80, 0, strings.Split(Footer, "\n"))
 	for _, w := range []string{"NEW DEVICE", "John Doe wants to sign in", "Pixel 9", "KXQ MTR",
 		"Type these letters on that device.", "Didn’t ask for this? Ignore it: the code goes away in 5 min."} {
 		if !strings.Contains(f, w) {
@@ -162,10 +162,10 @@ func TestRenderSignIn(t *testing.T) {
 		strings.Repeat("d", 64) + `","expiresAt":"2026-09-26T12:04:30Z"}`)
 	sc = mustParse(t, long)
 	for _, size := range [][2]int{{64, 24}, {80, 25}, {120, 33}} {
-		f := Render(sc, now, size[0], size[1], strings.Split(Banner, "\n"))
+		f := Render(sc, now, size[0], size[1], strings.Split(Footer, "\n"))
 		lines := strings.Split(f, "\n")
 		if len(lines) != size[1] || !strings.Contains(f, "KXQ MTR") || !strings.Contains(f, "Type these letters") ||
-			!strings.Contains(f, "goes away in") || !strings.Contains(f, "There is no login on this") {
+			!strings.Contains(f, "goes away in") || !strings.Contains(f, "hold Space") {
 			t.Fatalf("%v:\n%s", size, f)
 		}
 		for _, l := range lines {

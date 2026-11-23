@@ -297,19 +297,26 @@
 }
 
 .diskName {
-  font: 500 18px var(--font-mono);
+  color: var(--mut);
+  font: 500 14px var(--font-mono);
 }
 
+/* The mono face for a disk's model: the sans face's Q has its tail apart under the letter, which reads as an underline
+   under a model such as QEMU. */
 .diskModel {
   overflow: hidden;
   color: var(--ink2);
-  font: var(--type-list);
+  font: 500 15px var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .diskSize {
-  font: 600 16px var(--font-sans);
+  font: 600 18px var(--font-sans);
+}
+
+.model {
+  font: 500 0.9em var(--font-mono);
 }
 
 .diskReason {

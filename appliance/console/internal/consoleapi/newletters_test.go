@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/CybexBV/whombat/appliance/console/internal/desk"
 	"github.com/CybexBV/whombat/appliance/console/internal/desk/desktest"
+	"github.com/CybexBV/whombat/appliance/console/internal/screen"
 )
 
 const lanClaim = `{"v":1,"state":"claimable","code":"KXQM","url":"http://192.0.2.10:4480/"`
@@ -119,5 +121,36 @@ func TestClaimFallback(t *testing.T) {
 		if c := claim(); c["fallbackInApp"] != nil || c["fallbackTailnet"] != nil {
 			t.Errorf("%s: %v", file, c)
 		}
+	}
+}
+
+// A browser has the claim link open: the page is told so, and gets no QR code or second way in.
+func TestClaimPageOpen(t *testing.T) {
+	f := newFixture(t)
+	own := `{"v":1,"state":"claimable","code":"KXQM","url":"https://quiet-river-otter.box.whombat.app/c/kxqmtv","fallbackUrl":"http://192.0.2.10:4480/"`
+	f.writeState(t, own+`,"pageOpen":true}`)
+	if c := f.get(t)["claim"].(map[string]any); c["pageOpen"] != true || c["code"] != "KXQM" || c["qr"] != nil ||
+		c["fallbackInApp"] != nil {
+		t.Fatalf("%v", c)
+	}
+	f.writeState(t, own+`}`)
+	if c := f.get(t)["claim"].(map[string]any); c["pageOpen"] != nil || c["qr"] == nil || c["fallbackInApp"] != "192.0.2.10" {
+		t.Fatalf("%v", c)
+	}
+}
+
+// The wait for the web address offers the claim in the app only once it took long, counted by the server itself.
+func TestWaitingInAppAfterALongWait(t *testing.T) {
+	f := newFixture(t)
+	at := now
+	f.srv.now = func() time.Time { return at }
+	f.writeState(t, `{"v":1,"state":"claimable","code":"KXQM","url":"http://10.100.0.10:4480/claim","reach":{"link":{"state":"on"}}}`)
+	link := func() map[string]any { return f.get(t)["reach"].(map[string]any)["link"].(map[string]any) }
+	if l := link(); l["waitingForAddress"] != true || l["inApp"] != nil {
+		t.Fatalf("at once: %v", l)
+	}
+	at = now.Add(screen.WaitLongAfter)
+	if l := link(); l["inApp"] != "10.100.0.10" {
+		t.Fatalf("after the wait: %v", l)
 	}
 }

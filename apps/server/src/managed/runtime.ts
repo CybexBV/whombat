@@ -232,6 +232,9 @@ export class ManagedRuntime {
       ...(options.events?.sweepMs ? { sweepMs: options.events.sweepMs } : {}),
     });
     this.sessions = new SessionRegistry(services, options.sessions);
+    // A browser with the claim link open: the screen says to type the letters there.
+    this.trust.ceremony.pageOpen = () => this.sessions.claimPageOpen;
+    this.sessions.onClaimPage = () => this.trust.ceremony.refresh();
     // New letters at the box also free the places devices nobody let in were holding.
     this.trust.onNewLetters = () => {
       void this.sessions

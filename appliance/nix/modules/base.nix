@@ -104,8 +104,8 @@ in
     };
     security.sudo.enable = false;
     security.sudo-rs.enable = false;
-    # The console shows a status banner only; recovery is the signed recovery environment (NX-13). The same
-    # words are the footer of the tty1 console (whombat.console.banner, NX-32).
+    # The console shows a status banner only; recovery is the signed recovery environment (NX-13). The tty1 console
+    # says the same in one plain line (whombat.console.footer, NX-32).
     services.getty.helpLine = lib.mkForce ("\n" + config.whombat.console.banner);
 
     assertions = [

@@ -198,8 +198,11 @@ describe('the claim line without an address to open', () => {
 });
 
 describe('Link on, the web address still coming', () => {
-  /** A box with Link on and no address to open yet: the claim in the app on this network. */
-  const onWaiting = (claim: object, reach: unknown = { link: { state: 'on', waitingForAddress: true } }) => {
+  /** A box with Link on and no address to open yet, the wait long: the claim in the app on this network. */
+  const onWaiting = (
+    claim: object,
+    reach: unknown = { link: { state: 'on', waitingForAddress: true, inApp: '10.100.0.10' } },
+  ) => {
     const s = parseState({
       mode: 'console',
       now: '2026-09-27T12:00:00Z',
@@ -218,14 +221,31 @@ describe('Link on, the web address still coming', () => {
     expect(linkScreen(s, NOW)).toBe('waiting');
     expect(waitingInApp(s)).toEqual({ address: '10.100.0.10', letters: 'EQMX' });
     // The same under Link's own wait for an address.
-    expect(waitingInApp(onWaiting({}, { link: { state: 'starting', waitingForAddress: true } }))).toEqual({
-      address: '10.100.0.10',
-      letters: 'EQMX',
-    });
+    expect(
+      waitingInApp(
+        onWaiting({}, { link: { state: 'starting', waitingForAddress: true, inApp: '10.100.0.10' } }),
+      ),
+    ).toEqual({ address: '10.100.0.10', letters: 'EQMX' });
+  });
+
+  it('names the app only once the server says the wait took long', () => {
+    expect(waitingInApp(onWaiting({}, { link: { state: 'on', waitingForAddress: true } }))).toBeNull();
+    // Outside the wait the server's address means nothing.
+    expect(
+      parseState({
+        mode: 'console',
+        now: '',
+        footer: '',
+        claim: null,
+        reach: { link: { state: 'starting', inApp: '10.100.0.10' } },
+      }),
+    ).toMatchObject({ reach: { link: { inApp: '' } } });
   });
 
   it('names no other way without an address for the app or letters, and leaves other screens alone', () => {
-    expect(waitingInApp(onWaiting({ inApp: undefined }))).toBeNull();
+    expect(
+      waitingInApp(onWaiting({}, { link: { state: 'on', waitingForAddress: true, inApp: '' } })),
+    ).toBeNull();
     expect(waitingInApp(onWaiting({ code: '' }))).toBeNull();
     expect(waitingInApp(onWaiting({}, { link: { state: 'starting' } }))).toBeNull();
     // `on` without the wait, or on a box that isn't claimable: the claim's own screen.

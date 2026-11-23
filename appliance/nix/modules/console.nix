@@ -39,8 +39,8 @@ let
   tokenDir = "/run/whombat-console-ui";
   gui = cfg.enable && cfg.gui;
   # The starting screen says why the first start can't finish when the provisioning unit wrote that (CG-409, NX-526).
-  serverArgs = "--file ${cfg.file} --footer-file ${bannerFile} --start-file ${config.whombat.provisioning.startProblemFile}";
-  bannerFile = pkgs.writeText "whombat-console-banner" cfg.banner;
+  serverArgs = "--file ${cfg.file} --footer-file ${footerFile} --start-file ${config.whombat.provisioning.startProblemFile}";
+  footerFile = pkgs.writeText "whombat-console-footer" cfg.footer;
 in
 {
   options.whombat.console = {
@@ -81,9 +81,16 @@ in
         }.
       '';
       defaultText = lib.literalMD "the banner; on `luks-tpm2` storage it names the disk recovery key";
+      description = "The getty banner of the other VTs (services.getty.helpLine), for whoever switches to them.";
+    };
+    footer = mkOption {
+      type = types.str;
+      # One plain line for the person at the screen; the recovery menu asks for the disk recovery key itself where the
+      # box has one.
+      default = "To repair this Whombat, restart it, hold Space and choose Whombat Recovery.";
       description = ''
-        The getty banner of the VTs (services.getty.helpLine) and the footer of the tty1 console. The
-        console's built-in default is the `luks-tpm2` text (console/internal/screen Banner; checks.console).
+        The footer of the tty1 console, text and graphical, once the box is set up (and while it starts). The
+        console's built-in default is the same line (console/internal/screen Footer; checks.console).
       '';
     };
     gui = mkOption {

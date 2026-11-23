@@ -216,8 +216,7 @@ function consoleState(p: Partial<ConsoleState>): ConsoleState {
     now: NOW,
     claim: null,
     desk: null,
-    footer:
-      'Whombat appliance. There is no login on this console.\nFor local recovery, restart and hold Space to open the boot menu, then choose\n"Whombat Recovery".',
+    footer: 'To repair this Whombat, restart it, hold Space and choose Whombat Recovery.',
     ...p,
   };
 }
@@ -252,6 +251,7 @@ const linkBase: ReachLink = {
   qr: [],
   expiresAt: null,
   waitingForAddress: false,
+  inApp: '',
   graceEndsOn: '',
 };
 /** The Link code changes 12½ min after the fixture's clock. */
@@ -580,6 +580,19 @@ export const FIXTURES: Record<string, Fixture> = {
       }),
     ),
   },
+  'console-claimable-page-open': {
+    note: 'Claim link already open in a browser: only where to type the letters',
+    timeline: one(
+      claim({
+        state: 'claimable',
+        code: 'FQTW',
+        claimUrl: 'quiet-river-otter.box.whombat.app/c/kxqmtv',
+        appUrl: 'quiet-river-otter.box.whombat.app',
+        newLetters: true,
+        pageOpen: true,
+      }),
+    ),
+  },
   'console-claimable-own-address-tailnet': {
     note: 'Claim link at the box’s own address, with its Tailscale page as the other way in',
     timeline: one(
@@ -660,7 +673,7 @@ export const FIXTURES: Record<string, Fixture> = {
     ),
   },
   'console-link-on-waiting': {
-    note: 'Easy: Whombat Link on, the web address still coming; the app on this network claims it already',
+    note: 'Easy: Whombat Link on, the web address still coming: the wait alone at first',
     timeline: one(
       claimReach(
         {
@@ -672,6 +685,22 @@ export const FIXTURES: Record<string, Fixture> = {
           newLetters: true,
         },
         { link: { ...linkBase, state: 'on', waitingForAddress: true } },
+      ),
+    ),
+  },
+  'console-link-on-waiting-long': {
+    note: 'Easy: the wait for the web address took long; the app on this network claims it already',
+    timeline: one(
+      claimReach(
+        {
+          state: 'claimable',
+          code: 'EQMX',
+          claimUrl: '',
+          appUrl: '',
+          inApp: '10.100.0.10',
+          newLetters: true,
+        },
+        { link: { ...linkBase, state: 'on', waitingForAddress: true, inApp: '10.100.0.10' } },
       ),
     ),
   },

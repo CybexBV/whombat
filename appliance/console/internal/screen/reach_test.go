@@ -126,7 +126,7 @@ func TestRenderLinkStarting(t *testing.T) {
 	}
 	// Waiting for an address, and no code (yet, or no longer).
 	f = Render(mustParse(t, reachFile(claimableFile, `{"link":{"state":"starting","waitingForAddress":true}}`)), now, 200, 0, nil)
-	if !strings.Contains(f, "web address…") || !strings.Contains(f, "asks again every minute by itself") || strings.Contains(f, "KXQM") {
+	if !strings.Contains(f, "web address…") || !strings.Contains(f, "changes by itself") || strings.Contains(f, "KXQM") {
 		t.Errorf("waiting:\n%s", f)
 	}
 	for name, l := range map[string]string{
@@ -208,7 +208,7 @@ func TestRenderTailscale(t *testing.T) {
 	// A long sign-in link is shown whole over several lines, none wider than the screen.
 	long := "login.tailscale.com/a/" + strings.Repeat("abcdef0123", 20)
 	sc := mustParse(t, reachFile(claimableFile, `{"tailscale":{"loginUrl":"https://`+long+`"}}`))
-	f = Render(sc, now, 80, 25, strings.Split(Banner, "\n"))
+	f = Render(sc, now, 80, 25, strings.Split(Footer, "\n"))
 	joined := ""
 	for _, l := range strings.Split(f, "\n") {
 		if utf8.RuneCountInString(l) > 80 {
@@ -242,7 +242,7 @@ func TestRenderClaimOnTailnet(t *testing.T) {
 // Everything at once still fits the screen, the codes in plain letters at least: on a claimed box with the footer at the
 // bottom, on one being set up without it (it gives way to Link's code).
 func TestRenderReachGeometry(t *testing.T) {
-	footer := strings.Split(Banner, "\n")
+	footer := strings.Split(Footer, "\n")
 	const alert = `,"alert":{"kind":"own_address_foreign","since":"2026-09-26T11:00:00Z"}`
 	const reach = `{"link":` + linkStarting + `,"tailscale":{` + loginURL + `,"needsHttps":true}}`
 	claimed := mustParse(t, reachFile(`"state":"claimed",`+claimedURL+alert, reach))
@@ -250,12 +250,12 @@ func TestRenderReachGeometry(t *testing.T) {
 	for _, size := range [][2]int{{80, 25}, {64, 24}, {160, 45}, {100, 30}} {
 		f := Render(claimed, now, size[0], size[1], footer)
 		lines := strings.Split(f, "\n")
-		if len(lines) != size[1] || !strings.Contains(lines[len(lines)-1], "disk recovery key") || !strings.Contains(f, "ABCD-EFGH") {
+		if len(lines) != size[1] || !strings.Contains(strings.Join(lines[len(lines)-2:], " "), "hold Space") || !strings.Contains(f, "ABCD-EFGH") {
 			t.Fatalf("claimed %v: %d lines, footer not at the bottom\n%s", size, len(lines), f)
 		}
 		f = Render(sc, now, size[0], size[1], footer)
 		lines = strings.Split(f, "\n")
-		if len(lines) != size[1] || strings.Contains(f, "disk recovery key") {
+		if len(lines) != size[1] || strings.Contains(f, "hold Space") {
 			t.Fatalf("%v: %d lines, or the footer shows while the box is set up\n%s", size, len(lines), f)
 		}
 		for _, l := range lines {

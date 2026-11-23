@@ -3,8 +3,8 @@ package local
 import "strings"
 
 // ConsoleStateValid reports whether a console file is consistent (CC-08), like consoleStateValid in
-// @whombat/control-contracts/local: Code exactly in state claimable, RetryAt exactly in state backoff, LettersUntil
-// and FallbackURL only in state claimable, NewLetters only in claimable and backoff, Ipv6Only never in claimed, Burrows
+// @whombat/control-contracts/local: Code exactly in state claimable, RetryAt exactly in state backoff, LettersUntil,
+// FallbackURL and PageOpen only in state claimable, NewLetters only in claimable and backoff, Ipv6Only never in claimed, Burrows
 // (CT-116) and SignIn (0.106, CT-626) only in state claimed. Validate the JSON with
 // ParseConsoleState first. A console that finds a SignIn outside claimed may drop it and keep the rest.
 func ConsoleStateValid(s ConsoleState) bool {
@@ -14,6 +14,7 @@ func ConsoleStateValid(s ConsoleState) bool {
 		(s.NewLetters == nil || s.State == ConsoleClaimStateClaimable || s.State == ConsoleClaimStateBackoff) &&
 		(s.Ipv6Only == nil || s.State != ConsoleClaimStateClaimed) &&
 		(s.FallbackURL == nil || s.State == ConsoleClaimStateClaimable) &&
+		(s.PageOpen == nil || s.State == ConsoleClaimStateClaimable) &&
 		(s.Burrows == nil || s.State == ConsoleClaimStateClaimed) &&
 		(s.SignIn == nil || s.State == ConsoleClaimStateClaimed)
 }
