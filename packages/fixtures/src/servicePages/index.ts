@@ -13,6 +13,7 @@ import { INFRA_APPS_PAGES } from './infra-apps.js';
 import { INFRA_NET_PAGES } from './infra-net.js';
 import { OWN_PAGES } from './own.js';
 import { PS5_PAGES } from './ps5.js';
+import { SERVER_PAGES } from './servers.js';
 import { STORAGE_PAGES } from './storage.js';
 import type { FixtureServicePage } from './types.js';
 import { WORKSPACE_PAGES } from './workspace.js';
@@ -33,4 +34,5 @@ export const GROUP_SERVICE_PAGES: readonly FixtureServicePage[] = [
   ...OWN_PAGES,
   ...PS5_PAGES,
   ...WORKSPACE_PAGES,
+  ...SERVER_PAGES,
 ];

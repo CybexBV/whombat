@@ -16,6 +16,7 @@ import { MEDIA_KINDS } from './media/index';
 import { OWN_KINDS } from './own/index';
 import { PS5_KIND } from './ps5';
 import type { KindModule } from './registry';
+import { SERVER_KINDS } from './servers/index';
 import { STORAGE_KINDS } from './storage/index';
 import { WORKSPACE_KINDS } from './workspace/index';
 
@@ -28,6 +29,7 @@ export const KIND_MODULES: Record<string, KindModule> = {
   ...BUSINESS_KINDS,
   ...OWN_KINDS,
   ...WORKSPACE_KINDS,
+  ...SERVER_KINDS,
   ps5: PS5_KIND,
   findmy: FIND_MY_KIND,
 };

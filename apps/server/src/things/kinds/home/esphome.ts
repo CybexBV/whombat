@@ -7,7 +7,8 @@
  *
  * Its Summary in slots: To update (installs running, then each device to update or install with its **Update** or
  * **Install** button, confirmed, and **Update all** on the card: `firmware/install`, `firmware/install_bulk` over the
- * network, which builds, flashes and restarts the device) beside In ESPHome (devices, up to date, changed since
+ * network, which builds, flashes and restarts the device), or Devices now while nothing waits (offline ones first) beside
+ * In ESPHome (devices, up to date, changed since
  * installed, found on the network); its version in the machine's card when Whombat knows that machine (else only in
  * the head); every device in a table below. ESPHome keeps no
  * history and knows no people: no Trend, Shelf or People. Nothing else is ever sent from here (no renames, secrets or
@@ -638,9 +639,63 @@ function needWords(d: EspDevice, s: EspSnapshot, now: Date, timeZone: string): s
   return [why, where].filter(Boolean).join(' · ');
 }
 
+/** How many devices Devices now lists: about as tall as In ESPHome beside it. */
+const NOW_ROWS = 6;
+
+/**
+ * Live while nothing waits for an install, “Devices now” (id `now`): the devices offline longest first, then those not
+ * seen yet, then the online ones by name, each with what it runs and where. Null without devices.
+ */
+export function devicesNow(s: EspSnapshot, ctx: { now: Date; timeZone: string }): LivePanel | null {
+  if (!s.devices.length) return null;
+  const sorted = s.devices
+    .slice()
+    .sort(
+      (a, b) =>
+        STATE_RANK[a.state] - STATE_RANK[b.state] ||
+        (b.offlineSeconds ?? 0) - (a.offlineSeconds ?? 0) ||
+        a.name.localeCompare(b.name),
+    );
+  const online = s.devices.filter((d) => d.state === 'online').length;
+  const offline = s.devices.filter((d) => d.state === 'offline').length;
+  const items: ThingPageItem[] = sorted.slice(0, NOW_ROWS).map((d) => {
+    const since = offlineSince(d, s.readAt);
+    const state =
+      d.state === 'online'
+        ? 'Online'
+        : d.state === 'offline'
+          ? since
+            ? `Offline since ${moment(since, ctx.now, ctx.timeZone)}`
+            : 'Offline'
+          : 'Not seen yet';
+    return {
+      id: clip(`now-${d.config}`, 200),
+      title: clip(d.name, 160),
+      icon: 'device',
+      detail: clip([state, d.deployed, d.address].filter(Boolean).join(' · '), 300),
+      ...(d.state === 'offline'
+        ? { tone: 'warn' as const }
+        : d.state === 'online'
+          ? { tone: 'ok' as const }
+          : {}),
+    };
+  });
+  const meta =
+    online === s.devices.length
+      ? `All ${s.devices.length} online`
+      : [`${online} online`, offline ? `${offline} offline` : null].filter(Boolean).join(' · ');
+  return liveList({
+    id: 'now',
+    title: 'Devices now',
+    // Every device is in the table below.
+    meta: clip(meta, 120),
+    items,
+  });
+}
+
 /**
  * Live, “To update”: installs going on now with how far they are, then each device built with an older ESPHome or
- * changed since it was installed, with its button; **Update all** on the card. Left out when nothing waits or runs.
+ * changed since it was installed, with its button; **Update all** on the card. While nothing waits or runs, Devices now.
  */
 export function esphomeLive(
   s: EspSnapshot,
@@ -679,7 +734,7 @@ export function esphomeLive(
       ...(b ? { actions: [b] } : {}),
     });
   }
-  if (!items.length) return null;
+  if (!items.length) return devicesNow(s, ctx);
   const all = updateAllButton(s, ctx.buttons);
   const meta = [
     active.size ? `${active.size} installing` : '',

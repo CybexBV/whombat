@@ -96,19 +96,29 @@ function kit(ctx: FixtureServiceCtx) {
     rest: string;
     change: string;
     color: 'green' | 'blue';
+    unit?: string;
+    span?: 1 | 2;
   }): ThingPagePanel => {
     const days = p.values.map((_, i) => new Date(now() - (p.values.length - 1 - i) * DAY));
     return {
       kind: 'chart',
       id: 'week',
       place: 'chart',
-      span: 1,
+      span: p.span ?? 1,
       title: 'This week',
       meta: p.meta,
       style: 'bars',
       timestamps: days.map((d) => d.toISOString()),
       labels: days.map((d, i) => (i === days.length - 1 ? 'Today' : (WEEKDAYS[d.getDay()] ?? ''))),
-      series: [{ key: 'values', label: p.label, values: p.values, color: p.color }],
+      series: [
+        {
+          key: 'values',
+          label: p.label,
+          values: p.values,
+          color: p.color,
+          ...(p.unit ? { unit: p.unit } : {}),
+        },
+      ],
       figure: { value: p.figure, rest: p.rest },
       stats: [[{ text: p.change, strong: true }, { text: ' on last week' }]],
       axis: { min: 0 },
@@ -1013,6 +1023,18 @@ function qbittorrent(ctx: FixtureServiceCtx) {
             }),
           ],
         },
+        // From Whombat's own readings of the all-time figure; the short row widens the Trend.
+        k.week({
+          meta: 'Downloaded per day',
+          label: 'Downloaded',
+          values: [42, 18.5, 0, 63.2, 27, 88.4, 31],
+          figure: '270 GB',
+          rest: 'this week',
+          change: '+14 %',
+          color: 'green',
+          unit: 'GB',
+          span: 2,
+        }),
         k.machine(
           [
             { id: 'qbt-version', label: 'qBittorrent', value: '5.0.3', pct: null },

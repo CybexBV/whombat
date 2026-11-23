@@ -4,7 +4,8 @@
  * disk free space, errored torrents, and speed over time (`qbt_mbps`). Read with WebUI API v2 (`/api/v2/sync/maindata`
  * and `/api/v2/app/version`). Supports both qBittorrent v5 (`stoppedDL`/`stoppedUP`, `/torrents/stop|start`) and v4
  * (`pausedDL`/`pausedUP`, `/torrents/pause|resume`). Never deletes torrents or files, never changes settings or shuts
- * qBittorrent down.
+ * qBittorrent down. Its Trend, downloaded per day, comes from Whombat's own readings of the all-time downloaded figure
+ * the same read has (`qbt_dl_gb`): each day's last less the day before's.
  */
 import type { ThingLine, ThingPageBar, ThingPageKpi } from '@whombat/core';
 import { signedConnectionFetch } from '../../../connections/http';
@@ -32,7 +33,19 @@ import { actAs } from '../act';
 import { cachedRead, getJson, KIND_DEADLINE_MS, liveRead, problemOf, withDeadline } from '../read';
 import type { KindAction, KindActionCtx, KindModule, KindSeen } from '../registry';
 import { seenFromView } from '../registry';
-import { countLine, dayKey, inventory, liveRows, slotPanels } from '../slots';
+import {
+  countLine,
+  dayKey,
+  daysWith,
+  inventory,
+  lastDays,
+  liveRows,
+  pointsByDay,
+  slotPanels,
+  type TrendPanel,
+  trend,
+  weekChange,
+} from '../slots';
 import type { KindCtx, KindView } from '../types';
 import {
   idOf,
@@ -58,6 +71,8 @@ import {
 
 const NAME = 'qBittorrent';
 export const QBT_MBPS_KEY = 'qbt_mbps';
+/** qBittorrent's all-time downloaded figure in GB, kept every pass: it keeps no history per day of its own. */
+export const QBT_DL_KEY = 'qbt_dl_gb';
 export const QBT_LIVE_MS = 4_000;
 const VERSION_KEEP_MS = 5 * 60_000;
 const GIB = 1024 ** 3;
@@ -302,6 +317,8 @@ export interface QbtInput {
   speed: { timestamps: string[]; values: (number | null)[] };
   who: ButtonCtx;
   url: string;
+  /** Whombat's own readings of the all-time downloaded figure (`qbt_dl_gb`), the last 15 days. */
+  downloaded?: readonly RawPoint[];
 }
 
 export function qbtNotices(input: QbtInput): KindNotice[] {
@@ -780,10 +797,54 @@ export function qbtKpis(input: Pick<QbtInput, 'snapshot' | 'speed'>): ThingPageK
   return out;
 }
 
+/** The all-time downloaded figure as the pass keeps it: GB, two decimals. */
+export function downloadedPoint(s: QbtSnapshot): Record<string, number> {
+  const b = s.state.alltimeDlBytes;
+  return b !== null && b >= 0 ? { [QBT_DL_KEY]: Math.round(b / 1e7) / 100 } : {};
+}
+
+const sumOf = (xs: readonly (number | null)[]) => xs.reduce<number>((a, x) => a + (x ?? 0), 0);
+
+/**
+ * Trend, downloaded per day this week: each day's last reading of the all-time figure less the day before's, today's
+ * from what qBittorrent says now. A day the figure went down (its statistics were reset) draws no bar. Left out with
+ * fewer than two days to draw; the change on last week once all seven days before have one.
+ */
+export function downloadedWeek(
+  input: Pick<QbtInput, 'snapshot' | 'now' | 'timeZone' | 'downloaded'>,
+): TrendPanel | null {
+  const { now, timeZone } = input;
+  const days = lastDays(now, timeZone, 15);
+  const levels = pointsByDay(input.downloaded ?? [], days.keys, timeZone, 'last');
+  const nowGb = downloadedPoint(input.snapshot)[QBT_DL_KEY];
+  if (nowGb !== undefined) levels[levels.length - 1] = nowGb;
+  const perDay = levels.map((v, i) => {
+    const before = i ? levels[i - 1] : null;
+    return v === null || before == null || v < before ? null : Math.round((v - before) * 100) / 100;
+  });
+  const week = perDay.slice(8);
+  if (daysWith(week) < 2) return null;
+  const before = perDay.slice(1, 8);
+  const total = sumOf(week);
+  return trend({
+    id: 'week',
+    title: 'This week',
+    meta: 'Downloaded per day',
+    days: { at: days.at.slice(-7), labels: days.labels.slice(-7) },
+    values: week,
+    label: 'Downloaded',
+    unit: 'GB',
+    figure: { value: bytes(total * 1e9), rest: 'this week' },
+    change: daysWith(before) === 7 ? weekChange(total, sumOf(before)) : null,
+    color: 'green',
+  });
+}
+
 export function qbtSlots(input: QbtInput): Pick<KindView, 'panels' | 'slots'> {
   return slotPanels({
     live: downloadingRows(input),
     inventory: torrentsInventory(input),
+    trend: downloadedWeek(input),
     more: qbtMore(input),
     machine: qbtMachineLines(input.snapshot),
   });
@@ -820,6 +881,12 @@ export function qbtUrl(row: Pick<CatalogConnectionRow, 'fields' | 'baseUrl'>): s
   return (str(row.fields.url) ?? row.baseUrl).replace(/\/+$/, '');
 }
 
+/** The last 15 days of the all-time downloaded figure; none when they can't be read (no Trend). */
+async function downloadedPoints(services: Services, rowId: string, now: Date): Promise<RawPoint[]> {
+  const got = await readPoints(services.db, rowId, [QBT_DL_KEY], now, 15 * 86_400_000).catch(() => null);
+  return got?.get(QBT_DL_KEY) ?? [];
+}
+
 async function speedLine(services: Services, rowId: string, range: PageRange, now: Date) {
   const points = await readPoints(services.db, rowId, [QBT_MBPS_KEY], now, RANGE_MS[range]).catch(
     () => new Map<string, RawPoint[]>(),
@@ -831,7 +898,7 @@ async function speedLine(services: Services, rowId: string, range: PageRange, no
 export async function qbtPage(ctx: KindCtx): Promise<KindView> {
   const { services, row, now } = ctx;
   const url = qbtUrl(row);
-  const [main, speed] = await Promise.all([
+  const [main, speed, downloaded] = await Promise.all([
     liveRead(
       services,
       liveKey(row),
@@ -840,6 +907,7 @@ export async function qbtPage(ctx: KindCtx): Promise<KindView> {
       { liveS: QBT_LIVE_MS / 1000 },
     ),
     speedLine(services, row.id, ctx.range, now),
+    downloadedPoints(services, row.id, now),
   ]);
   if (!main.ok)
     return {
@@ -864,6 +932,7 @@ export async function qbtPage(ctx: KindCtx): Promise<KindView> {
     speed,
     who: { row },
     url,
+    downloaded,
   });
   return { ...view, refreshing: main.refreshing };
 }
@@ -913,7 +982,10 @@ export async function qbtSeen(
       }),
       activity: qbtActivity(snapshot),
     },
-    points: { [QBT_MBPS_KEY]: Math.round((snapshot.state.dlSpeedBps / 1e6) * 100) / 100 },
+    points: {
+      [QBT_MBPS_KEY]: Math.round((snapshot.state.dlSpeedBps / 1e6) * 100) / 100,
+      ...downloadedPoint(snapshot),
+    },
     ...linesSeen(view, qbtSkipped(snapshot)),
   };
 }

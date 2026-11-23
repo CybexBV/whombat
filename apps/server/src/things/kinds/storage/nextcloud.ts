@@ -5,20 +5,24 @@
  * `skipUpdate=false` (both default to true there), as the connection's account, which must be an admin, and its users
  * from `/ocs/v2.php/cloud/users/details` (kept 10 minutes). Nextcloud reports the free space only, not the disk's size,
  * so Free for files has no bar (SD-S17). An account that isn't an admin sees its own storage and a line saying why the
- * rest is missing. Nothing happens live that Whombat could show and Nextcloud keeps no history per day: no Live, Shelf
- * or Trend. Setup warnings have no API: left out. Read only.
+ * rest is missing. Nothing happens live that Whombat could show: no Live or Shelf. Nextcloud keeps no history per day,
+ * so the health pass keeps the free space it reads as a point (`nextcloud_free_gb`) and Space used draws each day's drop
+ * in free space as what was added. Setup warnings have no API: left out. Read only.
  */
 import type { ThingLine, ThingPageBar, ThingPageItem, ThingPageKpi, ThingPagePanel } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
+import { readPoints } from '../../points';
 import { shortHash } from '../../quiet/items';
 import type { KindCheck } from '../../quiet/types';
+import type { RawPoint } from '../../series';
 import { bytes, clip, line, num, plural, rec, str, thousands } from '../../words';
 import { cachedRead, KIND_DEADLINE_MS, latestRead, problemOf, ReadProblem, withDeadline } from '../read';
 import type { KindModule } from '../registry';
-import { countLine, inventory, people, slotPanels } from '../slots';
+import { countLine, inventory, people, slotPanels, type TrendPanel } from '../slots';
 import type { KindCtx, KindView } from '../types';
 import { fixed, type KindNotice, lookInto, newer, UNTIL } from './lines';
+import { spaceWeek } from './nas';
 import { optional, readJson, StatusProblem } from './net';
 import {
   ago,
@@ -44,6 +48,9 @@ const APPS_MAX = 12;
 export const USERS_MAX = 100;
 /** Who uses how much changes slowly: read again after 10 minutes. */
 const USERS_KEEP_MS = 600_000;
+/** The free space for files in GB (decimal), kept every pass: Nextcloud keeps no history of it. */
+export const NEXTCLOUD_FREE_KEY = 'nextcloud_free_gb';
+const DAY = 86_400_000;
 
 /* Reading ------------------------------------------------------------------------------------------------------------ */
 
@@ -282,6 +289,40 @@ export interface NextcloudInput {
   /** Its users (an admin's read); absent or null: not read. */
   users?: NextcloudUser[] | null;
   now?: Date;
+  timeZone?: string;
+  /** Whombat's own readings of the free space (`nextcloud_free_gb`), the last 15 days. */
+  free?: readonly RawPoint[];
+}
+
+/** The pass's point: the free space for files in GB, or none when it wasn't read. */
+export function freePoint(s: NextcloudSnapshot): Record<string, number> {
+  const b = s.info?.freeBytes;
+  return b != null && b >= 0 ? { [NEXTCLOUD_FREE_KEY]: Math.round(b / 1e7) / 100 } : {};
+}
+
+/**
+ * Trend, Space used: what was added each day this week, as the day's drop in free space from Whombat's own readings
+ * (Nextcloud reports free space, not what it uses); a day that freed space draws none. Left out with fewer than two
+ * days to draw.
+ */
+export function spaceUsed(input: NextcloudInput): TrendPanel | null {
+  const { now, timeZone, free } = input;
+  if (!now || !timeZone || !free?.length) return null;
+  // Less free is more used: the NAS Trend reads the used space, so it gets the free space with its sign turned.
+  const used = free.map((p) => ({ ...p, value: p.value === null ? null : -p.value }));
+  return spaceWeek({
+    points: used,
+    now,
+    timeZone,
+    freeBytes: input.snapshot.info?.freeBytes ?? null,
+    what: 'From its free space',
+  });
+}
+
+/** The last 15 days of free space; none when they can't be read (no Trend). */
+export async function readFree(services: Services, rowId: string, now: Date): Promise<RawPoint[]> {
+  const got = await readPoints(services.db, rowId, [NEXTCLOUD_FREE_KEY], now, 15 * DAY).catch(() => null);
+  return got?.get(NEXTCLOUD_FREE_KEY) ?? [];
 }
 
 /** Updates waiting: Nextcloud's own and its apps'. */
@@ -641,6 +682,7 @@ export function nextcloudView(input: NextcloudInput): KindView {
     notices: shown,
     ...slotPanels({
       inventory: holdings(input),
+      trend: spaceUsed(input),
       people: whoUsesMost(input),
       more,
       machine: nextcloudMachineLines(i),
@@ -660,11 +702,17 @@ export function nextcloudView(input: NextcloudInput): KindView {
 export async function nextcloudPage(ctx: KindCtx): Promise<KindView> {
   const { services, row, now } = ctx;
   const url = serviceUrl(row);
-  const read = await nextcloudLatest(services, row, now);
+  const [read, free] = await Promise.all([
+    nextcloudLatest(services, row, now),
+    readFree(services, row.id, now),
+  ]);
   if (!read.ok) return unreadView(NAME, url, problemOf(read.error, NAME).message, read.refreshing);
   // Only an admin may list the users.
   const users = read.value.info ? await readUsers(services, row) : null;
-  return { ...nextcloudView({ snapshot: read.value, url, users, now }), refreshing: read.refreshing };
+  return {
+    ...nextcloudView({ snapshot: read.value, url, users, now, timeZone: ctx.timeZone, free }),
+    refreshing: read.refreshing,
+  };
 }
 
 export const NEXTCLOUD_KIND: KindModule = {
@@ -674,15 +722,18 @@ export const NEXTCLOUD_KIND: KindModule = {
     const s = await nextcloudSnapshot(services, row, now);
     const view = nextcloudView({ snapshot: s, url: serviceUrl(row) });
     const version = s.info?.version;
-    return seenOf(
-      cardOf(
-        { kpis: figures(s), notices: view.notices },
-        s.info ? ['active', 'free'] : ['yours'],
-        version ? `Files · Nextcloud ${version}` : 'Files',
+    return {
+      ...seenOf(
+        cardOf(
+          { kpis: figures(s), notices: view.notices },
+          s.info ? ['active', 'free'] : ['yours'],
+          version ? `Files · Nextcloud ${version}` : 'Files',
+        ),
+        view.notices as KindNotice[],
+        nextcloudSkipped(s),
       ),
-      view.notices as KindNotice[],
-      nextcloudSkipped(s),
-    );
+      points: freePoint(s),
+    };
   },
   checks: NEXTCLOUD_CHECKS,
 };
