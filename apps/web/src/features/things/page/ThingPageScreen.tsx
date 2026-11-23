@@ -8,7 +8,8 @@
  * `?tab=`), Activity and Connection (its own settings). The range (`?range=`, the page read again for it, the old page shown meanwhile) is
  * picked beside the charts a figure opens (`?chart=`), and at the tab row's end on the Summary only while a chart card
  * is left. Every tab of the server's is drawn by the one Summary renderer (`dashboard/`), except one about a server
- * (`ThingPageTab.server`): Find My's, drawn from its Mac's own reads (`findmy/`). An open page reads again every
+ * (`ThingPageTab.server`): Find My's and its Timeline, drawn from the Mac's own reads and the connection's timeline
+ * (`findmy/`), the Timeline only when the box sends it. An open page reads again every
  * `refreshS`
  * while the tab is shown (at least 5 s; a minute without one; contracts 0.121 CT-1010, service-dashboards.md AP-4568),
  * and a read that failed keeps what the page has and says why. Its buttons (CT-1001…CT-1003, CT-1014) share one
@@ -58,7 +59,7 @@ import {
   type ThingPageAction,
   thingHref,
 } from '@whombat/core';
-import { placeKindOfCatalog } from '@whombat/core/domain';
+import { FIND_MY_TIMELINE_TAB, placeKindOfCatalog } from '@whombat/core/domain';
 import { formatClock } from '@whombat/core/text';
 import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -81,6 +82,7 @@ import { Crumb, PageHead, TabRow, tabsInRow } from '../dashboard/PageHead';
 import type { DashboardContext } from '../dashboard/Panels';
 import { RangePicker } from '../dashboard/RangePicker';
 import { FindMyTab } from '../findmy/FindMyTab';
+import { FindMyTimelineTab } from '../findmy/FindMyTimelineTab';
 import { BackupsKeptHere } from '../KeptHere';
 import { AppLink, ConfirmDialog, Skeleton, useChangeRunner } from '../parts';
 import { PAGE_FRESH_MS, thingPageInput } from '../prefetch';
@@ -298,6 +300,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
             <SettingsTab burrow={burrow} page={page} />
           ) : about && tab === FIND_MY_TAB ? (
             <FindMyTab burrow={burrow} serverId={about} />
+          ) : about && tab === FIND_MY_TIMELINE_TAB && page.connectionId ? (
+            <FindMyTimelineTab burrow={burrow} connectionId={page.connectionId} serverId={about} />
           ) : (
             <>
               {/* What the assistant found out, at the top of the Summary (look-research-web.md AP-5906). */}
