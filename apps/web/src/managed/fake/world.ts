@@ -1751,12 +1751,30 @@ export async function createFakeWorld(): Promise<FakeWorld> {
         case 'reach.get':
         case 'link.on':
         case 'link.off':
+        case 'link.mail.set':
         case 'updates.channel.get':
         case 'updates.channel.set':
         case 'push.token.set':
         case 'push.token.clear': {
           if (!a.endpoints[me]?.accountId) return err(403, 'forbidden', 'Enrolled devices only.');
-          const link: LinkSummary = a.link ?? { state: 'off', since: now };
+          // The owner's email choices (4.15): the box's defaults until changed.
+          const link: LinkSummary = {
+            mail: { offline: true, notifications: false },
+            ...(a.link ?? { state: 'off', since: now }),
+          };
+          if (op === 'link.mail.set') {
+            const mail = link.mail ?? { offline: true, notifications: false };
+            a.link = {
+              ...link,
+              mail: {
+                offline: typeof input.offline === 'boolean' ? input.offline : mail.offline,
+                notifications:
+                  typeof input.notifications === 'boolean' ? input.notifications : mail.notifications,
+              },
+            };
+            save();
+            return json(200, { link: a.link });
+          }
           if (op === 'reach.get') {
             const t = tailscaleFor(device).call('host.tailscale', {});
             const tailscale = (t?.body as { tailscale?: unknown } | undefined)?.tailscale ?? null;

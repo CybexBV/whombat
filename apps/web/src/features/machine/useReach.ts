@@ -15,6 +15,8 @@ export interface Reach {
   error: string | null;
   turnOn: () => Promise<void>;
   turnOff: () => Promise<boolean>;
+  /** The owner's choices for email through Whombat Link (4.15): whether it saved. */
+  setMail: (change: { offline?: boolean; notifications?: boolean }) => Promise<boolean>;
   reload: () => void;
 }
 
@@ -65,10 +67,25 @@ export function useReach(session: ApplianceSession | null | undefined): Reach {
     [session],
   );
 
+  const setMail = useCallback(
+    async (change: { offline?: boolean; notifications?: boolean }): Promise<boolean> => {
+      if (!session) return false;
+      try {
+        const out = await sessionOps.linkMailSet(session, change);
+        setReach((r) => (r ? { ...r, link: out.link } : r));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [session],
+  );
+
   return {
     reach,
     busy,
     error,
+    setMail,
     turnOn: async () => {
       await turn(true);
     },

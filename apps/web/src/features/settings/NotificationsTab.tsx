@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
 import { dndSetText, quietHoursText, toggleDay, WEEKDAY_LABELS } from '@whombat/client';
 import { COMMUNITY_TEXT } from '@whombat/client/managed';
+import { queryKeys } from '@whombat/client/query';
 import { useBootstrap, useTheAgent } from '@whombat/client/react';
 import {
   ClockTime,
@@ -10,8 +12,9 @@ import {
   type NotificationPreferences,
   WEEKDAY_KEYS,
 } from '@whombat/core';
+import type { LinkSummary } from '@whombat/protocol/session';
 import { type FormEvent, useCallback, useEffect, useId, useState } from 'react';
-import { useCommunity, useManaged } from '../../app/providers';
+import { useAppServices, useCommunity, useManaged } from '../../app/providers';
 import { Button, ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Input } from '../../components/Input';
@@ -22,6 +25,7 @@ import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
 import { useWebPush, type WebPushStatus } from '../../push/useWebPush';
+import { useReach } from '../machine/useReach';
 import { useNow } from '../messaging/useRoom';
 import own from './NotificationsTab.module.css';
 import { useNotificationPreferences, useSaveNotificationPreferences } from './notificationPreferences';
@@ -60,6 +64,10 @@ export function NotificationsTab({ burrow }: { burrow: string }) {
   const capabilities = bootstrap?.capabilities;
   const { words: agent } = useTheAgent(burrow);
   const words = notificationsWords(bootstrap?.burrow.name ?? 'this Whombat', agent.name);
+  const { session } = useAppServices();
+  const { reach, setMail } = useReach(session);
+  const qc = useQueryClient();
+  const link = reach?.link;
 
   const apply = useCallback<Apply>(
     (change, done) =>
@@ -85,6 +93,22 @@ export function NotificationsTab({ burrow }: { burrow: string }) {
       <QuietHoursSection prefs={prefs} timeZone={timeZone} apply={apply} />
       {capabilities?.emailNotifications ? (
         <EmailSection prefs={prefs} apply={apply} hints={words.email} />
+      ) : null}
+      {/* Email through Whombat Link: only where Link knows this Whombat, and the box keeps the choices. */}
+      {link?.mail && link.state !== 'off' ? (
+        <LinkEmailSection
+          link={link}
+          mail={link.mail}
+          save={async (change) => {
+            const ok = await setMail(change);
+            if (!ok) toast.show(SAVE_FAILED);
+            // Whether this Whombat emails notifications now (the EMAIL section above) follows the second choice.
+            else
+              void qc.invalidateQueries({
+                queryKey: queryKeys.conversations.bootstrap({ params: { burrow } }),
+              });
+          }}
+        />
       ) : null}
       {words.threads ? <ThreadsSection prefs={prefs} apply={apply} /> : null}
       <PreviewsSection prefs={prefs} apply={apply} />
@@ -387,6 +411,88 @@ function EmailSection({
     </section>
   );
 }
+
+/**
+ * WHOMBAT LINK (docs/decisions/link-email.md): the owner's two choices for email through Link. Told when this Whombat
+ * goes offline (on unless turned off), and the notification emails and notices sent through Whombat Link (off unless
+ * turned on), with an example of what such an email says. Not in the mocks: Settings → Profile's rows.
+ */
+function LinkEmailSection({
+  link,
+  mail,
+  save,
+}: {
+  link: LinkSummary;
+  mail: NonNullable<LinkSummary['mail']>;
+  save: (change: { offline?: boolean; notifications?: boolean }) => Promise<void>;
+}) {
+  const ids = useId();
+  const to = link.email ?? 'you';
+  return (
+    <section className={styles.section} aria-labelledby={`${ids}-label`}>
+      <SectionLabel as="h2" id={`${ids}-label`}>
+        WHOMBAT LINK
+      </SectionLabel>
+      <div className={styles.card}>
+        <div className={styles.row}>
+          <span className={styles.rowMain}>
+            <label className={styles.rowTitle} htmlFor={`${ids}-offline`}>
+              {LINK_EMAIL_TEXT.offlineTitle}
+            </label>
+            <span className={styles.rowMeta} id={`${ids}-offline-meta`}>
+              {LINK_EMAIL_TEXT.offlineMeta(to)}
+            </span>
+          </span>
+          <Toggle
+            id={`${ids}-offline`}
+            checked={mail.offline}
+            aria-describedby={`${ids}-offline-meta`}
+            onCheckedChange={(offline) => void save({ offline })}
+          />
+        </div>
+        <div className={cx(styles.row, own.wrapRow)}>
+          <span className={styles.rowMain}>
+            <label className={styles.rowTitle} htmlFor={`${ids}-mail`}>
+              {LINK_EMAIL_TEXT.mailTitle}
+            </label>
+            <span className={styles.rowMeta} id={`${ids}-mail-meta`}>
+              {LINK_EMAIL_TEXT.mailMeta}
+            </span>
+          </span>
+          <Toggle
+            id={`${ids}-mail`}
+            checked={mail.notifications}
+            aria-describedby={`${ids}-mail-meta`}
+            onCheckedChange={(notifications) => void save({ notifications })}
+          />
+          <details className={own.example}>
+            <summary>{LINK_EMAIL_TEXT.exampleLabel}</summary>
+            <div className={own.exampleMail}>
+              <p className={own.exampleSubject}>{LINK_EMAIL_TEXT.exampleSubject}</p>
+              <p>{LINK_EMAIL_TEXT.exampleBody}</p>
+              <p className={own.exampleButton}>Open Whombat</p>
+              <p className={own.exampleFoot}>{LINK_EMAIL_TEXT.exampleFoot}</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** The section's words (link-email.md). */
+export const LINK_EMAIL_TEXT = {
+  offlineTitle: 'Tell me when it goes offline',
+  offlineMeta: (to: string) =>
+    `Whombat Link emails ${to} when it hasn’t heard from this Whombat for 2 hours.`,
+  mailTitle: 'Send my emails through Whombat Link',
+  mailMeta:
+    'Your notification emails and notices about this Whombat. They pass through Whombat’s servers and say how many things are waiting, never what they are.',
+  exampleLabel: 'See an example',
+  exampleSubject: '3 things are waiting for you in Whombat',
+  exampleBody: '3 things are waiting for you in your Whombat.',
+  exampleFoot: 'Sent through Whombat Link. It says how many things wait, never what they are.',
+} as const;
 
 /** THREADS: replies in your threads notify you even where you only get mentions. */
 function ThreadsSection({ prefs, apply }: { prefs: NotificationPreferences; apply: Apply }) {
