@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   drawOwnAddressLabel,
+  OWN_ADDRESS_RESERVED_PREFIXES,
   OWN_ADDRESS_RUDE_WORDS,
   OWN_ADDRESS_WORDS,
   OWN_ADDRESS_WORDS_RETIRED,
@@ -50,10 +51,35 @@ describe('ownAddressNameProblem', () => {
       expect(ownAddressNameProblem(name), name).toBe('reserved');
   });
 
+  it('keeps names that pass for a sign-in page or that devices look up for nobody', () => {
+    for (const name of [
+      'secure',
+      'verify',
+      'autodiscover',
+      'wpad',
+      'mta-sts',
+      'paypal',
+      'paypallogin',
+      'my-paypal',
+      'apple-support',
+      'apple',
+      'ing',
+      'ing-verify',
+      'googledrive',
+    ])
+      expect(ownAddressNameProblem(name), name).toBe('reserved');
+    // Only whole names and hyphen-parts: ordinary words that hold one stay free.
+    for (const name of ['applesauce', 'ingrid', 'striped', 'pineapple', 'pingu', 'apple-gusto-sphinx'])
+      expect(ownAddressNameProblem(name), name).toBeNull();
+  });
+
   it('never refuses a drawn label', () => {
     for (const w of [...OWN_ADDRESS_WORDS, ...OWN_ADDRESS_WORDS_RETIRED]) {
       expect(OWN_ADDRESS_RUDE_WORDS.has(w), w).toBe(false);
-      expect(w.startsWith('whombat') || w.startsWith('cybex'), w).toBe(false);
+      expect(
+        OWN_ADDRESS_RESERVED_PREFIXES.filter((p) => w.startsWith(p)),
+        w,
+      ).toEqual([]);
     }
     // Reserved names are whole names, so a word that is one (`news`) is fine inside a label. Two words joined without
     // their hyphen must not spell a rude word either.
