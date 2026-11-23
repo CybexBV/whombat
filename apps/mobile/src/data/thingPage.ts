@@ -29,6 +29,9 @@ import {
 } from '@whombat/client';
 import {
   type ChatSubject,
+  FEEDBACK_THING_ID,
+  GITHUB_THING_ID,
+  isAccountPageId,
   type LookResearch,
   type NoticeNature,
   type NoticeRef,
@@ -44,6 +47,7 @@ import {
   type ThingPagePanel,
   type ThingRunsOn,
 } from '@whombat/core';
+import type { AccountPage } from '../navigation/connectionLinks';
 import { OVERVIEW_TITLE } from './shell';
 
 export const THING_PAGE_COPY = {
@@ -118,7 +122,10 @@ export interface PhoneThingTab {
   key: string;
   label: string;
   count: number | null;
-  /** Connection (the clients' own settings) opens the Connection screen instead of showing a tab (CP-19). */
+  /**
+   * Connection (the clients' own settings) opens the Connection screen instead of showing a tab (CP-19); an account's
+   * opens its own screen (`thingSettingsOpens`).
+   */
   settings: boolean;
   /** “Integrations, 171”. */
   spoken: string;
@@ -129,9 +136,12 @@ export interface PhoneThingTab {
 }
 
 /** The page's tabs: the server's in order, Activity, then Connection when the page has one (CP-05; AP-2634; SST-06). */
-export function phoneThingTabs(page: Pick<ThingPage, 'tabs' | 'settings' | 'connectionId'>): PhoneThingTab[] {
+export function phoneThingTabs(
+  page: Pick<ThingPage, 'tabs' | 'settings' | 'connectionId' | 'catalogId'>,
+): PhoneThingTab[] {
+  // An account's Connection is its own screen, which GitHub and Website feedback have without a connection id.
   return thingTabs(page)
-    .filter((t) => t.own !== 'settings' || !!page.connectionId)
+    .filter((t) => t.own !== 'settings' || !!page.connectionId || isAccountPageId(page.catalogId))
     .map((t) => ({
       key: t.key,
       label: t.label,
@@ -140,6 +150,27 @@ export function phoneThingTabs(page: Pick<ThingPage, 'tabs' | 'settings' | 'conn
       spoken: t.count === null ? t.label : `${t.label}, ${t.count}`,
       server: t.server,
     }));
+}
+
+/**
+ * Where a page's Connection goes: an account's own screen (Google, Microsoft 365, Email, GitHub, Website feedback: its
+ * sign-in, services and what the assistant may do, as Settings → Connections shows it), else the connection's
+ * Connection screen; null without either. Before the page answers, or when an older box answers 404, the row the app
+ * holds names the catalog entry, and GitHub's and Website feedback's ids name themselves.
+ */
+export type ThingSettingsOpens =
+  | { screen: 'ConnectAccount'; page: AccountPage }
+  | { screen: 'Connection'; connectionId: string };
+
+export function thingSettingsOpens(
+  thingId: string,
+  catalogId: string | null | undefined,
+  connectionId: string | null | undefined,
+): ThingSettingsOpens | null {
+  const account =
+    catalogId ?? (thingId === GITHUB_THING_ID ? 'github' : thingId === FEEDBACK_THING_ID ? 'feedback' : null);
+  if (isAccountPageId(account)) return { screen: 'ConnectAccount', page: account };
+  return connectionId ? { screen: 'Connection', connectionId } : null;
 }
 
 /** The tab a link or an address asks for, if the page shows it as a tab; else the first (Overview). */

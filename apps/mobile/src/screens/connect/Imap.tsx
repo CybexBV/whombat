@@ -365,10 +365,13 @@ function ProviderHint({
 export function MailAccount({
   connection,
   header,
+  below = null,
   bottomInset,
 }: {
   connection: Connection;
   header: ReactNode;
+  /** What follows the account (What Whombat watches, when its page opened it). */
+  below?: ReactNode;
   bottomInset: number;
 }) {
   const theme = useTheme();
@@ -526,6 +529,7 @@ export function MailAccount({
         </View>
       ) : null}
       {problem?.message && !changing ? <FormMessage text={problem.message} /> : null}
+      {below}
     </Panel>
   );
 }

@@ -4,8 +4,8 @@
  * fact lines (version first), its address, “Runs on pve-02 · CT 131” opening that guest or server, why the figures
  * couldn't be read this time; its actions (Restart, behind a confirm sheet, for those who may manage it) and “Open
  * Home Assistant” in the browser; then the tabs, underlined (underline-tabs-android.md AP-2634) — the server's
- * (Overview first), Activity, and Connection on the right, which opens the Connection screen — and the tab's panels
- * stacked. Overview ends with “Ask about Home
+ * (Overview first), Activity, and Connection on the right, which opens the Connection screen (an account's: its own
+ * screen, with What Whombat watches under it) — and the tab's panels stacked. Overview ends with “Ask about Home
  * Assistant”: the chat about it, or a new one; a notice's “Look into it” and a “Show more here” chip open the new-chat
  * sheet with their question ready. Pull to refresh; read again every `refreshS` (60 seconds) while on screen (CP-04).
  * The Overview is the Summary (Whombat dashboards.md DS-01…DS-05, connections-page.md CN-05, CN-06; dashboards-mobile.md
@@ -38,7 +38,6 @@ import {
   OVERVIEW_WORDS,
   type ThingHeadPreview,
   thingButtonKey,
-  thingGlyph,
   thingMark,
   thingStatusLevel,
 } from '@whombat/client';
@@ -61,6 +60,7 @@ import { DEFAULT_RANGE, rangeOptions } from '../data/dashboard';
 import { quietNote } from '../data/quiet';
 import { pressNote } from '../data/servicePanels';
 import { putBackAction } from '../data/serviceSettings';
+import { phoneThingGlyph } from '../data/thingLook';
 import {
   headSpoken,
   type LinkRun,
@@ -72,7 +72,9 @@ import {
   shownPanels,
   shownTab,
   THING_PAGE_COPY,
+  type ThingSettingsOpens,
   thingPageInterval,
+  thingSettingsOpens,
   thingSubject,
 } from '../data/thingPage';
 import { showToast, toasts } from '../data/toast';
@@ -203,13 +205,26 @@ export function ThingPageScreen({
   const name = page?.name ?? early?.name ?? title ?? THING_PAGE_COPY.back;
   const parsed = parseThingId(thingId);
 
-  // Its settings are the Connection screen, with What Whombat watches for this thing (a device's is its own, AP-4865).
-  const settingsOf = (connectionId: string | undefined) =>
-    connectionId
-      ? () => navigation.navigate('Connection', { connectionId, title: name, back: name, thingId })
-      : null;
-  const openSettings = settingsOf(page?.settings ? page.connectionId : undefined);
-  const fallbackSettings = settingsOf(parsed?.id.startsWith('con_') ? parsed.id : undefined);
+  // Its settings are the Connection screen, with What Whombat watches for this thing (a device's is its own, AP-4865);
+  // an account's are its own screen (Google's sign-in and services, Email's mailbox), with the same section under them.
+  const settingsOf = (to: ThingSettingsOpens | null) =>
+    to?.screen === 'ConnectAccount'
+      ? () => navigation.navigate('ConnectAccount', { page: to.page, back: name, thingId })
+      : to
+        ? () =>
+            navigation.navigate('Connection', {
+              connectionId: to.connectionId,
+              title: name,
+              back: name,
+              thingId,
+            })
+        : null;
+  const openSettings = settingsOf(
+    page?.settings ? thingSettingsOpens(thingId, page.catalogId, page.connectionId) : null,
+  );
+  const fallbackSettings = settingsOf(
+    thingSettingsOpens(thingId, early?.catalogId, parsed?.id.startsWith('con_') ? parsed.id : null),
+  );
   const showTab = (key: string) => {
     setTab(key);
     scroller.current?.scrollTo({ y: Math.max(0, tabsAt.current - 8), animated: true });
@@ -510,7 +525,12 @@ function HeadTop({
       accessibilityLabel={headSpoken({ name: thing.name, badge: verdict ?? thing.badge })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <ThingIcon glyph={thingGlyph(thing)} mark={thingMark(thing)} size={24} color={theme.colors.ink2} />
+        <ThingIcon
+          glyph={phoneThingGlyph(thing)}
+          mark={thingMark(thing)}
+          size={24}
+          color={theme.colors.ink2}
+        />
         <Text size={28} weight={700} tracking={-0.02} numberOfLines={2} style={{ flexShrink: 1 }}>
           {thing.name}
         </Text>
@@ -608,7 +628,7 @@ function ServiceHead({
         accessibilityLabel={headSpoken({ name: page.name, badge: page.badge })}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
       >
-        <ThingIcon glyph={thingGlyph(page)} mark={thingMark(page)} size={30} color={theme.colors.ink2} />
+        <ThingIcon glyph={phoneThingGlyph(page)} mark={thingMark(page)} size={30} color={theme.colors.ink2} />
         <Text size={30} weight={700} lh={1.05} tracking={-0.02} numberOfLines={2} style={{ flexShrink: 1 }}>
           {page.name}
         </Text>

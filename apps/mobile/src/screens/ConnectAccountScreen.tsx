@@ -9,6 +9,8 @@
  *   Setting up a provider's app stays on the web (once).
  * - **Email (IMAP)**: its form and account (`connect/Imap.tsx`).
  * - **GitHub and Website feedback**: what is connected, and that they are set up in Whombat on a computer.
+ * The same screen is an account's Connection: its page opens it with its thing (`thingId`), and WHAT WHOMBAT WATCHES
+ * for that page follows the account (`connect/AccountWatch.tsx`), as a connection's Connection screen lists it.
  * The web's words (`ACCOUNT_TEXT`, `REAUTH_TEXT`, `IMAP_COPY`).
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -61,6 +63,7 @@ import { KeyboardAvoidingView } from '../ui/keyboard';
 import { Button, ErrorState, SkeletonRows, StatusDot, toneColor } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
 import { AccountKeys } from './connect/AccountKeys';
+import { AccountWatch } from './connect/AccountWatch';
 import { ImapConnectForm, MailAccount } from './connect/Imap';
 import { backUnder, Note, openOutside, Panel, Title } from './connect/parts';
 import { showFailure, showNotice } from './feedback';
@@ -69,7 +72,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ConnectAccount'>;
 
 export function ConnectAccountScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { page } = route.params;
+  const { page, thingId } = route.params;
   const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key));
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Connections'));
   // A sign-in's refusal (`connect_error=`), said once.
@@ -90,24 +93,34 @@ export function ConnectAccountScreen({ route, navigation }: Props) {
       </Screen>
     );
   const header = <Head page={page} />;
+  // Opened from the account's page: what Whombat watches there, under the account.
+  const below = thingId ? (
+    <AccountWatch thingId={thingId} title={(text) => <SectionTitle>{text}</SectionTitle>} />
+  ) : null;
   return (
     <Screen>
       <BackBar label={back} onPress={goBack} />
       <KeyboardAvoidingView style={{ flex: 1 }}>
         {isAccountProvider(page) ? (
-          <ProviderAccount provider={page} header={header} error={accountErrorText(page, error)} />
+          <ProviderAccount
+            provider={page}
+            header={header}
+            below={below}
+            error={accountErrorText(page, error)}
+          />
         ) : page === 'imap' ? (
           <ImapPage
             header={header}
+            below={below}
             bottomInset={insets.bottom}
             onOpenProvider={(provider) =>
               navigation.push('ConnectAccount', { page: provider, back: accountHead('imap').name })
             }
           />
         ) : page === 'github' ? (
-          <GitHubPage header={header} />
+          <GitHubPage header={header} below={below} />
         ) : (
-          <FeedbackPage header={header} />
+          <FeedbackPage header={header} below={below} />
         )}
       </KeyboardAvoidingView>
     </Screen>
@@ -146,10 +159,13 @@ function SectionTitle({ children }: { children: string }) {
 function ProviderAccount({
   provider,
   header,
+  below,
   error,
 }: {
   provider: AccountProvider;
   header: ReactNode;
+  /** What follows the account (What Whombat watches, from its page). */
+  below: ReactNode;
   error: string | null;
 }) {
   const theme = useTheme();
@@ -346,6 +362,7 @@ function ProviderAccount({
           title={(text) => <SectionTitle>{text}</SectionTitle>}
         />
       ) : null}
+      {below}
     </Panel>
   );
 }
@@ -427,10 +444,12 @@ function ServicePicker({
 
 function ImapPage({
   header,
+  below,
   bottomInset,
   onOpenProvider,
 }: {
   header: ReactNode;
+  below: ReactNode;
   bottomInset: number;
   onOpenProvider: (provider: 'google' | 'microsoft') => void;
 }) {
@@ -462,7 +481,7 @@ function ImapPage({
       </Panel>
     );
   return connection ? (
-    <MailAccount connection={connection} header={header} bottomInset={bottomInset} />
+    <MailAccount connection={connection} header={header} below={below} bottomInset={bottomInset} />
   ) : (
     <ImapConnectForm header={header} bottomInset={bottomInset} onOpenProvider={onOpenProvider} />
   );
@@ -470,7 +489,7 @@ function ImapPage({
 
 /* GitHub and Website feedback ------------------------------------------------------------------------------------ */
 
-function GitHubPage({ header }: { header: ReactNode }) {
+function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) {
   const theme = useTheme();
   const { slug } = useBurrow();
   const github = useGitHubStatus({ params: { burrow: slug } }, { retry: false });
@@ -506,11 +525,12 @@ function GitHubPage({ header }: { header: ReactNode }) {
         </View>
       )}
       <Note>{BUILTIN_TEXT.github.elsewhere}</Note>
+      {below}
     </Panel>
   );
 }
 
-function FeedbackPage({ header }: { header: ReactNode }) {
+function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }) {
   const theme = useTheme();
   const { slug } = useBurrow();
   const list = useFeedbackIntegrations({ params: { burrow: slug } }, { retry: false });
@@ -541,6 +561,7 @@ function FeedbackPage({ header }: { header: ReactNode }) {
       <Text size={13.5} lh={1.45} color={theme.colors.mut}>
         {BUILTIN_TEXT.feedback.elsewhere}
       </Text>
+      {below}
     </Panel>
   );
 }
