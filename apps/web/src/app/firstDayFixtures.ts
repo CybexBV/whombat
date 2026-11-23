@@ -31,7 +31,7 @@ const mail = card({
       actions: [
         {
           id: 'imap',
-          label: 'Other email (IMAP)',
+          label: 'Other email',
           style: 'primary',
           href: '/settings?tab=connections&connection=imap',
         },
