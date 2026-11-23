@@ -13,6 +13,7 @@ import { FIRST_KINDS } from './first';
 import { HOME_KINDS } from './home/index';
 import { INFRA_KINDS } from './infra/index';
 import { MEDIA_KINDS } from './media/index';
+import { OWN_KINDS } from './own/index';
 import { PS5_KIND } from './ps5';
 import type { KindModule } from './registry';
 import { STORAGE_KINDS } from './storage/index';
@@ -24,6 +25,7 @@ export const KIND_MODULES: Record<string, KindModule> = {
   ...INFRA_KINDS,
   ...STORAGE_KINDS,
   ...BUSINESS_KINDS,
+  ...OWN_KINDS,
   ps5: PS5_KIND,
   findmy: FIND_MY_KIND,
 };
