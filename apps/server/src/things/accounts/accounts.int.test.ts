@@ -9,6 +9,7 @@ import {
   GITHUB_THING_ID,
   googleScopesFor,
   newId,
+  ThingPage,
   thingHref,
   thingId,
 } from '@whombat/core';
@@ -67,6 +68,7 @@ beforeAll(async () => {
 describe('a Google account’s page', () => {
   it('is its own person’s, read with their token, and not_found for anyone else', async () => {
     const page = await thingPage(t.services, mara, google, TZ);
+    expect(ThingPage.safeParse(page).error).toBeUndefined();
     expect(page).toMatchObject({ id: google, catalogId: 'google', name: 'Google', settings: true });
     expect(page.connectionId).toBe(google.slice('connection:'.length));
     expect(page.address).toBe('mara@example.com');
@@ -87,6 +89,7 @@ describe('a Google account’s page', () => {
 describe('GitHub’s page', () => {
   it('comes from the mirror: the review asked of the viewer, the counts', async () => {
     const page = await thingPage(t.services, mara, GITHUB_THING_ID, TZ);
+    expect(ThingPage.safeParse(page).error).toBeUndefined();
     expect(page).toMatchObject({ id: GITHUB_THING_ID, catalogId: 'github', settings: true });
     const panels = page.tabs[0]?.panels ?? [];
     const waiting = panels.find((p) => p.id === 'waiting');
@@ -117,6 +120,7 @@ describe('Website feedback’s page and Home', () => {
       .set({ status: 'resolved' })
       .where(eq(feedbackReports.id, first.id));
     const page = await thingPage(t.services, mara, FEEDBACK_THING_ID, TZ);
+    expect(ThingPage.safeParse(page).error).toBeUndefined();
     expect(page).toMatchObject({ id: FEEDBACK_THING_ID, catalogId: 'feedback', name: 'Website feedback' });
     const fresh = page.tabs[0]?.panels.find((p) => p.id === 'new');
     expect(fresh?.kind === 'list' && fresh.items).toHaveLength(1);
