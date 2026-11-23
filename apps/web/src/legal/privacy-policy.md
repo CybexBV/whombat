@@ -69,7 +69,9 @@ or browser details) and, if you use them, your passkeys. We use them to sign you
 We also keep which version of our terms you accepted, and when, with a keyed hash of the network you accepted them
 from (not its IP address).
 
-**Whombat Link.** For each Whombat you add: its name, its own address (`<label>.box.whombat.app`), whether Link is
+**Whombat Link.** For each Whombat you add: its name, its own address (`<name>.whombat.app`, the name you chose or a
+random one; `<label>.box.whombat.app` for a Whombat that hasn't moved yet), the address it had before for 30 days after
+you change it, whether Link is
 on, starting, ending or off and since when, and when it last asked us for a connection. The one-time code a Whombat
 shows to join your account lives 15 minutes. If we give you free time, we keep how long and a short note why. We use
 this to run Whombat Link and to know what your subscription covers.
@@ -208,8 +210,10 @@ so they see its IP address and what it asks for, and their own privacy policies 
 - **Anthropic** hosts Claude Code. Your Whombat downloads it from Anthropic's own site when you choose Claude.
 - **Let's Encrypt** (ISRG) issues the certificate for your Whombat's own address when you use Whombat Link. Every
   certificate is published in public **Certificate Transparency logs**, so that address (a name under
-  `box.whombat.app`) becomes public there. Your Whombat reads those logs through **Cert Spotter** (SSLMate) to warn
-  you about any certificate for its address that it didn't ask for.
+  `whombat.app`) becomes public there. Your Whombat reads those logs through **Cert Spotter** (SSLMate) to warn
+  you about any certificate for its address that it didn't ask for. Until 16 February 2027, **Cloudflare**, which runs
+  `whombat.app`'s DNS, also holds a certificate for every name under `whombat.app`; your Whombat knows it and says so
+  under its address.
 - **Hugging Face** hosts the speech models. Your Whombat downloads its speech-to-text model while voice typing is on
   (it is at first), and the Dutch voice only after you turn it on and agree to its licence.
 - **Time servers** keep its clock right: Cloudflare, Netnod, PTB and SIDN's TimeNL.

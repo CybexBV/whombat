@@ -14,8 +14,12 @@ import {
   LinkMailSetInput,
   LinkOutput,
   LinkWhombatsOutput,
+  OwnAddressCheckInput,
+  OwnAddressCheckOutput,
   OwnAddressReachSetInput,
   OwnAddressReachSetOutput,
+  OwnAddressRenameInput,
+  OwnAddressRenameOutput,
   OwnAddressStatusOutput,
   PasskeyLinkInput,
   PasskeyRegisterBeginInput,
@@ -1029,6 +1033,15 @@ export const sessionOps = {
   /** The owner's switch “Reach my Whombat's page from anywhere”. */
   ownAddressReachSet: (s: ApplianceSession, on: boolean, o?: CallOptions) =>
     run(s, 'ownAddress.reach.set', OwnAddressReachSetInput.parse({ on }), OwnAddressReachSetOutput, o),
+  /**
+   * Whether a name is free for this box's address (owners, 4.16): `free`, `yours` (it had it before), `taken`,
+   * `reserved` or `invalid`; `host` when it could be the box's. A box before 4.16 answers `unknown_op`.
+   */
+  ownAddressCheck: (s: ApplianceSession, label: string, o?: CallOptions) =>
+    run(s, 'ownAddress.check', OwnAddressCheckInput.parse({ label }), OwnAddressCheckOutput, o),
+  /** Changes the box's address (owners, 4.16); the old one keeps working for 30 days. The answer is the new state. */
+  ownAddressRename: (s: ApplianceSession, label: string, o?: CallOptions) =>
+    run(s, 'ownAddress.rename', OwnAddressRenameInput.parse({ label }), OwnAddressRenameOutput, o),
   /*
    * Whombat Link, Reach and Updates (4.4; docs/decisions/whombat-link.md): a box before 4.4 answers `unknown_op`, which
    * the apps read as “no Link or channel on this Whombat yet”.

@@ -1,0 +1,46 @@
+/* The name for the box's address: `[ name ].whombat.app`, the check's line and the privacy words under it. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input > input {
+  flex: 1;
+  min-width: 0;
+}
+
+.zone {
+  color: var(--ink2);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.line {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--mut);
+}
+
+.line[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.line[data-tone="bad"] {
+  color: var(--bad);
+}
+
+/* The field with its label and the way back, filling a card's row (the account site's confirm step). */
+.box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

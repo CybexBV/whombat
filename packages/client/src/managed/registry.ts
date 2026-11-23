@@ -40,7 +40,7 @@ export interface KnownAppliance {
    */
   direct?: DirectAddresses | null;
   /**
-   * The box's own address (`https://<label>.box.whombat.app/`, 4.3), from the device link that let this device in or the
+   * The box's own address (`https://<name>.whombat.app/`, 4.3; `<label>.box.whombat.app` for a box that hasn't moved), from the device link that let this device in or the
    * box's status: the phone tries it first. Kept apart from `direct`, which each `welcome` replaces.
    */
   ownAddress?: string | null;

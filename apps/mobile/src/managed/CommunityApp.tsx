@@ -204,6 +204,10 @@ export function CommunityApp(props: CommunityAppProps) {
         const k = registry.get(active.device);
         if (k) registry.put({ ...k, direct });
       }}
+      onOwnAddress={(ownAddress) => {
+        const k = registry.get(active.device);
+        if (k) registry.put({ ...k, ownAddress });
+      }}
       onAccount={(accountId) => {
         const k = registry.get(active.device);
         if (k && k.accountId !== accountId) registry.put({ ...k, accountId });

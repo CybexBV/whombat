@@ -27,6 +27,7 @@ export * from './magic-link';
 export * from './naming';
 export * from './one-passkey';
 export * from './own-address';
+export * from './own-name';
 export * from './pairing';
 export * from './passkey-backup-key';
 export { passkeyPrfBytes } from './passkey-backup-key';

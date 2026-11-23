@@ -1697,14 +1697,18 @@ elsewhere keeps Name your Whombat and Meet your agent. Empty first screens show 
 ([first-day.md](docs/decisions/first-day.md)). The hosted app is
 also the account site for Whombat Link: open sign-up by magic link; the home (`/`) with the person's Whombats, each
 opening at its own address (the one this browser opened last first), and Add a Whombat; `/add` (also `/link`, what a
-box's screen shows) where a person enters the code their Whombat's screen shows and ticks the Subscription Terms; and
+box's screen shows) where a person enters the code their Whombat's screen shows, may choose the name of its address
+(checked as they type) and ticks the Subscription Terms; and
 the account (`/account`, `/billing`) with the Link subscription by the month or the year with a promotion code on
 Stripe's page and its free time (Stripe Checkout to start paying, the portal once Stripe has the subscription, through
 control), the email, the phone app and signing out. An account with an organization made before Link sees its
 Whombats on the home too and keeps its hosted list at `/appliances`
 ([link-account-site.md](docs/app/decisions/link-account-site.md), [account-home.md](docs/app/decisions/account-home.md)).
 On a box's own page with Link, the name at the top of the sidebar opens the account's other Whombats (`link.whombats`,
-through the manager and control) and the way back to the account site. The legal pages are
+through the manager and control) and the way back to the account site. Settings → This Whombat changes the address's
+name; for the 30 days the old address still works, its page says where the box moved and opens the new one with a device
+link, and the phone keeps the address the box reports ([own-address.md](docs/app/decisions/own-address.md)). The legal
+pages are
 `apps/web/src/legal/*.md` at `/legal/…`. Development and the visual harness:
 [docs/app/README.md](docs/app/README.md).
 
