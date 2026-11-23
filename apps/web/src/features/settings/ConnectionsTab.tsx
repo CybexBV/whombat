@@ -346,6 +346,7 @@ function useCatalogOverview(burrow: string): CatalogOverview | undefined {
       category: entry.category,
       action: state.action,
       note: state.note,
+      ...(state.addServer ? { addServer: true } : {}),
     });
   }
   return { rows, tiles };

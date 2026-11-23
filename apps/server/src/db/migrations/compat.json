@@ -111,6 +111,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Email through Whombat Link (docs/decisions/link-email.md): two defaulted booleans on appliance_state, the owner's choices; the release before it reads and writes past them."
+    },
+    "0017_findmy_places": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Find My as a connection (docs/decisions/findmy-connection.md): a new table findmy_places, each person's last known place words and since when on a Find My connection a live automation listens to, cascading with the connection. It also marks the first release that runs findmy automations: a box turns them on only while the release it would go back to recorded at least this schema in runtime_releases. The release before it never reads the table."
     }
   }
 }

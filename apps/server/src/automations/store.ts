@@ -507,7 +507,14 @@ export async function activeRunCount(db: Db, automationId: string, exceptRunId?:
 }
 
 /** Trigger kinds that read the signed events after the burrow's cursor (BP-C07). */
-export const EVENT_TRIGGER_KINDS = ['message_posted', 'reaction_added', 'github', 'tracker', 'mail'] as const;
+export const EVENT_TRIGGER_KINDS = [
+  'message_posted',
+  'reaction_added',
+  'github',
+  'tracker',
+  'mail',
+  'findmy',
+] as const;
 
 /** Whether a trigger reads the events (the engine scans a burrow only while a live automation has one, SV-03). */
 export function readsEvents(trigger: { kind: string }): boolean {

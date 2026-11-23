@@ -1,10 +1,14 @@
 /**
- * Find My on a Mac's page, in words and numbers both apps share (docs/implementation/macos/findmy.md §5): when the tab
+ * Find My through a Mac, in words and numbers both apps share (docs/implementation/macos/findmy.md §5): when the tab
  * reads again, what its one line says (the screen's own reason first, then a read under way, then why the last read
- * didn't work), each person's line, the map's size and zoom, where each person's avatar sits on the picture, and the
- * exact picture's words. Pure; the hooks are `findmy-react.ts`.
+ * didn't work), each person's line, the map's size and zoom, where each person's avatar sits on the picture, the
+ * exact picture's words, and how the box reads it while nobody looks. The tab is the Find My connection's
+ * (docs/implementation/macos/findmy-connection.md); the Mac's page links to it. Pure; the hooks are `findmy-react.ts`.
  */
+import { thingHref } from '@whombat/core';
 import {
+  type ConnectionView,
+  findMyPlaceKey,
   findMyProblemText,
   HOST_FIND_MY_FRESH_MS,
   HOST_SCREEN_LIMITS,
@@ -40,7 +44,72 @@ export const FIND_MY_WORDS = {
   mapAlt: (server: string) => `Map of everyone Find My shows on ${server}`,
   drawing: 'Drawing the map…',
   close: 'Close',
+  /** Under the map, when the box reads only for whoever has the page open. */
+  readsWhileLooking: 'Reads only while someone looks',
+  /** The Mac's page: its one link to the Find My connection that reads it. */
+  linkTitle: 'Find My',
+  linkHint: 'Opens Find My',
 } as const;
+
+/* Reading in the background ---------------------------------------------------------------------------- */
+
+/** “every 15 minutes”, “every hour”, “every 2 hours”, “every minute”. */
+export function findMyEvery(minutes: number): string {
+  if (minutes >= 60 && minutes % 60 === 0)
+    return minutes === 60 ? 'every hour' : `every ${minutes / 60} hours`;
+  return minutes === 1 ? 'every minute' : `every ${minutes} minutes`;
+}
+
+/**
+ * The muted line under the map: how the box reads Find My while nobody looks. “Reads only while someone looks” (off, or
+ * an older box that doesn't say), “Reads every 15 minutes”, or, when an automation is why, “Reads every 15 minutes for
+ * “Tell me when Mara gets home””.
+ */
+export function findMyBackgroundLine(background: HostFindMy['background']): string {
+  if (!background) return FIND_MY_WORDS.readsWhileLooking;
+  const every = `Reads ${findMyEvery(background.everyMinutes)}`;
+  return background.automation ? `${every} for “${background.automation}”` : every;
+}
+
+/* The connection a Mac reads for -------------------------------------------------------------------------- */
+
+/** The Find My catalog entry's id. */
+export const FIND_MY_CATALOG_ID = 'findmy';
+
+export interface FindMyConnectionLink {
+  connectionId: string;
+  label: string;
+  /** The connection's page (`/things/connection:con_…`), which opens on its Find My tab. */
+  href: string;
+}
+
+/**
+ * The Find My connection that reads Find My on the Mac `serverId` (its `mac` field names the Mac), for the one link on
+ * the Mac's page; null when none does. Each Mac has at most one; the first by the list's order otherwise.
+ */
+export function findMyConnectionOf(
+  connections: readonly Pick<ConnectionView, 'id' | 'catalogId' | 'label' | 'fields'>[] | null | undefined,
+  serverId: string,
+): FindMyConnectionLink | null {
+  const c = (connections ?? []).find((x) => x.catalogId === FIND_MY_CATALOG_ID && x.fields.mac === serverId);
+  return c ? { connectionId: c.id, label: c.label, href: thingHref('connection', c.id) } : null;
+}
+
+/** The Mac each Find My connection reads, by its `mac` field: `[connectionId, serverId]`, the ones without left out. */
+export function findMyMacs(
+  connections: readonly Pick<ConnectionView, 'id' | 'catalogId' | 'fields'>[] | null | undefined,
+): { connectionId: string; serverId: string }[] {
+  return (connections ?? []).flatMap((c) =>
+    c.catalogId === FIND_MY_CATALOG_ID && c.fields.mac
+      ? [{ connectionId: c.id, serverId: c.fields.mac }]
+      : [],
+  );
+}
+
+/** Whether a person's place is Home in Find My's own words (case and spaces don't count). */
+export function findMyAtHome(person: Pick<HostFindMyPerson, 'place'>): boolean {
+  return !!person.place && findMyPlaceKey(person.place) === 'home';
+}
 
 /** “just now” under a minute, else “5 min ago”. */
 export function findMyAgo(iso: string, now: number): string {

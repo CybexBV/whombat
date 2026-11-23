@@ -1,8 +1,21 @@
 /** Find My on the fixture Mac: a read that takes a moment, the made-up people, the map and the exact picture. */
-import { HOST_FIND_MY_FRESH_MS, HostFindMy, HostFindMyMap, HostFindMyPicture } from '@whombat/core/domain';
+import { ThingPage, ThingSummary } from '@whombat/core';
+import {
+  ConnectionView,
+  HOST_FIND_MY_FRESH_MS,
+  HostFindMy,
+  HostFindMyMap,
+  HostFindMyPicture,
+} from '@whombat/core/domain';
 import { describe, expect, it } from 'vitest';
 import { createHostsFixtures } from './fixtures';
-import { FIND_MY_FIXTURE_READ_MS, FIND_MY_PEOPLE } from './fixtures-findmy';
+import { FIND_MY_FIXTURE_BACKGROUND, FIND_MY_FIXTURE_READ_MS, FIND_MY_PEOPLE } from './fixtures-findmy';
+import {
+  FIND_MY_CONNECTION_ID,
+  findMyConnectionPage,
+  findMyConnectionThing,
+  findMyConnectionView,
+} from './fixtures-findmy-connection';
 import { MAC_SERVER, type MacScenario } from './fixtures-mac';
 
 const NOW = Date.parse('2026-11-22T12:00:00Z');
@@ -110,5 +123,20 @@ describe('Find My on the fixture Mac', () => {
     const sem = HostFindMy.parse(call('POST', '/exact', {}, { person: '9c651d225f5b' })?.body);
     expect(sem.exact).toMatchObject({ state: 'failed', problem: { code: 'not_found' } });
     expect(call('POST', '/exact', {}, { person: 'Ilse' })?.status).toBe(400);
+  });
+});
+
+describe('the fixture worlds’ Find My connection', () => {
+  const at = new Date(NOW).toISOString();
+
+  it('names studio as its Mac in its fields, its page’s tab and its read', () => {
+    const view = ConnectionView.parse(findMyConnectionView(at));
+    expect(view.fields).toEqual({ mac: MAC_SERVER, background: '15' });
+    const page = ThingPage.parse(findMyConnectionPage(at));
+    expect(page.connectionId).toBe(FIND_MY_CONNECTION_ID);
+    expect(page.tabs[0]).toMatchObject({ key: 'findmy', server: MAC_SERVER, panels: [] });
+    expect(ThingSummary.parse(findMyConnectionThing()).catalogId).toBe('findmy');
+    const { read } = studio();
+    expect(read().background).toEqual(FIND_MY_FIXTURE_BACKGROUND);
   });
 });

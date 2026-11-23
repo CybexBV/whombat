@@ -16,6 +16,7 @@ import {
   TRIGGER_KIND_LABELS,
 } from '../domain/automation.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
+import { findMyWhenText } from './findmy.js';
 import { mailTriggerProblems, mailWhenText } from './mail.js';
 import { checkSchedule, describeSchedule, ScheduleError } from './schedule.js';
 import { templatePaths } from './template.js';
@@ -298,6 +299,8 @@ export function triggerSummary(
           return `${t.event === 'reporter_replied' ? 'Customer replies' : trackerSummary(t.itemKinds)} in ${connectionLabel(t.connectionId) ?? 'a tracker connection'}`;
         case 'mail':
           return mailWhenText(t, connectionLabel(t.connectionId));
+        case 'findmy':
+          return findMyWhenText(t);
       }
       return '';
     })

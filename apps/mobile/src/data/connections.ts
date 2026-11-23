@@ -102,7 +102,9 @@ export function connectionsWebPath(slug: string, catalogId: string, connectionId
  */
 export type ConnectionOpens =
   | { screen: 'Connect'; catalogId: string }
-  | { screen: 'ConnectAccount'; page: AccountPage };
+  | { screen: 'ConnectAccount'; page: AccountPage }
+  /** Add a server: Find My without a Mac (`needs_mac`, findmy-connection.md §1.2). */
+  | { screen: 'AddServer' };
 
 export function entryOpens(catalogId: string): ConnectionOpens | null {
   if (isAccountPage(catalogId)) return { screen: 'ConnectAccount', page: catalogId };
@@ -439,7 +441,8 @@ export function addConnectionRows(
         tag,
         logo: connectionLogo(entry.id, entry.name),
         webPath: connectionsWebPath(slug, entry.id),
-        opens: entryOpens(entry.id),
+        // Find My without a Mac opens Add a server; you add the Mac there first.
+        opens: address === 'needs_mac' && !has.has(entry.id) ? { screen: 'AddServer' } : entryOpens(entry.id),
         // The description's own full stop goes: the parts are joined with “. ”.
         accessibilityLabel: [
           tag ? `${entry.name}, ${tag.text}` : entry.name,

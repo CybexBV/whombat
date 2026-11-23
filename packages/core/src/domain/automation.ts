@@ -21,6 +21,7 @@ import {
 } from '../ids.js';
 import { MergeMethod } from './approval.js';
 import { JsonObject, Timestamp } from './common.js';
+import { FIND_MY_PLACE_MAX, FindMyPersonId } from './hosts-findmy.js';
 import { TRACKER_CUSTOMER_REPLY_MAX, TrackerItemKind, TrackerRecipeWords } from './tracker.js';
 
 /** The longest `AutomationAssessment.valueWhy` (3.12). */
@@ -251,6 +252,32 @@ export const MailTrigger = z
   .strict();
 export type MailTrigger = z.infer<typeof MailTrigger>;
 
+/** What a Find My trigger waits for: the person gets to the place, or goes from it to another place. */
+export const FindMyChange = z.enum(['arrives', 'leaves']);
+export type FindMyChange = z.infer<typeof FindMyChange>;
+
+/**
+ * A person arriving at or leaving a place, as Find My on one of the person's Macs shows it
+ * (docs/implementation/macos/findmy-connection.md): it fires on the signed `findmy.place_changed`, which the box records
+ * only while a live automation listens to that connection. `person` is Find My's stable id for the name
+ * (`HostFindMyPerson.id`); `place` is Find My's own words (“Home”, “Lelystad”), compared without case or spaces.
+ * `arrives`: the person is at the place now and wasn't; `leaves`: they were there and are at another place now. Someone
+ * Find My has no place for (“No location found”) neither arrives nor leaves.
+ */
+export const FindMyTrigger = z
+  .object({
+    kind: z.literal('findmy'),
+    /** The Find My connection (Settings → Connections) whose reads it listens to. */
+    connectionId: ConnectionId,
+    person: FindMyPersonId,
+    /** The person's name as Find My showed it when the automation was made, for its words (“Mara Visser”). */
+    name: z.string().trim().min(1).max(200).optional(),
+    change: FindMyChange,
+    place: z.string().trim().min(1).max(FIND_MY_PLACE_MAX),
+  })
+  .strict();
+export type FindMyTrigger = z.infer<typeof FindMyTrigger>;
+
 /** An authenticated inbound webhook (off until an owner turns it on and a secret exists). */
 export const WebhookTrigger = z.object({ kind: z.literal('webhook') }).strict();
 
@@ -266,6 +293,7 @@ export const AutomationTrigger = z.discriminatedUnion('kind', [
   ManualTrigger,
   TrackerTrigger,
   MailTrigger,
+  FindMyTrigger,
 ]);
 export type AutomationTrigger = z.infer<typeof AutomationTrigger>;
 export type AutomationTriggerInput = z.input<typeof AutomationTrigger>;
@@ -1119,6 +1147,7 @@ export const AutomationSource = z.enum([
   'github',
   'tracker',
   'mail',
+  'findmy',
   'schedule',
   'message',
   'reaction',
@@ -1291,6 +1320,7 @@ export const AutomationTriggerInfo = z.object({
     'manual',
     'tracker',
     'mail',
+    'findmy',
   ]),
   /** “Mara in #bugs”, “Every day at 09:00”, “Webhook delivery 7f3c…”. */
   summary: z.string().max(200),
@@ -1426,4 +1456,5 @@ export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {
   manual: 'Only when started by hand',
   tracker: 'A report arrives in a tracker',
   mail: 'Matching mail arrives',
+  findmy: 'Someone arrives or leaves',
 };

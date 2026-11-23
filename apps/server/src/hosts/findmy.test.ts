@@ -366,6 +366,35 @@ describe('a read', () => {
   });
 });
 
+describe('a Find My connection’s reads', () => {
+  it('tell whoever listens after a read that worked, and never after one that didn’t', async () => {
+    const { mac, store, read, later } = setup();
+    const told: { server: string; places: (string | null)[] }[] = [];
+    const stop = store.onRead((server, people) => told.push({ server, places: people.map((p) => p.place) }));
+    await read();
+    expect(told).toEqual([{ server: 'studio', places: ['Home', 'Lelystad', null] }]);
+    mac.idle = 5;
+    later(3 * MIN);
+    expect((await read()).problem?.code).toBe('in_use');
+    expect(told).toHaveLength(1);
+    stop();
+  });
+
+  it('keep what was read while the Mac is read in the background, and a background read isn’t a look', async () => {
+    const { mac, store, later } = setup();
+    store.hold(['Studio']);
+    store.refresh(mac, 'studio', ACTOR, 'Studio', { look: false });
+    await store.idle('studio');
+    later(3 * 60 * MIN);
+    store.sweep();
+    expect(store.peek('studio')?.people).toHaveLength(3);
+    // Once it isn't, the hour after the last look applies: the background read wasn't one.
+    store.hold([]);
+    store.sweep();
+    expect(store.peek('studio')).toBeNull();
+  });
+});
+
 describe('the exact picture', () => {
   it('cuts Find My’s map of the person from the screen, zoomed in, and keeps it ten minutes', async () => {
     const { mac, store, read, later } = setup();

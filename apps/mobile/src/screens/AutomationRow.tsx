@@ -32,6 +32,7 @@ import {
   LinkIcon,
   type LucideIcon,
   Mail,
+  MapPin,
   MessageSquare,
   Play,
   Smile,
@@ -48,6 +49,7 @@ const AVATAR_STALE_MS = 6 * 60 * 60 * 1000;
 const ICONS: Record<Exclude<AutomationSource, 'github'>, LucideIcon> = {
   tracker: Inbox,
   mail: Mail,
+  findmy: MapPin,
   schedule: Clock,
   message: MessageSquare,
   reaction: Smile,

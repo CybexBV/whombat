@@ -34,7 +34,7 @@ export const SERVER_COPY = {
   plugins: 'Plugins',
   /** A Mac's (macos-servers.md MAC-34). */
   screen: 'Screen',
-  /** A Mac's Find My (docs/implementation/macos/findmy.md). */
+  /** A Mac's Find My, on a Whombat from before Find My was a connection (findmy-connection.md). */
   findmy: 'Find My',
   noGuests: 'Nothing runs on this server.',
   guestsFailed: 'This list didn’t load.',

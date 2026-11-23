@@ -29,6 +29,7 @@ import { CareStepId } from '../domain/care-plan.js';
 import { DiffStat, FileChange, JsonObject } from '../domain/common.js';
 import { ConnectorProvider, type ConnectorService } from '../domain/connectors.js';
 import { ConversationKind } from '../domain/conversation.js';
+import { FindMyPersonId } from '../domain/hosts-findmy.js';
 import {
   LOOK_FIX_LABEL_MAX,
   LOOK_FIX_STEP_MAX,
@@ -180,6 +181,18 @@ export const AgentMailConnection = z.object({
   working: z.boolean(),
 });
 export type AgentMailConnection = z.infer<typeof AgentMailConnection>;
+
+/**
+ * A person on one of the person's Find My connections, for a findmy trigger's `connectionId`, `person` and `name`, with
+ * their place as Find My words it now (null: none, or not read yet). Never a street or coordinates.
+ */
+export const AgentFindMyPerson = z.object({
+  connectionId: ConnectionId,
+  person: FindMyPersonId,
+  name: z.string(),
+  place: z.string().nullable(),
+});
+export type AgentFindMyPerson = z.infer<typeof AgentFindMyPerson>;
 
 /**
  * `look_report`'s input (3.5; Whombat look-research.md LR-05…LR-07): strict, and a fixed look offers no step. Whombat
@@ -730,13 +743,14 @@ export const MCP_TOOLS = {
     name: 'automation_read',
     title: 'Read automations',
     description:
-      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
+      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), the people Find My connections know (findMyPeople, the connectionId, person and name a findmy trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
     input: z.object({ automationId: AutomationId.optional() }),
     output: z.object({
       automations: z.array(AgentAutomationSummary).optional(),
       automation: AgentAutomationDetail.optional(),
       trackerConnections: z.array(AgentTrackerConnection).optional(),
       mailConnections: z.array(AgentMailConnection).optional(),
+      findMyPeople: z.array(AgentFindMyPerson).max(500).optional(),
       guide: z.string().optional(),
     }),
     requiredKey: null,

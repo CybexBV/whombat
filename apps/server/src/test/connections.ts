@@ -51,7 +51,8 @@ export async function insertConnection(services: Services, c: TestConnection): P
   // A report tracker names its driver: the tests' fake one unless a test says otherwise.
   const fields =
     c.catalogId === 'tracker' ? { driver: 'fake-tracker', ...(c.fields ?? {}) } : (c.fields ?? {});
-  const baseUrl = resolveBaseUrl(entry, fields);
+  // A connection through a Mac (Find My) keeps the entry's own base, which is never requested.
+  const baseUrl = entry.check?.kind === 'mac' ? entry.baseUrl : resolveBaseUrl(entry, fields);
   if (!baseUrl) throw new Error(`no base URL for ${c.catalogId} with ${JSON.stringify(fields)}`);
   const seal = (kind: ConnectionSecretKind, value: string | null | undefined) =>
     value ? sealConnectionSecret(services.custody, id, kind, value) : null;

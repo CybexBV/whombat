@@ -47,9 +47,11 @@ export function AddConnectionScreen({ navigation }: Props) {
   const theme = useTheme();
   const { slug } = useBurrow();
   const { catalog, offered, settled, refetch } = useConnections();
-  /** What a row opens (AP-2902): Connect {Name}, or the account's own screen. */
+  /** What a row opens (AP-2902): Connect {Name}, the account's own screen, or Add a server (Find My without a Mac). */
   const open = (opens: ConnectionOpens | null) => {
     if (!opens) return undefined;
+    if (opens.screen === 'AddServer')
+      return () => navigation.navigate('AddServer', { back: ADD_CONNECTION_TEXT.title });
     return () =>
       opens.screen === 'Connect'
         ? navigation.navigate('Connect', { catalogId: opens.catalogId, back: ADD_CONNECTION_TEXT.title })

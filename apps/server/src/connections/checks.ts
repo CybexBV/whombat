@@ -19,6 +19,8 @@ import {
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { catalogConnections } from '../db/schema/index';
+import { runMacCheck } from '../hosts/findmy-connection';
+import { hostsFor } from '../hosts/service';
 import { OutboundError, type OutboundResponse } from '../lib/outbound';
 import type { Services } from '../services';
 import { bindDriver } from '../trackers/drivers';
@@ -209,7 +211,7 @@ async function mcpCheck(
 export function checkKindFor(
   entry: CatalogEntry,
   kind: SignInKind,
-): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | null {
+): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | null {
   if (socketCheckOf(entry)) return 'socket';
   if (kind === 'mcp_oauth' || (kind === 'none' && connectionTransport(entry, kind) === 'mcp')) return 'mcp';
   return entry.check?.kind ?? null;
@@ -235,6 +237,8 @@ export async function runCatalogCheck(services: Services, input: RunCheckInput):
   }
   if (kind === 'socket') return runSocketCheck(services, input);
   if (kind === 'driver') return runDriverCheck(services, input);
+  // A connection through a Mac (Find My) is checked against the hosts fleet, never over the network.
+  if (kind === 'mac') return runMacConnectionCheck(services, input);
   // A secret of another shape may have its own request (SG-12: Mollie's access tokens); a password never does.
   const secret = credential.secret !== undefined && !credential.session ? credential.secret : undefined;
   const check = secret !== undefined ? catalogCheckFor(entry, secret) : entry.check;
@@ -299,6 +303,26 @@ export async function runCatalogCheck(services: Services, input: RunCheckInput):
     ...(session ? { session } : {}),
     fromCheck: fieldsFromCheck(entry, json),
   });
+}
+
+/**
+ * A connection through one of the person's Macs (Find My, docs/decisions/findmy-connection.md): its `mac` field's Mac
+ * (or the only Mac) is one of Whombat's servers, runs macOS and has a new enough Whombat Helper. The answer is the
+ * Macs as `{id, name}`, the `fromService` choices of that field. Nothing touches the Mac's screen.
+ */
+async function runMacConnectionCheck(services: Services, input: RunCheckInput): Promise<CheckOutcome> {
+  const found = await runMacCheck(hostsFor(services), input.fields.mac);
+  const json = found.macs.map((m) => ({ id: m.id, name: m.name }));
+  // 409: the Mac isn't as the connection needs it (gone, not a Mac, an old helper); null: nothing answered.
+  if (found.problem) return { ...failed(found.unanswered ? null : 409, false, found.problem), json };
+  return {
+    ok: true,
+    refused: false,
+    status: null,
+    message: null,
+    json,
+    checks: [{ id: 'credential', state: 'ok', message: null }],
+  };
 }
 
 /**

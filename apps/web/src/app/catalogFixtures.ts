@@ -39,6 +39,7 @@
  * done.
  */
 
+import { findMyConnectionView, MAC_SERVER, macFixtureListed } from '@whombat/client/hosts/fixtures';
 import type { ConnectionDiscovery, DiscoveredService } from '@whombat/core/contracts';
 import { type AnyEndpoint, API_ENDPOINTS, api, matchPath } from '@whombat/core/contracts';
 import {
@@ -287,6 +288,15 @@ function seed(connected: boolean): { connection: ConnectionView; tools: Connecti
       ),
       tools: [],
     },
+    // Find My through studio, when the servers' world lists the Mac (findmy-connection.md): read every 15 minutes.
+    ...(macFixtureListed()
+      ? [
+          {
+            connection: findMyConnectionView(NOW, { connectedBy: { id: mara.id, name: mara.name } }),
+            tools: entryTools('findmy'),
+          },
+        ]
+      : []),
   ];
 }
 
@@ -591,7 +601,10 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
               updatedAt: dropboxApp ? NOW : null,
             },
           }
-        : { catalogId: id, available: true, reason: null },
+        : id === 'findmy' && !macFixtureListed()
+          ? // Find My reads through a Mac: without studio in the servers' world, Add a Mac first.
+            { catalogId: id, available: false, reason: 'needs_mac' }
+          : { catalogId: id, available: true, reason: null },
     );
     return { mode: 'real', entries, limit: CONNECTIONS_MAX };
   }
@@ -744,6 +757,14 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
         const refusedPassword =
           twoStepOf(catalogId) && body.secret === '2fa' ? null : sessionRefusal(catalogId, body.secret);
         if (refusedPassword) return refusedPassword;
+        // Find My picks the only Mac by itself, and one Mac has one Find My (findmy-connection.md §1.1).
+        if (catalogId === 'findmy') {
+          if (!macFixtureListed())
+            return refuse(409, 'check_failed', 'Add your Mac as a server first, then connect Find My.');
+          fields.mac ||= MAC_SERVER;
+          if (rows.some((r) => r.connection.catalogId === 'findmy' && r.connection.fields.mac === fields.mac))
+            return refuse(409, 'check_failed', `Find My on ${fields.mac} is already connected.`);
+        }
         if (catalogId === 'moneybird' && !fields.administration)
           return refuse(
             409,
@@ -780,7 +801,13 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
       case api.connections.update.id: {
         if (!row) return json({ error: { code: 'not_found', message: 'Not found.' } }, 404);
         if (typeof body.label === 'string') row.connection.label = body.label;
-        if (body.fields) row.connection.fields = body.fields as Record<string, string>;
+        // As the server: the fields sent replace those, the rest stay (an empty value removes one).
+        if (body.fields) {
+          const next = { ...row.connection.fields, ...(body.fields as Record<string, string>) };
+          for (const [k, v] of Object.entries(body.fields as Record<string, string>))
+            if (!v.trim()) delete next[k];
+          row.connection.fields = next;
+        }
         if (body.access === 'read' || body.access === 'manage')
           row.connection.access = body.access as ConnectionAccessLevel;
         return json({ connection: row.connection, eventId: null });

@@ -59,6 +59,8 @@ import {
 } from '../db/schema/index';
 import { briefAgent } from '../domain/agent-brief';
 import { postMessage } from '../domain/messages';
+import { findMyBackgroundFor } from '../hosts/findmy-background';
+import { findMyConnectionRow } from '../hosts/findmy-connection';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { checkOutboundUrl } from '../lib/outbound';
 import { newSecret } from '../lib/secrets';
@@ -158,6 +160,8 @@ export async function referenceProblems(
       problems.push(`There is no tracker connection ${t.connectionId} on this Whombat.`);
     if (t.kind === 'mail' && !(await mailConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
       problems.push(`There is no connected mailbox ${t.connectionId} on this Whombat.`);
+    if (t.kind === 'findmy' && !(await findMyConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
+      problems.push(`There is no Find My connection ${t.connectionId} on this Whombat.`);
   }
   for (const id of definitionConversations(def))
     if (!(await inBurrow(ctx.tx, ctx.burrow.id, id)))
@@ -558,9 +562,12 @@ export async function publishVersion(
   });
   const services = ctx.services;
   const touchesMail = prevHadMail || def.triggers.some((t) => t.kind === 'mail');
+  const touchesFindMy = [...(prevDef?.triggers ?? []), ...def.triggers].some((t) => t.kind === 'findmy');
   ctx.after(async () => {
     services.automations.nudge();
     if (touchesMail) services.mailTriggers.nudge();
+    // A Find My connection an automation listens to reads at least every 15 minutes from now on, or no longer does.
+    if (touchesFindMy) findMyBackgroundFor(services).nudge();
   });
   return n;
 }
@@ -893,6 +900,7 @@ export const setAutomationEnabled = defineCommand({
     const def = current.definition;
     if (input.enabled) await ctx.services.newerAutomations.refuse(def);
     const watchesMail = def.triggers.some((t) => t.kind === 'mail');
+    const watchesFindMy = def.triggers.some((t) => t.kind === 'findmy');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
     // new version of the same definition, checked and signed the way publishing is.
@@ -939,6 +947,7 @@ export const setAutomationEnabled = defineCommand({
       ctx.after(async () => {
         services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
+        if (watchesFindMy) findMyBackgroundFor(services).nudge();
       });
       return { automationId: row.id };
     }
@@ -969,10 +978,11 @@ export const setAutomationEnabled = defineCommand({
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
     const services = ctx.services;
-    if (input.enabled || watchesMail) {
+    if (input.enabled || watchesMail || watchesFindMy) {
       ctx.after(async () => {
         if (input.enabled) services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
+        if (watchesFindMy) findMyBackgroundFor(services).nudge();
       });
     }
     return { automationId: row.id };
@@ -1307,7 +1317,10 @@ export async function removeAutomation(
   ctx.publish(topics.burrow(ctx.burrow.id), { type: 'automation.deleted', automationId: row.id });
   await republishPlanCards(ctx, row.id);
   const services = ctx.services;
-  ctx.after(async () => services.mailTriggers.nudge());
+  ctx.after(async () => {
+    services.mailTriggers.nudge();
+    findMyBackgroundFor(services).nudge();
+  });
   return active.length;
 }
 

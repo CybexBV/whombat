@@ -60,9 +60,15 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * run trigger and list source, the `connection_actions` step and an agent step's `proposeActions`, which a box sends as
  * they are only to a session at minor 3 or later (Whombat automation-recipes.md), plus the agent's optional
  * `backgroundModel` (`agent.update` `runtime.backgroundModel`, Whombat model-effort.md), on-request server disk
- * usage (`hosts.diskUsage`), and the opt-in Dutch voice plus `removing` voice model state (Whombat desk-display-talk.md).
+ * usage (`hosts.diskUsage`), and the opt-in Dutch voice plus `removing` voice model state (Whombat desk-display-talk.md);
+ * minor 4 is Find My as a connection of its own: the `findmy` trigger, run trigger and list source, which a box sends as
+ * they are only to a session at minor 4 or later, the catalog's `needs_mac` reason, a select field's own `options` and
+ * a page tab's `server` (docs/implementation/macos/findmy-connection.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 3 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 4 };
+
+/** Session protocol minor (major 5) that reads automations started by Find My (the `findmy` trigger and source). */
+export const FIND_MY_MINOR = 4;
 
 /** Session protocol minor (major 5) where `agent.update` stores `runtime.backgroundModel`. */
 export const BACKGROUND_MODEL_MINOR = 3;

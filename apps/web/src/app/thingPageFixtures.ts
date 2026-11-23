@@ -18,6 +18,8 @@
  * - **Pool** (`device:con_pool`): a switched-on device with a chart card per reading (CP-13, DS-14); the **heat pump**
  *   is learned until its card switches it on, then the same.
  * - **Proxmox VE API** (`con_pve-02-api`): part of pve-02 (CP-10).
+ * - **Find My** (`con_findmy`): the Find My tab naming studio, which the apps draw from the Mac's own Find My
+ *   (findmy-connection.md).
  * - Any other connection: the generic page from its summary.
  *
  * Their Settings tabs read `connections.tools` for these connections, which this layer answers too (the catalog's world
@@ -25,6 +27,12 @@
  */
 import { localAt } from '@whombat/client';
 import { DASHBOARD_RANGE_WORDS, dashboardNumber, seriesStats } from '@whombat/client/hosts';
+import {
+  FIND_MY_CONNECTION_FIELDS,
+  FIND_MY_CONNECTION_ID,
+  FIND_MY_THING,
+  findMyConnectionPage,
+} from '@whombat/client/hosts/fixtures';
 import {
   type ChangeEntry,
   type HostSeriesRange,
@@ -177,6 +185,12 @@ const CONNECTIONS: Record<string, { catalogId: string; fields: Record<string, st
   con_sabnzbd: { catalogId: 'sabnzbd', fields: { url: 'http://10.100.0.20:8080' }, label: 'SABnzbd' },
   con_protect: { catalogId: 'unifi_protect', fields: { url: 'https://10.100.0.1' }, label: 'UniFi Protect' },
   con_pihole: { catalogId: 'pihole', fields: { url: 'http://10.100.0.53' }, label: 'Pi-hole' },
+  // Find My through studio (findmy-connection.md): its Mac and how often it reads in the background.
+  [FIND_MY_CONNECTION_ID]: {
+    catalogId: 'findmy',
+    fields: { ...FIND_MY_CONNECTION_FIELDS },
+    label: 'Find My',
+  },
   con_pool: { catalogId: 'device', fields: {}, label: 'Pool' },
   'con_heat-pump': { catalogId: 'device', fields: {}, label: 'Heat pump' },
   // Each group's service pages (`@whombat/fixtures` `servicePages/<group>.ts`): their Settings tab's tools.
@@ -1586,6 +1600,8 @@ export function createThingPageFixtures(
     if (thing === HETZNER) return hetzner(range);
     if (thing === TRACKER) return tracker(range);
     if (thing === PVE_API) return partOfServer(range);
+    // Find My's page names its Mac; the apps draw its tab from studio's Find My (answered by address always).
+    if (thing === FIND_MY_THING) return findMyConnectionPage(new Date(made).toISOString(), range);
     if (thing === POOL) return device(POOL, range, 'Pool', 'device');
     const s = summary(thing);
     if (thing === HEAT && s) {

@@ -837,6 +837,11 @@ export const ThingPageTab = z.object({
   /** A count after the label (“Integrations 171”). */
   count: z.number().int().min(0).optional(),
   panels: z.array(ThingPagePanel).max(24),
+  /**
+   * The server a tab is about, by its id in the hosts fleet, when the apps draw the tab themselves from that server's
+   * own operations instead of panels (Find My's tab names its Mac). Absent: the tab is its panels.
+   */
+  server: z.string().min(1).max(200).optional(),
 });
 export type ThingPageTab = z.infer<typeof ThingPageTab>;
 

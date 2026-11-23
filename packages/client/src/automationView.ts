@@ -16,6 +16,7 @@ import {
   type AutomationTrigger,
   automationFlow,
   type Decider,
+  findMyWhenText,
   formatClock,
   formatDate,
   type GitHubTriggerEvent,
@@ -47,6 +48,8 @@ export const AUTOMATION_PAGE_TEXT = {
   /** “Next run 24 Sep, 08:30”, “Next run on a new issue”, “Next run when you start it”. */
   nextRun: (when: string) => `Next run ${when}`,
   nextOn: (event: string) => `Next run on ${event}`,
+  /** “Next run when Mara Visser arrives at Home” (a Find My trigger's own words). */
+  nextWhen: (when: string) => `Next run ${when}`,
   nextByHand: 'Next run when you start it',
   noNext: 'No next run',
   noNextYet: 'No next run yet',
@@ -140,6 +143,7 @@ export const AUTOMATION_SOURCE_LABELS: Record<AutomationSource, string> = {
   github: 'GitHub',
   tracker: 'Report tracker',
   mail: 'Mail',
+  findmy: 'Find My',
   schedule: 'Schedule',
   message: 'Message',
   reaction: 'Reaction',
@@ -211,6 +215,7 @@ const SOURCE_OF: Record<AutomationTrigger['kind'], AutomationSource> = {
   github: 'github',
   tracker: 'tracker',
   mail: 'mail',
+  findmy: 'findmy',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
@@ -347,6 +352,23 @@ function nextEvent(triggers: readonly AutomationTrigger[]): string | null {
   return events.length ? events.join(' or ') : null;
 }
 
+/**
+ * What Find My triggers wait for, in their own words after “Next run”: “when Mara Visser arrives at Home”, two joined
+ * with “or”. Null without one.
+ */
+function findMyNext(triggers: readonly AutomationTrigger[]): string | null {
+  const whens = [
+    ...new Set(
+      triggers.flatMap((t) => {
+        if (t.kind !== 'findmy') return [];
+        const text = findMyWhenText(t);
+        return [text.charAt(0).toLowerCase() + text.slice(1)];
+      }),
+    ),
+  ];
+  return whens.length ? whens.join(' or ') : null;
+}
+
 /** When it runs next: a known time, the event that starts it, or that it doesn't run. */
 export function nextRunText(
   a: Pick<Automation, 'status' | 'currentVersion' | 'nextRunAt' | 'definition'>,
@@ -358,7 +380,10 @@ export function nextRunText(
   if (a.nextRunAt) return AUTOMATION_PAGE_TEXT.nextRun(runMoment(a.nextRunAt, now, timeZone));
   const triggers = a.definition?.triggers ?? [];
   const event = nextEvent(triggers);
+  const when = findMyNext(triggers);
+  if (event && when) return `${AUTOMATION_PAGE_TEXT.nextOn(event)} or ${when}`;
   if (event) return AUTOMATION_PAGE_TEXT.nextOn(event);
+  if (when) return AUTOMATION_PAGE_TEXT.nextWhen(when);
   if (triggers.some((t) => t.kind === 'manual')) return AUTOMATION_PAGE_TEXT.nextByHand;
   return null;
 }

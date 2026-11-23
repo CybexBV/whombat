@@ -36,6 +36,22 @@ export const SETUP_STEP_TITLES: Record<SetupStep, string> = {
   access: 'What may your agent do?',
 };
 
+/** The sign-in step of an entry read through a Mac (Find My): nothing to sign in to, only how it reads. */
+export const READ_THROUGH_MAC_STEP_TITLE = 'How should Whombat read it?';
+
+/**
+ * A step's title for this entry: an entry checked through a Mac (Find My) has nothing to sign in to, so its sign-in
+ * step asks how Whombat reads it. `access` is the caller's, by the assistant's name.
+ */
+export function setupStepTitle(
+  entry: Pick<CatalogEntry, 'check'>,
+  step: Exclude<SetupStep, 'access'>,
+): string {
+  return step === 'signIn' && entry.check?.kind === 'mac'
+    ? READ_THROUGH_MAC_STEP_TITLE
+    : SETUP_STEP_TITLES[step];
+}
+
 /** Whether the entry is somewhere on the person's network or server (it has an address): cloud services have none. */
 export function hasAddress(entry: CatalogEntry): boolean {
   return entry.fields.some((f) => f.id === 'url');

@@ -48,6 +48,7 @@ import { GatewayKind } from './gateway.js';
 import { ConnectionToolLimits } from './tool-limits.js';
 import { TrackerEnvironment } from './tracker.js';
 
+export { FIND_MY_PEOPLE_TOOL } from './connections-catalog/findmy.js';
 export { NOTION_VERSION } from './connections-catalog/notion.js';
 export {
   ALWAYS_ASKS_LABEL,
@@ -143,6 +144,7 @@ import { entry as deviceEntry } from './connections-catalog/device.js';
 import { entry as dropboxEntry } from './connections-catalog/dropbox.js';
 import { entry as esphomeEntry } from './connections-catalog/esphome.js';
 import { entry as feedbackEntry } from './connections-catalog/feedback.js';
+import { entry as findmyEntry } from './connections-catalog/findmy.js';
 import { entry as forgejoEntry } from './connections-catalog/forgejo.js';
 import { entry as frigateEntry } from './connections-catalog/frigate.js';
 import { entry as fuseboxEntry } from './connections-catalog/fusebox.js';
@@ -204,6 +206,7 @@ const ENTRIES = [
   homeassistantEntry,
   esphomeEntry,
   ps5Entry,
+  findmyEntry,
   notionEntry,
   todoistEntry,
   airtableEntry,
@@ -286,6 +289,7 @@ export const CATALOG_IDS = [
   'homeassistant',
   'esphome',
   'ps5',
+  'findmy',
   'notion',
   'todoist',
   'airtable',
@@ -712,6 +716,8 @@ export function fieldProblem(field: CatalogField, value: string | undefined): st
   if (field.guide && v.length > CONNECTION_GUIDE_MAX) return 'Keep it under 1 500 characters.';
   if (field.validation && !new RegExp(`^(?:${field.validation.pattern})$`).test(v))
     return field.validation.message;
+  if (field.options && !field.options.some((o) => o.value === v))
+    return `Pick one of the choices for ${field.label}.`;
   return null;
 }
 
@@ -1859,10 +1865,11 @@ export const CatalogEntryStatus = z.object({
    * `no_driver` (a report tracker without a driver installed here: the apps don't offer it). Since 4.5 (Whombat
    * whombat-link.md LNK-16): `needs_secure_address` (its sign-in must come back to a secure address this Whombat
    * doesn't have yet: Whombat Link, or Tailscale with HTTPS), `hosted_only` (its sign-in is registered on the hosted
-   * page only, which this Whombat doesn't use). An older app reads a newer reason as null.
+   * page only, which this Whombat doesn't use). `needs_mac` (Find My): no macOS server in the fleet yet, so the app
+   * says “Add a Mac first” and offers Add a server. An older app reads a newer reason as null.
    */
   reason: z
-    .enum(['app_not_configured', 'off', 'no_driver', 'needs_secure_address', 'hosted_only'])
+    .enum(['app_not_configured', 'off', 'no_driver', 'needs_secure_address', 'hosted_only', 'needs_mac'])
     .nullable(),
   /** `app_oauth` entries only. */
   app: CatalogAppStatus.optional(),

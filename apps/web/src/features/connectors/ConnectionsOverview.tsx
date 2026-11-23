@@ -178,6 +178,8 @@ export interface CatalogTile {
   category: CatalogCategory;
   action: string;
   note: string | null;
+  /** It opens Add a server instead of its page (Find My without a Mac). */
+  addServer?: boolean;
 }
 
 /**
@@ -676,8 +678,10 @@ function PickTile({ tile }: { tile: Tile }) {
   return (
     <li>
       <Link
-        to="/settings"
-        search={tile.search}
+        // Find My without a Mac opens Add a server (findmy-connection.md §1.2); every other tile its page.
+        {...(tile.addServer && !tile.connected
+          ? { to: '/connections' as const, search: { add: 1 } as never }
+          : { to: '/settings' as const, search: tile.search })}
         className={c.pickTile}
         data-provider={tile.catalogId}
         aria-label={`${action} ${name}`}

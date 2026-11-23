@@ -125,6 +125,15 @@ describe('catalog integrity (CX-01, CX-50…CX-62)', () => {
       expect(e.baseUrl, e.id).not.toBeNull();
       expect(e.check, e.id).not.toBeNull();
       expect(e.guide.length, e.id).toBeGreaterThan(50);
+      // A connection through a Mac (Find My) has no address of its own: the Servers connection's base, never requested.
+      if (e.check?.kind === 'mac') {
+        expect(e.baseUrl, e.id).toBe('whombat-hosts:');
+        expect(e.request, e.id).toBeNull();
+        expect(
+          e.signIn.map((m) => m.kind),
+          e.id,
+        ).toEqual(['none']);
+      } else expect(e.baseUrl, e.id).toMatch(/^(https?:\/\/|\{url\})/);
       if (e.transport === 'mcp')
         expect(e.signIn.some((m) => m.kind === 'mcp_oauth') || e.mcpPath !== null, e.id).toBe(true);
       // REST entries offer typed adapter tools, an allowed request, or both. Automation-only entries are not callable.
@@ -149,6 +158,15 @@ describe('catalog integrity (CX-01, CX-50…CX-62)', () => {
       ];
       for (const t of templates)
         for (const id of templateFields(t)) expect(ids.has(id), `${e.id} {${id}}`).toBe(true);
+      // A select's own choices (Find My's Read in the background): never with the service's, each once, and the
+      // default one of them.
+      for (const f of e.fields) {
+        if (!f.options) continue;
+        const values = f.options.map((o) => o.value);
+        expect([f.kind, f.fromService ?? false], `${e.id}.${f.id}`).toEqual(['select', false]);
+        expect(new Set(values).size, `${e.id}.${f.id}`).toBe(values.length);
+        if (f.default !== undefined) expect(values, `${e.id}.${f.id}`).toContain(f.default);
+      }
       for (const m of e.signIn) {
         if (m.kind !== 'token') continue;
         expect(tokenAuthProblem(e, m.auth), e.id).toBeNull();
@@ -1225,6 +1243,7 @@ describe('why an entry is not offered (contracts 4.5)', () => {
       'app_not_configured',
       'off',
       'no_driver',
+      'needs_mac',
       null,
     ])
       expect(CatalogEntryStatus.safeParse({ catalogId: 'dropbox', available: false, reason }).success).toBe(

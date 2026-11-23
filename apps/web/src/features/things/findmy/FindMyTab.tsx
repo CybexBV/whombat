@@ -1,9 +1,11 @@
 /**
- * A Mac's Find My tab (docs/implementation/macos/findmy.md §5): the people Find My shows on the Mac, read through
- * Whombat Helper when the tab opens on an old read, every 15 minutes while it stays open and on “Read again”; a map the
- * Mac draws in the page's theme with each person's avatar on it, ＋ and − to zoom and “Fit everyone”; and for one person
- * “Show exactly”, Find My's own map cut from the Mac's screen, in a dialog. The screen's own reason (the Mac not checking
- * in, the shell switch, Screen Sharing, its password) comes first, as on the Screen tab.
+ * The Find My connection's Find My tab (docs/implementation/macos/findmy.md §5, findmy-connection.md §1.3): the people
+ * Find My shows on the Mac the connection reads, through Whombat Helper when the tab opens on an old read, every 15
+ * minutes while it stays open and on “Read again”; a map the Mac draws in the page's theme with each person's avatar on
+ * it, ＋ and − to zoom and “Fit everyone”; under it how the box reads while nobody looks; and for one person “Show
+ * exactly”, Find My's own map cut from the Mac's screen, in a dialog. The screen's own reason (the Mac not checking in,
+ * the shell switch, Screen Sharing, its password) comes first, as on the Mac's Screen tab. The tab names the Mac
+ * (`ThingPageTab.server`); its page is read here.
  */
 import { HUMAN_TONES, initialsFor } from '@whombat/avatars';
 import { HumanAvatar } from '@whombat/avatars/react';
@@ -11,6 +13,7 @@ import {
   FIND_MY_WORDS,
   type FindMyPersonRow,
   type FindMyRegion,
+  findMyBackgroundLine,
   findMyCanZoom,
   findMyExactView,
   findMyMapAsk,
@@ -21,8 +24,8 @@ import {
   hostErrorInfo,
   macScreenView,
 } from '@whombat/client/hosts';
-import { useFindMyMap, useFindMyPicture, useFindMyTab } from '@whombat/client/hosts/react';
-import type { HostFindMy } from '@whombat/core/domain';
+import { useFindMyMap, useFindMyPicture, useFindMyTab, useHostServer } from '@whombat/client/hosts/react';
+import type { HostFindMy, HostServerDetail } from '@whombat/core/domain';
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../../app/theme/ThemeProvider';
@@ -31,15 +34,38 @@ import { Icon } from '../../../components/Icon';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { useToast } from '../../../components/Toast';
 import { useNow } from '../../messaging/useRoom';
-import { Badge, Card, Empty, ErrorLine, StateCell } from '../parts';
+import mac from '../macos/Mac.module.css';
+import { Badge, Card, Empty, ErrorLine, Skeleton, StateCell } from '../parts';
 import styles from '../Things.module.css';
-import type { TabProps } from '../tabs/tabProps';
 import fm from './FindMy.module.css';
-import mac from './Mac.module.css';
 
 const toneOf = (p: Pick<FindMyPersonRow, 'tone'>) => HUMAN_TONES[p.tone] ?? HUMAN_TONES[0];
 
-export function MacFindMyTab({ burrow, serverId, detail }: TabProps) {
+/** The tab of the Find My connection whose Mac is `serverId`: the Mac's page first, for its screen's switches. */
+export function FindMyTab({ burrow, serverId }: { burrow: string; serverId: string }) {
+  const detail = useHostServer({ params: { burrow, serverId }, query: { range: '24h' } }, { retry: false });
+  if (detail.data) return <FindMyRead burrow={burrow} serverId={serverId} detail={detail.data} />;
+  return detail.error ? (
+    <Card id="mac-findmy" title={FIND_MY_WORDS.title}>
+      <ErrorLine error={detail.error} onRetry={() => void detail.refetch()} />
+    </Card>
+  ) : (
+    <div role="status" aria-busy="true" aria-label="Loading Find My" style={{ display: 'grid', gap: 18 }}>
+      <Skeleton height={64} />
+      <Skeleton height={360} />
+    </div>
+  );
+}
+
+function FindMyRead({
+  burrow,
+  serverId,
+  detail,
+}: {
+  burrow: string;
+  serverId: string;
+  detail: HostServerDetail;
+}) {
   const toast = useToast();
   const name = detail.server.name ?? serverId;
   const now = useNow(15_000);
@@ -86,7 +112,14 @@ export function MacFindMyTab({ burrow, serverId, detail }: TabProps) {
         {view.anyLocated ? (
           <FindMyMap burrow={burrow} serverId={serverId} name={name} state={tab.state} people={view.people} />
         ) : null}
-        {view.anyLocated ? <p className={styles.cardNote}>{FIND_MY_WORDS.note}</p> : null}
+        {/* How the box reads while nobody looks (only then, every few minutes, or for an automation), and where the
+            spots are, in one foot under the map. */}
+        {tab.state ? (
+          <div className={`${styles.cardNote} ${fm.foot}`}>
+            <p data-findmy-background="">{findMyBackgroundLine(tab.state.background)}</p>
+            {view.anyLocated ? <p>{FIND_MY_WORDS.note}</p> : null}
+          </div>
+        ) : null}
       </Card>
 
       {view.people.length > 0 || view.empty ? (

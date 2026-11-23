@@ -21,13 +21,13 @@ import {
   nextcloudPollStep,
   probedSignIn,
   SERVICE_LOGIN_WAIT_TEXT,
-  SETUP_STEP_TITLES,
   type SetupStep,
   type SignInChoice,
   serviceLoginCode,
   serviceLoginEnds,
   serviceLoginPollStep,
   setupSteps,
+  setupStepTitle,
   switchText,
 } from '@whombat/client/connections';
 import { type CatalogEntry, type CatalogEntryStatus, catalogEntry } from '@whombat/core';
@@ -114,7 +114,7 @@ export function stepHeaders(
   return open.map((step, i) => ({
     step,
     number: i + 1,
-    title: step === 'access' ? options.words.mayDoQuestion : SETUP_STEP_TITLES[step],
+    title: step === 'access' ? options.words.mayDoQuestion : setupStepTitle(entry, step),
     done:
       step === 'where' &&
       !!options.identified?.reachable &&

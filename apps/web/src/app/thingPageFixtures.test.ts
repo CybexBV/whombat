@@ -28,6 +28,7 @@ describe('thing page fixtures', () => {
         'connection:con_fixture_tracker',
         'connection:con_pve-02-api',
         'connection:con_mail',
+        'connection:con_findmy',
         'device:con_pool',
         'device:con_heat-pump',
       ]) {

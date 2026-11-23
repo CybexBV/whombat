@@ -62,13 +62,27 @@ export {
   FIXTURE_AGENT_OLD,
   withAgentUpdatesFixtures,
 } from './fixtures-au';
-export { FIND_MY_FIXTURE_READ_MS, FIND_MY_PEOPLE, type FindMyFixture } from './fixtures-findmy';
+export {
+  FIND_MY_FIXTURE_BACKGROUND,
+  FIND_MY_FIXTURE_READ_MS,
+  FIND_MY_PEOPLE,
+  type FindMyFixture,
+} from './fixtures-findmy';
+export {
+  FIND_MY_CONNECTION_FIELDS,
+  FIND_MY_CONNECTION_ID,
+  FIND_MY_THING,
+  findMyConnectionPage,
+  findMyConnectionThing,
+  findMyConnectionView,
+} from './fixtures-findmy-connection';
 export {
   createMacFixture,
   MAC_LOOK_PNG_B64,
   MAC_SERVER,
   type MacFixture,
   type MacScenario,
+  macFixtureListed,
   macScenario,
 } from './fixtures-mac';
 export { type HostsQuietFixtures, withQuietFixtures } from './fixtures-qn';

@@ -609,6 +609,14 @@ export const CatalogFieldKind = z.enum(CATALOG_FIELD_KINDS);
 
 export type CatalogFieldKind = z.infer<typeof CatalogFieldKind>;
 
+/** One of a `select` field's own choices: the value stored and the words the form shows (“Every 15 minutes”). */
+export const CatalogFieldOption = z.object({
+  value: z.string().min(1).max(100),
+  label: z.string().min(1).max(60),
+});
+
+export type CatalogFieldOption = z.infer<typeof CatalogFieldOption>;
+
 /** What the person fills in (CX-01). Values are not secret: they are stored and shown. */
 export const CatalogField = z.object({
   id: FieldId,
@@ -629,6 +637,12 @@ export const CatalogField = z.object({
    * picks the only one, or refuses with `field_choice_needed` and the choices (CT-268).
    */
   fromService: z.boolean().optional(),
+  /**
+   * A `select`'s own choices, in the order the form offers them, when they don't come from the service (Find My's
+   * Read in the background; never with `fromService`): a value not among them is refused (`fieldProblem`), and
+   * `default`, when given, is one of them.
+   */
+  options: z.array(CatalogFieldOption).min(2).max(12).optional(),
   /** Only asked with these sign-in methods (Nextcloud's username: only with an app password). Absent: always. */
   methods: z.array(SignInKind).optional(),
   /** A `text` field that becomes the connection's guide for agents (Custom API, CX-62). */
@@ -716,6 +730,12 @@ export const CatalogCheck = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('reach') }),
   /** A report tracker's check: its driver asks the tracker whether the token works (report-trackers.md). */
   z.object({ kind: z.literal('driver') }),
+  /**
+   * A connection that works through one of the person's Macs (Find My): the Mac its `mac` field names is one of
+   * Whombat's servers, runs macOS, and its Whombat Helper is new enough. It never touches the Mac's screen. Such an
+   * entry has no address of its own: nothing is ever sent to its base URL, and it has no `request`.
+   */
+  z.object({ kind: z.literal('mac') }),
   /**
    * A socket connection's check (0.97, CT-471; CM-13, CM-17): signs in on the socket, then calls `method` with `params`
    * (absent: none). `version` is where the result holds the service's version for the check line (TrueNAS

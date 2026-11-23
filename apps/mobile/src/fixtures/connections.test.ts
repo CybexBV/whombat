@@ -55,6 +55,8 @@ describe('Settings → Connections in the demo world (AP-2815)', () => {
       ['Email (IMAP)', 'mara@okafor.example'],
     ]);
     expect(overview.apps.map((r) => [r.title, r.line])).toEqual([
+      // Find My through studio (findmy-connection.md): no address of its own.
+      ['Find My', null],
       ['Hetzner', null],
       ['Home Assistant', '10.100.0.131:8123'],
       ['UniFi', '10.100.0.1'],

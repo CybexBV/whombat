@@ -72,15 +72,17 @@ export function trackerTriggers(definition: AutomationDefinition | null | undefi
 }
 
 /**
- * The connection ids a definition names: its tracker and mail triggers' and its `tracker_update`, `tracker_reply` and
- * `tracker_decision` steps'.
+ * The connection ids a definition names: its tracker, mail and Find My triggers' and its `tracker_update`,
+ * `tracker_reply` and `tracker_decision` steps'.
  */
 export function definitionConnections(definition: AutomationDefinition | null | undefined): string[] {
   if (!definition) return [];
   return [
     ...new Set([
       ...trackerTriggers(definition).map((t) => t.connectionId),
-      ...definition.triggers.flatMap((t) => (t.kind === 'mail' ? [t.connectionId] : [])),
+      ...definition.triggers.flatMap((t) =>
+        t.kind === 'mail' || t.kind === 'findmy' ? [t.connectionId] : [],
+      ),
       ...definition.steps.flatMap((s) =>
         s.kind === 'tracker_update' || s.kind === 'tracker_reply' || s.kind === 'tracker_decision'
           ? [s.connectionId]

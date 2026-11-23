@@ -11,7 +11,7 @@ import { ApprovalEngine } from './approvals/engine';
 import { registerApprovalExecutors } from './approvals/executors';
 import { grantKeyExecutor } from './approvals/grant-key';
 import { AutomationEngine, type EngineOptions } from './automations/engine';
-import { knownRelease, NewerAutomationsGate } from './automations/release-gate';
+import { knownRelease, NewerAutomationsGate, releaseSchema } from './automations/release-gate';
 import { CollabService, type CollabTimings } from './collab/service';
 import { registerCommands } from './commands/index';
 import { Pipeline } from './commit/pipeline';
@@ -203,7 +203,11 @@ export function createServices(deps: ServiceDeps): Services {
     housekeeping: new Housekeeping(() => services.log),
     licence: new LicenceGate(),
     links: { managedBase: null },
-    newerAutomations: new NewerAutomationsGate(deps.config, (id) => knownRelease(services.db, id)),
+    newerAutomations: new NewerAutomationsGate(
+      deps.config,
+      (id) => knownRelease(services.db, id),
+      (id) => releaseSchema(services.db, id),
+    ),
   } as Services;
   // The app swaps in its own logger later; mail resolves it when sending.
   // The person's own mail server (HE-61, HE-S225) takes the box's mail when one is set.

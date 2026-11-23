@@ -13,7 +13,8 @@
  * charts opens them inside the figures' card), the range control (the page's `ranges`, on a Whombat with
  * `things.dashboards`) at the top or, when every chart sits behind a figure, in the opened figure; the previous range's
  * page on screen while the next one is read. Until the page answers the first time, its glyph, name and status are
- * the Connections tab's row, the rest skeletons (page-speed.md AP-2650).
+ * the Connections tab's row, the rest skeletons (page-speed.md AP-2650). A tab about a server (`ThingPageTab.server`) is
+ * the app's own: Find My's, drawn from its Mac's Find My (`findmy/FindMyPart.tsx`).
  * A service's page (Whombat service-dashboards.md SD-01…SD-11; service-dashboards.md AP-4630…): its own buttons in the
  * head beside Restart, and one runner for every button on it (`useThingButtons`) — a question opens the question sheet
  * (Restart's), the toast says the server's words, the page is read again at once; switches and steppers show what the
@@ -98,6 +99,7 @@ import { LevelPill } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
 import { hitSlopFor } from '../ui/touchTarget';
 import { errorText, outcomeText, showFailure, showNotice } from './feedback';
+import { FindMyPart } from './findmy/FindMyPart';
 import { CardSkeletons, ReadNote } from './home/OverviewParts';
 import { NewChatSheet } from './NewChatSheet';
 import { ThingActivity } from './thing/Changes';
@@ -113,6 +115,9 @@ import { useHandOver } from './thing/useHandOver';
 import { useAskAbout } from './useAskAbout';
 
 const INSET = 18;
+
+/** The Find My connection's tab (findmy-connection.md): it names its Mac. */
+const FIND_MY_TAB = 'findmy';
 
 export function ThingPageScreen({
   thingId,
@@ -185,6 +190,8 @@ export function ThingPageScreen({
     if (wanted) setTab(wanted);
   }, [wanted]);
   const shown = shownTab(tabs, tab);
+  // A tab about a server is drawn from that server's own reads (Find My's names its Mac).
+  const about = tabs.find((t) => t.key === shown)?.server ?? null;
   const subject = useMemo(() => (page ? thingSubject(page) : null), [page]);
   const [asking, setAsking] = useState<{ text: string | null } | null>(null);
   const [confirm, setConfirm] = useState<ThingPageAction | null>(null);
@@ -383,6 +390,15 @@ export function ThingPageScreen({
             </View>
             {shown === 'activity' ? (
               <ThingActivity page={page} ctx={ctx} />
+            ) : shown === FIND_MY_TAB && about ? (
+              // Find My's tab names its Mac and is drawn from that Mac's Find My (findmy-connection.md §1.3); as the
+              // first tab it ends with Ask, as every Summary.
+              <>
+                <FindMyPart serverId={about} />
+                {shown === tabs[0]?.key && subject && !service ? (
+                  <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
+                ) : null}
+              </>
             ) : (
               <>
                 {shown === tabs[0]?.key ? <LookCard page={page} onAsk={askAbout} /> : null}

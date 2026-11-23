@@ -6,6 +6,7 @@
 import {
   type AgentAutomationDetail,
   type AgentAutomationSummary,
+  type AgentFindMyPerson,
   type AgentMailConnection,
   type AgentTrackerConnection,
   AUTOMATION_AUTHORING_GUIDE,
@@ -18,12 +19,15 @@ import {
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { automationPlans, automations, catalogConnections } from '../db/schema/index';
+import { findMyFor } from '../hosts/findmy';
+import { findMyConnections, macOf } from '../hosts/findmy-connection';
+import { keptPlaces } from '../hosts/findmy-places';
 import { forbidden } from '../lib/errors';
 import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
 import { outsidersTurn } from '../runtime/person';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
-import { ACTION_AUTOMATIONS_LATER, MAIL_AUTOMATIONS_LATER } from './release-gate';
+import { ACTION_AUTOMATIONS_LATER, FIND_MY_AUTOMATIONS_LATER, MAIL_AUTOMATIONS_LATER } from './release-gate';
 import { loadAutomationRow, toAutomation } from './store';
 
 function summaryOf(a: Automation): AgentAutomationSummary {
@@ -81,10 +85,37 @@ async function mailConnectionsOf(db: Db, burrowId: string): Promise<AgentMailCon
 }
 
 /**
+ * The people the person's Find My connections know, for a findmy trigger's `connectionId`, `person` and `name`: from
+ * the last read of each connection's Mac in the box's memory, and the places kept for its automations (someone the
+ * last read didn't have). Their place as Find My words it; never a street or coordinates.
+ */
+async function findMyPeopleOf(ctx: ToolContext): Promise<AgentFindMyPerson[]> {
+  const out: AgentFindMyPerson[] = [];
+  for (const c of await findMyConnections(ctx.services.db, { burrowId: ctx.burrowId })) {
+    const mac = macOf(c);
+    const read = mac ? (findMyFor(ctx.services).peek(mac)?.people ?? []) : [];
+    const seen = new Set<string>();
+    for (const p of read) {
+      seen.add(p.id);
+      out.push({ connectionId: c.id, person: p.id, name: p.name, place: p.place?.slice(0, 200) || null });
+    }
+    for (const k of await keptPlaces(ctx.services.db, c.id))
+      if (!seen.has(k.person))
+        out.push({ connectionId: c.id, person: k.person, name: k.name, place: k.place });
+  }
+  return out.slice(0, 500);
+}
+
+/**
  * The guide while automations the release before them can't run wait for the next update (release-gate.ts): what the
  * person is told when they ask for one, before the rest. draft_automation refuses them with the same line.
  */
 const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} Draft neither until then; when the person asks for one, tell them that line.
+
+${AUTOMATION_AUTHORING_GUIDE}`;
+
+/** The guide while only findmy automations wait for the next update. */
+const FIND_MY_LATER_GUIDE = `Not on this Whombat yet: ${FIND_MY_AUTOMATIONS_LATER} Don’t draft one until then; when the person asks for one, tell them that line.
 
 ${AUTOMATION_AUTHORING_GUIDE}`;
 
@@ -124,6 +155,11 @@ export async function automationsForAgent(
     automations: list,
     trackerConnections: await trackerConnectionsOf(db, ctx.burrowId),
     mailConnections: await mailConnectionsOf(db, ctx.burrowId),
-    guide: (await ctx.services.newerAutomations.ready()) ? AUTOMATION_AUTHORING_GUIDE : LATER_GUIDE,
+    findMyPeople: await findMyPeopleOf(ctx),
+    guide: !(await ctx.services.newerAutomations.ready())
+      ? LATER_GUIDE
+      : (await ctx.services.newerAutomations.findMyReady())
+        ? AUTOMATION_AUTHORING_GUIDE
+        : FIND_MY_LATER_GUIDE,
   };
 }

@@ -1,7 +1,8 @@
 /**
  * What a connection's screen changes on the phone (phone-connect.md PC-09, AP-2911), the web's ConnectionPage at phone
  * width: NAME with Rename, WHAT {AGENT} MAY DO with Change (Look only · Manage; raising a key made at Look only says so,
- * with Sign in again), the last check with Check again, and SIGN-IN — a new key or password (checked before it replaces
+ * with Sign in again), the choices that can change later (Find My's Mac and Read in the background), the last check
+ * with Check again, and SIGN-IN — a new key or password (checked before it replaces
  * the old one; an OAuth client's secret too; a session's two-step code when the service asks, Synology's, AP-3958),
  * Reconnect (a sign-in elsewhere in the browser or Nextcloud's login, on the same connection; nothing that would make a
  * second one, AP-2920), Sign in again on the service's own page (Plex's, AP-3957) or with a new code (T3 Code's pairing
@@ -9,8 +10,11 @@
  */
 import {
   accessChoices,
+  type ChoiceSetting,
   CONNECT_FORM_TEXT,
   type ConnectionWords,
+  choiceSavedText,
+  choiceSettings,
   codeProblem,
   codeSignInOf,
   connectionWords,
@@ -22,6 +26,7 @@ import {
   setSecretBody,
   usedByAgents,
 } from '@whombat/client/connections';
+import { useMacChoices } from '@whombat/client/hosts/react';
 import { useConnectionWrite } from '@whombat/client/react';
 import {
   type CatalogEntry,
@@ -234,6 +239,114 @@ export function LevelBlock({
             <Button label={CONNECTION_CHANGE_TEXT.signInAgain} variant="secondary" onPress={onSignInAgain} />
           </View>
         ) : null}
+        <FormMessage text={problem} />
+      </View>
+    </Section>
+  );
+}
+
+/**
+ * The connection's choices that can change later (findmy-connection.md §2.1): a select's own options (Find My's Read in
+ * the background) and the Mac of an entry checked through a Mac, among the servers that are Macs; each a section with
+ * Change, radio cards and Save, as WHAT {AGENT} MAY DO. The server checks the new value as it checks a new connection.
+ */
+export function ChoiceBlocks({
+  slug,
+  entry,
+  conn,
+}: {
+  slug: string;
+  entry: CatalogEntry;
+  conn: ConnectionView;
+}) {
+  const macs = useMacChoices(slug, entry.check?.kind === 'mac');
+  const settings = choiceSettings(entry, conn.fields, macs);
+  return (
+    <>
+      {settings.map((setting) => (
+        <ChoiceBlock key={`${setting.field}-${setting.value}`} slug={slug} conn={conn} setting={setting} />
+      ))}
+    </>
+  );
+}
+
+function ChoiceBlock({
+  slug,
+  conn,
+  setting,
+}: {
+  slug: string;
+  conn: ConnectionView;
+  setting: ChoiceSetting;
+}) {
+  const update = useConnectionWrite(api.connections.update, slug);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(setting.value);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function save() {
+    if (value === setting.value) return setEditing(false);
+    setProblem(null);
+    try {
+      const result = await update.mutateAsync({
+        params: { burrow: slug, connectionId: conn.id },
+        body: { fields: { [setting.field]: value } },
+      });
+      if (result.status === 'ok') {
+        setEditing(false);
+        showNotice(choiceSavedText(setting, value));
+      }
+    } catch (err) {
+      const p = connectProblem(err);
+      setProblem(p.fields[setting.field] ?? p.message);
+    }
+  }
+
+  return (
+    <Section title={setting.label}>
+      <View style={{ padding: 14, gap: 10 }}>
+        {editing ? (
+          <>
+            <RadioCards
+              label={setting.label}
+              value={value}
+              onChange={setValue}
+              disabled={update.isPending}
+              options={setting.options.map((o) => ({ value: o.value, title: o.label }))}
+            />
+            {setting.help ? <Note>{setting.help}</Note> : null}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button
+                label={CONNECTION_CHANGE_TEXT.save}
+                busy={update.isPending}
+                onPress={() => void save()}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label={CONNECTION_CHANGE_TEXT.cancel}
+                variant="quiet"
+                onPress={() => setEditing(false)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text size={15} weight={600} style={{ flex: 1 }}>
+              {setting.valueLabel}
+            </Text>
+            <Button
+              label={CONNECTION_CHANGE_TEXT.change}
+              variant="secondary"
+              accessibilityLabel={`${CONNECTION_CHANGE_TEXT.change} ${setting.label}`}
+              onPress={() => {
+                setValue(setting.value);
+                setProblem(null);
+                setEditing(true);
+              }}
+            />
+          </View>
+        )}
         <FormMessage text={problem} />
       </View>
     </Section>

@@ -1,10 +1,12 @@
 /**
- * Find My on a Mac's page (docs/implementation/macos/findmy.md): Whombat reads the Find My app on a Mac through Whombat
+ * Find My through a Mac (docs/implementation/macos/findmy.md): Whombat reads the Find My app on a Mac through Whombat
  * Helper, as a person reads it, finds each person's place with the Mac's own geocoder and draws the map on the Mac.
  * Find My gives no coordinates, so a person's spot on the map is their address's (about 100 m); “Show exactly” takes
- * Find My's own map of that person from the Mac's screen. What was read lives in the box's memory only.
+ * Find My's own map of that person from the Mac's screen. What was read lives in the box's memory only. The Find My
+ * connection (docs/implementation/macos/findmy-connection.md) reads it for its page, the assistant and automations.
  */
 import { z } from 'zod';
+import { ConnectionId } from '../ids.js';
 import { Timestamp } from './common.js';
 import { HOST_SCREEN_IMAGE_MAX, HOST_SCREEN_LIMITS, HostScreenCode, hostScreenProblemText } from './hosts.js';
 
@@ -21,6 +23,71 @@ export const HOST_FIND_MY_REFRESH_MS = 15 * 60_000;
 
 /** The apps ask for the state this often while a read or a picture is under way (ms). */
 export const HOST_FIND_MY_POLL_MS = 2000;
+
+/**
+ * The Find My connection's Read in the background choices (its `background` field), Off first and the default: reading
+ * takes the Mac's screen for a moment, so it happens without anyone looking only when the person chose how often.
+ */
+export const FIND_MY_BACKGROUND_CHOICES = [
+  { value: 'off', label: 'Off' },
+  { value: '5', label: 'Every 5 minutes' },
+  { value: '15', label: 'Every 15 minutes' },
+  { value: '30', label: 'Every 30 minutes' },
+  { value: '60', label: 'Every hour' },
+] as const;
+
+export type FindMyBackground = (typeof FIND_MY_BACKGROUND_CHOICES)[number]['value'];
+
+/** Minutes between background reads for a `background` value; null for Off or a value it doesn't know. */
+export function findMyBackgroundMinutes(value: string | null | undefined): number | null {
+  const choice = FIND_MY_BACKGROUND_CHOICES.find((c) => c.value === value);
+  return choice && choice.value !== 'off' ? Number(choice.value) : null;
+}
+
+/**
+ * How often a Find My connection reads at least while a live automation listens to it, even with Read in the
+ * background Off (ms): an arrival is noticed within a quarter of an hour without taking the Mac's screen more often.
+ */
+export const FIND_MY_LISTENED_MS = 15 * 60_000;
+
+/** The longest place words a Find My trigger or event carries (Find My's own words: “Home”, “Lelystad”). */
+export const FIND_MY_PLACE_MAX = 200;
+
+/** A person on Find My as Whombat names them everywhere: 12 hex characters of the SHA-256 of their name. */
+export const FindMyPersonId = z.string().regex(/^[0-9a-f]{12}$/);
+
+/** `findmy_people`'s input: everyone, or one person by name or first name. */
+export const FindMyPeopleArgs = z.strictObject({
+  person: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('A name or first name (Mara); leave out for everyone'),
+});
+export type FindMyPeopleArgs = z.infer<typeof FindMyPeopleArgs>;
+
+/** The signed event a Find My connection an automation listens to records when a person's place changes. */
+export const FIND_MY_PLACE_CHANGED = 'findmy.place_changed';
+
+/**
+ * `findmy.place_changed`'s payload: whose place changed on which Find My connection, their name, and the place's words
+ * before and now (null: Find My had no place for them, “No location found”). Never a street or coordinates.
+ */
+export const FindMyPlaceChanged = z.strictObject({
+  connectionId: ConnectionId,
+  person: FindMyPersonId,
+  name: z.string().min(1).max(200),
+  from: z.string().min(1).max(FIND_MY_PLACE_MAX).nullable(),
+  to: z.string().min(1).max(FIND_MY_PLACE_MAX).nullable(),
+});
+export type FindMyPlaceChanged = z.infer<typeof FindMyPlaceChanged>;
+
+/** Place words as automations compare them: case and spaces don't count (“home ” is “Home”). */
+export function findMyPlaceKey(place: string): string {
+  return place.normalize('NFC').toLowerCase().replace(/\s+/g, '');
+}
 
 /**
  * Why a read or a picture didn't work: the Mac's screen codes, and `in_use` (someone used the Mac's keyboard or mouse
@@ -76,6 +143,14 @@ export const HostFindMy = z.object({
   problem: HostFindMyProblem.nullable(),
   people: z.array(HostFindMyPerson).max(HOST_FIND_MY_PEOPLE_MAX),
   exact: HostFindMyExact.nullable(),
+  /**
+   * How a Find My connection reads this Mac without anyone looking: every `everyMinutes`, and the name of the
+   * automation that needs it when that is the reason. Null or absent: only while someone looks (and an older box).
+   */
+  background: z
+    .object({ everyMinutes: z.number().int().positive(), automation: z.string().max(200).nullable() })
+    .nullable()
+    .optional(),
 });
 export type HostFindMy = z.infer<typeof HostFindMy>;
 

@@ -75,6 +75,15 @@ export const FIND_MY_PEOPLE: readonly HostFindMyPerson[] = [
   },
 ];
 
+/**
+ * How the fixture Mac's Find My says the box reads it while nobody looks: its Find My connection reads it every 15
+ * minutes because an automation waits for Ruben to get home (`fixtures-findmy-connection.ts`).
+ */
+export const FIND_MY_FIXTURE_BACKGROUND: NonNullable<HostFindMy['background']> = {
+  everyMinutes: 15,
+  automation: 'Tell me when Ruben gets home',
+};
+
 /** How a read ends: the people, nobody sharing, or someone at the Mac. */
 export type FindMyFixtureEnd = 'people' | 'nobody' | 'in_use';
 
@@ -125,12 +134,15 @@ export function createFindMyFixture({
   clock,
   blocked,
   end = 'people',
+  background = null,
 }: {
   server: string;
   clock: () => number;
   /** Why the Mac can't be read now (its helper, its screen), or null. */
   blocked: () => HostFindMyCode | null;
   end?: FindMyFixtureEnd;
+  /** How a Find My connection reads this Mac while nobody looks (null: only while someone looks). */
+  background?: HostFindMy['background'];
 }): FindMyFixture {
   const st: {
     readingUntil: number | null;
@@ -172,6 +184,7 @@ export function createFindMyFixture({
             problem: e.failed ? { code: e.failed } : null,
           }
         : null,
+      background,
     };
   };
   const ok = (body: unknown): HostsFixtureAnswer => ({ status: 200, body });

@@ -2,7 +2,14 @@
  * What a signed event means to triggers (bp-automations BP-C05, automation-recipes.md): its facts, the room, thread and
  * GitHub or tracker item it is about, the run's scope and trigger, and how deep in an automation chain it is.
  */
-import type { GitHubTriggerEvent, JsonObject, TriggerFacts } from '@whombat/core';
+import {
+  FIND_MY_PLACE_CHANGED,
+  FindMyPlaceChanged,
+  findMyTriggerFacts,
+  type GitHubTriggerEvent,
+  type JsonObject,
+  type TriggerFacts,
+} from '@whombat/core';
 import { and, eq, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import {
@@ -15,6 +22,7 @@ import {
   repos,
 } from '../../db/schema/index';
 import { isFeedbackPrincipal, isReportThread } from '../../feedback/principal';
+import { findMyPrincipal, placeChangeScope, placeChangeSummary } from '../../hosts/findmy-places';
 import {
   mailHeadline,
   mailItemKey,
@@ -60,6 +68,8 @@ export const EVENT_TYPES = [
   'tracker.reporter_replied',
   // A matching incoming email arrived in a connected mailbox watched by a live automation.
   'mail.received',
+  // Someone's place changed on a Find My connection a live automation listens to (findmy-connection.md).
+  FIND_MY_PLACE_CHANGED,
 ];
 
 export interface EventFacts {
@@ -222,6 +232,29 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
       info: (e) => ({
         kind: 'mail',
         summary: mailHeadline(item),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  // Someone arrived somewhere or left, as Find My showed it (findmy-connection.md): only the Find My signer's count, and
+  // someone without a place now neither arrives nor leaves.
+  if (event.type === FIND_MY_PLACE_CHANGED) {
+    const parsed = FindMyPlaceChanged.safeParse(payload);
+    if (!parsed.success || parsed.data.to === null || !findMyPrincipal.is(actor)) return null;
+    const change = { ...parsed.data, to: parsed.data.to };
+    const scope = placeChangeScope(change);
+    return {
+      facts: findMyTriggerFacts(change),
+      conversationId: null,
+      threadRootId: null,
+      itemKey: null,
+      scope,
+      info: (e) => ({
+        kind: 'findmy',
+        summary: placeChangeSummary(change).slice(0, 200),
         actorId: actor.id,
         eventId: e.id,
         messageId: null,

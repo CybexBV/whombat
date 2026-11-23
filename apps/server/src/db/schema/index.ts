@@ -26,6 +26,7 @@ export * from './desk';
 export * from './devices';
 export * from './events';
 export * from './feedback';
+export * from './findmy';
 export * from './followed-tasks';
 export * from './gateway';
 export * from './github';

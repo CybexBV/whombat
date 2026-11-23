@@ -120,6 +120,13 @@
       "when": 1795426639226,
       "tag": "0016_link_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795429591076,
+      "tag": "0017_findmy_places",
+      "breakpoints": true
     }
   ]
 }
