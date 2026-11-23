@@ -85,10 +85,12 @@ const managedSnippets = {
   csp: cspAdvice(managedInput),
 };
 
+/** Website feedback's own page, its Connection tab: its integrations (was its page in Connections, SS-05). */
+const FEEDBACK_SETTINGS = `/things/${encodeURIComponent('connection:feedback')}?tab=settings`;
+
 async function openFeedbackTab(services?: AppServices) {
-  // Website feedback's own page in Connections (SS-05).
-  const app = renderApp(`/connections?connection=feedback`, services);
-  await screen.findByRole('heading', { level: 2, name: 'Website feedback' });
+  const app = renderApp(FEEDBACK_SETTINGS, services);
+  await screen.findByRole('tabpanel', { name: 'Connection' }, { timeout: 12_000 });
   return app;
 }
 
@@ -433,8 +435,8 @@ describe('Settings → Feedback', () => {
     expect(page?.querySelectorAll('pre').length).toBe(1);
     expect(screen.getByRole('link', { name: 'Open https://docs.example.com' })).toBeTruthy();
     await user.click(screen.getByRole('link', { name: 'Done' }));
-    expect(await screen.findByRole('heading', { level: 2, name: 'Website feedback' })).toBeTruthy();
-    await waitFor(() => expect(location()).toBe(`/connections?connection=feedback`));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Website feedback' })).toBeTruthy();
+    await waitFor(() => expect(location()).toBe(FEEDBACK_SETTINGS));
     expect(await screen.findByText('Docs')).toBeTruthy();
   });
 

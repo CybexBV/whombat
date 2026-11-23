@@ -5,6 +5,7 @@
  */
 import { ThingPage } from '@whombat/core';
 import { SetRunsOnResponse, ThingActionResponse } from '@whombat/core/contracts';
+import { isAccountPageId } from '@whombat/core/domain';
 import { burrow, createServicePages } from '@whombat/fixtures';
 import { describe, expect, it } from 'vitest';
 import { createOneFixtures } from './oneFixtures';
@@ -27,7 +28,7 @@ describe('thing page fixtures', () => {
         'connection:con_hetzner',
         'connection:con_fixture_tracker',
         'connection:con_pve-02-api',
-        'connection:con_mail',
+        'connection:con_mara',
         'connection:con_findmy',
         'device:con_pool',
         'device:con_heat-pump',
@@ -89,6 +90,27 @@ describe('thing page fixtures', () => {
     expect(pages.page('connection:con_home-assistant')?.runsOn).toBeNull();
     expect((await set({ mode: 'chosen', serverId: 'pve-01', guestId: null })).runsOn?.name).toBe('pve-01');
     expect((await set({ mode: 'auto' })).runsOn?.name).toBe('homeassistant (pve-02)');
+  });
+
+  it('answers the accounts’ pages, and lists each account once beside the service pages', async () => {
+    const now = () => Date.parse('2026-10-18T12:05:00Z');
+    const services = createServicePages({ now, homeAssistant: HOME_ASSISTANT_THING });
+    const one = createOneFixtures({ now, moreThings: () => services.things() });
+    const pages = createThingPageFixtures(one, { services });
+    const ids = [
+      'connection:con_mara',
+      'connection:con_mail_mara_fastmail_com',
+      'connection:github',
+      'connection:feedback',
+    ];
+    for (const id of ids) {
+      const res = (await pages.handle(new Request(`${B}/things/${encodeURIComponent(id)}`))) as Response;
+      const page = ThingPage.parse(await res.json());
+      expect([page.id, isAccountPageId(page.catalogId), page.settings]).toEqual([id, true, true]);
+    }
+    // The world's own Google is the same account as the service pages' one: listed once.
+    const accounts = one.things().filter((t) => isAccountPageId(t.catalogId));
+    expect(accounts.map((t) => t.id).sort()).toEqual([...ids].sort());
   });
 
   it('answers the service pages by address, and Home Assistant’s Controls, buttons and pictures with them (AP-4571)', async () => {
