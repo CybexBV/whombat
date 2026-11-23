@@ -148,7 +148,7 @@ LNK-13). `dev/console` shows what its screen shows.
 The console is drawn by the appliance's own `whombat-console`, built from this checkout into
 `~/.cache/whombat-mgd/bin/` (needs Go; without it `dev/console` prints a one-line summary). No own address is given
 out here (`WB_MGD_OWN_ADDRESS*` below switches that on), so the box's page is the loopback one; a real box shows its
-`https://<label>.box.whombat.app` address instead.
+`https://<label>.whombat.app` address instead.
 
 ## The manifest
 

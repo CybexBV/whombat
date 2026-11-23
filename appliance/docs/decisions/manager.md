@@ -2459,11 +2459,12 @@ computed with `go mod vendor` and `nix hash path`, which gave the old hash for t
   reaches the real one). An unknown value leaves it off and says so in the log.
 - **Zone and directory from the env**, not from new configuration fields: the configuration refuses unknown fields, so
   a field an image set would break a rollback to an older known-good manager. `prod` → `box.whombat.app`, otherwise
-  `dev.whombat.app`; both Let's Encrypt production.
+  `dev.whombat.app`; both Let's Encrypt production. (Zones superseded by MG-186.)
 - **State** in `<dir of journalDir>/own-address/` (`/persist/manager/own-address/`, 0700, every file 0600, the
   manager user's; also a tmpfiles entry): `state.json` (label, host, registeredAt, the current and previous pair's
   serials and the directory the current one came from), `account.key`, `<serial>.key` and `<serial>.pem` for the
   current and previous pair, `ordered.json`, `ct.json`. A saved name under another zone is forgotten at start.
+  (The zone rule and the files superseded by MG-186, MG-188.)
 - **Never fatal.** A problem setting it up leaves the box without an own address, as an older manager, and the
   manager runs on. It runs in the recovery manager too: a page whose certificate runs out helps nobody.
 - Tests: `ownaddress.TestResolve`, `config.TestNoOwnAddressField`, daemon `TestOwnAddressOnByEnv`,
@@ -2521,7 +2522,8 @@ or the loop started without a certificate: then it is tried again in 5 s, outsid
 - **What counts:** only a complete answer in full. A 5xx, a page out of shape or an issuance it can't read is no check
   at all. A 429 waits as told (an hour without `Retry-After`); other errors retry from an hour, doubling up to 6 hours.
 - **Names kept:** the host, any name under it, and exactly `*.<zone>`; `*.whombat.app` covers no two-level name and is
-  dropped. Each certificate keeps only those names.
+  dropped. Each certificate keeps only those names. (Superseded by MG-189: every served host, `*.<zone>` of each host's
+  own zone.)
 - **Missed windows:** more than 12 hours between fresh checks (from the start of watching, or across downtime) is a
   window, closed at the next fresh check; `/ct` adds the open one up to now. After a restart the watch waits for the
   next regular check rather than asking at once, so restarts don't spend the keyless quota.
@@ -2539,7 +2541,7 @@ or the loop started without a certificate: then it is tried again in 5 s, outsid
   the runtime sends, and control isn't asked again. `label_taken` / `label_invalid` → `409 own_address.label_taken` /
   `.label_invalid`; control out of reach (429 included) → `503 control_unreachable`; other refusals → `502
   control_refused` with control's codes first.
-- **Cert** is the current pair with its host, or `409 own_address.no_cert`.
+- **Cert** is the current pair with its host, or `409 own_address.no_cert`. (Amended by MG-190: a host may be named.)
 - **Forwarded as sent**, like the shared links: `/v1/runtime/account/link-lookup`, `/v1/runtime/account/link` and
   `/v1/backup/kit-credentials` (the device ops `account.link.lookup`, `account.link`, `kit.credentials.declare`), checked
   both ways against the contract, control's refusal codes leading the message.
@@ -2835,3 +2837,90 @@ manager stores nothing of its own” holds only once a box has signed in.
 - A box whose Link is off sends nothing, claim link or not (LNK-03).
 - Checked: `manager/internal/link` `TestTheClaimLinkGoesWithLinkStatus`, `TestAControlBeforeClaimLinksStillGivesTheState`;
   `manager/internal/broker` `TestLinkClaimRoute`.
+
+## MG-186 The own address's zones: prod's two, the host from control (2026-11-23; Whombat own-address.md, own names)
+
+Names are now chosen and changed, and prod's zone is `whombat.app` directly. The manager takes the box's host from
+control (`address.register`, `address.rename`, `link.status` `host`) and checks only that it is the label directly
+under one of its environment's zones.
+
+- **Zones per environment** (`ownaddress.ZonesOf`): prod `whombat.app` and its earlier `box.whombat.app` (where boxes
+  stay until they move); dev `dev.whombat.app` alone. The nix prod environment names `ownAddressZone = "whombat.app"`
+  (flake check); a prod box whose environment names no zone takes `whombat.app` too; an image that still names
+  `box.whombat.app` gets the same two. An environment zone that is none of Whombat's leaves the own address off (logged),
+  as no host from control could ever fit it.
+- **`ZoneOf(host)`**: the longest of the three zones the host is directly under; a zone itself (`box.whombat.app`,
+  `dev.whombat.app`) is never a box's host, and a label must have the contract's shape and length (3–32).
+- **`Open` keeps a saved address under any of the environment's zones**: an update that changes the zone never wipes a
+  box's address and certificate. Only an address under none of them (a box moved between dev and prod) is forgotten.
+- Tests: `TestResolve`, `TestZones`, `TestOpenKeepsAnAddressUnderAnEarlierZone`, `TestAdoptChecksEveryHost`.
+
+## MG-187 The box moves itself to control's zone, once (2026-11-23; Whombat own-address.md, own names)
+
+- The Link state keeps control's view of the address from every `link.status` and ticket answer: `host`, `zone` (the
+  zone new names get) and `leaving` (`Record.Host`, `.Zone`, `.AddressLeaving`; a control that names the zone without a
+  leaving address means none, an older control's silence keeps what the box knows). A change of any of them, or Link
+  becoming active, runs `followAddress`, and so does a timer every 30 minutes while Link is active (a move that failed
+  is tried again then).
+- **The move**: the box's host is under `box.whombat.app`, control names another of its zones, control's host is the
+  box's own, and nothing is leaving (neither the box nor control knows one) → `address.rename` with the box's own label.
+  Only updated boxes move; an older box stays at `<label>.box.whombat.app`, which keeps working.
+- **A rename the box missed**: control's host differs from the box's and control names the box's host as leaving (its
+  answer to the rename never arrived) → the box takes control's address as a rename. Without that sign the box keeps
+  its own: a `link.status` answer fetched before the box's own rename must not take it back.
+- One `followAddress` at a time; each reads the newest state.
+- The Link record's label and host follow a rename or a move at once (`Keeper.FollowAddress`), before control's next
+  answer says so.
+- Tests: daemon `TestOwnAddressMovesItself`; link `TestTheAddressFollowsControl`; broker `TestOwnAddressMove`.
+
+## MG-188 The leaving address: served with its pair, never ordered, then forgotten (2026-11-23; Whombat own-address.md)
+
+- `state.json` gains `leaving {label, host, until, pair}` (`Previous` still means the current host's previous pair). A
+  rename or a move whose answer names the box's current host as leaving keeps that host with its current pair; the new
+  host has no pair yet and is probed and ordered at once (the quick probes of a new label apply).
+- It is served until `min(until, the pair's notAfter)`; **no order is ever made for it** (Let's Encrypt's weekly budget
+  is the new host's). The order loop wakes at that time; then the leaving address is forgotten and its pair's files
+  removed. An older manager reading `state.json` ignores the field.
+- **At most one.** A rename while one is leaving keeps it when control names it (its date as control says), and the
+  name in between stops at once with its pair. A leaving address without a pair (renamed before its certificate came)
+  leaves nothing to serve and isn't kept. An answer without `leaving` never ends one early: its date does.
+- A certificate that arrives for a host the box left during the order is dropped (and so is the probe's: the loop
+  starts over with the new host).
+- `/v1/own-address/state` answers `leaving {label, host, until}` with the effective end.
+- Tests: `TestMoveKeepsTheOldPairAsLeaving`, `TestRenameAndRenameDuringLeaving`, `TestLeavingStopsAndIsForgotten`,
+  `TestRenameBeforeACertificateLeavesNothing`, `TestOrderForALeftHostIsDropped`; against Pebble `TestPebbleRename`.
+
+## MG-189 The certificate watch covers every served host (2026-11-23; Whombat own-address.md)
+
+- The watch follows the hosts the box answers at (current first, then leaving): a new host starts at once without a
+  restart, a host no longer served stops and its record goes. Each host has its own record, `ct-<host>.json`; an older
+  manager's `ct.json` counts for its host and goes once that host's own record is written.
+- **Names kept per host**: the host, names under it, and exactly `*.<zone>` of that host's own zone. So for a host
+  under `whombat.app` the two Cloudflare `*.whombat.app` certificates (valid to 2027-02-16) reach the runtime, which
+  knows them and decides what is foreign; for a host under `box.whombat.app` they are not kept, as before.
+- **One answer for all** (`/v1/own-address/ct`, `hosts`): `checkingSince` is the latest host's start, `lastFreshAt` the
+  oldest host's last fresh check (none while any host has none), `missed` every host's windows, `certs` every host's,
+  each once. It never claims more than each host's own record.
+- Tests: `TestCTOverTwoHosts`, `TestCTTakesAnOlderRecord`, `TestRelevantNamesPerZone`.
+
+## MG-190 The broker's routes for names (2026-11-23; Whombat own-address.md, contracts 4.16)
+
+```
+POST /v1/own-address/cert   {v:1, host?}  → 200 OwnAddressCertResponse | 404 own_address.off | 409 own_address.no_cert
+POST /v1/own-address/check  {v:1, label}  → 200 {v:1, label, verdict} | 404 own_address.off | 409 own_address.link_off
+                                             | 503 control_unreachable | 502 control_refused
+POST /v1/own-address/rename {v:1, label}  → 200 OwnAddressStateResponse | 404 own_address.off | 409 own_address.
+                                             label_taken / .label_invalid / .label_reserved / .rename_limit / .link_off
+                                             | 503 control_unreachable | 502 control_refused
+```
+
+- `cert` without `host` is the current host's; with the leaving host its pair; any other host `409 own_address.no_cert`.
+- `check` and `rename` go to control signed by the box (`address.check`, `address.rename`), only while Link is
+  starting, on or in grace (otherwise `409 own_address.link_off`, control isn't asked). Control's `own_address_off` is
+  `404 own_address.off`; its `link_off` is `409 own_address.link_off`.
+- A rename's answer is taken like the move's (MG-188), the cached tickets are dropped (the next carries the new `lbl`
+  and the leaving `plbl`), the Link state names the new label, and the route answers the new state.
+- `register` keeps its rule: once the box has a label that is the answer (a new name is a rename).
+- fakecontrol: `address.check`, `address.rename` (rename, move, limit, at most one leaving), `link.status` and tickets
+  with `host`, `zone`, `leaving`.
+- Tests: broker `TestOwnAddressCheckAndRename`, `TestOwnAddressMove`, `TestOwnAddressOff`, `TestOwnAddressOnlyForTheRuntime`.

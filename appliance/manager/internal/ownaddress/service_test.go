@@ -53,9 +53,18 @@ type fakeOrderer struct {
 	life  time.Duration
 	errs  []error
 	n     int
+	hosts []string
+	// during runs inside an order, before it ends (a rename while the certificate is ordered).
+	during func()
 }
 
 func (o *fakeOrderer) Order(_ context.Context, host string) (*Pair, error) {
+	o.hosts = append(o.hosts, host)
+	if o.during != nil {
+		f := o.during
+		o.during = nil
+		f()
+	}
 	if len(o.errs) > 0 {
 		err := o.errs[0]
 		o.errs = o.errs[1:]
@@ -159,7 +168,7 @@ func TestServiceOrdersAndRenewsAtTwoThirds(t *testing.T) {
 	if len(ordered) != 2 || ordered[0].Serial != saved.Current {
 		t.Fatalf("ordered %+v", ordered)
 	}
-	cert, ok := s.Cert()
+	cert, ok := s.Cert("")
 	if !ok || cert.Serial != saved.Current || cert.Host != testHost || cert.Validate() != nil {
 		t.Fatalf("cert %+v", cert)
 	}

@@ -22,24 +22,33 @@ import (
 )
 
 // Watch is the certificate watch (MG-165, design §6): Cert Spotter's issuance search, keyless, called by the box
-// itself every 6 hours ± 30 minutes. It keeps the last fresh, complete answer and every window of more than 12 hours
-// without one; silence and errors never count as a check. There is no catch-up source in phase 1 (plan D14).
+// itself every 6 hours ± 30 minutes for every host it answers at (its address, and an earlier one while it still
+// answers there). It keeps, per host, the last fresh, complete answer and every window of more than 12 hours without
+// one; silence and errors never count as a check. There is no catch-up source in phase 1 (plan D14).
 type Watch struct {
 	// BaseURL is Cert Spotter's (CertSpotterURL; tests: a fake).
 	BaseURL string
 	HTTP    *http.Client
 	Store   *Store
-	// Zone is the box's zone: a wildcard of exactly `*.<zone>` covers the host too.
-	Zone string
-	Now  func() time.Time
-	Log  *slog.Logger
+	Now     func() time.Time
+	Log     *slog.Logger
 	// The schedule; zero: the design's.
 	Every, Jitter, Gap, RetryMin, RetryMax time.Duration
 	// Sleep waits d or until ctx ends (false); nil: a timer (tests replace it).
 	Sleep func(ctx context.Context, d time.Duration) bool
 
 	mu sync.Mutex
-	st *CTState
+	// recs are the records of the hosts started, order the hosts in the order the answer names them.
+	recs  map[string]*CTState
+	order []string
+	// runs are the hosts Follow watches now.
+	runs map[string]*ctRun
+	wg   sync.WaitGroup
+}
+
+type ctRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 // The design's schedule and bounds.
@@ -98,36 +107,110 @@ type RateLimited struct{ Wait time.Duration }
 
 func (e *RateLimited) Error() string { return fmt.Sprintf("cert spotter: rate limited for %s", e.Wait) }
 
-// Start loads (or starts) the record for host: a record for another name starts over, from now.
+// Start loads (or starts) the record for host: a host without one starts from now.
 func (w *Watch) Start(host string) error {
-	st, err := w.Store.CT()
+	st, err := w.Store.CT(host)
 	if err != nil {
-		w.log().Warn("own address: ct.json unreadable; the watch starts over", "err", err)
+		w.log().Warn("own address: the watch's record is unreadable; it starts over", "host", host, "err", err)
 		st = nil
 	}
-	if st == nil || st.Host != host {
+	if st == nil {
 		st = &CTState{Host: host, CheckingSince: w.now().UTC(), Missed: []Window{}, Certs: []local.OwnAddressCtCert{}}
 		if err := w.Store.SaveCT(st); err != nil {
 			return err
 		}
 	}
 	w.mu.Lock()
-	w.st = st
-	w.mu.Unlock()
+	defer w.mu.Unlock()
+	if w.recs == nil {
+		w.recs = map[string]*CTState{}
+	}
+	w.recs[host] = st
+	if !slices.Contains(w.order, host) {
+		w.order = append(w.order, host)
+	}
 	return nil
+}
+
+// Follow watches exactly hosts from now on: a new host starts at once (no restart needed), a host no longer served
+// stops and its record is forgotten. Its loops end with ctx; Wait waits for them.
+func (w *Watch) Follow(ctx context.Context, hosts []string) {
+	w.mu.Lock()
+	if w.runs == nil {
+		w.runs = map[string]*ctRun{}
+	}
+	var stop []string
+	for h := range w.runs {
+		if !slices.Contains(hosts, h) {
+			stop = append(stop, h)
+		}
+	}
+	stopped := make([]*ctRun, 0, len(stop))
+	for _, h := range stop {
+		stopped = append(stopped, w.runs[h])
+		delete(w.runs, h)
+	}
+	var start []string
+	for _, h := range hosts {
+		if _, ok := w.runs[h]; !ok {
+			start = append(start, h)
+		}
+	}
+	for _, h := range start {
+		c, cancel := context.WithCancel(ctx)
+		r := &ctRun{cancel: cancel, done: make(chan struct{})}
+		w.runs[h] = r
+		w.wg.Add(1)
+		go func() {
+			defer w.wg.Done()
+			defer close(r.done)
+			w.Run(c, h)
+			w.mu.Lock()
+			if w.runs[h] == r {
+				delete(w.runs, h)
+			}
+			w.mu.Unlock()
+		}()
+	}
+	// The answer names the hosts as given (the current one first); a host not started yet has no record to show.
+	w.order = slices.Clone(hosts)
+	w.mu.Unlock()
+	for i, r := range stopped {
+		r.cancel()
+		<-r.done
+		w.forget(stop[i])
+	}
+}
+
+// forget drops host's record, in memory and on disk.
+func (w *Watch) forget(host string) {
+	w.mu.Lock()
+	delete(w.recs, host)
+	w.order = slices.DeleteFunc(w.order, func(h string) bool { return h == host })
+	w.mu.Unlock()
+	if err := w.Store.DropCT(host); err != nil {
+		w.log().Warn("own address: the watch's record of an earlier host stays", "host", host, "err", err)
+	}
+}
+
+// Wait waits for the loops Follow started.
+func (w *Watch) Wait() { w.wg.Wait() }
+
+func (w *Watch) record(host string) *CTState {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.recs[host]
 }
 
 // Run watches host until ctx ends. After a restart it waits for the next regular check rather than asking at once,
 // so restarts don't spend the keyless quota.
 func (w *Watch) Run(ctx context.Context, host string) {
 	if err := w.Start(host); err != nil {
-		w.log().Error("own address: the certificate watch can't keep its record", "err", err)
+		w.log().Error("own address: the certificate watch can't keep its record", "host", host, "err", err)
 		return
 	}
 	every, jitter := or(w.Every, ctEvery), or(w.Jitter, ctJitter)
-	w.mu.Lock()
-	last := w.st.LastFresh
-	w.mu.Unlock()
+	last := w.record(host).LastFresh
 	wait := time.Duration(rand.Int64N(int64(time.Minute)))
 	if !last.IsZero() {
 		if due := last.Add(every).Sub(w.now()); due > wait {
@@ -151,7 +234,7 @@ func (w *Watch) Run(ctx context.Context, host string) {
 			w.log().Warn("own address: cert spotter asked to wait", "wait", rl.Wait)
 			wait = max(rl.Wait, time.Minute)
 		default:
-			w.log().Warn("own address: certificate check failed", "err", err, "retry", retry)
+			w.log().Warn("own address: certificate check failed", "host", host, "err", err, "retry", retry)
 			wait = retry
 			retry = min(retry*2, or(w.RetryMax, ctRetryMax))
 		}
@@ -186,10 +269,7 @@ var (
 
 // Check runs one complete check of host and records it. An answer it can't read in full is no check at all.
 func (w *Watch) Check(ctx context.Context, host string) error {
-	w.mu.Lock()
-	started := w.st != nil
-	w.mu.Unlock()
-	if !started {
+	if w.record(host) == nil {
 		if err := w.Start(host); err != nil {
 			return err
 		}
@@ -225,7 +305,12 @@ func (w *Watch) Check(ctx context.Context, host string) error {
 	now := w.now().UTC()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	st := *w.st
+	cur := w.recs[host]
+	if cur == nil {
+		// Forgotten while it checked: the box no longer answers there.
+		return nil
+	}
+	st := *cur
 	from := st.LastFresh
 	if from.IsZero() {
 		from = st.CheckingSince
@@ -240,7 +325,7 @@ func (w *Watch) Check(ctx context.Context, host string) error {
 	if err := w.Store.SaveCT(&st); err != nil {
 		return err
 	}
-	w.st = &st
+	w.recs[host] = &st
 	return nil
 }
 
@@ -301,8 +386,9 @@ func retryAfterOf(v string, now time.Time) time.Duration {
 	return time.Hour
 }
 
-// cert reads one issuance. keep is false when none of its names concern this box (Cert Spotter's wildcard match also
-// returns wildcards higher up, such as `*.whombat.app`, which cover no box's two-level name).
+// cert reads one issuance. keep is false when none of its names concern host. Cert Spotter's wildcard match also
+// returns wildcards higher up: `*.whombat.app` covers a host directly under whombat.app and is kept for it (the runtime
+// decides whether it is foreign), but covers no `<label>.box.whombat.app`, so it isn't kept for such a host.
 func (w *Watch) cert(is issuance, host string) (local.OwnAddressCtCert, bool, error) {
 	if !ctIDRe.MatchString(is.ID) || !ctSPKIRe.MatchString(is.PubkeySHA256) {
 		return local.OwnAddressCtCert{}, false, fmt.Errorf("cert spotter: an issuance out of shape (id %q)", is.ID)
@@ -312,7 +398,7 @@ func (w *Watch) cert(is issuance, host string) (local.OwnAddressCtCert, bool, er
 	if err := errors.Join(err1, err2); err != nil {
 		return local.OwnAddressCtCert{}, false, fmt.Errorf("cert spotter: issuance %s: %w", is.ID, err)
 	}
-	names := RelevantNames(is.DNSNames, host, w.Zone)
+	names := RelevantNames(is.DNSNames, host, ZoneOf(host))
 	if len(names) == 0 {
 		return local.OwnAddressCtCert{}, false, nil
 	}
@@ -330,13 +416,13 @@ func (w *Watch) cert(is issuance, host string) (local.OwnAddressCtCert, bool, er
 
 var ctNameRe = regexp.MustCompile(`^[*a-z0-9.-]{1,253}$`)
 
-// RelevantNames keeps the names that concern host (OWA-09): host itself, any name under it, and exactly `*.<zone>`,
-// which covers it. Lower case, without a trailing dot, each once.
+// RelevantNames keeps the names that concern host (OWA-09): host itself, any name under it, and exactly `*.<zone>`
+// of host's own zone, which covers it. Lower case, without a trailing dot, each once.
 func RelevantNames(names []string, host, zone string) []string {
 	out := []string{}
 	for _, n := range names {
 		n = strings.TrimSuffix(strings.ToLower(n), ".")
-		if n != host && !strings.HasSuffix(n, "."+host) && n != "*."+zone {
+		if n != host && !strings.HasSuffix(n, "."+host) && (zone == "" || n != "*."+zone) {
 			continue
 		}
 		if !ctNameRe.MatchString(n) || slices.Contains(out, n) {
@@ -350,15 +436,60 @@ func RelevantNames(names []string, host, zone string) []string {
 	return out
 }
 
-// Response is the record as the runtime reads it (/v1/own-address/ct), with an open window up to now when more than
-// 12 hours passed since the last fresh check. nil before the watch started.
+// Response is the records as the runtime reads them (/v1/own-address/ct): every watched host, with an open window up to
+// now when more than 12 hours passed since a host's last fresh check. nil before the watch started.
+//
+// One answer covers every host, so it claims no more than each of them: checkingSince is the latest host's start,
+// lastFreshAt the oldest host's last fresh check (none while any host has none), missed every host's windows, and the
+// certificates every host's, each once.
 func (w *Watch) Response(now time.Time) *local.OwnAddressCtResponse {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.st == nil {
+	var out *local.OwnAddressCtResponse
+	gap := or(w.Gap, ctGap)
+	fresh := true
+	var since, last time.Time
+	for _, h := range w.order {
+		st := w.recs[h]
+		if st == nil {
+			continue
+		}
+		r := ctResponse(st, now, gap)
+		if out == nil {
+			out = r
+			out.Hosts = []string{}
+		} else {
+			out.Missed = append(out.Missed, r.Missed...)
+			for _, c := range r.Certs {
+				if len(out.Certs) < ctCertsMax && !slices.ContainsFunc(out.Certs, func(o local.OwnAddressCtCert) bool { return o.ID == c.ID }) {
+					out.Certs = append(out.Certs, c)
+				}
+			}
+		}
+		out.Hosts = append(out.Hosts, h)
+		if st.CheckingSince.After(since) {
+			since = st.CheckingSince
+		}
+		if st.LastFresh.IsZero() {
+			fresh = false
+		} else if last.IsZero() || st.LastFresh.Before(last) {
+			last = st.LastFresh
+		}
+	}
+	if out == nil {
 		return nil
 	}
-	return ctResponse(w.st, now, or(w.Gap, ctGap))
+	out.CheckingSince = since.UTC().Format(time.RFC3339)
+	out.LastFreshAt = nil
+	if fresh && !last.IsZero() {
+		s := last.UTC().Format(time.RFC3339)
+		out.LastFreshAt = &s
+	}
+	slices.SortStableFunc(out.Missed, func(a, b local.OwnAddressCtResponseMissedItem) int { return strings.Compare(a.From, b.From) })
+	if len(out.Missed) > ctMissedMax {
+		out.Missed = out.Missed[len(out.Missed)-ctMissedMax:]
+	}
+	return out
 }
 
 func ctResponse(st *CTState, now time.Time, gap time.Duration) *local.OwnAddressCtResponse {

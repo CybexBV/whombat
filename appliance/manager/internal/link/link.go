@@ -50,6 +50,11 @@ type Record struct {
 	TrialEndsAt       *time.Time         `json:"trialEndsAt,omitempty"`
 	Label             string             `json:"label,omitempty"`
 	Email             string             `json:"email,omitempty"`
+	// Host, Zone and AddressLeaving are control's view of the box's address: its live host, the zone new names get,
+	// and the earlier address it still routes. The own address follows them (a move, a rename it missed).
+	Host           string                 `json:"host,omitempty"`
+	Zone           string                 `json:"zone,omitempty"`
+	AddressLeaving *device.AddressLeaving `json:"addressLeaving,omitempty"`
 	// CheckedAt is when control last told the box its state; nil before it ever did.
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 	// Carried: a box registered at control before Link (Cybex's own boxes, LNK-37, LNK-50) starts `on`, as it worked
@@ -221,8 +226,11 @@ func (k *Keeper) unlock() {
 func changed(a, b Record) bool {
 	pa, pb := a.Pending, b.Pending
 	samePending := (pa == nil) == (pb == nil) && (pa == nil || *pa == *pb)
+	la, lb := a.AddressLeaving, b.AddressLeaving
+	sameAddressLeaving := (la == nil) == (lb == nil) && (la == nil || *la == *lb)
 	return a.State != b.State || a.Leaving != b.Leaving || a.Label != b.Label || !samePending ||
-		a.WaitingForAddress != b.WaitingForAddress || !sameTime(a.GraceEndsAt, b.GraceEndsAt)
+		a.WaitingForAddress != b.WaitingForAddress || !sameTime(a.GraceEndsAt, b.GraceEndsAt) ||
+		a.Host != b.Host || a.Zone != b.Zone || !sameAddressLeaving
 }
 
 func sameTime(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
@@ -251,6 +259,18 @@ func adopt(r Record, st *device.DeviceLinkStatus, now time.Time) Record {
 	}
 	if st.Email != nil {
 		r.Email = *st.Email
+	}
+	if st.Host != nil {
+		r.Host = *st.Host
+	}
+	if st.Zone != nil {
+		r.Zone = string(*st.Zone)
+		// A control that names the zone says what is leaving too: none when it leaves it out.
+		r.AddressLeaving = nil
+		if st.Leaving != nil {
+			l := *st.Leaving
+			r.AddressLeaving = &l
+		}
 	}
 	t := now.UTC()
 	r.CarriedOff = (r.Carried || r.CarriedOff) && r.State == protocol.LinkStateOff
@@ -497,6 +517,21 @@ func (k *Keeper) WantOn(seq uint64) error {
 	err := k.saveLocked(next)
 	k.poke()
 	return err
+}
+
+// FollowAddress takes the box's new name after a rename or a move, so the Link state names it before control's next
+// answer does.
+func (k *Keeper) FollowAddress(label, host string) {
+	k.mu.Lock()
+	defer k.unlock()
+	if k.rec.Label == label && k.rec.Host == host {
+		return
+	}
+	next := k.rec
+	next.Label, next.Host = label, host
+	if err := k.saveLocked(next); err != nil {
+		k.log().Warn("link: the new name wasn't kept", "err", err)
+	}
 }
 
 // ReachSeen records that the reach file's seq was acted on (without a change to Link).

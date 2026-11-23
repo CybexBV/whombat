@@ -92,6 +92,8 @@ type Daemon struct {
 	claimWindowIgnored sync.Once
 	// linkSig wakes whileLinkActive at every Link change.
 	linkSig linkSignal
+	// addressMu: one followAddress at a time.
+	addressMu sync.Mutex
 
 	started time.Time
 	// wake tells the progress loop that the outbox has new reports (a coalescing signal: the outbox holds them all,

@@ -74,7 +74,7 @@ func newWatch(t *testing.T, f *fakeSpotter, c *clock) (*Watch, *Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Watch{BaseURL: srv.URL, Store: st, Zone: "dev.whombat.app", Now: c.now}, st
+	return &Watch{BaseURL: srv.URL, Store: st, Now: c.now}, st
 }
 
 func TestCTKeepsOnlyNamesThatConcernTheBox(t *testing.T) {
@@ -194,7 +194,7 @@ func TestCTRecordsMissedWindows(t *testing.T) {
 	}
 	// The box is off for two days: the next start keeps the record, and the first check closes the gap.
 	c.add(48 * time.Hour)
-	w2 := &Watch{BaseURL: w.BaseURL, Store: st, Zone: w.Zone, Now: c.now}
+	w2 := &Watch{BaseURL: w.BaseURL, Store: st, Now: c.now}
 	if err := w2.Start(testHost); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCTRecordsMissedWindows(t *testing.T) {
 		t.Fatalf("closed %+v since %s", r.Missed, r.CheckingSince)
 	}
 	// Another name starts over.
-	w3 := &Watch{BaseURL: w.BaseURL, Store: st, Zone: w.Zone, Now: c.now}
+	w3 := &Watch{BaseURL: w.BaseURL, Store: st, Now: c.now}
 	if err := w3.Start("other-name-here.dev.whombat.app"); err != nil {
 		t.Fatal(err)
 	}

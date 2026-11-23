@@ -110,8 +110,8 @@ on the account site (`link.name.check`, `label` on `link.confirm`); the rules fo
 a manager from before Link the runtime draws it), orders the certificate (ACME TLS-ALPN-01) and watches Certificate
 Transparency. The owner changes the name later (`ownAddress.rename` → the manager → control's `address.rename`), and a box
 whose host is under the old zone moves itself to control's zone the same way; either way the earlier host stays served
-for 30 days (`leaving`: tickets carry it as `plbl`, the box serves its current certificate, makes new passkeys only at
-the new host) and then stops;
+for 30 days (`leaving`: tickets carry it as `plbl`, the manager keeps that host's certificate and orders none for it,
+the certificate watch covers both hosts, the box makes new passkeys only at the new host) and then stops;
 the runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
 person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch
 calls foreign and raises the notices. The relay's door hands the box raw TLS streams over the relay client

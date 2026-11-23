@@ -218,9 +218,16 @@ func (d *Daemon) linkChanged(before, after link.Record) {
 	if !after.Active() && d.Broker != nil {
 		d.Broker.DropTickets()
 	}
-	if after.Active() && after.Label != "" && after.Label != before.Label {
-		go d.registerLinkLabel(context.Background())
+	if after.Active() && addressChanged(before, after) {
+		go d.followAddress(context.Background())
 	}
+}
+
+// addressChanged: control's view of the box's address changed, or Link just became active.
+func addressChanged(before, after link.Record) bool {
+	lb, la := before.AddressLeaving, after.AddressLeaving
+	sameLeaving := (lb == nil) == (la == nil) && (lb == nil || *lb == *la)
+	return !before.Active() || before.Label != after.Label || before.Host != after.Host || before.Zone != after.Zone || !sameLeaving
 }
 
 // whileLinkActive runs f while Link is starting, on or in grace: cancelled when Link stops, started again when it comes
@@ -262,7 +269,7 @@ func (d *Daemon) whileLinkActive(ctx context.Context, f func(context.Context)) {
 }
 
 // registerLinkLabel registers the label control gave with Link (LNK-13: control gives it, the manager registers it and
-// orders the certificate). A box that has its label already keeps it (labels never change, LNK-06).
+// orders the certificate). A box that has its label already keeps it: a new name comes by a rename (followAddress).
 func (d *Daemon) registerLinkLabel(ctx context.Context) {
 	if d.OwnAddress == nil || d.Control == nil || !d.linkActive() {
 		return
@@ -385,12 +392,12 @@ func (d *Daemon) resumeTailscale(ctx context.Context, c *reach.Choice) {
 	}()
 }
 
-// linkLoop acts on the reach choice, registers a label the box was given while it was away, and keeps the Link state
-// fresh.
+// linkLoop acts on the reach choice, follows what control said of the address while the box was away (a label to
+// register, a move), and keeps the Link state fresh.
 func (d *Daemon) linkLoop(ctx context.Context) {
 	d.applyReach(ctx)
 	if d.linkActive() {
-		go d.registerLinkLabel(ctx)
+		go d.followAddress(ctx)
 	}
 	d.Link.Run(ctx)
 }

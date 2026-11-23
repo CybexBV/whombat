@@ -540,3 +540,37 @@ func TestCodeAsksSoonThenLessOften(t *testing.T) {
 		t.Fatal("the run of codes didn't end with the confirm")
 	}
 }
+
+// Control's view of the box's address (4.16) is kept and changes are told: its host, the zone new names get, the
+// earlier address it routes. A control that names the zone and no leaving address means none; FollowAddress takes a
+// rename's answer at once.
+func TestTheAddressFollowsControl(t *testing.T) {
+	b := newBox(t, true)
+	var changes []Record
+	b.keep.OnChange = func(_, after Record) { changes = append(changes, after) }
+	label, host, zone := "maple-otter-river", "maple-otter-river.whombat.app", protocol.OwnAddressZoneWhombatApp
+	leaving := &device.AddressLeaving{Label: label, Host: "maple-otter-river.box.whombat.app", Until: b.now.Unix() + 86400}
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: &label, Host: &host,
+		Zone: &zone, Leaving: leaving})
+	r := b.keep.Snapshot()
+	if r.Host != host || r.Zone != "whombat.app" || r.AddressLeaving == nil || *r.AddressLeaving != *leaving || len(changes) != 1 {
+		t.Fatalf("%+v (%d changes)", r, len(changes))
+	}
+	// An older control says nothing of the address: what the box knows stays.
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()})
+	if r := b.keep.Snapshot(); r.Host != host || r.AddressLeaving == nil {
+		t.Fatalf("%+v", r)
+	}
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: &label, Host: &host, Zone: &zone})
+	if r := b.keep.Snapshot(); r.AddressLeaving != nil || len(changes) != 2 {
+		t.Fatalf("%+v", r)
+	}
+	b.keep.FollowAddress("home", "home.whombat.app")
+	if r := b.keep.Snapshot(); r.Label != "home" || r.Host != "home.whombat.app" || len(changes) != 3 {
+		t.Fatalf("%+v", r)
+	}
+	// Kept across a restart.
+	if r := b.open(t, true).Snapshot(); r.Label != "home" || r.Zone != "whombat.app" {
+		t.Fatalf("%+v", r)
+	}
+}

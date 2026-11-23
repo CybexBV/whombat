@@ -217,6 +217,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressRegister, s.onlyN(rt, ownAddressBodyMax, s.ownAddressRegister))
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCert, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCert))
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCt, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCT))
+	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCheck, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCheck))
+	mux.HandleFunc("POST "+local.ManagerPathOwnAddressRename, s.onlyN(rt, ownAddressBodyMax, s.ownAddressRename))
 	for path, route := range ownAddressForwards {
 		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
 	}

@@ -19,7 +19,9 @@ in
       appUrl = "https://app.whombat.com";
       embedUrl = "https://embed.whombat.com";
       relayHost = "relay.whombat.com";
-      ownAddressZone = "box.whombat.app";
+      # New names land directly under whombat.app; a box under the earlier box.whombat.app keeps it and moves when
+      # control names whombat.app (the manager allows both zones in prod).
+      ownAddressZone = "whombat.app";
       # The production support CA once the Hetzner host has made it (RH-10, ONE-17: `deploy.sh support-ca`, its public
       # half committed as manifest/prod/support-ca.pub); until then no remote help in production.
       supportCaKeys = optional (prod + "/support-ca.pub");

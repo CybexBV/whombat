@@ -689,7 +689,7 @@ cached (UP-X46), the push refused and run again, a ceremony stopped while signin
 
 ### Moving Home to production (ONE-06)
 
-When production runs Link (control, relay and the door for `*.box.whombat.app`), the key ceremony is done and its root
+When production runs Link (control, relay and the door for `*.whombat.app`), the key ceremony is done and its root
 and the env prod client keys are in the image (“The key ceremony” below), and Home runs that image. Keep the
 development stack running until John is signed in at Home's new address: until then `environment undo` takes Home back.
 As root on Home (its console, or remote help: that session ends with the reboot), in order. A root shell has
@@ -741,7 +741,7 @@ and Home's screen shows a Link code with `app.whombat.com/link`. Then John, in o
 1. **Link.** On a computer or phone, open `app.whombat.com/link`, sign in with his production account (the e-mail's
    sign-in link; the first time it makes the account) and enter the code from Home's screen. Link starts; at
    admin.whombat.com his account gets free time, forever (ONE-09). Within minutes Home has its address,
-   `<label>.box.whombat.app`: app.whombat.com lists Home with **Open**.
+   `<label>.whombat.app`: app.whombat.com lists Home with **Open**.
 2. **Sign in at the new address.** **Open** (or the address) shows Home's page. Home is claimed, so it asks how this
    device gets in: **Use its screen**. Six letters appear on Home's screen; type them. The browser is in John's own
    account, with everything as it was: the owner, members, conversations, automations, files and servers.

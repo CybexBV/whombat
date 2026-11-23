@@ -73,6 +73,12 @@ func (f *fakeLink) Observe(st *device.DeviceLinkStatus) {
 	}
 }
 
+func (f *fakeLink) FollowAddress(label, host string) {
+	f.mu.Lock()
+	f.rec.Label, f.rec.Host = label, host
+	f.mu.Unlock()
+}
+
 func (f *fakeLink) SetClaimLink(secret string) {
 	f.mu.Lock()
 	f.claims = append(f.claims, secret)

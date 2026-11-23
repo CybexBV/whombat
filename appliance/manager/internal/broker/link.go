@@ -48,6 +48,8 @@ type Link interface {
 	Off(ctx context.Context) (link.Record, error)
 	Observe(st *device.DeviceLinkStatus)
 	SetClaimLink(secret string)
+	// FollowAddress takes the box's new name into the Link state after a rename or a move.
+	FollowAddress(label, host string)
 }
 
 // linkBodyMax: {v: 1, contentProof (128 hex), name (64)} and the push routes' token.

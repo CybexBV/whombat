@@ -34,6 +34,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/CybexBV/whombat/contracts/go/device"
+	"github.com/CybexBV/whombat/contracts/go/local"
 )
 
 type pebble struct {
@@ -373,5 +376,51 @@ func TestPebbleRenewsAtTwoThirds(t *testing.T) {
 	}
 	if st := s.State(); st.Acme.State != "valid" || st.Cert == nil || st.Cert.Serial != second.Meta.Serial {
 		t.Fatalf("state %+v", st)
+	}
+}
+
+// A rename against Pebble: the loop orders the new host's certificate through the door at once, and the old host keeps
+// the pair it had, with no order for it.
+func TestPebbleRename(t *testing.T) {
+	p := startPebble(t, 90*24*time.Hour)
+	o, st, _ := p.orderer(t)
+	s, err := Open(Mode{Enabled: true, Zone: "dev.whombat.app", Directory: p.dirURL}, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Responder, s.Orderer = p.resp, o
+	s.Prober = &Prober{Responder: p.resp, Addr: p.door, Timeout: 5 * time.Second}
+	register(t, s)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	waitCert := func(host string) *local.OwnAddressCertResponse {
+		t.Helper()
+		for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+			if c, ok := s.Cert(""); ok && c.Host == host {
+				return c
+			}
+		}
+		t.Fatalf("no certificate for %s within 60 s: state %+v", host, s.State())
+		return nil
+	}
+	first := waitCert(testHost)
+	const renamed = "home-box.dev.whombat.app"
+	if _, err := s.Adopt(Address{Label: "home-box", Host: renamed,
+		Leaving: &device.AddressLeaving{Label: "maple-otter-river", Host: testHost, Until: time.Now().Add(30 * 24 * time.Hour).Unix()}}); err != nil {
+		t.Fatal(err)
+	}
+	second := waitCert(renamed)
+	blk, _ := pem.Decode([]byte(second.CertPem))
+	leaf, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil || leaf.VerifyHostname(renamed) != nil {
+		t.Fatalf("the new pair doesn't name %s: %v", renamed, err)
+	}
+	if c, ok := s.Cert(testHost); !ok || c.Serial != first.Serial {
+		t.Fatal("the old host lost its pair")
+	}
+	if ordered, _ := st.Ordered(); len(ordered) != 2 {
+		t.Fatalf("%d orders, want 2", len(ordered))
 	}
 }
