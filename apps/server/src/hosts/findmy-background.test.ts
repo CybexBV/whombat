@@ -119,6 +119,12 @@ describe('background reads', () => {
     expect(w.loop.about('mini')).toBeNull();
   });
 
+  it('say when the timeline is why a Mac is read this often', async () => {
+    const w = world([{ ...plan(15), pace: { everyMinutes: 15, automation: null, timeline: true } }]);
+    await w.at(0);
+    expect(w.loop.about('studio')).toEqual({ everyMinutes: 15, automation: null, timeline: true });
+  });
+
   it('count a read that throws as a failure', async () => {
     const loop = new FindMyBackground({
       now: () => 0,

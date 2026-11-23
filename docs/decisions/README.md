@@ -262,6 +262,7 @@ How the split was made: `docs.md`.
 - `server-updates.md`, `server-updates-server.md` — software updates on servers.
 - `macos-servers.md` — Macs as servers: the macOS agent, the screen through Screen Sharing, Whombat Helper.
 - `findmy-connection.md`, `../app/decisions/findmy-connection.md` — Find My as a connection through a Mac: its check, background reads, arriving and leaving automations, the assistant's tool.
+- `findmy-timeline.md` — a Find My connection's timeline: what the box keeps of whom and for how long, reading for it, its routes and map, the assistant's `findmy_timeline`.
 - `agent-updates.md`, `agent-updates-server.md` — servers' agents keep themselves up to date.
 
 ## Skills, guides, backups

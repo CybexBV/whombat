@@ -191,19 +191,22 @@ export interface FindMyPace {
   everyMinutes: number;
   /** The automation that needs it, when that is why it reads this often; null: the person's own setting. */
   automation: string | null;
+  /** Its timeline is why it reads this often (absent: it isn't). */
+  timeline?: true;
 }
 
 /**
- * The pace of a connection (pure): its own setting, or every `listenedMinutes` while an automation listens when that is
- * sooner (or the setting is Off); null when it doesn't read in the background.
+ * The pace of a connection (pure): its own setting, or every `listenedMinutes` while an automation listens or it keeps a
+ * timeline, when that is sooner (or the setting is Off); null when it doesn't read in the background.
  */
 export function findMyPace(
   background: string | undefined,
   listenedBy: string | null,
   listenedMinutes: number,
+  timeline = false,
 ): FindMyPace | null {
   const own = findMyBackgroundMinutes(background);
-  if (listenedBy !== null && (own === null || own > listenedMinutes))
-    return { everyMinutes: listenedMinutes, automation: listenedBy };
+  if ((listenedBy !== null || timeline) && (own === null || own > listenedMinutes))
+    return { everyMinutes: listenedMinutes, automation: listenedBy, ...(timeline ? { timeline: true } : {}) };
   return own === null ? null : { everyMinutes: own, automation: null };
 }

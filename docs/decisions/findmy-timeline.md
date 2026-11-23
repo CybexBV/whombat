@@ -1,0 +1,42 @@
+# Workstream: A Find My timeline (FMT)
+
+John, 2026-11-23, after reading every 5 minutes: “we should be able to create a location timeline, right?” He answered
+the mockup's three questions: keep each day 30 days; only he sees it; Dusty can read it, on by default. The plan is
+`docs/implementation/macos/findmy-timeline.md`; Find My as a connection stays `findmy-connection.md`. Names here are made
+up (Noor, Ruben and Ilse Visser, a Mac called Studio, towns Rietveen and Wilgendam).
+
+## What the box keeps (2026-11-23)
+
+| ID | Decision | Reason |
+|---|---|---|
+| FMT-01 | **A timeline only while the person keeps one, only for the people they tick, 30 days.** `findmy_timeline_people` (who, their name, kept since) and `findmy_stops` (one row per stretch: `place` with Find My's words, the street and the Mac geocoder's spot; `none`; `unread` with the read's problem code; first and last read), migration `0018_findmy_timeline`, both cascading with the connection. A connection keeps a timeline while someone is ticked. Never Find My's “seen …” words, a picture, or anyone not ticked. | John's answers: a history of where people were is worth having only when asked for, for whom it is asked, and not for ever. |
+| FMT-02 | **This narrows FMC-21 and MAC-55, it doesn't replace them**: with a timeline on, the box keeps, for the people ticked, the place's words, the street, the geocoder's spot and the times, 30 days, in its database and so in its backups. Without one, nothing changes: no street, coordinates or history. | The old promise still holds for everyone who doesn't turn it on. |
+| FMT-03 | **A read extends a person's last row when it says the same**: the same kind, for a place the same street (else the same place words, without case or spaces: `findMyStopKey`), for `unread` the same problem, and the row's last read within the tolerance (twice the pace plus 5 minutes). Otherwise a new row starts at the read. A kept person missing from a read has no location; a read no newer than the last row writes nothing; Find My's street alone counts as the place when it gave no place words. | Reads every few minutes would make hundreds of rows a day; stretches keep it small and the day exact to a read. |
+| FMT-04 | **Every read that worked is noted** (the page's, the background's, the assistant's: `FindMyStore.onRead`), one at a time per Mac. A **background** read that didn't work (no new read since it started, and a problem) gives each kept person an `unread` row with the code, `in_use` included; a page or assistant read that fails writes nothing. Times are Whombat's read times. | The background is the timeline's rhythm; a failed look in between says nothing about where anyone was. Find My's own “5 min ago” is in the Mac's language. |
+| FMT-05 | **The Find My signer writes the rows through the pipeline with no event** (`findmy.timeline_noted`); the 30 days are `findmy.timeline_expired`, 500 rows a commit, up to 20 commits each background pass (every minute), with or without the hosts service, and a failure there doesn't stop the reads. | The event log is signed and kept for ever: it must never hold where anyone was. |
+| FMT-06 | **Turning it on, changing whose, stopping and deleting are the person's commands**: `findmy.timeline_set` (unticking someone deletes their rows in the same commit; no one stops it and deletes everything) and `findmy.timeline_deleted` (every row goes, whose stays, kept since starts again). Signed by the person with names only (“Kept a Find My timeline for Noor Visser and Ruben Visser”, “Stopped keeping a Find My timeline”, “Deleted the Find My timeline”; a count when the names don't fit), kind System, and recorded as a change on the connection, so its Activity shows them. The same choice again signs nothing. | Who keeps a history of whom is a decision the log should show; where they were never is. |
+| FMT-07 | **No release gate.** The release before it never reads the two tables (an expand migration) and nothing it reads changes; after a going-back, the next release deletes what is past 30 days on its first pass. | Unlike Find My automations (FMC-25), an older release can't misread anything here; a gate would keep the timeline off for a whole release. |
+
+## Reading for it (2026-11-23)
+
+| ID | Decision | Reason |
+|---|---|---|
+| FMT-10 | **A connection with a timeline reads at least every 15 minutes** (`FIND_MY_LISTENED_MS`), even with Read in the background Off, as one an automation listens to; a sooner setting (John's 5 minutes) stays. `HostFindMy.background.timeline` is true when the timeline is why (an automation's name, when there is one too, is said instead); the apps' line says “Reads every 15 minutes for the timeline”. Turning it on or off starts a background pass at once. | A day needs reads; quoting “the timeline” as an automation's name would read wrong. |
+
+## What the apps ask (2026-11-23)
+
+| ID | Decision | Reason |
+|---|---|---|
+| FMT-20 | **Four routes, the person's only** (`hosts/findmy-timeline-routes.ts`): a person principal (an assistant gets 403, and its settings map has them as NONE), a Find My connection of the burrow (any other: 404). Only the map needs the hosts service. | A Whombat is one person's (OP-01); the screen channel and outsiders' turns never reach them. |
+| FMT-21 | **`findMyTimeline` answers each day from the rows that touch it plus the one before and after** (`findMyTimelineDay`, cut in the viewer's zone); people are the Mac's last read in memory, in its order (never counted as a look), then those kept who weren't on it; `paceMinutes` as the loop plans it (null: only while someone looks); `readAt` from memory; `assistantReads` when `findmy_timeline` is Allowed. A connection from before the tool gets its tools read once there, so `connections.setTool` finds the tool. | One answer draws the whole tab; the switch is the tool's tier, as every assistant switch is. |
+| FMT-22 | **`findMyTimelineSet` names people from the Mac's last read in memory, else from those kept**; an id neither has is 404 `find_my_person` (“Read it again and try once more”). Both changes answer the signed event (null: nothing changed) and everyone as the timeline lists them. | Only Find My's own names are signed; the box never guesses one. |
+| FMT-23 | **The day's map is the Mac's**, as `hosts.findMyMap`: the day's distinct spots in order as pins (`findMyTimelinePins`, at most 20), two pixels a point in the app's theme, each pin's point with its stop numbers, pins outside the picture left out. 404 `find_my_person` for someone not kept, 409 `find_my_no_places` for a day without a spot, 409 `find_my_no_mac` without a Mac. The picture isn't kept. | The apps draw the numbers, lines and avatar over the points; a map is never stored. |
+| FMT-24 | **The Timeline tab follows Find My** (`{ key: 'timeline', label: 'Timeline', server: <Mac>, panels: [] }`); a session below minor 5 gets the page without it (`things/older-apps.ts`, applied in the dispatcher). | An older app would show an empty tab. |
+| FMT-25 | **Nothing of the timeline on the card, Overview, the desk display, notifications or a share link**: the card and Worth a look stay the last read's count and problem, the tab has no panels a widget could show, and the routes aren't on the screen channel. | Overview is also on the desk display; a history of places is for the person alone. |
+
+## The assistant (2026-11-23)
+
+| ID | Decision | Reason |
+|---|---|---|
+| FMT-30 | **`findmy_timeline { person?, date? }`** on the Find My adapter, Allowed from the start, only in the person's own turns (the call's person is a person of the Whombat; an outsiders' turn is refused). The day is in the person's time zone (their own, else their Whombat's), today by default; people are picked as `findmy_people` picks them, among those kept and the last read. | John: Dusty may read it, on by default; outsiders never. |
+| FMT-31 | **It answers in words**: per person their day as lines with local times (“08:30–12:15 Home (Kerkstraat 4, Rietveen)”, “12:15–12:40 on the way”, “13:00–14:10 not read (someone was using the Mac)”, “16:05–now Wilgendam, still there”), never coordinates; “Whombat keeps no timeline for Ilse. Turn it on under Find My → Timeline.”; without a timeline that it keeps none; “Whombat keeps 30 days.” for an older day. What it reads goes to its AI like any answer (FMC-32). | The assistant relays words; spots are the Mac's guesses and not needed in a sentence. |

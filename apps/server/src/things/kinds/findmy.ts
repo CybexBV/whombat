@@ -1,10 +1,12 @@
 /**
  * A Find My connection's page and card (docs/decisions/findmy-connection.md): its first tab is Find My, which names the
- * Mac it reads (`ThingPageTab.server`) for the apps to draw from that Mac's own operations; the card says how many
- * people the last read had and how long ago, or why it couldn't read. Everything here comes from the box's memory: the
- * page and the health pass never read Find My themselves, and say no place (Overview is also on the desk display).
+ * Mac it reads (`ThingPageTab.server`) for the apps to draw from that Mac's own operations, and its Timeline tab follows
+ * (findmy-timeline.md), drawn by the apps from the connection's timeline operations; the card says how many people the
+ * last read had and how long ago, or why it couldn't read. Everything here comes from the box's memory: the page and
+ * the health pass never read Find My themselves, and say no place and nothing of the timeline (Overview is also on the
+ * desk display).
  */
-import type { HostFindMy, HostFindMyCode } from '@whombat/core';
+import { FIND_MY_TIMELINE_TAB, type HostFindMy, type HostFindMyCode } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { findMyFor } from '../../hosts/findmy';
 import { type MacProblem, macOf, runMacCheck } from '../../hosts/findmy-connection';
@@ -80,7 +82,13 @@ function remembered(
   return { mac, shown: mac ? findMyFor(services).peek(mac) : null };
 }
 
-/** The page: Find My first (the apps draw it from the Mac's operations), its head's facts, its one line. */
+/** The key of the tab the apps draw Find My on. */
+export const FIND_MY_TAB = 'findmy';
+
+/**
+ * The page: Find My first (the apps draw it from the Mac's operations), then the Timeline (an app below session minor 5
+ * doesn't get it: `things/older-apps.ts`), its head's facts, its one line.
+ */
 export function findMyView(mac: string | null, shown: HostFindMy | null): KindView {
   const name = mac ? serverLabel(mac) : null;
   return {
@@ -88,7 +96,12 @@ export function findMyView(mac: string | null, shown: HostFindMy | null): KindVi
     charts: [],
     notices: name ? findMyNotices(shown, name) : [],
     panels: [],
-    tabs: mac ? [{ key: 'findmy', label: 'Find My', server: mac, panels: [] }] : [],
+    tabs: mac
+      ? [
+          { key: FIND_MY_TAB, label: 'Find My', server: mac, panels: [] },
+          { key: FIND_MY_TIMELINE_TAB, label: 'Timeline', server: mac, panels: [] },
+        ]
+      : [],
     facts: [
       ...(name ? [line(`On **${name}**`)] : []),
       ...(shown?.readAt ? [line(`**${plural(shown.people.length, 'person', 'people')}**`)] : []),
