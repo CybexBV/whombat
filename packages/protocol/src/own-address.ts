@@ -92,9 +92,13 @@ export function ownAddressZoneOf(host: string): OwnAddressZone | null {
   return ZONES.find((zone) => host.endsWith(`.${zone}`)) ?? null;
 }
 
-/** The label of an own-address host, or null for anything else (upper case included: lower-case it first). */
+/**
+ * The label of an own-address host, or null for anything else (upper case included: lower-case it first). A zone
+ * itself (`box.whombat.app`, `dev.whombat.app`) has the shape of a name under `whombat.app` but is never a box's host.
+ */
 export function ownAddressLabelOf(host: string): string | null {
   if (!OwnAddressHost.safeParse(host).success) return null;
+  if ((ZONES as readonly string[]).includes(host)) return null;
   const label = host.slice(0, host.indexOf('.'));
   return OwnAddressLabel.safeParse(label).success ? label : null;
 }

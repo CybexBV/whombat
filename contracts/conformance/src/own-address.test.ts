@@ -89,6 +89,8 @@ describe('own-address hosts', () => {
       `${'a'.repeat(33)}.whombat.app`,
       'xn--a.whombat.app',
       'whombat.app',
+      'box.whombat.app',
+      'dev.whombat.app',
       'home.example.com',
     ])
       expect(ownAddressLabelOf(host), host).toBeNull();
