@@ -76,8 +76,8 @@ describe('the edition (CT-1300, CT-1301)', () => {
     expect(DirectIdentity.safeParse({ v: 1, appliance: BOX, edition: 'home' }).success).toBe(false);
   });
 
-  it('counts the additions in the session minor: 1 is the local claim’s proof round, 2 the hello’s claim link, 3 mail automations', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 3 });
+  it('counts the additions in the session minor: 1 is the local claim’s proof round, 2 the hello’s claim link, 3 mail automations, 4 Find My', () => {
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 4 });
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

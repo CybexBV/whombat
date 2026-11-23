@@ -1041,3 +1041,23 @@ before 4.4 answers `unknown_op`, which a client reads as “no Link or channel h
   showing, without trying its tag.
 - Application code `claim_busy` (`unavailable`): the box couldn't finish a step of the claim in time; nothing was tried
   and nothing claimed. Try again.
+
+## Session minor 4 of major 5: Find My as a connection
+
+`SESSION_PROTOCOL` is `{major: 5, minor: 4}` (`FIND_MY_MINOR`). No contracts release: control and the relay don't
+speak these, and everything here is TypeScript only (docs/implementation/macos/findmy-connection.md).
+
+- **Automations started by Find My**: the trigger `{kind: 'findmy', connectionId, person, name?, change: 'arrives' |
+  'leaves', place}` (`person` is Find My's stable id for the name, `place` Find My's own words, compared without case
+  or spaces), the run trigger kind and the list source `findmy`. A box sends them as they are only to a session at
+  minor 4 or later; an app below it gets them in a form it reads, as mail automations below minor 3.
+- **The signed event `findmy.place_changed`** (`FindMyPlaceChanged {connectionId, person, name, from, to}`; never a
+  street or coordinates), recorded only while a live automation listens to that connection; automations start on it.
+- **`connections.catalog`**: `CatalogEntryStatus.reason` gains `needs_mac` (no macOS server among the box's servers
+  yet: “Add a Mac first”). An older client's `decodeTolerant` reads it as null.
+- **The catalog**: the check kind `mac` (the entry works through the Mac its `mac` field names; no address of its own),
+  and a `select` field's own `options` (`{value, label}[]`; a value not among them is refused, `default` is one of
+  them). Find My's entry (`findmy`) has both.
+- **`things.page`**: `ThingPageTab.server`, the server a tab is about when the apps draw it themselves (Find My's tab
+  names its Mac). Older apps strip it.
+- **`automation_read`** answers `findMyPeople` (`{connectionId, person, name, place}`), what a findmy trigger names.

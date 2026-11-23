@@ -24,6 +24,7 @@ import {
 import {
   BACKGROUND_MODEL_MINOR,
   DISK_USAGE_MINOR,
+  FIND_MY_MINOR,
   negotiateCapabilities,
   negotiateVersion,
   protocolAtLeast,
@@ -93,7 +94,7 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 3 });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: 4 });
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });
@@ -121,6 +122,8 @@ describe('version negotiation', () => {
   it('checks negotiated minor thresholds for additive features', () => {
     expect(BACKGROUND_MODEL_MINOR).toBe(3);
     expect(DISK_USAGE_MINOR).toBe(3);
+    expect(FIND_MY_MINOR).toBe(4);
+    expect(protocolAtLeast({ major: 5, minor: 3 }, FIND_MY_MINOR)).toBe(false);
     expect(protocolAtLeast(null, 3)).toBe(false);
     expect(protocolAtLeast(undefined, 3)).toBe(false);
     expect(protocolAtLeast({ major: 5, minor: 2 }, 3)).toBe(false);
