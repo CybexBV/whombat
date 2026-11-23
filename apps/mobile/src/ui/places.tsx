@@ -17,12 +17,13 @@ import {
   PLACES,
   PLACES_COPY,
   type PlaceId,
+  type PlaceThingRow,
   placeLabel,
   placeRoute,
   placesThings,
   type ServerFacts,
 } from '../data/places';
-import { useAppNavigation } from '../navigation/hooks';
+import { openHref, useAppNavigation } from '../navigation/hooks';
 import { useBadges } from '../navigation/TabBar';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -171,8 +172,13 @@ function PlacesSheet({
       if (route.kind === 'tab') navigation.dispatch(StackActions.popTo('Tabs', { screen: route.tab }));
       else (navigation.navigate as (name: string, params: object) => void)(route.name, route.params);
     });
-  const openThing = (id: string, title: string) =>
-    choose(() => navigation.navigate('Thing', { thingId: id, title, back: here }));
+  // A thing the box gives no page (an account on an older box) follows its address, as Home's rows do.
+  const openThing = (t: PlaceThingRow) =>
+    choose(() =>
+      t.opens
+        ? openHref(t.opens)
+        : navigation.navigate('Thing', { thingId: t.id, title: t.name, back: here }),
+    );
   const counts: Partial<Record<PlaceId, { count: number; tone: 'ink' | 'warn' | 'bad' }>> = {
     chat: { count: badges.ChatRoom?.count ?? 0, tone: 'ink' },
     inbox: {
@@ -242,7 +248,7 @@ function PlacesSheet({
                 title={t.name}
                 mono
                 leading={<ThingIcon glyph={t.glyph} mark={t.mark} size={20} />}
-                onPress={() => openThing(t.id, t.name)}
+                onPress={() => openThing(t)}
               />
             ))}
           </ThingsSection>
@@ -255,7 +261,7 @@ function PlacesSheet({
                 label={t.label}
                 title={t.name}
                 leading={<ThingIcon glyph={t.glyph} mark={t.mark} size={20} />}
-                onPress={() => openThing(t.id, t.name)}
+                onPress={() => openThing(t)}
               />
             ))}
           </ThingsSection>

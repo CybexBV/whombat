@@ -23,6 +23,8 @@ import {
   connectionsOverview,
   connectionsWebPath,
   connectionToolRow,
+  feedbackRow,
+  githubRow,
   labelName,
   matchesConnectionSearch,
 } from './connections';
@@ -133,6 +135,84 @@ describe('CONNECTED (CX-70)', () => {
   it('falls back to the host from the fields when the server gives no detail', () => {
     const [row] = connectedRows([connection({ detail: null })], [], 'hq');
     expect(row?.meta).toBe('home.lan:8123');
+  });
+});
+
+describe('an account’s page from Connections (session minor 7)', () => {
+  const active = { ...google, status: 'active' } as Connection;
+  const imap = { ...google, id: 'con_mail', provider: 'imap', status: 'active' } as Connection;
+  const github = githubRow(
+    { connected: true, login: 'mara', error: null },
+    { connected: true, on: 3 },
+    'hq',
+    true,
+  );
+  const sites = [
+    { integration: { name: 'Billing portal' }, health: { reportsLast24h: 2, warnings: [] } },
+    { integration: { name: 'Docs' }, health: { reportsLast24h: 1, warnings: [] } },
+  ];
+
+  it('opens each account’s page on a box that has them', () => {
+    const rows = connectedRows([connection()], [active, imap], 'hq', {
+      pages: true,
+      builtins: [github, feedbackRow(sites, 'hq', true)],
+    });
+    expect(rows.map((r) => [r.title, r.opens])).toEqual([
+      ['Google', { screen: 'Thing', thingId: 'connection:cn_google' }],
+      ['Email (IMAP)', { screen: 'Thing', thingId: 'connection:con_mail' }],
+      ['GitHub', { screen: 'Thing', thingId: 'connection:github' }],
+      ['Website feedback', { screen: 'Thing', thingId: 'connection:feedback' }],
+      ['Home Assistant', null],
+    ]);
+  });
+
+  it('keeps each account’s own screen on an older box', () => {
+    const rows = connectedRows([], [active, imap], 'hq', {
+      builtins: [
+        githubRow({ connected: true, login: 'mara', error: null }, null, 'hq'),
+        feedbackRow(sites, 'hq'),
+      ],
+    });
+    expect(rows.map((r) => r.opens)).toEqual([
+      { screen: 'ConnectAccount', page: 'google' },
+      { screen: 'ConnectAccount', page: 'imap' },
+      { screen: 'ConnectAccount', page: 'github' },
+      { screen: 'ConnectAccount', page: 'feedback' },
+    ]);
+  });
+
+  it('lists GitHub with its account and repositories, and Website feedback with its sites and reports', () => {
+    expect(github).toMatchObject({
+      kind: 'account',
+      catalogId: 'github',
+      line: '@mara · 3 repositories on',
+      logo: { kind: 'mark', mark: 'github' },
+      state: { tone: 'ok' },
+    });
+    const feedback = feedbackRow(sites, 'hq', true);
+    expect(feedback).toMatchObject({
+      catalogId: 'feedback',
+      meta: '2 sites',
+      logo: { kind: 'icon', icon: 'message' },
+      state: { tone: 'ok', label: 'On' },
+    });
+    expect(feedback?.line).toContain('3 reports');
+    expect(feedbackRow([sites[0] as (typeof sites)[number]], 'hq')?.meta).toBe('Billing portal');
+    // GitHub sits with the accounts, Website feedback with the apps and services.
+    const overview = connectionsOverview(connectedRows([], [], 'hq', { builtins: [github, feedback] }));
+    expect(overview.accounts.map((r) => r.id)).toEqual(['github']);
+    expect(overview.apps.map((r) => r.id)).toEqual(['feedback']);
+  });
+
+  it('leaves GitHub and Website feedback out until they’re connected, and says when they need a look', () => {
+    expect(githubRow({ connected: false, login: null, error: null }, null, 'hq')).toBeNull();
+    expect(githubRow(undefined, undefined, 'hq')).toBeNull();
+    expect(githubRow(undefined, { connected: true, on: 1 }, 'hq')?.line).toBe('1 repository on');
+    expect(feedbackRow([], 'hq')).toBeNull();
+    expect(githubRow({ connected: true, login: 'mara', error: 'gone' }, null, 'hq')?.state.tone).toBe('bad');
+    const warned = [{ ...sites[0], health: { reportsLast24h: 0, warnings: [{ code: 'x' }] } }] as never;
+    expect(feedbackRow(warned, 'hq')?.state.tone).toBe('bad');
+    expect(connectedRows([], [], 'hq', { builtins: [null, null] })).toEqual([]);
   });
 });
 

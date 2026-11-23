@@ -25,6 +25,7 @@ import {
   searchView,
 } from '../data/search';
 import { useAgentWords } from '../data/useAgent';
+import { openHref } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { advancedRowsOnPhone, youLine, youPartsHere } from '../settings/groups';
 import { useSettingsRows } from '../settings/useSettingsFacts';
@@ -134,6 +135,7 @@ export function SearchScreen({ navigation, route }: Props) {
       case 'thread':
         return navigation.navigate('Thread', { messageId: o.rootId, back: HERE });
       case 'thing':
+        if (o.href) return void openHref(o.href);
         return navigation.navigate('Thing', { thingId: o.thingId, title: o.title, back: HERE });
       case 'setting':
         if (o.target.kind === 'tab')

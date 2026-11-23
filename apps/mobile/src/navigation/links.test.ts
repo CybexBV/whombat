@@ -307,6 +307,11 @@ describe('Settings → Connections’ pages open the phone’s own screens (phon
     ['/settings?tab=connections&connection=imap', 'whombat://settings/connections/account/imap'],
     ['/settings?tab=connections&connection=github', 'whombat://settings/connections/account/github'],
     ['/settings?tab=connections&connection=feedback', 'whombat://settings/connections/account/feedback'],
+    // An account's settings address stays its own screen, even with its connection's id (a page has its own address).
+    [
+      '/settings?tab=connections&connection=google&id=con_mara',
+      'whombat://settings/connections/account/google',
+    ],
     // Google's return names no page (CN-04).
     ['/settings?tab=connections&connected=google', 'whombat://settings/connections'],
     [

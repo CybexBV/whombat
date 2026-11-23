@@ -35,11 +35,14 @@ export function demoConnectionsList(connections: readonly ConnectionView[]): Con
   return { connections: sorted, count: sorted.length };
 }
 
-/** Mara's own accounts (`connectors.status`'s `connections`). */
+/**
+ * Mara's own accounts (`connectors.status`'s `connections`). Their ids are the shared world's account pages'
+ * (`@whombat/fixtures` `servicePages/accounts.ts`), so a row opens its page.
+ */
 export function demoAccounts(): AccountConnection[] {
   return [
     {
-      id: 'con_google-mara',
+      id: 'con_mara',
       provider: 'google',
       email: 'mara@lumio.example',
       name: 'Mara Okafor',
@@ -54,7 +57,7 @@ export function demoAccounts(): AccountConnection[] {
     },
     // Her own domain's mailbox at Fastmail, over IMAP and SMTP (connections-more-android.md AP-2817).
     {
-      id: 'con_imap-mara',
+      id: 'con_mail_mara_fastmail_com',
       provider: 'imap',
       email: 'mara@okafor.example',
       name: 'Mara Okafor',

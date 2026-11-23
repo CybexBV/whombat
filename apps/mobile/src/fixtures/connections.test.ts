@@ -76,4 +76,24 @@ describe('Settings → Connections in the demo world (AP-2815)', () => {
     );
     expect(offered.every((r) => r.note === null)).toBe(true);
   });
+
+  it('opens a page for each of Mara’s accounts on a box with account pages', async () => {
+    const server = setup();
+    const status = await answer<{ connections: Parameters<typeof connectedRows>[1] }>(
+      server,
+      api.connectors.status,
+      '/connectors',
+    );
+    const rows = connectedRows([], status.connections, burrow, { pages: true });
+    const pages = rows.flatMap((r) => (r.opens?.screen === 'Thing' ? [r.opens.thingId] : []));
+    expect(pages).toEqual(['connection:con_mara', 'connection:con_mail_mara_fastmail_com']);
+    for (const thing of pages) {
+      const page = await answer<{ catalogId?: string }>(
+        server,
+        api.things.page,
+        `/burrows/${burrow}/things/${encodeURIComponent(thing)}`,
+      );
+      expect(page.catalogId).toMatch(/^(google|imap)$/);
+    }
+  });
 });

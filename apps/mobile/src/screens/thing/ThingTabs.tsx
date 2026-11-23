@@ -1,8 +1,8 @@
 /**
  * A thing page's tabs (Whombat connection-pages.md CP-19; connection-pages-mobile.md AP-1952; underline-tabs-android.md
  * AP-2634): `UnderlineTabs`, each tab with its count after it (“Integrations 171”), scrolling sideways to the screen's
- * edges when there are more than fit a phone. Connection (its own settings, SST-06) opens the Connection screen, so it is no tab: a button with a
- * chevron on the right, outside the scrolling tabs, 44dp tall.
+ * edges when there are more than fit a phone. Connection (its own settings, SST-06) opens the Connection screen (an
+ * account's own screen), so it is no tab: a button with a chevron on the right, outside the scrolling tabs, 44dp tall.
  */
 import { useMemo } from 'react';
 import { View } from 'react-native';

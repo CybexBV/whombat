@@ -8,7 +8,9 @@
 import type { MarkLike } from '@whombat/brand';
 import { type ThingRow, thingRows } from '@whombat/client';
 import type { ThingSummary } from '@whombat/core';
+import { serviceRowOpens } from './home';
 import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from './shell';
+import { type PhoneGlyph, phoneThingGlyph } from './thingLook';
 
 export type PlaceId =
   | 'search'
@@ -135,10 +137,20 @@ export function placeOfScreen(name: string | undefined): PlaceId | null {
   }
 }
 
+/**
+ * A thing's row in the sidebar: the shared row, its glyph as the phone draws it (Website feedback's bubble), and the
+ * address it follows instead of its page — an account a box gives no page (its Settings link), as Home's rows do.
+ */
+export interface PlaceThingRow extends Omit<ThingRow, 'glyph'> {
+  glyph: PhoneGlyph;
+  /** The address to follow instead of the thing's page (`serviceRowOpens`); null opens the page. */
+  opens: string | null;
+}
+
 /** The shortcuts under the places: the servers, then the connections and devices, in the server's order. */
 export interface PlacesThings {
-  servers: ThingRow[];
-  connections: ThingRow[];
+  servers: PlaceThingRow[];
+  connections: PlaceThingRow[];
 }
 
 /** What the hosts service says of a server that the thing list doesn't: its system's logo and name, how it is. */
@@ -162,9 +174,16 @@ export function placesThings(
   const list = things ?? [];
   const serverIds = new Set(list.filter((t) => t.kind === 'server').map((t) => t.id));
   const facts = new Map(servers.map((s) => [s.thingId, s]));
-  const rows = thingRows(list).map((r) => {
+  const byId = new Map(list.map((t) => [t.id, t]));
+  const rows = thingRows(list).map((r): PlaceThingRow => {
     const mark = facts.get(r.id)?.mark;
-    return mark ? { ...r, mark } : r;
+    const thing = byId.get(r.id);
+    return {
+      ...r,
+      ...(mark ? { mark } : {}),
+      glyph: thing ? phoneThingGlyph(thing) : r.glyph,
+      opens: thing ? serviceRowOpens(thing) : null,
+    };
   });
   return {
     servers: rows.filter((r) => serverIds.has(r.id)),
