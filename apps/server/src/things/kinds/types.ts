@@ -83,6 +83,11 @@ export interface KindView {
   panels: ThingPagePanel[];
   /** Its own tabs after the Summary. */
   tabs: ThingPageTab[];
+  /**
+   * The key of its own tab the page opens on, when that tab is the dashboard and the Summary isn't (Find My's map,
+   * which the apps draw): that tab comes first, the Summary last, and the Summary gets no answer times.
+   */
+  lead?: string;
   /** The head's first facts (“Home Assistant **2026.10.2** · Container”). */
   facts: ThingLine[];
   /** More precise than the check's (“1 access point offline”). */

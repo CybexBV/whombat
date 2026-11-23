@@ -96,6 +96,8 @@ export function findMyView(mac: string | null, shown: HostFindMy | null): KindVi
     charts: [],
     notices: name ? findMyNotices(shown, name) : [],
     panels: [],
+    // The map and the people are the dashboard; the Summary keeps what needs a look and what changed.
+    ...(mac ? { lead: FIND_MY_TAB } : {}),
     tabs: mac
       ? [
           { key: FIND_MY_TAB, label: 'Find My', server: mac, panels: [] },

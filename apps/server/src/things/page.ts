@@ -57,6 +57,7 @@ import {
   genericNotices,
   layout,
   offeredRange,
+  orderTabs,
   PAGE_REFRESH_S,
   REFRESHING_S,
   rangeFields,
@@ -227,11 +228,15 @@ export async function connectionPage(
     services.log.warn({ catalogId: row.catalogId, problems: misplaced }, 'service page: slots out of place');
   const rtt = points.get(RTT_KEY) ?? [];
   // A connection without a kind, and a kind whose read gave nothing to show, get the page's own slots: how it answers.
+  // A kind that opens on a tab of its own keeps its Summary to its notices and closing panels: nothing there answers.
+  const lead = view?.lead && view.tabs.some((t) => t.key === view.lead) ? view.lead : null;
   const slotted: Pick<KindView, 'panels' | 'slots'> | null = view?.slots
     ? view
-    : !view || bareView(view)
-      ? genericSlots(row, rtt, now, timeZone)
-      : null;
+    : lead
+      ? { panels: view?.panels ?? [] }
+      : !view || bareView(view)
+        ? genericSlots(row, rtt, now, timeZone)
+        : null;
   const problem = view?.problem ?? null;
 
   // The machine's figures and charts come first (DS-10), unless the kind draws them itself; a kind that puts its own
@@ -341,16 +346,14 @@ export async function connectionPage(
       ? await kind.settings.tab(ctx)
       : null;
   const extraTabs = [...(settingsTab ? [settingsTab] : []), ...(view?.tabs ?? [])].slice(0, 7);
-  const tabs: ThingPageTab[] = [
-    {
-      ...SUMMARY_TAB,
-      panels: layout(
-        summary,
-        extraTabs.map((t) => t.key),
-      ).slice(0, 24),
-    },
-    ...extraTabs,
-  ];
+  const summaryTab: ThingPageTab = {
+    ...SUMMARY_TAB,
+    panels: layout(
+      summary,
+      extraTabs.map((t) => t.key),
+    ).slice(0, 24),
+  };
+  const tabs = orderTabs(summaryTab, extraTabs, lead);
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];
   if (connected) facts.push(connected);

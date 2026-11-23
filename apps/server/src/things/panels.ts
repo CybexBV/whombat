@@ -11,6 +11,7 @@ import {
   type ThingPageAccessItem,
   type ThingPageKpi,
   type ThingPagePanel,
+  type ThingPageTab,
   type ThingPanelPlace,
   type ThingStatus,
 } from '@whombat/core';
@@ -45,6 +46,19 @@ export const REFRESHING_S = 5;
 
 /** The first tab of every page (DS-15); its key stays `overview` for old links. */
 export const SUMMARY_TAB = { key: 'overview', label: 'Summary' } as const;
+
+/**
+ * The page's tabs in the order the apps show them; they open the first. The kind's own dashboard tab first when it names
+ * one (`KindView.lead`), its other tabs after it and the Summary last; else the Summary first.
+ */
+export function orderTabs(
+  summary: ThingPageTab,
+  own: readonly ThingPageTab[],
+  lead: string | null,
+): ThingPageTab[] {
+  const first = lead ? own.find((t) => t.key === lead) : undefined;
+  return first ? [first, ...own.filter((t) => t !== first), summary] : [summary, ...own];
+}
 
 /** What every connection's and device's page says about its range (CT-397). */
 export function rangeFields(
