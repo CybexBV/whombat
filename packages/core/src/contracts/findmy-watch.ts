@@ -3,9 +3,10 @@
  * `connections.findMyWatchCancel`). Only the box's person; the assistant starts, lists and cancels watches with its
  * `findmy_watch` tool.
  */
+
+import { z } from 'zod';
 import { FindMyWatchCancelBody, FindMyWatchView } from '../domain/findmy-watch.js';
 import { FindMyWatchId } from '../ids.js';
-import { z } from 'zod';
 import { BurrowParam, endpoint } from './endpoint.js';
 
 /** Merged into `api.connections` (op names `connections.<action>`). */

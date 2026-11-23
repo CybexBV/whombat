@@ -123,6 +123,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "A Find My timeline (docs/decisions/findmy-timeline.md): two new tables, findmy_timeline_people (whose days a Find My connection keeps, by Find My's id and name, since when) and findmy_stops (one row per stretch where the reads of a kept person said the same: a place's words, street and the geocoder's spot, no location, or a background read that didn't work, with its first and last read), both cascading with the connection. Rows whose last read is over 30 days old are deleted by each background pass. The release before it never reads either table."
+    },
+    "0019_findmy_watches": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "One-time Find My watches (docs/decisions/findmy-watch.md): a new table findmy_watches, each watch the assistant started (whose, leaves or arrives, the card's place words, where they were while it watches, its thread and card, its status), kept when the connection goes (its connection_id set null, so the watch can say it stopped), cascading with the conversation and the agent. The release before it never reads the table; a findmy_watch card it finds shows as its message's text."
     }
   }
 }

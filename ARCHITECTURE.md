@@ -1424,11 +1424,17 @@ Setup and operation: `docs/github.md`.
   place, street and geocoded spot, or of no location or a read that didn't work (`findmy_stops`, no event), the
   background reads it at least every 15 minutes, and rows go 30 days after their last read. Core's `findMyTimelineDay`
   turns the rows into a day's stays, trips and gaps; the Mac draws a day's map; only the person sees it, and the
-  assistant reads it through `findmy_timeline` in the person's turns.
+  assistant reads it through `findmy_timeline` in the person's turns. When the person asks to be told once that someone
+  leaves where they are now or arrives somewhere, the assistant's `findmy_watch` reads Find My first and starts a watch
+  in that thread (`findmy_watches`, `hosts/findmy-watch*.ts`) with a `findmy_watch` card and Cancel
+  (`connections.findMyWatchCancel`); the connection then reads at least every 5 minutes, every read is compared with the
+  watch by the box itself (a leave: another street and more than 250 m from where they were; an arrival: Find My names
+  the place), and the first that shows it ends the watch with the assistant's message in the thread. A day without it,
+  or the connection or its Mac gone, ends it with a message too; where they were is cleared when it ends.
   `mac_ui` also runs an element's own action by name (“Play”) and quits an
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
   ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
-  [findmy-timeline.md](docs/decisions/findmy-timeline.md)).
+  [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly

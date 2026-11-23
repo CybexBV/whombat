@@ -193,6 +193,8 @@ export interface FindMyPace {
   automation: string | null;
   /** Its timeline is why it reads this often (absent: it isn't). */
   timeline?: true;
+  /** Who a one-time watch follows, when one runs on it (findmy-watch.md; absent: none). */
+  watching?: string;
 }
 
 /**
