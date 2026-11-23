@@ -48,6 +48,8 @@ import {
   removeFuseboxClient,
 } from '../gateway/provision';
 import { gatewayConnectionOf, gatewayName, isGatewayCatalogId } from '../gateway/store';
+import { FIND_MY_CONNECTION_TEXT, findMyConnections } from '../hosts/findmy-connection';
+import { serverLabel } from '../hosts/self';
 import { OutboundError } from '../lib/outbound';
 import { ok } from '../routes/define';
 import type { Services } from '../services';
@@ -136,12 +138,15 @@ export function connectableEntry(catalogId: string): CatalogEntry {
   return entry;
 }
 
-/** Every address the connection will call is allowed now (CX-40), or `destination_refused` with what to add (CX-41). */
+/**
+ * Every address the connection will call is allowed now (CX-40), or `destination_refused` with what to add (CX-41).
+ * The hosts service's own base (a connection through a Mac) isn't an address anything is sent to.
+ */
 export async function requireDestination(
   services: Services,
   urls: readonly (string | null)[],
 ): Promise<void> {
-  for (const url of new Set(urls.filter((u): u is string => !!u))) {
+  for (const url of new Set(urls.filter((u): u is string => !!u && u !== HOSTS_BASE))) {
     const problem = await connectionDestinationProblem(services, url, 'save');
     if (!problem) continue;
     const s = problem.suggestion;
@@ -176,8 +181,18 @@ export function requireFields(entry: CatalogEntry, kind: SignInKind, fields: Rec
   if (Object.keys(problems).length) throw fieldProblemsError(problems);
 }
 
-/** The base URL with the fields filled in, or a field error on the address. */
+/** Whether an entry works through one of the person's Macs (Find My): no address of its own, nothing sent there. */
+const throughMac = (entry: CatalogEntry) => entry.check?.kind === 'mac';
+
+/** The base of a connection through the hosts service (the Servers connection's and Find My's): never requested. */
+const HOSTS_BASE = 'whombat-hosts:';
+
+/**
+ * The base URL with the fields filled in, or a field error on the address. A connection through a Mac keeps the
+ * entry's own base (the Servers connection's), which is never requested.
+ */
 export function requireBaseUrl(entry: CatalogEntry, fields: Record<string, string>): string {
+  if (throughMac(entry)) return entry.baseUrl ?? HOSTS_BASE;
   const base = resolveBaseUrl(entry, fields);
   if (base) return base;
   const urlField = fieldsFor(entry, 'token').find((f) => f.kind === 'url')?.id ?? 'url';
@@ -593,6 +608,8 @@ export async function createTokenConnection(
   });
   requireCheckPassed(outcome);
   const chosen = chooseServiceFields(entry, kind, fields, outcome);
+  await requireFreeMac(services, viewer.burrowId, entry, chosen);
+  const labelGiven = body.label ?? (await macLabel(services, viewer.burrowId, entry, chosen));
   // A field picked from the service may be in the base (none in v1, but the template decides).
   const base = resolveBaseUrl(entry, chosen) ?? baseUrl;
   // A Fusebox: Whombat's own client key, made with the management key that just passed (ai-gateway.md AIG-02).
@@ -606,7 +623,7 @@ export async function createTokenConnection(
     return await saveNewConnection(services, viewer, {
       entry,
       signIn: kind,
-      labelGiven: body.label ?? null,
+      labelGiven,
       fields: made?.clientId ? { ...chosen, clientId: made.clientId } : chosen,
       baseUrl: base,
       auth,
@@ -627,6 +644,41 @@ export async function createTokenConnection(
 }
 
 /* The AI gateway (ai-gateway.md AIG-01…AIG-03) ------------------------------------------------------------------------ */
+
+/**
+ * One Find My connection per Mac (each Mac is signed in to its own Apple Account): another on the same Mac is refused
+ * with the Mac's name. `except`: the connection being changed.
+ */
+export async function requireFreeMac(
+  services: Services,
+  burrowId: string,
+  entry: CatalogEntry,
+  fields: Readonly<Record<string, string>>,
+  except: string | null = null,
+): Promise<void> {
+  const mac = throughMac(entry) ? fields.mac?.trim() : undefined;
+  if (!mac) return;
+  const taken = (await findMyConnections(services.db, { burrowId, mac })).some((r) => r.id !== except);
+  if (taken) {
+    const text = FIND_MY_CONNECTION_TEXT.taken(serverLabel(mac));
+    throw fieldProblemsError({ mac: text });
+  }
+}
+
+/**
+ * A Find My connection's name when the burrow has one already: “Find My · Studio”, by the Mac it reads (as other
+ * services get their address then). Null: the service's name does.
+ */
+async function macLabel(
+  services: Services,
+  burrowId: string,
+  entry: CatalogEntry,
+  fields: Readonly<Record<string, string>>,
+): Promise<string | null> {
+  const mac = throughMac(entry) ? fields.mac?.trim() : undefined;
+  if (!mac || !(await findMyConnections(services.db, { burrowId })).length) return null;
+  return `${entry.name} · ${serverLabel(mac)}`.slice(0, 80);
+}
 
 /** At most one gateway connection per burrow (AIG-01): connecting a second is refused with the first one's name. */
 export async function requireNoOtherGateway(
@@ -1235,6 +1287,7 @@ export async function updateConnection(
         throw connectionError('check_failed', {}, sessionTwoStepAgainText(entry, session));
       requireCheckPassed(outcome);
       const chosen = { ...chooseServiceFields(entry, kind, next, outcome), ...(outcome.fromCheck ?? {}) };
+      await requireFreeMac(services, viewer.burrowId, entry, chosen, row.id);
       Object.assign(set, {
         fields:
           row.fields.clientId && row.catalogId === 'fusebox'

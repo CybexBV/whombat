@@ -22,6 +22,8 @@ import {
 import { inArray } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { connectorApps, principals } from '../db/schema/index';
+import { macsOf } from '../hosts/findmy-connection';
+import { hostsFor } from '../hosts/service';
 import { iso } from '../lib/time';
 import type { PrincipalRow } from '../read/principals';
 import type { Services } from '../services';
@@ -130,6 +132,17 @@ export async function connectionToolsResponse(db: Db | Tx, row: CatalogConnectio
   };
 }
 
+/** How many Macs Whombat watches: 0 without the hosts service, null when it doesn't answer. */
+async function macCount(services: Services): Promise<number | null> {
+  const hosts = hostsFor(services);
+  if (!hosts.present) return 0;
+  try {
+    return macsOf(await hosts.fleetRaw()).length;
+  } catch {
+    return null;
+  }
+}
+
 /** `connections.catalog` (CX-14, CX-75): every entry, an `app_oauth` one available once the person registered its app. */
 export async function catalogStatus(services: Services): Promise<ConnectionsCatalogStatus> {
   const appIds = CATALOG.filter((e) => e.signIn.some((m) => m.kind === 'app_oauth')).map((e) => e.id);
@@ -143,10 +156,14 @@ export async function catalogStatus(services: Services): Promise<ConnectionsCata
   // A box without a secure address can't take a sign-in back (whombat-link.md): an entry that signs in only that way
   // says so before anyone starts it, in the words `startOAuth` would refuse with.
   const noReturn = returnAddressProblem(services.config) !== null;
+  // Find My works through one of the person's Macs: offered once the servers have one (unknown while they don't answer).
+  const macs = CATALOG.some((e) => e.check?.kind === 'mac') ? await macCount(services) : null;
   const entries: CatalogEntryStatus[] = CATALOG.map((entry) => {
     // A report tracker is offered once a driver is installed (report-trackers.md).
     if (entry.check?.kind === 'driver' && !services.tracker.drivers.list().length)
       return { catalogId: entry.id, available: false, reason: 'no_driver' };
+    if (entry.check?.kind === 'mac' && macs === 0)
+      return { catalogId: entry.id, available: false, reason: 'needs_mac' };
     const needsReturn =
       entry.signIn.length > 0 && entry.signIn.every((m) => OAuthSignInKind.safeParse(m.kind).success);
     const app = byId.get(entry.id);
