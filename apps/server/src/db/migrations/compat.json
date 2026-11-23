@@ -117,6 +117,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Find My as a connection (docs/decisions/findmy-connection.md): a new table findmy_places, each person's last known place words and since when on a Find My connection a live automation listens to, cascading with the connection. It also marks the first release that runs findmy automations: a box turns them on only while the release it would go back to recorded at least this schema in runtime_releases. The release before it never reads the table."
+    },
+    "0018_findmy_timeline": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "A Find My timeline (docs/decisions/findmy-timeline.md): two new tables, findmy_timeline_people (whose days a Find My connection keeps, by Find My's id and name, since when) and findmy_stops (one row per stretch where the reads of a kept person said the same: a place's words, street and the geocoder's spot, no location, or a background read that didn't work, with its first and last read), both cascading with the connection. Rows whose last read is over 30 days old are deleted by each background pass. The release before it never reads either table."
     }
   }
 }
