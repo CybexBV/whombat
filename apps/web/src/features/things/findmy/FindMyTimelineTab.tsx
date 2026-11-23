@@ -158,12 +158,11 @@ export function FindMyTimelineTab({
     );
 
   const person = findMyPickedPerson(data.people, picked);
-  const shownDate = data.days.at(-1)?.date ?? date;
   return (
     <div className={t.tab} aria-busy={read.isPlaceholderData || undefined}>
       <DayBar
         mode={mode}
-        date={shownDate}
+        date={date}
         today={today}
         onStep={(n) => setChosen(findMyDateAdd(date, n))}
         onMode={(m) => {
