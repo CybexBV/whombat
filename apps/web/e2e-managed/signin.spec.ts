@@ -99,6 +99,8 @@ test('first run with several Whombats on this network: straight to picking one',
   await fake(page, 'nearby', ['fresh', 'contested']);
   await fake(page, 'existingOrg');
   await page.goto(await fake<string>(page, 'lastLink'));
+  await expect(page.getByRole('heading', { name: 'Add your Whombat' })).toBeVisible();
+  await page.goto('/appliances');
   await expect(page.getByRole('heading', { name: 'We found 2 Whombats on your network' })).toBeVisible();
 });
 

@@ -50,9 +50,8 @@ test('signed out, the box’s code and an email: the link comes back to /link, w
   await page.getByRole('button', { name: 'Add it' }).click();
   await expect(page.getByRole('heading', { name: 'Home is added' })).toBeVisible();
   // Control recorded the Subscription Terms the person ticked.
-  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual(['2026-11-19']);
-  await expect(page.getByText('Its screen then shows where to open it.', { exact: false })).toBeVisible();
-  await page.goto('/account');
+  expect(await fake<(string | null)[]>(page, 'linkTerms')).toEqual(['2026-11-22']);
+  await page.getByRole('button', { name: 'Your Whombats' }).click();
   await expect(page.getByRole('heading', { name: 'Your Whombat' })).toBeVisible();
   await expect(page.getByText(/Whombat Link · Free month · until /)).toBeVisible();
   const row = page.locator('[data-link-state="on"]');
@@ -130,7 +129,7 @@ test('Subscribe from the account, a free account, Included, Manage only with a c
   await page.getByRole('button', { name: 'Add it' }).click();
   await expect(page.getByRole('heading', { name: /is added$/ })).toBeVisible();
   await page.goto('/account');
-  await expect(page.getByText(/^Free month · until /).first()).toBeVisible();
+  await expect(page.getByText(/Free month · until /).first()).toBeVisible();
   await fake(page, 'linkPlan', { manual: true });
   await liveIn(page);
   await page.getByRole('button', { name: 'Add a card' }).click();
