@@ -23,8 +23,8 @@ import { ThingScreen } from '../ThingScreen';
 /** Whose days a change asked to keep. */
 const peopleOf = (c: { body: unknown } | undefined) => (c?.body as { people?: string[] } | null)?.people;
 
-/** Monday 23 November 2026 in the afternoon, wherever the test runs. */
-const NOW = Date.parse('2026-11-23T14:20:00Z');
+/** 15:20 on Monday 23 November 2026 in the zone the test runs in, which the tab cuts its days in too. */
+const NOW = new Date(2026, 10, 23, 15, 20).getTime();
 
 /** The fixture world with studio and its Find My connection on its Timeline tab, recording what it changes. */
 function open() {
