@@ -27,6 +27,8 @@ import {
   type MailHeaderAttachment,
   type MailProviderCursor,
   normalizeRfcMessageId,
+  quotaOf,
+  type RecentFile,
   receivedAtOrAfter,
 } from './types';
 
@@ -865,6 +867,14 @@ export class MicrosoftWorkspace implements GoogleWorkspace {
   }
   async filesTrash(token: string, fileId: string) {
     await this.call(token, `/me/drive/items/${id(fileId)}`, 'DELETE');
+  }
+  async filesQuota(token: string) {
+    const quota = obj((await this.call(token, `/me/drive?${query({ $select: 'quota' })}`)).quota);
+    return quotaOf(quota.used, quota.total);
+  }
+  /** Graph's `/me/drive/recent` stops returning data in November 2026: OneDrive has no list of recent changes here. */
+  async filesRecent(): Promise<RecentFile[]> {
+    throw badRequest('OneDrive’s recent files can’t be read.');
   }
   async docsEdit(): Promise<{ applied: number }> {
     return unsupported();

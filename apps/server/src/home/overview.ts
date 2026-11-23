@@ -55,6 +55,7 @@ import { liveResearches } from '../looks/research';
 import type { PrincipalRow } from '../read/principals';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
+import { feedbackThing } from '../things/accounts/feedback';
 import { displayName, partOfMap } from '../things/part-of';
 import { connectionVerdict, withNotice } from '../things/quiet/connection';
 import { NO_QUIET, type QuietBook, quietBook, type ThingQuiet } from '../things/quiet/store';
@@ -790,10 +791,11 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
     reads.quiet(),
     collectThings(reads.ctx),
   ]);
-  const [partOf, mail, github] = await Promise.all([
+  const [partOf, mail, github, feedback] = await Promise.all([
     partOfMap(services, viewer.burrow.id, connections).catch(() => new Map<string, string>()),
     mailThings(services, services.db, viewer.principal, { book, now }),
     githubThing(services, viewer.burrow.id).catch(() => null),
+    feedbackThing(services, { burrowId: viewer.burrow.id, principal: viewer.principal }).catch(() => null),
   ]);
   return sortThings([
     ...connections.map((r) =>
@@ -804,6 +806,7 @@ async function thingsOf(services: Services, viewer: HomeViewer, now: Date, reads
     ),
     ...mail,
     ...(github ? [github] : []),
+    ...(feedback ? [feedback] : []),
     ...others.items,
   ]).slice(0, 200);
 }

@@ -1033,6 +1033,12 @@ export class ImapWorkspace implements GoogleWorkspace {
   async filesTrash(): Promise<never> {
     return this.notMail();
   }
+  async filesQuota(): Promise<never> {
+    return this.notMail();
+  }
+  async filesRecent(): Promise<never> {
+    return this.notMail();
+  }
   async docsEdit(): Promise<never> {
     return this.notMail();
   }

@@ -253,12 +253,10 @@ describe('the mail tools on it (CM-19, CM-26)', () => {
     expect(await pollMailGlances(t.services)).toBeGreaterThan(0);
     const mara = await loadPrincipalRow(t.services.db, IDS.mara);
     const things = await mailThings(t.services, t.services.db, mara as NonNullable<typeof mara>);
-    expect(things.find((x) => x.catalogId === 'imap')).toMatchObject({
-      name: 'Email',
-      status: 'ok',
-      line: `1 unread · ${EMAIL}`,
-      href: '/settings?tab=connections&connection=imap',
-    });
+    const email = things.find((x) => x.catalogId === 'imap');
+    expect(email).toMatchObject({ name: 'Email', status: 'ok', line: `1 unread · ${EMAIL}` });
+    // It opens its own page.
+    expect(email?.href).toBe(`/things/${encodeURIComponent(email?.id ?? '')}`);
   });
 
   it('asks for a new password when the server refuses it, keeps the servers when it gets one, and Disconnect forgets the account', async () => {

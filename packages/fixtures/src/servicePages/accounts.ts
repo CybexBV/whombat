@@ -94,6 +94,7 @@ const google: FixtureServicePage = {
             span: 2,
             title: 'Today',
             meta: '2 left',
+            empty: 'No more meetings today.',
             items: [
               {
                 id: 'event-0',
@@ -126,7 +127,7 @@ const google: FixtureServicePage = {
               count('meetings', 'Meetings today', '5', { icon: 'clock', detail: '2 left' }),
               count('space', 'Drive space', '84 %', {
                 icon: 'disk',
-                detail: '12.6 GB of 15 GB',
+                detail: '13 of 15 GB',
               }),
               count('automations', 'Automations', '1', { icon: 'update', detail: 'Start on new mail' }),
             ],
@@ -169,8 +170,8 @@ const google: FixtureServicePage = {
                 id: 'file-2',
                 title: 'Team offsite photos',
                 detail: 'Folder · Sam Okafor',
-                icon: 'photo',
-                right: 'Yesterday',
+                icon: 'disk',
+                right: '2 days ago',
                 url: 'https://drive.google.com/drive/folders/example-offsite',
               },
             ],
@@ -284,7 +285,7 @@ const github: FixtureServicePage = {
                 icon: 'warn',
                 tone: 'bad',
                 at: ctx.ago(DAY),
-                right: '1 day ago',
+                right: '24 h ago',
                 url: 'https://github.com/burrowhq/infra/pull/88',
               },
             ],
@@ -300,7 +301,7 @@ const github: FixtureServicePage = {
               count('repos', 'Repositories on', '6', { icon: 'database' }),
               count('open', 'Open pull requests', '14', {
                 icon: 'log',
-                figure: { value: '14', note: '+5 this week' },
+                figure: { value: '14', note: '+5 this week', tone: 'ok' },
               }),
               count('failing', 'Failing checks', '2', {
                 icon: 'warn',

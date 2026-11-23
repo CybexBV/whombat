@@ -739,3 +739,19 @@ describe('Microsoft mail change feed', () => {
     expect(p2.headers.map((h) => h.id)).toEqual(['m_after_empty_pages']);
   });
 });
+
+describe('OneDrive for an account’s page', () => {
+  it('reads its quota from the drive in one call', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response({ quota: { total: 1099511627776, used: 549755813888, state: 'normal' } }),
+      );
+    expect(await new MicrosoftWorkspace(fetcher).filesQuota('tok')).toEqual({
+      used: 549755813888,
+      total: 1099511627776,
+    });
+    const url = new URL(String(fetcher.mock.calls[0]?.[0]));
+    expect([url.pathname, url.searchParams.get('$select')]).toEqual(['/v1.0/me/drive', 'quota']);
+  });
+});

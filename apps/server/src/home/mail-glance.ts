@@ -9,7 +9,7 @@
  * Its lines (quiet-notices.md QN-01, QN-03; QN-S12): signed out is only you (`conn.signin`, the reason on its card and
  * the desk), a count that failed is a heads-up (`mail.count`): its dot stays as it was. Both can be ignored on the desk.
  */
-import { type ThingSummary, thingId } from '@whombat/core';
+import { type ThingSummary, thingHref, thingId } from '@whombat/core';
 import { and, eq, inArray } from 'drizzle-orm';
 import { providerWorkspace } from '../connectors/providers';
 import type { Db } from '../db/client';
@@ -77,6 +77,11 @@ export async function pollMailGlances(services: Services, now = services.clock()
   return counted;
 }
 
+/** The health pass's last count of a mail connection: when, how many, whether it failed; null before the first. */
+export function lastMailCount(services: Services, connectionId: string): Readonly<MailGlance> | null {
+  return glancesOf(services).get(connectionId) ?? null;
+}
+
 /** Whether the last count of a mail connection failed (its `mail.count` line). */
 export function mailCountFailed(services: Services, connectionId: string): boolean {
   return glancesOf(services).get(connectionId)?.problem ?? false;
@@ -95,7 +100,10 @@ export const MAIL_CHECKS: readonly KindCheck[] = [
 ];
 registerChecks(MAIL_CHECKS);
 
-/** Where an account's thing opens: its page on the Connections tab (web and phone read `connection=`). */
+/**
+ * Where an account's thing opened before it had a page: its page on the Connections tab (web and phone read
+ * `connection=`). An app too old for account pages still gets it (`things/older-apps.ts`).
+ */
 export function mailThingHref(provider: (typeof COUNTED)[number] | 'github'): string {
   return `/settings?tab=connections&connection=${provider}`;
 }
@@ -168,7 +176,8 @@ export async function mailThings(
       name: accountName(provider),
       // Google's mark, Microsoft's, Email (IMAP)'s (marks.md MK-02, CM-28); a client without it draws the envelope.
       icon: provider,
-      href: mailThingHref(provider),
+      // Its own page (`things/accounts/`).
+      href: thingHref('connection', r.id),
     };
     const v = verdict(
       mailLines(r, glance?.problem ?? false).map((l) => glanceLine(l)),
