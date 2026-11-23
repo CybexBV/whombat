@@ -168,7 +168,7 @@ describe('the account’s list and its link code', () => {
     expect(own?.textContent).toBe(`Home${T.hosted.addressElsewhere}`);
     expect(within(own as HTMLElement).queryByRole('button')).toBeNull();
     expect(within(other as HTMLElement).getByRole('button', { name: 'Open Studio' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: T.hosted.linkEntry })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add a Whombat' })).toBeTruthy();
   });
 
   it('shows the code once the terms are agreed, with its countdown and the account passkey’s words', async () => {
