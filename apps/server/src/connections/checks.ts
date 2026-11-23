@@ -209,7 +209,7 @@ async function mcpCheck(
 export function checkKindFor(
   entry: CatalogEntry,
   kind: SignInKind,
-): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | null {
+): 'request' | 'mcp' | 'reach' | 'socket' | 'driver' | 'mac' | null {
   if (socketCheckOf(entry)) return 'socket';
   if (kind === 'mcp_oauth' || (kind === 'none' && connectionTransport(entry, kind) === 'mcp')) return 'mcp';
   return entry.check?.kind ?? null;
@@ -235,6 +235,8 @@ export async function runCatalogCheck(services: Services, input: RunCheckInput):
   }
   if (kind === 'socket') return runSocketCheck(services, input);
   if (kind === 'driver') return runDriverCheck(services, input);
+  // A connection through a Mac (Find My) is checked against the hosts fleet, never over the network.
+  if (kind === 'mac') return failed(null, false, 'Whombat can’t check a connection through a Mac yet.');
   // A secret of another shape may have its own request (SG-12: Mollie's access tokens); a password never does.
   const secret = credential.secret !== undefined && !credential.session ? credential.secret : undefined;
   const check = secret !== undefined ? catalogCheckFor(entry, secret) : entry.check;

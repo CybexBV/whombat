@@ -18,6 +18,8 @@ export const CATALOG_REASON_TEXT = {
   /** The short note on the entry's tile or row. */
   needsSecureAddressNote: 'Needs a secure address',
   hostedOnlyNote: 'Needs your own app',
+  /** `needs_mac` (Find My): no Mac among the servers yet; its action opens Add a server. */
+  needsMacNote: 'Add a Mac first',
 } as const;
 
 /** The reasons that say what to do first; the others (`off`, `no_driver`, `app_not_configured`) have their own UI. */
