@@ -77,6 +77,12 @@ export {
   findMyConnectionView,
 } from './fixtures-findmy-connection';
 export {
+  createFindMyTimelineFixture,
+  FIND_MY_TIMELINE_FIXTURE_PACE,
+  FIND_MY_TIMELINE_FIXTURE_PEOPLE,
+  type FindMyTimelineFixture,
+} from './fixtures-findmy-timeline';
+export {
   createMacFixture,
   MAC_LOOK_PNG_B64,
   MAC_SERVER,

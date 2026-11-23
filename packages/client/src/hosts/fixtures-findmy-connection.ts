@@ -6,7 +6,7 @@
  * Mac (`localStorage['whombat.fixtures.mac']`); the phone's demo world always. Not imported by production code.
  */
 import { type HostSeriesRange, type ThingPage, type ThingSummary, thingHref, thingId } from '@whombat/core';
-import type { ConnectionView } from '@whombat/core/domain';
+import { type ConnectionView, FIND_MY_TIMELINE_TAB } from '@whombat/core/domain';
 import { MAC_SERVER } from './fixtures-mac';
 
 export const FIND_MY_CONNECTION_ID = 'con_findmy';
@@ -60,7 +60,10 @@ export function findMyConnectionThing(): ThingSummary {
   };
 }
 
-/** Its page: the Find My tab, which names the Mac and carries no panels, then the apps' own tabs. */
+/**
+ * Its page: the Find My tab and the Timeline tab, which name the Mac and carry no panels, then the apps' own tabs. The
+ * Timeline tab is what a box sends a session of minor 5 or later (`FIND_MY_TIMELINE_MINOR`).
+ */
 export function findMyConnectionPage(readAt: string, range: HostSeriesRange = '24h'): ThingPage {
   return {
     id: FIND_MY_THING,
@@ -74,7 +77,10 @@ export function findMyConnectionPage(readAt: string, range: HostSeriesRange = '2
     facts: [],
     runsOn: null,
     settings: true,
-    tabs: [{ key: 'findmy', label: 'Find My', server: MAC_SERVER, panels: [] }],
+    tabs: [
+      { key: 'findmy', label: 'Find My', server: MAC_SERVER, panels: [] },
+      { key: FIND_MY_TIMELINE_TAB, label: 'Timeline', server: MAC_SERVER, panels: [] },
+    ],
     actions: [],
     readAt,
     range,

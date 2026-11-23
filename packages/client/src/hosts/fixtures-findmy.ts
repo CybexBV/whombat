@@ -29,7 +29,7 @@ export const FIND_MY_MAP_DARK_PNG_B64 =
 export const FIND_MY_EXACT_PNG_B64 =
   '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';
 
-const MAP_PX = { w: 1200, h: 640 };
+export const FIND_MY_MAP_PX = { w: 1200, h: 640 };
 const EXACT_PX = { w: 640, h: 400 };
 
 /** How long the fixture's read and picture take (ms): long enough to see “Reading…”, short enough not to wait. */
@@ -103,7 +103,7 @@ export interface FindMyFixture {
 const M_PER_DEG_LAT = 111_320;
 
 /** Metres east and north of a centre (flat around a town, as near enough for a drawn map). */
-function metres(at: { lat: number; lon: number }, centre: { lat: number; lon: number }) {
+export function findMyFixtureMetres(at: { lat: number; lon: number }, centre: { lat: number; lon: number }) {
   return {
     x: (at.lon - centre.lon) * M_PER_DEG_LAT * Math.cos((centre.lat * Math.PI) / 180),
     y: (at.lat - centre.lat) * M_PER_DEG_LAT,
@@ -111,14 +111,14 @@ function metres(at: { lat: number; lon: number }, centre: { lat: number; lon: nu
 }
 
 /** Everyone with a spot, with a 30 % margin and at least 600 m, as the Mac's map fits them. */
-function fitRegion(spots: readonly { lat: number; lon: number }[], w: number, h: number) {
+export function findMyFixtureFit(spots: readonly { lat: number; lon: number }[], w: number, h: number) {
   const lats = spots.map((s) => s.lat);
   const lons = spots.map((s) => s.lon);
   const centre = {
     lat: (Math.min(...lats) + Math.max(...lats)) / 2,
     lon: (Math.min(...lons) + Math.max(...lons)) / 2,
   };
-  const far = metres({ lat: Math.max(...lats), lon: Math.max(...lons) }, centre);
+  const far = findMyFixtureMetres({ lat: Math.max(...lats), lon: Math.max(...lons) }, centre);
   // Metres a point so the farthest fits the shorter and the longer side alike.
   const perPoint = Math.max((2 * Math.abs(far.x)) / w, (2 * Math.abs(far.y)) / h);
   return { ...centre, spanM: Math.max(600, perPoint * Math.min(w, h) * 1.3) };
@@ -232,11 +232,11 @@ export function createFindMyFixture({
       const region =
         q.lat !== undefined && q.lon !== undefined && q.spanM !== undefined
           ? { lat: q.lat, lon: q.lon, spanM: q.spanM }
-          : fitRegion(spots, q.w, q.h);
+          : findMyFixtureFit(spots, q.w, q.h);
       const perPoint = region.spanM / Math.min(q.w, q.h);
       const points: HostFindMyMap['points'] = [];
       for (const p of located) {
-        const m = metres(p.location as NonNullable<HostFindMyPerson['location']>, region);
+        const m = findMyFixtureMetres(p.location as NonNullable<HostFindMyPerson['location']>, region);
         const x = q.w / 2 + m.x / perPoint;
         const y = q.h / 2 - m.y / perPoint;
         if (x >= 0 && x <= q.w && y >= 0 && y <= q.h) points.push({ person: p.id, x, y });
@@ -245,8 +245,8 @@ export function createFindMyFixture({
         server,
         imageB64: q.dark ? FIND_MY_MAP_DARK_PNG_B64 : FIND_MY_MAP_LIGHT_PNG_B64,
         format: 'png',
-        w: MAP_PX.w,
-        h: MAP_PX.h,
+        w: FIND_MY_MAP_PX.w,
+        h: FIND_MY_MAP_PX.h,
         points,
         lat: region.lat,
         lon: region.lon,

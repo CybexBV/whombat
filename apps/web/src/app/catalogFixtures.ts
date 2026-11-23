@@ -39,7 +39,12 @@
  * done.
  */
 
-import { findMyConnectionView, MAC_SERVER, macFixtureListed } from '@whombat/client/hosts/fixtures';
+import {
+  createFindMyTimelineFixture,
+  findMyConnectionView,
+  MAC_SERVER,
+  macFixtureListed,
+} from '@whombat/client/hosts/fixtures';
 import type { ConnectionDiscovery, DiscoveredService } from '@whombat/core/contracts';
 import { type AnyEndpoint, API_ENDPOINTS, api, matchPath } from '@whombat/core/contracts';
 import {
@@ -539,6 +544,13 @@ const ENDPOINTS: AnyEndpoint[] = API_ENDPOINTS.filter(
 export function createCatalogFixtures({ connected }: { connected: boolean }) {
   const rows = seed(connected);
   const allowed = new Set<string>();
+  // Find My's timeline (findmy-timeline.md §1): Noor and Ruben kept; the assistant reads it while its tool is Allowed.
+  const timeline = createFindMyTimelineFixture({
+    clock: () => Date.now(),
+    assistantReads: () =>
+      rows.find((r) => r.connection.catalogId === 'findmy')?.tools.find((t) => t.name === 'findmy_timeline')
+        ?.tier === 'can',
+  });
   let dropboxApp: { clientIdHint: string; secretSet: boolean } | null = null;
   const flows = new Map<string, { polls: number; fields: Record<string, string>; label?: string }>();
   /** Sign-ins on the service's own page (SG-01): Plex's PIN, connected on the second poll. */
@@ -1053,6 +1065,23 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
         return json(status());
       case api.connections.finishOAuth.id:
         return json({ returnPath: `/${burrow.slug}/settings?tab=connections`, connectionId: null });
+      case api.connections.findMyTimeline.id:
+      case api.connections.findMyTimelineSet.id:
+      case api.connections.findMyTimelineDelete.id:
+      case api.connections.findMyTimelineMap.id: {
+        if (row?.connection.catalogId !== 'findmy')
+          return json({ error: { code: 'not_found', message: 'That isn’t a Find My connection.' } }, 404);
+        const query = Object.fromEntries(url.searchParams);
+        const answer =
+          ep.id === api.connections.findMyTimeline.id
+            ? timeline.timeline(query)
+            : ep.id === api.connections.findMyTimelineSet.id
+              ? timeline.set(body)
+              : ep.id === api.connections.findMyTimelineDelete.id
+                ? timeline.remove(body)
+                : timeline.map(query);
+        return json(answer.body, answer.status);
+      }
       default:
         return null;
     }

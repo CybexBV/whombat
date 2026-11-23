@@ -12,6 +12,7 @@ export * from './console';
 export * from './dashboard';
 export * from './errors';
 export * from './findmy';
+export * from './findmy-timeline';
 export * from './fleet';
 export * from './format';
 export * from './hints';
