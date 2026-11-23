@@ -14,6 +14,7 @@ import '../../managed/backup-key-inbox';
 import '../../managed/link/notices';
 import '../../managed/network-watch';
 import '../../managed/own-address/notices';
+import { spaceCheck } from '../accounts/mail';
 import { KIND_MODULES } from '../kinds/index';
 import { GENERIC_CHECKS } from '../panels';
 import '../recipe/kind';
@@ -26,6 +27,7 @@ const lists = [
   GENERIC_CHECKS,
   DEVICE_CHECKS,
   MAIL_CHECKS,
+  [spaceCheck('google'), spaceCheck('microsoft')],
   ...Object.values(KIND_MODULES).map((k) => k.checks ?? []),
   HOST_WATCH_CHECKS,
 ];
@@ -39,6 +41,7 @@ describe('checks that start off (watch-defaults.md)', () => {
     expect(checkStartsOn('fusebox.week_runs_out')).toBe(false);
     expect(checkStartsOn('device.readings')).toBe(false);
     expect(checkStartsOn('mail.count')).toBe(false);
+    expect(checkStartsOn('files.space')).toBe(false);
     expect(checkStartsOn('host.disk.space_high')).toBe(true);
     expect(checkStartsOn('host.disk.wear_high')).toBe(false);
     expect(checkStartsOn('host.hint.system.updates')).toBe(false);

@@ -1,9 +1,19 @@
 /**
- * A thing's page for an older app (docs/decisions/findmy-timeline.md): an app below session minor 5 gets a Find My
- * connection's page without the Timeline tab it can't draw; a newer one, and anything outside a session, gets it all.
+ * A thing's page and Home's things for an older app (docs/decisions/findmy-timeline.md, connection-dashboards.md): an
+ * app below session minor 5 gets a Find My connection's page without the Timeline tab it can't draw; one below minor 7
+ * gets Home's accounts opening on Settings and no Website feedback; a newer one, and anything outside a session, gets it
+ * all.
  */
-import { FIND_MY_TIMELINE_TAB, type ThingPage } from '@whombat/core';
-import { FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
+import {
+  FEEDBACK_THING_ID,
+  FIND_MY_TIMELINE_TAB,
+  GITHUB_THING_ID,
+  type HomeOverview,
+  type ThingPage,
+  type ThingSummary,
+  thingHref,
+} from '@whombat/core';
+import { ACCOUNT_PAGES_MINOR, FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { thingAnswerFor, thingPageFor } from './older-apps';
 
@@ -32,5 +42,46 @@ describe('a thing’s page for an older app', () => {
     expect(thingPageFor(page, FIND_MY_TIMELINE_MINOR)).toBe(page);
     expect(thingPageFor(page, undefined)).toBe(page);
     expect(thingAnswerFor('things.quiet', page, 0)).toBe(page);
+  });
+});
+
+const thing = (id: string, catalogId: string, href = `/things/${encodeURIComponent(id)}`): ThingSummary => ({
+  id,
+  kind: 'connection',
+  catalogId,
+  name: catalogId,
+  icon: catalogId,
+  status: 'ok',
+  facts: [],
+  href,
+});
+
+const overview = {
+  things: [
+    thing('connection:con_google01', 'google'),
+    thing('connection:con_mail01', 'imap'),
+    thing(GITHUB_THING_ID, 'github'),
+    thing(FEEDBACK_THING_ID, 'feedback'),
+    thing('connection:con_plex01', 'plex'),
+  ],
+} as unknown as HomeOverview;
+
+const hrefs = (o: unknown) =>
+  Object.fromEntries((o as HomeOverview).things.map((t) => [t.catalogId ?? t.id, t.href]));
+
+describe('Home’s accounts for an older app', () => {
+  it('opens them on Settings below minor 7 and leaves Website feedback out', () => {
+    expect(hrefs(thingAnswerFor('home.overview', overview, ACCOUNT_PAGES_MINOR - 1))).toEqual({
+      google: '/settings?tab=connections&connection=google',
+      imap: '/settings?tab=connections&connection=imap',
+      github: '/settings?tab=connections&connection=github',
+      plex: thingHref('connection', 'con_plex01'),
+    });
+  });
+
+  it('opens their own pages from minor 7 on and outside a session', () => {
+    expect(thingAnswerFor('home.overview', overview, ACCOUNT_PAGES_MINOR)).toBe(overview);
+    expect(thingAnswerFor('home.overview', overview, undefined)).toBe(overview);
+    expect(hrefs(overview).feedback).toBe(thingHref('connection', 'feedback'));
   });
 });

@@ -1,6 +1,7 @@
 /**
  * A connection's or device's own page (`things.page`; connection-pages.md CP-01…CP-14; connection-pages-server.md
- * CP-S01…): the server builds every panel with its words, the clients draw them by kind (CP-04).
+ * CP-S01…): the server builds every panel with its words, the clients draw them by kind (CP-04). The person's accounts
+ * (Google, Microsoft 365, Email, GitHub, Website feedback) have pages of their own (`accounts/`).
  *
  * - **Who sees it**: as `connections.list`, the burrow's person: every connection and device of the burrow
  *   (one-person.md OP-S50).
@@ -43,6 +44,7 @@ import { listChanges } from '../home/changes';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
 import type { Services } from '../services';
+import { type AccountTarget, accountPage, findAccount } from './accounts/index';
 import { devicePage, learningPage } from './devices';
 import { genericSlots } from './generic';
 import { kindFor } from './kinds/index';
@@ -85,7 +87,8 @@ import { clip, dayMonth, line, span } from './words';
 export type ThingTarget =
   | { kind: 'connection'; id: string; row: CatalogConnectionRow }
   | { kind: 'device'; id: string; row: CatalogConnectionRow; skill: DeviceSkillRow }
-  | { kind: 'learning'; id: string; skill: DeviceSkillRow };
+  | { kind: 'learning'; id: string; skill: DeviceSkillRow }
+  | { kind: 'account'; id: string; account: AccountTarget };
 
 async function connectionRow(services: Services, id: string): Promise<CatalogConnectionRow | null> {
   const [row] = await services.db.select().from(catalogConnections).where(eq(catalogConnections.id, id));
@@ -113,6 +116,9 @@ export async function findThing(
     if (parsed.kind !== 'connection' || !entry || entry.transport === 'builtin') throw notFound('Thing');
     return { kind: 'connection', id, row };
   }
+  // The person's accounts: Google, Microsoft 365, Email, GitHub and Website feedback.
+  const account = await findAccount(services, viewer, parsed);
+  if (account) return { kind: 'account', id, account };
   if (parsed.kind !== 'device') throw notFound('Thing');
   const skill = await skillById(services.db, parsed.id);
   if (!skill || skill.burrowId !== viewer.burrowId) throw notFound('Thing');
@@ -514,6 +520,8 @@ export async function thingPage(
     );
   if (target.kind === 'device')
     return withPageResearch(services, viewer, await devicePage(services, viewer, target, timeZone, range));
+  if (target.kind === 'account')
+    return withPageResearch(services, viewer, await accountPage(services, viewer, target.account, timeZone));
   return learningPage(services, target, timeZone);
 }
 

@@ -1,27 +1,21 @@
 /**
- * `things.quiet`, `things.watch`, `things.setWatch` for connections, devices and mail accounts (quiet-notices.md
+ * `things.quiet`, `things.watch`, `things.setWatch` for connections, devices and the person's accounts (quiet-notices.md
  * QN-10…QN-17; QN-S09, QN-S10, QN-S16): the thing as the person may see it, the line as it is now (a page read, its
  * kind's reads kept 30 s), who may quiet it (who may manage the thing; a mail account its person), then one command in
  * the commit pipeline. Servers go to the servers' part (`hosts/quiet.ts`). The desk's Ignore and Not now and Needs you's
  * shared Ignore come here too, as the person.
  */
-import { catalogEntry, parseThingId, thingId } from '@whombat/core';
-import { and, eq, inArray } from 'drizzle-orm';
+import { catalogEntry, parseThingId } from '@whombat/core';
+import { and, eq } from 'drizzle-orm';
 import { type ConnectionViewer, isVisibleTo } from '../../connections/store';
-import { connections, noticeQuiets } from '../../db/schema/index';
+import { noticeQuiets } from '../../db/schema/index';
 import { DEVICE_CHECKS, deviceLines } from '../../devices/home';
 import { addQuietExceptions, watchList } from '../../domain/quiet-watch';
-import {
-  accountName,
-  COUNTED,
-  isAccountThing,
-  MAIL_CHECKS,
-  mailCountFailed,
-  mailLines,
-} from '../../home/mail-glance';
+import { accountName } from '../../home/mail-glance';
 import { quietServerNotice, serverWatch, setServerWatch } from '../../hosts/quiet';
 import { notAllowed, notFound } from '../../lib/errors';
 import type { Services } from '../../services';
+import { type AccountTarget, accountChecks, accountLines } from '../accounts/index';
 import { kindFor } from '../kinds/index';
 import { connectionPage, findThing } from '../page';
 import { genericChecksFor } from '../panels';
@@ -53,33 +47,24 @@ function viewerIsPerson(viewer: ConnectionViewer): boolean {
   return viewer.principal.kind === 'person';
 }
 
-/** A person's own mail account as a thing (no page: Home and the desk show it). */
-async function mailTarget(
-  services: Services,
-  viewer: ConnectionViewer,
-  id: string,
-): Promise<QuietTarget | null> {
-  const [row] = await services.db
-    .select()
-    .from(connections)
-    .where(
-      and(
-        eq(connections.id, id),
-        eq(connections.accountId, viewer.accountId),
-        inArray(connections.provider, [...COUNTED]),
-      ),
-    );
-  if (!row || !isAccountThing(row)) return null;
+/** One of the person's accounts (Google, Microsoft 365, Email, GitHub, Website feedback) as a thing to quiet. */
+function accountTarget(services: Services, viewer: ConnectionViewer, target: AccountTarget): QuietTarget {
+  const name =
+    target.kind === 'mail'
+      ? accountName(target.row.provider)
+      : target.kind === 'github'
+        ? 'GitHub'
+        : 'Website feedback';
   return {
     thing: {
-      id: thingId('connection', row.id),
+      id: target.id,
       kind: 'connection',
-      ref: row.id,
-      name: accountName(row.provider as (typeof COUNTED)[number]),
+      ref: target.id.slice(target.id.indexOf(':') + 1),
+      name,
       owner: viewer.burrowId,
     },
-    checks: MAIL_CHECKS,
-    lines: async () => mailLines(row, mailCountFailed(services, row.id)),
+    checks: accountChecks(target),
+    lines: async () => accountLines(services, target),
   };
 }
 
@@ -90,13 +75,9 @@ async function quietTarget(
   value: string,
   timeZone: string,
 ): Promise<QuietTarget> {
-  const parsed = parseThingId(value);
-  if (parsed?.kind === 'connection') {
-    const mail = await mailTarget(services, viewer, parsed.id);
-    if (mail) return mail;
-  }
   const target = await findThing(services, viewer, value);
   if (target.kind === 'learning') throw notFound('Thing');
+  if (target.kind === 'account') return accountTarget(services, viewer, target.account);
   const row = target.row;
   if (!isVisibleTo(row, viewer)) throw notFound('Thing');
   if (target.kind === 'device')
