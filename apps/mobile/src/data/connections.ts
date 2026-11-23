@@ -41,14 +41,21 @@ import {
   type ConnectionView,
   catalogEntry,
   connectionHost,
+  FEEDBACK_THING_ID,
   FOUND_SERVER_ID,
   type GatewayKind,
+  GITHUB_THING_ID,
   gatewayKindOf,
   isGatewayConnection,
   NEW_TOOL_LABEL,
   type Tone,
+  thingId,
 } from '@whombat/core';
-import type { ConnectionToolsResponse } from '@whombat/core/contracts';
+import type {
+  ConnectionToolsResponse,
+  FeedbackIntegrationHealth,
+  GitHubStatusResponse,
+} from '@whombat/core/contracts';
 import { formatAgo } from '@whombat/core/text';
 import { type AccountPage, isAccountPage } from '../navigation/connectionLinks';
 
@@ -82,6 +89,14 @@ export const CONNECTIONS_TEXT = {
   notFound: 'This connection isn’t here any more.',
   loadingDetail: 'Loading the connection',
   truncated: 'The service lists more tools; only the first 128 are used.',
+  /** GitHub's row: how many of its repositories Whombat works in (the web's overview). */
+  reposOn: (n: number) => (n === 1 ? '1 repository on' : `${n} repositories on`),
+  /** Website feedback's row: its one site's name, else how many. */
+  sites: (n: number) => (n === 1 ? '1 site' : `${n} sites`),
+  reports: (n: number) =>
+    n === 0 ? 'No reports in the last 24 h' : `${n} ${n === 1 ? 'report' : 'reports'} in the last 24 h`,
+  /** Website feedback's state when it's fine: it takes reports. */
+  on: 'On',
 } as const;
 
 /* Where things open on the web ------------------------------------------------------------------- */
@@ -105,6 +120,9 @@ export type ConnectionOpens =
   | { screen: 'ConnectAccount'; page: AccountPage }
   /** Add a server: Find My without a Mac (`needs_mac`, findmy-connection.md §1.2). */
   | { screen: 'AddServer' };
+
+/** What a Connections row opens: an entry's screen, or an account's page (`connection:con_…`, `connection:github`). */
+export type RowOpens = ConnectionOpens | { screen: 'Thing'; thingId: string };
 
 export function entryOpens(catalogId: string): ConnectionOpens | null {
   if (isAccountPage(catalogId)) return { screen: 'ConnectAccount', page: catalogId };
@@ -153,7 +171,7 @@ export const CONNECTION_STATES: Record<CatalogConnectionState, ConnectionState> 
 
 export interface ConnectedRow {
   key: string;
-  /** `catalog`: opens the connection's screen; `account` (Google, Microsoft 365): opens its web page. */
+  /** `catalog`: opens the connection's page; `account` (Google, Microsoft 365, Email, GitHub, Website feedback): `opens`. */
   kind: 'catalog' | 'account';
   /** The connection's id (catalog) or the account connection's id. */
   id: string;
@@ -165,8 +183,11 @@ export interface ConnectedRow {
   logo: ConnectionLogoKind;
   /** The page on the web (kept for a self-hosted Whombat's sign-ins elsewhere). */
   webPath: string;
-  /** An account row's screen (Google, Microsoft 365, Email (IMAP); AP-2909); null for a catalog connection. */
-  opens: ConnectionOpens | null;
+  /**
+   * An account row's page on a box that has them (session minor 7), else its own screen (Google, Microsoft 365, Email
+   * (IMAP), GitHub, Website feedback; AP-2909); null for a catalog connection.
+   */
+  opens: RowOpens | null;
   /**
    * The compact row's one meta line (AP-1172, AP-1177): where it is (the host and port, else the account) and “Look
    * only” when the agent may only look; null when there's neither. A gateway's line is on its
@@ -226,8 +247,16 @@ export function connectedRow(c: ConnectionView, slug: string): ConnectedRow {
   };
 }
 
-/** Your Google / Microsoft 365 account (CN-04), shown as a connection; it opens its own screen. */
-export function accountRow(a: AccountConnection, slug: string): ConnectedRow {
+/**
+ * Where an account's row goes: its page (`connection:<its id>`) when the box answers account pages (`pages`, session
+ * minor 7), else its own screen as before.
+ */
+function accountOpens(page: AccountPage, thing: string, pages: boolean): RowOpens {
+  return pages ? { screen: 'Thing', thingId: thing } : { screen: 'ConnectAccount', page };
+}
+
+/** Your Google / Microsoft 365 / Email account (CN-04), shown as a connection; it opens its page or its own screen. */
+export function accountRow(a: AccountConnection, slug: string, pages = false): ConnectedRow {
   const title = catalogEntry(a.provider)?.name ?? a.provider;
   const state = CONNECTION_STATES[a.status];
   return {
@@ -240,19 +269,111 @@ export function accountRow(a: AccountConnection, slug: string): ConnectedRow {
     state,
     logo: connectionLogo(a.provider, title),
     webPath: connectionsWebPath(slug, a.provider),
-    opens: entryOpens(a.provider),
+    opens: isAccountPage(a.provider)
+      ? accountOpens(a.provider, thingId('connection', a.id), pages)
+      : entryOpens(a.provider),
     line: joinLine([a.email]),
     accessibilityLabel: rowLabel(title, a.email, state),
   };
 }
 
-/** CONNECTED: your accounts first (the Accounts category comes first), then the server's order (by label). */
+/**
+ * GitHub, when this Whombat is connected to it (the web's overview): the account it acts as and how many repositories
+ * are on; Needs attention when GitHub can't be reached. Null while it isn't connected or didn't answer.
+ */
+export function githubRow(
+  status: Pick<GitHubStatusResponse, 'connected' | 'login' | 'error'> | null | undefined,
+  repos: { connected: boolean; on: number } | null | undefined,
+  slug: string,
+  pages = false,
+): ConnectedRow | null {
+  const connected = status?.connected ?? repos?.connected ?? false;
+  if (!connected) return null;
+  const title = catalogEntry('github')?.name ?? 'GitHub';
+  const login = status?.login ? `@${status.login}` : null;
+  const state = status?.error ? CONNECTION_STATES.error : CONNECTION_STATES.active;
+  const line = joinLine([login, repos ? CONNECTIONS_TEXT.reposOn(repos.on) : null]);
+  return {
+    key: 'account:github',
+    kind: 'account',
+    id: 'github',
+    catalogId: 'github',
+    title,
+    meta: login,
+    state,
+    logo: connectionLogo('github', title),
+    webPath: connectionsWebPath(slug, 'github'),
+    opens: accountOpens('github', GITHUB_THING_ID, pages),
+    line,
+    accessibilityLabel: rowLabel(title, line, state),
+  };
+}
+
+/**
+ * Website feedback, once it has a site (the web's overview): the site's name or how many, and the reports of the last
+ * 24 hours; Needs attention while a site has a warning. Null without a site.
+ */
+export function feedbackRow(
+  integrations:
+    | readonly {
+        integration: { name: string };
+        health: Pick<FeedbackIntegrationHealth, 'reportsLast24h' | 'warnings'>;
+      }[]
+    | null
+    | undefined,
+  slug: string,
+  pages = false,
+): ConnectedRow | null {
+  const list = integrations ?? [];
+  if (!list.length) return null;
+  const title = catalogEntry('feedback')?.name ?? 'Website feedback';
+  const detail =
+    list.length === 1 ? (list[0]?.integration.name ?? null) : CONNECTIONS_TEXT.sites(list.length);
+  const reports = list.reduce((n, { health }) => n + health.reportsLast24h, 0);
+  const state = list.some(({ health }) => health.warnings.length > 0)
+    ? CONNECTION_STATES.error
+    : { tone: 'ok' as const, label: CONNECTIONS_TEXT.on };
+  const line = joinLine([detail, CONNECTIONS_TEXT.reports(reports)]);
+  return {
+    key: 'account:feedback',
+    kind: 'account',
+    id: 'feedback',
+    catalogId: 'feedback',
+    title,
+    meta: detail,
+    state,
+    logo: connectionLogo('feedback', title),
+    webPath: connectionsWebPath(slug, 'feedback'),
+    opens: accountOpens('feedback', FEEDBACK_THING_ID, pages),
+    line,
+    accessibilityLabel: rowLabel(title, line, state),
+  };
+}
+
+/** What `connectedRows` adds to the catalog connections and the person's own accounts. */
+export interface ConnectedExtras {
+  /** The box answers account pages (session minor 7): an account's row opens its page. */
+  pages?: boolean;
+  /** GitHub's and Website feedback's rows, when they are connected (`githubRow`, `feedbackRow`). */
+  builtins?: readonly (ConnectedRow | null)[];
+}
+
+/**
+ * CONNECTED: your accounts first (the Accounts category comes first), GitHub and Website feedback after them, then the
+ * server's order (by label).
+ */
 export function connectedRows(
   connections: readonly ConnectionView[],
   accounts: readonly AccountConnection[],
   slug: string,
+  extras: ConnectedExtras = {},
 ): ConnectedRow[] {
-  return [...accounts.map((a) => accountRow(a, slug)), ...connections.map((c) => connectedRow(c, slug))];
+  const builtins = (extras.builtins ?? []).filter((r): r is ConnectedRow => r !== null);
+  return [
+    ...accounts.map((a) => accountRow(a, slug, extras.pages ?? false)),
+    ...builtins,
+    ...connections.map((c) => connectedRow(c, slug)),
+  ];
 }
 
 /* The Connections screen: NEEDS YOU, then CONNECTED · N (AP-1171, AP-1172) ------------------------------------ */
