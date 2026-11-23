@@ -145,10 +145,16 @@ export const HostFindMy = z.object({
   exact: HostFindMyExact.nullable(),
   /**
    * How a Find My connection reads this Mac without anyone looking: every `everyMinutes`, and the name of the
-   * automation that needs it when that is the reason. Null or absent: only while someone looks (and an older box).
+   * automation that needs it when that is the reason. `timeline`: the connection's timeline is why it reads this often
+   * (“Reads every 15 minutes for the timeline”; an automation's name, when there is one too, is said instead). Null or
+   * absent: only while someone looks (and an older box).
    */
   background: z
-    .object({ everyMinutes: z.number().int().positive(), automation: z.string().max(200).nullable() })
+    .object({
+      everyMinutes: z.number().int().positive(),
+      automation: z.string().max(200).nullable(),
+      timeline: z.boolean().optional(),
+    })
     .nullable()
     .optional(),
 });
