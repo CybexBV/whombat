@@ -7,7 +7,6 @@
 import { catalogEntry } from '@whombat/core';
 import { externalEffect } from '../../../commit/scope';
 import { signedConnectionFetch } from '../../../connections/http';
-import { toolRowsOf } from '../../../connections/store';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
 import { list, rec } from '../../words';
@@ -80,13 +79,9 @@ export async function apiRead(
 
 /* MCP tools ---------------------------------------------------------------------------------------------------------- */
 
-export type Schema = Record<string, unknown> | null;
-
+export type { ToolSchema as Schema } from '../mcp-tools';
 /** The connection's tools a page may read (those its server marks read-only), each with its input schema. */
-export async function readTools(services: Services, connectionId: string): Promise<Map<string, Schema>> {
-  const rows = await toolRowsOf(services.db, connectionId);
-  return new Map(rows.filter((t) => t.access === 'read').map((t) => [t.name, t.inputSchema ?? null]));
-}
+export { readToolSchemas as readTools } from '../mcp-tools';
 
 /** The properties an input schema names. */
 export function propsOf(schema: unknown): Record<string, Record<string, unknown>> {
