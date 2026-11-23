@@ -30,7 +30,9 @@ import {
   type RuntimeFeedbackPullResponse,
   type RuntimeFeedbackReportersRequest,
   RuntimeKitEnvelopesRequest,
+  RuntimeLinkMailSetRequest,
   type RuntimeLinkWhombatsResponse,
+  RuntimeMailSendRequest,
   RuntimeShareDeleteRequest,
   RuntimeSharePutRequest,
   RuntimeShareViewsRequest,
@@ -541,6 +543,26 @@ export class FakeManager implements ManagerPort {
       throw new ManagerCallError(MANAGER_PATHS.linkWhombats, 404, 'link.unavailable', 'Link isn’t on');
     if (this.whombatsFail) throw this.whombatsFail;
     return { whombats: this.whombats };
+  }
+  /**
+   * Email through Link (4.15): the choices and emails as control was handed them, while control knows the box (404
+   * otherwise, as the manager). `mailFail` answers with that error instead.
+   */
+  mailChoices: { offline: boolean; notifications: boolean }[] = [];
+  mails: z.output<typeof RuntimeMailSendRequest>[] = [];
+  mailFail: ManagerCallError | null = null;
+  private mailKnown(path: string): void {
+    if (!this.link || this.link.link.state === 'off')
+      throw new ManagerCallError(path, 404, 'unavailable', 'Whombat Link is off on this Whombat');
+    if (this.mailFail) throw this.mailFail;
+  }
+  async linkMailSet(request: z.input<typeof RuntimeLinkMailSetRequest>): Promise<void> {
+    this.mailKnown(MANAGER_PATHS.linkMail);
+    this.mailChoices.push(RuntimeLinkMailSetRequest.parse(request));
+  }
+  async mailSend(request: z.input<typeof RuntimeMailSendRequest>): Promise<void> {
+    this.mailKnown(MANAGER_PATHS.mailSend);
+    this.mails.push(RuntimeMailSendRequest.parse(request));
   }
   /** The update channel the helper keeps (4.4); null answers 404 `update.channel_unavailable`. */
   channel: { channel: 'production' | 'development'; staysOn?: string } | null = null;

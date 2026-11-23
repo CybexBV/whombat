@@ -161,6 +161,13 @@ export const applianceState = pgTable('appliance_state', {
    * end), so a restart doesn't push it again.
    */
   linkNoticed: text('link_noticed'),
+  /**
+   * Email through Whombat Link (docs/decisions/link-email.md): the owner's two choices. “Tell me when it goes offline”
+   * (on unless turned off) and “Send my notification emails through Whombat Link” (off unless turned on); control is
+   * told them whenever it knows the box.
+   */
+  linkMailOffline: boolean('link_mail_offline').notNull().default(true),
+  linkMailNotifications: boolean('link_mail_notifications').notNull().default(false),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 

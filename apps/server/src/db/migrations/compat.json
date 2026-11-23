@@ -105,6 +105,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The runtime releases that ran on this database (docs/decisions/automation-recipes.md): a new table runtime_releases, where each release from this one on records itself at its first start on a managed box. A box makes, turns on and runs automations started by mail, or that change things in connected services, only while the release it would go back to after a failed update (from the manager's update facts) is in it, so the release before this one never runs on a database that has them: on a box updated from that release they stay off, and the next release turns them on. The release before it never reads the table."
+    },
+    "0016_link_mail": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Email through Whombat Link (docs/decisions/link-email.md): two defaulted booleans on appliance_state, the owner's choices; the release before it reads and writes past them."
     }
   }
 }

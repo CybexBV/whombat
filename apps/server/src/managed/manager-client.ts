@@ -37,6 +37,7 @@
  *   POST /v1/link/state|on|off     {v, contentProof?, name?} → {v, enabled, link} (4.4; whombat-link.md)
  *   POST /v1/update/channel[/set]  {v, channel?}            → {v, channel, staysOn?} (4.4; 404 update.channel_unavailable)
  *   POST /v1/runtime/push/register|unregister {token|handle} → {handle} | {ok} (4.4; push through the box)
+ *   POST /v1/link/mail {offline, notifications} → {ok}; POST /v1/runtime/mail LinkMail → {ok} (4.15; email through Link)
  *
  * The manager answers 503 `unavailable` while control is unreachable; the runtime keeps claims and revocations
  * pending and retries them.
@@ -85,8 +86,10 @@ import {
   RuntimeKitCredentialsResponse,
   RuntimeKitEnvelopesRequest,
   RuntimeKitEnvelopesResponse,
+  RuntimeLinkMailSetRequest,
   RuntimeLinkWhombatsRequest,
   RuntimeLinkWhombatsResponse,
+  RuntimeMailSendRequest,
   RuntimePushRegisterRequest,
   RuntimePushRegisterResponse,
   RuntimePushRequest,
@@ -574,6 +577,15 @@ export class ManagerSocketClient implements ManagerPort {
         KIT_ENVELOPES_TIMEOUT_MS,
       ),
     );
+  }
+
+  async linkMailSet(body: z.input<typeof RuntimeLinkMailSetRequest>) {
+    await this.call(MANAGER_PATHS.linkMail, RuntimeLinkMailSetRequest.parse(body), KIT_ENVELOPES_TIMEOUT_MS);
+  }
+
+  /** One email for the Link account's own address: a count or a notice in fixed words, never content. */
+  async mailSend(body: z.input<typeof RuntimeMailSendRequest>) {
+    await this.call(MANAGER_PATHS.mailSend, RuntimeMailSendRequest.parse(body), KIT_ENVELOPES_TIMEOUT_MS);
   }
 
   async pushUnregister(body: z.input<typeof RuntimePushUnregisterRequest>) {

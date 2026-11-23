@@ -24,6 +24,7 @@ import { previewBody, previewTitle, pushKind } from '../domain/push-preview';
 import { ApiError } from '../lib/errors';
 import type { ControlPushOptions } from '../push/sender';
 import type { Services } from '../services';
+import { linkEmailOf } from './link/mail';
 import { ManagerCallError, type ManagerPort } from './ports';
 import { appPageTarget, type SecurityNotice, SecurityPushes } from './security-push';
 
@@ -122,6 +123,10 @@ export class ControlPush {
     const quarantine = options.evenInQuarantine ? { evenInQuarantine: true } : {};
     if (told.length) await this.forAccounts(told, kind, what, { preview }, quarantine);
     if (plain.length) await this.forAccounts(plain, kind, what, {}, quarantine);
+    // By email too when the owner chose it: the same fixed lines, to the Link account's own address.
+    await linkEmailOf(this.services)
+      ?.notice(what, notice, options)
+      .catch((err) => this.services.log.warn({ err: String(err) }, 'link: the notice wasn’t emailed'));
   }
 
   async #resolveSecurity(accountId: string, ref: string): Promise<PushTarget | null> {
