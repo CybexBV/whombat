@@ -9,6 +9,7 @@ import { useInboxSplit } from '../../features/chats/inboxNav';
 import { DeskUnlockNotice } from '../../features/desk/DeskUnlock';
 import { MessageFilesProvider } from '../../features/messaging/messageFiles';
 import { LinkBanner } from '../../managed/LinkBanner';
+import { MovedBanner } from '../../managed/MovedBanner';
 import { PasskeyNotices } from '../../managed/PasskeyNotices';
 import { useOpenBurrow } from '../routing/openBurrow';
 import { AgentsBlockedNotice } from './AgentsBlockedNotice';
@@ -174,6 +175,8 @@ export function BurrowShell() {
             <AgentsBlockedNotice burrow={burrow} onSettings={location.kind === 'settings'} />
             {/* Whombat Link ending or ended: what still works, and Turn on Tailscale. */}
             <LinkBanner />
+            {/* At the box's old address after a change: where it moved, and the way there. */}
+            <MovedBanner />
             <PasskeyNotices onSettings={location.kind === 'settings'} />
             <DeskUnlockNotice burrow={burrow} hidden={onWhombatOverview} />
           </>

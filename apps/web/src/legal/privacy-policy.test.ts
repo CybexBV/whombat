@@ -56,7 +56,8 @@ describe('the Whombat Privacy Policy (AP-165)', () => {
 
   it('says what control keeps for Whombat Link and how push reaches the phones (ENV-13)', () => {
     expect(text).toContain('**Whombat Link.**');
-    expect(text).toContain('`<label>.box.whombat.app`');
+    expect(text).toContain('`<name>.whombat.app`');
+    expect(text).toContain('16 February 2027');
     expect(text).toContain('whether you pay by the month or by the year');
     expect(text).toContain('a promotion code you');
     expect(text).toContain('Apple Push Notification service');
