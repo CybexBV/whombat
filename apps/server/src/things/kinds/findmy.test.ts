@@ -4,6 +4,7 @@
  */
 import { FIND_MY_TIMELINE_TAB, type HostFindMy } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import { orderTabs, SUMMARY_TAB } from '../panels';
 import { FIND_MY_CHECKS, FIND_MY_KIND, findMyGlanceLine, findMyNotices, findMyView } from './findmy';
 import { KIND_MODULES } from './index';
 
@@ -41,6 +42,18 @@ describe('the Find My kind', () => {
     expect(view.charts).toEqual([]);
     expect(view.readAt?.toISOString()).toBe('2026-11-23T09:55:00.000Z');
     expect(findMyView(null, null).tabs).toEqual([]);
+  });
+
+  it('opens on its map: the page puts Find My first and the Summary last', () => {
+    const view = findMyView('studio', read());
+    const summary = { ...SUMMARY_TAB, panels: [] };
+    expect(orderTabs(summary, view.tabs, view.lead ?? null).map((t) => t.key)).toEqual([
+      'findmy',
+      FIND_MY_TIMELINE_TAB,
+      'overview',
+    ]);
+    // Without a Mac there is no map to open on.
+    expect(findMyView(null, null).lead).toBeUndefined();
   });
 
   it('says how many people and how long ago, never where', () => {

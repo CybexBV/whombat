@@ -666,8 +666,12 @@ const TASKS: { id: string; title: string; detail: string; late?: boolean; right?
   { id: 't6', title: 'Answer Lena about the offsite', detail: 'Work · Today', right: 'P3' },
 ];
 
-const todoist: FixtureServicePage = {
-  thing: 'connection:con_todoist',
+/**
+ * Todoist with an API token (`con_todoist`), or signed in with Todoist (`con_todoist_mcp`): the same page read through
+ * its MCP server's tools that only read, without Done.
+ */
+const todoistOf = (mcp: boolean): FixtureServicePage => ({
+  thing: mcp ? 'connection:con_todoist_mcp' : 'connection:con_todoist',
   catalogId: 'todoist',
   name: 'Todoist',
   make: (ctx) => {
@@ -691,6 +695,7 @@ const todoist: FixtureServicePage = {
           address: 'todoist.com',
           open: { label: 'Open Todoist', url: TODOIST },
         }),
+        ...(mcp ? { id: 'connection:con_todoist_mcp', connectionId: 'con_todoist_mcp' } : {}),
         tabs: summary([
           {
             kind: 'list',
@@ -706,7 +711,9 @@ const todoist: FixtureServicePage = {
               detail: t.detail,
               ...(t.late ? { tone: 'warn' as const } : {}),
               ...(t.right ? { right: t.right } : {}),
-              actions: [button({ action: 'done', target: t.id, label: 'Done', icon: 'check' })],
+              ...(mcp
+                ? {}
+                : { actions: [button({ action: 'done', target: t.id, label: 'Done', icon: 'check' })] }),
             })),
             empty: 'Nothing due today.',
           },
@@ -763,7 +770,7 @@ const todoist: FixtureServicePage = {
         };
       },
       action: ({ action, target }) => {
-        if (action !== 'done' || typeof target !== 'string' || done.has(target)) return null;
+        if (mcp || action !== 'done' || typeof target !== 'string' || done.has(target)) return null;
         const task = TASKS.find((t) => t.id === target);
         if (!task) return null;
         done.add(target);
@@ -775,7 +782,7 @@ const todoist: FixtureServicePage = {
       checks: [],
     };
   },
-};
+});
 
 /* T3 Code: a computer on the LAN ---------------------------------------------------------------------------------- */
 
@@ -1091,4 +1098,11 @@ const t3code: FixtureServicePage = {
   },
 };
 
-export const BIZ_DEV_PAGES: FixtureServicePage[] = [gitlab, forgejo, githubActions, todoist, t3code];
+export const BIZ_DEV_PAGES: FixtureServicePage[] = [
+  gitlab,
+  forgejo,
+  githubActions,
+  todoistOf(false),
+  todoistOf(true),
+  t3code,
+];

@@ -12,18 +12,18 @@ const page = {
   kind: 'connection',
   name: 'Find My',
   tabs: [
-    { key: 'summary', label: 'Summary', panels: [] },
     { key: 'findmy', label: 'Find My', server: 'studio', panels: [] },
     { key: FIND_MY_TIMELINE_TAB, label: 'Timeline', server: 'studio', panels: [] },
+    { key: 'overview', label: 'Summary', panels: [] },
   ],
 } as unknown as ThingPage;
 
 const keys = (p: unknown) => (p as ThingPage).tabs.map((t) => t.key);
 
 describe('a thing’s page for an older app', () => {
-  it('leaves the Timeline out below minor 5 and keeps Find My', () => {
+  it('leaves the Timeline out below minor 5, keeps Find My and opens on the Summary', () => {
     expect(keys(thingAnswerFor('things.page', page, FIND_MY_TIMELINE_MINOR - 1))).toEqual([
-      'summary',
+      'overview',
       'findmy',
     ]);
   });

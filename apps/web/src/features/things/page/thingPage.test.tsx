@@ -179,7 +179,7 @@ describe('every connection and device has a page (CP-06, CP-10, CP-13)', () => {
   it('gives a connection without its own figures the generic page, in slots', async () => {
     renderApp('/things/connection%3Acon_fixture_tracker', world());
     expect(await screen.findByRole('heading', { name: 'Acme Desk dev', level: 1 })).toBeTruthy();
-    expect(text(await card('How it answers'))).toContain('182 ms');
+    expect(text(await card('With Whombat'))).toContain('182 ms');
     expect(await card('Answer time')).toBeTruthy();
     // No row of figures, and no Worth a look while nothing needs one.
     expect(screen.queryByRole('region', { name: 'At a glance' })).toBeNull();

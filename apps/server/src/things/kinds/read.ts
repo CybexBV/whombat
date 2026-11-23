@@ -123,24 +123,27 @@ interface Cached {
   reading: Promise<unknown> | null;
   /** The last read's outcome. */
   last: Outcome | null;
+  /** How long its last outcome is worth keeping: a read kept an hour isn't dropped after the usual 15 minutes. */
+  keepMs: number;
 }
 
 const caches = new WeakMap<Services, Map<string, Cached>>();
 
 /** The cache entry of `key`, a new one when the credential changed; drops entries nobody can use any more. */
-function entryOf(services: Services, key: string, row: ReadRow, now: number): Cached {
+function entryOf(services: Services, key: string, row: ReadRow, now: number, keepMs = KIND_KEEP_MS): Cached {
   let cache = caches.get(services);
   if (!cache) {
     cache = new Map();
     caches.set(services, cache);
   }
-  for (const [k, v] of cache) if (!v.reading && (!v.last || now - v.last.at > KIND_KEEP_MS)) cache.delete(k);
+  for (const [k, v] of cache) if (!v.reading && (!v.last || now - v.last.at > v.keepMs)) cache.delete(k);
   const version = `${row.credentialVersion}:${row.updatedAt.getTime()}`;
   let entry = cache.get(key);
   if (entry?.version !== version) {
-    entry = { version, connectionId: row.id ?? null, reading: null, last: null };
+    entry = { version, connectionId: row.id ?? null, reading: null, last: null, keepMs: KIND_KEEP_MS };
     cache.set(key, entry);
   }
+  entry.keepMs = Math.max(entry.keepMs, keepMs);
   return entry;
 }
 
@@ -184,7 +187,7 @@ export function cachedRead<T>(
   ttlMs = KIND_CACHE_MS,
 ): Promise<T> {
   const now = Date.now();
-  const entry = entryOf(services, key, row, now);
+  const entry = entryOf(services, key, row, now, ttlMs);
   if (entry.last?.ok && now - entry.last.at <= ttlMs) return Promise.resolve(entry.last.value as T);
   return readNow(entry, load, now);
 }

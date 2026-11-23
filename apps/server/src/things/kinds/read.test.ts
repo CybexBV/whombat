@@ -136,6 +136,22 @@ describe('liveRead (SD-S05)', () => {
   });
 });
 
+describe('cachedRead kept long', () => {
+  it('keeps a read kept an hour past the usual 15 minutes, while other reads come and go', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-23T12:00:00Z'));
+    const services = {} as Services;
+    const hourly = loader(['bases']);
+    const other = loader(['a', 'b']);
+    expect(await cachedRead(services, 'airtable:1', row, hourly.load, 3_600_000)).toBe('bases');
+    vi.setSystemTime(Date.now() + 20 * 60_000);
+    // Another read drops what nobody can use any more; the hourly one stays.
+    await cachedRead(services, 'other:1', row, other.load);
+    expect(await cachedRead(services, 'airtable:1', row, hourly.load, 3_600_000)).toBe('bases');
+    expect(hourly.calls).toBe(1);
+  });
+});
+
 describe('forgetConnectionReads (SD-S10)', () => {
   it('reads a connection again after a button, every part of it, and leaves the others kept', async () => {
     const services = {} as Services;

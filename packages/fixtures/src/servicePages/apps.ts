@@ -735,7 +735,7 @@ const nextcloud: FixtureServicePage = {
   name: 'Nextcloud',
   fields: { url: NEXTCLOUD_URL },
   make: (ctx) => {
-    const { page } = kit(ctx);
+    const { page, week } = kit(ctx);
     return {
       page: () =>
         page({
@@ -781,6 +781,28 @@ const nextcloud: FixtureServicePage = {
                 }),
               ],
             },
+            // Space used, from Whombat's own readings of the free space: what was added each day.
+            {
+              kind: 'chart',
+              id: 'week',
+              place: 'chart',
+              span: 1,
+              title: 'Space used',
+              meta: 'From its free space',
+              style: 'bars',
+              ...week(),
+              series: [
+                {
+                  key: 'values',
+                  label: 'Added',
+                  values: [3.2, 1.1, null, 6.4, 0.8, 2.5, 1.4],
+                  color: 'violet',
+                  unit: 'GB',
+                },
+              ],
+              figure: { value: '+15 GB', rest: 'this week' },
+              axis: { min: 0 },
+            },
             {
               kind: 'bars',
               id: 'people',
@@ -800,11 +822,13 @@ const nextcloud: FixtureServicePage = {
                 person(3, 'Sam', '1.1 GB', 1.1 / 412, { note: 'Turned off' }),
               ],
             },
+            // Alone in its row: the server widens it and lays its lines side by side.
             {
               kind: 'bars',
               id: 'machine',
               place: 'chart',
-              span: 1,
+              span: 3,
+              columns: 3,
               title: 'Nextcloud itself',
               items: [
                 {

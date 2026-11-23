@@ -4,7 +4,8 @@
  * token through Todoist's API v1 (REST v2 and Sync v9 are gone): `tasks/filter?query=today | overdue`, the projects'
  * names (kept 15 minutes) and `tasks/completed/by_completion_date` for today (left out when it doesn't answer); kept 30
  * seconds, read again after Done. No Worth a look: a to-do list's overdue tasks are its owner's business, not a dot;
- * so nothing to watch either (quiet-notices.md QN-15: What Whombat watches is empty).
+ * so nothing to watch either (quiet-notices.md QN-15: What Whombat watches is empty). Signed in with Todoist, the same
+ * page is read through its MCP server's tools that only read (`todoist-mcp.ts`), without Done.
  */
 import type { ThingLine, ThingPageItem, ThingPageKpi } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
@@ -18,7 +19,6 @@ import type { KindCtx, KindView } from '../types';
 import {
   bumpGeneration,
   buttonsFor,
-  cannotRead,
   daysBetween,
   dayWords,
   generationOf,
@@ -35,6 +35,7 @@ import {
   todayStart,
   viewOrProblem,
 } from './common';
+import { todoistMcpLatest, todoistMcpPage, todoistMcpSeen } from './todoist-mcp';
 import { weekCounts } from './week';
 
 const NAME = 'Todoist';
@@ -470,12 +471,15 @@ export function todoistCardView(input: TodoistInput): KindView {
 
 /* The page and Done ------------------------------------------------------------------------------------------------- */
 
-/** Signed in with Todoist (its MCP server): its token isn't for the API this page reads (SD-S18). */
+/**
+ * Signed in with Todoist (its MCP server), its token isn't for the API this page reads: the page reads its server's
+ * tools instead (`todoist-mcp.ts`), and says this when the server offers no tasks to read.
+ */
 export const MCP_ONLY = 'This page needs Todoist connected with an API token.';
 
 export async function todoistPage(ctx: KindCtx): Promise<KindView> {
   const open = { label: 'Open Todoist', url: TODOIST_APP };
-  if (ctx.row.signIn === 'mcp_oauth') return cannotRead(MCP_ONLY, open);
+  if (ctx.row.signIn === 'mcp_oauth') return todoistMcpPage(ctx);
   const read = await todoistLatest(ctx.services, ctx.row, ctx.now, ctx.timeZone);
   return viewOrProblem(read, NAME, open, (snapshot) =>
     todoistView({ snapshot, now: ctx.now, timeZone: ctx.timeZone, button: buttonsFor(ctx) }),
@@ -484,6 +488,8 @@ export async function todoistPage(ctx: KindCtx): Promise<KindView> {
 
 /** **Done** on a task the page shows (SD-65): closes it (a repeating one moves to its next day); everyday (SD-08). */
 const done: KindAction = async (ctx, input) => {
+  // Signed in with Todoist the page offers no Done: its server's tools are only read for a page.
+  if (ctx.row.signIn === 'mcp_oauth') throw stale(NAME);
   const target = typeof input.target === 'string' ? input.target : '';
   const snapshot = await cachedRead(
     ctx.services,
@@ -509,9 +515,11 @@ export const TODOIST_KIND: KindModule = {
   page: todoistPage,
   checks: [],
   prefetch: (services, row, now, timeZone) =>
-    row.signIn === 'mcp_oauth' ? Promise.resolve(null) : todoistLatest(services, row, now, timeZone),
+    row.signIn === 'mcp_oauth'
+      ? todoistMcpLatest(services, row, now, timeZone)
+      : todoistLatest(services, row, now, timeZone),
   seen: async (services, row, now, timeZone) => {
-    if (row.signIn === 'mcp_oauth') return { glance: { facts: [] }, points: {}, notices: [] };
+    if (row.signIn === 'mcp_oauth') return todoistMcpSeen(services, row, now, timeZone);
     const snapshot = await cachedRead(
       services,
       keyOf(row, timeZone),

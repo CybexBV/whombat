@@ -10,7 +10,8 @@
  *   knows what it runs on, then the kind's or the generic ones, over the page's range (DS-03) — a service's own figures
  *   first and the machine's CPU and Memory after them when its kind says so (service-dashboards.md SD-03, SD-S02); the
  *   kinds come from the registry (`kinds/index.ts`, SD-S01); “Worth a look” as a strip
- *   on top while it has a line (docs/decisions/service-slots.md); the kind's main and side panels, a Proxmox or Unraid connection's “part of” text (CP-10), “Whombat did
+ *   on top while it has a line (docs/decisions/service-slots.md); the kind's main and side panels, a Proxmox or Unraid
+ *   connection's “part of” text when its kind read nothing (else its kind shows the server), “Whombat did
  *   here” and “What Whombat may do” in the main column; “Show more here” at the bottom. A panel with nothing to say is
  *   left out. Every panel says where it sits (`layout`).
  * - **In slots** (docs/decisions/service-slots.md): a kind's page in slots, and the page of a connection without a kind
@@ -57,6 +58,7 @@ import {
   genericNotices,
   layout,
   offeredRange,
+  orderTabs,
   PAGE_REFRESH_S,
   REFRESHING_S,
   rangeFields,
@@ -173,6 +175,16 @@ export function closingPanels(input: {
 
 const GENERIC_SUGGESTIONS = ['Response time', 'How often it’s used'];
 
+/**
+ * “Show more here” for a connection without a page of its own: a Custom one first offers what's inside it, which the
+ * assistant answers by writing its page.
+ */
+function genericSuggestions(row: Pick<CatalogConnectionRow, 'catalogId'>): string[] {
+  return row.catalogId === 'custom_api' || row.catalogId === 'custom_mcp'
+    ? ['What’s inside', ...GENERIC_SUGGESTIONS]
+    : GENERIC_SUGGESTIONS;
+}
+
 /** A connection's page over `range` (DS-03). */
 export async function connectionPage(
   services: Services,
@@ -227,11 +239,15 @@ export async function connectionPage(
     services.log.warn({ catalogId: row.catalogId, problems: misplaced }, 'service page: slots out of place');
   const rtt = points.get(RTT_KEY) ?? [];
   // A connection without a kind, and a kind whose read gave nothing to show, get the page's own slots: how it answers.
+  // A kind that opens on a tab of its own keeps its Summary to its notices and closing panels: nothing there answers.
+  const lead = view?.lead && view.tabs.some((t) => t.key === view.lead) ? view.lead : null;
   const slotted: Pick<KindView, 'panels' | 'slots'> | null = view?.slots
     ? view
-    : !view || bareView(view)
-      ? genericSlots(row, rtt, now, timeZone)
-      : null;
+    : lead
+      ? { panels: view?.panels ?? [] }
+      : !view || bareView(view)
+        ? genericSlots(row, rtt, now, timeZone)
+        : null;
   const problem = view?.problem ?? null;
 
   // The machine's figures and charts come first (DS-10), unless the kind draws them itself; a kind that puts its own
@@ -295,7 +311,8 @@ export async function connectionPage(
       title: 'Worth a look',
       items: marked.items,
     });
-  if (partOf) {
+  // A kind in slots shows the server's figures itself (Proxmox VE, Unraid); the sentence is for a page without them.
+  if (partOf && !view?.slots) {
     const server = partOf.slice('server:'.length);
     summary.push({
       kind: 'text',
@@ -333,7 +350,7 @@ export async function connectionPage(
               lookOnly: row.access === 'read',
             }
           : null,
-      suggestions: view?.suggestions ?? GENERIC_SUGGESTIONS,
+      suggestions: view?.suggestions ?? genericSuggestions(row),
     }),
   );
   const settingsTab =
@@ -341,16 +358,14 @@ export async function connectionPage(
       ? await kind.settings.tab(ctx)
       : null;
   const extraTabs = [...(settingsTab ? [settingsTab] : []), ...(view?.tabs ?? [])].slice(0, 7);
-  const tabs: ThingPageTab[] = [
-    {
-      ...SUMMARY_TAB,
-      panels: layout(
-        summary,
-        extraTabs.map((t) => t.key),
-      ).slice(0, 24),
-    },
-    ...extraTabs,
-  ];
+  const summaryTab: ThingPageTab = {
+    ...SUMMARY_TAB,
+    panels: layout(
+      summary,
+      extraTabs.map((t) => t.key),
+    ).slice(0, 24),
+  };
+  const tabs = orderTabs(summaryTab, extraTabs, lead);
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];
   if (connected) facts.push(connected);

@@ -20,7 +20,7 @@ work. The decisions are in [service-slots.md](decisions/service-slots.md); the b
 The machine card: the machine Whombat knows, linked; else the service's own figures (`KindView.slots.own`, a NAS or
 Home Assistant OS) as “The machine” without a link; else only the kind's lines as “<name> itself”. A page in slots
 never gets the response-time chart, the machine's charts or a row of figures, whatever the view sets; a chart over the
-page's range goes in `more`. A connection without a kind gets slots of its own (`things/generic.ts`: How it answers,
+page's range goes in `more`. A connection without a kind gets slots of its own (`things/generic.ts`: With Whombat,
 Answer time).
 
 A slot the service has nothing for is left out and the row closes up. Anything that fits no slot (failed downloads,

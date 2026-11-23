@@ -291,7 +291,8 @@ export function screenPanels(page: ThingPage, hints: KindHints, at: PanelsAt): P
  * line of its counts (Movies 1,284).
  */
 export function headFigures(page: ThingPage, hints?: Pick<KindHints, 'rowFigures'>): ThingPageKpi[] {
-  const panels = page.tabs[0]?.panels ?? [];
+  // The Summary's, also when a kind's own tab opens the page (Find My's map).
+  const panels = (page.tabs.find((t) => t.key === 'overview') ?? page.tabs[0])?.panels ?? [];
   const head =
     panels.find((p): p is PanelOf<'kpis'> => p.kind === 'kpis' && p.id === HEAD_FIGURES) ??
     panels.find((p): p is PanelOf<'kpis'> => p.kind === 'kpis');

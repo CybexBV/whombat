@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { slotProblems } from '../slots';
 import {
+  devicesNow,
   ESPHOME_CHECKS,
   type EspSnapshot,
   esphomeKpis,
@@ -243,16 +244,42 @@ describe('ESPHome', () => {
     expect(live.meta).toBe('1 installing · 2 waiting · ESPHome 2026.10.0 is here');
   });
 
-  it('leaves To update out when nothing waits or runs', () => {
+  it('shows Devices now in place of To update when nothing waits or runs', () => {
     const tidy: EspSnapshot = {
       ...real(),
       devices: real().devices.map((d) => ({ ...d, pending: false, update: false, state: 'online' as const })),
     };
     const view = esphomeView(tidy, { now: NOW, timeZone: TZ, buttons: { row: ROW } });
     expect(slotProblems(view)).toEqual([]);
-    expect(view.panels.map((p) => p.id)).toEqual(['inventory', 'devices']);
+    expect(view.panels.map((p) => p.id)).toEqual(['now', 'inventory', 'devices']);
+    const live = view.panels[0];
+    if (live?.kind !== 'list') throw new Error('Devices now is a list');
+    expect(live.title).toBe('Devices now');
+    expect(live.meta).toBe('All 2 online');
+    expect(live.items.every((i) => i.tone === 'ok' && i.detail?.startsWith('Online'))).toBe(true);
     expect(view.verdict).toBe('ESPHome is fine: all 2 devices are online and up to date.');
     expect(importableOf(ESPHOME_devices)).toBe(0);
     expect(esphomeKpis(tidy).map((k) => k.key)).toEqual(['online', 'updates', 'pending', 'version']);
+  });
+
+  it('lists the device offline longest first in Devices now', () => {
+    const base = real().devices[0] as EspSnapshot['devices'][number];
+    const devices = [
+      { ...base, config: 'a.yaml', name: 'Attic', state: 'online' as const, offlineSeconds: null },
+      { ...base, config: 'b.yaml', name: 'Barn', state: 'offline' as const, offlineSeconds: 3_600 },
+      { ...base, config: 'c.yaml', name: 'Cellar', state: 'offline' as const, offlineSeconds: 3 * 86_400 },
+      { ...base, config: 'd.yaml', name: 'Den', state: 'unknown' as const, offlineSeconds: null },
+    ].map((d) => ({ ...d, pending: false, update: false }));
+    const live = devicesNow({ ...real(), devices }, { now: NOW, timeZone: TZ });
+    if (live?.kind !== 'list') throw new Error('Devices now is a list');
+    expect(live.items.map((i) => [i.title, i.tone])).toEqual([
+      ['Cellar', 'warn'],
+      ['Barn', 'warn'],
+      ['Den', undefined],
+      ['Attic', 'ok'],
+    ]);
+    expect(live.items[0]?.detail).toMatch(/^Offline since /);
+    expect(live.meta).toBe('1 online · 2 offline');
+    expect(devicesNow({ ...real(), devices: [] }, { now: NOW, timeZone: TZ })).toBeNull();
   });
 });

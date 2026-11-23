@@ -42,7 +42,6 @@ import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
 import type { KindSeen } from '../things/kinds/registry';
-import { unraidHostname } from '../things/kinds/unraid';
 import { diskNotice, diskNow, type MachineNow } from '../things/machine';
 import { answerCheckOf, genericNotices, signinNotice } from '../things/panels';
 import { within } from '../things/part-of';
@@ -162,19 +161,15 @@ async function zoneOf(services: Services, row: CatalogConnectionRow): Promise<st
 
 /**
  * The glance of an entry Whombat has words for, from its kind's reader (the registry's `seen`, SD-S01, SD-05); null for
- * the others. Unraid's own name, for the server it is part of (SB-09): its address may not be the one the server reports.
+ * the others. Unraid's kind keeps its own name in the glance, for the server it is part of: its address may not
+ * be the one the server reports.
  */
 async function seenOf(
   services: Services,
   row: CatalogConnectionRow,
-  entry: CatalogEntry,
   now: Date,
   quiet?: Awaited<ReturnType<typeof thingQuiet>>,
 ): Promise<KindSeen | null> {
-  if (entry.id === 'unraid') {
-    const hostname = await unraidHostname(services, row);
-    return { glance: { facts: [], ...(hostname ? { hostname } : {}) }, points: {} };
-  }
   const seen = kindFor(row)?.seen;
   return seen ? seen(services, row, now, await zoneOf(services, row), quiet) : null;
 }
@@ -313,7 +308,7 @@ export async function checkConnectionHealth(
       // What the answer filled (Nextcloud's user id, connection-signin.md SG-15a), for the next calls.
       await recordFromCheck(services, row, outcome);
       const quiet = (await kept.catch(() => null))?.[0];
-      const seen = await seenOf(services, row, entry, now, quiet).catch(() => undefined);
+      const seen = await seenOf(services, row, now, quiet).catch(() => undefined);
       lines = genericNotices({ ...row, glance: null }, 0, null);
       if (seen === undefined) {
         // The check answered but the reader didn't: what showed stays, and none of the kind's checks were read.

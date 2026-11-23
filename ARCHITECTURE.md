@@ -1110,8 +1110,14 @@ Setup and operation: `docs/github.md`.
   Inventory counts, a Shelf, Trend, People) and the machine as one card after them (`things/machine.ts` `machineCard`;
   without a known machine the service's own figures, else its lines alone as “<name> itself”), with no row of figures,
   machine charts or response-time chart; desk widgets read such a page's figures from its live rows and counts. A
-  connection without a kind, or whose kind read nothing, gets slots of its own (`things/generic.ts`): how it answers
-  Whombat's checks and its answer time per day ([service-slots.md](docs/decisions/service-slots.md)) A Custom
+  connection without a kind, or whose kind read nothing, gets slots of its own (`things/generic.ts`, “With Whombat”):
+  how it answers Whombat's checks, its answer time per day and when Whombat last used it
+  ([service-slots.md](docs/decisions/service-slots.md)). The apps open a page's first tab: the Summary, unless the kind
+  names one of its own tabs as its dashboard (`KindView.lead`, Find My's map), which then comes first and the Summary
+  last; every catalog entry has a kind or is named with where it opens (`things/kinds/landing.test.ts`,
+  [connection-dashboards.md](docs/decisions/connection-dashboards.md)). Some kinds read only Whombat's own records (a
+  report tracker's mirror, the turns sent through an AI gateway: `things/kinds/own/`), and a kind may read a
+  “Sign in with …” connection through its MCP server's read-only tools (`things/kinds/mcp-read.ts`). A Custom
   connection (`custom_mcp`, `custom_api`) may have a page recipe instead (`catalog_connections.page`,
   `things/recipe/`): the assistant names what to read — MCP tools the server marks read-only, or GET paths — and where
   each value goes (Live, Inventory, Trend, a list, the head's facts, Worth a look's lines under the checks `page.broken`

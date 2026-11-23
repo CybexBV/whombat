@@ -5,7 +5,8 @@
  * chargeback or many failed payments in Worth a look. Read with the connection's key through Mollie API v2: the
  * payments newest first, paged back to the start of the month or 30 days (kept 5 minutes; the newest 50 every read),
  * `/v2/refunds`, `/v2/chargebacks`, and `/v2/settlements/next` (an access token or OAuth only: with a plain API key the
- * figure is left out), with descriptions and payers' names. Read only.
+ * figure is left out), with descriptions and payers' names. Read only. Signed in with Mollie, the same page is read
+ * through its MCP server's tools that only read, without refunds and chargebacks (`mollie-mcp.ts`).
  */
 import type { ThingLine, ThingPageItem, ThingPageKpi, ThingPagePanel } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
@@ -34,7 +35,6 @@ import {
   addTo,
   amount,
   amountOf,
-  cannotRead,
   lastDays,
   loader,
   localDay,
@@ -52,6 +52,7 @@ import {
   viewOrProblem,
   webUrl,
 } from './common';
+import { mollieMcpLatest, mollieMcpPage, mollieMcpSeen } from './mollie-mcp';
 
 const NAME = 'Mollie';
 const DAY = 86_400_000;
@@ -948,12 +949,15 @@ export function mollieSeen(input: MollieInput) {
 
 /* The page ----------------------------------------------------------------------------------------------------------- */
 
-/** Signed in with Mollie (its MCP server): its token isn't for the API this page reads (SD-S18). */
+/**
+ * Signed in with Mollie (its MCP server), its token isn't for the API this page reads: the page reads its server's
+ * tools instead (`mollie-mcp.ts`), and says this when the server offers no payments to read.
+ */
 export const MCP_ONLY = 'This page needs Mollie connected with an API key or access token.';
 
 export async function molliePage(ctx: KindCtx): Promise<KindView> {
   const open = { label: 'Open Mollie', url: DASHBOARD };
-  if (ctx.row.signIn === 'mcp_oauth') return cannotRead(MCP_ONLY, open);
+  if (ctx.row.signIn === 'mcp_oauth') return mollieMcpPage(ctx);
   const read = await mollieLatest(ctx.services, ctx.row, ctx.now, ctx.timeZone);
   return viewOrProblem(read, NAME, open, (snapshot) =>
     mollieView({ snapshot, now: ctx.now, timeZone: ctx.timeZone }),
@@ -964,11 +968,19 @@ export const MOLLIE_KIND: KindModule = {
   page: molliePage,
   asksFirst: 'anything that moves money asks first',
   prefetch: (services, row, now, timeZone) =>
-    row.signIn === 'mcp_oauth' ? Promise.resolve(null) : mollieLatest(services, row, now, timeZone),
+    row.signIn === 'mcp_oauth'
+      ? mollieMcpLatest(services, row, now, timeZone)
+      : mollieLatest(services, row, now, timeZone),
   checks: MOLLIE_WATCH,
   seen: async (services, row, now, timeZone) => {
     if (row.signIn === 'mcp_oauth')
-      return { glance: { facts: [] }, points: {}, notices: [], skipped: MOLLIE_WATCH.map((c) => c.check) };
+      return mollieMcpSeen(
+        services,
+        row,
+        now,
+        timeZone,
+        MOLLIE_WATCH.map((c) => c.check),
+      );
     const snapshot = await cachedRead(
       services,
       `mollie:${row.id}:${timeZone}`,

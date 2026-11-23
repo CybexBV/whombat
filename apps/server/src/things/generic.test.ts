@@ -51,6 +51,22 @@ describe('the page of a connection without a kind', () => {
     ]);
   });
 
+  it('says when Whombat last used it, also before any check answered', () => {
+    const used = genericSlots(
+      { status: 'active', glance: null, lastUsedAt: new Date(NOW.getTime() - 3 * HOUR) },
+      [],
+      NOW,
+      TZ,
+    );
+    expect(slotProblems(used)).toEqual([]);
+    const [panel] = used.panels;
+    expect(panel?.kind === 'list' && panel.items.map((i) => [i.id, i.figure?.value])).toEqual([
+      ['last-used', '3 h ago'],
+    ]);
+    const never = genericSlots({ status: 'active', glance: null, lastUsedAt: null }, [], NOW, TZ);
+    expect(never.panels[0]?.kind === 'list' && never.panels[0].items[0]?.figure?.value).toBe('Not yet');
+  });
+
   it('takes a kind whose read gave nothing for one without a kind', () => {
     expect(bareView({ panels: [], charts: [] })).toBe(true);
     expect(bareView({ panels: [], kpis: [{ key: 'a', label: 'A', value: '1' }] })).toBe(false);

@@ -1,0 +1,27 @@
+{
+  "tasks": [
+    {
+      "id": "6Jf8VQXxpwv56VS2",
+      "content": "Groceries",
+      "description": "",
+      "recurring": false,
+      "priority": "p4",
+      "projectId": "6Jf8VQXxpwv56VR0",
+      "checked": true,
+      "completedAt": "2026-10-21T11:40:00.000Z"
+    },
+    {
+      "id": "6Jf8VQXxpwv56VS1",
+      "content": "Reply to Ann",
+      "description": "",
+      "recurring": false,
+      "priority": "p4",
+      "projectId": "6Jf8VQXxpwv56VQ8",
+      "checked": true,
+      "completedAt": "2026-10-21T08:12:00.000Z"
+    }
+  ],
+  "totalCount": 2,
+  "hasMore": false,
+  "appliedFilters": { "getBy": "completion", "since": "2026-10-21", "until": "2026-10-21", "limit": 50 }
+}

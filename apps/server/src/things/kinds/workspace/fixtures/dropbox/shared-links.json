@@ -1,0 +1,20 @@
+{
+  "links": [
+    {
+      ".tag": "file",
+      "url": "https://www.dropbox.com/s/2sn712vy1ovegw8/Taxes%202026.pdf?dl=0",
+      "name": "Taxes 2026.pdf"
+    },
+    {
+      ".tag": "folder",
+      "url": "https://www.dropbox.com/sh/s6fvw6ol7rmqo1x/AAAgWRSbjmYDvPpDB30Sykjfa?dl=0",
+      "name": "Photos"
+    },
+    {
+      ".tag": "folder",
+      "url": "https://www.dropbox.com/sh/abcdefghijklmno/AAAAAAAAAAAAAAAAAAAAAAAAAa?dl=0",
+      "name": "Work"
+    }
+  ],
+  "has_more": false
+}

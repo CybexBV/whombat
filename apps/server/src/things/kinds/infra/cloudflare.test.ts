@@ -344,7 +344,7 @@ describe('cloudflare page', () => {
     expect(lots.tabs.map((t) => [t.key, t.panels[0]?.id])).toEqual([['sites', 'sites']]);
   });
 
-  it('asks an MCP connection for a token in a calm line', () => {
+  it('says under the name that a token shows more, with a hint that starts off', () => {
     expect(viaToken({ signIn: 'token' })).toBe(true);
     expect(viaToken({ signIn: 'mcp_oauth' })).toBe(false);
     const view = signInView();
@@ -355,7 +355,9 @@ describe('cloudflare page', () => {
       check: 'cloudflare.token_hint',
       link: { kind: 'tab', tab: 'settings' },
     });
-    expect(view.problem).toBeUndefined();
+    // The hint starts off (advice about settings), so the line under the name says it.
+    expect(CLOUDFLARE_CHECKS.find((c) => c.check === 'cloudflare.token_hint')?.startsOn).toBe(false);
+    expect(view.problem).toContain('API token');
   });
 
   it('skips RDAP when domain_expiring is off, runs it in seen when on, and never blocks or fails page reads', async () => {

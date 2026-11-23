@@ -214,6 +214,7 @@ How the split was made: `docs.md`.
 - `connection-signin.md` — connections that sign in properly (two-step, single sign-on).
 - `connect-in-chat.md` — setting up from the chat: the connect card, the write-only Vault card, servers found on the network, Add a server's failure card.
 - `connect-by-talking.md` — any MCP server or API connected by talking: the assistant fills in a Custom entry, the card takes the key and connects.
+- `connection-dashboards.md` — every connection opens on a dashboard: a kind's own tab first when that is its dashboard (Find My's map), pages from Whombat's own records (report tracker, AI gateway), Notion, Airtable, Dropbox, Proxmox VE and Unraid, reads through “Sign in with …” connections, and the test that every catalog entry has one.
 - `connection-looks.md` — a Custom connection's own logo (SVG turned into path shapes) and its page from a recipe the assistant writes.
 - `connections-more.md`, `connections-more-server.md`, `connections-more-mail.md` — more connections, mail over IMAP/SMTP.
 - `connections-page.md` — the page at `/connections`, Overview now (*in part*).
