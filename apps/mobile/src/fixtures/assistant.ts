@@ -32,6 +32,7 @@
 
 import { nextAt } from '@whombat/client';
 import {
+  createFindMyTimelineFixture,
   createMacFixture,
   FIND_MY_CONNECTION_FIELDS,
   FIND_MY_CONNECTION_ID,
@@ -57,6 +58,7 @@ import {
   type ConversationSummary,
   type DeviceSkillCard,
   FIND_MY_PEOPLE_TOOL,
+  FIND_MY_TIMELINE_TOOL,
   type Grant,
   type GrantInput,
   type HomeChat,
@@ -567,7 +569,10 @@ const CONNECTIONS: Record<
     handle: 'findmy',
     fields: { ...FIND_MY_CONNECTION_FIELDS },
     signIn: 'none',
-    tools: [[FIND_MY_PEOPLE_TOOL.name, FIND_MY_PEOPLE_TOOL.title, 'read', 'can']],
+    tools: [
+      [FIND_MY_PEOPLE_TOOL.name, FIND_MY_PEOPLE_TOOL.title, 'read', 'can'],
+      [FIND_MY_TIMELINE_TOOL.name, FIND_MY_TIMELINE_TOOL.title, 'read', 'can'],
+    ],
   },
   [HEAT_CONNECTION]: {
     catalogId: 'device',
@@ -583,7 +588,11 @@ const CONNECTIONS: Record<
 /** The demo's connections Settings → Connections lists (AP-2815). */
 const DEMO_CATALOG_CONNECTIONS = ['con_ha', 'con_unifi', 'con_hetzner', FIND_MY_CONNECTION_ID];
 
-function connectionTools(id: string, heatOn: boolean) {
+/**
+ * A connection with its tools as `connections.tools` answers it; `tiers` holds the tiers set since the demo started
+ * (`connectionId/tool`), over the table's.
+ */
+function connectionTools(id: string, heatOn: boolean, tiers: ReadonlyMap<string, string> = new Map()) {
   const c = CONNECTIONS[id];
   if (!c || (id === HEAT_CONNECTION && !heatOn)) return null;
   return {
@@ -613,7 +622,7 @@ function connectionTools(id: string, heatOn: boolean) {
       name,
       description,
       access,
-      tier,
+      tier: (tiers.get(`${id}/${name}`) ?? tier) as typeof tier,
       sensitive: false,
       isNew: false,
       ...(name === 'heat_pump_room_setpoint'
@@ -1426,6 +1435,13 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
   // studio, a Mac: its screen as the Mac's agent answers it (macos-servers.md MAC-36) and its Find My, on the demo
   // world's clock (a read and a picture take a couple of seconds of it).
   const macFx = createMacFixture(now().getTime(), 'ready', () => now().getTime());
+  // Tool tiers set since the demo started, and Find My's timeline, whose assistant switch is `findmy_timeline`'s tier.
+  const toolTiers = new Map<string, string>();
+  const timelineFx = createFindMyTimelineFixture({
+    clock: () => now().getTime(),
+    assistantReads: () =>
+      (toolTiers.get(`${FIND_MY_CONNECTION_ID}/${FIND_MY_TIMELINE_TOOL.name}`) ?? 'can') === 'can',
+  });
   // thetitan's Incus instances and blackbox's Unraid, containers and VMs (incus-unraid-mobile.md AP-1640).
   const iu = createIuFixtures({ now, emit, setTimer, hostsTopic, guests, json, notFound, bodyOf });
   // The servers' Summaries: figures, sensors, storages and history of the dashboards' servers (AP-2135).
@@ -1748,9 +1764,37 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
         });
       }
       case 'connections.tools': {
-        const tools = labelled(connectionTools(params.connectionId ?? '', heat.status === 'on'));
+        const tools = labelled(connectionTools(params.connectionId ?? '', heat.status === 'on', toolTiers));
         const made = connect.added().find((c) => c.id === params.connectionId);
         return tools ? json(tools) : made ? json(addedTools(made)) : null;
+      }
+      // A tool's tier (the Find My timeline's “can read it” switch sets `findmy_timeline`'s).
+      case 'connections.setTool': {
+        const connectionId = params.connectionId ?? '';
+        const was = connectionTools(connectionId, heat.status === 'on', toolTiers);
+        if (!was?.tools.some((t) => t.name === params.tool))
+          return notFound('That tool isn’t one of this connection’s.');
+        const { tier } = await bodyOf<{ tier: string }>(init);
+        toolTiers.set(`${connectionId}/${params.tool}`, tier);
+        return json(labelled(connectionTools(connectionId, heat.status === 'on', toolTiers)));
+      }
+      // Find My's timeline (findmy-timeline.md §1): Noor and Ruben kept, on the demo world's clock.
+      case 'connections.findMyTimeline':
+      case 'connections.findMyTimelineSet':
+      case 'connections.findMyTimelineDelete':
+      case 'connections.findMyTimelineMap': {
+        if (params.connectionId !== FIND_MY_CONNECTION_ID)
+          return notFound('That isn’t a Find My connection.');
+        const query = Object.fromEntries(url.searchParams);
+        const answer =
+          id === 'connections.findMyTimeline'
+            ? timelineFx.timeline(query)
+            : id === 'connections.findMyTimelineSet'
+              ? timelineFx.set(await bodyOf<unknown>(init))
+              : id === 'connections.findMyTimelineDelete'
+                ? timelineFx.remove(await bodyOf<unknown>(init))
+                : timelineFx.map(query);
+        return json(answer.body, answer.status);
       }
       // Settings → Connections (connections-more-android.md AP-2815): the burrow's catalog connections (Mail is Mara's
       // Google, a device lives on its own page), the catalog's statuses and Mara's own accounts.

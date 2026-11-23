@@ -112,3 +112,41 @@ describe('studio’s Find My in the demo world', () => {
     expect(picture.data).toMatchObject({ person, format: 'png' });
   });
 });
+
+describe('Find My’s timeline in the demo world', () => {
+  const params = { burrow, connectionId: 'con_findmy' };
+  const tz = 'Europe/Amsterdam';
+
+  it('keeps Noor and Ruben, draws a day’s map, and its assistant switch is the tool’s tier', async () => {
+    const client = setup();
+    const today = new Date(at('14:05')).toISOString().slice(0, 10);
+    const day = await client.request(api.connections.findMyTimeline, {
+      params,
+      query: { date: today, tz, days: 1 },
+    });
+    if (day.status !== 'ok') throw new Error(day.status);
+    expect(day.data.people.filter((p) => p.kept).map((p) => p.name)).toEqual(['Noor Visser', 'Ruben Visser']);
+    expect(day.data.assistantReads).toBe(true);
+    const ruben = day.data.people.find((p) => p.name === 'Ruben Visser')?.id ?? '';
+    const map = await client.request(api.connections.findMyTimelineMap, {
+      params,
+      query: { person: ruben, date: today, tz, w: 320, h: 224, dark: 'false' },
+    });
+    expect(map.status === 'ok' && map.data.points.length).toBeGreaterThan(0);
+
+    const off = await client.request(api.connections.setTool, {
+      params: { ...params, tool: 'findmy_timeline' },
+      body: { tier: 'off' },
+    });
+    expect(off.status === 'ok' && off.data.tools.find((t) => t.name === 'findmy_timeline')?.tier).toBe('off');
+    const after = await client.request(api.connections.findMyTimeline, {
+      params,
+      query: { date: today, tz, days: 7 },
+    });
+    expect(after.status === 'ok' && after.data.assistantReads).toBe(false);
+    expect(after.status === 'ok' && after.data.days).toHaveLength(7);
+
+    const stopped = await client.request(api.connections.findMyTimelineSet, { params, body: { people: [] } });
+    expect(stopped.status === 'ok' && stopped.data.people.some((p) => p.kept)).toBe(false);
+  });
+});
