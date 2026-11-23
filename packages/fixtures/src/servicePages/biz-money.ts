@@ -202,7 +202,11 @@ const PAYMENTS: {
   },
 ];
 
-function mollie(ctx: FixtureServiceCtx): ThingPage {
+/**
+ * Mollie with a key (`con_mollie`), or signed in with Mollie (`con_mollie_mcp`): the same page read through its MCP
+ * server's tools that only read, which have no refunds or chargebacks and read back 100 payments (“at least”).
+ */
+function mollie(ctx: FixtureServiceCtx, mcp = false): ThingPage {
   const hours = Array.from({ length: 24 }, (_, h) => h);
   const nowHour = new Date(ctx.now()).getHours();
   const start = new Date(ctx.now());
@@ -215,11 +219,11 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
     0, 0, 0, 0, 0, 0, 30, 30, 95, 180, 210, 310, 420, 470, 520, 640, 700, 760, 790, 840, 900, 930, 960,
   ];
   return head(ctx, {
-    id: 'connection:con_mollie',
+    id: mcp ? 'connection:con_mollie_mcp' : 'connection:con_mollie',
     catalogId: 'mollie',
     name: 'Mollie',
-    status: 'bad',
-    badge: 'Chargeback of € 89.00',
+    status: mcp ? 'ok' : 'bad',
+    badge: mcp ? 'Taking payments' : 'Chargeback of € 89.00',
     facts: [
       strong('Live', ' payments'),
       [{ text: 'Last paid ' }, { text: '6 min', strong: true }, { text: ' ago' }],
@@ -228,21 +232,25 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
     open: MOLLIE,
     panels: [
       ...strip([
-        notice(
-          ctx,
-          {
-            id: 'chargeback-chb_xs8w3s',
-            tone: 'bad',
-            icon: 'money',
-            title: 'Chargeback of € 89.00',
-            detail: 'The payer’s bank took it back on 2 Nov: Not received.',
-            link: { kind: 'url', label: 'Open in Mollie', url: MOLLIE },
-            subject: { id: 'chargeback:chb_xs8w3s', name: '€ 89.00 on 2 Nov' },
-          },
-          'you',
-          'mollie.chargeback',
-          'Until it’s reversed.',
-        ),
+        ...(mcp
+          ? []
+          : [
+              notice(
+                ctx,
+                {
+                  id: 'chargeback-chb_xs8w3s',
+                  tone: 'bad',
+                  icon: 'money',
+                  title: 'Chargeback of € 89.00',
+                  detail: 'The payer’s bank took it back on 2 Nov: Not received.',
+                  link: { kind: 'url', label: 'Open in Mollie', url: MOLLIE },
+                  subject: { id: 'chargeback:chb_xs8w3s', name: '€ 89.00 on 2 Nov' },
+                },
+                'you',
+                'mollie.chargeback',
+                'Until it’s reversed.',
+              ),
+            ]),
       ]),
       {
         kind: 'list',
@@ -278,8 +286,8 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
             id: 'paid',
             title: 'Paid',
             icon: 'money',
-            detail: '214 payments',
-            value: '€ 18,460',
+            detail: mcp ? 'At least 100 payments' : '214 payments',
+            value: mcp ? '€ 9,840' : '€ 18,460',
             note: '+€ 6,100 this week',
             noteTone: 'ok',
             url: MOLLIE,
@@ -292,15 +300,19 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
             value: '€ 74',
             url: MOLLIE,
           }),
-          count({
-            id: 'chargebacks',
-            title: 'Chargebacks',
-            icon: 'warn',
-            detail: 'Last 30 days',
-            value: '1',
-            tone: 'bad',
-            url: MOLLIE,
-          }),
+          ...(mcp
+            ? []
+            : [
+                count({
+                  id: 'chargebacks',
+                  title: 'Chargebacks',
+                  icon: 'warn',
+                  detail: 'Last 30 days',
+                  value: '1',
+                  tone: 'bad',
+                  url: MOLLIE,
+                }),
+              ]),
           count({
             id: 'payout',
             title: 'Next payout',
@@ -318,7 +330,8 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
         values: [740, 1210, 980, 610, 450, 930, 1180],
         figure: '€ 6,100',
         rest: 'paid this week',
-        change: '+12 %',
+        // Signed in with Mollie the read doesn't reach the week before.
+        ...(mcp ? {} : { change: '+12 %' }),
         color: 'green',
       }),
       peoplePanel('Who paid most', 'This month', [
@@ -358,39 +371,42 @@ function mollie(ctx: FixtureServiceCtx): ThingPage {
         ],
         axis: { min: 0 },
       },
-      {
-        kind: 'list',
-        id: 'refunds',
-        place: 'main',
-        title: 'Refunds and chargebacks',
-        items: [
-          {
-            id: 'cb-chb_xs8w3s',
-            title: 'Chargeback € 89.00',
-            detail: 'Not received',
-            at: ctx.ago(2 * DAY),
-            tone: 'bad',
-          },
-          {
-            id: 're-re_4qqhO8',
-            title: 'Refund € 49.00',
-            detail: 'Returned order 1031',
-            at: ctx.ago(3 * DAY),
-            right: 'Refunded',
-          },
-          {
-            id: 're-re_4qqhO2',
-            title: 'Refund € 25.00',
-            detail: 'Order 1022',
-            at: ctx.ago(9 * DAY),
-            right: 'Refunded',
-          },
-        ],
-        empty: 'No refunds or chargebacks.',
-      },
+      ...(mcp ? [] : [refundsPanel(ctx)]),
     ],
   });
 }
+
+/** Refunds and chargebacks below the slots: only a key reads them. */
+const refundsPanel = (ctx: FixtureServiceCtx): ThingPagePanel => ({
+  kind: 'list',
+  id: 'refunds',
+  place: 'main',
+  title: 'Refunds and chargebacks',
+  items: [
+    {
+      id: 'cb-chb_xs8w3s',
+      title: 'Chargeback € 89.00',
+      detail: 'Not received',
+      at: ctx.ago(2 * DAY),
+      tone: 'bad',
+    },
+    {
+      id: 're-re_4qqhO8',
+      title: 'Refund € 49.00',
+      detail: 'Returned order 1031',
+      at: ctx.ago(3 * DAY),
+      right: 'Refunded',
+    },
+    {
+      id: 're-re_4qqhO2',
+      title: 'Refund € 25.00',
+      detail: 'Order 1022',
+      at: ctx.ago(9 * DAY),
+      right: 'Refunded',
+    },
+  ],
+  empty: 'No refunds or chargebacks.',
+});
 
 /* Moneybird ------------------------------------------------------------------------------------------------------ */
 
@@ -901,6 +917,17 @@ const CRM_PAGES: FixtureServicePage[] = CRMS.map((w) => ({
   },
 }));
 
+const MOLLIE_CHECKS: NonNullable<ReturnType<FixtureServicePage['make']>['checks']> = [
+  { check: 'mollie.chargeback', name: 'Chargebacks', nature: 'you', perItem: true },
+  {
+    check: 'mollie.payments_failing',
+    name: 'Many payments failing today',
+    nature: 'problem',
+    perItem: false,
+  },
+  { check: 'mollie.test_mode', name: 'Only test payments', nature: 'fyi', perItem: false },
+];
+
 export const BIZ_MONEY_PAGES: FixtureServicePage[] = [
   {
     thing: 'connection:con_mollie',
@@ -916,16 +943,23 @@ export const BIZ_MONEY_PAGES: FixtureServicePage[] = [
         ],
         reason: 'Chargeback of € 89.00',
       }),
-      checks: [
-        { check: 'mollie.chargeback', name: 'Chargebacks', nature: 'you', perItem: true },
-        {
-          check: 'mollie.payments_failing',
-          name: 'Many payments failing today',
-          nature: 'problem',
-          perItem: false,
-        },
-        { check: 'mollie.test_mode', name: 'Only test payments', nature: 'fyi', perItem: false },
-      ],
+      checks: MOLLIE_CHECKS,
+    }),
+  },
+  {
+    thing: 'connection:con_mollie_mcp',
+    catalogId: 'mollie',
+    name: 'Mollie',
+    make: (ctx) => ({
+      page: () => mollie(ctx, true),
+      row: () => ({
+        line: '€ 1,180 today',
+        facts: [
+          { label: 'Paid today', value: '€ 1,180' },
+          { label: 'This month', value: '€ 9,840', note: 'at least' },
+        ],
+      }),
+      checks: MOLLIE_CHECKS,
     }),
   },
   {

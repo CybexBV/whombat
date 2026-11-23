@@ -1,0 +1,53 @@
+{
+  "tasks": [
+    {
+      "id": "6Jf8VQXxpwv56VQ7",
+      "content": "Pay the [VAT return](https://example.com/vat)",
+      "description": "",
+      "dueDate": "2026-10-21",
+      "recurring": false,
+      "priority": "p1",
+      "projectId": "6Jf8VQXxpwv56VQ8",
+      "checked": false
+    },
+    {
+      "id": "6Jf8VQXxpwv56VT1",
+      "content": "Book the train to Ghent",
+      "description": "",
+      "dueDate": "2026-10-22",
+      "recurring": false,
+      "priority": "p4",
+      "projectId": "6Jf8VQXxpwv56VR0",
+      "checked": false
+    },
+    {
+      "id": "6Jf8VQXxpwv56VT2",
+      "content": "Team lunch",
+      "description": "",
+      "dueDate": "2026-10-23T10:00:00Z",
+      "recurring": false,
+      "priority": "p3",
+      "projectId": "6Jf8VQXxpwv56VQ8",
+      "checked": false
+    },
+    {
+      "id": "6Jf8VQXxpwv56VT3",
+      "content": "Clean the gutters",
+      "description": "",
+      "dueDate": "2026-10-24",
+      "recurring": false,
+      "priority": "p4",
+      "projectId": "6Jf8VQXxpwv56VR0",
+      "checked": false
+    }
+  ],
+  "totalCount": 4,
+  "hasMore": false,
+  "appliedFilters": {
+    "startDate": "today",
+    "overdueOption": "exclude-overdue",
+    "daysCount": 7,
+    "limit": 40,
+    "responsibleUserFiltering": "all"
+  }
+}

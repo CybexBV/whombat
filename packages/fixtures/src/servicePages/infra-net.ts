@@ -112,6 +112,18 @@ function kit(ctx: FixtureServiceCtx) {
 
 const CLOUDFLARE = 'connection:con_cloudflare' as const;
 const CF_DASH = 'https://dash.cloudflare.com/';
+const CF_CHECKS: NonNullable<ReturnType<FixtureServicePage['make']>['checks']> = [
+  { check: 'cloudflare.tunnel_down', name: 'Tunnels going down', nature: 'problem', perItem: true },
+  {
+    check: 'cloudflare.tunnel_degraded',
+    name: 'Tunnels losing connections',
+    nature: 'problem',
+    perItem: true,
+  },
+  { check: 'cloudflare.cert', name: 'Certificates ending', nature: 'problem', perItem: true },
+  { check: 'cloudflare.zone', name: 'Sites that aren’t active', nature: 'you', perItem: true },
+  { check: 'cloudflare.paused', name: 'Paused sites', nature: 'fyi', perItem: true },
+];
 
 const cloudflare: FixtureServicePage = {
   thing: CLOUDFLARE,
@@ -292,17 +304,102 @@ const cloudflare: FixtureServicePage = {
         cleared.add(target);
         return { message: `Cleared Cloudflare’s cache for ${target}.`, recorded: true };
       },
+      checks: CF_CHECKS,
+    };
+  },
+};
+
+/**
+ * Cloudflare signed in with Cloudflare (`con_cloudflare_mcp`): its MCP server's only tool that reads is who signed in,
+ * so the page is a connection's own (How it answers, Answer time) and the line under the name says a token shows more.
+ */
+const cloudflareMcp: FixtureServicePage = {
+  thing: 'connection:con_cloudflare_mcp',
+  catalogId: 'cloudflare',
+  name: 'Cloudflare',
+  make: (ctx) => {
+    const { head, summary, week, count } = kit(ctx);
+    const page = (): ThingPage => ({
+      ...head(
+        'connection:con_cloudflare_mcp',
+        'cloudflare',
+        'Cloudflare',
+        'ok',
+        'Running fine',
+        [[{ text: 'Checked ' }, { text: '3 min', strong: true }, { text: ' ago' }]],
+        'mcp.cloudflare.com',
+        CF_DASH,
+      ),
+      problem: 'An API token shows its traffic and tunnels here.',
+      tabs: [
+        summary(
+          [],
+          [
+            {
+              kind: 'list',
+              id: 'answers',
+              place: 'chart',
+              span: 1,
+              look: 'counts',
+              title: 'How it answers',
+              meta: 'Whombat’s checks',
+              items: [
+                count({
+                  id: 'answers',
+                  title: 'Answers',
+                  icon: 'network',
+                  detail: '2,016 checks in 7 days',
+                  value: '100 %',
+                  note: 'All answered',
+                  noteTone: 'ok',
+                }),
+                count({
+                  id: 'answer-time',
+                  title: 'Answers in',
+                  icon: 'clock',
+                  detail: 'Typical today',
+                  value: '214 ms',
+                  note: '+3 % on last week',
+                }),
+              ],
+            },
+            {
+              kind: 'chart',
+              id: 'week',
+              place: 'chart',
+              span: 1,
+              title: 'Answer time',
+              meta: 'Typical per day',
+              style: 'bars',
+              ...week(),
+              series: [
+                {
+                  key: 'values',
+                  label: 'Answer time',
+                  values: [208, 199, 226, 241, 205, 192, 214],
+                  color: 'blue',
+                  unit: 'ms',
+                },
+              ],
+              figure: { value: '212 ms', rest: 'typical this week' },
+              stats: [[{ text: '+3 %', strong: true }, { text: ' on last week' }]],
+              axis: { min: 0 },
+            },
+          ],
+        ),
+      ],
+    });
+    return {
+      page,
+      row: () => ({ line: 'Running fine' }),
       checks: [
-        { check: 'cloudflare.tunnel_down', name: 'Tunnels going down', nature: 'problem', perItem: true },
+        ...CF_CHECKS,
         {
-          check: 'cloudflare.tunnel_degraded',
-          name: 'Tunnels losing connections',
-          nature: 'problem',
-          perItem: true,
+          check: 'cloudflare.token_hint',
+          name: 'The hint to connect with an API token',
+          nature: 'fyi',
+          perItem: false,
         },
-        { check: 'cloudflare.cert', name: 'Certificates ending', nature: 'problem', perItem: true },
-        { check: 'cloudflare.zone', name: 'Sites that aren’t active', nature: 'you', perItem: true },
-        { check: 'cloudflare.paused', name: 'Paused sites', nature: 'fyi', perItem: true },
       ],
     };
   },
@@ -941,4 +1038,4 @@ const tailscale: FixtureServicePage = {
   },
 };
 
-export const INFRA_NET_PAGES: FixtureServicePage[] = [cloudflare, opnsense, tailscale];
+export const INFRA_NET_PAGES: FixtureServicePage[] = [cloudflare, cloudflareMcp, opnsense, tailscale];
