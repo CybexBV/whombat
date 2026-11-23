@@ -31,6 +31,7 @@ import {
 import { loadAssessmentCards, loadReportCards } from '../feedback/cards';
 import { toAttachment } from '../files/service';
 import { messageFileInFiles } from '../files/space';
+import { findMyWatchCards } from '../hosts/findmy-watch-cards';
 import { iso, isoOrNull } from '../lib/time';
 import { lookPlanCards } from '../looks/research';
 import { scheduleCardsFor } from '../schedules/store';
@@ -198,6 +199,7 @@ export async function loadMessages(
   const automationPlanIds = cards.flatMap((c) => (c.kind === 'automation_plan' ? [c.planId] : []));
   const lookPlanIds = cards.flatMap((c) => (c.kind === 'look_plan' ? [c.researchId] : []));
   const featureRequestIds = cards.flatMap((c) => (c.kind === 'feature_request' ? [c.requestId] : []));
+  const watchIds = cards.flatMap((c) => (c.kind === 'findmy_watch' ? [c.watchId] : []));
   const attachmentIds = rows.flatMap((r) => r.attachmentIds);
   const [
     plans,
@@ -209,6 +211,7 @@ export async function loadMessages(
     automationPlanViews,
     lookPlanViews,
     featureRequestViews,
+    watchViews,
     reactionRows,
     attachmentRows,
   ] = await Promise.all([
@@ -225,6 +228,8 @@ export async function loadMessages(
     lookPlanCards(db, lookPlanIds),
     // So does a feature request (report-trackers.md TA-44).
     featureRequestCards(db, featureRequestIds),
+    // A Find My watch reads the same for everyone too (findmy-watch.md).
+    findMyWatchCards(db, watchIds),
     db
       .select({
         messageId: reactions.messageId,
@@ -291,6 +296,8 @@ export async function loadMessages(
           requestId: card.requestId,
           request: featureRequestViews.get(card.requestId) ?? null,
         };
+      case 'findmy_watch':
+        return { kind: 'findmy_watch', watchId: card.watchId, watch: watchViews.get(card.watchId) ?? null };
       default:
         return card;
     }

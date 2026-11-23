@@ -4,7 +4,7 @@
  * each Whombat and the account with the subscription; Stripe Checkout and back; a Whombat removed; Link ending.
  */
 import { expect, type Page, test } from '@playwright/test';
-import { fake, fresh } from './support';
+import { fake, fresh, openSignInLink } from './support';
 
 test.beforeEach(async ({ page }) => {
   await fresh(page);
@@ -27,7 +27,7 @@ const agree = (page: Page) =>
 async function signInNew(page: Page) {
   await page.getByLabel('Email').fill('mara@burrowhq.example');
   await page.getByRole('button', { name: 'Email me a link' }).click();
-  await page.goto(await fake<string>(page, 'lastLink'));
+  await openSignInLink(page, await fake<string>(page, 'lastLink'));
   await expect(home(page)).toBeVisible();
 }
 
@@ -43,7 +43,7 @@ test('signed out, the box’s code and an email: the link comes back to /link, w
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const link = await fake<string>(page, 'lastLink');
   expect(decodeURIComponent(link)).toContain(`next=/add?code=${code}`);
-  await page.goto(link);
+  await openSignInLink(page, link);
   await expect(page.getByRole('heading', { name: 'Add Home?' })).toBeVisible();
   await expect(page.getByText('Your first month is free. No card needed.')).toBeVisible();
   await agree(page);

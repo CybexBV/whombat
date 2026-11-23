@@ -26,6 +26,7 @@ import { ONE_WHOMBAT_COMMANDS } from '../home/commands';
 import { HOSTS_COMMANDS } from '../hosts/commands';
 import { FIND_MY_COMMANDS } from '../hosts/findmy-places';
 import { FIND_MY_TIMELINE_COMMANDS } from '../hosts/findmy-timeline';
+import { FIND_MY_WATCH_COMMANDS } from '../hosts/findmy-watch';
 import { FOLLOWED_TASK_COMMANDS } from '../hosts/followed';
 import { MAIL_TRIGGER_COMMANDS } from '../mail-triggers/index';
 import { setAgentNotes } from '../memory/notes';
@@ -220,6 +221,7 @@ export const COMMANDS: CommandDef[] = [
   ...FIND_MY_COMMANDS,
   // Where the people the person ticked were, 30 days — findmy-timeline.md.
   ...FIND_MY_TIMELINE_COMMANDS,
+  ...FIND_MY_WATCH_COMMANDS,
   // Devices Whombat doesn't support yet — one-whombat-devices.md.
   ...DEVICES_COMMANDS,
   // The desk screen paired to a person — desk-display-server.md.

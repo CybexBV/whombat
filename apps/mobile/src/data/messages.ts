@@ -25,6 +25,7 @@ import {
   earlierCardLine,
   earlierCardText,
   featureRequestLine,
+  findMyWatchLine,
   foldIntoRuns,
   type LookPlanCardView,
   lastReplyLabel,
@@ -74,6 +75,7 @@ import {
   describeScheduleWhen,
   evidenceLine,
   FEEDBACK_OUTCOME_LABELS,
+  findMyWatchCardLines,
   formatAdditions,
   formatClock,
   formatCommitsFooter,
@@ -158,6 +160,8 @@ export interface CardSummary {
   deploy?: { url: string | null };
   /** A server task Whombat follows (task-feedback.md AP-4305): the live card while it runs, its server's page. */
   task?: TaskCardModel | null;
+  /** A one-time Find My watch that still watches (findmy-watch.md): its Cancel. */
+  findMyWatch?: { watchId: string } | null;
 }
 
 /** A card's head in the one layout, with its time in the person's zone and what folds under it. */
@@ -752,6 +756,19 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
         },
       };
     }
+    case 'findmy_watch': {
+      // A one-time Find My watch (findmy-watch.md), every word core's: what it waits for and until when, with Cancel
+      // while it watches. One nobody can read any more leaves the message's words alone.
+      if (!card.watch) return null;
+      const lines = findMyWatchCardLines(card.watch, ctx.timeZone, ctx.now);
+      return {
+        ...base,
+        label: '',
+        title: lines.title,
+        detail: lines.detail,
+        findMyWatch: lines.canCancel ? { watchId: card.watchId } : null,
+      };
+    }
     case 'answer':
     case 'digest':
     case 'guide':
@@ -790,8 +807,8 @@ export function lookPlanItem(card: LookPlanCard): LookPlanItem | null {
 
 /**
  * A settled card's line (docs/decisions/card-settle.md AP-731), for the cards that aren't runs (a run's line is
- * `card.runLine` or `card.runSettled`): approval, plan, schedule, assessment, a feature request and a retried failed
- * turn. Null while the card is still a card, and for a card without a line. `authorId`: who posted it, the agent of a
+ * `card.runLine` or `card.runSettled`): approval, plan, schedule, assessment, a feature request, a retried failed
+ * turn and an ended Find My watch. Null while the card is still a card, and for a card without a line. `authorId`: who posted it, the agent of a
  * schedule the viewer can't read.
  */
 export function settledLine(
@@ -840,6 +857,8 @@ export function settledLine(
       return deploySettledLine(card);
     case 'task':
       return taskLine(card, ctx.now.getTime());
+    case 'findmy_watch':
+      return card.watch ? findMyWatchLine(card.watch, ctx.timeZone, ctx.now.getTime()) : null;
     default:
       return null;
   }

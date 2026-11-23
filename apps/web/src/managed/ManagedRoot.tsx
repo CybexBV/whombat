@@ -245,25 +245,36 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
     const dropped = ['/claim', '/signup'].includes(window.location.pathname) && window.location.hash !== '';
     if (add || dropped) window.history.replaceState(null, '', window.location.pathname);
   });
+  // The token leaves the address bar at once, but is used only when the person taps Sign in: mail scanners (Microsoft
+  // 365's among them) open every link in a browser that runs the page, and would use the one-time link up first.
   useEffect(() => {
+    if (verify) window.history.replaceState(null, '', '/auth/verify');
+  }, [verify]);
+  const [verifying, setVerifying] = useState(false);
+  const signInWithLink = useCallback(() => {
     if (!verify) return;
-    window.history.replaceState(null, '', '/auth/verify');
-    let live = true;
-    // One request per one-use token, however often the effect runs (StrictMode runs it twice).
+    setVerifying(true);
+    setVerifyError(null);
+    // One request per one-use token, however often it's asked for.
     verifyOnce(env, verify.token).then(
       (s) => {
-        if (!live) return;
         setCloud(s);
         navigate(verify.next);
-        // Used: a later sign-out (or account deletion) shows the sign-in page, not “Signing you in…”.
+        // Used: a later sign-out (or account deletion) shows the sign-in page, not this one.
         setVerify(null);
+        setVerifying(false);
       },
-      () => live && setVerifyError(COPY.signIn.badLink),
+      () => {
+        setVerifying(false);
+        setVerifyError(COPY.signIn.badLink);
+      },
     );
-    return () => {
-      live = false;
-    };
   }, [verify, env, navigate]);
+  const askForNewLink = useCallback(() => {
+    setVerify(null);
+    setVerifyError(null);
+    navigate('/');
+  }, [navigate]);
 
   // Set up again after this browser was removed (AP-39): the revoked key is discarded and a new one made.
   const rekey = useCallback(async () => {
@@ -378,7 +389,15 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
   // page (never a sign-in's `next`).
   if (url.pathname === PHONE_SIGNIN_PATH) return <PhoneLinkPage loadDownload={loadAndroid} />;
   // The waitlist and invite codes went with open sign-up (Whombat Link, LNK-31): their old links show the sign-in.
-  if (verify && (cloud === 'loading' || !cloud || verifyError)) return <VerifyScreen error={verifyError} />;
+  if (verify)
+    return (
+      <VerifyScreen
+        error={verifyError}
+        busy={verifying}
+        onSignIn={signInWithLink}
+        onNewLink={askForNewLink}
+      />
+    );
   if (cloud === 'loading' || key === null) return null;
   if (key === 'weakKey')
     return (

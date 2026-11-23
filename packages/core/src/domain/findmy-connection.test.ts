@@ -65,14 +65,16 @@ describe('the Find My entry', () => {
     expect(background?.options?.at(-1)?.label).toBe('Every hour');
   });
 
-  it('has two tools that read: where people are, and where they were on a day', () => {
+  it('has three tools that read: where people are, where they were on a day, and a one-time watch', () => {
     const tools = findmy().tools;
     expect(tools.map((t) => [t.name, t.access])).toEqual([
       ['findmy_people', 'read'],
       ['findmy_timeline', 'read'],
+      ['findmy_watch', 'read'],
     ]);
-    expect(tools.map((t) => defaultToolTier(t.access))).toEqual(['can', 'can']);
+    expect(tools.map((t) => defaultToolTier(t.access))).toEqual(['can', 'can', 'can']);
     expect(findmy().guide).toContain('findmy_timeline');
+    expect(findmy().guide).toContain('findmy_watch');
     const timeline = tools[1];
     expect(timeline?.description).toContain('30 days');
     expect(timeline?.description).toContain('YYYY-MM-DD');

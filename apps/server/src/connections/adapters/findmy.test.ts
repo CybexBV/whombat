@@ -241,6 +241,6 @@ describe('findmy_timeline’s words', () => {
   });
 
   it('is served by the Find My adapter', () => {
-    expect(Object.keys(FINDMY_ADAPTER).sort()).toEqual(['findmy_people', 'findmy_timeline']);
+    expect(Object.keys(FINDMY_ADAPTER).sort()).toEqual(['findmy_people', 'findmy_timeline', 'findmy_watch']);
   });
 });

@@ -137,6 +137,8 @@ export const ID_PREFIXES = {
   keptSite: 'kst',
   /** A matched incoming email stored for a mail-triggered automation run. */
   mailTriggerItem: 'mlm',
+  /** A one-time watch: tell the person once when someone leaves where they are or arrives somewhere (findmy-watch.md). */
+  findMyWatch: 'fmw',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
@@ -195,6 +197,8 @@ export const VaultSshServerId = idSchema('vss');
 export const CommandAllowanceId = idSchema('cma');
 /** A turn an agent scheduled for itself (RA-30). */
 export const AgentScheduleId = idSchema('sch');
+/** A one-time Find My watch (findmy-watch.md). */
+export const FindMyWatchId = idSchema('fmw');
 /** A recorded deploy of a service to an environment (improvement-review RF-02, CT-296). */
 export const DeploymentId = idSchema('dpl');
 /** A backup file an owner made (kept 24 hours for download), an uploaded one staged for a restore, a restore (CT-335). */

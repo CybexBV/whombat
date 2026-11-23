@@ -303,6 +303,8 @@ const TABLE = {
   'connections.findMyTimelineSet': NEVER,
   'connections.findMyTimelineDelete': DESTRUCTIVE_NEVER,
   'connections.findMyTimelineMap': READ,
+  // A one-time watch's Cancel: a watch that already ended answers as it is, so a retry changes nothing more.
+  'connections.findMyWatchCancel': RECEIPT,
   'connectors.setApp': NEVER,
   'connectors.removeApp': DESTRUCTIVE,
 

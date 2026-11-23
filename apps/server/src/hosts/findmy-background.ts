@@ -6,7 +6,8 @@
  * locked Mac back. A read that fails waits twice as long each time, up to an hour. While a connection reads, what was
  * read stays in memory; once it stops, the hour after the last look applies. It stops when the connection is removed,
  * its Mac is gone, or it is Off with nothing listening and no timeline. Each pass also deletes the timeline rows past
- * their 30 days.
+ * their 30 days, and ends the one-time watches whose day is over or whose Find My went (findmy-watch.md); a connection
+ * with a watch reads at least every 5 minutes.
  */
 import { FIND_MY_LISTENED_MS, type HostFindMy, type HostFindMyCode } from '@whombat/core';
 import { onConnectionLifecycle } from '../connections/lifecycle';
@@ -22,6 +23,7 @@ import {
 } from './findmy-connection';
 import { findMyPlacesFor } from './findmy-places';
 import { findMyTimelineFor, timelineConnectionIds } from './findmy-timeline';
+import { findMyWatcherFor, paceWithWatch, watchedConnections } from './findmy-watch';
 import { hostsFor, WHOMBAT_ACTOR } from './service';
 
 /** A Find My connection that reads in the background now. */
@@ -149,6 +151,7 @@ export class FindMyBackground {
           everyMinutes: fastest.everyMinutes,
           automation: fastest.automation,
           ...(fastest.timeline ? { timeline: true } : {}),
+          ...(fastest.watching ? { watching: fastest.watching } : {}),
         }
       : null;
   }
@@ -174,29 +177,64 @@ async function plansOf(services: Services): Promise<FindMyPlan[]> {
       ),
     );
   const hosts = hostsFor(services);
-  if (!hosts.present) return [];
+  if (!hosts.present) {
+    await sweepWatches(services);
+    return [];
+  }
   const rows = await findMyConnections(services.db);
   // Automations the release a box would go back to can't run wait: nothing listens meanwhile, and what they keep stays.
   const ready = await services.newerAutomations.findMyReady();
   const listened = ready ? await listenedFindMyConnections(services.db) : new Map<string, string>();
   if (ready) await findMyPlacesFor(services).clearUnlistened(listened);
-  if (!rows.length) return [];
+  if (!rows.length) {
+    await sweepWatches(services);
+    return [];
+  }
   const timelines = await timelineConnectionIds(services.db);
-  const macs = macsOf(await hosts.fleetRaw());
+  const watched = await watchedConnections(services.db);
+  let fleet: unknown;
+  try {
+    fleet = await hosts.fleetRaw();
+  } catch (err) {
+    // A fleet that can't be read says nothing about Macs: only the watches past their day end.
+    await sweepWatches(services);
+    throw err;
+  }
+  const macs = macsOf(fleet);
+  const macless = new Set<string>();
   const plans: FindMyPlan[] = [];
   for (const row of rows) {
     const id = macOf(row)?.toLowerCase();
     const mac = id ? macs.find((m) => m.id.toLowerCase() === id) : undefined;
-    if (!mac) continue;
-    const pace = findMyPace(
-      row.fields.background,
-      listened.get(row.id) ?? null,
-      FIND_MY_LISTENED_MS / 60_000,
-      timelines.has(row.id),
+    if (!mac) {
+      macless.add(row.id);
+      continue;
+    }
+    const pace = paceWithWatch(
+      findMyPace(
+        row.fields.background,
+        listened.get(row.id) ?? null,
+        FIND_MY_LISTENED_MS / 60_000,
+        timelines.has(row.id),
+      ),
+      watched.get(row.id),
     );
     if (pace) plans.push({ connectionId: row.id, serverId: mac.id, label: mac.name, pace });
   }
+  await sweepWatches(services, (connectionId) => macless.has(connectionId));
   return plans;
+}
+
+/** Ends the one-time watches whose day is over or whose Find My went; a failure there doesn't stop the reads. */
+async function sweepWatches(services: Services, macGone?: (connectionId: string) => boolean): Promise<void> {
+  await findMyWatcherFor(services)
+    .sweep(services.clock(), macGone)
+    .catch((err: unknown) =>
+      services.log.warn(
+        { err: err instanceof Error ? err.name : 'error' },
+        'Find My: the watches weren’t checked',
+      ),
+    );
 }
 
 /**
@@ -245,6 +283,7 @@ export class FindMyBackgroundService extends FindMyBackground {
     findMyFor(services).onRead((serverId, people, at) => {
       void findMyPlacesFor(services).noted(serverId, people, at);
       void findMyTimelineFor(services).noted(serverId, people, at);
+      void findMyWatcherFor(services).noted(serverId, people);
     });
     // A Find My connection added, changed or removed is read (or not) from the next pass, which starts now.
     onConnectionLifecycle(services, (event) => {
@@ -253,7 +292,7 @@ export class FindMyBackgroundService extends FindMyBackground {
     services.housekeeping.add('find my background', this.timing.tickMs, this.#pass, { first: 'tick' });
   }
 
-  /** A pass now (an automation that listens to Find My was published, switched or removed). */
+  /** A pass now (an automation that listens to Find My was published, switched or removed, or a watch started). */
   nudge(): void {
     if (this.#started) this.services.background.run('find my nudge', this.#pass);
   }

@@ -14,6 +14,7 @@ import { findMyBackgroundFor } from './findmy-background';
 import { FIND_MY_CATALOG_ID, macOf } from './findmy-connection';
 import { deleteFindMyTimeline, keptTimelinePeople, setFindMyTimeline } from './findmy-timeline';
 import { findMyTimelineMapOf, findMyTimelineOf, timelinePeopleNow } from './findmy-timeline-view';
+import { cancelFindMyWatch } from './findmy-watch';
 import { serverLabel } from './self';
 import { actorOf, HOSTS_TEXT, hostsFor } from './service';
 
@@ -71,6 +72,13 @@ export const findMyTimelineRoutes: RouteDef[] = [
     const { eventId } = await commitAs(ctx, deleteFindMyTimeline, { connectionId: row.id });
     const kept = await keptTimelinePeople(ctx.services.db, row.id);
     return { ok: true as const, eventId, people: timelinePeopleNow(ctx.services, row, kept) };
+  }),
+
+  // A one-time watch's Cancel (findmy-watch.md): the person's; one that already ended answers as it is.
+  route(api.connections.findMyWatchCancel, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can stop a watch.');
+    const { watch } = await commitAs(ctx, cancelFindMyWatch, { watchId: ctx.params.watchId });
+    return watch;
   }),
 
   // The Mac draws it, as Find My's own map: through the hosts service, as the person.

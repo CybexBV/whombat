@@ -264,6 +264,7 @@ How the split was made: `docs.md`.
 - `findmy-connection.md`, `../app/decisions/findmy-connection.md` — Find My as a connection through a Mac: its check, background reads, arriving and leaving automations, the assistant's tool.
 - `findmy-timeline.md` — a Find My connection's timeline: what the box keeps of whom and for how long, reading for it, its routes and map, the assistant's `findmy_timeline`.
 - `../app/decisions/findmy-timeline.md` — a Find My timeline in the apps: the Timeline tab, before it's on, the strips and a colour per place, the map's marks, whose and the assistant switch.
+- `findmy-watch.md` — one-time Find My watches: “tell me when Noor leaves”, the rule that says it happened, its card, pace and ends, the assistant's `findmy_watch`.
 - `agent-updates.md`, `agent-updates-server.md` — servers' agents keep themselves up to date.
 
 ## Skills, guides, backups

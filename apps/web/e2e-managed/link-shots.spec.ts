@@ -3,7 +3,7 @@
  * `LINK_SHOTS=<dir>` writes them.
  */
 import { expect, type Page, test } from '@playwright/test';
-import { fake, fresh } from './support';
+import { fake, fresh, openSignInLink } from './support';
 
 /** The Subscription Terms, ticked before a Whombat joins. */
 const agree = (page: Page) =>
@@ -42,7 +42,7 @@ for (const size of ['desktop', 'phone'] as const)
       await shot('link-signed-out');
       await page.getByRole('button', { name: 'Email me a link' }).click();
       await heading('Check your email');
-      await page.goto(await fake<string>(page, 'lastLink'));
+      await openSignInLink(page, await fake<string>(page, 'lastLink'));
       await heading('Add Home?');
       await shot('link-confirm-trial');
       await agree(page);

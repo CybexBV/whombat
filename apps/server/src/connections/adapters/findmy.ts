@@ -6,18 +6,23 @@
  * pictures or coordinates. Outside an assistant's turn it refuses, as the Servers tools do.
  *
  * `findmy_timeline` (docs/decisions/findmy-timeline.md) answers where the people the person keeps a timeline of were on
- * a day, only in the person's own turns.
+ * a day, only in the person's own turns. `findmy_watch` (docs/decisions/findmy-watch.md) starts, lists and cancels
+ * one-time watches, also only in the person's own turns.
  */
 import {
   FIND_MY_TIMELINE_DAYS,
   FindMyPeopleArgs,
+  FindMySpot,
   FindMyTimelineArgs,
   type FindMyTimelineSegment,
   type FindMyTimelineWhy,
+  FindMyWatchArgs,
   findMyDateAdd,
   findMyDayBounds,
   findMyPlaceKey,
   findMyProblemText,
+  findMyWatchArrived,
+  findMyWhere,
   type HostFindMy,
   type HostFindMyPerson,
 } from '@whombat/core';
@@ -27,9 +32,11 @@ import { outsideCommandScope } from '../../commit/scope';
 import { accounts, burrows, principals } from '../../db/schema/index';
 import { zoneOf } from '../../domain/notify';
 import { type FindMyStore, findMyFor } from '../../hosts/findmy';
+import { findMyBackgroundFor } from '../../hosts/findmy-background';
 import { macOf } from '../../hosts/findmy-connection';
 import { type KeptPerson, keptTimelinePeople, nameList } from '../../hosts/findmy-timeline';
 import { personTimelineDay } from '../../hosts/findmy-timeline-view';
+import { cancelFindMyWatch, leavesPlace, startFindMyWatch, watchingIn } from '../../hosts/findmy-watch';
 import { knownServer, serverLabel } from '../../hosts/self';
 import { failure, output, scope } from '../../hosts/tools-shared';
 import { loadPrincipalRow } from '../../read/principals';
@@ -130,41 +137,191 @@ export function peopleAnswer(
   };
 }
 
+/** What a fresh read gives a tool: the store's view of the Mac, or the tool's answer when it can't read. */
+type ReadNow =
+  | { out: Awaited<ReturnType<AdapterTool>> }
+  | { shown: HostFindMy; mac: string; serverId: string; stillReading: boolean };
+
+/**
+ * Reads the connection's Mac unless a read runs or the last worked under two minutes ago, waiting up to 45 seconds; a
+ * Mac in use is left alone. The answer is what the store has then.
+ */
+async function readNow(ctx: AdapterContext, deps: FindMyPeopleDeps): Promise<ReadNow> {
+  const serverId = ctx.fields.mac?.trim();
+  if (!serverId)
+    throw new ConnectionArgumentError('This Find My connection names no Mac. Pick one in its settings.');
+  let s: Awaited<ReturnType<typeof scope>>;
+  try {
+    s = await deps.scope(ctx);
+  } catch (err) {
+    if (err instanceof ConnectionArgumentError) throw err;
+    return { out: failure(err, { server: serverId }) };
+  }
+  // The Mac's name as screens give it (the fleet read notes the names people gave their servers).
+  if (!knownServer(serverId)) await s.hosts.fleetRaw().catch(() => null);
+  const mac = serverLabel(serverId);
+  const store = deps.store(ctx);
+  const started = outsideCommandScope(() => store.refresh(s.hosts, serverId, s.actor('admin'), mac));
+  let stillReading = false;
+  if (started.reading)
+    stillReading = !(await Promise.race([
+      store.idle(serverId).then(() => true),
+      deps.wait(FIND_MY_PEOPLE_WAIT_MS).then(() => false),
+    ]));
+  const shown = store.view(serverId);
+  return { shown, mac, serverId, stillReading: stillReading || shown.reading };
+}
+
 /** `findmy_people`, with the waits and the store it uses. */
 export function findMyPeopleTool(deps: FindMyPeopleDeps = DEFAULT_DEPS): AdapterTool {
   return async (ctx, args) => {
     const parsed = FindMyPeopleArgs.safeParse(args);
     if (!parsed.success) throw new ConnectionArgumentError('person: a name or first name, or leave it out.');
-    const serverId = ctx.fields.mac?.trim();
-    if (!serverId)
-      throw new ConnectionArgumentError('This Find My connection names no Mac. Pick one in its settings.');
-    let s: Awaited<ReturnType<typeof scope>>;
-    try {
-      s = await deps.scope(ctx);
-    } catch (err) {
-      if (err instanceof ConnectionArgumentError) throw err;
-      return failure(err, { server: serverId });
-    }
-    // The Mac's name as screens give it (the fleet read notes the names people gave their servers).
-    if (!knownServer(serverId)) await s.hosts.fleetRaw().catch(() => null);
-    const mac = serverLabel(serverId);
-    const store = deps.store(ctx);
-    // A read starts unless one runs or the last worked under two minutes ago; it leaves a Mac in use alone.
-    const started = outsideCommandScope(() => store.refresh(s.hosts, serverId, s.actor('admin'), mac));
-    let stillReading = false;
-    if (started.reading)
-      stillReading = !(await Promise.race([
-        store.idle(serverId).then(() => true),
-        deps.wait(FIND_MY_PEOPLE_WAIT_MS).then(() => false),
-      ]));
-    const shown = store.view(serverId);
-    const res = peopleAnswer(shown, {
-      mac,
+    const read = await readNow(ctx, deps);
+    if ('out' in read) return read.out;
+    const res = peopleAnswer(read.shown, {
+      mac: read.mac,
       person: parsed.data.person,
       now: deps.now(ctx),
-      stillReading: stillReading || shown.reading,
+      stillReading: read.stillReading,
     });
     return 'error' in res ? output({ error: res.error }, true) : output(res.answer);
+  };
+}
+
+/* One-time watches --------------------------------------------------------------------------------------------- */
+
+/** How old the last read may be for a watch to start from it, when a new one couldn't be made (ms). */
+export const FIND_MY_WATCH_READ_MAX_AGE_MS = 15 * 60_000;
+
+/** What `findmy_watch` answers in words (the facts it carries; the assistant says them its own way). */
+export const FIND_MY_WATCH_TOOL_TEXT = {
+  personal: 'Only the person can start a watch, in their own chat.',
+  noChat: 'A watch starts in a chat thread.',
+  noWhere: (name: string) => `Find My doesn’t know where ${name} is right now, so a watch can’t start.`,
+  already: (name: string, where: string) => `${name} is already ${where}. Nothing to watch.`,
+  which: (names: readonly string[]) => `More than one person matches: ${names.join(', ')}. Say which one.`,
+  started:
+    'Started. The card with Cancel is in this thread, and Whombat posts here by itself when it happens.',
+  notStarted: 'The watch couldn’t be started. Try again in a moment.',
+  notCancelled: 'That watch couldn’t be found.',
+} as const;
+
+const tidy = (s: string | null | undefined): string | null => {
+  const w = s?.replace(/\s+/g, ' ').trim().slice(0, 300);
+  return w ? w : null;
+};
+
+/** A running watch as `list` answers it. */
+function watchOut(w: { id: string; name: string; change: string; place: string; endsAt: Date | string }) {
+  return {
+    watchId: w.id,
+    what:
+      w.change === 'leaves'
+        ? `When ${w.name} leaves ${w.place}`
+        : `When ${w.name} arrives ${findMyWhere(w.place)}`,
+    until: typeof w.endsAt === 'string' ? w.endsAt : w.endsAt.toISOString(),
+  };
+}
+
+/**
+ * `findmy_watch { action?, person?, change?, place?, watchId? }`, in the person's own turns only: `start` reads Find My
+ * first and starts a watch in the turn's thread (leaving where they are now, or arriving at a place in Find My's words);
+ * `list` the watches running; `cancel` one.
+ */
+export function findMyWatchTool(deps: FindMyPeopleDeps = DEFAULT_DEPS): AdapterTool {
+  return async (ctx, args) => {
+    const parsed = FindMyWatchArgs.safeParse(args);
+    if (!parsed.success)
+      throw new ConnectionArgumentError(
+        'action: start, list or cancel; person: a name or first name; change: leaves or arrives; place: where they arrive, in Find My’s words; watchId: the watch to cancel.',
+      );
+    const call = ctx.call;
+    if (!call) throw new ConnectionArgumentError('This connection’s tools run only in an assistant’s turn.');
+    const services = call.services;
+    const asked = call.personId ? await loadPrincipalRow(services.db, call.personId) : null;
+    if (asked?.kind !== 'person' || asked.burrowId !== call.burrowId)
+      return output({ error: FIND_MY_WATCH_TOOL_TEXT.personal }, true);
+    const a = parsed.data;
+    const as = { burrowId: call.burrowId, actorId: call.agentId };
+
+    if (a.action === 'list')
+      return output({ watches: (await watchingIn(services.db, call.burrowId)).map(watchOut) });
+
+    if (a.action === 'cancel') {
+      if (!a.watchId) throw new ConnectionArgumentError('watchId: which watch to cancel (from list).');
+      const res = await services.pipeline.commit(cancelFindMyWatch, { watchId: a.watchId }, as);
+      if (res.status !== 'ok') return output({ error: FIND_MY_WATCH_TOOL_TEXT.notCancelled }, true);
+      return output({ status: res.result.watch.status, watch: watchOut(res.result.watch) });
+    }
+
+    if (!a.person) throw new ConnectionArgumentError('person: who to watch, by name or first name.');
+    if (a.change === 'arrives' && !a.place)
+      throw new ConnectionArgumentError('place: where they arrive, in Find My’s words (Home, Work, a town).');
+    if (!call.conversationId) return output({ error: FIND_MY_WATCH_TOOL_TEXT.noChat }, true);
+
+    const read = await readNow(ctx, deps);
+    if ('out' in read) return read.out;
+    const { shown, mac } = read;
+    const age = shown.readAt ? deps.now(ctx) - new Date(shown.readAt).getTime() : Number.POSITIVE_INFINITY;
+    if (age > FIND_MY_WATCH_READ_MAX_AGE_MS) {
+      const res = peopleAnswer(shown, { mac, now: deps.now(ctx), stillReading: read.stillReading });
+      if ('error' in res) return output({ error: res.error }, true);
+      return output({ error: `A watch needs a recent read. ${res.answer.note ?? ''}`.trim() }, true);
+    }
+    const found = matchPeople(shown.people, a.person);
+    if (!found.length)
+      return output(
+        {
+          error: `Nobody called ${a.person} is on Find My on ${mac}. People there: ${shown.people.map((p) => p.name).join(', ')}.`,
+        },
+        true,
+      );
+    if (found.length > 1)
+      return output({ error: FIND_MY_WATCH_TOOL_TEXT.which(found.map((p) => p.name)) }, true);
+    const p = found[0] as HostFindMyPerson;
+
+    let place: string;
+    let from: { place: string | null; address: string | null; spot: FindMySpot | null } | null = null;
+    if (a.change === 'leaves') {
+      const here = leavesPlace(p);
+      if (!here) return output({ error: FIND_MY_WATCH_TOOL_TEXT.noWhere(p.name) }, true);
+      place = here;
+      from = {
+        place: tidy(p.place),
+        address: tidy(p.address),
+        spot: p.location && FindMySpot.safeParse(p.location).success ? { ...p.location } : null,
+      };
+    } else {
+      place = tidy(a.place) as string;
+      if (findMyWatchArrived(place, p))
+        return output({ note: FIND_MY_WATCH_TOOL_TEXT.already(p.name, findMyWhere(place)) });
+    }
+
+    const res = await services.pipeline.commit(
+      startFindMyWatch,
+      {
+        connectionId: call.connectionId,
+        conversationId: call.conversationId,
+        threadRootId: call.threadRootId ?? null,
+        person: p.id,
+        name: p.name.slice(0, 200),
+        change: a.change,
+        place,
+        from,
+      },
+      as,
+    );
+    if (res.status !== 'ok') return output({ error: FIND_MY_WATCH_TOOL_TEXT.notStarted }, true);
+    if (res.result.status === 'invalid') return output({ error: res.result.problem }, true);
+    // The connection reads every 5 minutes from the next pass, which starts now.
+    findMyBackgroundFor(services).nudge();
+    return output({
+      started: true,
+      what: watchOut(res.result.watch).what,
+      until: res.result.watch.endsAt,
+      note: FIND_MY_WATCH_TOOL_TEXT.started,
+    });
   };
 }
 
@@ -324,8 +481,9 @@ export function findMyTimelineTool(deps: FindMyTimelineDeps = { zone: personZone
   };
 }
 
-/** Find My's typed tools (`findmy_people`, `findmy_timeline`), served through the connection's adapter. */
+/** Find My's typed tools (`findmy_people`, `findmy_timeline`, `findmy_watch`), served through the connection's adapter. */
 export const FINDMY_ADAPTER: Adapter = {
   findmy_people: findMyPeopleTool(),
   findmy_timeline: findMyTimelineTool(),
+  findmy_watch: findMyWatchTool(),
 };

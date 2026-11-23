@@ -4,10 +4,12 @@
  * guided setup's card reads as what it asked and what the person chose (assistant-guides.md AG-18). A Whombat Feedback
  * report card is never shown this way (`reportCardNote`, FB-F3-12). A schedule card says when and how it stands, never
  * what the agent wrote for it (`scheduleCardText`, resourceful-agents.md RA-30). A deploy card says what went where and how
- * it ended (`deployCardText`), a followed server task what it does and how it ended (`taskCardText`).
+ * it ended (`deployCardText`), a followed server task what it does and how it ended (`taskCardText`), a Find My watch
+ * whom it watches and how it stands (`findMyWatchCardText`, findmy-watch.md).
  */
 import {
   deployCardText,
+  findMyWatchCardText,
   guideCardText,
   type Message,
   scheduleCardText,
@@ -43,6 +45,9 @@ export function cardNote(message: Pick<Message, 'card'>, timeZone = 'UTC'): stri
     case 'task':
       // “[task: Installing 3 updates on shale, ok — shale is up to date…]” (contracts CT-880, Whombat TF-10).
       return taskCardText(card);
+    case 'findmy_watch':
+      // “[watch: Noor Visser leaves Keizersgracht; watching]”, with its id so the agent can cancel it when asked.
+      return `${findMyWatchCardText(card)} (watchId ${card.watchId})`;
     case 'digest':
       return `[digest card: ${[card.title, card.summary].filter(Boolean).join(' · ')} · ${card.sections
         .map(
