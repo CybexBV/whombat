@@ -40,6 +40,10 @@ packages/core/src/
 - Conversation resolution: channels by name (`GET /channels/:channel`), DMs per viewer via
   `POST /dms {agent}` (get or create), branch rooms via `GET /prs/:number` (its `pr.conversationId`),
   everything else by id. `?repo=` disambiguates PR numbers when several repos are on.
+- A query or body field that turns its input into something else also takes what it turns it into: the apps parse an
+  op's input with the endpoint's schemas before they send it over the session, and the box parses it again.
+  `QueryBool` takes `true` as well as `?flag=true`; `query-round-trip.test.ts` in `@whombat/protocol` checks every
+  op's fields.
 - The shell loads with one `GET /burrows/:burrow/bootstrap`: burrow, me, all principals, sidebar
   (channels with unread + mention counts, branch rooms with PR status and dot tone, DMs, nav counts),
   preferences, server time and the realtime topics to subscribe to.

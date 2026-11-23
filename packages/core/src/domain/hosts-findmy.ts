@@ -96,10 +96,9 @@ const Side = z.coerce.number().int().min(64).max(HOST_SCREEN_LIMITS.mapSide);
 export const HostFindMyMapQuery = z.object({
   w: Side,
   h: Side,
-  /** `?dark=true` (as `QueryBool`). */
+  /** `?dark=true` (as `QueryBool`), or the boolean the apps send over the session once they parsed the query. */
   dark: z
-    .enum(['true', 'false', '1', '0'])
-    .transform((v) => v === 'true' || v === '1')
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1')])
     .optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lon: z.coerce.number().min(-180).max(180).optional(),
