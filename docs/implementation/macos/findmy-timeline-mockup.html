@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find My Timeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; }
+
+  /* The mockup's own controls, in the thread's theme. */
+  .mockbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between;
+    margin: 0 0 10px; font: 12.5px var(--font-sans, system-ui); color: var(--muted-foreground, #777); }
+  .mockbar .lbl { margin-right: 6px; }
+  .mseg { display: inline-flex; border: 1px solid var(--border, #ccc); border-radius: var(--radius, 8px); padding: 2px; gap: 2px; }
+  .mseg button { font: inherit; border: 0; background: transparent; color: inherit; padding: 4px 10px; cursor: pointer;
+    border-radius: calc(var(--radius, 8px) - 2px); }
+  .mseg button[aria-pressed="true"] { background: var(--secondary, #eee); color: var(--foreground, #111); }
+
+  /* Whombat's tokens (packages/tokens). */
+  .wb {
+    --bg: #fbf9f5; --sf: #fffdf9; --sf2: #f1ece4; --ink: #221d18; --ink2: #3d352e; --mut: #6e655c;
+    --line: rgba(34,29,24,.09); --line2: rgba(34,29,24,.18); --brand: #7d6353; --btn: #221d18; --btnfg: #f5f2ed;
+    --ok: #3e7b58; --ok-text: #36694a; --bad: #9f5540; --sel: rgba(34,29,24,.06);
+    --c1: #3a78bd; --c2: #d9762f; --c3: #1e9a72; --c4: #6e3bb4; --c5: #7d6353;
+    --m-land: #f2eee6; --m-block: #e4ddd0; --m-water: #a8d1ee; --m-road: #f6d98a; --m-edge: #e3bd62;
+    --m-minor: #ffffff; --m-park: #cfe4c3; --m-label: #6d6458; --m-line: #3d352e;
+    --sans: 'Bricolage Grotesque', system-ui, sans-serif; --mono: 'DM Mono', ui-monospace, monospace;
+    container-type: inline-size;
+    font: 400 14px/1.45 var(--sans); color: var(--ink); background: var(--bg);
+    border-radius: var(--radius, 12px); padding: 16px;
+  }
+  .wb[data-theme="dark"] {
+    --bg: #1c1815; --sf: #24201c; --sf2: #2e2925; --ink: #f1ebe3; --ink2: #d8cfc4; --mut: #a0958a;
+    --line: rgba(255,255,255,.08); --line2: rgba(255,255,255,.16); --brand: #d2b49a; --btn: #f1ebe3; --btnfg: #1c1815;
+    --ok: #6fcf97; --ok-text: #6fcf97; --bad: #e59a85; --sel: rgba(255,255,255,.07);
+    --c1: #4a8ad0; --c2: #d06a28; --c3: #1f9a70; --c4: #8450d4; --c5: #a88a72;
+    --m-land: #2a2623; --m-block: #35302b; --m-water: #1e3344; --m-road: #6a5a37; --m-edge: #4d4128;
+    --m-minor: #3b3631; --m-park: #2b3a2a; --m-label: #a59b8f; --m-line: #d8cfc4;
+  }
+  .wb * { box-sizing: border-box; }
+  .wb button { font: inherit; color: inherit; }
+
+  /* Page header and tabs. */
+  .crumb { font-size: 13px; color: var(--mut); margin: 2px 0 12px; }
+  .head { display: flex; align-items: center; gap: 14px; }
+  .tile { width: 48px; height: 48px; border-radius: 12px; background: var(--sf2); display: grid; place-items: center; flex: none; color: var(--ink); }
+  .head h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .head .grow { flex: 1; min-width: 0; }
+  .ask { border: 0; background: var(--btn); color: var(--btnfg) !important; font-weight: 600; font-size: 13.5px;
+    padding: 8px 14px; border-radius: 9px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11px var(--mono); padding: 2px 8px;
+    border-radius: 999px; background: var(--sf2); color: var(--ink2); white-space: nowrap; vertical-align: 2px; }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ok-text); }
+  .pill.ok i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .pill.now { background: var(--btn); color: var(--btnfg); }
+  .tabs { display: flex; gap: 4px; margin: 16px -16px 18px; padding: 0 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabs button { border: 0; background: none; padding: 10px 12px; font-size: 14px; color: var(--ink2);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; cursor: pointer; }
+  .tabs button[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+  .tabs .new { font: 500 10px var(--mono); color: var(--brand); margin-left: 4px; }
+
+  /* Toolbar. */
+  .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .day { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  .icon { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line2); background: var(--sf);
+    display: grid; place-items: center; cursor: pointer; flex: none; }
+  .icon:disabled { opacity: .35; cursor: default; }
+  .day b { font-size: 17px; letter-spacing: -.01em; margin-left: 4px; }
+  .day span { color: var(--mut); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg { display: inline-flex; background: var(--sf2); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: none; padding: 5px 12px; border-radius: 7px; font-size: 13px; cursor: pointer; color: var(--ink2); }
+  .seg button[aria-pressed="true"] { background: var(--sf); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  /* Cards. */
+  .card { background: var(--sf); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+  .card > header { display: flex; align-items: baseline; gap: 10px; padding: 14px 18px 10px; flex-wrap: wrap; }
+  .card > header h2 { margin: 0; font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
+  .card > header .meta { color: var(--mut); font-size: 13px; }
+  .card > header .end { margin-left: auto; }
+  .note { border-top: 1px solid var(--line); padding: 10px 18px 12px; color: var(--mut); font-size: 12.5px; }
+  .note p { margin: 0; }
+
+  .av { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+    font: 600 11px var(--sans); color: #221d18; }
+
+  /* Day strips. */
+  .strips { padding: 0 18px 4px; }
+  .srow { display: grid; grid-template-columns: 112px 1fr 96px; align-items: center; gap: 12px; width: 100%;
+    border: 0; background: none; text-align: left; padding: 7px 8px; margin: 0 -8px; border-radius: 10px; min-height: 44px; }
+  button.srow { cursor: pointer; width: calc(100% + 16px); }
+  button.srow:hover { background: var(--sel); }
+  button.srow[aria-pressed="true"] { background: var(--sel); box-shadow: inset 0 0 0 1px var(--line2); }
+  .who { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: 14px; }
+  .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nowat { font-size: 12.5px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+  .strip { position: relative; height: 22px; border-radius: 6px; background: var(--sf2); overflow: hidden; }
+  .strip i { position: absolute; top: 0; bottom: 0; min-width: 2px; }
+  .strip i.trip { background: repeating-linear-gradient(135deg, var(--mut) 0 1.5px, transparent 1.5px 5px); opacity: .7; }
+  .strip i.gap { background: var(--sf); border: 1px dashed var(--line2); border-radius: 3px; }
+  .strip i.later { background: repeating-linear-gradient(90deg, transparent 0 3px, transparent 3px 6px); }
+  .strip i.nowline { width: 2px; min-width: 0; background: var(--ink); }
+  .strip.off { background: none; border: 1px dashed var(--line2); display: flex; align-items: center; padding: 0 10px;
+    font-size: 12.5px; color: var(--mut); }
+  .axis { display: grid; grid-template-columns: 112px 1fr 96px; gap: 12px; padding: 2px 0 0; }
+  .axis .ticks { position: relative; height: 18px; font: 400 11px var(--mono); color: var(--mut); }
+  .axis .ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .axis .ticks span.first { transform: none; }
+  .axis .ticks span.last { transform: translateX(-100%); }
+  .axis .ticks span.nowtick { color: var(--ink); font-weight: 500; background: var(--sf); padding: 0 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 18px 14px; font-size: 12.5px; color: var(--ink2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .legend i.trip { background: repeating-linear-gradient(135deg, var(--mut) 0 1.5px, transparent 1.5px 4px); }
+  .legend i.gap { border: 1px dashed var(--line2); }
+
+  /* One person's day. */
+  .person > header { align-items: center; }
+  .map { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--m-land); line-height: 0; }
+  .map svg { display: block; width: 100%; }
+  ol.tl { list-style: none; margin: 0; padding: 10px 18px 12px; }
+  ol.tl li { display: grid; grid-template-columns: 48px 26px 1fr auto; gap: 10px; min-height: 46px; }
+  ol.tl .time { font: 400 12px var(--mono); color: var(--ink2); padding-top: 11px; }
+  ol.tl .rail { position: relative; }
+  ol.tl .rail::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-1px);
+    border-left: 2px solid var(--line2); }
+  ol.tl li.trip .rail::before { border-left-style: dashed; }
+  ol.tl li.gap .rail::before { border-left-style: dotted; border-left-color: var(--mut); opacity: .6; }
+  ol.tl li:first-child .rail::before { top: 21px; }
+  ol.tl li:last-child .rail::before { bottom: calc(100% - 21px); }
+  ol.tl .dot { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); min-width: 22px; height: 22px;
+    border-radius: 11px; display: grid; place-items: center; font: 500 11px var(--mono); color: #fff;
+    box-shadow: 0 0 0 3px var(--sf); padding: 0 6px; }
+  ol.tl .body { padding: 9px 0 9px; min-width: 0; }
+  ol.tl .body b { font-weight: 600; font-size: 14.5px; }
+  ol.tl li.trip .body b, ol.tl li.gap .body b { font-weight: 500; color: var(--ink2); font-size: 13.5px; }
+  ol.tl .sub { display: block; color: var(--mut); font-size: 12.5px; }
+  ol.tl .dur { font: 400 12px var(--mono); color: var(--mut); padding-top: 11px; white-space: nowrap; text-align: right; }
+  ol.tl .durin { display: none; }
+  .foot { color: var(--mut); font-size: 12.5px; margin: 2px 2px 0; }
+  .foot a, .link { color: var(--brand); text-decoration: none; font-weight: 500; cursor: pointer; }
+
+  /* Week. */
+  .chips { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line2); background: var(--sf);
+    border-radius: 999px; padding: 4px 12px 4px 4px; cursor: pointer; font-weight: 500; font-size: 13.5px; min-height: 38px; }
+  .chip[aria-pressed="true"] { background: var(--btn); color: var(--btnfg) !important; border-color: var(--btn); }
+  .chip .av { width: 28px; height: 28px; }
+  .wrow { display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: center; width: calc(100% + 16px);
+    border: 0; background: none; text-align: left; padding: 6px 8px; margin: 0 -8px; border-radius: 10px; cursor: pointer; min-height: 40px; }
+  .wrow:hover { background: var(--sel); }
+  .wrow .dname { font-size: 13.5px; color: var(--ink2); }
+  .wrow .dname b { color: var(--ink); font-weight: 600; }
+  .totals { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 18px 14px; }
+  .totals span { display: inline-flex; align-items: center; gap: 6px; background: var(--sf2); border-radius: 8px;
+    padding: 4px 9px; font-size: 12.5px; color: var(--ink2); }
+  .totals span b { font: 500 12px var(--mono); color: var(--ink); }
+  .totals i { width: 9px; height: 9px; border-radius: 2px; }
+
+  /* Before it's on. */
+  .intro { padding: 26px 24px 24px; display: grid; gap: 14px; justify-items: start; }
+  .intro h2 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+  .intro p { margin: 0; color: var(--ink2); max-width: 520px; font-size: 14.5px; }
+  .intro ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .intro li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink2); font-size: 13.5px; }
+  .intro li svg { flex: none; margin-top: 2px; color: var(--ok); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--line2); background: var(--sf); border-radius: 9px; padding: 9px 14px; font-size: 13.5px;
+    font-weight: 600; cursor: pointer; min-height: 40px; }
+  .btn.primary { background: var(--btn); color: var(--btnfg) !important; border-color: var(--btn); }
+  .btn.danger { color: var(--bad) !important; }
+  .ghost { opacity: .5; pointer-events: none; }
+
+  /* Settings. */
+  .set { display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; padding: 14px 18px; border-top: 1px solid var(--line); align-items: center; }
+  .set:first-of-type { border-top: 0; }
+  .set .lab b { font-weight: 600; display: block; }
+  .set .lab span { color: var(--mut); font-size: 12.5px; }
+  .select { border: 1px solid var(--line2); border-radius: 9px; padding: 7px 30px 7px 12px; background: var(--sf); font-size: 13.5px;
+    position: relative; white-space: nowrap; }
+  .select::after { content: ''; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid var(--mut);
+    border-bottom: 1.5px solid var(--mut); transform: translateY(-70%) rotate(45deg); }
+  .toggle { width: 42px; height: 24px; border-radius: 12px; background: var(--line2); position: relative; border: 0; cursor: pointer; flex: none; }
+  .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--sf);
+    box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .15s; }
+  .toggle[aria-checked="true"] { background: var(--btn); }
+  .toggle[aria-checked="true"]::after { left: 21px; }
+  .whose { grid-column: 1 / -1; display: grid; gap: 2px; }
+  .whose label { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; min-height: 40px; }
+  .whose input { width: 18px; height: 18px; accent-color: var(--btn); margin: 0; }
+  .whose em { font-style: normal; color: var(--mut); font-size: 12.5px; margin-left: auto; }
+  .keeps { margin: 0 18px 14px; padding: 10px 12px; border-radius: 10px; background: var(--sf2); color: var(--ink2); font-size: 13px; }
+
+  /* Phone width. */
+  @container (max-width: 560px) {
+    .head h1 { font-size: 23px; }
+    .tile { width: 42px; height: 42px; }
+    .ask { display: none; }
+    .card > header { padding: 12px 14px 8px; }
+    .strips { padding: 0 14px 4px; }
+    .srow, .axis { grid-template-columns: 30px 1fr; gap: 10px; }
+    .who > span:not(.av), .nowat, .axis > :last-child, .axis .ticks span.near { display: none; }
+    .tabs button { padding: 10px 9px; }
+    .wrow { grid-template-columns: 52px 1fr; }
+    .legend, .totals { padding-left: 14px; padding-right: 14px; }
+    ol.tl { padding: 8px 14px 10px; }
+    ol.tl li { grid-template-columns: 40px 22px 1fr; gap: 8px; }
+    ol.tl .dur { display: none; }
+    ol.tl .durin { display: inline; }
+    .note { padding: 10px 14px 12px; }
+    .set { grid-template-columns: 1fr; padding: 12px 14px; }
+    .keeps { margin: 0 14px 12px; }
+    .intro { padding: 20px 16px; }
+    .day span { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="mockbar">
+  <div><span class="lbl">Mockup</span>
+    <span class="mseg" id="states">
+      <button data-state="on" aria-pressed="true">Timeline</button>
+      <button data-state="off" aria-pressed="false">Before it’s on</button>
+      <button data-state="settings" aria-pressed="false">Settings</button>
+    </span>
+  </div>
+  <span class="mseg" id="themes">
+    <button data-theme="light" aria-pressed="false">Light</button>
+    <button data-theme="dark" aria-pressed="false">Dark</button>
+  </span>
+</div>
+<div class="wb" id="wb"></div>
+
+<script>
+const T = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+const NOW = T('15:20');
+const pad = n => String(n).padStart(2, '0');
+const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const dur = m => { const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h} h ${r} min` : `${h} h`) : `${r} min`; };
+
+// Made-up places on a made-up map (units: about 55 m each).
+const SPOTS = {
+  home:    { x: 205, y: 262, place: 'Home',        street: 'Lindenlaan 8, Rietveen' },
+  school:  { x: 236, y: 240, place: 'School',      street: 'Schoolpad 1, Rietveen' },
+  shop:    { x: 220, y: 246, place: 'Rietveen',    street: 'Dorpsstraat 22, Rietveen' },
+  station: { x: 752, y: 150, place: 'Wilgendam',   street: 'Stationsplein 2, Wilgendam' },
+  kade:    { x: 806, y: 112, place: 'Wilgendam',   street: 'Kade 14, Wilgendam' },
+  haven:   { x: 645, y: 306, place: 'Oosterhaven', street: 'Havenweg 3, Oosterhaven' },
+};
+const COLOR = { Home: 'var(--c1)', Wilgendam: 'var(--c2)', School: 'var(--c3)', Oosterhaven: 'var(--c4)', Rietveen: 'var(--c5)' };
+const WHY = {
+  inuse: { title: 'Not read', text: 'Studio was in use, so Whombat left it alone.' },
+  noloc: { title: 'No location', text: p => `Find My had no location for ${p}.` },
+};
+
+const stay = (from, to, spot, extra = {}) => ({ k: 'stay', from, to, spot, holes: [], ...extra });
+const trip = (from, to) => ({ k: 'trip', from, to });
+const gap = (from, to, why) => ({ k: 'gap', from, to, why });
+
+const PEOPLE = [
+  { id: 'noor', name: 'Noor Visser', first: 'Noor', ini: 'NV', tone: '#dcc0cc', kept: true },
+  { id: 'ruben', name: 'Ruben Visser', first: 'Ruben', ini: 'RV', tone: '#bfd0bf', kept: true },
+  { id: 'ilse', name: 'Ilse de Wit', first: 'Ilse', ini: 'IW', tone: '#c3cad9', kept: false, nowAt: 'Oosterhaven' },
+];
+
+const TODAY = {
+  noor: [
+    stay(0, T('08:20'), 'home', { holes: [[T('02:10'), T('06:30'), 'noloc']] }),
+    trip(T('08:20'), T('08:35')),
+    stay(T('08:35'), T('14:30'), 'school'),
+    trip(T('14:30'), T('14:45')),
+    stay(T('14:45'), T('15:00'), 'shop'),
+    trip(T('15:00'), T('15:10')),
+    stay(T('15:10'), null, 'home', { seen: 'now', nearby: true }),
+  ],
+  ruben: [
+    stay(0, T('07:50'), 'home'),
+    trip(T('07:50'), T('08:30')),
+    stay(T('08:30'), T('12:15'), 'station'),
+    trip(T('12:15'), T('12:30')),
+    stay(T('12:30'), T('13:05'), 'kade'),
+    gap(T('13:05'), T('13:45'), 'inuse'),
+    stay(T('13:45'), null, 'station', { seen: '4 min ago' }),
+  ],
+};
+
+const DAYS = [
+  { title: 'Tuesday', date: '17 November', short: 'Tue 17' },
+  { title: 'Wednesday', date: '18 November', short: 'Wed 18' },
+  { title: 'Thursday', date: '19 November', short: 'Thu 19' },
+  { title: 'Friday', date: '20 November', short: 'Fri 20' },
+  { title: 'Saturday', date: '21 November', short: 'Sat 21', weekend: true },
+  { title: 'Yesterday', date: 'Sunday 22 November', short: 'Sun 22', weekend: true },
+  { title: 'Today', date: 'Monday 23 November', short: 'Mon 23' },
+];
+const TODAY_I = 6;
+
+function rng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function made(id, i) {
+  const r = rng(i * 97 + id.length * 13), q = (a, b) => Math.round((a + r() * (b - a)) / 5) * 5;
+  const night = () => (r() < 0.6 ? [[q(60, 150), q(360, 400), 'noloc']] : []);
+  if (id === 'ruben') {
+    if (DAYS[i].short.startsWith('Sun')) return [stay(0, 1440, 'home', { holes: r() < 0.6 ? [[q(780, 840), q(870, 900), 'inuse']] : [] })];
+    if (DAYS[i].weekend) { const a = q(600, 660), b = q(900, 1020);
+      return [stay(0, a, 'home'), trip(a, a + 25), stay(a + 25, b, 'haven'), trip(b, b + 25), stay(b + 25, 1440, 'home')]; }
+    const a = q(455, 485), b = q(1020, 1080), h = q(600, 900);
+    return [stay(0, a, 'home'), trip(a, a + 40), stay(a + 40, b, 'station', { holes: r() < 0.55 ? [[h, h + q(20, 45), 'inuse']] : [] }),
+      trip(b, b + 40), stay(b + 40, 1440, 'home')];
+  }
+  if (DAYS[i].weekend) { const a = q(600, 700);
+    return [stay(0, a, 'home', { holes: night() }), trip(a, a + 10), stay(a + 10, a + 70, 'shop'), trip(a + 70, a + 80), stay(a + 80, 1440, 'home')]; }
+  const a = q(490, 505), b = q(870, 930);
+  return [stay(0, a, 'home', { holes: night() }), trip(a, a + 15), stay(a + 15, b, 'school'), trip(b, b + 15), stay(b + 15, 1440, 'home')];
+}
+const dayOf = (id, i) => (i === TODAY_I ? TODAY[id] : made(id, i));
+const endOf = (it, i) => it.to ?? (i === TODAY_I ? NOW : 1440);
+
+function dist(a, b) {
+  const km = Math.hypot(SPOTS[a].x - SPOTS[b].x, SPOTS[a].y - SPOTS[b].y) * 0.0556;
+  return km < 1 ? `${Math.round(km * 10) * 100} m` : km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+}
+
+// State.
+const ui = { state: 'on', mode: 'day', day: TODAY_I, person: 'ruben', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' };
+const wb = document.getElementById('wb');
+const person = id => PEOPLE.find(p => p.id === id);
+const avatar = (p, size) => `<span class="av" style="background:${p.tone}${size ? `;width:${size}px;height:${size}px` : ''}" aria-label="${p.name}">${p.ini}</span>`;
+
+const ICON = {
+  findmy: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M12 10v3"/><circle cx="5.5" cy="13.5" r="2.2"/><circle cx="18.5" cy="13.5" r="2.2"/><path d="M2 21c.4-2.4 1.8-3.6 3.5-3.6S8.6 18.6 9 21M15 21c.4-2.4 1.8-3.6 3.5-3.6S21.6 18.6 22 21"/></svg>',
+  left: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
+  right: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8.5 3.2 3L13 4.5"/></svg>',
+};
+
+function header() {
+  const tab = (name, key, extra = '') => `<button data-tab="${key}" ${key === 'timeline' ? 'aria-current="page"' : ''}>${name}${extra}</button>`;
+  return `<div class="crumb">‹ Overview</div>
+    <div class="head"><span class="tile">${ICON.findmy}</span>
+      <div class="grow"><h1>Find My</h1><span class="pill ok"><i></i>Connected</span></div>
+      <button class="ask">Ask Neo</button></div>
+    <nav class="tabs">${tab('Find My', 'findmy')}${tab('Timeline', 'timeline', '<span class="new">New</span>')}${tab('Activity', 'activity')}${tab('Connection', 'connection')}</nav>`;
+}
+
+function strip(items, i, p) {
+  const end = i === TODAY_I ? NOW : 1440, pct = m => (m / 1440 * 100).toFixed(3) + '%';
+  let s = '';
+  for (const it of items) {
+    const a = it.from, b = endOf(it, i);
+    if (it.k === 'stay') {
+      const sp = SPOTS[it.spot];
+      s += `<i style="left:${pct(a)};width:${pct(b - a)};background:${COLOR[sp.place]}" title="${sp.place} · ${hhmm(a)}–${hhmm(b)}"></i>`;
+      for (const [ha, hb] of it.holes) s += `<i class="gap" style="left:${pct(ha)};width:${pct(hb - ha)}" title="Not read · ${hhmm(ha)}–${hhmm(hb)}"></i>`;
+    } else s += `<i class="${it.k}" style="left:${pct(a)};width:${pct(b - a)}" title="${it.k === 'trip' ? 'On the way' : 'Not read'} · ${hhmm(a)}–${hhmm(b)}"></i>`;
+  }
+  if (i === TODAY_I) s += `<i class="nowline" style="left:${pct(end)}"></i>`;
+  return `<div class="strip" aria-label="${p.first}’s ${DAYS[i].title.toLowerCase()}">${s}</div>`;
+}
+
+function axis(withNow) {
+  const near = h => withNow && Math.abs(h / 24 - NOW / 1440) < 0.13 ? ' near' : '';
+  const t = [0, 6, 12, 18, 24].map((h, j) => `<span class="${j === 0 ? 'first' : j === 4 ? 'last' : ''}${near(h)}" style="left:${h / 24 * 100}%">${pad(h)}:00</span>`).join('');
+  const n = withNow ? `<span class="nowtick" style="left:${NOW / 1440 * 100}%">${hhmm(NOW)}</span>` : '';
+  return `<div class="axis"><span></span><div class="ticks">${t}${n}</div><span></span></div>`;
+}
+
+function placesIn(dayLists) {
+  const seen = new Set();
+  for (const items of dayLists) for (const it of items) if (it.k === 'stay') seen.add(SPOTS[it.spot].place);
+  return Object.keys(COLOR).filter(p => seen.has(p));
+}
+
+function legend(places) {
+  return `<div class="legend">${places.map(p => `<span><i style="background:${COLOR[p]}"></i>${p}</span>`).join('')}
+    <span><i class="trip"></i>On the way</span><span><i class="gap"></i>Not read</span></div>`;
+}
+
+function everyone() {
+  const i = ui.day, kept = PEOPLE.filter(p => p.kept);
+  const rows = PEOPLE.map(p => {
+    if (!p.kept) return `<div class="srow"><span class="who">${avatar(p)}<span>${p.first}</span></span>
+      <div class="strip off">Not kept · <a class="link" data-go="settings" style="margin-left:4px">Keep ${p.first}’s too</a></div>
+      <span class="nowat">${i === TODAY_I ? p.nowAt : ''}</span></div>`;
+    const items = dayOf(p.id, i), last = items[items.length - 1];
+    const nowAt = i === TODAY_I && last.k === 'stay' ? SPOTS[last.spot].place : '';
+    return `<button class="srow" data-person="${p.id}" aria-pressed="${ui.person === p.id}">
+      <span class="who">${avatar(p)}<span>${p.first}</span></span>${strip(items, i, p)}<span class="nowat">${nowAt}</span></button>`;
+  }).join('');
+  const meta = i === TODAY_I ? 'Reads every 5 minutes · last read 15:18' : 'Read every 5 minutes';
+  return `<section class="card"><header><h2>Everyone</h2><span class="meta">${meta}</span></header>
+    <div class="strips">${rows}${axis(i === TODAY_I)}</div>${legend(placesIn(kept.map(p => dayOf(p.id, i))))}</section>`;
+}
+
+function list(p, items, i) {
+  let n = 0, prev = null;
+  const lis = items.map((it, j) => {
+    const a = it.from, b = endOf(it, i), d = dur(b - a);
+    if (it.k === 'stay') {
+      n++; prev = it;
+      const sp = SPOTS[it.spot], current = it.to === null;
+      const holes = it.holes.map(([ha, hb, why]) => `<span class="sub">${WHY[why].title} ${hhmm(ha)}–${hhmm(hb)}</span>`).join('');
+      const durText = current ? `${d} so far` : d;
+      return `<li class="stay"><span class="time">${hhmm(a)}</span>
+        <span class="rail"><span class="dot" style="background:${COLOR[sp.place]}">${n}</span></span>
+        <div class="body"><b>${sp.place}</b> ${current ? '<span class="pill now">Now</span>' : ''} ${it.nearby ? '<span class="pill ok">Nearby</span>' : ''}
+          <span class="sub">${sp.street}${current ? ` · seen ${it.seen}` : ''}<span class="durin"> · ${durText}</span></span>${holes}</div>
+        <span class="dur">${durText}</span></li>`;
+    }
+    if (it.k === 'trip') {
+      const next = items.slice(j + 1).find(x => x.k === 'stay');
+      const from = SPOTS[prev.spot], to = SPOTS[next.spot];
+      const route = from.place === to.place ? `Within ${to.place}` : `${from.place} → ${to.place}`;
+      return `<li class="trip"><span class="time">${hhmm(a)}</span><span class="rail"></span>
+        <div class="body"><b>On the way</b><span class="sub">${route} · about ${dist(prev.spot, next.spot)} in a straight line<span class="durin"> · ${d}</span></span></div>
+        <span class="dur">${d}</span></li>`;
+    }
+    const w = WHY[it.why];
+    return `<li class="gap"><span class="time">${hhmm(a)}</span><span class="rail"></span>
+      <div class="body"><b>${w.title}</b><span class="sub">${typeof w.text === 'function' ? w.text(p.first) : w.text}<span class="durin"> · ${d}</span></span></div>
+      <span class="dur">${d}</span></li>`;
+  }).join('');
+  return `<ol class="tl">${lis}</ol>`;
+}
+
+function personCard() {
+  const p = person(ui.person), i = ui.day, items = dayOf(p.id, i), last = items[items.length - 1];
+  const stays = items.filter(x => x.k === 'stay');
+  let km = 0;
+  for (let j = 1; j < stays.length; j++) km += Math.hypot(SPOTS[stays[j].spot].x - SPOTS[stays[j - 1].spot].x, SPOTS[stays[j].spot].y - SPOTS[stays[j - 1].spot].y) * 0.0556;
+  const meta = i === TODAY_I && last.to === null
+    ? `Now in ${SPOTS[last.spot].place === 'Home' ? 'Home' : SPOTS[last.spot].place} · seen ${last.seen}`
+    : `${stays.length} stops · about ${Math.round(km)} km between them`;
+  return `<section class="card person"><header>${avatar(p)}<h2>${p.name}</h2><span class="meta">${meta}</span></header>
+    <div class="map" data-map></div>
+    <div class="note"><p>Lines join the spots Whombat read, not the way ${p.first} went.</p>
+      <p>Spots are where Find My’s address is, about 100 m. A stop shorter than 5 minutes can be missed.</p></div>
+    ${list(p, items, i)}</section>`;
+}
+
+function week() {
+  const kept = PEOPLE.filter(p => p.kept), p = person(ui.person);
+  const chips = kept.map(k => `<button class="chip" data-person="${k.id}" aria-pressed="${k.id === p.id}">${avatar(k, 28)}${k.first}</button>`).join('');
+  const lists = DAYS.map((_, i) => dayOf(p.id, i));
+  const rows = DAYS.map((d, i) => `<button class="wrow" data-day="${i}"><span class="dname">${i === TODAY_I ? '<b>Today</b>' : d.short}</span>${strip(lists[i], i, p)}</button>`).join('');
+  const tot = {};
+  lists.forEach((items, i) => items.forEach(it => {
+    const len = endOf(it, i) - it.from;
+    if (it.k === 'stay') { const pl = SPOTS[it.spot].place, h = it.holes.reduce((s, [a, b]) => s + b - a, 0);
+      tot[pl] = (tot[pl] || 0) + len - h; tot['Not read'] = (tot['Not read'] || 0) + h; }
+    else { const k = it.k === 'trip' ? 'On the way' : 'Not read'; tot[k] = (tot[k] || 0) + len; }
+  }));
+  const order = [...Object.keys(COLOR), 'On the way', 'Not read'].filter(k => tot[k]);
+  const sw = k => COLOR[k] ? `background:${COLOR[k]}` : k === 'On the way' ? 'background:repeating-linear-gradient(135deg,var(--mut) 0 1.5px,transparent 1.5px 4px)' : 'border:1px dashed var(--line2)';
+  const totals = order.map(k => `<span><i style="${sw(k)}"></i>${k} <b>${Math.round(tot[k] / 60)} h</b></span>`).join('');
+  return `<div class="chips">${chips}</div>
+    <section class="card"><header><h2>${p.first}’s week</h2><span class="meta">17 – 23 November</span></header>
+      <div class="strips">${rows}<div class="axis" style="grid-template-columns:112px 1fr"><span></span><div class="ticks">${[0, 6, 12, 18, 24].map((h, j) => `<span class="${j === 0 ? 'first' : j === 4 ? 'last' : ''}" style="left:${h / 24 * 100}%">${pad(h)}:00</span>`).join('')}</div></div></div>
+      <div class="totals">${totals}</div>
+      <div class="note"><p>Pick a day to see its stops and the map.</p></div></section>`;
+}
+
+function timelineOn() {
+  const d = DAYS[ui.day], isWeek = ui.mode === 'week';
+  const bar = `<div class="bar"><div class="day">
+      <button class="icon" data-step="-1" aria-label="Day before" ${isWeek || ui.day === 0 ? 'disabled' : ''}>${ICON.left}</button>
+      <button class="icon" data-step="1" aria-label="Day after" ${isWeek || ui.day === TODAY_I ? 'disabled' : ''}>${ICON.right}</button>
+      <b>${isWeek ? 'Last 7 days' : d.title}</b><span>${isWeek ? '' : d.date}</span></div>
+      <span class="seg"><button data-mode="day" aria-pressed="${!isWeek}">Day</button><button data-mode="week" aria-pressed="${isWeek}">Week</button></span></div>`;
+  const body = isWeek ? week() : everyone() + personCard();
+  return bar + body + settings();
+}
+
+function timelineOff() {
+  const li = t => `<li>${ICON.check}<span>${t}</span></li>`;
+  return `<section class="card"><div class="intro">
+      <h2>Keep a timeline?</h2>
+      <p>Whombat sees where people are now, but keeps no history. A timeline keeps where each person you choose was at every read, so you can look back at a day.</p>
+      <ul>${li('Places and streets, as Find My names them, every 5 minutes.')}
+        ${li('Only on this Whombat, and only you see it.')}
+        ${li('Days older than 30 are deleted by themselves.')}</ul>
+      <div class="whose" style="width:100%;max-width:420px">${PEOPLE.map(p => `<label>${avatar(p, 28)}<span>${p.name}</span>
+        <input type="checkbox" style="margin-left:auto" aria-label="Keep ${p.first}’s timeline"></label>`).join('')}</div>
+      <div class="btns"><button class="btn primary" disabled style="opacity:.45">Keep a timeline</button></div>
+      <p style="font-size:13px;color:var(--mut)">The people on it should know you keep it.</p>
+    </div></section>
+    <section class="card ghost" aria-hidden="true"><header><h2>Everyone</h2><span class="meta">A timeline looks like this</span></header>
+      <div class="strips">${PEOPLE.filter(p => p.kept).map(p => `<div class="srow"><span class="who">${avatar(p)}<span>${p.first}</span></span>${strip(made(p.id, 3), 3, p)}<span class="nowat"></span></div>`).join('')}${axis(false)}</div></section>`;
+}
+
+function settings() {
+  const who = PEOPLE.map(p => `<label>${avatar(p, 28)}<span>${p.name}</span><em>${p.kept ? 'kept since 23 Nov' : ''}</em>
+      <input type="checkbox" ${p.kept ? 'checked' : ''} aria-label="Keep ${p.first}’s timeline"></label>`).join('');
+  return `<section class="card"><header><h2>Timeline settings</h2></header>
+      <div class="set"><div class="lab"><b>Whose</b><span>Only the people you tick. Unticking someone deletes their days.</span></div><span></span>
+        <div class="whose">${who}</div></div>
+      <div class="set"><div class="lab"><b>Kept 30 days</b><span>Days older than 30 are deleted by themselves.</span></div><span></span></div>
+      <div class="set"><div class="lab"><b>Neo can read it</b><span>Then you can ask “Where was Ruben on Friday afternoon?”</span></div>
+        <button class="toggle" role="switch" aria-checked="true" aria-label="Neo can read the timeline"></button></div>
+      <p class="keeps">Only you see it. When Neo reads it, what it reads goes to its AI like any chat.</p>
+      <div class="set"><div class="lab"><b>Delete the timeline</b><span>Removes every day kept so far.</span></div><button class="btn danger">Delete…</button></div>
+      <div class="set"><div class="lab"><b>Stop keeping a timeline</b><span>Deletes every day and stops keeping new ones.</span></div><button class="btn danger">Stop…</button></div>
+    </section>`;
+}
+
+function mapSvg(items, p, i, wPx, hPx) {
+  const stays = items.filter(x => x.k === 'stay');
+  const keys = [...new Set(stays.map(s => s.spot))], xs = keys.map(k => SPOTS[k].x), ys = keys.map(k => SPOTS[k].y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  // Room around the stops in screen pixels, more above for the avatar pin.
+  const aspect = wPx / hPx;
+  let w = Math.max((maxX - minX) / (1 - 96 / wPx), 280), h = (maxY - minY) / (1 - 110 / hPx);
+  if (w / aspect < h) w = h * aspect; else h = w / aspect;
+  const vx = (minX + maxX) / 2 - w / 2, vy = (minY + maxY) / 2 - h / 2 - 8 * (w / wPx), k = w / wPx;
+
+  const r = rng(11);
+  let blocks = '';
+  for (const [cx, cy, R] of [[215, 250, 58], [775, 140, 52], [640, 318, 36]])
+    for (let gx = -R; gx <= R; gx += 13) for (let gy = -R; gy <= R; gy += 13)
+      if (Math.hypot(gx, gy) < R * (0.7 + r() * 0.35) && r() > 0.12)
+        blocks += `<rect x="${cx + gx}" y="${cy + gy}" width="10" height="10" rx="1" style="fill:var(--m-block)"/>`;
+  const road = (d, wd) => `<path d="${d}" style="fill:none;stroke:var(--m-edge);stroke-width:${(wd + 2) * k}"/><path d="${d}" style="fill:none;stroke:var(--m-road);stroke-width:${wd * k}"/>`;
+  const minor = d => `<path d="${d}" style="fill:none;stroke:var(--m-minor);stroke-width:${3 * k}"/>`;
+  const label = (x, y, t) => `<text x="${x}" y="${y}" text-anchor="middle" style="fill:var(--m-label);font:600 ${12 * k}px var(--sans);letter-spacing:.02em">${t}</text>`;
+
+  let base = `<rect x="-2000" y="-2000" width="5000" height="5000" style="fill:var(--m-land)"/>
+    <ellipse cx="110" cy="110" rx="80" ry="42" style="fill:var(--m-park)"/><ellipse cx="900" cy="320" rx="70" ry="36" style="fill:var(--m-park)"/>
+    <ellipse cx="300" cy="300" rx="26" ry="14" style="fill:var(--m-park)"/><ellipse cx="820" cy="92" rx="22" ry="12" style="fill:var(--m-park)"/>
+    <path d="M360,-40 L730,-40 C705,70 690,150 640,205 C590,255 505,292 432,300 C382,305 350,270 345,222 C340,150 372,70 360,-40 Z" style="fill:var(--m-water)"/>
+    ${blocks}
+    ${minor('M150,262 L280,262 M215,190 L215,330 M175,230 L270,230 M700,140 L850,140 M775,70 L775,220 M600,318 L690,318')}
+    ${road('M-100,285 C120,272 200,262 300,247 L735,152 C800,136 900,112 1100,96', 6)}
+    ${road('M230,-100 C236,120 230,250 220,480', 4.5)}${road('M780,-100 C776,100 770,180 792,480', 4.5)}
+    ${road('M540,480 C600,345 640,318 700,300 C800,268 900,256 1100,240', 4.5)}
+    ${label(215, 324, 'Rietveen')}${label(775, 210, 'Wilgendam')}${label(668, 356, 'Oosterhaven')}`;
+
+  // Lines between stops: dashed when Whombat saw the move, dotted when it wasn't read in between.
+  let lines = '', last = null, unread = false;
+  for (const it of items) {
+    if (it.k === 'gap') unread = true;
+    if (it.k !== 'stay') continue;
+    if (last && last.spot !== it.spot) {
+      const a = SPOTS[last.spot], b = SPOTS[it.spot];
+      lines += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:var(--m-line);stroke-width:${2.2 * k};stroke-linecap:round;${unread ? `stroke-dasharray:${0.1 * k} ${5 * k};opacity:.55` : `stroke-dasharray:${7 * k} ${5 * k}`}"/>`;
+    }
+    last = it; unread = false;
+  }
+
+  const nums = {};
+  stays.forEach((s, j) => (nums[s.spot] ||= []).push(j + 1));
+  let marks = '';
+  for (const key of keys) {
+    const sp = SPOTS[key], t = nums[key].join(', '), wd = Math.max(22, t.length * 7 + 12) * k, ht = 22 * k;
+    marks += `<rect x="${sp.x - wd / 2}" y="${sp.y - ht / 2}" width="${wd}" height="${ht}" rx="${ht / 2}" style="fill:${COLOR[sp.place]};stroke:var(--sf);stroke-width:${2 * k}"/>
+      <text x="${sp.x}" y="${sp.y + 4 * k}" text-anchor="middle" style="fill:#fff;font:500 ${11 * k}px var(--mono)">${t}</text>`;
+  }
+  const end = items[items.length - 1];
+  if (i === TODAY_I && end.k === 'stay' && end.to === null) {
+    const sp = SPOTS[end.spot], ay = sp.y - 34 * k;
+    marks += `<line x1="${sp.x}" y1="${ay + 15 * k}" x2="${sp.x}" y2="${sp.y - 11 * k}" style="stroke:var(--m-line);stroke-width:${1.5 * k}"/>
+      <circle cx="${sp.x}" cy="${ay}" r="${15 * k}" style="fill:${p.tone};stroke:var(--sf);stroke-width:${2.5 * k}"/>
+      <text x="${sp.x}" y="${ay + 4 * k}" text-anchor="middle" style="fill:#221d18;font:600 ${10.5 * k}px var(--sans)">${p.ini}</text>`;
+  }
+  return `<svg viewBox="${vx} ${vy} ${w} ${h}" height="${hPx}" role="img" aria-label="${p.first}’s stops on a map">${base}${lines}${marks}</svg>`;
+}
+
+function drawMap() {
+  const el = wb.querySelector('[data-map]');
+  if (!el) return;
+  const wPx = el.clientWidth || 680, hPx = wPx < 520 ? 210 : 260;
+  el.innerHTML = mapSvg(dayOf(ui.person, ui.day), person(ui.person), ui.day, wPx, hPx);
+}
+
+function render() {
+  wb.dataset.theme = ui.theme;
+  wb.innerHTML = header() + (ui.state === 'off' ? timelineOff() : timelineOn());
+  document.querySelectorAll('#states button').forEach(b => b.setAttribute('aria-pressed', b.dataset.state === ui.state));
+  document.querySelectorAll('#themes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.theme === ui.theme));
+  drawMap();
+  if (ui.state === 'settings') wb.querySelector('.card:last-of-type')?.scrollIntoView({ block: 'start' });
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, a, input');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.state) ui.state = d.state;
+  else if (d.theme) ui.theme = d.theme;
+  else if (d.go) ui.state = d.go;
+  else if (d.tab === 'timeline') ui.state = ui.state === 'off' ? 'off' : 'on';
+    else if (d.person) ui.person = d.person;
+  else if (d.step) ui.day = Math.min(TODAY_I, Math.max(0, ui.day + Number(d.step)));
+  else if (d.mode) ui.mode = d.mode;
+  else if (d.day) { ui.day = Number(d.day); ui.mode = 'day'; }
+  else if (t.classList.contains('toggle')) { t.setAttribute('aria-checked', t.getAttribute('aria-checked') !== 'true'); return; }
+  else if (t.parentElement?.classList.contains('seg') && !t.dataset.mode) {
+    t.parentElement.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b === t)); return; }
+  else return;
+  render();
+});
+
+let lastW = 0;
+new ResizeObserver(() => { const w = wb.clientWidth; if (Math.abs(w - lastW) > 4) { lastW = w; drawMap(); } }).observe(wb);
+render();
+</script>
+</body>
+</html>
