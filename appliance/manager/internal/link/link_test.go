@@ -513,3 +513,30 @@ func TestWaitingForTheAddressAsksSoonThenEveryMinute(t *testing.T) {
 		t.Fatal(wait, err)
 	}
 }
+
+// While a code shows the box asks soon, so its screen moves within seconds of the confirm; after half an hour of codes
+// nobody typed it asks less often, and a new run of codes (after a confirm, a restart) is soon again.
+func TestCodeAsksSoonThenLessOften(t *testing.T) {
+	b := newBox(t, false)
+	if _, err := b.keep.On(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollCode || wait > 2*time.Second {
+		t.Fatal(wait, err)
+	}
+	b.now = b.now.Add(pollCodeFor - time.Second)
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollCode {
+		t.Fatal(wait, err)
+	}
+	b.now = b.now.Add(time.Second)
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollPending {
+		t.Fatal(wait, err)
+	}
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()})
+	if wait, err := b.keep.step(context.Background()); err != nil || wait != pollOn {
+		t.Fatal(wait, err)
+	}
+	if !b.keep.codeSince.IsZero() {
+		t.Fatal("the run of codes didn't end with the confirm")
+	}
+}
