@@ -111,8 +111,8 @@ describe('Places (phone-shell-final.md)', () => {
       ['Website feedback', null],
       ['Email', '/settings?tab=connections&connection=imap'],
     ]);
-    // Each account draws its own mark; Website feedback, which has none, its bubble rather than a plug.
-    expect(connections.map((t) => t.mark)).toEqual(['google', 'github', null, 'imap']);
+    // Each account draws its own mark; Website feedback's glyph, where no mark is drawn, is its bubble, not a plug.
+    expect(connections.map((t) => t.mark)).toEqual(['google', 'github', 'feedback', 'imap']);
     expect(connections[2]?.glyph).toBe('message');
   });
 });

@@ -99,7 +99,7 @@ describe('logos', () => {
     expect(connectionLogo('tracker', 'Report tracker')).toEqual({ kind: 'mark', mark: 'tracker' });
     expect(connectionLogo('custom_mcp')).toEqual({ kind: 'mark', mark: 'custom_mcp' });
     expect(connectionLogo('custom_api')).toEqual({ kind: 'mark', mark: 'custom_api' });
-    expect(connectionLogo('feedback')).toEqual({ kind: 'icon', icon: 'message' });
+    expect(connectionLogo('feedback')).toEqual({ kind: 'mark', mark: 'feedback' });
     expect(connectionLogo('moneybird')).toEqual({ kind: 'mark', mark: 'moneybird' });
     expect(connectionLogo('someday', 'later')).toEqual({ kind: 'monogram', letter: 'L' });
   });
@@ -193,7 +193,7 @@ describe('an account’s page from Connections (session minor 7)', () => {
     expect(feedback).toMatchObject({
       catalogId: 'feedback',
       meta: '2 sites',
-      logo: { kind: 'icon', icon: 'message' },
+      logo: { kind: 'mark', mark: 'feedback' },
       state: { tone: 'ok', label: 'On' },
     });
     expect(feedback?.line).toContain('3 reports');
