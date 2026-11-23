@@ -303,8 +303,20 @@ function FindMyMap({
           style={{ width: '100%', height: '100%', opacity: map.drawing ? 0.75 : 1 }}
         />
       ) : (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          {map.error ? null : <ActivityIndicator color={theme.colors.mut} />}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+          {map.error ? (
+            <Text
+              size={13.5}
+              lh={1.45}
+              color={theme.colors.mut}
+              accessibilityLiveRegion="polite"
+              style={{ textAlign: 'center' }}
+            >
+              {hostErrorInfo(map.error).message}
+            </Text>
+          ) : (
+            <ActivityIndicator color={theme.colors.mut} />
+          )}
         </View>
       )}
       <View

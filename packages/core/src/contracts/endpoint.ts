@@ -160,8 +160,14 @@ export const BurrowParam = z.string().min(1).max(63);
 /** Positive integer path segment (`/runs/:number`). */
 export const NumberParam = z.coerce.number().int().positive();
 
-/** `?flag=true` style booleans. */
-export const QueryBool = z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1');
+/**
+ * `?flag=true` style booleans. A boolean passes too: the apps parse a query before they send it over the session, so
+ * the box reads `true`, never the text the address would carry.
+ */
+export const QueryBool = z.union([
+  z.boolean(),
+  z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1'),
+]);
 
 /** Page size, 1–200 (default per endpoint). */
 export function limitQuery(defaultLimit: number, max = 200) {

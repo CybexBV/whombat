@@ -206,7 +206,9 @@ function FindMyMap({
           draggable={false}
         />
       ) : (
-        <span className={fm.drawing}>{map.error ? null : FIND_MY_WORDS.drawing}</span>
+        <span className={fm.drawing} role={map.error ? 'status' : undefined}>
+          {map.error ? hostErrorInfo(map.error).message : FIND_MY_WORDS.drawing}
+        </span>
       )}
       {pins.map((pin) => {
         const p = byId.get(pin.person);
