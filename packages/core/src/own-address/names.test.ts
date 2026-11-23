@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   drawOwnAddressLabel,
-  OWN_ADDRESS_LOOKALIKE_WORDS,
   OWN_ADDRESS_RESERVED_PREFIXES,
   OWN_ADDRESS_RUDE_WORDS,
   OWN_ADDRESS_WORDS,
