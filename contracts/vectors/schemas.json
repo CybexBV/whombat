@@ -50255,6 +50255,204 @@
       }
     },
     {
+      "schema": "LinkMailSetRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "offline": true,
+        "notifications": false
+      }
+    },
+    {
+      "schema": "LinkMailSetRequest",
+      "name": "both off",
+      "valid": true,
+      "value": {
+        "offline": false,
+        "notifications": false
+      }
+    },
+    {
+      "schema": "LinkMailSetRequest",
+      "name": "one left out",
+      "valid": false,
+      "value": {
+        "offline": true
+      }
+    },
+    {
+      "schema": "LinkMailSetRequest",
+      "name": "a recipient",
+      "valid": false,
+      "value": {
+        "offline": true,
+        "notifications": true,
+        "to": "someone@example.com"
+      }
+    },
+    {
+      "schema": "LinkMailSetResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "ok": true
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 3,
+        "cadence": "daily"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "hourly, one thing",
+      "valid": true,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 1,
+        "cadence": "hourly"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "with its page",
+      "valid": true,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 2,
+        "cadence": "hourly",
+        "path": "/home"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a notice with its page",
+      "valid": true,
+      "value": {
+        "kind": "notice",
+        "ref": "n0t1ce_r3fXk2pQ9vLm",
+        "title": "A new device signed in",
+        "body": "A device signed in to your Whombat with your passkey. If it wasn’t you, remove it in Settings.",
+        "path": "/settings?tab=appliance&section=devices"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a notice without a page",
+      "valid": true,
+      "value": {
+        "kind": "notice",
+        "ref": "n0t1ce_r3fXk2pQ9vLm",
+        "title": "Recovery kit saved",
+        "body": "Keep it somewhere safe."
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "nothing waiting",
+      "valid": false,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 0,
+        "cadence": "daily"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "weekly",
+      "valid": false,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 3,
+        "cadence": "weekly"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a recipient",
+      "valid": false,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 3,
+        "cadence": "daily",
+        "to": "x@example.com"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a short ref",
+      "valid": false,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3f",
+        "count": 3,
+        "cadence": "daily"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a page on another site",
+      "valid": false,
+      "value": {
+        "kind": "notice",
+        "ref": "n0t1ce_r3fXk2pQ9vLm",
+        "title": "Hi",
+        "body": "There",
+        "path": "https://example.com/"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "a notice over two lines",
+      "valid": false,
+      "value": {
+        "kind": "notice",
+        "ref": "n0t1ce_r3fXk2pQ9vLm",
+        "title": "Hi",
+        "body": "line one\nline two"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "another kind",
+      "valid": false,
+      "value": {
+        "kind": "text",
+        "ref": "r3fXk2pQ9vLm0aZt"
+      }
+    },
+    {
+      "schema": "MailSendRequest",
+      "name": "text of its own",
+      "valid": false,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 3,
+        "cadence": "daily",
+        "text": "Hi"
+      }
+    },
+    {
+      "schema": "MailSendResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "ok": true
+      }
+    },
+    {
       "schema": "LinkWhombatsResponse",
       "name": "base",
       "valid": true,
@@ -50889,6 +51087,42 @@
       "valid": true,
       "value": {
         "whombats": []
+      }
+    },
+    {
+      "schema": "RuntimeLinkMailSetRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "offline": true,
+        "notifications": true
+      }
+    },
+    {
+      "schema": "RuntimeLinkMailSetResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "ok": true
+      }
+    },
+    {
+      "schema": "RuntimeMailSendRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "kind": "waiting",
+        "ref": "r3fXk2pQ9vLm0aZt",
+        "count": 2,
+        "cadence": "hourly"
+      }
+    },
+    {
+      "schema": "RuntimeMailSendResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "ok": true
       }
     },
     {

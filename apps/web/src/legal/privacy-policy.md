@@ -1,4 +1,4 @@
-> Version `2026-11-22`.
+> Version `2026-11-23`.
 
 # Whombat Privacy Policy
 
@@ -112,7 +112,15 @@ previews off in Settings → Notifications (“Show message text in notification
 read it. We keep its size, when it expires, and how often and when it was last opened.
 
 **Emails.** We send sign-in links and Whombat Link emails, such as the end of your free month or a payment that
-failed.
+failed. Two more are your choice, in your Whombat's Settings → Notifications, and only ever go to your Whombat Link
+account's email address:
+
+- **“Tell me when it goes offline”** (on unless you turn it off): we email you when we haven't heard from your Whombat
+  for 2 hours. It uses only what we already know: when your Whombat was last in touch.
+- **“Send my emails through Whombat Link”** (off unless you turn it on): your Whombat's notification emails and
+  notices about it go through us. A notification email only says how many things are waiting for you, never who,
+  where or what. A notice is a fixed sentence about your Whombat itself, such as “A new device signed in”. We keep a
+  short reference of each email for 7 days so it is never sent twice, not its words.
 
 **Keeping Whombat secure.** A log of important actions in your account (such as a Whombat linked or a subscription
 changed), recorded under a pseudonymous account number, without email addresses, and of every change our staff make
@@ -186,7 +194,7 @@ We use a small number of service providers, under agreements that only let them 
 - **Cloudflare, Inc.** sits in front of our websites and services: it answers for their names (DNS), delivers and
   protects them. It handles the web traffic to them for us, including visitors' IP addresses, but not the content
   between your devices and your Whombat, which stays end-to-end encrypted.
-- **Mailgun** (Sinch) sends our emails.
+- **Mailgun** (Sinch) sends our emails, including the ones your Whombat sends through Whombat Link when you chose it.
 - **Stripe** handles payments. For fraud prevention and its own legal obligations, Stripe is also a controller in its
   own right; see Stripe's privacy policy.
 - **Push services** deliver notifications: Apple Push Notification service for the iPhone app, Google Firebase Cloud
@@ -228,6 +236,8 @@ provider is certified, and otherwise on the European Commission's Standard Contr
   log:** up to 2 months.
   **Rate-limit counters:** 2 days. **Payment events from Stripe:** 90 days. **Audit log:** 400 days.
 - **Phone push addresses:** until unused for 90 days.
+- **Emails your Whombat sent through Whombat Link:** a short reference to each for 7 days; your two email choices as
+  long as your Whombat is in your account.
 - **Shared links:** until you remove them or they expire.
 - **Feedback reports:** until your Whombat collects them, and never longer than 7 days.
 - **Remote help:** what support did stays on your Whombat for 90 days (at most 500 MB), not with us. Our record of

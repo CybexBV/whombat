@@ -15,6 +15,7 @@ Your name, title and photo, and how Chat settles finished threads.
 What Whombat tells you about, by push and by email.
 
 - Choose how a conversation notifies you — `conversations.setNotify` · change
+- Choose which emails Whombat Link sends you — `link.mail.set` · change, always asks
 
 ## Settings → You → Devices (`you.devices`)
 

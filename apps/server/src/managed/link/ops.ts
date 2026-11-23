@@ -10,10 +10,13 @@
  * - `updates.channel.get {}`, `updates.channel.set {channel}` (the owner sets): the update channel the helper keeps;
  *   `staysOn` says the box keeps a newer release until Production passes it. A set is signed (`update.channel_set`).
  *   A manager that can't choose answers `update_channel_unavailable`.
+ * - `link.mail.set {offline?, notifications?}` (the owner): which emails Whombat Link sends (`mail.ts`), a signed
+ *   appliance event (`link.mail_set`); answers Link with the choices.
  * - `push.token.set {token}`, `push.token.clear {}` (the device itself): push through the box (`push-tokens.ts`).
  */
 import { LOCAL_API_VERSION } from '@whombat/control-contracts/local';
 import type {
+  LinkMailSetInput,
   LinkOutput,
   LinkWhombatsOutput,
   PushTokenSetInput,
@@ -106,6 +109,17 @@ export const LINK_SESSION_HANDLERS = {
     const link = c.link.summary();
     if (!link) throw linkError(new LinkRefusal('whombat_link_unavailable', 'no Link'));
     c.services.log.info({ state: link.state }, 'link: the owner turned Whombat Link off');
+    return { link };
+  },
+  'link.mail.set': async (
+    c: SessionOpContext,
+    input: z.output<typeof LinkMailSetInput>,
+  ): Promise<LinkOutput> => {
+    const { account, endpointId } = requirePerson(c.principal);
+    if (!c.link || !c.linkEmail) throw linkError(new LinkRefusal('whombat_link_unavailable', 'no Link'));
+    await c.linkEmail.set({ accountId: account.id, endpointId }, input);
+    const link = c.link.summary();
+    if (!link) throw linkError(new LinkRefusal('whombat_link_unavailable', 'no Link'));
     return { link };
   },
   'updates.channel.get': async (c: SessionOpContext): Promise<UpdatesChannelOutput> => {

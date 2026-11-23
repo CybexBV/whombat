@@ -88,7 +88,13 @@ manager (the helper keeps it). Grace is one Inbox item and one push asking to tu
 details' paper copy; once ended, one Inbox item says what still works and how to come back
 (`link/notices.ts`). The screen shows Link's code while it starts and Tailscale's sign-in link (`ConsoleState.reach`). A
 phone gives its own push token to the box (`push.token.set`); the box keeps it on the device's endpoint and registers it
-at control while Link runs (`link/push-tokens.ts`), and pushes go to that handle. A box control registered before Link
+at control while Link runs (`link/push-tokens.ts`), and pushes go to that handle. Email through Link
+(`link/mail.ts`, [link-email.md](docs/decisions/link-email.md)): the owner's two choices (told when the box goes offline,
+on; notification emails through Link, off) are kept on the box, signed (`link.mail_set`) and told to control whenever it
+knows the box (`link.mail.set`); control emails the Link account when it hasn't heard from the box for two hours, and,
+when the owner chose it, the digest sends a count of what waits (`mail.send`, kind `waiting`) unless a mail server of the
+owner's own sends it, and every fixed-word notice goes by email too (kind `notice`). The only recipient is the Link
+account's own email. A box control registered before Link
 (Home, the DEV stack box; `device.json` names an appliance route other than `local`) keeps its claim through control,
 its reports to control and links to the hosted app; every other box is claimed on and linked to its own pages (its own
 address, else an HTTPS way such as its Tailscale name, else its address on the local network; no address at all while

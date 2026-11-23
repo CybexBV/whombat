@@ -237,6 +237,11 @@ const LOCAL_SCHEMAS = [
   // The account's other Whombats (4.14).
   'RuntimeLinkWhombatsRequest',
   'RuntimeLinkWhombatsResponse',
+  // Email through Whombat Link (4.15).
+  'RuntimeLinkMailSetRequest',
+  'RuntimeLinkMailSetResponse',
+  'RuntimeMailSendRequest',
+  'RuntimeMailSendResponse',
   'UpdateChannelRequest',
   'UpdateChannelSetRequest',
   'UpdateChannelResponse',

@@ -87,6 +87,7 @@ import {
   hostWifiScanOp,
 } from './host-network';
 import type { LicenceService } from './licence';
+import type { LinkEmail } from './link/mail';
 import { LINK_SESSION_HANDLERS } from './link/ops';
 import type { PushTokens } from './link/push-tokens';
 import type { LinkService } from './link/service';
@@ -162,6 +163,8 @@ export interface SessionOpContext {
   link?: LinkService | undefined;
   /** Phones' own push tokens, registered at control while Link runs (LNK-36). */
   pushTokens?: PushTokens | undefined;
+  /** Email through Whombat Link: the owner's choices (link-email.md). */
+  linkEmail?: LinkEmail | undefined;
 }
 
 /**
@@ -654,6 +657,7 @@ export class SessionDispatcher {
   /** Whombat Link and phones' push tokens (the runtime sets them). */
   link: LinkService | undefined;
   pushTokens: PushTokens | undefined;
+  linkEmail: LinkEmail | undefined;
   private readonly ephemeralLimiter: RateLimiter;
   /** Per screen op of `SCREEN_READS_PER_MINUTE`, per key. */
   private readonly screenLimiters: ReadonlyMap<string, RateLimiter>;
@@ -1016,6 +1020,7 @@ export class SessionDispatcher {
         ownAddress: this.trust.ownAddress,
         link: this.link,
         pushTokens: this.pushTokens,
+        linkEmail: this.linkEmail,
       },
       input,
     );

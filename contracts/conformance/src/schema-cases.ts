@@ -4574,6 +4574,72 @@ export const SCHEMA_CASES: Case[] = [
     ['a host for a label', { link: { ...linkGrace, label: 'maple-otter-river.box.whombat.app' } }, false],
   ]),
   ...cases('LinkWhombatsRequest', {}, [['a member', { all: true }, false]]),
+  ...cases('LinkMailSetRequest', { offline: true, notifications: false }, [
+    ['both off', { offline: false, notifications: false }, true],
+    ['one left out', { offline: true }, false],
+    ['a recipient', { offline: true, notifications: true, to: 'someone@example.com' }, false],
+  ]),
+  ...cases('LinkMailSetResponse', { ok: true }, []),
+  ...cases('MailSendRequest', { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 3, cadence: 'daily' }, [
+    ['hourly, one thing', { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 1, cadence: 'hourly' }, true],
+    [
+      'with its page',
+      { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 2, cadence: 'hourly', path: '/home' },
+      true,
+    ],
+    [
+      'a notice with its page',
+      {
+        kind: 'notice',
+        ref: 'n0t1ce_r3fXk2pQ9vLm',
+        title: 'A new device signed in',
+        body: 'A device signed in to your Whombat with your passkey. If it wasn’t you, remove it in Settings.',
+        path: '/settings?tab=appliance&section=devices',
+      },
+      true,
+    ],
+    [
+      'a notice without a page',
+      {
+        kind: 'notice',
+        ref: 'n0t1ce_r3fXk2pQ9vLm',
+        title: 'Recovery kit saved',
+        body: 'Keep it somewhere safe.',
+      },
+      true,
+    ],
+    ['nothing waiting', { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 0, cadence: 'daily' }, false],
+    ['weekly', { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 3, cadence: 'weekly' }, false],
+    [
+      'a recipient',
+      { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 3, cadence: 'daily', to: 'x@example.com' },
+      false,
+    ],
+    ['a short ref', { kind: 'waiting', ref: 'r3f', count: 3, cadence: 'daily' }, false],
+    [
+      'a page on another site',
+      {
+        kind: 'notice',
+        ref: 'n0t1ce_r3fXk2pQ9vLm',
+        title: 'Hi',
+        body: 'There',
+        path: 'https://example.com/',
+      },
+      false,
+    ],
+    [
+      'a notice over two lines',
+      { kind: 'notice', ref: 'n0t1ce_r3fXk2pQ9vLm', title: 'Hi', body: 'line one\nline two' },
+      false,
+    ],
+    ['another kind', { kind: 'text', ref: 'r3fXk2pQ9vLm0aZt' }, false],
+    [
+      'text of its own',
+      { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 3, cadence: 'daily', text: 'Hi' },
+      false,
+    ],
+  ]),
+  ...cases('MailSendResponse', { ok: true }, []),
   ...cases(
     'LinkWhombatsResponse',
     {
@@ -4698,6 +4764,14 @@ export const SCHEMA_CASES: Case[] = [
   ...cases('RuntimePushUnregisterResponse', { ok: true }, []),
   ...cases('RuntimeLinkWhombatsRequest', {}, []),
   ...cases('RuntimeLinkWhombatsResponse', { whombats: [] }, []),
+  ...cases('RuntimeLinkMailSetRequest', { offline: true, notifications: true }, []),
+  ...cases('RuntimeLinkMailSetResponse', { ok: true }, []),
+  ...cases(
+    'RuntimeMailSendRequest',
+    { kind: 'waiting', ref: 'r3fXk2pQ9vLm0aZt', count: 2, cadence: 'hourly' },
+    [],
+  ),
+  ...cases('RuntimeMailSendResponse', { ok: true }, []),
   ...cases(
     'ConsoleState',
     {

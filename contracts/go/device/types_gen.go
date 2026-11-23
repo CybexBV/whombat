@@ -22,7 +22,13 @@ type SupportTicketResponse = TicketIssueResponse
 // ShareViewsRequest is the same schema as ShareDeleteRequest.
 type ShareViewsRequest = ShareDeleteRequest
 
-// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "push.register", "push.unregister", "support.heartbeat".
+// MailSendResponse is the same schema as LinkMailSetResponse.
+type MailSendResponse = LinkMailSetResponse
+
+// PushUnregisterResponse is the same schema as LinkMailSetResponse.
+type PushUnregisterResponse = LinkMailSetResponse
+
+// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "link.mail.set", "mail.send", "push.register", "push.unregister", "support.heartbeat".
 type DeviceOpName string
 
 const (
@@ -52,13 +58,15 @@ const (
 	DeviceOpNameLinkStatus               DeviceOpName = "link.status"
 	DeviceOpNameLinkLeave                DeviceOpName = "link.leave"
 	DeviceOpNameLinkWhombats             DeviceOpName = "link.whombats"
+	DeviceOpNameLinkMailSet              DeviceOpName = "link.mail.set"
+	DeviceOpNameMailSend                 DeviceOpName = "mail.send"
 	DeviceOpNamePushRegister             DeviceOpName = "push.register"
 	DeviceOpNamePushUnregister           DeviceOpName = "push.unregister"
 	DeviceOpNameSupportHeartbeat         DeviceOpName = "support.heartbeat"
 )
 
 // DeviceOpNameValues lists every DeviceOpName.
-var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
+var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
 
 type DeviceRequestEnvelope struct {
 	V      int64           `json:"v"` // always 1
@@ -372,6 +380,25 @@ type LinkWhombatsResponse struct {
 	Whombats []LinkWhombat `json:"whombats"`
 }
 
+type LinkMailSetRequest struct {
+	Offline       bool `json:"offline"`
+	Notifications bool `json:"notifications"`
+}
+
+type LinkMailSetResponse struct {
+	Ok bool `json:"ok"` // always true
+}
+
+type MailSendRequest struct {
+	Kind    string  `json:"kind"`
+	Ref     string  `json:"ref"`
+	Count   *int64  `json:"count,omitempty"`
+	Cadence *string `json:"cadence,omitempty"`
+	Title   *string `json:"title,omitempty"`
+	Body    *string `json:"body,omitempty"`
+	Path    *string `json:"path,omitempty"`
+}
+
 type PushRegisterRequest struct {
 	Token protocol.NativePushToken `json:"token"`
 }
@@ -382,10 +409,6 @@ type PushRegisterResponse struct {
 
 type PushUnregisterRequest struct {
 	Handle string `json:"handle"`
-}
-
-type PushUnregisterResponse struct {
-	Ok bool `json:"ok"` // always true
 }
 
 type SupportHeartbeatRequest struct {
@@ -1515,6 +1538,61 @@ func (v *LinkWhombatsResponse) Validate() error {
 
 var _ = register("LinkWhombatsResponse", func(data []byte) (any, error) { return ParseLinkWhombatsResponse(data) })
 
+// ParseLinkMailSetRequest validates data against the LinkMailSetRequest JSON Schema and decodes it.
+func ParseLinkMailSetRequest(data []byte) (*LinkMailSetRequest, error) {
+	v := new(LinkMailSetRequest)
+	if err := schemas.Decode("LinkMailSetRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the LinkMailSetRequest JSON Schema (as it would be sent).
+func (v *LinkMailSetRequest) Validate() error { return schemas.ValidateValue("LinkMailSetRequest", v) }
+
+var _ = register("LinkMailSetRequest", func(data []byte) (any, error) { return ParseLinkMailSetRequest(data) })
+
+// ParseLinkMailSetResponse validates data against the LinkMailSetResponse JSON Schema and decodes it.
+func ParseLinkMailSetResponse(data []byte) (*LinkMailSetResponse, error) {
+	v := new(LinkMailSetResponse)
+	if err := schemas.Decode("LinkMailSetResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the LinkMailSetResponse JSON Schema (as it would be sent).
+func (v *LinkMailSetResponse) Validate() error {
+	return schemas.ValidateValue("LinkMailSetResponse", v)
+}
+
+var _ = register("LinkMailSetResponse", func(data []byte) (any, error) { return ParseLinkMailSetResponse(data) })
+
+// ParseMailSendRequest validates data against the MailSendRequest JSON Schema and decodes it.
+func ParseMailSendRequest(data []byte) (*MailSendRequest, error) {
+	v := new(MailSendRequest)
+	if err := schemas.Decode("MailSendRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the MailSendRequest JSON Schema (as it would be sent).
+func (v *MailSendRequest) Validate() error { return schemas.ValidateValue("MailSendRequest", v) }
+
+var _ = register("MailSendRequest", func(data []byte) (any, error) { return ParseMailSendRequest(data) })
+
+// ParseMailSendResponse validates data against the MailSendResponse JSON Schema and decodes it.
+func ParseMailSendResponse(data []byte) (*MailSendResponse, error) {
+	v := new(MailSendResponse)
+	if err := schemas.Decode("MailSendResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("MailSendResponse", func(data []byte) (any, error) { return ParseMailSendResponse(data) })
+
 // ParsePushRegisterRequest validates data against the PushRegisterRequest JSON Schema and decodes it.
 func ParsePushRegisterRequest(data []byte) (*PushRegisterRequest, error) {
 	v := new(PushRegisterRequest)
@@ -1570,11 +1648,6 @@ func ParsePushUnregisterResponse(data []byte) (*PushUnregisterResponse, error) {
 		return nil, err
 	}
 	return v, nil
-}
-
-// Validate checks v against the PushUnregisterResponse JSON Schema (as it would be sent).
-func (v *PushUnregisterResponse) Validate() error {
-	return schemas.ValidateValue("PushUnregisterResponse", v)
 }
 
 var _ = register("PushUnregisterResponse", func(data []byte) (any, error) { return ParsePushUnregisterResponse(data) })

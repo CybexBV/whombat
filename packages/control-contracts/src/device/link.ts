@@ -66,6 +66,72 @@ export type LinkWhombat = z.infer<typeof LinkWhombat>;
 /** At most this many other Whombats in one answer. */
 export const LINK_WHOMBATS_MAX = 100;
 
+/**
+ * Email through Whombat Link (4.15; Whombat docs/decisions/link-email.md): the owner's two choices, kept on the box and
+ * told to control with `link.mail.set`. `offline`: control emails the Link account's address when it hasn't heard from
+ * the box for `LINK_MAIL_OFFLINE_AFTER_S`. `notifications`: the box may hand control its notification emails and its
+ * notices in fixed words (`mail.send`), which control sends to that same address and nowhere else.
+ */
+export const LinkMailChoices = z.object({ offline: z.boolean(), notifications: z.boolean() });
+export type LinkMailChoices = z.infer<typeof LinkMailChoices>;
+
+/** How long control waits without hearing from a box before it emails that the box went quiet. */
+export const LINK_MAIL_OFFLINE_AFTER_S = 7_200;
+
+/** At most this many `mail.send` a day per box: an hourly email and the odd notice fit with room to spare. */
+export const LINK_MAIL_PER_DAY = 40;
+
+/**
+ * The box's own name for one email, the same for every try of it (an opaque keyed hash, never an id): control sends a
+ * mail with a ref it already sent once only.
+ */
+export const LinkMailRef = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
+
+/** A page of the box the email's button opens, under the box's own address (`/home/settings?tab=notifications`). */
+export const LinkMailPath = z.string().regex(/^\/[A-Za-z0-9/_.~%?&=-]{0,199}$/);
+
+/**
+ * One email the box asks control to send (`mail.send`); one flat shape, so the manager's Go reads it as it is. By
+ * `kind`:
+ *
+ * - `waiting`: the notification email, as a count only: `count` things wait unread, sent `hourly` or `daily` as the
+ *   person chose; `path` the box's page that shows them. Never who, where or what: control learns how many, not what
+ *   they are.
+ * - `notice`: a notice about the box in fixed words (a new device, the recovery kit, remote help, a restore that is
+ *   done), the same two lines a phone notification shows (`title`, `body`); `path` the page of the box its button
+ *   opens.
+ *
+ * Control refuses a `waiting` without `count` and `cadence`, a `notice` without `title` and `body`, and either with the
+ * other kind's members (`validation_failed`).
+ */
+export const LinkMail = z.strictObject({
+  kind: z.enum(['waiting', 'notice']),
+  ref: LinkMailRef,
+  count: z.number().int().min(1).max(999).optional(),
+  cadence: z.enum(['hourly', 'daily']).optional(),
+  title: hostTextSchema(80).optional(),
+  body: hostTextSchema(240).optional(),
+  path: LinkMailPath.optional(),
+});
+export type LinkMail = z.infer<typeof LinkMail>;
+
+/** Whether a `LinkMail` has the members its kind needs and none of the other's (what control checks). */
+export function linkMailComplete(mail: LinkMail): boolean {
+  if (mail.kind === 'waiting')
+    return (
+      mail.count !== undefined &&
+      mail.cadence !== undefined &&
+      mail.title === undefined &&
+      mail.body === undefined
+    );
+  return (
+    mail.title !== undefined &&
+    mail.body !== undefined &&
+    mail.count === undefined &&
+    mail.cadence === undefined
+  );
+}
+
 export const LINK_DEVICE_OPS = {
   /**
    * The owner turned Link on (or the installer's choice at first start): a fresh one-time code for this box. Works for
@@ -119,6 +185,27 @@ export const LINK_DEVICE_OPS = {
   'link.whombats': {
     body: z.strictObject({}),
     response: z.object({ whombats: z.array(LinkWhombat).max(LINK_WHOMBATS_MAX) }),
+  },
+  /**
+   * The owner's choices for email through Link (4.15): control keeps them for this box, the latest wins. Send them when
+   * they change and whenever control may not have them (a start, Link on again). Control emails that a box went quiet
+   * only for a box that sent `offline: true`, and sends `mail.send` only for one that sent `notifications: true`.
+   * Accepted in any Link state but `off` (the box sends nothing then).
+   */
+  'link.mail.set': {
+    body: z.strictObject({ offline: z.boolean(), notifications: z.boolean() }),
+    response: Ok,
+  },
+  /**
+   * One email to the Link account's own address (4.15), the only recipient there is: the box names none. Control
+   * writes the email from its own words around these few facts, with a button to the box's own address. Needs Link on
+   * or in grace (`link_off`); a `notice` also after Link ended, as a `security` push does. Refused when the box's
+   * choices say no (`mail_off`, 409), when the box is in no account (`no_account`, 409), and beyond `LINK_MAIL_PER_DAY`
+   * a day (`rate_limited`). A ref control already sent answers `ok` again without a second email.
+   */
+  'mail.send': {
+    body: LinkMail,
+    response: Ok,
   },
   /** The device that gave the token was removed: control forgets the handle. An unknown handle is fine. */
   'push.unregister': {

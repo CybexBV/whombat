@@ -13,6 +13,8 @@ package broker
 //	POST /v1/runtime/push/unregister {handle}                       runtime → control's push.unregister answer
 //	POST /v1/link/whombats          {}                              runtime → control's link.whombats answer | 404 link.unavailable |
 //	                                                                          503 control_unreachable | 502 control_refused
+//	POST /v1/link/mail              {offline, notifications}        runtime → control's link.mail.set answer (4.15)
+//	POST /v1/runtime/mail           LinkMail                        runtime → control's mail.send answer (4.15)
 //
 // Turning Link off answers `off` at once: the box stops using Link before control has heard of it, and the manager
 // tells control (link.leave) as soon as it answers.
@@ -20,7 +22,8 @@ package broker
 // The gate: every route that goes to control asks the Link state first (gate, noControl). Link features (tickets,
 // shares, the feedback drop, kit envelope copies, remote help's ticket, the own address's label, push tokens) need Link
 // starting, on or in grace; what is never gated (claim and revocation reports, push.send — control lets only security
-// pushes through once Link ended — and forgetting a push token) needs control to know the box (any state but off). A
+// pushes through once Link ended —, forgetting a push token, and email through Link: the owner's choices and mail.send,
+// whose Link rules are control's) needs control to know the box (any state but off). A
 // box with Link off sends nothing to control (LNK-03).
 
 import (
@@ -281,4 +284,44 @@ func (s *Server) linkWhombats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// linkMail tells control the owner's choices for email through Link (4.15): the device op's body and answer, unchanged.
+// Whenever control knows the box, so a choice turned off reaches it in every state but off.
+func (s *Server) linkMail(w http.ResponseWriter, r *http.Request) {
+	s.forwardKnown(w, r, device.DeviceOpNameLinkMailSet, func(b []byte) (any, error) {
+		return local.ParseRuntimeLinkMailSetRequest(b)
+	})
+}
+
+// mailSend hands control one email for the Link account's own address (4.15): the device op's body and answer,
+// unchanged. Control decides whether Link's state and the owner's choice allow it.
+func (s *Server) mailSend(w http.ResponseWriter, r *http.Request) {
+	s.forwardKnown(w, r, device.DeviceOpNameMailSend, func(b []byte) (any, error) {
+		return local.ParseRuntimeMailSendRequest(b)
+	})
+}
+
+// forwardKnown passes a runtime request that answers {ok: true} to control as a device op while control knows the box.
+func (s *Server) forwardKnown(w http.ResponseWriter, r *http.Request, op device.DeviceOpName, parse func([]byte) (any, error)) {
+	if s.gate(w, needKnown) {
+		return
+	}
+	b, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	req, err := parse(b)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), linkOpTimeout)
+	defer cancel()
+	var out local.LocalOk
+	if err := s.Control.Do(ctx, op, req, &out); err != nil {
+		s.controlErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, local.LocalOk{Ok: true})
 }

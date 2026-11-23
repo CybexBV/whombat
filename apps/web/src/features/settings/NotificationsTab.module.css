@@ -90,3 +90,58 @@
     min-height: var(--size-touch-target);
   }
 }
+
+/* WHOMBAT LINK's example email: folded under its switch, a quiet card of what such an email says. */
+.example {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.example > summary {
+  cursor: pointer;
+  width: fit-content;
+  border-radius: var(--radius-small);
+}
+
+.example > summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.exampleMail {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--sf2);
+  color: var(--ink2);
+  line-height: 1.45;
+}
+
+.exampleMail > p {
+  margin: 0 0 8px;
+}
+
+.exampleMail > p:last-child {
+  margin-bottom: 0;
+}
+
+.exampleSubject {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.exampleButton {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-button-small);
+  background: var(--btn);
+  color: var(--btnfg);
+  font-weight: 500;
+}
+
+.exampleFoot {
+  font-size: 12px;
+  color: var(--mut);
+}
