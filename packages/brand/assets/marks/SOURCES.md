@@ -37,7 +37,7 @@ implies no endorsement.
 | `endeavouros.svg` | EndeavourOS | Simple Icons `endeavouros` (<https://github.com/endeavouros-team/endeavouros-theming/blob/135f642c980ed8d8fc212783eb478f96226f6c72/endeavouros-logo-text.svg>) | CC0-1.0 |
 | `esphome.svg` | ESPHome | Simple Icons `esphome` (<https://github.com/esphome/developers.esphome.io/blob/7c0304aa36536c63c93b1f19ba18969f96df0e08/docs/images/logo.svg>) | CC0-1.0 |
 | `fedora.svg` | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | custom |
-| `findmy.svg` | Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | AGPL-3.0-only (Whombat) |
+| `findmy.svg` | Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | own |
 | `forgejo.svg` | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC-BY-SA-4.0 (Caesar Schinas) |
 | `freebsd.svg` | FreeBSD | Simple Icons `freebsd` (<https://www.freebsdfoundation.org/about/project/>) | CC0-1.0 |
 | `frigate.svg` | Frigate | Simple Icons `frigate` (<https://frigate.video>) | CC0-1.0 |
