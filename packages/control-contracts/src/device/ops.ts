@@ -171,6 +171,9 @@ export const DEVICE_OPS = {
   'link.status': LINK_DEVICE_OPS['link.status'],
   'link.leave': LINK_DEVICE_OPS['link.leave'],
   'link.whombats': LINK_DEVICE_OPS['link.whombats'],
+  // Email through Link (4.15): the owner's choices, and one email to the Link account's own address.
+  'link.mail.set': LINK_DEVICE_OPS['link.mail.set'],
+  'mail.send': LINK_DEVICE_OPS['mail.send'],
   'push.register': LINK_DEVICE_OPS['push.register'],
   'push.unregister': LINK_DEVICE_OPS['push.unregister'],
   'support.heartbeat': LINK_DEVICE_OPS['support.heartbeat'],

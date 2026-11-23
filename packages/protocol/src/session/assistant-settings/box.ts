@@ -25,6 +25,8 @@ export const BOX_SETTINGS = {
   'link.on': never('appliance.about', 'Turn Whombat Link on'),
   'link.off': never('appliance.about', 'Turn Whombat Link off'),
   'link.whombats': read('appliance.about', 'Read which other Whombats share this Whombat Link account'),
+  // Which emails go out through Whombat Link is a privacy choice: the person says yes on a card each time.
+  'link.mail.set': ask('you.notifications', 'Choose which emails Whombat Link sends you'),
   'updates.channel.get': read('appliance.about', 'Read which updates this Whombat takes'),
   'updates.channel.set': never('appliance.about', 'Choose Production or Development updates'),
   // Whether updates wait for the owner, and the owner's yes to one: theirs alone, so nobody acting for them turns it off.

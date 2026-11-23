@@ -54,6 +54,8 @@ const (
 	ManagerPathLinkOff            = "/v1/link/off"
 	ManagerPathLinkClaim          = "/v1/link/claim"
 	ManagerPathLinkWhombats       = "/v1/link/whombats"
+	ManagerPathLinkMail           = "/v1/link/mail"
+	ManagerPathMailSend           = "/v1/runtime/mail"
 	ManagerPathUpdateChannel      = "/v1/update/channel"
 	ManagerPathUpdateChannelSet   = "/v1/update/channel/set"
 	ManagerPathPushRegister       = "/v1/runtime/push/register"

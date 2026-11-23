@@ -89,6 +89,18 @@ type RuntimeLinkWhombatsRequest = device.LinkWhombatsRequest
 // RuntimeLinkWhombatsResponse is the same schema as device.LinkWhombatsResponse.
 type RuntimeLinkWhombatsResponse = device.LinkWhombatsResponse
 
+// RuntimeLinkMailSetRequest is the same schema as device.LinkMailSetRequest.
+type RuntimeLinkMailSetRequest = device.LinkMailSetRequest
+
+// RuntimeLinkMailSetResponse is the same schema as device.LinkMailSetResponse.
+type RuntimeLinkMailSetResponse = device.LinkMailSetResponse
+
+// RuntimeMailSendRequest is the same schema as device.MailSendRequest.
+type RuntimeMailSendRequest = device.MailSendRequest
+
+// RuntimeMailSendResponse is the same schema as device.LinkMailSetResponse.
+type RuntimeMailSendResponse = device.LinkMailSetResponse
+
 // RuntimePushRegisterRequest is the same schema as device.PushRegisterRequest.
 type RuntimePushRegisterRequest = device.PushRegisterRequest
 
@@ -98,8 +110,8 @@ type RuntimePushRegisterResponse = device.PushRegisterResponse
 // RuntimePushUnregisterRequest is the same schema as device.PushUnregisterRequest.
 type RuntimePushUnregisterRequest = device.PushUnregisterRequest
 
-// RuntimePushUnregisterResponse is the same schema as device.PushUnregisterResponse.
-type RuntimePushUnregisterResponse = device.PushUnregisterResponse
+// RuntimePushUnregisterResponse is the same schema as device.LinkMailSetResponse.
+type RuntimePushUnregisterResponse = device.LinkMailSetResponse
 
 type RuntimeTicketRequest struct {
 	Class string `json:"class"`
@@ -4271,6 +4283,50 @@ func ParseRuntimeLinkWhombatsResponse(data []byte) (*RuntimeLinkWhombatsResponse
 }
 
 var _ = register("RuntimeLinkWhombatsResponse", func(data []byte) (any, error) { return ParseRuntimeLinkWhombatsResponse(data) })
+
+// ParseRuntimeLinkMailSetRequest validates data against the RuntimeLinkMailSetRequest JSON Schema and decodes it.
+func ParseRuntimeLinkMailSetRequest(data []byte) (*RuntimeLinkMailSetRequest, error) {
+	v := new(RuntimeLinkMailSetRequest)
+	if err := schemas.Decode("RuntimeLinkMailSetRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeLinkMailSetRequest", func(data []byte) (any, error) { return ParseRuntimeLinkMailSetRequest(data) })
+
+// ParseRuntimeLinkMailSetResponse validates data against the RuntimeLinkMailSetResponse JSON Schema and decodes it.
+func ParseRuntimeLinkMailSetResponse(data []byte) (*RuntimeLinkMailSetResponse, error) {
+	v := new(RuntimeLinkMailSetResponse)
+	if err := schemas.Decode("RuntimeLinkMailSetResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeLinkMailSetResponse", func(data []byte) (any, error) { return ParseRuntimeLinkMailSetResponse(data) })
+
+// ParseRuntimeMailSendRequest validates data against the RuntimeMailSendRequest JSON Schema and decodes it.
+func ParseRuntimeMailSendRequest(data []byte) (*RuntimeMailSendRequest, error) {
+	v := new(RuntimeMailSendRequest)
+	if err := schemas.Decode("RuntimeMailSendRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeMailSendRequest", func(data []byte) (any, error) { return ParseRuntimeMailSendRequest(data) })
+
+// ParseRuntimeMailSendResponse validates data against the RuntimeMailSendResponse JSON Schema and decodes it.
+func ParseRuntimeMailSendResponse(data []byte) (*RuntimeMailSendResponse, error) {
+	v := new(RuntimeMailSendResponse)
+	if err := schemas.Decode("RuntimeMailSendResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var _ = register("RuntimeMailSendResponse", func(data []byte) (any, error) { return ParseRuntimeMailSendResponse(data) })
 
 // ParseUpdateChannelRequest validates data against the UpdateChannelRequest JSON Schema and decodes it.
 func ParseUpdateChannelRequest(data []byte) (*UpdateChannelRequest, error) {
