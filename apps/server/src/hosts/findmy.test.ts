@@ -66,6 +66,25 @@ describe('Find My’s rows', () => {
     });
   });
 
+  it('never take the distance for the street or the place, also with a decimal comma', () => {
+    expect(parseFindMyRow(`Ruben Visser${DOT}5,5 km${DOT}Lelystad${DOT}Now`)).toEqual({
+      name: 'Ruben Visser',
+      place: 'Lelystad',
+      address: null,
+      when: 'Now',
+      nearby: false,
+    });
+    expect(parseFindMyRow(`Ruben Visser${DOT}5,5 km${DOT}Stationsplein 1, Lelystad${DOT}Now`)).toMatchObject({
+      place: null,
+      address: 'Stationsplein 1, Lelystad',
+    });
+    for (const far of ['3.4 mi', '800 m', '12 km', '1,2\u00a0km', '<0.1 mi'])
+      expect(parseFindMyRow(`Ruben Visser${DOT}${far}${DOT}Lelystad${DOT}Now`)).toMatchObject({
+        place: 'Lelystad',
+        address: null,
+      });
+  });
+
   it('have no place with fewer than three parts', () => {
     expect(parseFindMyRow(`Mara’s Keys${DOT}No location found`)).toEqual({
       name: 'Mara’s Keys',
@@ -186,7 +205,7 @@ describe('a read', () => {
     expect(Date.parse(seen.readAt ?? '')).toBe(Date.parse('2026-11-22T20:00:00Z') + elapsed());
     expect(seen.people.map((p) => [p.name, p.place, p.address, p.when, p.nearby])).toEqual([
       ['Mara Visser', 'Home', 'Damrak 1, Amsterdam', 'Now', true],
-      ['Ruben Visser', 'Lelystad', 'Stationsplein 2, Lelystad', '5 min ago', true],
+      ['Ruben Visser', 'Lelystad', 'Stationsplein 2, Lelystad', '5 min ago', false],
       ['Noor Visser', null, null, 'No location found', false],
     ]);
     expect(seen.people[0]?.id).toBe(findMyPersonId('Mara Visser'));

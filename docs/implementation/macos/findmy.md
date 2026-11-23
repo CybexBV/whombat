@@ -116,7 +116,8 @@ HostFindMyPicture = { server, person, imageB64, format, w, h, takenAt }
   name is the Mac's language's), wait until its window lists radio
   buttons (≤ 8 s; else `no_find_my`), press the first radio button (People, in any language) by its description, `ui.list`,
   take the `AXButton`s whose description has ` · `. For each person with a place (three parts or more) press the row by
-  name (role button), list again and take the part with a comma as the address. `map.geocode` the addresses (or the
+  name (role button), list again and take the part with a comma as the address, leaving out how far away the person is
+  (“5,5 km”: a decimal comma in Dutch). `map.geocode` the addresses (or the
   place when there is none). Then `ui.quit` `com.apple.findmy` when it wasn't running, and lock the screen again
   (`keys` `ctrl+cmd+q`) when it was locked.
 - **The exact picture**: the same start, press People and the person's row, press “Zoom in” twice when there is one,
