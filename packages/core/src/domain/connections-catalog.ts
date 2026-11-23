@@ -48,7 +48,7 @@ import { GatewayKind } from './gateway.js';
 import { ConnectionToolLimits } from './tool-limits.js';
 import { TrackerEnvironment } from './tracker.js';
 
-export { FIND_MY_PEOPLE_TOOL } from './connections-catalog/findmy.js';
+export { FIND_MY_PEOPLE_TOOL, FIND_MY_TIMELINE_TOOL } from './connections-catalog/findmy.js';
 export { NOTION_VERSION } from './connections-catalog/notion.js';
 export {
   ALWAYS_ASKS_LABEL,

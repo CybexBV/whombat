@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { JsonObject } from '../common.js';
+import { FIND_MY_TIMELINE_DAYS, FindMyTimelineArgs } from '../findmy-timeline.js';
 import { FIND_MY_BACKGROUND_CHOICES, FindMyPeopleArgs } from '../hosts-findmy.js';
 import type { CatalogEntryInput, ConnectionToolDef } from './shared.js';
 
@@ -11,6 +12,18 @@ export const FIND_MY_PEOPLE_TOOL: ConnectionToolDef = {
     'Where each person is, as Find My on the Mac shows them: their name, place (Find My’s own words, such as Home), street, how long ago Find My saw them, whether they are nearby, and when Whombat read it. Give person (a name or first name) for one person. When the last read is older than 2 minutes and the Mac can be used, it reads Find My first, waiting up to 45 seconds; otherwise it answers the last read with its age and why it couldn’t read. Never pictures or coordinates.',
   access: 'read',
   inputSchema: z.toJSONSchema(FindMyPeopleArgs) as JsonObject,
+};
+
+/**
+ * Where people were on a day, from the timeline the person keeps (docs/implementation/macos/findmy-timeline.md): only
+ * for the people they ticked, the last 30 days. Words and times only, never coordinates.
+ */
+export const FIND_MY_TIMELINE_TOOL: ConnectionToolDef = {
+  name: 'findmy_timeline',
+  title: 'See where people were',
+  description: `Where people were on a day, from the timeline Whombat keeps of the people the person chose: each stop with its local times (08:30–12:15), the place in Find My’s words and its street, the times on the way, and when Whombat couldn’t tell where they were and why. Give person (a name or first name) for one person and date (YYYY-MM-DD) for a day other than today. Whombat keeps ${FIND_MY_TIMELINE_DAYS} days, and says who has no timeline. Never coordinates.`,
+  access: 'read',
+  inputSchema: z.toJSONSchema(FindMyTimelineArgs) as JsonObject,
 };
 
 /**
@@ -48,16 +61,16 @@ export const entry = {
   mcpPath: null,
   mcpMissingHint: null,
   check: { kind: 'mac' },
-  tools: [FIND_MY_PEOPLE_TOOL],
+  tools: [FIND_MY_PEOPLE_TOOL, FIND_MY_TIMELINE_TOOL],
   request: null,
   guide:
-    'Find My as the person’s Mac shows it, read through Whombat Helper on that Mac. findmy_people answers each person’s name, place, street, how long ago Find My saw them and whether they are nearby; give person to ask about one. A read uses the Mac’s screen for a moment and leaves a Mac someone is using alone: then the answer is the last read, with its age and why. Say places as Find My words them. There are never pictures or coordinates. To tell the person when someone arrives somewhere or leaves, make an automation with a findmy trigger.',
+    'Find My as the person’s Mac shows it, read through Whombat Helper on that Mac. findmy_people answers each person’s name, place, street, how long ago Find My saw them and whether they are nearby; give person to ask about one. A read uses the Mac’s screen for a moment and leaves a Mac someone is using alone: then the answer is the last read, with its age and why. Say places as Find My words them. There are never pictures or coordinates. findmy_timeline answers where someone was on a day, with times, when the person keeps a timeline for them (Find My → Timeline on the connection’s page). To tell the person when someone arrives somewhere or leaves, make an automation with a findmy trigger.',
   sensitive: [],
   docsUrl: null,
   tokenUrl: null,
   handle: 'findmy',
   access: {
-    read: 'The assistant can see where each person is, and change nothing.',
+    read: 'The assistant can see where each person is and, with a timeline on, where they were. It changes nothing.',
     manage: 'The same: Find My has nothing the assistant can change.',
   },
 } satisfies CatalogEntryInput;

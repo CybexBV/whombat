@@ -9,6 +9,7 @@ import {
   CatalogEntryStatus,
   CatalogField,
   catalogEntry,
+  defaultToolTier,
   fieldProblem,
   fieldsFor,
   fieldsProblems,
@@ -64,9 +65,23 @@ describe('the Find My entry', () => {
     expect(background?.options?.at(-1)?.label).toBe('Every hour');
   });
 
-  it('has one tool that reads, for everyone or one person', () => {
+  it('has two tools that read: where people are, and where they were on a day', () => {
     const tools = findmy().tools;
-    expect(tools.map((t) => [t.name, t.access])).toEqual([['findmy_people', 'read']]);
+    expect(tools.map((t) => [t.name, t.access])).toEqual([
+      ['findmy_people', 'read'],
+      ['findmy_timeline', 'read'],
+    ]);
+    expect(tools.map((t) => defaultToolTier(t.access))).toEqual(['can', 'can']);
+    expect(findmy().guide).toContain('findmy_timeline');
+    const timeline = tools[1];
+    expect(timeline?.description).toContain('30 days');
+    expect(timeline?.description).toContain('YYYY-MM-DD');
+    expect(timeline?.inputSchema).toMatchObject({
+      type: 'object',
+      properties: { person: { type: 'string' }, date: { type: 'string' } },
+      additionalProperties: false,
+    });
+    expect(timeline?.inputSchema.required).toBeUndefined();
     expect(tools[0]?.description).toContain('2 minutes');
     expect(tools[0]?.inputSchema).toMatchObject({
       type: 'object',
