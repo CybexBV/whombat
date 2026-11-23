@@ -13,7 +13,7 @@ import { createFixtureServer } from './fixture-server';
 
 const burrow = 'burrow-hq';
 
-function setup(o: { tasks?: boolean; signIns?: boolean } = {}) {
+function setup(o: { tasks?: boolean; signIns?: boolean; watches?: boolean } = {}) {
   const timers: { fn: () => void; ms: number }[] = [];
   const now = createClock(new Date(at('14:05')), Date.now());
   const server = createFixtureServer({
@@ -463,6 +463,42 @@ describe('what answers in Chat, in the demo world (AP-2732)', () => {
     });
     const view = await s.raw(api.chats.runtime, '/chats/runtime');
     expect(view.data).toMatchObject({ default: { provider: 'codex', effort: 'high' } });
+  });
+});
+
+describe('one-time Find My watches in the demo Chat (findmy-watch.md)', () => {
+  const watchOf = (data: unknown) =>
+    (data as { replies: Message[] }).replies.flatMap((m) =>
+      m.card?.kind === 'findmy_watch' ? [m.card] : [],
+    )[0];
+
+  it('has one watching and one that happened, and Cancel ends the first on its message', async () => {
+    const s = setup({ watches: true });
+    const noor = await s.raw(api.messages.thread, `/messages/${CHAT_ROOTS.watchNoor}/thread`);
+    const card = watchOf(noor.data);
+    expect(card?.watch?.status).toBe('watching');
+    const ruben = await s.raw(api.messages.thread, `/messages/${CHAT_ROOTS.watchRuben}/thread`);
+    expect(watchOf(ruben.data)?.watch?.status).toBe('happened');
+
+    const cancelled = await s.raw(
+      api.connections.findMyWatchCancel,
+      `/find-my/watches/${card?.watchId}/cancel`,
+      post({}),
+    );
+    expect(cancelled.data).toMatchObject({ id: card?.watchId, status: 'cancelled' });
+    const updated = s.events
+      .map((e) => e.event)
+      .find((e): e is Extract<RealtimeEvent, { type: 'message.updated' }> => e.type === 'message.updated');
+    expect(updated?.message.card).toMatchObject({ kind: 'findmy_watch', watch: { status: 'cancelled' } });
+    const after = await s.raw(api.messages.thread, `/messages/${CHAT_ROOTS.watchNoor}/thread`);
+    expect(watchOf(after.data)?.watch?.status).toBe('cancelled');
+    // Once ended it answers as it is.
+    const again = await s.raw(
+      api.connections.findMyWatchCancel,
+      `/find-my/watches/${card?.watchId}/cancel`,
+      post({}),
+    );
+    expect(again.data).toMatchObject({ status: 'cancelled' });
   });
 });
 

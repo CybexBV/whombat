@@ -1147,7 +1147,8 @@ function chipsLabel(chips: RunChips | null | undefined): string | null {
  * A settled card as one line (docs/decisions/card-settle.md AP-730, AP-731), in the run line's anatomy: a status dot
  * in the tone, the bold lead, the muted detail; tapping it opens the card in place (the card's “Hide card” returns the
  * line). A run's line adds its `PR #3` and `+12 −8` under the text and “Open ›” to the run beside it. Inside a run
- * (AP-732) it is indented under the run's dot.
+ * (AP-732) it is indented under the run's dot. Without `onOpen` it is only the line, with nothing to open (an ended Find
+ * My watch, whose card said no more).
  */
 export function SettledLineView({
   line,
@@ -1158,8 +1159,8 @@ export function SettledLineView({
   lines = 1,
 }: {
   line: SettledLine;
-  /** Opens the card in place. */
-  onOpen: () => void;
+  /** Opens the card in place; without it the line opens nothing. */
+  onOpen?: () => void;
   chips?: RunChips | null;
   /** “Open ›” beside a run's line: the run screen. */
   link?: { label: string; onPress: () => void } | null;
@@ -1171,6 +1172,44 @@ export function SettledLineView({
   const words = [line.lead, line.detail].filter(Boolean).join(', ');
   const chipWords = chipsLabel(chips);
   const hasChips = !!chips && (!!chips.prNumber || !!chips.diff);
+  const dotAndWords = (
+    <>
+      <View
+        style={{
+          width: 8,
+          height: 8,
+          // On the first line's middle when the words wrap.
+          marginTop: lines > 1 ? 6 : 0,
+          borderRadius: 4,
+          backgroundColor: lineDotColor(theme, line.tone),
+        }}
+      />
+      <Text size={14} lh={1.4} color={theme.colors.ink2} numberOfLines={lines} style={{ flexShrink: 1 }}>
+        <Text size={14} weight={600} color={line.tone === 'warn' ? theme.colors.warn : undefined}>
+          {line.lead}
+        </Text>
+        {line.detail ? ` · ${line.detail}` : ''}
+      </Text>
+    </>
+  );
+  if (!onOpen)
+    return (
+      <View
+        accessible
+        accessibilityLabel={words}
+        style={{
+          alignSelf: 'stretch',
+          marginLeft: indent ? 18 : 0,
+          minHeight: 44,
+          justifyContent: 'center',
+          paddingVertical: 6,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: lines > 1 ? 'flex-start' : 'center', gap: 10 }}>
+          {dotAndWords}
+        </View>
+      </View>
+    );
   const toggle = (
     <Touchable
       onPress={onOpen}
@@ -1182,22 +1221,7 @@ export function SettledLineView({
       style={{ minHeight: 44, justifyContent: 'center', paddingVertical: 6 }}
     >
       <View style={{ flexDirection: 'row', alignItems: lines > 1 ? 'flex-start' : 'center', gap: 10 }}>
-        <View
-          style={{
-            width: 8,
-            height: 8,
-            // On the first line's middle when the words wrap.
-            marginTop: lines > 1 ? 6 : 0,
-            borderRadius: 4,
-            backgroundColor: lineDotColor(theme, line.tone),
-          }}
-        />
-        <Text size={14} lh={1.4} color={theme.colors.ink2} numberOfLines={lines} style={{ flexShrink: 1 }}>
-          <Text size={14} weight={600} color={line.tone === 'warn' ? theme.colors.warn : undefined}>
-            {line.lead}
-          </Text>
-          {line.detail ? ` · ${line.detail}` : ''}
-        </Text>
+        {dotAndWords}
         <ChevronDown
           size={16}
           color={theme.colors.mut}
