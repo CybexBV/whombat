@@ -79,7 +79,7 @@ export interface BoxAddress {
 }
 
 /**
- * A box's address as typed (LNK-08): its own address (`name.box.whombat.app`) or its Tailscale name, with or without
+ * A box's address as typed (LNK-08): its own address (`name.whombat.app`) or its Tailscale name, with or without
  * `https://`, a port and a trailing slash; or its address on this network as its screen shows it (`192.168.1.20`).
  * Its pages are HTTPS only, so `http://` isn't one. The box serves its Tailscale name and its
  * local network on its direct port (4480, the address its page shows), so an address typed without a port gets that one;
@@ -181,10 +181,10 @@ export const PHONE_COMMUNITY_TEXT = {
     tip: 'On your Whombat’s page, the QR code is under Settings → This Whombat → Devices.',
     scan: 'Scan the QR code',
     address: 'Its address',
-    addressHint: 'Like name.box.whombat.app, its Tailscale name, or the address on its screen.',
-    placeholder: 'name.box.whombat.app',
+    addressHint: 'Like name.whombat.app, its Tailscale name, or the address on its screen.',
+    placeholder: 'name.whombat.app',
     go: 'Continue',
-    bad: 'That isn’t an address. Type it like name.box.whombat.app or 192.168.1.20.',
+    bad: 'That isn’t an address. Type it like name.whombat.app or 192.168.1.20.',
     signIn: 'Sign in with a Whombat account',
     /** Opens the demo world (look-around.md): for anyone without a Whombat, App Review among them. */
     lookAround: SHARED_COPY.lookAround.open,

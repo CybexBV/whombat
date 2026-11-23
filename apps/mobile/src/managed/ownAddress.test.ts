@@ -1,8 +1,8 @@
 /** The phone and a box's own address (own-address.md): its passkeys' RP ID, its route first, its record from a link. */
-import { ownAddressRoute, parseLocalLink } from '@whombat/client/managed';
+import { createRegistry, ownAddressRoute, ownAddressToKeep, parseLocalLink } from '@whombat/client/managed';
 import { localLinkFor } from '@whombat/protocol/session';
 import { describe, expect, it, vi } from 'vitest';
-import { communityRecord } from './community';
+import { addressRecord, communityRecord, PHONE_COMMUNITY_TEXT, readBoxAddress } from './community';
 
 vi.mock('../../modules/whombat-passkeys', () => ({
   WhombatPasskeys: { supported: () => false },
@@ -45,5 +45,55 @@ describe('a device link with o= (design §7.3)', () => {
     expect(ownAddressRoute(`https://${HOST}/`)?.socket).toBe(`wss://${HOST}/v1/direct`);
     expect(ownAddressRoute('https://app.whombat.com/')).toBeNull();
     expect(ownAddressRoute(null)).toBeNull();
+  });
+});
+
+describe('own names at <name>.whombat.app (4.16)', () => {
+  const NEW = 'home.whombat.app';
+
+  it('a chosen name is a box’s own host: its passkeys, its route and a typed address', () => {
+    expect(passkeyRpIdFor({ host: NEW })).toBe(NEW);
+    expect(ownAddressRoute(`https://${NEW}/`)?.socket).toBe(`wss://${NEW}/v1/direct`);
+    expect(ownAddressRoute('https://home2.whombat.app/')?.web).toBe('https://home2.whombat.app/');
+    // A zone itself is never a box.
+    expect(ownAddressRoute('https://box.whombat.app/')).toBeNull();
+    expect(readBoxAddress('Home.Whombat.app')).toEqual({ host: NEW, port: 443 });
+    expect(addressRecord({ host: NEW, port: 443 }, BOX).ownAddress).toBe(`https://${NEW}/`);
+  });
+
+  it('the phone’s record follows the box’s current address from its status', () => {
+    const store = new Map<string, string>();
+    const registry = createRegistry('acc_mara', {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => void store.set(k, v),
+      removeItem: (k) => void store.delete(k),
+    });
+    const link = parseLocalLink(
+      localLinkFor({
+        kind: 'device',
+        appliance: BOX,
+        secret: 'A'.repeat(32),
+        routes: [],
+        own: `https://${HOST}/`,
+      }),
+    );
+    registry.put(communityRecord(link as NonNullable<typeof link>, true));
+    // What ApplianceRoot does with `ownAddress.status` once the connection opens (and the About screen with its status).
+    const seen = (own: { host: string; url: string } | null) => {
+      const k = registry.get(BOX);
+      const url = ownAddressToKeep(k?.ownAddress, own);
+      if (k && url) registry.put({ ...k, ownAddress: url });
+      return url;
+    };
+    expect(seen({ host: NEW, url: `https://${NEW}/` })).toBe(`https://${NEW}/`);
+    expect(registry.get(BOX)?.ownAddress).toBe(`https://${NEW}/`);
+    // The same again, or no address in the answer: nothing is written.
+    expect(seen({ host: NEW, url: `https://${NEW}/` })).toBeNull();
+    expect(seen(null)).toBeNull();
+    expect(registry.get(BOX)?.ownAddress).toBe(`https://${NEW}/`);
+  });
+
+  it('typed addresses are explained with the new kind of name', () => {
+    expect(PHONE_COMMUNITY_TEXT.start.placeholder).toBe('name.whombat.app');
   });
 });

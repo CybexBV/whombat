@@ -21,22 +21,31 @@ import {
   DiagnosticsIntegrityError,
   downloadDiagnostics,
   OWN_ADDRESS_TEXT,
+  OWN_NAME_TEXT,
+  ownAddressCloudflareLine,
+  ownAddressLeavingView,
+  ownAddressRenameErrorText,
   ownAddressView,
+  ownNameChosen,
+  ownNameLine,
+  ownNameZoneOf,
   previewDiagnostics,
   THIS_WHOMBAT_TEXT,
   UPDATE_TEXT,
   updateView,
 } from '@whombat/client/managed';
+import { useOwnNameCheck } from '@whombat/client/managed/react';
 import {
   type ApplianceStatus,
   type DiagnosticBundleSummary,
   OperationError,
   sessionOps,
 } from '@whombat/client/session';
+import { ownAddressLabelOf } from '@whombat/protocol';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { SYNC_LOG_TEXT, syncLog, syncLogFile } from '../data/syncLog';
 import { useAppNavigation } from '../navigation/hooks';
@@ -59,7 +68,7 @@ import { HardwareSection } from './HardwareSection';
 import { ChannelRow, ReachCard } from './ReachCard';
 import { RemoteHelpSection } from './RemoteHelpSection';
 import { diagnosticScopeLine } from './thisWhombat';
-import { Card, Note, Row } from './ui';
+import { Card, ErrorLine, Note, Row } from './ui';
 import { useApplianceStatus, useReleaseSummary } from './useApplianceStatus';
 import { useMachineHere, useScrollToCard } from './useMachine';
 import { usePhoneReach } from './useReach';
@@ -197,7 +206,7 @@ export function WhombatAboutScreen() {
           </Card>
 
           {/* The box's own address (own-address.md): what it is, with Copy. */}
-          {status.ownAddress ? <OwnAddressCard own={status.ownAddress} /> : null}
+          {status.ownAddress ? <OwnAddressCard own={status.ownAddress} onChanged={reload} /> : null}
 
           {policy.length > 0 ? (
             <Card label={THIS_WHOMBAT_TEXT.turnedOff}>
@@ -225,10 +234,28 @@ export function WhombatAboutScreen() {
   );
 }
 
-/** ADDRESS: the box's own address, whether it works, its certificate and the watch's last check. */
-function OwnAddressCard({ own }: { own: NonNullable<ApplianceStatus['ownAddress']> }) {
+/**
+ * ADDRESS: the box's own address, whether it works, its certificate and the watch's last check; Cloudflare's
+ * certificates for `*.whombat.app` while they last; the old address while it still works after a change; and Change,
+ * which opens the name field in place (the same check and words as the web).
+ */
+function OwnAddressCard({
+  own,
+  onChanged,
+}: {
+  own: NonNullable<ApplianceStatus['ownAddress']>;
+  onChanged: () => void;
+}) {
+  const managed = useManagedOrThrow();
+  const theme = useTheme();
   const v = ownAddressView(own);
   const t = OWN_ADDRESS_TEXT.settings;
+  const leaving = ownAddressLeavingView(own);
+  const cloudflare = ownAddressCloudflareLine(own.host);
+  const [changing, setChanging] = useState(false);
+  // What the box says now is what the next connection dials (a change made elsewhere included).
+  const seen = managed.ownAddressSeen;
+  useEffect(() => seen?.(own), [seen, own]);
   return (
     <Card label={t.section}>
       <Row
@@ -241,8 +268,126 @@ function OwnAddressCard({ own }: { own: NonNullable<ApplianceStatus['ownAddress'
         action={
           <Button variant="secondary" label={t.copy} onPress={() => void copyToClipboard(v.url, t.copied)} />
         }
-      />
+      >
+        {cloudflare ? (
+          <Text size={13} lh={1.4} color={theme.colors.mut}>
+            {cloudflare}
+          </Text>
+        ) : null}
+      </Row>
+      {leaving ? <Row dot="mut" title={leaving.host} body={leaving.line} /> : null}
+      <View style={{ padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: theme.colors.line }}>
+        {changing ? (
+          <ChangeAddress
+            own={own}
+            onCancel={() => setChanging(false)}
+            onDone={(next) => {
+              setChanging(false);
+              seen?.(next);
+              showNotice(OWN_NAME_TEXT.changed(next.host));
+              onChanged();
+            }}
+          />
+        ) : (
+          <Button variant="secondary" label={OWN_NAME_TEXT.change} onPress={() => setChanging(true)} />
+        )}
+      </View>
     </Card>
+  );
+}
+
+/** The name field `[ name ].whombat.app` with its live check, what happens to the old address, and Change address. */
+function ChangeAddress({
+  own,
+  onCancel,
+  onDone,
+}: {
+  own: NonNullable<ApplianceStatus['ownAddress']>;
+  onCancel: () => void;
+  onDone: (own: NonNullable<ApplianceStatus['ownAddress']>) => void;
+}) {
+  const { session } = useManagedOrThrow();
+  const theme = useTheme();
+  const N = OWN_NAME_TEXT;
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const { check, type } = useOwnNameCheck(
+    (label) => sessionOps.ownAddressCheck(session, label),
+    ownAddressLabelOf(own.host),
+  );
+  const label = ownNameChosen(check);
+  const zone = ownNameZoneOf(check.kind === 'done' && check.host ? check.host : own.host);
+  const line = ownNameLine(check, zone);
+  const lineColor =
+    line?.tone === 'ok' ? theme.colors.ok : line?.tone === 'bad' ? theme.colors.bad : theme.colors.mut;
+  const submit = async () => {
+    if (!label) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      onDone((await sessionOps.ownAddressRename(session, label)).ownAddress);
+    } catch (error) {
+      setProblem(ownAddressRenameErrorText(error));
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Text size={11.5} mono color={theme.colors.mut}>
+        {N.label.toUpperCase()}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TextInput
+          value={typed}
+          onChangeText={(next) => {
+            const name = next.toLowerCase().replace(/\s/g, '');
+            setTyped(name);
+            setProblem(null);
+            type(name);
+          }}
+          accessibilityLabel={N.label}
+          placeholder={N.placeholder}
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.brand}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          maxLength={64}
+          style={{
+            flex: 1,
+            minHeight: 48,
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: line?.tone === 'bad' ? theme.colors.bad : theme.colors.line2,
+            backgroundColor: theme.colors.sf,
+            color: theme.colors.ink,
+            fontSize: 16,
+          }}
+        />
+        <Text size={16} color={theme.colors.ink2}>
+          {`.${zone}`}
+        </Text>
+      </View>
+      {line ? (
+        <Text size={13} lh={1.4} color={lineColor} accessibilityLiveRegion="polite">
+          {line.text}
+        </Text>
+      ) : null}
+      <Text size={13} lh={1.4} color={theme.colors.mut}>
+        {N.privacy}
+      </Text>
+      <Note text={N.explain} />
+      <ErrorLine text={problem} />
+      <Button
+        label={busy ? N.changing : N.changeAddress}
+        busy={busy}
+        disabled={!label}
+        onPress={() => void submit()}
+      />
+      <Button label={N.cancel} variant="quiet" disabled={busy} onPress={onCancel} />
+    </>
   );
 }
 
