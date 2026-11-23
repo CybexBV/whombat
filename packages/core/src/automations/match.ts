@@ -6,6 +6,7 @@
 import type { AutomationTrigger, GitHubTriggerEvent, TrackerTriggerEvent } from '../domain/automation.js';
 import type { TrackerItemKind } from '../domain/tracker.js';
 import { globMatch } from '../keys/engine.js';
+import { type FindMyTriggerFacts, findMyTriggerMatches } from './findmy.js';
 import { type MailTriggerFacts, mailTriggerMatches } from './mail.js';
 
 export type TriggerFacts =
@@ -37,7 +38,9 @@ export type TriggerFacts =
   /** A new report in a tracker connection (0.69, CT-325, TA-04): the `tracker.item_opened` event. */
   | { kind: 'tracker'; event: TrackerTriggerEvent; connectionId: string; itemKind: TrackerItemKind }
   /** A matching incoming email in a connected mailbox. */
-  | MailTriggerFacts;
+  | MailTriggerFacts
+  /** A person's place changed on a Find My connection: the `findmy.place_changed` event. */
+  | FindMyTriggerFacts;
 
 export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts): boolean {
   switch (trigger.kind) {
@@ -79,6 +82,8 @@ export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts):
       );
     case 'mail':
       return facts.kind === 'mail' && mailTriggerMatches(trigger, facts);
+    case 'findmy':
+      return facts.kind === 'findmy' && findMyTriggerMatches(trigger, facts);
     default:
       return false;
   }

@@ -27,6 +27,7 @@ import type {
   AutomationPlanState,
   AutomationPlanView,
 } from '../domain/automation-plan.js';
+import { findMyTriggerDetail, findMyWhenText } from './findmy.js';
 import { mailTriggerDetail, mailWhenText } from './mail.js';
 import { RECIPE_FIX_IMPORTANCE, recipeOf, trackerItemNoun, UNKNOWN_TRACKER_CONNECTION } from './recipes.js';
 import { describeSchedule } from './schedule.js';
@@ -182,6 +183,8 @@ function whenLine(t: AutomationTrigger, names: PlanNames): AutomationPlanLine {
       const mailbox = names.connectionLabel?.(t.connectionId);
       return line(mailWhenText(t, mailbox), mailTriggerDetail(mailbox));
     }
+    case 'findmy':
+      return line(findMyWhenText(t), findMyTriggerDetail(names.connectionLabel?.(t.connectionId)));
     case 'webhook':
       return line('Someone calls its webhook');
     case 'manual':

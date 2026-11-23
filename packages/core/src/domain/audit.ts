@@ -207,6 +207,9 @@ export const EVENT_TYPES = {
   'connection.tool_tier_changed': 'Keys',
   'connection.tool_called': 'Code',
   'connection.tool_finished': 'Code',
+  // A person's place changed on a Find My connection an automation listens to (`FindMyPlaceChanged`: the connection,
+  // the person's id and name, the place's words before and now; never a street or coordinates). Automations start on it.
+  'findmy.place_changed': 'System',
   // Contracts 3.15 (Whombat assistant-settings.md): the assistant asked to change one of the person's settings and it
   // went ahead or was approved (`{op, deferred}`, hidden: the op signs what it changed itself).
   'setting.changed': 'System',

@@ -104,6 +104,7 @@ export { default as LockOpen } from 'lucide-react-native/icons/lock-open';
 export { default as LogOut } from 'lucide-react-native/icons/log-out';
 export { default as Mail } from 'lucide-react-native/icons/mail';
 export { default as MailOpen } from 'lucide-react-native/icons/mail-open';
+export { default as MapPin } from 'lucide-react-native/icons/map-pin';
 export { default as Maximize2 } from 'lucide-react-native/icons/maximize-2';
 export { default as Menu } from 'lucide-react-native/icons/menu';
 export { default as MessageCircle } from 'lucide-react-native/icons/message-circle';
