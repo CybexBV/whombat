@@ -586,7 +586,9 @@ export function createOneFixtures(
       facts: [{ label: 'Guests', value: '23' }],
       partOf: 'server:pve-02',
     }),
-    connection('con_mail', 'google', 'Google', 'google', {
+    // Mara's Google account, by the id the connectors' world gives it (`connectorFixtures.ts`): its page and its
+    // Connection tab are that account's.
+    connection('con_mara', 'google', 'Google', 'google', {
       line: 'Last checked 13:55',
       usedAt: at(0, '08:00'),
     }),

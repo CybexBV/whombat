@@ -54,7 +54,12 @@ import type {
   SetThingWatchBody,
   ThingActionBody,
 } from '@whombat/core/contracts';
-import { type ConnectionToolView, type ConnectionView, catalogEntry } from '@whombat/core/domain';
+import {
+  type ConnectionToolView,
+  type ConnectionView,
+  catalogEntry,
+  isAccountPageId,
+} from '@whombat/core/domain';
 import {
   burrow,
   GROUP_SERVICE_PAGES,
@@ -193,9 +198,10 @@ const CONNECTIONS: Record<string, { catalogId: string; fields: Record<string, st
   },
   con_pool: { catalogId: 'device', fields: {}, label: 'Pool' },
   'con_heat-pump': { catalogId: 'device', fields: {}, label: 'Heat pump' },
-  // Each group's service pages (`@whombat/fixtures` `servicePages/<group>.ts`): their Settings tab's tools.
+  // Each group's service pages (`@whombat/fixtures` `servicePages/<group>.ts`): their Settings tab's tools. An
+  // account's Connection tab is its own settings page, from the connectors' world.
   ...Object.fromEntries(
-    GROUP_SERVICE_PAGES.map((g) => [
+    GROUP_SERVICE_PAGES.filter((g) => !isAccountPageId(g.catalogId)).map((g) => [
       g.thing.slice('connection:'.length),
       { catalogId: g.catalogId, fields: g.fields ?? {}, label: g.name },
     ]),

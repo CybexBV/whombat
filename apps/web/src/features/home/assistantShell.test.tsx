@@ -371,7 +371,7 @@ describe('Overview (one-whombat-shell.md AP-1265…AP-1273; connections-page.md 
       'connection:con_unifi',
       'device:con_heat-pump',
       'connection:con_hetzner',
-      'connection:con_mail',
+      'connection:con_mara',
     ]);
     // Why, in plain words, on what isn't connected; a tile's line has no full stop.
     expect(within(things).getByText('2 integrations not loading')).toBeTruthy();
