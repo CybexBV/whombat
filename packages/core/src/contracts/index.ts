@@ -22,6 +22,7 @@ import type { AnyEndpoint } from './endpoint.js';
 import { feedbackEndpoints } from './feedback.js';
 import { filesEndpoints } from './files.js';
 import { findMyTimelineEndpoints } from './findmy-timeline.js';
+import { findMyWatchEndpoints } from './findmy-watch.js';
 import { githubEndpoints } from './github.js';
 import { guideEndpoints } from './guides.js';
 import { healthEndpoints } from './health.js';
@@ -85,6 +86,7 @@ export * from './errors.js';
 export * from './feedback.js';
 export * from './files.js';
 export * from './findmy-timeline.js';
+export * from './findmy-watch.js';
 export * from './github.js';
 export * from './guides.js';
 export * from './health.js';
@@ -167,7 +169,8 @@ export interface Api {
   connectors: typeof connectorEndpoints & typeof connectorAppEndpoints;
   connections: typeof connectionEndpoints &
     typeof connectionCatalogEndpoints &
-    typeof findMyTimelineEndpoints;
+    typeof findMyTimelineEndpoints &
+    typeof findMyWatchEndpoints;
   attachments: typeof attachmentEndpoints;
   memory: typeof memoryEndpoints;
   skills: typeof skillLibraryEndpoints;
@@ -237,9 +240,14 @@ export const api: Api = {
   /**
    * Google and Microsoft connections; since 0.48 the connections catalog (Whombat connections-catalog.md, CT-266…):
    * shared and personal connections of catalog entries, their tools and tiers, OAuth and Nextcloud sign-ins; a Find My
-   * connection's timeline (Whombat findmy-timeline.md).
+   * connection's timeline (Whombat findmy-timeline.md) and the one-time watch's Cancel (findmy-watch.md).
    */
-  connections: { ...connectionEndpoints, ...connectionCatalogEndpoints, ...findMyTimelineEndpoints },
+  connections: {
+    ...connectionEndpoints,
+    ...connectionCatalogEndpoints,
+    ...findMyTimelineEndpoints,
+    ...findMyWatchEndpoints,
+  },
   // Buzz-parity workstreams (docs/implementation/buzz-parity/PLAN.md): each file is owned by one workstream.
   attachments: attachmentEndpoints,
   memory: memoryEndpoints,
