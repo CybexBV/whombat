@@ -11,6 +11,7 @@ import {
   HOST_DESTRUCTIVE_ACTIONS,
   type HostActionAccepted,
   type HostAlert,
+  type HostFindMy,
   type HostGuestAction,
   type HostGuestDetail,
   type HostInstallBody,
@@ -41,6 +42,7 @@ import { HOSTS_API, type HostsActor, HostsUnavailable, networksOf, poolsOf, seg 
 import { type HostsChangeInput, recordHostsChange } from './commands';
 import { type HostsNames, hostsCall, refusedBeforeActing } from './errors';
 import { findMyFor } from './findmy';
+import { findMyBackgroundFor } from './findmy-background';
 import { type InstallPlan, installsFor } from './install';
 import {
   ADDRESS_FIELD_TEXT,
@@ -146,6 +148,11 @@ async function sign(ctx: AlertCtx, input: HostsChangeInput): Promise<string> {
 }
 
 const S = (serverId: string) => `${HOSTS_API}/servers/${seg(serverId)}`;
+
+/** A Find My answer with how its Mac is read in the background (null: only while someone looks). */
+function withBackground(services: Services, view: HostFindMy): HostFindMy {
+  return { ...view, background: findMyBackgroundFor(services).about(view.server) };
+}
 const G = (serverId: string, guestId: string) => `${S(serverId)}/guests/${seg(guestId)}`;
 
 /** A guest's display name for texts (its name, else its id) and whether it is the guest this Whombat runs in. */
@@ -1878,11 +1885,12 @@ export const hostsRoutes: RouteDef[] = [
     );
   }),
 
-  // Find My on a Mac's page: an owner's, as a look is (a read unlocks the Mac and reads its screen). What was read
-  // stays in memory only (`findmy.ts`), and none of its steps is signed.
+  // Find My on a Find My connection's page (the Mac it reads): an owner's, as a look is (a read unlocks the Mac and
+  // reads its screen). What was read stays in memory only (`findmy.ts`), and none of its steps is signed. Each answer
+  // says how the Mac is read without anyone looking (`findmy-background.ts`).
   route(api.hosts.findMy, async (ctx) => {
     await guard(ctx, { manage: true });
-    return findMyFor(ctx.services).view(ctx.params.serverId);
+    return withBackground(ctx.services, findMyFor(ctx.services).view(ctx.params.serverId));
   }),
 
   route(api.hosts.findMyRefresh, async (ctx) => {
@@ -1890,15 +1898,21 @@ export const hostsRoutes: RouteDef[] = [
     const { serverId } = ctx.params;
     const label = await shownNameOf(g, serverId);
     // The read runs on after this answer, outside the request's command (its receipt keeps nothing).
-    return outsideCommandScope(() => findMyFor(ctx.services).refresh(g.hosts, serverId, g.actor, label));
+    return withBackground(
+      ctx.services,
+      outsideCommandScope(() => findMyFor(ctx.services).refresh(g.hosts, serverId, g.actor, label)),
+    );
   }),
 
   route(api.hosts.findMyExact, async (ctx) => {
     const g = await guard(ctx, { manage: true });
     const { serverId } = ctx.params;
     const label = await shownNameOf(g, serverId);
-    return outsideCommandScope(() =>
-      findMyFor(ctx.services).exact(g.hosts, serverId, ctx.body.person, g.actor, label),
+    return withBackground(
+      ctx.services,
+      outsideCommandScope(() =>
+        findMyFor(ctx.services).exact(g.hosts, serverId, ctx.body.person, g.actor, label),
+      ),
     );
   }),
 

@@ -24,6 +24,7 @@ import { GUIDE_ASK_COMMANDS } from '../guides/ask';
 import { GUIDE_COMMANDS } from '../guides/commands';
 import { ONE_WHOMBAT_COMMANDS } from '../home/commands';
 import { HOSTS_COMMANDS } from '../hosts/commands';
+import { FIND_MY_COMMANDS } from '../hosts/findmy-places';
 import { FOLLOWED_TASK_COMMANDS } from '../hosts/followed';
 import { MAIL_TRIGGER_COMMANDS } from '../mail-triggers/index';
 import { setAgentNotes } from '../memory/notes';
@@ -214,6 +215,8 @@ export const COMMANDS: CommandDef[] = [
   ...HOSTS_COMMANDS,
   // Server tasks followed to their end as cards in their thread — task-feedback.md.
   ...FOLLOWED_TASK_COMMANDS,
+  // Where people are on Find My, kept for the automations that listen — findmy-connection.md.
+  ...FIND_MY_COMMANDS,
   // Devices Whombat doesn't support yet — one-whombat-devices.md.
   ...DEVICES_COMMANDS,
   // The desk screen paired to a person — desk-display-server.md.

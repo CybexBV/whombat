@@ -7,8 +7,10 @@
  * Someone using the Mac is left alone (`in_use`). A locked Mac is unlocked for the read and locked again after it, and
  * Find My is quit again when it wasn't open, whatever happened in between. One job at a time per Mac.
  *
- * What was read lives in this process's memory only and goes an hour after the last look: Whombat keeps no history of
- * where anyone was, never logs a place and signs none of these steps (the hosts service audits them, without places).
+ * What was read lives in this process's memory only and goes an hour after the last look, or once a Find My connection
+ * stops reading it in the background: Whombat keeps no history of where anyone was, never logs a place and signs none of
+ * these steps (the hosts service audits them, without places). After every read the Find My connections on that Mac
+ * compare each person's place (`findmy-places.ts`).
  */
 import { createHash } from 'node:crypto';
 import {
@@ -487,6 +489,9 @@ export interface FindMyDeps {
   warn?: (facts: { server: string; code: string }, msg: string) => void;
 }
 
+/** Told of every read that worked: the Mac, the people as read, and when. */
+export type FindMyReadListener = (serverId: string, people: readonly HostFindMyPerson[], at: Date) => void;
+
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** Find My on the Macs of this Whombat: what was read, the jobs in line and the pictures, per Mac. */
@@ -496,6 +501,9 @@ export class FindMyStore {
   readonly #sleep: Sleep;
   readonly #warn: NonNullable<FindMyDeps['warn']>;
   readonly timing: FindMyTiming;
+  readonly #listeners = new Set<FindMyReadListener>();
+  /** Macs a Find My connection reads in the background: what was read there stays while it does. */
+  #held: ReadonlySet<string> = new Set();
 
   constructor(deps: FindMyDeps) {
     this.#now = deps.now;
@@ -504,11 +512,22 @@ export class FindMyStore {
     this.timing = { ...FIND_MY_TIMING, ...deps.timing };
   }
 
+  /** Tells `listener` of every read that worked from now on; returns its removal. */
+  onRead(listener: FindMyReadListener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  /** The Macs read in the background now (lower case ids): kept while they are, the hour after the last look after. */
+  hold(serverIds: Iterable<string>): void {
+    this.#held = new Set([...serverIds].map((id) => id.toLowerCase()));
+  }
+
   /** Forgets what is past its time: a Mac nobody looked at for an hour, old pictures and maps. */
   sweep(): void {
     const now = this.#now();
     for (const [id, e] of this.#entries) {
-      if (e.jobs === 0 && now - e.lookedAt > this.timing.keepMs) {
+      if (e.jobs === 0 && now - e.lookedAt > this.timing.keepMs && !this.#held.has(id.toLowerCase())) {
         this.#entries.delete(id);
         continue;
       }
@@ -528,6 +547,13 @@ export class FindMyStore {
     return this.#shown(e);
   }
 
+  /** What was read last without counting as a look (the background, the assistant's answer); null: nothing kept. */
+  peek(serverId: string): HostFindMy | null {
+    this.sweep();
+    const e = this.#entries.get(serverId);
+    return e ? this.#shown(e) : null;
+  }
+
   #shown(e: Entry): HostFindMy {
     return {
       server: e.serverId,
@@ -539,7 +565,7 @@ export class FindMyStore {
     };
   }
 
-  #entry(serverId: string): Entry {
+  #entry(serverId: string, look = true): Entry {
     let e = this.#entries.get(serverId);
     if (!e) {
       e = {
@@ -557,8 +583,7 @@ export class FindMyStore {
         exactWaiting: false,
       };
       this.#entries.set(serverId, e);
-    }
-    e.lookedAt = this.#now();
+    } else if (look) e.lookedAt = this.#now();
     return e;
   }
 
@@ -579,10 +604,19 @@ export class FindMyStore {
     for (let e = this.#entries.get(serverId); e && e.jobs > 0; e = this.#entries.get(serverId)) await e.tail;
   }
 
-  /** `hosts.findMyRefresh`: a read starts unless one is in line or the last worked under two minutes ago. */
-  refresh(hosts: Hosts, serverId: string, actor: HostsActor, label: string): HostFindMy {
+  /**
+   * `hosts.findMyRefresh`: a read starts unless one is in line or the last worked under two minutes ago. `look: false`
+   * (the background) doesn't count as someone looking.
+   */
+  refresh(
+    hosts: Hosts,
+    serverId: string,
+    actor: HostsActor,
+    label: string,
+    options: { look?: boolean } = {},
+  ): HostFindMy {
     this.sweep();
-    const e = this.#entry(serverId);
+    const e = this.#entry(serverId, options.look !== false);
     const fresh = e.readAt !== null && !e.problem && this.#now() - e.readAt < HOST_FIND_MY_FRESH_MS;
     if (!e.reading && !fresh) {
       e.reading = true;
@@ -600,6 +634,14 @@ export class FindMyStore {
       e.readAt = this.#now();
       e.problem = located.problem;
       e.map = null;
+      const at = new Date(e.readAt);
+      for (const listener of this.#listeners) {
+        try {
+          listener(e.serverId, e.people, at);
+        } catch {
+          // A listener says its own failures; the read stands.
+        }
+      }
     } catch (err) {
       e.problem = problemOf(err, label);
       this.#warn({ server: e.serverId, code: e.problem.code }, 'Find My: a read didn’t work');

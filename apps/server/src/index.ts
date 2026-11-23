@@ -14,6 +14,7 @@ import { recoverMergeIntents } from './github/merge-intents';
 import { hermesHousekeeping } from './hermes-home/housekeeping';
 import { closeHermesHome } from './hermes-home/service';
 import { homeJobsFor } from './home/jobs';
+import { findMyBackgroundFor } from './hosts/findmy-background';
 import { startHosts } from './hosts/index';
 import { emailDigestFor } from './mail/digest';
 import { type ManagedBoot, startManaged } from './managed/boot';
@@ -169,6 +170,8 @@ if (!readOnly) {
   services.tracker.start();
   // Connected mailboxes watched by live mail-triggered automations.
   services.mailTriggers.start();
+  // Find My read in the background where a connection asks or an automation listens (findmy-connection.md).
+  findMyBackgroundFor(services).start();
   // The AI gateway (docs/decisions/ai-gateway.md AIG-11): each gateway connection read every minute, alerts to the
   // person.
   services.gateway.start();
