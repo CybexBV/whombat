@@ -123,6 +123,7 @@ CC0 1.0 Universal. The others:
 | AI gateway | Lucide `sparkles` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | API | Lucide `braces` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Debian | Simple Icons `debian` (<https://www.debian.org/logos>) | the Debian Open Use Logo, Copyright (c) 1999 Software in the Public Interest, Inc., and others: LGPL-3.0-or-later or, at your option, CC BY-SA 3.0 (<https://www.debian.org/logos/>) |
+| Website feedback | Lucide `message-square-text` | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Fedora | Simple Icons `fedora` (<https://docs.fedoraproject.org/en-US/project/brand/>) | its owner’s brand terms |
 | Find My | drawn for Whombat in Lucide's stroke: a location pin over two people (never Apple's Find My icon) | Cybex BV’s own |
 | Forgejo | Simple Icons `forgejo` (<https://codeberg.org/forgejo/meta/raw/branch/readme/branding/logo/forgejo-monochrome.svg>) | CC BY-SA 4.0, by Caesar Schinas |
