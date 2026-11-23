@@ -5,6 +5,8 @@
   imports = [
     (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
     ./installer-base.nix
+    # The boot menu in Whombat's look: its logo on the console's dark ground, UEFI and BIOS alike.
+    ./installer-boot-look.nix
     # Wi-Fi with iwd, as on the appliance (HD-08, NX-242): the installer's Wi-Fi step joins through it, and the profile
     # iwd wrote is copied into the installed system.
     ../modules/wifi.nix
