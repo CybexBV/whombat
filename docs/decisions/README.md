@@ -260,6 +260,7 @@ How the split was made: `docs.md`.
 - `server-names.md` — names people give servers, renaming servers and connections where they are listed.
 - `server-updates.md`, `server-updates-server.md` — software updates on servers.
 - `macos-servers.md` — Macs as servers: the macOS agent, the screen through Screen Sharing, Whombat Helper.
+- `findmy-connection.md` — Find My as a connection through a Mac: its check, background reads, arriving and leaving automations, the assistant's tool.
 - `agent-updates.md`, `agent-updates-server.md` — servers' agents keep themselves up to date.
 
 ## Skills, guides, backups

@@ -113,6 +113,13 @@
       "when": 1795321165433,
       "tag": "0015_runtime_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795428144688,
+      "tag": "0016_findmy_places",
+      "breakpoints": true
     }
   ]
 }

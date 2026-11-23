@@ -119,6 +119,8 @@ export async function scanBurrow(
           )
             continue;
         }
+        // A change of place noticed before this version was published was for another automation's listening.
+        if (facts.facts.kind === 'findmy' && event.createdAt < v.publishedAt) continue;
         // Loop guards: automation-caused events stop at a small depth, and never trigger their own automation.
         if (
           cause.depth > limits.maxCausalDepth ||

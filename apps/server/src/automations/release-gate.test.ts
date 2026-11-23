@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_AUTOMATIONS_LATER,
   BEFORE_FIRST_RELEASE,
+  FIND_MY_AUTOMATIONS_LATER,
+  FIND_MY_SCHEMA,
   laterWords,
   MAIL_AUTOMATIONS_LATER,
   NewerAutomationsGate,
   newerDefinition,
   newerRun,
   rollbackTarget,
+  schemaKnowsFindMy,
 } from './release-gate';
 
 const OLD = 'whombat-20261121.4';
@@ -169,5 +172,46 @@ describe('newer definitions', () => {
     expect(laterWords({ triggers: [{ kind: 'manual' }], steps: [{ kind: 'connection_actions' }] })).toBe(
       ACTION_AUTOMATIONS_LATER,
     );
+  });
+});
+
+describe('Find My automations', () => {
+  const production = { NODE_ENV: 'production' as const, WHOMBAT_RELEASE_ID: NEXT };
+  const findmy = { triggers: [{ kind: 'findmy', connectionId: 'con_findmy01' }], steps: [] };
+  const schemas = (bySchema: Record<string, string | null>) => async (id: string) => bySchema[id] ?? null;
+
+  it('are newer definitions and runs, refused with their own words', () => {
+    expect(newerDefinition(findmy)).toBe(true);
+    expect(newerDefinition({ recipe: { when: { kind: 'findmy' } }, triggers: [], steps: [] })).toBe(true);
+    expect(newerRun({ trigger: { kind: 'findmy' }, definition: { triggers: [], steps: [] } })).toBe(true);
+    expect(laterWords(findmy)).toBe(FIND_MY_AUTOMATIONS_LATER);
+  });
+
+  it('wait until the release a box would go back to recorded a schema that runs them', async () => {
+    const { lookup } = releases([ME]);
+    const update = facts({
+      current: NEXT,
+      lastUpdate: { release: NEXT, from: ME, at: '2026-11-23T06:00:00Z' },
+    });
+    // The release before them recorded itself, with an older schema: mail automations go on, Find My's wait.
+    const before = new NewerAutomationsGate(production, lookup, schemas({ [ME]: '0015_runtime_releases' }));
+    before.follow(() => update);
+    expect(await before.ready()).toBe(true);
+    expect(await before.findMyReady()).toBe(false);
+    await expect(before.refuse(findmy)).rejects.toThrow(FIND_MY_AUTOMATIONS_LATER);
+    expect(await before.holdsRun({ trigger: { kind: 'findmy' }, definition: findmy })).toBe(true);
+    expect(
+      await before.holdsRun({ trigger: { kind: 'mail' }, definition: { triggers: [], steps: [] } }),
+    ).toBe(false);
+    // One with it, or a later one.
+    for (const schema of [FIND_MY_SCHEMA, '0017_later']) {
+      const after = new NewerAutomationsGate(production, lookup, schemas({ [ME]: schema }));
+      after.follow(() => update);
+      expect(await after.findMyReady()).toBe(true);
+      await expect(after.refuse(findmy)).resolves.toBeUndefined();
+    }
+    expect(schemaKnowsFindMy(null)).toBe(false);
+    // Development boxes and tests have them.
+    expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).findMyReady()).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import type { CatalogConnectionRow } from '../../connections/types';
 import { registerChecks } from '../quiet/defaults';
 import { recipeKind } from '../recipe/kind';
 import { BUSINESS_KINDS } from './business/index';
+import { FIND_MY_KIND } from './findmy';
 import { FIRST_KINDS } from './first';
 import { HOME_KINDS } from './home/index';
 import { INFRA_KINDS } from './infra/index';
@@ -24,6 +25,7 @@ export const KIND_MODULES: Record<string, KindModule> = {
   ...STORAGE_KINDS,
   ...BUSINESS_KINDS,
   ps5: PS5_KIND,
+  findmy: FIND_MY_KIND,
 };
 
 // Which of their checks Whombat watches from the start (watch-defaults.md).

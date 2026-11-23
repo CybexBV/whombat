@@ -16,7 +16,7 @@ import {
 import { decodeTolerant } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { answerFor, eventFor, MAIL_AUTOMATIONS_MINOR } from './older-apps';
+import { answerFor, eventFor, FIND_MY_AUTOMATIONS_MINOR, MAIL_AUTOMATIONS_MINOR } from './older-apps';
 
 /* The contracts an app below minor 3 decodes with: the release before mail triggers had none of these. */
 type Member = z.ZodObject<{ kind: z.ZodLiteral<string> }>;
@@ -221,6 +221,59 @@ describe('what an older app gets of mail automations', () => {
       expect(eventFor({ type: 'automation.updated', automation }, newer)).toEqual({
         type: 'automation.updated',
         automation,
+      });
+    }
+  });
+});
+
+describe('what an app below minor 4 gets of Find My automations', () => {
+  const findmy = AutomationDefinition.parse({
+    version: 1,
+    conversationId: 'cnv_chat',
+    triggers: [
+      {
+        kind: 'findmy',
+        connectionId: 'con_findmy01',
+        person: '0123456789ab',
+        name: 'Mara Visser',
+        change: 'arrives',
+        place: 'Home',
+      },
+    ],
+    steps: [{ id: 'tell', kind: 'post_message', text: '{{trigger.text}}' }],
+  });
+  const arrives: Automation = {
+    ...automation,
+    definition: findmy,
+    draft: findmy,
+    glance: automation.glance ? { ...automation.glance, source: 'findmy' } : null,
+  };
+  const ran: AutomationRun = {
+    ...run,
+    trigger: { ...run.trigger, kind: 'findmy', summary: 'Mara Visser is now at Home' },
+    steps: [step('tell', 0, 'post_message')] as AutomationRun['steps'],
+  };
+  const MINOR_3 = FIND_MY_AUTOMATIONS_MINOR - 1;
+
+  it('a form it reads: no definition, a message’s source and trigger; mail automations stay whole', () => {
+    const got = answerFor('automations.get', { automation: arrives }, MINOR_3) as { automation: Automation };
+    expect(got.automation).toMatchObject({ definition: null, draft: null, glance: { source: 'message' } });
+    const runs = answerFor('automations.runs', { runs: [ran] }, MINOR_3) as { runs: AutomationRun[] };
+    expect(runs.runs[0]?.trigger).toMatchObject({ kind: 'message_posted', summary: ran.trigger.summary });
+    expect(() => answerFor('automations.export', { definition: findmy }, MINOR_3)).toThrow(/Update the app/);
+    // At minor 3 a mail automation is read as it is.
+    const mail = answerFor('automations.get', { automation }, MINOR_3) as { automation: Automation };
+    expect(mail.automation).toMatchObject({ glance: { source: 'mail' } });
+    expect(mail.automation.definition).not.toBeNull();
+    expect(answerFor('automations.runs', { runs: [run] }, MINOR_3)).toEqual({ runs: [run] });
+  });
+
+  it('everything from minor 4 on', () => {
+    for (const newer of [FIND_MY_AUTOMATIONS_MINOR, undefined]) {
+      expect(answerFor('automations.get', { automation: arrives }, newer)).toEqual({ automation: arrives });
+      expect(eventFor({ type: 'automation.run.updated', run: ran }, newer)).toEqual({
+        type: 'automation.run.updated',
+        run: ran,
       });
     }
   });
