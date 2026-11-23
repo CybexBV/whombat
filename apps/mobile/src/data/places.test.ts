@@ -92,4 +92,27 @@ describe('Places (phone-shell-final.md)', () => {
     expect(things.connections[0]?.mark).not.toBeNull();
     expect(placesThings(undefined)).toEqual({ servers: [], connections: [] });
   });
+
+  it('opens an account on its page when the box gives one, else on the address it gives (an older box)', () => {
+    const { connections } = placesThings([
+      thing('connection', 'con_mara', { catalogId: 'google', icon: 'google', name: 'Google' }),
+      thing('connection', 'github', { catalogId: 'github', icon: 'github', name: 'GitHub' }),
+      thing('connection', 'feedback', { catalogId: 'feedback', icon: 'feedback', name: 'Website feedback' }),
+      thing('connection', 'con_old', {
+        catalogId: 'imap',
+        icon: 'imap',
+        name: 'Email',
+        href: '/settings?tab=connections&connection=imap',
+      }),
+    ]);
+    expect(connections.map((t) => [t.name, t.opens])).toEqual([
+      ['Google', null],
+      ['GitHub', null],
+      ['Website feedback', null],
+      ['Email', '/settings?tab=connections&connection=imap'],
+    ]);
+    // Each account draws its own mark; Website feedback, which has none, its bubble rather than a plug.
+    expect(connections.map((t) => t.mark)).toEqual(['google', 'github', null, 'imap']);
+    expect(connections[2]?.glyph).toBe('message');
+  });
 });

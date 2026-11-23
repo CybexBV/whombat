@@ -52,6 +52,11 @@ describe('the shell’s addresses (AP-1351)', () => {
     ['/things/server%3Apve-02', 'whombat://things/server%3Apve-02'],
     ['/things/server:pve-02', 'whombat://things/server%3Apve-02'],
     ['/burrow-hq/things/connection%3Acon_ha', 'whombat://things/connection%3Acon_ha'],
+    // An account's page (session minor 7): GitHub's and Website feedback's ids aren't a connection's `con_…`.
+    ['/things/connection%3Agithub', 'whombat://things/connection%3Agithub'],
+    ['/things/connection:feedback', 'whombat://things/connection%3Afeedback'],
+    ['/burrow-hq/things/connection%3Acon_mara', 'whombat://things/connection%3Acon_mara'],
+    ['/things/connection%3Agithub?tab=activity', 'whombat://things/connection%3Agithub?tab=activity'],
     ['/chats', 'whombat://chats'],
     ['/chats/cnv_chat-heat', 'whombat://chats/cnv_chat-heat'],
     ['/chats/cnv_chat-heat#msg_1', 'whombat://chats/cnv_chat-heat?anchor=msg_1'],

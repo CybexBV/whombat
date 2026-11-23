@@ -6,17 +6,12 @@
  */
 
 import type { MarkLike } from '@whombat/brand';
-import {
-  agentKeysText,
-  SETTINGS_GROUP_TEXT,
-  THING_STATUS_LABELS,
-  type ThingGlyph,
-  type ThreadRow,
-} from '@whombat/client';
+import { agentKeysText, SETTINGS_GROUP_TEXT, THING_STATUS_LABELS, type ThreadRow } from '@whombat/client';
 import type { ThingSummary } from '@whombat/core';
 import type { AdvancedRowView } from '../settings/groups';
 import { SETTINGS_TEXT } from '../settings/list';
 import { PLACE_WORDS, PLACES, type PlaceId, placeLine, placesThings, type ServerFacts } from './places';
+import type { PhoneGlyph } from './thingLook';
 
 export type SearchGroup = 'chats' | 'things' | 'settings' | 'places';
 
@@ -72,7 +67,8 @@ export interface SearchSetting {
 /** What a result opens. */
 export type SearchOpen =
   | { kind: 'thread'; rootId: string }
-  | { kind: 'thing'; thingId: string; title: string }
+  /** `href`: the address to follow instead of its page (an account a box gives no page), as the sidebar does. */
+  | { kind: 'thing'; thingId: string; title: string; href?: string | null }
   | { kind: 'setting'; target: SettingTarget }
   | { kind: 'place'; place: Exclude<PlaceId, 'search'> };
 
@@ -84,7 +80,7 @@ export interface SearchEntry {
   /** What it is found by besides its title and line. */
   terms: string;
   /** Things: the glyph, and the real logo drawn instead of it when there is one. */
-  glyph?: ThingGlyph;
+  glyph?: PhoneGlyph;
   mark?: MarkLike | null;
   /** Settings: their icon. */
   icon?: SearchSetting['icon'];
@@ -145,7 +141,7 @@ export function searchEntries(input: {
       terms: [thing?.catalogId, thing?.icon, thing?.kind].filter(Boolean).join(' '),
       glyph: row.glyph,
       mark: row.mark,
-      open: { kind: 'thing', thingId: row.id, title: row.name },
+      open: { kind: 'thing', thingId: row.id, title: row.name, href: row.opens },
     });
   }
   for (const s of input.settings)
