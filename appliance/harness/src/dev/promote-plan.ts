@@ -112,7 +112,7 @@ export function promotePlan(f: PromoteFacts): PromoteStep[] {
       });
     steps.push({
       kind: 'iso-upload',
-      words: `put ${f.host.id}'s installer on ${f.site.baseUrl}: installer/${f.host.id}/whombat-installer.iso and .sha256, the same at installer/latest/, then installer/latest.json (release/upload-iso --production)`,
+      words: `put ${f.host.id}'s installer on ${f.site.baseUrl} under its version (whombat-installer-vX.Y.iso and its .sha256, the next version unless the site has this one), then installer/latest.json, then remove every older installer from the bucket (release/upload-iso --production; ENV-22)`,
       dir: f.host.dir,
     });
   }
@@ -125,11 +125,23 @@ export function planWords(id: string, steps: readonly PromoteStep[]): string {
   return [`promote ${id}:`, ...steps.map((s, i) => `  ${i + 1}. ${s.words}`)].join('\n');
 }
 
+/** What the download site has after a promotion: its installer, or the newer one it kept. */
+export interface PromotedInstaller {
+  /** The release whose ISO went up (the promoted release's host). */
+  host: string;
+  /** The installer's link: this one's, or the newer one's the site kept. */
+  url: string;
+  /** Its version (`v0.12`), when the site says one. */
+  version?: string | null;
+  /** The newer release whose installer the site kept, when it did. */
+  kept?: string | null;
+}
+
 /** The releases runbook's section for a promotion. */
 export function promotionSection(o: {
   id: string;
   day: string;
-  installer: { host: string; url: string } | null;
+  installer: PromotedInstaller | null;
   /** The commit that was tagged with the release's id, when it was. */
   tagged?: string | null;
 }): string {
@@ -138,12 +150,15 @@ export function promotionSection(o: {
     '',
     `Promoted on John's word with whombat-ops \`promote ${o.id} --yes\` (\`tufrepo gh-promote\`, ONE-19).${
       o.tagged ? ` Whombat \`${o.tagged.slice(0, 12)}\` is tagged \`${o.id}\`.` : ''
-    }${
-      o.installer
-        ? ` The installer is ${o.installer.host}'s: ${o.installer.url} (and \`installer/latest/\`, \`installer/latest.json\`).`
-        : ' The installer was left as it was (`--no-iso`).'
-    }`,
+    }${installerWords(o.installer)}`,
   ].join('\n');
+}
+
+function installerWords(i: PromotedInstaller | null): string {
+  if (!i) return ' The installer was left as it was (`--no-iso`).';
+  const v = i.version ? ` ${i.version}` : '';
+  if (i.kept) return ` The download site keeps ${i.kept}'s installer${v}, which is newer: ${i.url}.`;
+  return ` The installer is${v}, ${i.host}'s: ${i.url} (\`installer/latest.json\` names it; older installers removed).`;
 }
 
 /**
@@ -156,24 +171,41 @@ export function withPromotion(md: string, id: string, section: string): string {
 }
 
 /**
- * What `release/upload-iso --production` said: up (exit 0), its own files up but the fixed links kept at a newer
- * release (exit 3, R2 B2: they only move forward), or failed.
+ * What `release/upload-iso --production` said: up (exit 0), nothing sent because the site has a newer release's
+ * installer (exit 3, R2 B2: it only moves forward), or failed.
  */
 export function uploadOutcome(
   code: number,
   stdout: string,
-): { kind: 'up' | 'kept'; host: string; url: string; kept?: string } | { kind: 'failed' } {
+):
+  | { kind: 'up'; host: string; url: string; version: string | null }
+  | { kind: 'kept'; host: string; url: string; version: string | null; kept: string }
+  | { kind: 'failed' } {
   if (code !== 0 && code !== 3) return { kind: 'failed' };
   // Its answer is the last thing it prints: one JSON object, on one line or spread over several as jq writes it.
   const lines = stdout.trimEnd().split('\n');
   const start = lines.findLastIndex((l) => l.startsWith('{'));
-  let out: { releaseId?: string; url?: string; latestKept?: string } = {};
+  let out: {
+    releaseId?: string;
+    url?: string;
+    version?: string | null;
+    latestKept?: string;
+    keptUrl?: string | null;
+    keptVersion?: string | null;
+  } = {};
   try {
     out = JSON.parse(start < 0 ? '' : lines.slice(start).join('\n'));
   } catch {
     return { kind: 'failed' };
   }
   const host = out.releaseId ?? '?';
-  const url = out.url ?? '?';
-  return code === 3 ? { kind: 'kept', host, url, kept: out.latestKept ?? '?' } : { kind: 'up', host, url };
+  if (code === 3)
+    return {
+      kind: 'kept',
+      host,
+      url: out.keptUrl ?? '?',
+      version: out.keptVersion ?? null,
+      kept: out.latestKept ?? '?',
+    };
+  return { kind: 'up', host, url: out.url ?? '?', version: out.version ?? null };
 }

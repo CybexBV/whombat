@@ -79,17 +79,18 @@ Recommendations, not requirements (PI-20); the installer doesn't ask.
 
 ## 3. Get the installer
 
-The ISO is `whombat-installer.iso`, the one Whombat image (ONE-02), from the installer download
-(`installer/<release-id>/` on the download site, with `installer/latest.json` naming the newest Production release;
-ONE-15: `release/upload-iso`), with its `.sha256`. It is built with its release (`release-build.md`:
+The ISO is `whombat-installer-vX.Y.iso`, the one Whombat image (ONE-02), from the installer download: one file at the
+root of the download site, named by its version, with its `.sha256` beside it and `installer/latest.json` naming both
+(ENV-22: `release/upload-iso`). It is built with its release (`release-build.md`:
 `release/build prod <releaseId>`), and the release must be published before the ISO is installed: the box looks it up
 at its first boot. A plain `nix build .#installer-iso-prod` names no release: its box works and can be claimed, but
 never takes an update.
 
 ```sh
-wget -O whombat-installer.iso '<link>'
-wget -O whombat-installer.iso.sha256 '<link>.sha256'
-sha256sum -c whombat-installer.iso.sha256
+wget '<link>'                                  # whombat-installer-v0.12.iso, say
+wget '<link>.sha256'
+sha256sum -c whombat-installer-v0.12.iso.sha256  # the .sha256 names the file as the site does
+mv whombat-installer-v0.12.iso whombat-installer.iso  # the name the steps below use
 ```
 
 The checksum comes from the same site as the ISO: it shows the download arrived whole, not that the ISO is
