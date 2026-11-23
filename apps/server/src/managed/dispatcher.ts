@@ -49,6 +49,7 @@ import { ApiError, UnknownOutcomeError, unauthorized, validationError } from '..
 import { OutcomeReply, Raw, type RouteDef } from '../routes/define';
 import { ROUTES } from '../routes/index';
 import type { Services } from '../services';
+import { thingAnswerFor } from '../things/older-apps';
 import { buildInfo } from '../version';
 import { VOICE_SESSION_HANDLERS } from '../voice/ops';
 import { forAssistant } from './acting-assistant';
@@ -1041,8 +1042,10 @@ export class SessionDispatcher {
     if (!ep || !def)
       throw new ApiError('not_implemented', `${spec.op} isn’t available on this appliance yet.`);
     const out = await runApiHandler(this.services, def, spec.op, principal.account, input);
-    // An older app gets what its contracts read (`automations/older-apps.ts`).
-    return out.raw ? out : { ...out, body: answerFor(ep.id, out.body, principal.protocolMinor) };
+    // An older app gets what its contracts read (`automations/older-apps.ts`, `things/older-apps.ts`).
+    if (out.raw) return out;
+    const minor = principal.protocolMinor;
+    return { ...out, body: answerFor(ep.id, thingAnswerFor(ep.id, out.body, minor), minor) };
   }
 
   /**

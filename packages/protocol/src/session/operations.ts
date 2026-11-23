@@ -463,7 +463,7 @@ export const EXPORT_OPS: readonly string[] = [];
  * instead of asking and getting `too_large` / `use_export_stream`. Settings → Skills: the library (a Whombat's list was
  * 71.5 KB), one skill's text (Hermes's `SKILL.md` goes to 100,000 characters), one of its files, a hub search (50
  * results) and a hub preview (a `SKILL.md` and up to 50 findings). Every other skills op answers one row or less. A
- * Mac's screenshot (`hosts.screenLook`) too.
+ * Mac's screenshot (`hosts.screenLook`) too, Find My's maps and a Find My timeline.
  */
 export const EXPORT_READ_OPS: readonly string[] = [
   // A Mac's screenshot (Whombat macos-servers.md): hundreds of kilobytes.
@@ -471,6 +471,9 @@ export const EXPORT_READ_OPS: readonly string[] = [
   // Find My on a Mac's page: the Mac's map picture and Find My's own map of one person.
   'hosts.findMyMap',
   'hosts.findMyPicture',
+  // A Find My timeline: a week of several people's days, and the Mac's map of one person's day.
+  'connections.findMyTimeline',
+  'connections.findMyTimelineMap',
   'skills.library',
   'skills.librarySkill',
   'skills.librarySkillFile',

@@ -107,4 +107,15 @@ describe('how often a connection reads in the background', () => {
     // Its own setting is sooner: the setting is why.
     expect(findMyPace('5', 'Tell me when Mara gets home', 15)).toEqual({ everyMinutes: 5, automation: null });
   });
+
+  it('reads at least every 15 minutes while it keeps a timeline, which is said when that is why', () => {
+    expect(findMyPace('off', null, 15, true)).toEqual({ everyMinutes: 15, automation: null, timeline: true });
+    expect(findMyPace('60', null, 15, true)).toEqual({ everyMinutes: 15, automation: null, timeline: true });
+    expect(findMyPace('off', 'Tell me when Mara gets home', 15, true)).toMatchObject({
+      automation: 'Tell me when Mara gets home',
+      timeline: true,
+    });
+    // John's 5 minutes stays.
+    expect(findMyPace('5', null, 15, true)).toEqual({ everyMinutes: 5, automation: null });
+  });
 });

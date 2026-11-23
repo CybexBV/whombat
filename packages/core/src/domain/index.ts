@@ -35,6 +35,7 @@ export * from './display-text.js';
 export * from './feature-request.js';
 export * from './feedback.js';
 export * from './file-view.js';
+export * from './findmy-timeline.js';
 export * from './gateway.js';
 export * from './grant.js';
 export * from './guides.js';

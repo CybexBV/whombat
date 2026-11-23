@@ -33,6 +33,11 @@ export const PEOPLE_SETTINGS = {
   'connections.create': never('connections', 'Connect a service with a token'),
   'connections.disconnect': ask('connections', 'Remove a connection and its tools'),
   'connections.discover': change('overview', 'Look for services on the home network'),
+  // A Find My timeline is the person's: the assistant reads it through its own tool (findmy_timeline), when allowed.
+  'connections.findMyTimeline': NONE,
+  'connections.findMyTimelineDelete': NONE,
+  'connections.findMyTimelineMap': NONE,
+  'connections.findMyTimelineSet': NONE,
   'connections.finishGoogle': NONE,
   'connections.finishMicrosoft': NONE,
   'connections.finishOAuth': NONE,

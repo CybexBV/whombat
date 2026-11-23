@@ -238,6 +238,13 @@ describe('reading in the background', () => {
     expect(findMyBackgroundLine({ everyMinutes: 15, automation: 'Tell me when Mara gets home' })).toContain(
       'Tell me when Mara gets home',
     );
+    expect(findMyBackgroundLine({ everyMinutes: 15, automation: null, timeline: true })).toContain(
+      'timeline',
+    );
+    // An automation's name wins over the timeline: it is the one the person made.
+    expect(
+      findMyBackgroundLine({ everyMinutes: 15, automation: 'Tell me when Mara gets home', timeline: true }),
+    ).not.toContain('timeline');
   });
 
   it('names hours as hours', () => {

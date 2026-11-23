@@ -63,12 +63,17 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * usage (`hosts.diskUsage`), and the opt-in Dutch voice plus `removing` voice model state (Whombat desk-display-talk.md);
  * minor 4 is Find My as a connection of its own: the `findmy` trigger, run trigger and list source, which a box sends as
  * they are only to a session at minor 4 or later, the catalog's `needs_mac` reason, a select field's own `options` and
- * a page tab's `server` (docs/implementation/macos/findmy-connection.md).
+ * a page tab's `server` (docs/implementation/macos/findmy-connection.md); minor 5 is a Find My timeline: the
+ * `connections.findMyTimeline…` operations and a Find My connection's Timeline tab, which a box shows only to a session
+ * at minor 5 or later (docs/implementation/macos/findmy-timeline.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 4 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 5 };
 
 /** Session protocol minor (major 5) that reads automations started by Find My (the `findmy` trigger and source). */
 export const FIND_MY_MINOR = 4;
+
+/** Session protocol minor (major 5) that draws a Find My connection's Timeline tab (`connections.findMyTimeline…`). */
+export const FIND_MY_TIMELINE_MINOR = 5;
 
 /** Session protocol minor (major 5) where `agent.update` stores `runtime.backgroundModel`. */
 export const BACKGROUND_MODEL_MINOR = 3;

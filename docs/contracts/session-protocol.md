@@ -1061,3 +1061,23 @@ speak these, and everything here is TypeScript only (docs/implementation/macos/f
 - **`things.page`**: `ThingPageTab.server`, the server a tab is about when the apps draw it themselves (Find My's tab
   names its Mac). Older apps strip it.
 - **`automation_read`** answers `findMyPeople` (`{connectionId, person, name, place}`), what a findmy trigger names.
+
+## Session minor 5 of major 5: a Find My timeline
+
+`SESSION_PROTOCOL` is `{major: 5, minor: 5}` (`FIND_MY_TIMELINE_MINOR`). No contracts release: control and the relay
+don't speak these, and everything here is TypeScript only (docs/implementation/macos/findmy-timeline.md).
+
+- **`connections.findMyTimeline`** (GET `…/connections/:connectionId/find-my/timeline?date&tz&days`): one day, or up to
+  seven ending on `date`, in the viewer's IANA time zone (`FindMyTimelineQuery`); each kept person's segments per day
+  (`stay` with its `holes`, `trip`, `gap` with `why`), everyone on the Mac's last read and who is kept since when, the
+  pace in minutes, the last read's time and whether the assistant can read it (`FindMyTimeline`). Read through an
+  export stream (`EXPORT_READ_OPS`).
+- **`connections.findMyTimelineSet`** (PUT, `{people}`: whose days to keep; empty stops the timeline and deletes
+  everything) and **`connections.findMyTimelineDelete`** (POST `…/timeline/delete`: every day goes, whose stays), both
+  answering `FindMyTimelineChanged`. Never resent by a client on its own.
+- **`connections.findMyTimelineMap`** (GET `…/timeline/map?person&date&tz&w&h&dark`): the Mac's map of one person's day
+  with each pin's point and the stops it stands for (`findMyTimelinePins`), read through an export stream; 409
+  `find_my_no_places` when the day has no spot.
+- **The catalog**: Find My's entry gains the read tool `findmy_timeline` (`{person?, date?}`, Allowed from the start).
+- **`things.page`**: a Find My connection's page shows its Timeline tab (`timeline`, naming its Mac as its Find My tab
+  does) only to a session at minor 5 or later.

@@ -1,7 +1,8 @@
 /**
  * The assistant's `findmy_people` without Postgres (docs/decisions/findmy-connection.md): it reads first when the last
  * read is old, answers the last read with its age and why when it can't, picks one person by name, and never gives a
- * spot on a map. A made-up Mac behind a stand-in hosts service; the clock and the wait are the test's.
+ * spot on a map. A made-up Mac behind a stand-in hosts service; the clock and the wait are the test's. And
+ * `findmy_timeline`'s words (findmy-timeline.md): a day as lines in the person's time zone, and whom a call is about.
  */
 import { describe, expect, it } from 'vitest';
 import type { HostsActor } from '../../hosts/client';
@@ -9,7 +10,15 @@ import { FindMyStore } from '../../hosts/findmy';
 import type { HostsService } from '../../hosts/service';
 import { FakeFindMyMac } from '../../hosts/testing/fake-findmy';
 import { ConnectionArgumentError } from '../request';
-import { FINDMY_ADAPTER, type FindMyPeopleDeps, findMyPeopleTool, matchPeople } from './findmy';
+import {
+  FIND_MY_TIMELINE_TEXT,
+  FINDMY_ADAPTER,
+  type FindMyPeopleDeps,
+  findMyPeopleTool,
+  matchPeople,
+  pickTimelinePeople,
+  timelineLines,
+} from './findmy';
 import type { AdapterContext } from './types';
 
 const MIN = 60_000;
@@ -142,5 +151,96 @@ describe('a person by name', () => {
     expect(matchPeople(people, 'mara visser').map((p) => p.name)).toEqual(['Mara Visser']);
     expect(matchPeople(people, 'Mara').map((p) => p.name)).toEqual(['Mara Visser']);
     expect(matchPeople(people, 'visser').map((p) => p.name)).toEqual(['Mara Visser', 'Ruben Visser']);
+  });
+});
+
+describe('findmy_timeline’s words', () => {
+  const TZ = 'Europe/Amsterdam';
+  const DAY_TO = '2026-11-23T23:00:00.000Z';
+
+  it('give each stop with local times, the street, the way between and why a stretch has no place', () => {
+    const lines = timelineLines(
+      [
+        {
+          kind: 'stay',
+          from: '2026-11-22T23:00:00.000Z',
+          to: '2026-11-23T07:30:00.000Z',
+          place: 'Home',
+          address: 'Kerkstraat 4, Rietveen',
+          spot: { lat: 52.1, lon: 5.2, accuracyM: 100 },
+          ongoing: false,
+          holes: [{ from: '2026-11-23T01:10:00.000Z', to: '2026-11-23T05:30:00.000Z', why: 'no_location' }],
+        },
+        { kind: 'trip', from: '2026-11-23T07:30:00.000Z', to: '2026-11-23T07:55:00.000Z' },
+        { kind: 'gap', from: '2026-11-23T12:00:00.000Z', to: '2026-11-23T13:10:00.000Z', why: 'in_use' },
+        {
+          kind: 'stay',
+          from: '2026-11-23T13:10:00.000Z',
+          to: '2026-11-23T14:00:00.000Z',
+          place: 'Wilgendam',
+          address: null,
+          spot: null,
+          ongoing: true,
+          holes: [],
+        },
+      ],
+      { timeZone: TZ, dayTo: DAY_TO },
+    );
+    expect(lines[0]).toMatch(/^00:00–08:30 Home \(Kerkstraat 4, Rietveen\); no location 02:10–06:30/);
+    expect(lines[1]).toMatch(/^08:30–08:55 on the way/);
+    expect(lines[2]).toMatch(/^13:00–14:10 not read .*using the Mac/);
+    expect(lines[3]).toMatch(/^14:10–now Wilgendam, still there/);
+    // Never a spot on a map.
+    expect(lines.join(' ')).not.toMatch(/52\.1|5\.2/);
+  });
+
+  it('say 24:00 for a stay that runs to the day’s end', () => {
+    const [line] = timelineLines(
+      [
+        {
+          kind: 'stay',
+          from: '2026-11-23T21:00:00.000Z',
+          to: DAY_TO,
+          place: 'Home',
+          address: null,
+          spot: null,
+          ongoing: false,
+          holes: [],
+        },
+      ],
+      { timeZone: TZ, dayTo: DAY_TO },
+    );
+    expect(line).toMatch(/^22:00–24:00 Home$/);
+  });
+
+  it('pick the kept people named, and say who is named but not kept', () => {
+    const at = new Date('2026-11-20T10:00:00.000Z');
+    const kept = [
+      { person: 'aaaaaaaaaaaa', name: 'Noor Visser', keptSince: at },
+      { person: 'bbbbbbbbbbbb', name: 'Ruben Visser', keptSince: at },
+    ];
+    const read = [
+      { id: 'aaaaaaaaaaaa', name: 'Noor Visser' },
+      { id: 'cccccccccccc', name: 'Ilse Visser' },
+    ];
+    expect(pickTimelinePeople(kept, read, undefined)).toEqual({
+      picked: kept,
+      notKept: ['Ilse Visser'],
+      notFound: false,
+    });
+    expect(pickTimelinePeople(kept, read, 'ruben').picked.map((k) => k.name)).toEqual(['Ruben Visser']);
+    expect(pickTimelinePeople(kept, read, 'Ilse')).toEqual({
+      picked: [],
+      notKept: ['Ilse Visser'],
+      notFound: false,
+    });
+    expect(pickTimelinePeople(kept, read, 'Mara').notFound).toBe(true);
+    expect(FIND_MY_TIMELINE_TEXT.notKept(['Ilse'])).toBe(
+      'Whombat keeps no timeline for Ilse. Turn it on under Find My → Timeline.',
+    );
+  });
+
+  it('is served by the Find My adapter', () => {
+    expect(Object.keys(FINDMY_ADAPTER).sort()).toEqual(['findmy_people', 'findmy_timeline']);
   });
 });

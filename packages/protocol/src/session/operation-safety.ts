@@ -297,6 +297,12 @@ const TABLE = {
   // 0.63 (CT-316): hiding or showing a found service again sets the same state each time.
   'connections.hideFound': RECEIPT,
   'connections.allowNetwork': RECEIPT,
+  // A Find My connection's timeline: the days, whose and the map are reads. Choosing whose can delete someone's days,
+  // and deleting every day can't be undone: neither is ever resent by itself.
+  'connections.findMyTimeline': READ,
+  'connections.findMyTimelineSet': NEVER,
+  'connections.findMyTimelineDelete': DESTRUCTIVE_NEVER,
+  'connections.findMyTimelineMap': READ,
   'connectors.setApp': NEVER,
   'connectors.removeApp': DESTRUCTIVE,
 

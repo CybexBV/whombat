@@ -63,12 +63,13 @@ export function findMyEvery(minutes: number): string {
 /**
  * The muted line under the map: how the box reads Find My while nobody looks. “Reads only while someone looks” (off, or
  * an older box that doesn't say), “Reads every 15 minutes”, or, when an automation is why, “Reads every 15 minutes for
- * “Tell me when Mara gets home””.
+ * “Tell me when Mara gets home””, and when the timeline is, “Reads every 15 minutes for the timeline”.
  */
 export function findMyBackgroundLine(background: HostFindMy['background']): string {
   if (!background) return FIND_MY_WORDS.readsWhileLooking;
   const every = `Reads ${findMyEvery(background.everyMinutes)}`;
-  return background.automation ? `${every} for “${background.automation}”` : every;
+  if (background.automation) return `${every} for “${background.automation}”`;
+  return background.timeline ? `${every} for the timeline` : every;
 }
 
 /* The connection a Mac reads for -------------------------------------------------------------------------- */

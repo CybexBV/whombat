@@ -127,6 +127,13 @@
       "when": 1795429591076,
       "tag": "0017_findmy_places",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795436512376,
+      "tag": "0018_findmy_timeline",
+      "breakpoints": true
     }
   ]
 }
