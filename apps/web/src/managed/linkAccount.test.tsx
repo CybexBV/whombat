@@ -183,6 +183,7 @@ describe('the Web address on the confirm step', () => {
     expiresAt: now + 600,
     linked: false,
     trial: true,
+    chooseName: true,
   });
   const box = account().boxes[0] as LinkAccount['boxes'][number];
 
@@ -281,6 +282,20 @@ describe('the Web address on the confirm step', () => {
 
   it('no row where control can’t check names (an older one)', async () => {
     const control = { linkLookup: lookup, linkConfirm: async () => box, linkAccount: async () => account() };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await screen.findByRole('button', { name: T.confirm });
+    expect(screen.queryByRole('button', { name: N.choose })).toBeNull();
+  });
+
+  it('no row where control says the box can’t take a chosen name', async () => {
+    const control = {
+      linkLookup: async () => ({ ...(await lookup()), chooseName: false }),
+      linkConfirm: async () => box,
+      linkNameCheck: async (name: string) => ({ name, verdict: 'free' as const }),
+      linkAccount: async () => account(),
+    };
     render(
       <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
     );

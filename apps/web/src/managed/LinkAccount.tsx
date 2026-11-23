@@ -362,7 +362,9 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
             ))}
           </ul>
         )}
-        {!lookup.linked && props.onCheckName && (
+        {/* Only when control says the box can take a chosen name: an older box, one that already has its address,
+            or an account past its chosen names for the year gets a random name (or keeps its own). */}
+        {!lookup.linked && lookup.chooseName === true && props.onCheckName && (
           <WebAddressRow
             ask={props.onCheckName}
             taken={props.nameTaken ?? null}

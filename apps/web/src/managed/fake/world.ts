@@ -3957,6 +3957,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
         linked: c.used,
         trial: !linkRuns(l) && l.plan.trialAvailable,
         termsVersion: SUBSCRIPTION_TERMS_VERSION,
+        chooseName: !c.used,
       });
     },
     async linkNameCheck(name) {
