@@ -3,7 +3,7 @@
  * before (“…which you add on the web”). The same two flows as the web's Settings → AI, over the session: ChatGPT's
  * device code (copy the code, open OpenAI's page in the in-app browser, sign in there) and Claude Code's own sign-in
  * (open claude.ai in the in-app browser, approve, copy the code it shows, paste it here). Asked only while nothing is
- * ready; Later opens the Whombat, where the line that the assistant can't work yet shows as before.
+ * ready; Skip for now opens the Whombat, where the line that the assistant can't work yet shows as before.
  */
 import { agentWords, createClient, theAgentOf } from '@whombat/client';
 import {

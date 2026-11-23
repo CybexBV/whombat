@@ -2,7 +2,7 @@
  * Connect your AI, the claim's last step (Whombat first-day.md): right after the claim, before the Whombat opens. The person picks ChatGPT or Claude Code and signs in with the same rows as Settings → AI
  * (`SignInRow`: ChatGPT's device code, Claude Code's own sign-in), so the assistant can answer from the first message.
  * Asked only while nothing is ready: a Whombat with a provider ready already, or whose sign-ins can't be read, opens at
- * once. Later opens the Whombat, where the line above Chat says the assistant can't work yet.
+ * once. Skip for now opens the Whombat, where the line above Chat says the assistant can't work yet.
  */
 import {
   BOX_SETUP_TEXT,
@@ -141,7 +141,7 @@ export function ConnectAiScreen({ burrow, onDone, terminal, afterBoxSetup }: Con
                 {T.continue}
               </Button>
             ) : (
-              <Button variant="link" onClick={onDone}>
+              <Button variant="secondary" size="lg" onClick={onDone}>
                 {T.later}
               </Button>
             )}
