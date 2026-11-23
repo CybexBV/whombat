@@ -72,7 +72,8 @@ export const CONNECT_AI_TEXT = {
   checking: 'Checking your AI sign-ins…',
   ready: (providers: readonly LiveProvider[], assistant: string) =>
     `Signed in to ${names(providers)}. ${assistant} is ready.`,
-  later: 'Later',
+  /** The one way on until an AI is signed in, as on Set up your AI. */
+  later: 'Skip for now',
   continue: 'Continue',
   /** The phone opens the providers' pages in its in-app browser and comes back to the step. */
   phone: {

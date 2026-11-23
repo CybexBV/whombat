@@ -321,7 +321,7 @@ export const COMMUNITY_TEXT = {
   claim: {
     title: 'Claim your Whombat',
     sub: 'Your Whombat shows four letters on its screen. Type them here to make it yours.',
-    tip: 'No screen on it? Look at the console of the machine it runs on.',
+    tip: 'No screen on it? Plug one in, or open its window if it runs in a virtual machine.',
     letters: 'LETTERS',
     lettersPlaceholder: 'ABCD',
     next: 'Continue',

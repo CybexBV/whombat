@@ -61,7 +61,7 @@ export async function finishSetup(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('STEP 4 OF 4')).toBeVisible();
-  await page.getByRole('button', { name: 'Later' }).click();
+  await page.getByRole('button', { name: 'Skip for now' }).click();
   await inTheApp(page);
 }
 

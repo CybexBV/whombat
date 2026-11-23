@@ -335,7 +335,7 @@ export const OWN_ADDRESS_TEXT = {
   claim: {
     title: 'Claim your Whombat',
     sub: 'Your Whombat shows four letters on its screen. Type them here to make it yours.',
-    tip: 'No screen on it? Look at the console of the machine it runs on.',
+    tip: 'No screen on it? Plug one in, or open its window if it runs in a virtual machine.',
   },
   account: {
     title: 'Who are you?',
@@ -372,7 +372,9 @@ export const OWN_ADDRESS_TEXT = {
   },
   passkey: {
     title: 'Make a passkey for this Whombat',
-    sub: 'It opens this Whombat and its backups. You’ll touch it twice: once to make it, once to check it.',
+    // Two prompts, on purpose: the second checks that the key the passkey gave when it was made is the one it gives
+    // when it is used, so the backups really open with it later.
+    sub: 'It opens this Whombat and its backups. Your device asks for it twice: first to make it, then to check it works.',
     /** Design §7.5, at setup, making the box passkey: verbatim. */
     words:
       'This passkey is for your Whombat only. Our website can’t use it to open your Whombat or its backups.',

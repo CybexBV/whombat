@@ -47,10 +47,13 @@ export function foundBody(one: boolean): string {
 export function seeAllLabel(n: number): string {
   return `See all ${n}`;
 }
-/** Mail second: other email first, Google reachable (it needs the person's own Google app today). */
+/**
+ * Mail second: other email first, Google reachable (it needs the person's own Google app today). No protocol name on
+ * the button: the form it opens says IMAP where it matters.
+ */
 export const MAIL_TITLE = 'Your email';
 export const MAIL_BODY = 'I can read, sort and draft replies. I always ask before I send anything.';
-export const MAIL_OTHER = 'Other email (IMAP)';
+export const MAIL_OTHER = 'Other email';
 export const MAIL_GOOGLE = 'Gmail or Google Workspace';
 export const MAYBE_LATER = 'Maybe later';
 

@@ -106,10 +106,10 @@ export async function skipToApp(page: Page): Promise<void> {
   await skipConnectAi(page);
 }
 
-/** “Connect your AI” (CLAIM · STEP 2 OF 2), Later: the Whombat opens with the line that the assistant can't work yet. */
+/** “Connect your AI” (CLAIM · STEP 2 OF 2), Skip for now: the Whombat opens with the line that the assistant can't work yet. */
 export async function skipConnectAi(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Connect your AI' })).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('button', { name: 'Later' }).click();
+  await page.getByRole('button', { name: 'Skip for now' }).click();
 }
 
 /**
