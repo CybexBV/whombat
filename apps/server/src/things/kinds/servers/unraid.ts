@@ -3,7 +3,7 @@
  * already knows (`watched.ts`), with no call to Unraid but the health pass's small one. Otherwise it reads Unraid's
  * GraphQL API as the connection (`POST /graphql`, `x-api-key`, a Viewer key is enough; queries only read): the array
  * with its disks and pools and the server's own name (the health pass reads this one every 5 minutes, also to find the
- * server Whombat watches by its name, SB-09, and keeps the array's used space as a point for Space used), then its
+ * server Whombat watches by its name, and keeps the array's used space as a point for Space used), then its
  * Docker containers and VMs, then its shares, unread notifications, a parity check and its own processor and memory.
  * Three small queries, kept 30 seconds, so a field an older Unraid lacks costs only its own part. Read only.
  */

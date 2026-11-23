@@ -49,7 +49,7 @@ afterEach(() => {
   watched.server = null;
 });
 
-describe('Unraid’s own name (SB-09)', () => {
+describe('Unraid’s own name', () => {
   it('reads the hostname from the answer, else nothing', () => {
     expect(unraidHostnameOf({ data: { info: { os: { hostname: 'BlackBox' } } } })).toBe('BlackBox');
     expect(unraidHostnameOf({ data: { info: { os: { hostname: '  ' } } } })).toBeNull();

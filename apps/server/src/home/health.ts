@@ -161,7 +161,7 @@ async function zoneOf(services: Services, row: CatalogConnectionRow): Promise<st
 
 /**
  * The glance of an entry Whombat has words for, from its kind's reader (the registry's `seen`, SD-S01, SD-05); null for
- * the others. Unraid's kind keeps its own name in the glance, for the server it is part of (SB-09): its address may not
+ * the others. Unraid's kind keeps its own name in the glance, for the server it is part of: its address may not
  * be the one the server reports.
  */
 async function seenOf(

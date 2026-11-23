@@ -11,7 +11,7 @@
  *   first and the machine's CPU and Memory after them when its kind says so (service-dashboards.md SD-03, SD-S02); the
  *   kinds come from the registry (`kinds/index.ts`, SD-S01); “Worth a look” as a strip
  *   on top while it has a line (docs/decisions/service-slots.md); the kind's main and side panels, a Proxmox or Unraid
- *   connection's “part of” text when its kind read nothing (CP-10; else its kind shows the server), “Whombat did
+ *   connection's “part of” text when its kind read nothing (else its kind shows the server), “Whombat did
  *   here” and “What Whombat may do” in the main column; “Show more here” at the bottom. A panel with nothing to say is
  *   left out. Every panel says where it sits (`layout`).
  * - **In slots** (docs/decisions/service-slots.md): a kind's page in slots, and the page of a connection without a kind
