@@ -46,6 +46,12 @@ export async function fresh(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Sign in to Whombat' })).toBeVisible();
 }
 
+/** Opens a mailed sign-in link and taps Sign in: the link is used on a tap, never on opening. */
+export async function openSignInLink(page: Page, link: string): Promise<void> {
+  await page.goto(link);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+}
+
 /**
  * Signs in as an account with an organization from before Whombat Link (the hosted list's Whombats; LNK-35 phase 1)
  * and waits on the list. Nothing is on this network while the list looks, so an organization without Whombats stays on
@@ -60,7 +66,7 @@ export async function signIn(page: Page, { nearby = ['fresh'] }: { nearby?: Box[
   await fake(page, 'existingOrg');
   const link = await fake<string>(page, 'lastLink');
   expect(link).toMatch(/^\/auth\/verify#token=/);
-  await page.goto(link);
+  await openSignInLink(page, link);
   const list = page.getByRole('heading', { name: 'Pick a Whombat' });
   // A sign-in lands on the home; the organization's own list stays at /appliances.
   await expect(page.getByRole('heading', { name: /^(Your Whombats?|Add your Whombat)$/ })).toBeVisible();

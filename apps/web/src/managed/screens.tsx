@@ -345,14 +345,38 @@ export function PasskeyStopScreen({
   );
 }
 
-export function VerifyScreen({ error }: { error: string | null }) {
+/**
+ * A sign-in link opened here: one tap uses it. A tap rather than on opening, so a mail scanner that opens links doesn't
+ * use the one-time link up before the person does.
+ */
+export function VerifyScreen({
+  error,
+  busy,
+  onSignIn,
+  onNewLink,
+}: {
+  error: string | null;
+  busy: boolean;
+  onSignIn: () => void;
+  onNewLink: () => void;
+}) {
+  const t = COPY.signIn;
   return (
-    <AuthLayout
-      kicker={COPY.signIn.kicker}
-      title={error ? COPY.signIn.title : COPY.signIn.verifying}
-      sub={error ?? undefined}
-      tip={COPY.signIn.tip}
-    />
+    <AuthLayout kicker={t.kicker} title={t.title} sub={error ?? t.linkSub} tip={t.tip}>
+      <div className={styles.form}>
+        <div className={styles.actions}>
+          {error ? (
+            <Button variant="primary" size="lg" onClick={onNewLink}>
+              {t.newLink}
+            </Button>
+          ) : (
+            <Button variant="primary" size="lg" disabled={busy} onClick={onSignIn}>
+              {busy ? t.verifying : t.useLink}
+            </Button>
+          )}
+        </div>
+      </div>
+    </AuthLayout>
   );
 }
 
