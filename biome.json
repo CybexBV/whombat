@@ -10,6 +10,7 @@
     "includes": [
       "**",
       "!docs/design-handoff",
+      "!docs/implementation/**/*.html",
       "!packages/brand/assets",
       "!packages/avatars/svg",
       "!packages/hermes-whombat/vendor",
