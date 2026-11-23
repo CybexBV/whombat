@@ -609,6 +609,21 @@ describe('after linking, waiting for the Whombat’s own address', () => {
     expect(asked).toBe(LINK_CLAIM_URL_GRACE_MS / LINK_ADDRESS_POLL_EVERY_MS + 1);
   });
 
+  it('asks every couple of seconds, so the page opens soon after the claim link reaches control', async () => {
+    const waits: number[] = [];
+    const answers = [starting, unclaimed, withLink];
+    await pollLinkAddress({
+      device: unclaimed.device,
+      load: async () => ({ plan: plan(), boxes: [answers.shift() ?? withLink] }),
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+      now: () => 0,
+    });
+    expect(waits).toHaveLength(2);
+    for (const ms of waits) expect(ms).toBeLessThanOrEqual(2_000);
+  });
+
   it('gives up after a while', async () => {
     let asked = 0;
     const out = await pollLinkAddress({
