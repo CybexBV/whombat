@@ -5,7 +5,7 @@
  * drawn by the Mac at the card's size. The map and the pictures are larger than one session message, so the session
  * reads them through an export stream by itself.
  */
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '@whombat/core/contracts';
 import {
   HOST_FIND_MY_POLL_MS,
@@ -13,13 +13,22 @@ import {
   type HostFindMy,
   type HostFindMyMap,
 } from '@whombat/core/domain';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { CommitResult } from '../http/types';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from '../react/context';
-import { queryHook } from '../react/queries';
+import { queryHook, useCatalogConnections } from '../react/queries';
 import { commitOutcomeText, hostErrorInfo } from './errors';
-import { type FindMyRegion, findMyMapQuery, findMyPolls, findMyStale } from './findmy';
+import {
+  type FindMyConnectionLink,
+  type FindMyRegion,
+  findMyAtHome,
+  findMyConnectionOf,
+  findMyMacs,
+  findMyMapQuery,
+  findMyPolls,
+  findMyStale,
+} from './findmy';
 
 const useFindMyRead = queryHook(api.hosts.findMy);
 /** The Mac's map picture (`hosts.findMyMap`), an export read. `useFindMyMap` keeps the last one on screen. */
@@ -193,4 +202,40 @@ export function useFindMyPicture({
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
   });
+}
+
+/**
+ * The Find My connection that reads Find My on the Mac `serverId`, for the one link on the Mac's page (its `mac` field,
+ * from the connections list); null while the list is read, when it can't be, or when none does.
+ */
+export function useFindMyConnectionOf(burrow: string, serverId: string | null): FindMyConnectionLink | null {
+  const list = useCatalogConnections(serverId ? { params: { burrow } } : null, { retry: false });
+  const connections = list.data?.connections;
+  return useMemo(
+    () => (serverId ? findMyConnectionOf(connections, serverId) : null),
+    [connections, serverId],
+  );
+}
+
+/**
+ * Who the Find My connections' last reads have at Home, by name, for the Automations page's ideas: what each Mac's
+ * Find My holds now (never a read of its own, so nobody's screen is taken for an idea). Empty until known.
+ */
+export function useFindMyHome(burrow: string): string[] {
+  const { queries } = useWhombat();
+  const list = useCatalogConnections({ params: { burrow } }, { retry: false });
+  const macs = [...new Set(findMyMacs(list.data?.connections).map((m) => m.serverId))];
+  const reads = useQueries({
+    queries: macs.map((serverId) => ({
+      ...queries.endpoint(api.hosts.findMy, { params: { burrow, serverId } }),
+      retry: false,
+      staleTime: 60_000,
+    })),
+  });
+  const stamp = reads.map((r) => r.dataUpdatedAt).join(',');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the reads' answers are keyed by `stamp`
+  return useMemo(() => {
+    const names = reads.flatMap((r) => (r.data as HostFindMy | undefined)?.people ?? []);
+    return [...new Set(names.filter(findMyAtHome).map((p) => p.name))];
+  }, [stamp]);
 }

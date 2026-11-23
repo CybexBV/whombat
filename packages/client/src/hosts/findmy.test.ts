@@ -10,9 +10,14 @@ import {
   FIND_MY_SPAN,
   FIND_MY_WORDS,
   findMyAgo,
+  findMyAtHome,
+  findMyBackgroundLine,
   findMyCanZoom,
+  findMyConnectionOf,
+  findMyEvery,
   findMyExactView,
   findMyFirstName,
+  findMyMacs,
   findMyMapAsk,
   findMyMapQuery,
   findMyPersonLine,
@@ -222,5 +227,52 @@ describe('the map', () => {
     );
     for (const [i, p] of pins.entries())
       for (const q of pins.slice(i + 1)) expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThanOrEqual(34);
+  });
+});
+
+describe('reading in the background', () => {
+  it('says how often, and for which automation', () => {
+    expect(findMyBackgroundLine(null)).toBe(FIND_MY_WORDS.readsWhileLooking);
+    expect(findMyBackgroundLine(undefined)).toBe(FIND_MY_WORDS.readsWhileLooking);
+    expect(findMyBackgroundLine({ everyMinutes: 15, automation: null })).toBe('Reads every 15 minutes');
+    expect(findMyBackgroundLine({ everyMinutes: 15, automation: 'Tell me when Mara gets home' })).toContain(
+      'Tell me when Mara gets home',
+    );
+  });
+
+  it('names hours as hours', () => {
+    expect(findMyEvery(5)).toBe('every 5 minutes');
+    expect(findMyEvery(60)).toBe('every hour');
+    expect(findMyEvery(120)).toBe('every 2 hours');
+    expect(findMyEvery(90)).toBe('every 90 minutes');
+    expect(findMyEvery(1)).toBe('every minute');
+  });
+});
+
+describe('the Find My connection a Mac reads for', () => {
+  const findMy = { id: 'con_findmy', catalogId: 'findmy', label: 'Find My', fields: { mac: 'studio' } };
+  const other = { id: 'con_ha', catalogId: 'homeassistant', label: 'Home Assistant', fields: { mac: 'studio' } };
+
+  it('is the Find My connection whose mac is that server', () => {
+    expect(findMyConnectionOf([other, findMy], 'studio')).toEqual({
+      connectionId: 'con_findmy',
+      label: 'Find My',
+      href: '/things/connection%3Acon_findmy',
+    });
+    expect(findMyConnectionOf([other, findMy], 'pve-02')).toBeNull();
+    expect(findMyConnectionOf(undefined, 'studio')).toBeNull();
+  });
+
+  it('lists each Find My connection with its Mac', () => {
+    expect(findMyMacs([other, findMy, { ...findMy, id: 'con_none', fields: {} }])).toEqual([
+      { connectionId: 'con_findmy', serverId: 'studio' },
+    ]);
+  });
+
+  it('knows Home in Find My’s own words', () => {
+    expect(findMyAtHome({ place: 'Home' })).toBe(true);
+    expect(findMyAtHome({ place: ' home ' })).toBe(true);
+    expect(findMyAtHome({ place: 'Wilgendam' })).toBe(false);
+    expect(findMyAtHome({ place: null })).toBe(false);
   });
 });
