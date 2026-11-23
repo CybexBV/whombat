@@ -104,6 +104,8 @@
   font: var(--type-display-onboarding);
   font-size: 46px;
   letter-spacing: var(--type-display-onboarding-tracking);
+  /* A longer title (the letters for the page that opened) wraps in even lines, never one word alone. */
+  text-wrap: balance;
 }
 
 .claimOpen {

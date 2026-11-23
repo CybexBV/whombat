@@ -125,7 +125,7 @@ in
     { nodes, ... }:
     let
       console = "${nodes.machine.whombat.console.package}/bin/whombat-console";
-      footer = pkgs.writeText "whombat-console-banner" nodes.machine.whombat.console.banner;
+      footer = pkgs.writeText "whombat-console-footer" nodes.machine.whombat.console.footer;
       runtimeUid = toString nodes.machine.whombat.ids.whombat;
       pulse = nodes.machine.whombat.sound.pulseServer;
     in
@@ -230,7 +230,7 @@ in
           headless.fail("ls /dev/dri/card*")
           headless.fail("systemctl is-active getty@tty1.service autovt@tty1.service")
           headless.wait_until_tty_matches("1", "Starting Whombat")
-          headless.wait_until_tty_matches("1", "There is no login on this console")
+          headless.wait_until_tty_matches("1", "hold Space")
 
       with subtest("headless: the text console's screens, as before"):
           write_state(headless, '{"v":1,"state":"claimable","code":"KXQM","url":"https://dev.whombat.com/claim"}')
@@ -784,6 +784,6 @@ in
           machine.wait_until_succeeds("systemctl is-active whombat-console.service", timeout=60)
           assert sh(machine, "systemctl show -P Result whombat-kiosk") == "start-limit-hit"
           machine.wait_until_tty_matches("1", "Starting Whombat")
-          machine.wait_until_tty_matches("1", "There is no login on this console")
+          machine.wait_until_tty_matches("1", "hold Space")
     '';
 }

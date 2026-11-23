@@ -1,6 +1,6 @@
 /**
  * Connect your AI, the claim's last step (Whombat first-day.md), against the fixture world's fake AI: asked while
- * nothing is ready, the sign-in rows of Settings → AI once a provider is picked, Later and Continue into the Whombat,
+ * nothing is ready, the sign-in rows of Settings → AI once a provider is picked, Skip for now and Continue into the Whombat,
  * and straight on when a provider is ready already.
  */
 import { screen, waitFor, within } from '@testing-library/react';
@@ -20,7 +20,7 @@ function services(ai: FakeAiOptions, extra: Parameters<typeof mockedServices>[1]
 }
 
 describe('Connect your AI (first-day.md)', () => {
-  it('asks while nothing is signed in; a pick shows its sign-in; Later opens the Whombat', async () => {
+  it('asks while nothing is signed in; a pick shows its sign-in; Skip for now opens the Whombat', async () => {
     const user = userEvent.setup();
     const { history } = renderApp(
       '/connect-ai',
@@ -32,7 +32,9 @@ describe('Connect your AI (first-day.md)', () => {
     expect(screen.queryByRole('region', { name: 'ChatGPT' })).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'Use ChatGPT' }));
     expect(await screen.findByRole('region', { name: 'ChatGPT' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Later' }));
+    // One way on, no greyed Continue beside it.
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
     await waitFor(() => expect(history.location.pathname).toBe('/chat'));
   });
 

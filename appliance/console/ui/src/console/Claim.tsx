@@ -313,10 +313,15 @@ export function Claimable({
   const text = backoff ? countdown(claim.retryAt, now) : claim.code;
   const size = backoff ? 150 : codeSize(claim.code.length);
   const stay = lettersStayMinutes(claim, now);
+  // A browser has the claim link open: only where to type the letters. The link, its QR code and the other way in
+  // would send the person elsewhere (a phone that scans the code takes the claim away from the computer that linked).
+  const pageOpen = !backoff && claim.pageOpen === true;
   return (
     <div className={styles.claim}>
       {backoff ? (
         <h1 className={styles.claimTitle}>{WORD.backoff(minutesLeft(claim.retryAt, now))}</h1>
+      ) : pageOpen ? (
+        <h1 className={styles.claimTitle}>{WORD.claimPageOpen}</h1>
       ) : (
         <OpenHead
           title={<ClaimTitle claim={claim} />}
@@ -343,7 +348,7 @@ export function Claimable({
         <p className={styles.claimRotates}>{stay === null ? WORD.claimRotates : WORD.claimStays(stay)}</p>
       )}
       {claim.newLetters && client && <NewLetters client={client} refresh={refresh} />}
-      {!backoff && <ClaimElse claim={claim} />}
+      {!backoff && !pageOpen && <ClaimElse claim={claim} />}
     </div>
   );
 }

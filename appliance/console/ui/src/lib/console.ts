@@ -141,14 +141,15 @@ export function linkShown(s: ConsoleState): boolean {
 }
 
 /**
- * The claim in the Whombat app on this network while the screen waits for the web address (screen.WaitingInApp): its
- * address and the letters to enter there, or null when there is none.
+ * The claim in the Whombat app on this network once the wait for the web address took long (screen.WaitingInApp; the
+ * server counts the wait): its address and the letters to enter there, or null when there is none yet.
  */
 export function waitingInApp(s: ConsoleState): { address: string; letters: string } | null {
   const c = s.claim;
-  if (!s.reach?.link?.waitingForAddress || c?.state !== 'claimable' || !c.inApp || !codeRe.test(c.code))
+  const address = s.reach?.link?.inApp ?? '';
+  if (!s.reach?.link?.waitingForAddress || c?.state !== 'claimable' || !address || !codeRe.test(c.code))
     return null;
-  return { address: c.inApp, letters: c.code };
+  return { address, letters: c.code };
 }
 
 /**

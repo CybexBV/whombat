@@ -226,6 +226,12 @@ export class ClaimCeremony {
    */
   ipv6Only: (() => boolean) | null = null;
 
+  /**
+   * Whether a browser has the claim link open (the runtime sets it from its sessions). The screen then says to type the
+   * letters on that page, without the link, its QR code or another way in.
+   */
+  pageOpen: (() => boolean) | null = null;
+
   constructor(
     private readonly services: Services,
     private readonly file: string | undefined = services.config.WHOMBAT_CONSOLE_FILE,
@@ -444,10 +450,14 @@ export class ClaimCeremony {
     // Said on its own, not read from the address: a box whose only addresses can't be told to anyone names none.
     const ipv6Only = this.local && state.state !== 'claimed' && this.ipv6Only?.() === true;
     const fallbackUrl = state.state === 'claimable' ? this.fallbackUrl(state.url) : null;
+    // Only the claim link at the box's own address opens a page that can be open: the screen beside it.
+    const pageOpen =
+      state.state === 'claimable' && state.url.startsWith('https://') && this.pageOpen?.() === true;
     return {
       ...state,
       ...(ipv6Only ? { ipv6Only: true as const } : {}),
       ...(fallbackUrl ? { fallbackUrl } : {}),
+      ...(pageOpen ? { pageOpen: true as const } : {}),
       ...(alert ? { alert } : {}),
       ...(reach ? { reach } : {}),
     };

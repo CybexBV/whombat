@@ -62,9 +62,9 @@ func ReadLimited(path string, limit int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, limit))
 }
 
-// LoadFooter reads the footer (the appliance banner, base.nix) as cleaned lines; "" is the built-in banner.
+// LoadFooter reads the footer (console.nix, whombat.console.footer) as cleaned lines; "" is the built-in one.
 func LoadFooter(path string) ([]string, error) {
-	text := screen.Banner
+	text := screen.Footer
 	if path != "" {
 		b, err := ReadLimited(path, 4096)
 		if err != nil {

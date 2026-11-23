@@ -163,7 +163,10 @@ function foundStep(text: string, finds: readonly WelcomeFind[]): Step {
   });
 }
 
-/** Mail, second: other email (IMAP) first, Gmail through the Google setup, or later. */
+/**
+ * Mail, second: other email first (its connect form), Gmail through the Google setup, or later. Answers find their
+ * action by its id, so cards posted with older labels still work.
+ */
 export const mailStep: Step = (_f, id) => ({
   id,
   text: '',

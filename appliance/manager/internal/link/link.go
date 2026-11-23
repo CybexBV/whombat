@@ -123,6 +123,9 @@ type Keeper struct {
 	// control from before the field refused it.
 	claim          string
 	claimRefusedAt time.Time
+	// codeSince is when this keeper first saw a code on the screen in the current run of codes (zero: none shows). Only
+	// the poll loop reads and writes it.
+	codeSince time.Time
 }
 
 // claimRetry: how long a box waits before it offers the claim link again to a control that refused the field.
@@ -545,11 +548,15 @@ func refusedClaimLink(err error) bool {
 }
 
 // The poll loop's waits per state: soon while a person types the code, now and then otherwise (every ticket answer
-// brings the state too). Once Link ended the box has no tickets, so link.status is the only way it hears that its owner
+// brings the state too). The person who confirms the code watches the box's screen for what comes next, and control
+// can't tell the box: for the first half hour of codes the box asks every 2 s, so the screen moves within seconds of the
+// confirm, then every 5 s, so a box nobody links doesn't keep asking that often. Once Link ended the box has no tickets, so link.status is the only way it hears that its owner
 // subscribed again: as often as in grace, so it comes back within minutes, not hours (LNK-06). While the box waits for
 // its address the person who just confirmed it is usually still watching: soon at first, then once a minute, so a box
 // that waits for hours doesn't keep asking every few seconds.
 const (
+	pollCode        = 2 * time.Second
+	pollCodeFor     = 30 * time.Minute
 	pollPending     = 5 * time.Second
 	pollWaitingSoon = 10 * time.Second
 	pollWaitingFor  = 10 * time.Minute
@@ -598,19 +605,21 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 	r, now := k.Snapshot(), k.now()
 	switch {
 	case r.Leaving:
+		k.codeSince = time.Time{}
 		return pollOn, k.leave(ctx)
 	case r.Want == "on" && !r.Active():
 		_, err := k.linkBegin(ctx, "", "")
-		return pollPending, err
+		return k.codeWait(), err
 	case (r.State == protocol.LinkStateOff || r.State == "") && !r.CarriedOff:
+		k.codeSince = time.Time{}
 		return 24 * time.Hour, nil // no calls; a change wakes the loop
 	case r.State == protocol.LinkStateStarting && r.Pending == nil && !r.WaitingForAddress && r.CheckedAt != nil:
 		// The code ran out (control answers starting without one): a fresh one for the screen.
 		_, err := k.linkBegin(ctx, "", "")
-		return pollPending, err
+		return k.codeWait(), err
 	case r.State == protocol.LinkStateStarting && r.Pending != nil && !now.Before(r.Pending.ExpiresAt):
 		_, err := k.linkBegin(ctx, "", "")
-		return pollPending, err
+		return k.codeWait(), err
 	}
 	if err := k.status(ctx); err != nil {
 		if r.Carried {
@@ -620,6 +629,9 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 		return 0, err
 	}
 	r = k.Snapshot()
+	if r.State != protocol.LinkStateStarting || r.WaitingForAddress {
+		k.codeSince = time.Time{}
+	}
 	switch r.State {
 	case protocol.LinkStateStarting:
 		if r.WaitingForAddress {
@@ -628,7 +640,7 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 			}
 			return pollWaiting, nil
 		}
-		return pollPending, nil
+		return k.codeWait(), nil
 	case protocol.LinkStateGrace:
 		return pollGrace, nil
 	case protocol.LinkStateEnded:
@@ -637,6 +649,19 @@ func (k *Keeper) step(ctx context.Context) (time.Duration, error) {
 		return pollEnded, nil // a carried box control turned off: until its comp
 	}
 	return pollOn, nil
+}
+
+// codeWait is the poll loop's wait while a code shows (or is being asked for): pollCode for pollCodeFor after the first
+// code of this run, then pollPending.
+func (k *Keeper) codeWait() time.Duration {
+	now := k.now()
+	if k.codeSince.IsZero() {
+		k.codeSince = now
+	}
+	if now.Sub(k.codeSince) < pollCodeFor {
+		return pollCode
+	}
+	return pollPending
 }
 
 func (k *Keeper) status(ctx context.Context) error {

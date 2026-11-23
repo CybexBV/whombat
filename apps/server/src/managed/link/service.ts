@@ -62,11 +62,11 @@ export interface LinkServiceOptions {
 export type LinkListener = (after: LinkView, before: LinkView) => void;
 
 /**
- * How often the manager's state is read while Link starts: the person confirms the code on the account site and the
- * site says the screen shows where to open the box next, so the screen (and the label's certificate after it) follows
- * within seconds, not at the next 5-minute read. The manager hears control's answer at once; this is a local socket.
+ * How often the manager's state is read while Link starts: the person confirms the code on the account site and then
+ * watches the box's screen, so the screen (and the label's certificate after it) follows within a second or two of the
+ * manager hearing it, not at the next 5-minute read. A read is a local socket and answers from the manager's memory.
  */
-export const LINK_STARTING_POLL_MS = 10_000;
+export const LINK_STARTING_POLL_MS = 1_000;
 
 /**
  * How often until the manager first answers: at the box's start the runtime may be up before the manager, and the screen

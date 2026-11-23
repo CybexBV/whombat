@@ -548,10 +548,12 @@ export async function pollLinkCheckout(input: {
 }
 
 /**
- * After `link.confirm`: ask every 5 s, for up to 5 minutes, until the Whombat has its own address. Control knows the
- * address once the box registered it; its certificate follows within a minute or two.
+ * After `link.confirm`: ask every 2 s, for up to 5 minutes, until the Whombat has its own address and its claim link.
+ * Control knows the address once the box registered it; its certificate follows within a minute or two, then the claim
+ * link. The person watches this page for that moment, so it opens within a couple of seconds of the link reaching
+ * control; each ask is one cheap read of the account's own Whombats.
  */
-export const LINK_ADDRESS_POLL_EVERY_MS = 5_000;
+export const LINK_ADDRESS_POLL_EVERY_MS = 2_000;
 export const LINK_ADDRESS_POLL_FOR_MS = 5 * 60_000;
 
 /**

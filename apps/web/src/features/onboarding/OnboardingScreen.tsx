@@ -350,7 +350,7 @@ export function OnboardingScreen({
     step === 0
       ? !nameTrimmed || createBurrow.isPending || Boolean(unavailableReason)
       : step === ONBOARDING_PROVIDER_STEP
-        ? !aiReady || !burrowSlug || (step === lastStep && finishing)
+        ? !burrowSlug || (step === lastStep && finishing)
         : step === lastStep
           ? finishing
           : false;
@@ -583,21 +583,29 @@ export function OnboardingScreen({
               </Button>
             )}
             <span className={styles.footerEnd}>
-              {onAiStep && !aiReady && (
-                <Button variant="link" onClick={handleNext}>
+              {/* Until an AI is signed in Skip for now is the one way on: no greyed Continue beside it to wonder about. */}
+              {onAiStep && !aiReady ? (
+                <Button
+                  variant="secondary"
+                  size="xl"
+                  padY={12}
+                  disabled={!burrowSlug || finishing}
+                  onClick={handleNext}
+                >
                   {AI_STEP_TEXT.skip}
                 </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="xl"
+                  padX={22}
+                  padY={12}
+                  disabled={nextDisabled}
+                  onClick={handleNext}
+                >
+                  {onboardingNextLabel(step, lastStep, burrowName)}
+                </Button>
               )}
-              <Button
-                variant="primary"
-                size="xl"
-                padX={22}
-                padY={12}
-                disabled={nextDisabled}
-                onClick={handleNext}
-              >
-                {onboardingNextLabel(step, lastStep, burrowName)}
-              </Button>
             </span>
           </div>
         </div>

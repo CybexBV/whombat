@@ -8,6 +8,7 @@ import {
   type ControlApi,
   ControlError,
   type ControlSession,
+  LINK_ADDRESS_POLL_EVERY_MS,
   LINK_CLAIM_URL_GRACE_MS,
   LINK_OPEN_FALLBACK_MS,
   type LinkAccount,
@@ -219,14 +220,16 @@ describe('/link once it is linked: its own page', () => {
     expect(await screen.findByText(T.addressWaiting)).toBeTruthy();
     const progress = screen.getByTestId('link-progress');
     expect(within(progress).getByText(T.progress.address).closest('li')?.dataset.state).toBe('current');
-    await vi.advanceTimersByTimeAsync(6_000);
+    // A little more than one wait between asks: the next answer, not the one after.
+    const nextAsk = LINK_ADDRESS_POLL_EVERY_MS * 1.2;
+    await vi.advanceTimersByTimeAsync(nextAsk);
     // The address alone: still waiting, for its page to answer; nothing opened, no button.
     await vi.waitFor(() =>
       expect(within(progress).getByText(T.progress.page).closest('li')?.dataset.state).toBe('current'),
     );
     expect(openPage).not.toHaveBeenCalled();
     expect(screen.queryByTestId('link-claim-now')).toBeNull();
-    await vi.advanceTimersByTimeAsync(6_000);
+    await vi.advanceTimersByTimeAsync(nextAsk);
     await vi.waitFor(() => expect(openPage).toHaveBeenCalledTimes(1));
     const url = new URL(openPage.mock.calls[0]?.[0] as string);
     expect(url.origin).toBe('https://calm-otter-reef.box.whombat.app');

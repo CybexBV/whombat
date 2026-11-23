@@ -341,10 +341,10 @@ describe('how often the runtime reads the manager’s Link state (LNK-13)', () =
       expect(link.answered).toBe(true);
       expect(link.state).toBe('starting');
       expect(heard).toEqual(['starting']);
-      // From now on, Link's own pace.
-      await vi.advanceTimersByTimeAsync(LINK_UNANSWERED_POLL_MS);
+      // From now on, Link's own pace: while it starts, soon, as the person who confirms it watches the screen.
+      await vi.advanceTimersByTimeAsync(LINK_STARTING_POLL_MS - 1);
       expect(reads).toBe(3);
-      await vi.advanceTimersByTimeAsync(LINK_STARTING_POLL_MS);
+      await vi.advanceTimersByTimeAsync(1);
       expect(reads).toBe(4);
       link.stop();
     } finally {

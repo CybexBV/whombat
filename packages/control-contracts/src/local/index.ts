@@ -862,8 +862,8 @@ export type ConsoleReach = z.infer<typeof ConsoleReach>;
  * rotation, backoff and claim state. `code` (the four letters, `KXQM`; the lookup number is never shown, CC-13, CT-67)
  * is present exactly in `claimable`, `retryAt`
  * exactly in `backoff`, `burrows` and `signIn` (0.106, a screen sign-in) only in `claimed` and optional there,
- * `lettersUntil` and `fallbackUrl` only in `claimable` and `newLetters` only in `claimable` and `backoff`, optional
- * there, `ipv6Only` in any state but `claimed`
+ * `lettersUntil`, `fallbackUrl` and `pageOpen` only in `claimable` and `newLetters` only in `claimable` and `backoff`,
+ * optional there, `ipv6Only` in any state but `claimed`
  * (`consoleStateValid`). `url` is
  * `WHOMBAT_APP_URL` + `/claim`, or on a box that has its own address ready and is still unclaimed, its claim link
  * (`https://<host>/c/<secret>`, 4.3); the console shows it without the scheme (`consoleDisplayUrl`). Every string except
@@ -913,6 +913,12 @@ export const ConsoleState = z.object({
     .max(256)
     .regex(/^https?:[/][/][\x21-\x7e]+$/)
     .optional(),
+  /**
+   * A browser has the claim link open and waits for the letters (Whombat console-gui.md): a session at the box's own
+   * address showed the link. Only in `claimable`. The screen then says to type the letters there, and leaves out the
+   * link to open, its QR code and the second way in: scanning the code would move the claim to another device.
+   */
+  pageOpen: z.literal(true).optional(),
   burrows: ConsoleBurrows.optional(),
   /** A screen sign-in is showing (0.106, CT-626): only in `claimed`. */
   signIn: ConsoleSignIn.optional(),
@@ -924,8 +930,8 @@ export const ConsoleState = z.object({
 export type ConsoleState = z.infer<typeof ConsoleState>;
 
 /**
- * `code` exactly when `claimable`, `retryAt` exactly when `backoff`, `lettersUntil` and `fallbackUrl` only when
- * `claimable`, `newLetters` only when `claimable` or `backoff`, `ipv6Only` never when `claimed`, `burrows` and `signIn` only when `claimed` (a runtime that doesn't
+ * `code` exactly when `claimable`, `retryAt` exactly when `backoff`, `lettersUntil`, `fallbackUrl` and `pageOpen` only
+ * when `claimable`, `newLetters` only when `claimable` or `backoff`, `ipv6Only` never when `claimed`, `burrows` and `signIn` only when `claimed` (a runtime that doesn't
  * send them, a box without a burrow or without a sign-in showing, leaves them out). A consumer that finds a `signIn` outside `claimed` may drop the sign-in and keep the rest
  * (the console does).
  */
@@ -937,6 +943,7 @@ export function consoleStateValid(s: {
   newLetters?: boolean;
   ipv6Only?: boolean;
   fallbackUrl?: string;
+  pageOpen?: boolean;
   burrows?: unknown;
   signIn?: unknown;
 }): boolean {
@@ -947,6 +954,7 @@ export function consoleStateValid(s: {
     (s.newLetters === undefined || s.state === 'claimable' || s.state === 'backoff') &&
     (s.ipv6Only === undefined || s.state !== 'claimed') &&
     (s.fallbackUrl === undefined || s.state === 'claimable') &&
+    (s.pageOpen === undefined || s.state === 'claimable') &&
     (s.burrows === undefined || s.state === 'claimed') &&
     (s.signIn === undefined || s.state === 'claimed')
   );

@@ -119,6 +119,8 @@ describe('the welcome', () => {
     // Other email first, Google reachable after it.
     expect(actionsOf(mailCard).map((a) => a.id)).toEqual(['imap', 'google', 'later']);
     expect(actionsOf(mailCard)[0]).toMatchObject({ label: copy.MAIL_OTHER, href: IMAP_HREF });
+    // Plain words on the button: no protocol name.
+    expect(actionsOf(mailCard)[0]?.label).not.toMatch(/IMAP/);
   });
 
   it('says one find as it', () => {

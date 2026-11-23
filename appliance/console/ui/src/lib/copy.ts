@@ -19,6 +19,8 @@ export const WORD = {
   // The claim link is the box's own address (or its tailnet name, below): it opens from anywhere.
   claimOpen: (url: string) => `On a computer or phone, open ${url} and enter`,
   claimRotates: 'The code changes after a wrong try.',
+  // A browser has the claim link open: only where to type the letters.
+  claimPageOpen: 'Type these letters on the page that just opened',
   // No address a person can open (the server sends no claimUrl/appUrl; Whombat LNK-55).
   claimNoAddress: 'The code appears once this Whombat has a secure address: Whombat Link or Tailscale.',
   // While Tailscale asks for a sign-in or HTTPS (the Expert choice), the claim line names only Tailscale's steps.
@@ -52,10 +54,10 @@ export const WORD = {
   linkRotates: (min: number) => `The code changes in ${min} min.`,
   linkWaiting: 'Waiting for this Whombat’s web address…',
   linkWaitingHint:
-    'Whombat Link is on. New web addresses are handed out in turn, and this one usually comes within a few minutes. This Whombat asks again every minute by itself; this screen changes when the address is ready.',
-  // Under the wait for the web address: the Whombat app on this network claims the box already.
+    'Whombat Link is on. The web address usually comes within a minute, and this screen changes by itself.',
+  // Under the wait for the web address once it took long: the Whombat app on this network claims the box already.
   linkWaitingInApp: (address: string, letters: string) =>
-    `Or claim it now: in the Whombat app on this network, type ${address} and enter ${letters}.`,
+    `Taking long? Claim it in the Whombat app on this network: type ${address} and enter ${letters}.`,
   linkStarting: 'Starting Whombat Link…',
   linkGrace: (day: string) =>
     `Whombat Link ends on ${day}. Turn on Tailscale in the Whombat app to keep a way in, and check your paper backup details.`,
@@ -193,10 +195,15 @@ export const INSTALLER = {
   diskNone: 'No disk is big enough. Whombat needs one of 110 GiB or more.',
 
   eraseTitle: 'Erase and install',
-  eraseSub: (name: string, what: string) =>
-    `Everything on ${name} (${what}) is erased. This can’t be undone.`,
+  /**
+   * The disk by its size and model, as a person knows it; its device name (sda) only where it must be typed. `model` is
+   * “ (QEMU HARDDISK)” with its space, or nothing.
+   */
+  eraseSub: (size: string, model: string) =>
+    `Everything on the ${size} disk${model} is erased. This can’t be undone.`,
   /** An empty disk: nothing to lose, so a button press confirms. */
-  eraseEmptySub: (name: string, what: string) => `${name} (${what}) is empty, so nothing on it is lost.`,
+  eraseEmptySub: (size: string, model: string) =>
+    `The ${size} disk${model} is empty, so nothing on it is lost.`,
   eraseLabel: (name: string) => `Type ${name} to confirm`,
   erase: (name: string) => `Erase ${name} and install`,
   eraseEmpty: 'Erase and install',
@@ -278,16 +285,18 @@ export function diskNote(disks: Disk[]): string {
   return `No disk to install on: ${refused.map(diskWhy).join('; ')}.`;
 }
 
+/** Each disk by its size first, as a person knows it, with its device name quiet after it. */
 function diskWhy(d: Disk): string {
+  const disk = `the ${formatSize(d.sizeBytes)} disk (${d.name})`;
   switch (d.reason) {
     case 'too-small':
-      return `${d.name} is too small (${formatSize(d.sizeBytes)}, needs 110 GiB)`;
+      return `${disk} is smaller than the 110 GiB Whombat needs`;
     case 'installer-medium':
-      return `${d.name} holds this installer`;
+      return `${disk} holds this installer`;
     case 'in-use':
-      return `${d.name} is in use`;
+      return `${disk} is in use`;
     default:
-      return `${d.name} is connected by USB`;
+      return `${disk} is connected by USB`;
   }
 }
 

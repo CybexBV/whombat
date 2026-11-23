@@ -62,6 +62,11 @@ export interface ClaimState {
   qr?: string[];
   /** The claim is the second of two numbered steps, after what Tailscale needs (the note above says “1 · ”). */
   second?: boolean;
+  /**
+   * A browser has the claim link open: the screen says to type the letters there, without the link, its QR code or the
+   * second way in. Claimable with a claim link and its code only.
+   */
+  pageOpen?: boolean;
 }
 
 /** The start problems the server sends (consoleapi `Start`, screen/start.go). */
@@ -109,6 +114,11 @@ export interface ReachLink {
   /** When the code changes (RFC 3339, the server's clock), only when the screen says so; else null. */
   expiresAt: string | null;
   waitingForAddress: boolean;
+  /**
+   * The address to type in the Whombat app on this network, once the wait for the web address took long (the server
+   * counts it); else ''.
+   */
+  inApp: string;
   /** Grace: the day it ends as the text console says it (“25 November”); else ''. */
   graceEndsOn: string;
 }
@@ -273,6 +283,9 @@ function parseClaim(v: unknown): ClaimState | null {
       ? { qr: qrRows(v.qr) }
       : {}),
     ...(v.state !== 'claimed' && v.state !== 'backoff' && v.second === true ? { second: true } : {}),
+    ...(v.state === 'claimable' && str(v.claimUrl) !== '' && str(v.code) !== '' && v.pageOpen === true
+      ? { pageOpen: true }
+      : {}),
   };
 }
 
@@ -348,6 +361,8 @@ function reach(v: unknown): { reach?: ConsoleReach } {
       qr: code ? qrRows(l.qr) : [],
       expiresAt: code && typeof l.expiresAt === 'string' ? l.expiresAt : null,
       waitingForAddress: l.waitingForAddress === true,
+      inApp:
+        l.waitingForAddress === true && typeof l.inApp === 'string' && l.inApp.length <= 64 ? l.inApp : '',
       graceEndsOn: typeof l.graceEndsOn === 'string' && l.graceEndsOn.length <= 40 ? l.graceEndsOn : '',
     };
   }

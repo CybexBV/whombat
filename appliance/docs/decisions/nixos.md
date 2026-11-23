@@ -517,8 +517,9 @@ hosted UI).
   and enter” / the code / “The code changes after a wrong try.”; `backoff` “Too many wrong codes. Try again in {n}
   min.” (whole minutes to `retryAt`, rounded up, at least 1); `claimed` “This Whombat is set up.” / “Open {url} to use
   it.”. The code is drawn in 5×5 block letters (`█`, two or one column apart, whichever fits) with the plain code
-  underneath; too narrow a screen, or a letter outside CC-01's alphabet, gives the plain code only. The footer is the
-  getty banner (“Whombat appliance. There is no login on this console. …”), one text in `whombat.console.banner`
+  underneath; too narrow a screen, or a letter outside CC-01's alphabet, gives the plain code only. *In part amended by
+  console-gui.md CG-432: the footer is one plain line of its own, `whombat.console.footer`; the getty banner stays on the
+  other VTs.* The footer is the getty banner (“Whombat appliance. There is no login on this console. …”), one text in `whombat.console.banner`
   used for both `services.getty.helpLine` and `--footer-file`; the program's built-in default is the same text
   (`checks.console` compares them).
 - **Unit.** `whombat-console.service` on tty1: `User=whombat-console` (a static system user/group, uid/gid 959,

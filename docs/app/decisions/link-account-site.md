@@ -213,7 +213,7 @@ the mocks: the plan card's row with the label beside a native select, like Quiet
 
 ## AP-9770 After linking, `/link` waits for the Whombat's page and opens it (2026-11-22; the Easy-path install test)
 
-*In part amended by AP-9773: control now gives the claim link, and Claim it now opens it.*
+*In part amended by AP-9773: control now gives the claim link, and Claim it now opens it; and by whombat-link.md LNK-90: it asks every 2 s.*
 
 The Easy path asked for two codes on two sites: the link code here, then, a minute or two later, the long address and
 four letters from the box's screen. Now “… is linked” waits for that Whombat's own address: it asks control's

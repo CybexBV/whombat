@@ -192,8 +192,9 @@ describe('OnboardingScreen (mocked server)', () => {
     expect(named.textContent).toContain(name);
     expect(named.textContent).toContain('Dusty');
     expect(named.textContent).toContain('Settings');
-    // No way back to a name step; skipping the AI opens the Whombat with Dusty as it is.
+    // No way back to a name step, and no greyed Open beside Skip for now; skipping opens the Whombat with Dusty as it is.
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Open / })).toBeNull();
     await user.click(screen.getByRole('button', { name: AI_STEP_TEXT.skip }));
     await waitFor(() => expect(app.location()).not.toMatch(/^\/onboarding/));
     expect(calls.some((c) => c.path.endsWith('/onboarding/complete'))).toBe(true);
@@ -274,8 +275,8 @@ describe('OnboardingScreen (mocked server)', () => {
     const calls: { method: string; path: string; body: unknown }[] = [];
     renderApp('/onboarding', mockedServices(mockServer({ calls })));
     await toAiStep(user);
-    // No AI signed in: Continue waits, Skip for now says what skipping means (FDY-33).
-    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+    // No AI signed in: Skip for now is the one way on, and says what skipping means (FDY-33, FDY-45).
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     expect(screen.getByText(AI_STEP_TEXT.later)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: AI_STEP_TEXT.skip }));
     await screen.findByRole('heading', { name: 'Meet your agent' });

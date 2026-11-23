@@ -89,7 +89,7 @@ func TestClean(t *testing.T) {
 	}
 }
 
-func frame(sc Screen) string { return Render(sc, now, 80, 0, strings.Split(Banner, "\n")) }
+func frame(sc Screen) string { return Render(sc, now, 80, 0, strings.Split(Footer, "\n")) }
 
 func TestRenderWords(t *testing.T) {
 	cases := []struct {
@@ -116,7 +116,7 @@ func TestRenderWords(t *testing.T) {
 		}
 		// The footer under every screen but the claim's (the person setting the box up doesn't need it yet).
 		setup := c.sc.State == Claimable || c.sc.State == Backoff
-		for _, w := range strings.Split(Banner, "\n") {
+		for _, w := range strings.Split(Footer, "\n") {
 			if strings.Contains(f, w) == setup {
 				t.Errorf("%s: footer line %q shown %v\n%s", c.sc.State, w, !setup, f)
 			}
@@ -174,7 +174,7 @@ func TestRenderBigCode(t *testing.T) {
 }
 
 func TestRenderFullScreenGeometry(t *testing.T) {
-	footer := strings.Split(Banner, "\n")
+	footer := strings.Split(Footer, "\n")
 	for _, size := range [][2]int{{80, 25}, {64, 24}, {50, 18}, {160, 45}} {
 		for _, sc := range []Screen{StartingScreen, {State: Claimable, Code: "KXQM", URL: "dev.whombat.com/claim"},
 			{State: Waiting, URL: "x.y/claim"}, {State: Claimed, URL: "app.whombat.com"}} {
@@ -191,12 +191,12 @@ func TestRenderFullScreenGeometry(t *testing.T) {
 			}
 			// During the claim the footer gives way: the person setting the box up doesn't need it yet.
 			if sc.State == Claimable {
-				if strings.Contains(f, "There is no login on this") {
+				if strings.Contains(f, "hold Space") {
 					t.Fatalf("%v %s: the footer shows during the claim:\n%s", size, sc.State, f)
 				}
 				continue
 			}
-			if !strings.HasPrefix(lines[len(lines)-1], "  ") || !strings.Contains(f, "There is no login on this") {
+			if !strings.HasPrefix(lines[len(lines)-1], "  ") || !strings.Contains(f, "hold Space") {
 				t.Fatalf("%v %s: footer not at the bottom:\n%s", size, sc.State, f)
 			}
 		}
