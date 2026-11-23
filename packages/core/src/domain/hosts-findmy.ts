@@ -143,6 +143,14 @@ export const HostFindMy = z.object({
   problem: HostFindMyProblem.nullable(),
   people: z.array(HostFindMyPerson).max(HOST_FIND_MY_PEOPLE_MAX),
   exact: HostFindMyExact.nullable(),
+  /**
+   * How a Find My connection reads this Mac without anyone looking: every `everyMinutes`, and the name of the
+   * automation that needs it when that is the reason. Null or absent: only while someone looks (and an older box).
+   */
+  background: z
+    .object({ everyMinutes: z.number().int().positive(), automation: z.string().max(200).nullable() })
+    .nullable()
+    .optional(),
 });
 export type HostFindMy = z.infer<typeof HostFindMy>;
 
