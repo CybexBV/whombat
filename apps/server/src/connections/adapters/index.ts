@@ -2,6 +2,7 @@
 
 import { DROPBOX_FILES } from './files-dropbox';
 import { NEXTCLOUD_FILES } from './files-nextcloud';
+import { FINDMY_ADAPTER } from './findmy';
 import { PS5_ADAPTER } from './ps5';
 import { PS5_CALL_WORDS } from './ps5-words';
 import { TODOIST_TASKS } from './tasks-todoist';
@@ -82,7 +83,15 @@ export function callReaches(
   return reaches.get(catalogId)?.(tool, args) ?? [];
 }
 
+/**
+ * Adapters read when a call is made, not when this module loads: Find My's reaches the hosts service, whose modules may
+ * load this one first.
+ */
+const LATER_ADAPTERS: Readonly<Record<string, () => Adapter>> = {
+  findmy: () => FINDMY_ADAPTER,
+};
+
 /** The adapter of an entry, or null (its typed tools aren't served here). */
 export function adapterFor(catalogId: string): Adapter | null {
-  return ADAPTERS[catalogId] ?? builtinAdapters.get(catalogId) ?? null;
+  return ADAPTERS[catalogId] ?? LATER_ADAPTERS[catalogId]?.() ?? builtinAdapters.get(catalogId) ?? null;
 }
