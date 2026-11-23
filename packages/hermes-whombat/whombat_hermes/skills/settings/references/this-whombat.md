@@ -124,7 +124,9 @@ Versions and updates, when updates may happen, remote help and the licence.
 - Turn Whombat Link off — `link.off` · theirs: send them there
 - Turn Whombat Link on — `link.on` · theirs: send them there
 - Read which other Whombats share this Whombat Link account — `link.whombats` · read
+- Check whether a name is free for this Whombat’s address — `ownAddress.check` · read
 - Turn reaching this Whombat’s page from anywhere on or off — `ownAddress.reach.set` · theirs: send them there
+- Change this Whombat’s address — `ownAddress.rename` · change, always asks
 - Read this Whombat’s own address and its certificate — `ownAddress.status` · read
 - Read how this Whombat is reached: Whombat Link, its address and Tailscale — `reach.get` · read
 - Confirm that support may connect — `remoteHelp.confirmBegin` · theirs: send them there

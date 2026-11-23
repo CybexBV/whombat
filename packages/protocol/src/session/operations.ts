@@ -246,8 +246,12 @@ import {
   AccountLinkLookupInput,
   AccountLinkLookupOutput,
   AccountLinkOutput,
+  OwnAddressCheckInput,
+  OwnAddressCheckOutput,
   OwnAddressReachSetInput,
   OwnAddressReachSetOutput,
+  OwnAddressRenameInput,
+  OwnAddressRenameOutput,
   OwnAddressStatusInput,
   OwnAddressStatusOutput,
 } from './own-address.js';
@@ -638,6 +642,9 @@ const SESSION_SPECS = [
   // The box's own address (4.3): its state, the owner's switch, and linking the box to the person's account by a code.
   session('ownAddress.status', OwnAddressStatusInput, OwnAddressStatusOutput, 'app', false),
   session('ownAddress.reach.set', OwnAddressReachSetInput, OwnAddressReachSetOutput, 'app'),
+  // Choosing and changing its name (4.16, session minor 6): the check is a read at control, the rename acts there first.
+  session('ownAddress.check', OwnAddressCheckInput, OwnAddressCheckOutput, 'app', false),
+  session('ownAddress.rename', OwnAddressRenameInput, OwnAddressRenameOutput, 'app'),
   session('account.link.lookup', AccountLinkLookupInput, AccountLinkLookupOutput, 'app', false),
   session('account.link', AccountLinkInput, AccountLinkOutput, 'app'),
   // Sign in at the box's screen (0.106, CT-622): the request and the begin are ephemeral (memory only, like

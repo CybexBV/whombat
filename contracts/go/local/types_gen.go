@@ -471,11 +471,28 @@ type OwnAddressRegisterRequest struct {
 }
 
 type OwnAddressCertRequest struct {
-	V int64 `json:"v"` // always 1
+	V    int64   `json:"v"` // always 1
+	Host *string `json:"host,omitempty"`
 }
 
 type OwnAddressCtRequest struct {
 	V int64 `json:"v"` // always 1
+}
+
+type OwnAddressCheckRequest struct {
+	V     int64  `json:"v"` // always 1
+	Label string `json:"label"`
+}
+
+type OwnAddressCheckResponse struct {
+	V       int64                          `json:"v"` // always 1
+	Label   string                         `json:"label"`
+	Verdict protocol.OwnAddressNameVerdict `json:"verdict"`
+}
+
+type OwnAddressRenameRequest struct {
+	V     int64  `json:"v"` // always 1
+	Label string `json:"label"`
 }
 
 type OwnAddressStateResponse struct {
@@ -485,6 +502,7 @@ type OwnAddressStateResponse struct {
 	Host    *string                     `json:"host,omitempty"`
 	Acme    OwnAddressStateResponseAcme `json:"acme"`
 	Cert    *OwnAddressCertMeta         `json:"cert,omitempty"`
+	Leaving *OwnAddressLeavingState     `json:"leaving,omitempty"`
 }
 
 type OwnAddressCertResponse struct {
@@ -504,6 +522,7 @@ type OwnAddressCtResponse struct {
 	CheckingSince string                           `json:"checkingSince"`
 	LastFreshAt   *string                          `json:"lastFreshAt"`
 	Missed        []OwnAddressCtResponseMissedItem `json:"missed"`
+	Hosts         []string                         `json:"hosts,omitempty"`
 	Certs         []OwnAddressCtCert               `json:"certs"`
 	Ordered       []OwnAddressCertMeta             `json:"ordered"`
 }
@@ -1442,6 +1461,12 @@ type OwnAddressCertMeta struct {
 	SpkiSHA256 string `json:"spkiSha256"`
 	NotBefore  string `json:"notBefore"`
 	NotAfter   string `json:"notAfter"`
+}
+
+type OwnAddressLeavingState struct {
+	Label string `json:"label"`
+	Host  string `json:"host"`
+	Until string `json:"until"`
 }
 
 type OwnAddressCtResponseMissedItem struct {
@@ -3183,6 +3208,54 @@ func (v *OwnAddressCtRequest) Validate() error {
 }
 
 var _ = register("OwnAddressCtRequest", func(data []byte) (any, error) { return ParseOwnAddressCtRequest(data) })
+
+// ParseOwnAddressCheckRequest validates data against the OwnAddressCheckRequest JSON Schema and decodes it.
+func ParseOwnAddressCheckRequest(data []byte) (*OwnAddressCheckRequest, error) {
+	v := new(OwnAddressCheckRequest)
+	if err := schemas.Decode("OwnAddressCheckRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the OwnAddressCheckRequest JSON Schema (as it would be sent).
+func (v *OwnAddressCheckRequest) Validate() error {
+	return schemas.ValidateValue("OwnAddressCheckRequest", v)
+}
+
+var _ = register("OwnAddressCheckRequest", func(data []byte) (any, error) { return ParseOwnAddressCheckRequest(data) })
+
+// ParseOwnAddressCheckResponse validates data against the OwnAddressCheckResponse JSON Schema and decodes it.
+func ParseOwnAddressCheckResponse(data []byte) (*OwnAddressCheckResponse, error) {
+	v := new(OwnAddressCheckResponse)
+	if err := schemas.Decode("OwnAddressCheckResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the OwnAddressCheckResponse JSON Schema (as it would be sent).
+func (v *OwnAddressCheckResponse) Validate() error {
+	return schemas.ValidateValue("OwnAddressCheckResponse", v)
+}
+
+var _ = register("OwnAddressCheckResponse", func(data []byte) (any, error) { return ParseOwnAddressCheckResponse(data) })
+
+// ParseOwnAddressRenameRequest validates data against the OwnAddressRenameRequest JSON Schema and decodes it.
+func ParseOwnAddressRenameRequest(data []byte) (*OwnAddressRenameRequest, error) {
+	v := new(OwnAddressRenameRequest)
+	if err := schemas.Decode("OwnAddressRenameRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the OwnAddressRenameRequest JSON Schema (as it would be sent).
+func (v *OwnAddressRenameRequest) Validate() error {
+	return schemas.ValidateValue("OwnAddressRenameRequest", v)
+}
+
+var _ = register("OwnAddressRenameRequest", func(data []byte) (any, error) { return ParseOwnAddressRenameRequest(data) })
 
 // ParseOwnAddressStateResponse validates data against the OwnAddressStateResponse JSON Schema and decodes it.
 func ParseOwnAddressStateResponse(data []byte) (*OwnAddressStateResponse, error) {

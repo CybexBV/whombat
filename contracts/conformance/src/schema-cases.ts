@@ -4269,20 +4269,31 @@ export const SCHEMA_CASES: Case[] = [
   ]),
   ...cases('AdmissionClaims', set(claims, { rol: 'appliance', lbl: 'maple-otter-river' }), [
     ['a label of 3-letter words', set(claims, { rol: 'appliance', lbl: 'ant-bee-cod' }), true],
-    ['a label of two words', set(claims, { rol: 'appliance', lbl: 'maple-otter' }), false],
+    ['a chosen name', set(claims, { rol: 'appliance', lbl: 'home' }), true],
+    ['a chosen name with a digit', set(claims, { rol: 'appliance', lbl: 'home2' }), true],
     ['a label in upper case', set(claims, { rol: 'appliance', lbl: 'Maple-otter-river' }), false],
     ['a label with a dot', set(claims, { rol: 'appliance', lbl: 'maple.otter.river' }), false],
+    ['a leaving label', set(claims, { rol: 'appliance', lbl: 'home', plbl: 'maple-otter-river' }), true],
+    ['a leaving label of two letters', set(claims, { rol: 'appliance', lbl: 'home', plbl: 'ho' }), false],
     [
       'an unknown claim is still refused',
       set(claims, { rol: 'appliance', lbl: 'maple-otter-river', zone: 'box' }),
       false,
     ],
   ]),
+  // Since 4.16 a label is any name of the shape; control checks a drawn one against the word list itself.
   ...cases('AddressRegisterRequest', { label: 'maple-otter-river' }, [
-    ['four words', { label: 'maple-otter-river-stone' }, false],
-    ['a word of 11 letters', { label: `maple-otter-${'r'.repeat(11)}` }, false],
-    ['a word of 2 letters', { label: 'ma-otter-river' }, false],
-    ['a digit', { label: 'maple-otter-river1' }, false],
+    ['four words', { label: 'maple-otter-river-stone' }, true],
+    ['a digit', { label: 'maple-otter-river1' }, true],
+    ['one word of three letters', { label: 'ant' }, true],
+    ['32 characters', { label: `a${'b'.repeat(31)}` }, true],
+    ['33 characters', { label: `a${'b'.repeat(32)}` }, false],
+    ['two letters', { label: 'ab' }, false],
+    ['a digit first', { label: '1abc' }, false],
+    ['a hyphen first', { label: '-abc' }, false],
+    ['a hyphen last', { label: 'abc-' }, false],
+    ['two hyphens (punycode)', { label: 'xn--abc' }, false],
+    ['an underscore', { label: 'my_box' }, false],
     ['an unknown member (command input)', { label: 'maple-otter-river', zone: 'dev' }, false],
   ]),
   ...cases(
@@ -4294,6 +4305,28 @@ export const SCHEMA_CASES: Case[] = [
         { label: 'maple-otter-river', host: 'maple-otter-river.dev.whombat.app', registeredAt: now },
         true,
       ],
+      ['whombat.app', { label: 'home', host: 'home.whombat.app', registeredAt: now }, true],
+      ['a name with digits', { label: 'home2', host: 'home2.whombat.app', registeredAt: now }, true],
+      [
+        'leaving',
+        {
+          label: 'home',
+          host: 'home.whombat.app',
+          registeredAt: now,
+          leaving: {
+            label: 'maple-otter-river',
+            host: 'maple-otter-river.box.whombat.app',
+            until: now + 30 * 86_400,
+          },
+        },
+        true,
+      ],
+      [
+        'another subdomain of whombat.app',
+        { label: 'home', host: 'home.www.whombat.app', registeredAt: now },
+        false,
+      ],
+      ['a host in upper case', { label: 'home', host: 'Home.whombat.app', registeredAt: now }, false],
       [
         'another zone',
         { label: 'maple-otter-river', host: 'maple-otter-river.example.com', registeredAt: now },
@@ -4308,6 +4341,54 @@ export const SCHEMA_CASES: Case[] = [
         'a trailing dot',
         { label: 'maple-otter-river', host: 'maple-otter-river.box.whombat.app.', registeredAt: now },
         false,
+      ],
+    ],
+  ),
+  ...cases('AddressCheckRequest', { label: 'home' }, [
+    ['what a person typed, not yet a name', { label: '1-a' }, true],
+    ['upper case', { label: 'Home' }, false],
+    ['a space', { label: 'my home' }, false],
+    ['65 characters', { label: 'a'.repeat(65) }, false],
+    ['empty', { label: '' }, false],
+  ]),
+  ...cases('AddressCheckResponse', { label: 'home', verdict: 'free' }, [
+    ['yours', { label: 'maple-otter-river', verdict: 'yours' }, true],
+    ['invalid', { label: 'xn--a', verdict: 'invalid' }, true],
+    ['an unknown verdict', { label: 'home', verdict: 'maybe' }, false],
+  ]),
+  ...cases('AddressRenameRequest', { label: 'home' }, [
+    ['a drawn label', { label: 'maple-otter-river' }, true],
+    ['not a name', { label: 'xn--a' }, false],
+    ['a host', { label: 'home.whombat.app' }, false],
+  ]),
+  ...cases(
+    'AddressRenameResponse',
+    {
+      label: 'home',
+      host: 'home.whombat.app',
+      registeredAt: now,
+      leaving: {
+        label: 'maple-otter-river',
+        host: 'maple-otter-river.box.whombat.app',
+        until: now + 30 * 86_400,
+      },
+    },
+    [
+      [
+        'nothing leaving',
+        { label: 'home', host: 'home.whombat.app', registeredAt: now, leaving: null },
+        true,
+      ],
+      ['leaving left out', { label: 'home', host: 'home.whombat.app', registeredAt: now }, false],
+      [
+        'a move keeps the label',
+        {
+          label: 'maple-otter-river',
+          host: 'maple-otter-river.whombat.app',
+          registeredAt: now,
+          leaving: { label: 'maple-otter-river', host: 'maple-otter-river.box.whombat.app', until: now },
+        },
+        true,
       ],
     ],
   ),
@@ -4351,7 +4432,23 @@ export const SCHEMA_CASES: Case[] = [
     ['no label', { v: 1 }, false],
     ['a host for a label', { v: 1, label: 'maple-otter-river.box.whombat.app' }, false],
   ]),
-  ...cases('OwnAddressCertRequest', { v: 1 }, [['version 2', { v: 2 }, false]]),
+  ...cases('OwnAddressCertRequest', { v: 1 }, [
+    ['version 2', { v: 2 }, false],
+    ['the leaving host', { v: 1, host: 'maple-otter-river.box.whombat.app' }, true],
+    ['another host', { v: 1, host: 'example.com' }, false],
+  ]),
+  ...cases('OwnAddressCheckRequest', { v: 1, label: 'home' }, [
+    ['no label', { v: 1 }, false],
+    ['upper case', { v: 1, label: 'Home' }, false],
+  ]),
+  ...cases('OwnAddressCheckResponse', { v: 1, label: 'home', verdict: 'taken' }, [
+    ['reserved', { v: 1, label: 'box', verdict: 'reserved' }, true],
+    ['no verdict', { v: 1, label: 'home' }, false],
+  ]),
+  ...cases('OwnAddressRenameRequest', { v: 1, label: 'home' }, [
+    ['no label', { v: 1 }, false],
+    ['two letters', { v: 1, label: 'ho' }, false],
+  ]),
   ...cases('OwnAddressCtRequest', { v: 1 }, [['a member', { v: 1, since: now }, false]]),
   ...cases('OwnAddressStateResponse', { v: 1, enabled: false, acme: { state: 'idle' } }, [
     [
@@ -4362,6 +4459,22 @@ export const SCHEMA_CASES: Case[] = [
         label: 'maple-otter-river',
         host: 'maple-otter-river.dev.whombat.app',
         acme: { state: 'ordering' },
+      },
+      true,
+    ],
+    [
+      'renamed, the earlier host leaving',
+      {
+        v: 1,
+        enabled: true,
+        label: 'home',
+        host: 'home.whombat.app',
+        acme: { state: 'ordering' },
+        leaving: {
+          label: 'maple-otter-river',
+          host: 'maple-otter-river.box.whombat.app',
+          until: '2026-12-23T10:00:00Z',
+        },
       },
       true,
     ],
@@ -4486,6 +4599,20 @@ export const SCHEMA_CASES: Case[] = [
         true,
       ],
       [
+        'watching two hosts',
+        {
+          v: 1,
+          source: 'certspotter',
+          checkingSince: '2026-11-18T10:00:00Z',
+          lastFreshAt: null,
+          hosts: ['home.whombat.app', 'maple-otter-river.box.whombat.app'],
+          missed: [],
+          certs: [],
+          ordered: [],
+        },
+        true,
+      ],
+      [
         'another source',
         {
           v: 1,
@@ -4572,6 +4699,19 @@ export const SCHEMA_CASES: Case[] = [
     ['off', { link: { state: 'off', since: 0 } }, true],
     ['no since', { link: { state: 'off' } }, false],
     ['a host for a label', { link: { ...linkGrace, label: 'maple-otter-river.box.whombat.app' } }, false],
+    [
+      'its host, the zone and a leaving address',
+      {
+        link: {
+          ...linkGrace,
+          host: 'maple-otter-river.box.whombat.app',
+          zone: 'whombat.app',
+          leaving: { label: 'maple-otter-river', host: 'maple-otter-river.box.whombat.app', until: now },
+        },
+      },
+      true,
+    ],
+    ['an unknown zone', { link: { ...linkGrace, zone: 'example.com' } }, false],
   ]),
   ...cases('LinkWhombatsRequest', {}, [['a member', { all: true }, false]]),
   ...cases('LinkMailSetRequest', { offline: true, notifications: false }, [

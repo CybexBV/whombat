@@ -107,15 +107,54 @@
         },
         "label": {
           "type": "string",
-          "minLength": 11,
+          "minLength": 3,
           "maxLength": 32,
-          "pattern": "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$"
+          "pattern": "^[a-z](-?[a-z0-9])+$"
         },
         "email": {
           "type": "string",
           "minLength": 3,
           "maxLength": 254,
           "pattern": "^[\\x21-\\x3f\\x41-\\x7e]+@[\\x21-\\x3f\\x41-\\x7e]+$"
+        },
+        "host": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
+        },
+        "zone": {
+          "type": "string",
+          "enum": [
+            "whombat.app",
+            "dev.whombat.app",
+            "box.whombat.app"
+          ]
+        },
+        "leaving": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 32,
+              "pattern": "^[a-z](-?[a-z0-9])+$"
+            },
+            "host": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
+            },
+            "until": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4102444800
+            }
+          },
+          "required": [
+            "label",
+            "host",
+            "until"
+          ]
         }
       },
       "required": [

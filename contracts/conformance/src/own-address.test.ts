@@ -5,18 +5,22 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { OWN_ADDRESS_WORDS } from '@whombat/core/own-address';
+import { OWN_ADDRESS_NAME_RE, OWN_ADDRESS_WORDS } from '@whombat/core/own-address';
 import {
   BOX_ASSET_LINKS,
   BOX_PASSKEY_REGISTER_PURPOSE,
   boxPasskeyRegisterChallenge,
   boxPasskeyRegisterChallengeBase64url,
   OWN_ADDRESS_LABEL_RE,
+  OWN_ADDRESS_OLD_ZONES,
+  OWN_ADDRESS_ZONE_CERTIFICATES,
   OWN_ADDRESS_ZONES,
   ownAddressClaimUrl,
   ownAddressHost,
   ownAddressLabelOf,
   ownAddressOrigin,
+  ownAddressZoneCertificate,
+  ownAddressZoneOf,
 } from '@whombat/protocol';
 import { describe, expect, it } from 'vitest';
 import { ROOT } from './gen-cross-language.ts';
@@ -56,11 +60,17 @@ describe('the own-address word list', () => {
   it('fits the label shape the relay and the manager check', () => {
     for (const w of OWN_ADDRESS_WORDS) expect(OWN_ADDRESS_LABEL_RE.test(`${w}-${w}-${w}`), w).toBe(true);
   });
+
+  it('core’s name shape is the protocol’s label shape', () => {
+    expect(OWN_ADDRESS_NAME_RE.source).toBe(OWN_ADDRESS_LABEL_RE.source);
+  });
 });
 
 describe('own-address hosts', () => {
   it('are one label under a known zone', () => {
-    expect(ownAddressHost('maple-otter-river', OWN_ADDRESS_ZONES.prod)).toBe(
+    expect(ownAddressHost('maple-otter-river', OWN_ADDRESS_ZONES.prod)).toBe('maple-otter-river.whombat.app');
+    expect(ownAddressHost('home', OWN_ADDRESS_ZONES.prod)).toBe('home.whombat.app');
+    expect(ownAddressHost('maple-otter-river', OWN_ADDRESS_OLD_ZONES[0])).toBe(
       'maple-otter-river.box.whombat.app',
     );
     expect(ownAddressHost('maple-otter-river', OWN_ADDRESS_ZONES.dev)).toBe(
@@ -69,14 +79,24 @@ describe('own-address hosts', () => {
     expect(() => ownAddressHost('maple-otter-river', 'example.com')).toThrow();
     expect(() => ownAddressHost('Maple-otter-river', OWN_ADDRESS_ZONES.prod)).toThrow();
     expect(ownAddressLabelOf('maple-otter-river.dev.whombat.app')).toBe('maple-otter-river');
+    expect(ownAddressLabelOf('home2.whombat.app')).toBe('home2');
+    expect(ownAddressLabelOf('maple-otter-river.box.whombat.app')).toBe('maple-otter-river');
     for (const host of [
       'MAPLE-otter-river.box.whombat.app',
       'www.maple-otter-river.box.whombat.app',
       'maple-otter-river.box.whombat.app.',
-      'maple-otter-river.whombat.app',
-      'box.whombat.app',
+      'ab.whombat.app',
+      `${'a'.repeat(33)}.whombat.app`,
+      'xn--a.whombat.app',
+      'whombat.app',
+      'home.example.com',
     ])
       expect(ownAddressLabelOf(host), host).toBeNull();
+    expect(ownAddressZoneOf('home.whombat.app')).toBe('whombat.app');
+    expect(ownAddressZoneOf('maple-otter-river.box.whombat.app')).toBe('box.whombat.app');
+    expect(ownAddressZoneOf('maple-otter-river.dev.whombat.app')).toBe('dev.whombat.app');
+    expect(ownAddressZoneOf('home.example.com')).toBeNull();
+    expect(ownAddressClaimUrl('home2.whombat.app', 'kxqmtr')).toBe('https://home2.whombat.app/c/kxqmtr');
     expect(ownAddressOrigin('maple-otter-river.box.whombat.app')).toBe(
       'https://maple-otter-river.box.whombat.app',
     );
@@ -91,6 +111,17 @@ describe('own-address hosts', () => {
       readFileSync(join(REPO, 'apps/web/public/.well-known/assetlinks.json'), 'utf8'),
     );
     expect(JSON.parse(JSON.stringify(BOX_ASSET_LINKS))).toEqual(hosted);
+  });
+});
+
+describe('Cloudflare’s certificates for the zone', () => {
+  it('are known by their SPKI until they end', () => {
+    expect(OWN_ADDRESS_ZONE_CERTIFICATES).toHaveLength(2);
+    const [google] = OWN_ADDRESS_ZONE_CERTIFICATES;
+    if (!google) throw new Error('no certificate');
+    expect(ownAddressZoneCertificate(google.spkiSha256, Date.parse('2026-12-01T00:00:00Z'))).toBe(google);
+    expect(ownAddressZoneCertificate(google.spkiSha256, Date.parse('2027-02-17T00:00:00Z'))).toBeNull();
+    expect(ownAddressZoneCertificate('0'.repeat(64), Date.parse('2026-12-01T00:00:00Z'))).toBeNull();
   });
 });
 

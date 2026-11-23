@@ -12,12 +12,13 @@ import {
   OwnAddressClaimSecret,
   OwnAddressHost,
   OwnAddressLabel,
+  OwnAddressZone,
 } from '@whombat/protocol';
 import { hostTextSchema, PushHandle } from '@whombat/protocol/session';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
 import { DeviceId } from '../common.js';
-import { AccountEmail } from './address.js';
+import { AccountEmail, AddressLeaving } from './address.js';
 import { DeviceRegistration } from './provisioning.js';
 import { SupportReport } from './status.js';
 
@@ -34,7 +35,10 @@ export type LinkPending = z.infer<typeof LinkPending>;
  * once the code expired: the box asks again with `link.begin`); `waitingForAddress` in `starting` when the person
  * confirmed but the day's new labels ran out (“Waiting for an address”); `graceEndsAt` only in `grace`;
  * `trialEndsAt` while the free month runs; `label` once control gave the box its address (the manager then registers
- * it with `address.register`); `email` the account's, once linked. Every member but `state` and `since` is optional.
+ * it with `address.register`); `email` the account's, once linked. Since 4.16: `host`, the box's live host as control
+ * has it (the manager serves that one); `zone`, where control gives names now (a box at a host under an old zone moves
+ * with `address.rename` of its own label); `leaving`, the earlier address while it still works. Every member but
+ * `state` and `since` is optional.
  */
 export const DeviceLinkStatus = z.object({
   state: LinkState,
@@ -45,6 +49,9 @@ export const DeviceLinkStatus = z.object({
   trialEndsAt: EpochSeconds.optional(),
   label: OwnAddressLabel.optional(),
   email: AccountEmail.optional(),
+  host: OwnAddressHost.optional(),
+  zone: OwnAddressZone.optional(),
+  leaving: AddressLeaving.optional(),
 });
 export type DeviceLinkStatus = z.infer<typeof DeviceLinkStatus>;
 

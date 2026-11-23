@@ -41,6 +41,8 @@
         "share.delete",
         "share.views",
         "address.register",
+        "address.check",
+        "address.rename",
         "account.link.lookup",
         "account.link",
         "kit.credentials.declare",

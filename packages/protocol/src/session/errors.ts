@@ -152,6 +152,16 @@ export const APP_ERROR_CODES = {
   link_devices_allowed: 'The account’s plan allows no more Whombats (`not_allowed`).',
   link_terms: 'The account hasn’t accepted the current Whombat terms yet (`not_allowed`).',
   control_unreachable: 'Whombat’s service didn’t answer: try again in a moment (`unavailable`).',
+  // Choosing and changing the own address's name (4.16, session minor 6; `OWN_ADDRESS_RENAME_ERROR_CODES`).
+  label_invalid:
+    'Not a name an address can have: 3 to 32 lower-case letters, digits and single hyphens, starting with a letter (`validation_failed`).',
+  label_reserved: 'That name isn’t given to anyone (`not_allowed`).',
+  label_taken: 'Another Whombat has or had that name (`conflict`).',
+  rename_limit: 'The address was changed 3 times in the last year already (`rate_limited`).',
+  link_off: 'The address can be changed only while Whombat Link is on (`not_allowed`).',
+  own_address_off: 'Whombat’s service gives no addresses here (`unavailable`).',
+  address_moved:
+    '`boxPasskey.register.begin` at the box’s earlier address: new passkeys are made only at its current address (`conflict`, `details.host`).',
   // Whombat Link and the update channel (4.4; `LINK_ERROR_CODES`).
   whombat_link_unavailable: 'This Whombat can’t use Whombat Link (`unavailable`).',
   whombat_link_busy: 'Whombat Link is changing already: wait a moment (`conflict`).',

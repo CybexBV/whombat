@@ -46,6 +46,8 @@ const (
 	ManagerPathOwnAddressRegister = "/v1/own-address/register"
 	ManagerPathOwnAddressCert     = "/v1/own-address/cert"
 	ManagerPathOwnAddressCt       = "/v1/own-address/ct"
+	ManagerPathOwnAddressCheck    = "/v1/own-address/check"
+	ManagerPathOwnAddressRename   = "/v1/own-address/rename"
 	ManagerPathAccountLinkLookup  = "/v1/runtime/account/link-lookup"
 	ManagerPathAccountLink        = "/v1/runtime/account/link"
 	ManagerPathKitCredentials     = "/v1/backup/kit-credentials"
@@ -312,6 +314,9 @@ const (
 	OwnAddressErrorLabelTaken    = "own_address.label_taken"
 	OwnAddressErrorLabelInvalid  = "own_address.label_invalid"
 	OwnAddressErrorNoCert        = "own_address.no_cert"
+	OwnAddressErrorLabelReserved = "own_address.label_reserved"
+	OwnAddressErrorRenameLimit   = "own_address.rename_limit"
+	OwnAddressErrorLinkOff       = "own_address.link_off"
 
 	// Whombat Link and the update channel (4.4; Whombat whombat-link.md).
 	LinkStatePollS                    = 300

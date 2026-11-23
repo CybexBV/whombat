@@ -155,10 +155,13 @@ export const DEVICE_OPS = {
   'share.delete': SHARE_DEVICE_OPS['share.delete'],
   'share.views': SHARE_DEVICE_OPS['share.views'],
   /**
-   * The box's own address (4.3; Whombat own-address.md): `address.register`, `account.link.lookup`, `account.link`,
-   * `kit.credentials.declare`.
+   * The box's own address (4.3; Whombat own-address.md): `address.register`, `address.check` and `address.rename`
+   * (4.16), `account.link.lookup`, `account.link`, `kit.credentials.declare`.
    */
   'address.register': ADDRESS_DEVICE_OPS['address.register'],
+  // Choosing and changing the name (4.16).
+  'address.check': ADDRESS_DEVICE_OPS['address.check'],
+  'address.rename': ADDRESS_DEVICE_OPS['address.rename'],
   'account.link.lookup': ADDRESS_DEVICE_OPS['account.link.lookup'],
   'account.link': ADDRESS_DEVICE_OPS['account.link'],
   'kit.credentials.declare': ADDRESS_DEVICE_OPS['kit.credentials.declare'],

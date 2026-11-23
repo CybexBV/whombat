@@ -13,14 +13,14 @@
     },
     "label": {
       "type": "string",
-      "minLength": 11,
+      "minLength": 3,
       "maxLength": 32,
-      "pattern": "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$"
+      "pattern": "^[a-z](-?[a-z0-9])+$"
     },
     "host": {
       "type": "string",
       "maxLength": 64,
-      "pattern": "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}[.](box|dev)[.]whombat[.]app$"
+      "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
     },
     "acme": {
       "type": "object",
@@ -78,6 +78,32 @@
         "spkiSha256",
         "notBefore",
         "notAfter"
+      ]
+    },
+    "leaving": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-z](-?[a-z0-9])+$"
+        },
+        "host": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
+        },
+        "until": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      },
+      "required": [
+        "label",
+        "host",
+        "until"
       ]
     }
   },

@@ -213,12 +213,31 @@ describe('Whombat Link (4.4)', () => {
       'checkout',
       'confirm',
       'lookup',
+      'nameCheck',
       'portal',
       'remove',
     ]);
     expect(controlApi.link.confirm.body.safeParse({ code: 'KXQM-TRVW' }).success).toBe(true);
     expect(controlApi.link.confirm.body.safeParse({ code: 'kxqm-trvw' }).success).toBe(false);
     for (const reason of ['registration_invalid', 'email_unconfirmed', 'link_trial_boxes', 'link_off'])
+      expect(CONTROL_REASONS, reason).toHaveProperty(reason);
+  });
+
+  it('lets the person choose the box’s name at setup (4.16)', () => {
+    const { confirm, nameCheck } = controlApi.link;
+    expect(nameCheck.path).toBe('/link/name');
+    expect(confirm.body.safeParse({ code: 'KXQM-TRVW', label: 'home' }).success).toBe(true);
+    expect(confirm.body.safeParse({ code: 'KXQM-TRVW', label: 'xn--home' }).success).toBe(false);
+    expect(nameCheck.body.safeParse({ name: '1-a' }).success).toBe(true);
+    expect(nameCheck.body.safeParse({ name: 'Home' }).success).toBe(false);
+    expect(nameCheck.response.safeParse({ name: 'home', verdict: 'yours' }).success).toBe(false);
+    for (const reason of [
+      'label_invalid',
+      'label_reserved',
+      'label_taken',
+      'rename_limit',
+      'own_address_off',
+    ])
       expect(CONTROL_REASONS, reason).toHaveProperty(reason);
   });
 });

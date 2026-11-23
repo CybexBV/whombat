@@ -49099,8 +49099,8 @@
     },
     {
       "schema": "AdmissionClaims",
-      "name": "a label of two words",
-      "valid": false,
+      "name": "a chosen name",
+      "valid": true,
       "value": {
         "iss": "https://api.dev.whombat.com",
         "aud": "whombat-relay:dev",
@@ -49114,7 +49114,27 @@
         "nbf": 1790000000,
         "exp": 1790000120,
         "jti": "vYt9-2mQx_7LkP0aZbW3cA",
-        "lbl": "maple-otter"
+        "lbl": "home"
+      }
+    },
+    {
+      "schema": "AdmissionClaims",
+      "name": "a chosen name with a digit",
+      "valid": true,
+      "value": {
+        "iss": "https://api.dev.whombat.com",
+        "aud": "whombat-relay:dev",
+        "rol": "appliance",
+        "apl": "apl_7Hq2mX",
+        "sub": "acc_91xzQ",
+        "org": "org_42",
+        "wrk": "relay-eu-1",
+        "chn": "app",
+        "iat": 1790000000,
+        "nbf": 1790000000,
+        "exp": 1790000120,
+        "jti": "vYt9-2mQx_7LkP0aZbW3cA",
+        "lbl": "home2"
       }
     },
     {
@@ -49159,6 +49179,48 @@
     },
     {
       "schema": "AdmissionClaims",
+      "name": "a leaving label",
+      "valid": true,
+      "value": {
+        "iss": "https://api.dev.whombat.com",
+        "aud": "whombat-relay:dev",
+        "rol": "appliance",
+        "apl": "apl_7Hq2mX",
+        "sub": "acc_91xzQ",
+        "org": "org_42",
+        "wrk": "relay-eu-1",
+        "chn": "app",
+        "iat": 1790000000,
+        "nbf": 1790000000,
+        "exp": 1790000120,
+        "jti": "vYt9-2mQx_7LkP0aZbW3cA",
+        "lbl": "home",
+        "plbl": "maple-otter-river"
+      }
+    },
+    {
+      "schema": "AdmissionClaims",
+      "name": "a leaving label of two letters",
+      "valid": false,
+      "value": {
+        "iss": "https://api.dev.whombat.com",
+        "aud": "whombat-relay:dev",
+        "rol": "appliance",
+        "apl": "apl_7Hq2mX",
+        "sub": "acc_91xzQ",
+        "org": "org_42",
+        "wrk": "relay-eu-1",
+        "chn": "app",
+        "iat": 1790000000,
+        "nbf": 1790000000,
+        "exp": 1790000120,
+        "jti": "vYt9-2mQx_7LkP0aZbW3cA",
+        "lbl": "home",
+        "plbl": "ho"
+      }
+    },
+    {
+      "schema": "AdmissionClaims",
       "name": "an unknown claim is still refused",
       "valid": false,
       "value": {
@@ -49189,33 +49251,89 @@
     {
       "schema": "AddressRegisterRequest",
       "name": "four words",
-      "valid": false,
+      "valid": true,
       "value": {
         "label": "maple-otter-river-stone"
       }
     },
     {
       "schema": "AddressRegisterRequest",
-      "name": "a word of 11 letters",
-      "valid": false,
-      "value": {
-        "label": "maple-otter-rrrrrrrrrrr"
-      }
-    },
-    {
-      "schema": "AddressRegisterRequest",
-      "name": "a word of 2 letters",
-      "valid": false,
-      "value": {
-        "label": "ma-otter-river"
-      }
-    },
-    {
-      "schema": "AddressRegisterRequest",
       "name": "a digit",
-      "valid": false,
+      "valid": true,
       "value": {
         "label": "maple-otter-river1"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "one word of three letters",
+      "valid": true,
+      "value": {
+        "label": "ant"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "32 characters",
+      "valid": true,
+      "value": {
+        "label": "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "33 characters",
+      "valid": false,
+      "value": {
+        "label": "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "two letters",
+      "valid": false,
+      "value": {
+        "label": "ab"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "a digit first",
+      "valid": false,
+      "value": {
+        "label": "1abc"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "a hyphen first",
+      "valid": false,
+      "value": {
+        "label": "-abc"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "a hyphen last",
+      "valid": false,
+      "value": {
+        "label": "abc-"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "two hyphens (punycode)",
+      "valid": false,
+      "value": {
+        "label": "xn--abc"
+      }
+    },
+    {
+      "schema": "AddressRegisterRequest",
+      "name": "an underscore",
+      "valid": false,
+      "value": {
+        "label": "my_box"
       }
     },
     {
@@ -49249,6 +49367,61 @@
     },
     {
       "schema": "AddressRegisterResponse",
+      "name": "whombat.app",
+      "valid": true,
+      "value": {
+        "label": "home",
+        "host": "home.whombat.app",
+        "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressRegisterResponse",
+      "name": "a name with digits",
+      "valid": true,
+      "value": {
+        "label": "home2",
+        "host": "home2.whombat.app",
+        "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressRegisterResponse",
+      "name": "leaving",
+      "valid": true,
+      "value": {
+        "label": "home",
+        "host": "home.whombat.app",
+        "registeredAt": 1790000000,
+        "leaving": {
+          "label": "maple-otter-river",
+          "host": "maple-otter-river.box.whombat.app",
+          "until": 1792592000
+        }
+      }
+    },
+    {
+      "schema": "AddressRegisterResponse",
+      "name": "another subdomain of whombat.app",
+      "valid": false,
+      "value": {
+        "label": "home",
+        "host": "home.www.whombat.app",
+        "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressRegisterResponse",
+      "name": "a host in upper case",
+      "valid": false,
+      "value": {
+        "label": "home",
+        "host": "Home.whombat.app",
+        "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressRegisterResponse",
       "name": "another zone",
       "valid": false,
       "value": {
@@ -49275,6 +49448,173 @@
         "label": "maple-otter-river",
         "host": "maple-otter-river.box.whombat.app.",
         "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "label": "home"
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "what a person typed, not yet a name",
+      "valid": true,
+      "value": {
+        "label": "1-a"
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "upper case",
+      "valid": false,
+      "value": {
+        "label": "Home"
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "a space",
+      "valid": false,
+      "value": {
+        "label": "my home"
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "65 characters",
+      "valid": false,
+      "value": {
+        "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "schema": "AddressCheckRequest",
+      "name": "empty",
+      "valid": false,
+      "value": {
+        "label": ""
+      }
+    },
+    {
+      "schema": "AddressCheckResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "label": "home",
+        "verdict": "free"
+      }
+    },
+    {
+      "schema": "AddressCheckResponse",
+      "name": "yours",
+      "valid": true,
+      "value": {
+        "label": "maple-otter-river",
+        "verdict": "yours"
+      }
+    },
+    {
+      "schema": "AddressCheckResponse",
+      "name": "invalid",
+      "valid": true,
+      "value": {
+        "label": "xn--a",
+        "verdict": "invalid"
+      }
+    },
+    {
+      "schema": "AddressCheckResponse",
+      "name": "an unknown verdict",
+      "valid": false,
+      "value": {
+        "label": "home",
+        "verdict": "maybe"
+      }
+    },
+    {
+      "schema": "AddressRenameRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "label": "home"
+      }
+    },
+    {
+      "schema": "AddressRenameRequest",
+      "name": "a drawn label",
+      "valid": true,
+      "value": {
+        "label": "maple-otter-river"
+      }
+    },
+    {
+      "schema": "AddressRenameRequest",
+      "name": "not a name",
+      "valid": false,
+      "value": {
+        "label": "xn--a"
+      }
+    },
+    {
+      "schema": "AddressRenameRequest",
+      "name": "a host",
+      "valid": false,
+      "value": {
+        "label": "home.whombat.app"
+      }
+    },
+    {
+      "schema": "AddressRenameResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "label": "home",
+        "host": "home.whombat.app",
+        "registeredAt": 1790000000,
+        "leaving": {
+          "label": "maple-otter-river",
+          "host": "maple-otter-river.box.whombat.app",
+          "until": 1792592000
+        }
+      }
+    },
+    {
+      "schema": "AddressRenameResponse",
+      "name": "nothing leaving",
+      "valid": true,
+      "value": {
+        "label": "home",
+        "host": "home.whombat.app",
+        "registeredAt": 1790000000,
+        "leaving": null
+      }
+    },
+    {
+      "schema": "AddressRenameResponse",
+      "name": "leaving left out",
+      "valid": false,
+      "value": {
+        "label": "home",
+        "host": "home.whombat.app",
+        "registeredAt": 1790000000
+      }
+    },
+    {
+      "schema": "AddressRenameResponse",
+      "name": "a move keeps the label",
+      "valid": true,
+      "value": {
+        "label": "maple-otter-river",
+        "host": "maple-otter-river.whombat.app",
+        "registeredAt": 1790000000,
+        "leaving": {
+          "label": "maple-otter-river",
+          "host": "maple-otter-river.box.whombat.app",
+          "until": 1790000000
+        }
       }
     },
     {
@@ -49661,6 +50001,105 @@
       }
     },
     {
+      "schema": "OwnAddressCertRequest",
+      "name": "the leaving host",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "host": "maple-otter-river.box.whombat.app"
+      }
+    },
+    {
+      "schema": "OwnAddressCertRequest",
+      "name": "another host",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "host": "example.com"
+      }
+    },
+    {
+      "schema": "OwnAddressCheckRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "label": "home"
+      }
+    },
+    {
+      "schema": "OwnAddressCheckRequest",
+      "name": "no label",
+      "valid": false,
+      "value": {
+        "v": 1
+      }
+    },
+    {
+      "schema": "OwnAddressCheckRequest",
+      "name": "upper case",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "label": "Home"
+      }
+    },
+    {
+      "schema": "OwnAddressCheckResponse",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "label": "home",
+        "verdict": "taken"
+      }
+    },
+    {
+      "schema": "OwnAddressCheckResponse",
+      "name": "reserved",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "label": "box",
+        "verdict": "reserved"
+      }
+    },
+    {
+      "schema": "OwnAddressCheckResponse",
+      "name": "no verdict",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "label": "home"
+      }
+    },
+    {
+      "schema": "OwnAddressRenameRequest",
+      "name": "base",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "label": "home"
+      }
+    },
+    {
+      "schema": "OwnAddressRenameRequest",
+      "name": "no label",
+      "valid": false,
+      "value": {
+        "v": 1
+      }
+    },
+    {
+      "schema": "OwnAddressRenameRequest",
+      "name": "two letters",
+      "valid": false,
+      "value": {
+        "v": 1,
+        "label": "ho"
+      }
+    },
+    {
       "schema": "OwnAddressCtRequest",
       "name": "base",
       "valid": true,
@@ -49700,6 +50139,25 @@
         "host": "maple-otter-river.dev.whombat.app",
         "acme": {
           "state": "ordering"
+        }
+      }
+    },
+    {
+      "schema": "OwnAddressStateResponse",
+      "name": "renamed, the earlier host leaving",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "enabled": true,
+        "label": "home",
+        "host": "home.whombat.app",
+        "acme": {
+          "state": "ordering"
+        },
+        "leaving": {
+          "label": "maple-otter-river",
+          "host": "maple-otter-river.box.whombat.app",
+          "until": "2026-12-23T10:00:00Z"
         }
       }
     },
@@ -49855,6 +50313,24 @@
         "source": "certspotter",
         "checkingSince": "2026-11-18T10:00:00Z",
         "lastFreshAt": null,
+        "missed": [],
+        "certs": [],
+        "ordered": []
+      }
+    },
+    {
+      "schema": "OwnAddressCtResponse",
+      "name": "watching two hosts",
+      "valid": true,
+      "value": {
+        "v": 1,
+        "source": "certspotter",
+        "checkingSince": "2026-11-18T10:00:00Z",
+        "lastFreshAt": null,
+        "hosts": [
+          "home.whombat.app",
+          "maple-otter-river.box.whombat.app"
+        ],
         "missed": [],
         "certs": [],
         "ordered": []
@@ -50237,6 +50713,40 @@
           "since": 1790000000,
           "graceEndsAt": 1790604800,
           "label": "maple-otter-river.box.whombat.app"
+        }
+      }
+    },
+    {
+      "schema": "LinkStatusResponse",
+      "name": "its host, the zone and a leaving address",
+      "valid": true,
+      "value": {
+        "link": {
+          "state": "grace",
+          "since": 1790000000,
+          "graceEndsAt": 1790604800,
+          "label": "maple-otter-river",
+          "host": "maple-otter-river.box.whombat.app",
+          "zone": "whombat.app",
+          "leaving": {
+            "label": "maple-otter-river",
+            "host": "maple-otter-river.box.whombat.app",
+            "until": 1790000000
+          }
+        }
+      }
+    },
+    {
+      "schema": "LinkStatusResponse",
+      "name": "an unknown zone",
+      "valid": false,
+      "value": {
+        "link": {
+          "state": "grace",
+          "since": 1790000000,
+          "graceEndsAt": 1790604800,
+          "label": "maple-otter-river",
+          "zone": "example.com"
         }
       }
     },

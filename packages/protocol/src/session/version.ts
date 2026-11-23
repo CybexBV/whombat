@@ -65,9 +65,18 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * they are only to a session at minor 4 or later, the catalog's `needs_mac` reason, a select field's own `options` and
  * a page tab's `server` (docs/implementation/macos/findmy-connection.md); minor 5 is a Find My timeline: the
  * `connections.findMyTimeline…` operations and a Find My connection's Timeline tab, which a box shows only to a session
- * at minor 5 or later (docs/implementation/macos/findmy-timeline.md).
+ * at minor 5 or later (docs/implementation/macos/findmy-timeline.md); minor 6 (contracts 4.16) is own names: an address
+ * the person chose or changed (`ownAddress.check`, `ownAddress.rename`, the summary's `leaving`, `address_moved`), and
+ * own-address hosts outside the three-word `box.`/`dev.` shape, which a box names only to a session at minor 6 or later
+ * (Whombat own-address.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 5 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 6 };
+
+/**
+ * Session protocol minor (major 5) that reads own-address names of the person's choosing and hosts under `whombat.app`;
+ * a box leaves such an address out of its answers to an older session.
+ */
+export const OWN_ADDRESS_NAMES_MINOR = 6;
 
 /** Session protocol minor (major 5) that reads automations started by Find My (the `findmy` trigger and source). */
 export const FIND_MY_MINOR = 4;

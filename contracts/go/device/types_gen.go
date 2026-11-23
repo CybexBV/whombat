@@ -28,7 +28,7 @@ type MailSendResponse = LinkMailSetResponse
 // PushUnregisterResponse is the same schema as LinkMailSetResponse.
 type PushUnregisterResponse = LinkMailSetResponse
 
-// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "link.mail.set", "mail.send", "push.register", "push.unregister", "support.heartbeat".
+// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "address.check", "address.rename", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "link.mail.set", "mail.send", "push.register", "push.unregister", "support.heartbeat".
 type DeviceOpName string
 
 const (
@@ -51,6 +51,8 @@ const (
 	DeviceOpNameShareDelete              DeviceOpName = "share.delete"
 	DeviceOpNameShareViews               DeviceOpName = "share.views"
 	DeviceOpNameAddressRegister          DeviceOpName = "address.register"
+	DeviceOpNameAddressCheck             DeviceOpName = "address.check"
+	DeviceOpNameAddressRename            DeviceOpName = "address.rename"
 	DeviceOpNameAccountLinkLookup        DeviceOpName = "account.link.lookup"
 	DeviceOpNameAccountLink              DeviceOpName = "account.link"
 	DeviceOpNameKitCredentialsDeclare    DeviceOpName = "kit.credentials.declare"
@@ -66,7 +68,7 @@ const (
 )
 
 // DeviceOpNameValues lists every DeviceOpName.
-var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
+var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAddressCheck, DeviceOpNameAddressRename, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNameLinkMailSet, DeviceOpNameMailSend, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
 
 type DeviceRequestEnvelope struct {
 	V      int64           `json:"v"` // always 1
@@ -318,9 +320,30 @@ type AddressRegisterRequest struct {
 }
 
 type AddressRegisterResponse struct {
-	Label        string `json:"label"`
-	Host         string `json:"host"`
-	RegisteredAt int64  `json:"registeredAt"`
+	Label        string          `json:"label"`
+	Host         string          `json:"host"`
+	RegisteredAt int64           `json:"registeredAt"`
+	Leaving      *AddressLeaving `json:"leaving,omitempty"`
+}
+
+type AddressCheckRequest struct {
+	Label string `json:"label"`
+}
+
+type AddressCheckResponse struct {
+	Label   string                         `json:"label"`
+	Verdict protocol.OwnAddressNameVerdict `json:"verdict"`
+}
+
+type AddressRenameRequest struct {
+	Label string `json:"label"`
+}
+
+type AddressRenameResponse struct {
+	Label        string          `json:"label"`
+	Host         string          `json:"host"`
+	RegisteredAt int64           `json:"registeredAt"`
+	Leaving      *AddressLeaving `json:"leaving"`
 }
 
 type AccountLinkLookupRequest struct {
@@ -433,14 +456,17 @@ type RelayAssignment struct {
 }
 
 type DeviceLinkStatus struct {
-	State             protocol.LinkState `json:"state"`
-	Since             int64              `json:"since"`
-	Pending           *LinkPending       `json:"pending,omitempty"`
-	WaitingForAddress *bool              `json:"waitingForAddress,omitempty"`
-	GraceEndsAt       *int64             `json:"graceEndsAt,omitempty"`
-	TrialEndsAt       *int64             `json:"trialEndsAt,omitempty"`
-	Label             *string            `json:"label,omitempty"`
-	Email             *string            `json:"email,omitempty"`
+	State             protocol.LinkState       `json:"state"`
+	Since             int64                    `json:"since"`
+	Pending           *LinkPending             `json:"pending,omitempty"`
+	WaitingForAddress *bool                    `json:"waitingForAddress,omitempty"`
+	GraceEndsAt       *int64                   `json:"graceEndsAt,omitempty"`
+	TrialEndsAt       *int64                   `json:"trialEndsAt,omitempty"`
+	Label             *string                  `json:"label,omitempty"`
+	Email             *string                  `json:"email,omitempty"`
+	Host              *string                  `json:"host,omitempty"`
+	Zone              *protocol.OwnAddressZone `json:"zone,omitempty"`
+	Leaving           *AddressLeaving          `json:"leaving,omitempty"`
 }
 
 type StatusReportRequestUpdate struct {
@@ -622,6 +648,12 @@ type ShareViews struct {
 	ShareID      string `json:"shareId"`
 	Views        int64  `json:"views"`
 	LastViewedAt *int64 `json:"lastViewedAt,omitempty"`
+}
+
+type AddressLeaving struct {
+	Label string `json:"label"`
+	Host  string `json:"host"`
+	Until int64  `json:"until"`
 }
 
 type LinkWhombat struct {
@@ -1327,6 +1359,70 @@ func (v *AddressRegisterResponse) Validate() error {
 }
 
 var _ = register("AddressRegisterResponse", func(data []byte) (any, error) { return ParseAddressRegisterResponse(data) })
+
+// ParseAddressCheckRequest validates data against the AddressCheckRequest JSON Schema and decodes it.
+func ParseAddressCheckRequest(data []byte) (*AddressCheckRequest, error) {
+	v := new(AddressCheckRequest)
+	if err := schemas.Decode("AddressCheckRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the AddressCheckRequest JSON Schema (as it would be sent).
+func (v *AddressCheckRequest) Validate() error {
+	return schemas.ValidateValue("AddressCheckRequest", v)
+}
+
+var _ = register("AddressCheckRequest", func(data []byte) (any, error) { return ParseAddressCheckRequest(data) })
+
+// ParseAddressCheckResponse validates data against the AddressCheckResponse JSON Schema and decodes it.
+func ParseAddressCheckResponse(data []byte) (*AddressCheckResponse, error) {
+	v := new(AddressCheckResponse)
+	if err := schemas.Decode("AddressCheckResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the AddressCheckResponse JSON Schema (as it would be sent).
+func (v *AddressCheckResponse) Validate() error {
+	return schemas.ValidateValue("AddressCheckResponse", v)
+}
+
+var _ = register("AddressCheckResponse", func(data []byte) (any, error) { return ParseAddressCheckResponse(data) })
+
+// ParseAddressRenameRequest validates data against the AddressRenameRequest JSON Schema and decodes it.
+func ParseAddressRenameRequest(data []byte) (*AddressRenameRequest, error) {
+	v := new(AddressRenameRequest)
+	if err := schemas.Decode("AddressRenameRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the AddressRenameRequest JSON Schema (as it would be sent).
+func (v *AddressRenameRequest) Validate() error {
+	return schemas.ValidateValue("AddressRenameRequest", v)
+}
+
+var _ = register("AddressRenameRequest", func(data []byte) (any, error) { return ParseAddressRenameRequest(data) })
+
+// ParseAddressRenameResponse validates data against the AddressRenameResponse JSON Schema and decodes it.
+func ParseAddressRenameResponse(data []byte) (*AddressRenameResponse, error) {
+	v := new(AddressRenameResponse)
+	if err := schemas.Decode("AddressRenameResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the AddressRenameResponse JSON Schema (as it would be sent).
+func (v *AddressRenameResponse) Validate() error {
+	return schemas.ValidateValue("AddressRenameResponse", v)
+}
+
+var _ = register("AddressRenameResponse", func(data []byte) (any, error) { return ParseAddressRenameResponse(data) })
 
 // ParseAccountLinkLookupRequest validates data against the AccountLinkLookupRequest JSON Schema and decodes it.
 func ParseAccountLinkLookupRequest(data []byte) (*AccountLinkLookupRequest, error) {
