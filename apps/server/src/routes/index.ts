@@ -23,6 +23,7 @@ import { githubRoutes } from '../github/routes';
 import { guideRoutes } from '../guides/routes';
 import { hermesHomeRoutes } from '../hermes-home/routes';
 import { oneWhombatRoutes } from '../home/routes';
+import { findMyTimelineRoutes } from '../hosts/findmy-timeline-routes';
 import { hostsRoutes } from '../hosts/routes';
 import { isApplianceLocalPath } from '../lib/local-paths';
 import { signInRoutes } from '../managed/providers/routes';
@@ -74,6 +75,8 @@ export const ROUTES: RouteDef[] = [
   ...connectorRoutes,
   // The connections catalog (docs/decisions/connections-catalog.md).
   ...connectionCatalogRoutes,
+  // A Find My connection's timeline (docs/decisions/findmy-timeline.md).
+  ...findMyTimelineRoutes,
   // What the agent remembers about the person, and the person's notes for it (hermes-engine.md HE-39).
   ...memoryRoutes,
   ...automationRoutes,
