@@ -42,7 +42,7 @@ How the split was made: `docs.md`.
 - `link-email.md` — email through Whombat Link: the owner's two choices, the offline warning, notification emails as a count, notices by email.
 - `legal-texts.md` — the legal texts: the seller's details, the Privacy Policy's third parties, when the accepted terms get a new version, the Dutch voice's restrictions, the What's new page.
 - `one-environment.md` — one environment, Link on production: one image, Production and Beta updates, release ids and keys, moving a box to production, the yearly price, promotion codes and free time, guarded admin, Easy/Expert words, the website, the installer download, shipping.
-- `own-address.md` — each Whombat's own page at `<label>.box.whombat.app`: the label, the door, the certificate and its watch, the claim and link there, box passkeys.
+- `own-address.md` — each Whombat's own page at `<name>.whombat.app`: the name (random or chosen, changed with a 30-day overlap), the door, the certificate and its watch, the claim and link there, box passkeys.
 - `../app/decisions/whombat-link-app.md` — Whombat Link in the apps: the one setup on the box's page, Reach and Updates in Settings, the Link-ended strip, joining a box on the phone without a cloud account, push through the box, nothing to buy on the iPhone.
 - `../app/decisions/link-account-site.md` — the account site under Whombat Link: open sign-up, `/link`, Your Whombats
   with the Link subscription, what left the hosted flow.

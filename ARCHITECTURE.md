@@ -103,9 +103,15 @@ inert: `WHOMBAT_EDITION` is read only where there is no `device.json` (developme
 refuses.
 
 **Own address** (`managed/own-address/`, [own-address.md](docs/decisions/own-address.md)): while Link runs a box also serves
-its page at `<label>.box.whombat.app` (DEV: `<label>.dev.whombat.app`), with TLS ending on the box. Control gives the label
-when Link starts and the manager registers it (with a manager from before Link the runtime draws it), orders the
-certificate (ACME TLS-ALPN-01) and watches Certificate Transparency;
+its page at `<name>.whombat.app` (DEV: `<name>.dev.whombat.app`; a box that hasn't moved yet at `<name>.box.whombat.app`, the
+old zone), with TLS ending on the box. The name is three random words, or one the person chose when they confirmed the box
+on the account site (`link.name.check`, `label` on `link.confirm`); the rules for names are core's
+`ownAddressNameProblem`, enforced by control. Control gives the name when Link starts and the manager registers it (with
+a manager from before Link the runtime draws it), orders the certificate (ACME TLS-ALPN-01) and watches Certificate
+Transparency. The owner changes the name later (`ownAddress.rename` → the manager → control's `address.rename`), and a box
+whose host is under the old zone moves itself to control's zone the same way; either way the earlier host stays served
+for 30 days (`leaving`: tickets carry it as `plbl`, the box serves its current certificate, makes new passkeys only at
+the new host) and then stops;
 the runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
 person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch
 calls foreign and raises the notices. The relay's door hands the box raw TLS streams over the relay client
