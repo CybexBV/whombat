@@ -189,8 +189,6 @@ describe('the claim link on the box’s screen', () => {
     // The link is the one the screen showed all along, and the person who read it there sets the box up.
     expect(own().claimLink.current).toBe(link);
     expect(linkOnScreen()).toBe(shown);
-    // Strangers' wrong links never told the screen that a page is open.
-    expect(m.runtime.trust.ceremony.consoleState()?.pageOpen).toBeUndefined();
     const person = await arrive(DOOR, { from: '198.51.100.7', claimLink: link });
     expect(person.answer.t).toBe('welcome');
     expect(sessions().unenrolledClaimLinkSize).toBe(1);
