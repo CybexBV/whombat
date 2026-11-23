@@ -6,6 +6,7 @@
 import { existsSync } from 'node:fs';
 import type { Edition } from '@whombat/protocol';
 import type { DirectAddresses } from '@whombat/protocol/session';
+import { outsideCommandScope } from '../commit/scope';
 import { HostPower } from '../desk/power';
 import type { DeskService } from '../desk/service';
 import { type DropTimings, FeedbackDropService } from '../feedback/drop/index';
@@ -223,7 +224,19 @@ export class ManagedRuntime {
           .then((id) => (id ? pushForeign(services, push, [id], found) : undefined))
           .catch((err) => services.log.warn({ err: String(err) }, 'own address: the notice was not pushed'));
       };
-      registerOwnAddressSource(() => this.ownAddress);
+      // The box stopped answering at a host (the leaving one's date came, or a name in between was replaced): the
+      // passkeys made for it go, and the screen and the links follow the hosts it has now.
+      // A rename tells it from inside the person's request: the removal is the box's own, never part of that commit.
+      own.onHosts = (now, before) => {
+        const gone = before.filter((h) => !now.includes(h));
+        void outsideCommandScope(() => this.trust.boxPasskeys.dropHosts(gone)).catch((err) =>
+          services.log.warn({ err: String(err) }, 'own address: passkeys of an old host stayed'),
+        );
+      };
+      registerOwnAddressSource(
+        () => this.ownAddress,
+        () => this.trust.boxPasskeys,
+      );
     }
     this.receipts = new CommandReceipts(services.db, services.clock);
     this.uploads = new SessionUploads(services);

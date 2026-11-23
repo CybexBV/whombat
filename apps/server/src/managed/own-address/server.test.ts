@@ -23,6 +23,9 @@ import { directWeb } from '../direct/web';
 import { OWN_ADDRESS_POLICY, ownAddressDoor, ROBOTS_TXT } from './server';
 
 const HOST = 'maple-otter-river.dev.whombat.app';
+/** The host the box is leaving (the fixture certificate names only HOST: clients here don't check the name). */
+const OLD = 'cedar-fox-lake.dev.whombat.app';
+let served = [HOST];
 const SRC = '203.0.113.7';
 const pem = readFileSync(join(import.meta.dirname, '__fixtures__', 'own-address-pair.pem'), 'utf8');
 const cert = pem.slice(pem.indexOf('-----BEGIN CERTIFICATE-----'));
@@ -87,7 +90,10 @@ beforeAll(async () => {
       return 'session';
     },
     web: directWeb(webRoot),
-    door: ownAddressDoor({ host: () => HOST, context: () => context }),
+    door: ownAddressDoor({
+      webHosts: () => served,
+      contextFor: (h) => (served.includes(h) ? context : null),
+    }),
     guard,
   });
   relay = createServer((socket) => listener.acceptDoor(asDoorStream(socket), src));
@@ -201,6 +207,101 @@ describe('the own address over HTTP/2 and HTTP/1.1', () => {
       socket.once('error', resolve);
     });
     expect(err).toBeInstanceOf(Error);
+  });
+});
+
+describe('two hosts for a while after a rename', () => {
+  const at = (servername: string) => ({ ...tlsOptions(), servername, checkServerIdentity: () => undefined });
+
+  /** One HTTP/1.1 GET on a connection made to `servername`, with `host` as its Host. */
+  function get(servername: string, host: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const req = httpsRequest(
+        {
+          ...at(servername),
+          path: '/',
+          headers: { host },
+          ALPNProtocols: ['http/1.1'],
+          agent: false,
+        } as never,
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  function handshake(servername: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = tlsConnect(at(servername));
+      socket.once('secureConnect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once('error', () => resolve(false));
+    });
+  }
+
+  it('serves each host on a connection made to it, and never one host’s name on the other’s connection', async () => {
+    served = [HOST, OLD];
+    try {
+      expect(await get(OLD, OLD)).toBe(200);
+      expect(await get(OLD, `${OLD}:443`)).toBe(200);
+      expect(await get(HOST, HOST)).toBe(200);
+      expect(await get(OLD, HOST)).toBe(421);
+      expect(await get(HOST, OLD)).toBe(421);
+    } finally {
+      served = [HOST];
+    }
+  });
+
+  it('opens the WebSocket at the old host from its own page only, as a door session arriving there', async () => {
+    served = [HOST, OLD];
+    try {
+      const opened = await new Promise<number | 'open'>((resolve, reject) => {
+        const ws = new WebSocket(`wss://${OLD}/v1/direct`, DIRECT_SUBPROTOCOL, {
+          createConnection: () => tlsConnect({ ...at(OLD), ALPNProtocols: ['http/1.1'] }),
+          origin: `https://${OLD}`,
+        } as WebSocket.ClientOptions);
+        ws.once('open', () =>
+          ws.send(JSON.stringify({ t: 'hello', v: 1, class: 'interactive', client: { build: 'web' } })),
+        );
+        ws.once('message', () => {
+          ws.close();
+          resolve('open');
+        });
+        ws.once('close', (code) => resolve(code));
+        ws.once('error', reject);
+      });
+      expect(opened).toBe('open');
+      expect(metas.at(-1)).toMatchObject({ network: 'door', local: OLD, origin: `https://${OLD}` });
+      const crossed = await new Promise<number | 'open'>((resolve, reject) => {
+        const ws = new WebSocket(`wss://${OLD}/v1/direct`, DIRECT_SUBPROTOCOL, {
+          createConnection: () => tlsConnect({ ...at(OLD), ALPNProtocols: ['http/1.1'] }),
+          origin: `https://${HOST}`,
+        } as WebSocket.ClientOptions);
+        ws.once('open', () =>
+          ws.send(JSON.stringify({ t: 'hello', v: 1, class: 'interactive', client: { build: 'web' } })),
+        );
+        ws.once('message', () => resolve('open'));
+        ws.once('close', (code) => resolve(code));
+        ws.once('error', reject);
+      });
+      expect(crossed).toBe(4403);
+    } finally {
+      served = [HOST];
+    }
+  });
+
+  it('stops at the old host once the box no longer answers there', async () => {
+    served = [HOST, OLD];
+    expect(await handshake(OLD)).toBe(true);
+    served = [HOST];
+    expect(await handshake(OLD)).toBe(false);
+    expect(await handshake(HOST)).toBe(true);
   });
 });
 

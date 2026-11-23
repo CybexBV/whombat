@@ -94,6 +94,7 @@ import type { PushTokens } from './link/push-tokens';
 import type { LinkService } from './link/service';
 import { LOCAL_SESSION_HANDLERS } from './local-ops';
 import type { ManagedExplanation } from './ops';
+import { ownAddressFor } from './own-address/older-apps';
 import { OWN_ADDRESS_SESSION_HANDLERS } from './own-address/ops';
 import type { OwnAddressService } from './own-address/state';
 import { feedbackIntakeGuard, managedPolicy, managedRefusal, passkeysUnavailableHere } from './policy';
@@ -297,8 +298,9 @@ export const SESSION_HANDLERS: Readonly<Record<string, SessionHandler>> = {
     // never "enabled" without a destination.
     backup: await applianceBackup(c),
     update: summarizeUpdate(c.facts.update),
-    // Its own address (own-address.md): null while it has none; absent from runtimes before 4.3.
-    ownAddress: c.trust.ownAddress?.summary() ?? null,
+    // Its own address (own-address.md): null while it has none (and to an older app that can't read its host); absent
+    // from runtimes before 4.3.
+    ownAddress: ownAddressFor(c.trust.ownAddress?.summary() ?? null, c.principal.protocolMinor),
   }),
   // How the box is doing, for the person (docs/decisions/box-status.md BS-06): the manager's measurements.
   'host.metrics': (c, i) => hostMetricsOp(c, i),

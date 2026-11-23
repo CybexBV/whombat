@@ -30,8 +30,10 @@
  *   POST /v1/tailscale/peers       {v}                      → {v, peers} (3.11, CT-1635; tailnet-reach.md TN-06)
  *   POST /v1/update/ask            {v, askFirst}            → {v, askFirst} (4.2; ask-before-updating.md)
  *   POST /v1/update/approve        {v, release}             → {v, release}  (409 not_waiting)
- *   POST /v1/own-address/state|register|cert|ct {v, label?} → state, the pair, the CT watch (4.3; own-address.md;
- *                                                              404 own_address.off or an older manager)
+ *   POST /v1/own-address/state|register|cert|ct|check|rename {v, label?, host?}
+ *                                                            → state, the pair, the CT watch, a name's verdict (4.3,
+ *                                                              4.16; own-address.md; 404 own_address.off or an older
+ *                                                              manager)
  *   POST /v1/runtime/account/link-lookup|link {code}         → {email, expiresAt|linkedAt} (4.3)
  *   POST /v1/backup/kit-credentials {credentialIds}          → {declared} (4.3)
  *   POST /v1/link/state|on|off     {v, contentProof?, name?} → {v, enabled, link} (4.4; whombat-link.md)
@@ -64,9 +66,12 @@ import {
   NetworkStateResponse,
   OwnAddressCertRequest,
   OwnAddressCertResponse,
+  OwnAddressCheckRequest,
+  OwnAddressCheckResponse,
   OwnAddressCtRequest,
   OwnAddressCtResponse,
   OwnAddressRegisterRequest,
+  OwnAddressRenameRequest,
   OwnAddressStateRequest,
   OwnAddressStateResponse,
   RuntimeAccountLinkLookupRequest,
@@ -306,10 +311,38 @@ export class ManagerSocketClient implements ManagerPort {
     );
   }
 
-  /** The pair carries a private key: the answer is never logged. */
-  async ownAddressCert() {
+  /**
+   * The pair carries a private key: the answer is never logged. Without `host` the request is the one an older manager
+   * knows (the current host's pair).
+   */
+  async ownAddressCert(host?: string) {
     return OwnAddressCertResponse.parse(
-      await this.call(MANAGER_PATHS.ownAddressCert, OwnAddressCertRequest.parse({ v: LOCAL_API_VERSION })),
+      await this.call(
+        MANAGER_PATHS.ownAddressCert,
+        OwnAddressCertRequest.parse({ v: LOCAL_API_VERSION, ...(host ? { host } : {}) }),
+      ),
+    );
+  }
+
+  /** What control says of another name for this box (the manager forwards `address.check`). */
+  async ownAddressCheck(label: string) {
+    return OwnAddressCheckResponse.parse(
+      await this.call(
+        MANAGER_PATHS.ownAddressCheck,
+        OwnAddressCheckRequest.parse({ v: LOCAL_API_VERSION, label }),
+        KIT_ENVELOPES_TIMEOUT_MS,
+      ),
+    );
+  }
+
+  /** Changing the name waits for control (the manager forwards `address.rename`); the answer is the new state. */
+  async ownAddressRename(label: string) {
+    return OwnAddressStateResponse.parse(
+      await this.call(
+        MANAGER_PATHS.ownAddressRename,
+        OwnAddressRenameRequest.parse({ v: LOCAL_API_VERSION, label }),
+        KIT_ENVELOPES_TIMEOUT_MS,
+      ),
     );
   }
 

@@ -209,6 +209,8 @@ export class SessionEndpoint {
         tls: meta.tls,
         page:
           meta.origin === null ? null : { origin: meta.origin, secureContext: meta.secureContext === true },
+        // The host it arrived at on the own address: box passkeys there belong to that host.
+        ...(door ? { host: meta.local } : {}),
       },
       ...(door ? { doorPeer: peer } : {}),
     });

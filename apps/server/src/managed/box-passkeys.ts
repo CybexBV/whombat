@@ -15,6 +15,11 @@
  * Origins: the box's own address and the Android release app's. Once a box passkey is added or removed, and at start,
  * the box declares the full set to control (`kit.credentials.declare`), retried until control acknowledges it, so control
  * keeps the backup envelopes of exactly these.
+ *
+ * After a rename or a move the box answers at two hosts for a while (the current one and the one it is leaving). A
+ * session's RP is the host it arrived at: sign-in, joins and step-ups work at either with that host's passkeys, new
+ * passkeys are made only at the current host (`address_moved` at the other), and when a host stops being served its
+ * passkeys are removed (`dropHosts`), which shrinks the declared set.
  */
 import { randomBytes } from 'node:crypto';
 import {
@@ -36,17 +41,20 @@ import {
   type WebAuthnRegistrationResponse,
   type WebAuthnRequestOptions,
 } from '@whombat/protocol/session';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { appliancePasskeys, applianceState, boxPasskeyUsers } from '../db/schema/index';
 import type { EndpointPlatform } from '../db/schema/managed';
 import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
 import { appendApplianceEvent } from './audit';
 import { ownNameOf } from './backup-key';
+import { removeBackupKeysOf } from './backup-key-store';
 import type { SessionScope } from './claim';
+import { arrivalHost, type SessionTransport } from './direct/transport';
 import { type PasskeyRow, passkeyInvalid } from './passkeys';
 import { linkRuns } from './policy';
 import { ManagerCallError, type ManagerPort, managerUnreachable } from './ports';
+import type { StepUpPasskeys } from './remote-help';
 import { SECURITY_NOTICES } from './security-push';
 import { type Identity, requireEnrolled, type SessionPrincipal, type TrustService } from './trust';
 
@@ -76,6 +84,11 @@ const passkeyLimit = () =>
     `You already have ${PASSKEYS_PER_ACCOUNT_MAX} passkeys on this Whombat. Remove one first.`,
     { details: { code: 'passkey_limit' } },
   );
+/** A new passkey asked for at the host the box is leaving: they are made only at its current host. */
+export const addressMoved = (host: string) =>
+  new ApiError('conflict', `Your Whombat’s address is now ${host}. Add a passkey there.`, {
+    details: { code: 'address_moved', host },
+  });
 const passkeyNotAllowed = () =>
   new ApiError(
     'not_allowed',
@@ -103,14 +116,22 @@ export class BoxPasskeyService {
     return this.services.clock();
   }
 
-  /** The box's RP: its own host and the origins a box passkey may carry; none while it has no own address. */
-  private rp(): { rpId: string; origins: string[] } {
-    const host = this.trust.ownAddress?.host();
-    if (!host)
+  /**
+   * A session's RP: the own-address host it arrived at, else (the apps, the local network) the current host; with the
+   * current host beside it. None while the box has no own address.
+   */
+  private rp(transport: SessionTransport | undefined): { rpId: string; current: string } {
+    const current = this.trust.ownAddress?.host();
+    if (!current)
       throw new ApiError('unavailable', 'This Whombat has no address of its own yet.', {
         details: { code: 'own_address_unavailable' },
       });
-    return { rpId: host, origins: [ownAddressOrigin(host), ...PASSKEY_ANDROID_ORIGINS] };
+    return { rpId: arrivalHost(transport) ?? current, current };
+  }
+
+  /** The origins a box passkey of `rpId` may carry: that host's page and the Android release app. */
+  private originsOf(rpId: string): string[] {
+    return [ownAddressOrigin(rpId), ...PASSKEY_ANDROID_ORIGINS];
   }
 
   /** The account's box user handle (32 random bytes, base64url), made the first time. */
@@ -147,7 +168,8 @@ export class BoxPasskeyService {
   async registerBegin(viewer: SessionPrincipal, session: SessionScope | null) {
     const { account, endpoint } = requireEnrolled(viewer);
     if (!session) throw new ApiError('bad_request', 'Add a passkey over a session.');
-    const { rpId } = this.rp();
+    const { rpId, current } = this.rp(session.transport);
+    if (rpId !== current) throw addressMoved(current);
     const ids = await this.liveIds(account.id);
     if (ids.length >= PASSKEYS_PER_ACCOUNT_MAX) throw passkeyLimit();
     const nonce = randomBytes(32).toString('hex');
@@ -190,8 +212,9 @@ export class BoxPasskeyService {
       begin.endpointId !== endpoint.id
     )
       throw passkeyInvalid();
-    const { rpId, origins } = this.rp();
-    if (rpId !== begin.rpId) throw passkeyInvalid();
+    const { rpId, current } = this.rp(session?.transport);
+    if (rpId !== begin.rpId || rpId !== current) throw passkeyInvalid();
+    const origins = this.originsOf(rpId);
     let info: Awaited<ReturnType<typeof verifyRegistrationResponse>>['registrationInfo'];
     try {
       const verified = await verifyRegistrationResponse({
@@ -269,7 +292,7 @@ export class BoxPasskeyService {
   /** `boxPasskey.enroll.begin {}`: the box's nonce for this session's join, and the RP ID. */
   async enrollBegin(session: SessionScope | null) {
     if (!session) throw new ApiError('bad_request', 'Sign in over a session.');
-    const { rpId } = this.rp();
+    const { rpId } = this.rp(session.transport);
     const nonce = randomBytes(32).toString('hex');
     session.boxPasskeyEnroll = { nonce, rpId, expiresAt: new Date(this.now().getTime() + BEGIN_TTL_MS) };
     return { nonce, rpId, timeoutMs: BOX_PASSKEY_TIMEOUT_MS };
@@ -372,8 +395,8 @@ export class BoxPasskeyService {
     rpId: string,
     challenge: () => string,
   ): Promise<{ row: PasskeyRow; newCounter: number; synced: boolean }> {
-    const rp = this.rp();
-    if (rp.rpId !== rpId) throw new Refused('the address changed since the begin');
+    // The current host, or the one the box is leaving until its date: a host it stopped answering at signs in nobody.
+    if (!this.trust.ownAddress?.servesHost(rpId)) throw new Refused('the box doesn’t answer at that host');
     if (response.id !== response.rawId) throw new Refused('id and rawId differ');
     const handle = response.response.userHandle;
     if (!handle) throw new Refused('no user handle');
@@ -389,7 +412,7 @@ export class BoxPasskeyService {
       const result = await verifyAuthenticationResponse({
         response: response as AuthenticationResponseJSON,
         expectedChallenge: challenge(),
-        expectedOrigin: rp.origins,
+        expectedOrigin: this.originsOf(rpId),
         expectedRPID: rpId,
         expectedType: 'webauthn.get',
         credential: {
@@ -414,10 +437,25 @@ export class BoxPasskeyService {
 
   /* Step-up: confirming a choice with a box passkey on the box's own page (remote help) --------------------------- */
 
-  /** The account's live box passkeys of this host; none while the box has no address of its own. */
-  private async stepUpRows(accountId: string) {
-    const host = this.trust.ownAddress?.host();
-    if (!host) return { host: null, rows: [] };
+  /**
+   * The step-up at one host (the one a session arrived at; the current host when it came another way), for remote help.
+   */
+  at(transport: SessionTransport | undefined): StepUpPasskeys {
+    const host = arrivalHost(transport) ?? undefined;
+    return {
+      hasPasskey: (accountId) => this.hasPasskey(accountId, host),
+      stepUpOptions: (accountId, challenge) => this.stepUpOptions(accountId, challenge, host),
+      confirm: (accountId, response, challenge) => this.confirm(accountId, response, challenge, host),
+    };
+  }
+
+  /**
+   * The account's live box passkeys of `host` (the current one when absent); none while the box has no address of its
+   * own or doesn't answer at that host.
+   */
+  private async stepUpRows(accountId: string, at?: string) {
+    const host = at ?? this.trust.ownAddress?.host();
+    if (!host || !this.trust.ownAddress?.servesHost(host)) return { host: null, rows: [] };
     const rows = await this.db
       .select({ id: appliancePasskeys.id, transports: appliancePasskeys.transports })
       .from(appliancePasskeys)
@@ -434,13 +472,17 @@ export class BoxPasskeyService {
   }
 
   /** Whether the account has a live box passkey of this host (then a step-up on the address needs one). */
-  async hasPasskey(accountId: string): Promise<boolean> {
-    return (await this.stepUpRows(accountId)).rows.length > 0;
+  async hasPasskey(accountId: string, host?: string): Promise<boolean> {
+    return (await this.stepUpRows(accountId, host)).rows.length > 0;
   }
 
   /** What `navigator.credentials.get` needs to confirm `challenge` with one of them, or null when it has none. */
-  async stepUpOptions(accountId: string, challenge: string): Promise<WebAuthnRequestOptions | null> {
-    const { host, rows } = await this.stepUpRows(accountId);
+  async stepUpOptions(
+    accountId: string,
+    challenge: string,
+    at?: string,
+  ): Promise<WebAuthnRequestOptions | null> {
+    const { host, rows } = await this.stepUpRows(accountId, at);
     if (!host || !rows.length) return null;
     return {
       challenge,
@@ -465,8 +507,9 @@ export class BoxPasskeyService {
     accountId: string,
     response: WebAuthnAuthenticationResponse,
     challenge: () => string,
+    at?: string,
   ): Promise<boolean> {
-    const host = this.trust.ownAddress?.host();
+    const host = at ?? this.trust.ownAddress?.host();
     let verified: { row: PasskeyRow; newCounter: number; synced: boolean };
     try {
       if (!host) throw new Refused('no address of its own');
@@ -498,6 +541,60 @@ export class BoxPasskeyService {
     });
     if (!ok) this.services.log.info('box passkey: a confirmation lost its race (removed or replayed)');
     return ok;
+  }
+
+  /* The hosts the box answers at -------------------------------------------------------------------------------- */
+
+  /**
+   * The box stopped answering at `hosts` (the leaving host's date came, or a name in between was replaced): their
+   * passkeys can't sign anyone in any more, so they are removed as if their owner removed them (each a signed
+   * `passkey.removed` with `byAccountId: null`, the backup key they gave going with them) and the smaller set is
+   * declared, so control drops their envelopes. The number removed.
+   */
+  async dropHosts(hosts: readonly string[]): Promise<number> {
+    if (!hosts.length) return 0;
+    const now = this.now();
+    const removed = await this.services.pipeline.transactAccount(async (tx) => {
+      const rows = await tx
+        .update(appliancePasskeys)
+        .set({ removedAt: now, removedByAccountId: null })
+        .where(and(inArray(appliancePasskeys.rpId, [...hosts]), isNull(appliancePasskeys.removedAt)))
+        .returning();
+      for (const row of rows) {
+        await removeBackupKeysOf(tx, row.id);
+        await appendApplianceEvent(tx, this.services.custody, {
+          type: 'passkey.removed',
+          actorAccountId: null,
+          endpointId: null,
+          payload: {
+            credentialId: row.id,
+            accountId: row.accountId,
+            byAccountId: null,
+            synced: row.backupEligible,
+          },
+          at: now,
+        });
+      }
+      return rows.length;
+    });
+    if (removed) {
+      this.services.log.info({ removed }, 'box passkeys: removed those of an address the box left');
+      this.declareSoon();
+    }
+    return removed;
+  }
+
+  /**
+   * Whether some device has box passkeys only for `leaving` and none for `current`: a passkey counts for the device that
+   * made it, and one whose maker is unknown counts on its own.
+   */
+  async onlyAt(leaving: string, current: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ rpId: appliancePasskeys.rpId, by: appliancePasskeys.createdByEndpointId })
+      .from(appliancePasskeys)
+      .where(and(isNull(appliancePasskeys.removedAt), inArray(appliancePasskeys.rpId, [leaving, current])));
+    const moved = new Set(rows.filter((r) => r.rpId === current && r.by).map((r) => r.by));
+    return rows.some((r) => r.rpId === leaving && (!r.by || !moved.has(r.by)));
   }
 
   /* Declaring them to control ------------------------------------------------------------------------------------ */

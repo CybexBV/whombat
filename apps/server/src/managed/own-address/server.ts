@@ -64,19 +64,20 @@ export function ownAddressRoutes(req: IncomingMessage, res: ServerResponse, path
 }
 
 /**
- * The own address's side of the listener: its host and certificate as the own-address state has them now. `first`
- * answers ahead of the address's own routes (the DEV device test, `device-test.ts`).
+ * The own address's side of the listener: its hosts and their certificates as the own-address state has them now (the
+ * current host, and the one it is leaving while that still works). `first` answers ahead of the address's own routes
+ * (the DEV device test, `device-test.ts`).
  */
 export function ownAddressDoor(
   state: {
-    host(): string | null;
-    context(): SecureContext | null;
+    webHosts(): readonly string[];
+    contextFor(host: string): SecureContext | null;
   },
   first?: (req: IncomingMessage, res: ServerResponse, path: string) => boolean,
 ): DirectDoor {
   return {
-    host: () => state.host(),
-    context: () => state.context(),
+    hosts: () => state.webHosts(),
+    context: (host) => state.contextFor(host),
     routes: first
       ? (req, res, path) => first(req, res, path) || ownAddressRoutes(req, res, path)
       : ownAddressRoutes,
