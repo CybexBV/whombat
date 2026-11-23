@@ -19,7 +19,7 @@ import {
   type HostUiApp,
 } from '@whombat/core/domain';
 import type { HostsFixtureAnswer, HostsFixtureRequest, HostsFixtureWorld } from './fixtures';
-import { createFindMyFixture, type FindMyFixture } from './fixtures-findmy';
+import { createFindMyFixture, FIND_MY_FIXTURE_BACKGROUND, type FindMyFixture } from './fixtures-findmy';
 
 export const MAC_SERVER = 'studio';
 
@@ -56,6 +56,14 @@ const SCENARIOS: readonly MacScenario[] = [
 /** A scenario from the stored setting (`1` or anything unknown: `ready`). */
 export function macScenario(v: string | null | undefined): MacScenario {
   return SCENARIOS.includes(v as MacScenario) ? (v as MacScenario) : 'ready';
+}
+
+/**
+ * Whether the web's fixture world lists studio (`localStorage['whombat.fixtures.mac']` is set): its Find My connection
+ * is listed with it, and Find My can be connected (else the catalog says Add a Mac first).
+ */
+export function macFixtureListed(): boolean {
+  return !!setting();
 }
 
 function setting(): string | null {
@@ -201,6 +209,8 @@ export function createMacFixture(
               ? 'sign_in_failed'
               : null,
     end: scenario === 'in-use' ? 'in_use' : scenario === 'nobody' ? 'nobody' : 'people',
+    // Its Find My connection reads it every 15 minutes for an automation (`fixtures-findmy-connection.ts`).
+    background: FIND_MY_FIXTURE_BACKGROUND,
   });
 
   return {

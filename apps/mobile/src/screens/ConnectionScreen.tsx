@@ -44,7 +44,7 @@ import { ListRow } from '../ui/ListRow';
 import { CardNote, ErrorState, Section, SkeletonRows, StatusDot, toneColor } from '../ui/primitives';
 import { StatusPill } from '../ui/StatusPill';
 import { useBottomRoom } from '../ui/screenBottom';
-import { CheckRow, LevelBlock, NameBlock, SignInBlock } from './connect/ConnectionChanges';
+import { CheckRow, ChoiceBlocks, LevelBlock, NameBlock, SignInBlock } from './connect/ConnectionChanges';
 import { errorText, outcomeText, showNotice } from './feedback';
 import { WhatWhombatWatches } from './thing/WhatWhombatWatches';
 
@@ -226,6 +226,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
                   onSignInAgain={signInAgain}
                 />
               ) : null}
+              {conn && entry ? <ChoiceBlocks slug={slug} entry={entry} conn={conn} /> : null}
 
               {gateway ? (
                 <Section title={GATEWAY_TEXT.section}>

@@ -35,6 +35,17 @@ describe('thing pages (CP-05)', () => {
     expect(thingTabs({ tabs, settings: false }).map((t) => t.key)).toEqual(['overview', 'activity']);
   });
 
+  it('keeps the server a tab is about, so the apps draw it themselves (Find My)', () => {
+    const tabs = [{ key: 'findmy', label: 'Find My', server: 'studio', panels: [] }];
+    const shown = thingTabs({ tabs, settings: true });
+    expect(shown.map((t) => [t.key, t.server])).toEqual([
+      ['findmy', 'studio'],
+      ['activity', null],
+      ['settings', null],
+    ]);
+    expect(parseThingTab({ tabs, settings: true }, undefined)).toBe('findmy');
+  });
+
   it('opens the asked tab only when the page has it', () => {
     const tabs = [
       { key: 'overview', label: 'Overview', panels: [] },

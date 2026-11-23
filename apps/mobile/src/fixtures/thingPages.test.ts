@@ -58,6 +58,16 @@ describe('thing page fixtures', () => {
     }
   });
 
+  it('is Find My through studio: its one tab names the Mac and has no panels', async () => {
+    const s = setup();
+    const res = await s.client.request(api.things.page, {
+      params: { burrow, thing: 'connection:con_findmy' },
+    });
+    if (res.status !== 'ok') throw new Error(res.status);
+    expect(res.data.tabs.map((t) => [t.key, t.server, t.panels.length])).toEqual([['findmy', 'studio', 0]]);
+    expect(res.data.settings).toBe(true);
+  });
+
   it('is Home Assistant in slots: Needs a look, runs on pve-02, its slots, nine notices', async () => {
     const s = setup();
     const res = await s.client.request(api.things.page, { params: { burrow, thing: 'connection:con_ha' } });

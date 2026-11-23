@@ -107,6 +107,19 @@ export function ConnectPage({
                     {CATALOG_REASON_TEXT.needsSecureAddressAction}
                   </RouterButtonLink>
                 </div>
+              ) : address === 'needs_mac' ? (
+                // Find My reads through a Mac: Add a server, where the Mac is added (findmy-connection.md §1.2).
+                <div className={c.addressAction}>
+                  <RouterButtonLink
+                    variant="secondary"
+                    size="sm"
+                    to="/connections"
+                    search={{ add: 1 } as never}
+                    data-testid="connect-address-action"
+                  >
+                    {CATALOG_REASON_TEXT.needsMacAction}
+                  </RouterButtonLink>
+                </div>
               ) : null}
             </>
           ) : appMissing ? (

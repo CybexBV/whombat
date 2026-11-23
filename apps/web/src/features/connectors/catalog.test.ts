@@ -251,6 +251,12 @@ describe('the overview’s entries (CX-70, AP-755)', () => {
     expect(
       catalogTileState({ catalogId: 'dropbox', available: false, reason: 'needs_secure_address' }),
     ).toEqual({ action: 'View', note: 'Needs a secure address' });
+    // Find My without a Mac: Add a Mac first, and the tile opens Add a server.
+    expect(catalogTileState({ catalogId: 'findmy', available: false, reason: 'needs_mac' })).toEqual({
+      action: 'Add a server',
+      note: 'Add a Mac first',
+      addServer: true,
+    });
   });
 
   it('groups tiles in the catalog’s category order and searches name, line and category', () => {

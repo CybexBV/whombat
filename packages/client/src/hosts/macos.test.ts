@@ -10,12 +10,14 @@ import { createHostsFixtures } from './fixtures';
 import { createMacFixture, MAC_SERVER } from './fixtures-mac';
 import { installFailureCard } from './install';
 import {
+  findMyOnMac,
   isMacInstallText,
   isMacServer,
   MAC_SERVER_TABS,
   macAccountProblem,
   macFacts,
   macScreenView,
+  macServerTabs,
   macStepText,
   macSystemLine,
   parseMacServerTab,
@@ -104,6 +106,13 @@ describe('a Mac’s page', () => {
     expect(serverDashboardTabs('macos')).toEqual(MAC_SERVER_TABS);
     expect(parseMacServerTab('screen')).toBe('screen');
     expect(parseMacServerTab('guests')).toBe('summary');
+    // Find My is a connection's page now: the Mac keeps its own tab only on a Whombat from before.
+    expect(parseMacServerTab('findmy')).toBe('summary');
+    expect(parseMacServerTab('findmy', macServerTabs(true))).toBe('findmy');
+    expect(macServerTabs(false)).toEqual(MAC_SERVER_TABS);
+    expect(findMyOnMac([{ catalogId: 'homeassistant' }])).toBe(true);
+    expect(findMyOnMac([{ catalogId: 'homeassistant' }, { catalogId: 'findmy' }])).toBe(false);
+    expect(findMyOnMac(undefined)).toBe(false);
   });
 
   it('says its macOS with the build in Technical details, and its own facts in “This Mac”', () => {

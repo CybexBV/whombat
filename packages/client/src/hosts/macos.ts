@@ -34,10 +34,20 @@ export const MAC_KIND_WORD = 'Mac';
 export type MacServerTab = 'summary' | 'screen' | 'findmy' | 'storage' | 'sensors' | 'system';
 
 /**
- * A Mac's tabs: the Screen and Find My after the Summary, then every server's; no machines or backups of its own. The
- * phone has the first three (`MAC_PHONE_TABS`).
+ * A Mac's tabs: the Screen after the Summary, then every server's; no machines or backups of its own. Find My is a
+ * connection of its own (docs/implementation/macos/findmy-connection.md), which the Summary links to. The phone has the
+ * first two (`MAC_PHONE_TABS`).
  */
-export const MAC_SERVER_TABS: readonly MacServerTab[] = [
+export const MAC_SERVER_TABS: readonly MacServerTab[] = ['summary', 'screen', 'storage', 'sensors', 'system'];
+
+/** The Mac's tabs on the phone: storage, sensors and the system stay on the web. */
+export const MAC_PHONE_TABS = ['summary', 'screen'] as const satisfies readonly MacServerTab[];
+
+/**
+ * A Mac's tabs on a Whombat from before Find My was a connection (its catalog doesn't list `findmy`): Find My after the
+ * Screen, as it was there, so nothing goes missing until the box is updated.
+ */
+export const MAC_SERVER_TABS_WITH_FIND_MY: readonly MacServerTab[] = [
   'summary',
   'screen',
   'findmy',
@@ -46,8 +56,17 @@ export const MAC_SERVER_TABS: readonly MacServerTab[] = [
   'system',
 ];
 
-/** The Mac's tabs on the phone: storage, sensors and the system stay on the web. */
-export const MAC_PHONE_TABS = ['summary', 'screen', 'findmy'] as const satisfies readonly MacServerTab[];
+/** The same on the phone. */
+export const MAC_PHONE_TABS_WITH_FIND_MY = [
+  'summary',
+  'screen',
+  'findmy',
+] as const satisfies readonly MacServerTab[];
+
+/** A Mac's tabs on the web: with its own Find My only on an older Whombat (`findMyOnMac`). */
+export function macServerTabs(findMyOnMac: boolean): readonly MacServerTab[] {
+  return findMyOnMac ? MAC_SERVER_TABS_WITH_FIND_MY : MAC_SERVER_TABS;
+}
 
 export const MAC_SERVER_TAB_WORDS: Record<MacServerTab, string> = {
   summary: 'Summary',
@@ -58,10 +77,18 @@ export const MAC_SERVER_TAB_WORDS: Record<MacServerTab, string> = {
   system: 'System',
 };
 
-export function parseMacServerTab(v: unknown): MacServerTab {
-  return typeof v === 'string' && (MAC_SERVER_TABS as readonly string[]).includes(v)
-    ? (v as MacServerTab)
-    : 'summary';
+/** The tab an address asks for, if the Mac's page has it (`tabs`, its own Find My only on an older Whombat). */
+export function parseMacServerTab(v: unknown, tabs: readonly MacServerTab[] = MAC_SERVER_TABS): MacServerTab {
+  return typeof v === 'string' && (tabs as readonly string[]).includes(v) ? (v as MacServerTab) : 'summary';
+}
+
+/**
+ * Whether the Mac's page keeps its own Find My tab: only on a Whombat whose catalog answered without the `findmy` entry
+ * (from before Find My was a connection). While the catalog is read, or when it can't be, the Mac links to its Find My
+ * connection instead (a newer Whombat's way).
+ */
+export function findMyOnMac(statuses: readonly { catalogId: string }[] | null | undefined): boolean {
+  return !!statuses && statuses.length > 0 && !statuses.some((s) => s.catalogId === 'findmy');
 }
 
 /** The words of a Mac's page that aren't built from its state. */

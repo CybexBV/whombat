@@ -10,6 +10,7 @@
  * date reads like the mock; the visual checks freeze the clock at 14:05.
  */
 import { localAt, tomorrowMorning } from '@whombat/client';
+import { findMyConnectionThing, macFixtureListed } from '@whombat/client/hosts/fixtures';
 import {
   type Agent,
   type AgentProfile,
@@ -589,6 +590,8 @@ export function createOneFixtures(
       line: 'Last checked 13:55',
       usedAt: at(0, '08:00'),
     }),
+    // Find My through studio, when the servers' world lists the Mac (findmy-connection.md).
+    ...(macFixtureListed() ? [findMyConnectionThing()] : []),
   ];
 
   const allThings = (): ThingSummary[] =>

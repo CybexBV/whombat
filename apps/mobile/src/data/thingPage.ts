@@ -124,6 +124,8 @@ export interface PhoneThingTab {
   spoken: string;
   /** Other tabs' keys a link may name for this one (a server's Summary links `docker` to the phone's Guests). */
   aliases?: readonly string[];
+  /** The server a tab is about, which the screen draws from that server's own reads (Find My's Mac); else none. */
+  server?: string | null;
 }
 
 /** The page's tabs: the server's in order, Activity, then Connection when the page has one (CP-05; AP-2634; SST-06). */
@@ -136,6 +138,7 @@ export function phoneThingTabs(page: Pick<ThingPage, 'tabs' | 'settings' | 'conn
       count: t.count,
       settings: t.own === 'settings',
       spoken: t.count === null ? t.label : `${t.label}, ${t.count}`,
+      server: t.server,
     }));
 }
 

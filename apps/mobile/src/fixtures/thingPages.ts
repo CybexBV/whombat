@@ -6,7 +6,8 @@
  * backups, nine things worth a look), UniFi (21 of 22 access points), Hetzner (`hetzner.png`: one server, its CPU,
  * network and disk), Mail (a connection without a page of its own: the generic Summary, DS-14) and the heat pump (its
  * readings once switched on, what Neo found while it is learned), each over the range asked (`?range=`, 1 h…30 d, on
- * the hosts service's time grid); `things.action` (Restart, recorded as Mara's change); `changes.list?thing=` and
+ * the hosts service's time grid), Find My (its tab naming studio, findmy-connection.md); `things.action` (Restart,
+ * recorded as Mara's change); `changes.list?thing=` and
  * `widgets.list?thing=` for the pages' own lists. Pure TypeScript over `Response`; every answer parses with its
  * endpoint's schema (`thingPages.test.ts`).
  *
@@ -17,6 +18,8 @@
  * Their lines can be ignored, snoozed and stopped (`things.quiet`, `things.watch`, `things.setWatch`, contracts 0.122;
  * quiet-notices-mobile.md AP-4870).
  */
+
+import { FIND_MY_THING, findMyConnectionPage } from '@whombat/client/hosts/fixtures';
 import type {
   ChangeEntry,
   HostSeriesRange,
@@ -1290,6 +1293,9 @@ export function createThingPageFixtures(options: ThingPageFixtureOptions) {
         return mail(range);
       case 'device:con_heatpump':
         return heatPump(range);
+      // Find My through studio (findmy-connection.md): its tab names the Mac, the app draws it from studio's Find My.
+      case FIND_MY_THING:
+        return findMyConnectionPage(now().toISOString(), range);
       default:
         return null;
     }

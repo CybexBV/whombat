@@ -26,8 +26,8 @@ import {
   LIBVIRT_SERVER_TAB_WORDS,
   LIBVIRT_SERVER_TABS,
   MAC_SERVER_TAB_WORDS,
-  MAC_SERVER_TABS,
   macScreenView,
+  macServerTabs,
   parseDashboardRange,
   parseIncusServerTab,
   parseLibvirtServerTab,
@@ -46,7 +46,7 @@ import {
   UNRAID_TAB_WORDS,
   UNRAID_TABS,
 } from '@whombat/client/hosts';
-import { useHostServer, useHostsLive, useServerDashboard } from '@whombat/client/hosts/react';
+import { useFindMyOnMac, useHostServer, useHostsLive, useServerDashboard } from '@whombat/client/hosts/react';
 import { useHomeOverview, useRenameThing, useTheAgent } from '@whombat/client/react';
 import { CONNECTIONS_HREF, HOST_SERVER_NAME_MAX, thingId } from '@whombat/core';
 import type { HostServerDetail } from '@whombat/core/domain';
@@ -63,6 +63,7 @@ import { HeadMenu } from './dashboard/HeadMenu';
 import { Crumb, PageHead, TabRow, tabsInRow } from './dashboard/PageHead';
 import { RangePicker } from './dashboard/RangePicker';
 import { ServerSummary, type ServerTechnicalView } from './dashboard/ServerSummary';
+import { FindMyLink } from './findmy/FindMyLink';
 import { GuestPage } from './guest/GuestPage';
 import { IncusPanel } from './incus/IncusPanel';
 import { LibvirtGuestPage } from './libvirt/LibvirtGuestPage';
@@ -88,24 +89,32 @@ export interface ServerPageProps {
 
 type ServerKind = 'unraid' | 'libvirt' | 'incus' | 'mac' | 'plain';
 
-/** A kind's tabs and their words, Summary first; what runs on it is its Machines or, on a Docker host, its Apps. */
-function kindTabs(kind: ServerKind, d: HostServerDetail | undefined): { key: string; label: string }[] {
+/**
+ * A kind's tabs and their words, Summary first; what runs on it is its Machines or, on a Docker host, its Apps. A Mac
+ * keeps its own Find My tab only on a Whombat from before Find My was a connection (`findMyHere`).
+ */
+function kindTabs(
+  kind: ServerKind,
+  d: HostServerDetail | undefined,
+  findMyHere: boolean,
+): { key: string; label: string }[] {
   if (kind === 'unraid') return UNRAID_TABS.map((key) => ({ key, label: UNRAID_TAB_WORDS[key] }));
   if (kind === 'libvirt')
     return LIBVIRT_SERVER_TABS.map((key) => ({ key, label: LIBVIRT_SERVER_TAB_WORDS[key] }));
   if (kind === 'incus') return INCUS_SERVER_TABS.map((key) => ({ key, label: INCUS_SERVER_TAB_WORDS[key] }));
-  if (kind === 'mac') return MAC_SERVER_TABS.map((key) => ({ key, label: MAC_SERVER_TAB_WORDS[key] }));
+  if (kind === 'mac')
+    return macServerTabs(findMyHere).map((key) => ({ key, label: MAC_SERVER_TAB_WORDS[key] }));
   const guests = d ? guestsWord(serverDashboardKind(d)) : SERVER_TAB_WORDS.guests;
   return SERVER_TABS.map((key) => ({ key, label: key === 'guests' ? guests : SERVER_TAB_WORDS[key] }));
 }
 
-function parseTab(kind: ServerKind, v: string | undefined): string {
+function parseTab(kind: ServerKind, v: string | undefined, findMyHere: boolean): string {
   if (kind === 'unraid') return parseUnraidTab(v);
   // A link to a server's updates (the phone's Updates screen, `?tab=updates`) opens System here (AP-2875).
   if (v === 'updates') return 'system';
   if (kind === 'libvirt') return parseLibvirtServerTab(v);
   if (kind === 'incus') return parseIncusServerTab(v);
-  if (kind === 'mac') return parseMacServerTab(v);
+  if (kind === 'mac') return parseMacServerTab(v, macServerTabs(findMyHere));
   return parseServerTab(v);
 }
 
@@ -140,7 +149,9 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
           : isLibvirtServer(d)
             ? 'libvirt'
             : 'plain';
-  const tab = parseTab(kind, search.tab);
+  // An older Whombat has no Find My connection: its Mac keeps its own Find My tab until it is updated.
+  const findMyHere = useFindMyOnMac(kind === 'mac');
+  const tab = parseTab(kind, search.tab, findMyHere);
   const range = parseDashboardRange(search.range);
   const askOpen = isAskOpen(search);
   const [draft, setDraft] = useState<string | null>(null);
@@ -266,7 +277,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
           }
         >
           <Tabs<string>
-            tabs={kindTabs(kind, d).map((t) => {
+            tabs={kindTabs(kind, d, findMyHere).map((t) => {
               const count = tabCount(t.key, d);
               return count !== null ? { ...t, meta: count } : t;
             })}
@@ -296,6 +307,8 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
               quiet={sq.actions}
               technical={technical}
               status={d.server.status}
+              // A Mac links to the Find My connection that reads it (findmy-connection.md §1.5).
+              links={kind === 'mac' ? <FindMyLink burrow={burrow} serverId={serverId} /> : null}
             />
           ) : kind === 'unraid' ? (
             <UnraidPanel
@@ -314,7 +327,12 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
             />
           ) : kind === 'mac' ? (
             <MacPanel
-              tab={parseMacServerTab(tab) as Exclude<ReturnType<typeof parseMacServerTab>, 'summary'>}
+              tab={
+                parseMacServerTab(tab, macServerTabs(findMyHere)) as Exclude<
+                  ReturnType<typeof parseMacServerTab>,
+                  'summary'
+                >
+              }
               {...props}
             />
           ) : tab === 'guests' ? (

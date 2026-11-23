@@ -241,6 +241,48 @@ describe('a mail-triggered automation', () => {
   });
 });
 
+describe('a Find My automation', () => {
+  const findMyNames = {
+    ...names,
+    connectionLabel: (id: string) => (id === 'con_findmy' ? 'Find My' : names.connectionLabel(id)),
+  };
+  const mailDef = AutomationDefinition.parse(
+    recipeDefinition({
+      when: { kind: 'mail', connectionId: 'con_mail' },
+      job: 'custom',
+      instructions: 'Tell me.',
+      conversationId: 'cnv_chat',
+    }),
+  );
+  const findMyDef = AutomationDefinition.parse({
+    ...mailDef,
+    triggers: [
+      {
+        kind: 'findmy',
+        connectionId: 'con_findmy',
+        person: 'db6613615969',
+        name: 'Noor Visser',
+        change: 'arrives',
+        place: 'Home',
+      },
+    ],
+  });
+
+  it('says whom it waits for and where, on its row and its tile', () => {
+    const item = automation({
+      id: 'aut_findmy',
+      name: 'Tell me when Noor gets home',
+      definition: findMyDef,
+      grants: definitionGrants(findMyDef),
+      triggerSummary: 'When Noor Visser arrives at Home',
+    });
+    const row = automationListRow(item, now, zone, findMyNames);
+    expect(row.tile).toMatchObject({ source: 'findmy', label: 'Find My' });
+    expect(row.when).toContain('Noor Visser');
+    expect(row.state.next).toBe('Next run when Noor Visser arrives at Home');
+  });
+});
+
 describe('an automation’s page (automation-page.md AP-6331…AP-6335)', () => {
   const you = { id: 'prn_mara', kind: 'person' as const };
 

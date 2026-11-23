@@ -22,7 +22,7 @@ const SERVER_TAB_ALIASES: Record<ServerTab, readonly string[]> = {
   backups: [],
   array: ['pools', 'disks', 'notifications', 'system'],
   plugins: ['updates'],
-  // A Mac's screen and its Find My (macos-servers.md).
+  // A Mac's screen (macos-servers.md), and its Find My on a Whombat from before Find My was a connection.
   screen: [],
   findmy: [],
 };

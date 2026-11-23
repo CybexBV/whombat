@@ -21,7 +21,8 @@
  *   `agent.setKeys` replaces them with a Keys event per change (AP-1555).
  * - `hosts.*`: the fleet, a server's detail, its guests and their power (the guest changes state a moment later, with
  *   a `hosts.guest` event).
- * - `connections.tools`: Home Assistant, UniFi, Hetzner, Mail and (once switched on) the heat pump, for their
+ * - `connections.tools`: Home Assistant, UniFi, Hetzner, Mail, Find My through studio (Settings → Connections lists it;
+ *   Home stays mock 4's) and (once switched on) the heat pump, for their
  *   Connection screens.
  * - `deviceSkills.decide` / `decline`: the card changes on its message (`message.updated`), the heat pump leaves Needs
  *   you and starts reading.
@@ -30,7 +31,13 @@
  */
 
 import { nextAt } from '@whombat/client';
-import { createMacFixture, MAC_SERVER, withQuietFixtures } from '@whombat/client/hosts/fixtures';
+import {
+  createMacFixture,
+  FIND_MY_CONNECTION_FIELDS,
+  FIND_MY_CONNECTION_ID,
+  MAC_SERVER,
+  withQuietFixtures,
+} from '@whombat/client/hosts/fixtures';
 import {
   AGENT_NAME_FORM_TEXT,
   AGENT_NAME_PATTERN,
@@ -49,6 +56,7 @@ import {
   type ConversationDetail,
   type ConversationSummary,
   type DeviceSkillCard,
+  FIND_MY_PEOPLE_TOOL,
   type Grant,
   type GrantInput,
   type HomeChat,
@@ -514,6 +522,10 @@ const CONNECTIONS: Record<
     handle: string;
     /** Its address (the form's `url`), as its page says it; Settings → Connections' row shows the host (AP-2815). */
     url?: string;
+    /** Its other fields (Find My's Mac and background reads). */
+    fields?: Record<string, string>;
+    /** How it signs in, when not with a token (Find My: through the Mac). */
+    signIn?: 'none';
     tools: [string, string, 'read' | 'write', 'can' | 'ask' | 'off'][];
   }
 > = {
@@ -548,6 +560,15 @@ const CONNECTIONS: Record<
     handle: 'mail',
     tools: [['mail_search', 'Searches your mail', 'read', 'can']],
   },
+  // Find My through studio (findmy-connection.md): read every 15 minutes for an automation.
+  [FIND_MY_CONNECTION_ID]: {
+    catalogId: 'findmy',
+    label: 'Find My',
+    handle: 'findmy',
+    fields: { ...FIND_MY_CONNECTION_FIELDS },
+    signIn: 'none',
+    tools: [[FIND_MY_PEOPLE_TOOL.name, FIND_MY_PEOPLE_TOOL.title, 'read', 'can']],
+  },
   [HEAT_CONNECTION]: {
     catalogId: 'device',
     label: 'Heat pump',
@@ -560,7 +581,7 @@ const CONNECTIONS: Record<
 };
 
 /** The demo's connections Settings → Connections lists (AP-2815). */
-const DEMO_CATALOG_CONNECTIONS = ['con_ha', 'con_unifi', 'con_hetzner'];
+const DEMO_CATALOG_CONNECTIONS = ['con_ha', 'con_unifi', 'con_hetzner', FIND_MY_CONNECTION_ID];
 
 function connectionTools(id: string, heatOn: boolean) {
   const c = CONNECTIONS[id];
@@ -574,9 +595,9 @@ function connectionTools(id: string, heatOn: boolean) {
       burrowId: BURROW_ID,
       connectedBy: { id: mara.id, name: mara.name },
       detail: null,
-      signIn: id === HEAT_CONNECTION ? ('none' as const) : ('token' as const),
+      signIn: id === HEAT_CONNECTION || c.signIn === 'none' ? ('none' as const) : ('token' as const),
       transport: id === HEAT_CONNECTION ? ('builtin' as const) : ('rest' as const),
-      fields: (c.url ? { url: c.url } : {}) as Record<string, string>,
+      fields: { ...(c.url ? { url: c.url } : {}), ...c.fields } as Record<string, string>,
       status: 'active' as const,
       reauthReason: null,
       checks: [],

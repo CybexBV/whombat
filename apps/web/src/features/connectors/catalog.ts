@@ -45,7 +45,7 @@ export {
   visibleFields,
 } from '@whombat/client/connections';
 
-import { addressReasonNote, addressReasonOf } from '@whombat/client/connections';
+import { addressReasonNote, addressReasonOf, CATALOG_REASON_TEXT } from '@whombat/client/connections';
 
 /* The overview (CX-70) ------------------------------------------------------------------------- */
 
@@ -182,19 +182,24 @@ export function installationLine(
 
 /** What an entry's tile says under ADD A CONNECTION, and its button. */
 export interface TileState {
-  action: 'Connect' | 'Set up' | 'View';
+  action: 'Connect' | 'Set up' | 'View' | typeof CATALOG_REASON_TEXT.needsMacAction;
   note: string | null;
+  /** The tile opens Add a server instead of its page: Find My without a Mac (`needs_mac`). */
+  addServer?: boolean;
 }
 
 /**
- * A catalog entry's tile (CX-70): Connect; an `app_oauth` entry not set up yet gets Set up (CT-1553); an entry this
- * Whombat turned off, or a report tracker without a driver installed here (nothing could read it), is left out (null).
+ * A catalog entry's tile (CX-70): Connect; an `app_oauth` entry not set up yet gets Set up (CT-1553); Find My without a
+ * Mac says Add a Mac first and opens Add a server; an entry this Whombat turned off, or a report tracker without a
+ * driver installed here (nothing could read it), is left out (null).
  */
 export function catalogTileState(status: CatalogEntryStatus | undefined): TileState | null {
   if (!status || status.available) return { action: 'Connect', note: null };
   if (status.reason === 'off' || status.reason === 'no_driver') return null;
-  // It can't sign in here yet: its page says what to do first.
+  // It can't sign in here yet: its page says what to do first, or Find My's tile opens Add a server for a Mac.
   const address = addressReasonOf(status);
+  if (address === 'needs_mac')
+    return { action: CATALOG_REASON_TEXT.needsMacAction, note: addressReasonNote(address), addServer: true };
   if (address) return { action: 'View', note: addressReasonNote(address) };
   return { action: 'Set up', note: 'Set it up once, then you can connect.' };
 }

@@ -21,7 +21,10 @@ import { createLink, useNavigate } from '@tanstack/react-router';
 import { ApiError, withBurrow } from '@whombat/client';
 import {
   accessChoices,
+  type ChoiceSetting,
   CONNECT_FORM_TEXT,
+  choiceSavedText,
+  choiceSettings,
   codeProblem,
   codeProblemText,
   codeShown,
@@ -33,6 +36,7 @@ import {
   SIGN_IN_AGAIN_TEXT,
   setSecretBody,
 } from '@whombat/client/connections';
+import { useMacChoices } from '@whombat/client/hosts/react';
 import { holdGoogleConnect } from '@whombat/client/managed';
 import { useConnectionTools, useConnectionWrite, useTheAgent } from '@whombat/client/react';
 import { api, type StartNextcloudLoginResponse } from '@whombat/core/contracts';
@@ -66,7 +70,7 @@ import { useToast } from '../../components/Toast';
 import styles from '../settings/SettingsScreen.module.css';
 import k from './Catalog.module.css';
 import { CatalogHeader } from './CatalogHeader';
-import { ExternalLink, Field, GuideSteps } from './CatalogParts';
+import { ExternalLink, Field, GuideSteps, OptionCards } from './CatalogParts';
 import c from './Connectors.module.css';
 import {
   NextcloudWait,
@@ -424,6 +428,7 @@ function ConnectionSection({
         )}
         {gateway && <GatewayUsedByBlock gateway={gatewayNow} />}
         {levels && <AccessBlock burrow={burrow} entry={entry} conn={conn} onSignInAgain={onSignInAgain} />}
+        <ChoiceBlocks burrow={burrow} entry={entry} conn={conn} />
         <div className={c.footer}>
           <span className={c.meta}>
             {recheck.isPending
@@ -450,6 +455,120 @@ function ConnectionSection({
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * The connection's choices that can change later (findmy-connection.md §2.1): a select's own options (Find My's Read in
+ * the background) and the Mac of an entry checked through a Mac, among the servers that are Macs. Each its block with
+ * Change, radio cards and Save; the server checks the new value as it checks a new connection.
+ */
+function ChoiceBlocks({
+  burrow,
+  entry,
+  conn,
+}: {
+  burrow: string;
+  entry: CatalogEntry;
+  conn: ConnectionView;
+}) {
+  const macs = useMacChoices(burrow, entry.check?.kind === 'mac');
+  const settings = choiceSettings(entry, conn.fields, macs);
+  return (
+    <>
+      {settings.map((setting) => (
+        <ChoiceBlock key={setting.field} burrow={burrow} conn={conn} setting={setting} />
+      ))}
+    </>
+  );
+}
+
+function ChoiceBlock({
+  burrow,
+  conn,
+  setting,
+}: {
+  burrow: string;
+  conn: ConnectionView;
+  setting: ChoiceSetting;
+}) {
+  const ids = useId();
+  const toast = useToast();
+  const update = useConnectionWrite(api.connections.update, burrow);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(setting.value);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (value === setting.value) return setEditing(false);
+    setProblem(null);
+    try {
+      const result = await update.mutateAsync({
+        params: { burrow, connectionId: conn.id },
+        body: { fields: { [setting.field]: value } },
+      });
+      if (result.status === 'ok') {
+        setEditing(false);
+        toast.show(choiceSavedText(setting, value));
+      }
+    } catch (err) {
+      const p = connectProblem(err);
+      setProblem(p.fields[setting.field] ?? p.message);
+    }
+  }
+
+  return (
+    <div className={c.block} data-choice={setting.field}>
+      <div className={c.head}>
+        <span className={c.main}>
+          <span className={c.fieldLabel}>{setting.label.toUpperCase()}</span>
+          {!editing && <span className={c.name}>{setting.valueLabel}</span>}
+        </span>
+        {!editing && (
+          <span className={c.actions}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={`Change ${setting.label}`}
+              onClick={() => {
+                setValue(setting.value);
+                setProblem(null);
+                setEditing(true);
+              }}
+            >
+              Change
+            </Button>
+          </span>
+        )}
+      </div>
+      {editing && (
+        <form className={c.appForm} onSubmit={save} noValidate>
+          <OptionCards
+            name={`${ids}-${setting.field}`}
+            label={setting.label}
+            help={setting.help}
+            options={setting.options}
+            value={value}
+            disabled={update.isPending}
+            onChange={setValue}
+          />
+          <div className={c.formActions}>
+            <Button type="submit" variant="primary" size="md" disabled={update.isPending}>
+              Save
+            </Button>
+            <Button variant="ghost" size="md" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+      {problem && (
+        <p className={c.error} role="alert">
+          {problem}
+        </p>
+      )}
+    </div>
   );
 }
 

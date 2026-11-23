@@ -8,6 +8,7 @@ import {
   SCHEDULE_TEXT,
   splitConfirm,
 } from '@whombat/client';
+import { useFindMyHome } from '@whombat/client/hosts/react';
 import { useAgentSchedules, useHomeOverview, useScheduleAction, useTheAgent } from '@whombat/client/react';
 import { type AgentScheduleView, formatClock, formatDate, scheduleCopy } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
@@ -96,7 +97,12 @@ export function AutomationsScreen({ burrow, asking = false, onAsked }: Automatio
   );
   // Ideas from what is connected (care-plan.md): a server, mail, Home Assistant… then everyday ones.
   const { data: home } = useHomeOverview({ params: { burrow } }, { retry: false });
-  const ideas = useMemo(() => automationIdeas(home?.things ?? []), [home?.things]);
+  // And an arrival for each person a Find My connection has seen at Home (findmy-connection.md §1.7).
+  const findMyHome = useFindMyHome(burrow);
+  const ideas = useMemo(
+    () => automationIdeas(home?.things ?? [], undefined, { findMyHome }),
+    [home?.things, findMyHome],
+  );
 
   // The sidebar's New automation lands here with the field in focus; the address forgets it so a reload doesn't.
   useEffect(() => {

@@ -86,6 +86,11 @@ describe('whether it can be connected here (ConnectPage’s gates)', () => {
     expect(iphone).not.toContain('Whombat Link');
   });
 
+  it('says Find My needs a Mac first', () => {
+    const status = { catalogId: 'findmy', available: false, reason: 'needs_mac' } as const;
+    expect(connectGate({ entry: entry('findmy'), status })).toContain('Mac');
+  });
+
   it('says a report tracker without a driver here can’t be connected', () => {
     const status = { catalogId: 'tracker', available: false, reason: 'no_driver' } as const;
     expect(connectGate({ entry: entry('tracker'), status })).toContain('can’t be connected');

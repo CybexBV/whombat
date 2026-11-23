@@ -35,6 +35,11 @@ export interface ThingTabView {
   count: number | null;
   /** `activity` and `settings` are drawn by the client; the server's carry panels. */
   own: 'activity' | 'settings' | null;
+  /**
+   * The server a tab of the server's is about (`ThingPageTab.server`): the apps draw it themselves from that server's
+   * own reads (Find My's tab names its Mac). Null: the tab is its panels.
+   */
+  server: string | null;
 }
 
 export const THING_ACTIVITY_TAB = 'activity';
@@ -44,11 +49,17 @@ export const THING_SETTINGS_TAB = 'settings';
 export function thingTabs(page: Pick<ThingPage, 'tabs' | 'settings'>): ThingTabView[] {
   const tabs: ThingTabView[] = page.tabs
     .filter((t) => t.key !== THING_ACTIVITY_TAB && t.key !== THING_SETTINGS_TAB)
-    .map((t) => ({ key: t.key, label: t.label, count: t.count ?? null, own: null }));
-  tabs.push({ key: THING_ACTIVITY_TAB, label: 'Activity', count: null, own: 'activity' });
+    .map((t) => ({
+      key: t.key,
+      label: t.label,
+      count: t.count ?? null,
+      own: null,
+      server: t.server ?? null,
+    }));
+  tabs.push({ key: THING_ACTIVITY_TAB, label: 'Activity', count: null, own: 'activity', server: null });
   // The connection's own settings: “Connection”, beside a service's own settings tab (service-settings.md SST-06).
   if (page.settings)
-    tabs.push({ key: THING_SETTINGS_TAB, label: 'Connection', count: null, own: 'settings' });
+    tabs.push({ key: THING_SETTINGS_TAB, label: 'Connection', count: null, own: 'settings', server: null });
   return tabs;
 }
 

@@ -32,11 +32,13 @@ import {
 } from '@whombat/client';
 import {
   detailGuests,
+  FIND_MY_WORDS,
   guestsWord,
   isIncusServer,
   isMacServer,
   isUnraidServer,
   MAC_PHONE_TABS,
+  MAC_PHONE_TABS_WITH_FIND_MY,
   SERVER_DASHBOARD_DEFAULT_RANGE,
   SERVER_DASHBOARD_PHONE_RANGES,
   type ServerDashboardHead,
@@ -49,6 +51,8 @@ import {
 } from '@whombat/client/hosts';
 import { isLibvirtServer, THIS_WHOMBAT, thisWhombatFact } from '@whombat/client/hosts/mobile';
 import {
+  useFindMyConnectionOf,
+  useFindMyOnMac,
   useHostGuests,
   useHostsFleet,
   useHostsLive,
@@ -56,7 +60,7 @@ import {
   useServerDashboard,
 } from '@whombat/client/hosts/react';
 import { useHomeOverview, useLookResearch, useQuietActions, useThingWatch } from '@whombat/client/react';
-import type { ChatSubject, HostGuest, HostSeriesRange } from '@whombat/core';
+import { type ChatSubject, type HostGuest, type HostSeriesRange, thingId } from '@whombat/core';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow, useNowLabel } from '../data/BurrowProvider';
@@ -84,6 +88,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { LevelPill } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
 import { UnderlineTabs } from '../ui/UnderlineTabs';
+import { FindMyPart } from './findmy/FindMyPart';
 import { CardSkeletons, ReadNote } from './home/OverviewParts';
 import { NewChatSheet } from './NewChatSheet';
 import { ServerBackups } from './ServerBackups';
@@ -91,7 +96,6 @@ import { AgentUpdatesCard } from './server/AgentUpdates';
 import { AsksFirstCard } from './server/AsksFirst';
 import { IncusServerBackups } from './server/IncusServer';
 import { LibvirtServerBackups } from './server/LibvirtServer';
-import { MacFindMyPart } from './server/MacFindMy';
 import { MacScreenPart } from './server/MacScreen';
 import { TechnicalDetailsCard } from './server/TechnicalDetails';
 import { UnraidArray, UnraidPlugins } from './server/UnraidParts';
@@ -163,8 +167,12 @@ export function ServerScreen({
   const incus = d && isIncusServer(d) ? (d.incus ?? null) : null;
   // A QEMU/KVM server (IU-13): libvirt without Proxmox VE, Unraid or Incus.
   const libvirt = d && isLibvirtServer(d) ? (d.libvirt ?? null) : null;
-  // A Mac (macos-servers.md): its Summary, its Screen and its Find My, nothing running on it to list.
+  // A Mac (macos-servers.md): its Summary and its Screen, nothing running on it to list; its Summary links to the Find
+  // My connection that reads it (findmy-connection.md §1.5).
   const mac = !!d && isMacServer(d);
+  const findMy = useFindMyConnectionOf(slug, mac ? serverId : null);
+  // An older Whombat has no Find My connection: its Mac keeps its own Find My segment until it is updated.
+  const findMyHere = useFindMyOnMac(mac);
   // The other segments name guests (Backups by its guest, Array's stop question by its containers).
   const guests = useHostGuests(
     tab !== 'summary' ? { params: { burrow: slug }, query: { server: serverId, limit: 200 } } : null,
@@ -173,6 +181,9 @@ export function ServerScreen({
   // Connections that are part of this server (its Proxmox API): Things leaves them out, this page lists them (CP-10).
   const home = useHomeOverview({ params: { burrow: slug } });
   const parts = useMemo(() => partsOf(home.data?.things ?? [], serverId), [home.data, serverId]);
+  const findMyLine = findMy
+    ? (home.data?.things.find((t) => t.id === thingId('connection', findMy.connectionId))?.line ?? null)
+    : null;
   const [asking, setAsking] = useState<{ text: string | null } | null>(null);
   // Temporary machines (CI jobs, sandboxes) stay out of the list until asked for.
   const [showTemporary, setShowTemporary] = useState(false);
@@ -195,7 +206,7 @@ export function ServerScreen({
   const openUpdates = () => navigation.navigate('ServerUpdates', { serverId, title: shown, back: shown });
   const proxmox = !!d?.proxmox || d?.server.platform === 'proxmox';
   const tabs: ServerTab[] = mac
-    ? [...MAC_PHONE_TABS]
+    ? [...(findMyHere ? MAC_PHONE_TABS_WITH_FIND_MY : MAC_PHONE_TABS)]
     : unraid
       ? ['summary', 'array', 'guests', 'plugins']
       : proxmox || incus || libvirt
@@ -390,8 +401,8 @@ export function ServerScreen({
             </View>
             {shownTab === 'screen' && mac && d ? (
               <MacScreenPart serverId={serverId} serverName={shown} detail={d} now={now} />
-            ) : shownTab === 'findmy' && mac && d ? (
-              <MacFindMyPart serverId={serverId} serverName={shown} detail={d} now={now} />
+            ) : shownTab === 'findmy' && mac ? (
+              <FindMyPart serverId={serverId} />
             ) : shownTab === 'backups' && incus ? (
               <IncusServerBackups
                 slug={slug}
@@ -510,6 +521,27 @@ export function ServerScreen({
                       first={WATCH_FIRST}
                       divider="top"
                       inset={14}
+                    />
+                  </OneCard>
+                ) : null}
+                {findMy ? (
+                  // The one link to Find My on this Mac: its connection's page, with its line from Overview.
+                  <OneCard>
+                    <OneRow
+                      first
+                      leading={<ThingIcon glyph="plug" mark="findmy" />}
+                      title={FIND_MY_WORDS.linkTitle}
+                      line={findMyLine}
+                      chevron
+                      label={[FIND_MY_WORDS.linkTitle, findMyLine].filter(Boolean).join(', ')}
+                      hint={FIND_MY_WORDS.linkHint}
+                      onPress={() =>
+                        navigation.navigate('Thing', {
+                          thingId: thingId('connection', findMy.connectionId),
+                          title: findMy.label,
+                          back: shown,
+                        })
+                      }
                     />
                   </OneCard>
                 ) : null}
