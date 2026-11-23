@@ -18,6 +18,7 @@ import type {
   DocEdit,
   DriveFile,
   FileContent,
+  FileKind,
   GoogleMode,
   GoogleUserType,
   MailDraftInput,
@@ -181,6 +182,33 @@ export interface MailSearchInput {
 export interface InboxUnread {
   count: number;
   newest: MailSummary[];
+}
+
+/** How much of the account's storage is used, in bytes; `total` null when it has no limit. */
+export interface FilesQuota {
+  used: number;
+  total: number | null;
+}
+
+/** A file changed lately: what it is, when, by whom (`byMe`: the account's own person), and where it opens. */
+export interface RecentFile {
+  id: string;
+  name: string;
+  kind: FileKind;
+  modifiedAt: string | null;
+  by: string | null;
+  byMe: boolean;
+  webUrl: string | null;
+}
+
+/** Bytes used and the limit as Drive or Graph give them (Drive's as strings); no limit, or none read: null. */
+export function quotaOf(used: unknown, total: unknown): FilesQuota {
+  const n = (v: unknown) => {
+    const x = typeof v === 'string' && v.trim() !== '' ? Number(v) : typeof v === 'number' ? v : Number.NaN;
+    return Number.isFinite(x) && x >= 0 ? x : null;
+  };
+  const limit = n(total);
+  return { used: n(used) ?? 0, total: limit && limit > 0 ? limit : null };
 }
 
 /** Lightweight attachment metadata read from headers or IMAP BODYSTRUCTURE without downloading attachment bytes. */
@@ -387,6 +415,16 @@ export interface GoogleWorkspace {
   filesCreate(accessToken: string, input: FilesCreateInput): Promise<DriveFile>;
   filesShare(accessToken: string, input: { fileId: string; email: string; role: ShareRole }): Promise<void>;
   filesTrash(accessToken: string, fileId: string): Promise<void>;
+  /**
+   * How full the account's storage is, one cheap call: Google Drive `about.get?fields=storageQuota` (the whole Google
+   * account's), Graph `GET /me/drive?$select=quota` (OneDrive's).
+   */
+  filesQuota(accessToken: string): Promise<FilesQuota>;
+  /**
+   * The files changed last, newest first (Drive `files.list` by `modifiedTime desc`). Google only: Graph's
+   * `/me/drive/recent` stops returning data in November 2026.
+   */
+  filesRecent(accessToken: string, input: { limit: number }): Promise<RecentFile[]>;
 
   docsEdit(
     accessToken: string,

@@ -23,6 +23,7 @@ import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { CONNECTIONS_COPY, serviceRowOpens } from '../../data/home';
 import { parseThingRowPick, RENAME_COPY, thingRowMenu } from '../../data/rename';
 import { OVERVIEW_TITLE } from '../../data/shell';
+import { type PhoneGlyph, phoneThingGlyph } from '../../data/thingLook';
 import { useAgentWords } from '../../data/useAgent';
 import { useStatusOrder } from '../../data/useStatusOrder';
 import { useThingRename } from '../../data/useThingRename';
@@ -70,6 +71,8 @@ export function ServicesCard({
   );
   const tiles = useStatusOrder(all, tileId, tileLevel, sortKey);
   const opensOf = useMemo(() => new Map(things.map((t) => [t.id, serviceRowOpens(t)])), [things]);
+  // Website feedback's bubble rather than the generic plug (it has no brand mark).
+  const glyphOf = useMemo(() => new Map(things.map((t) => [t.id, phoneThingGlyph(t)])), [things]);
   const adding = () => navigation.navigate('AddConnection');
   const rename = useThingRename(slug);
   // Elsewhere than iPhone a held tile's menu is a sheet, for the tile it was held on.
@@ -108,6 +111,7 @@ export function ServicesCard({
               <ConnectionTile
                 key={tile.row.id}
                 tile={tile}
+                glyph={glyphOf.get(tile.row.id) ?? tile.row.glyph}
                 name={name}
                 selected={isBeside(beside, 'Thing', 'thingId', tile.row.id)}
                 onPress={() => open(tile)}
@@ -170,6 +174,7 @@ export function ServicesCard({
  */
 function ConnectionTile({
   tile,
+  glyph,
   name,
   selected,
   onPress,
@@ -177,6 +182,7 @@ function ConnectionTile({
   renaming,
 }: {
   tile: OverviewTile;
+  glyph: PhoneGlyph;
   /** The name it shows (the one just saved while the list catches up). */
   name: string;
   /** With two pages: the page beside the list shows it. */
@@ -228,7 +234,7 @@ function ConnectionTile({
             justifyContent: 'center',
           }}
         >
-          <ThingIcon glyph={tile.row.glyph} mark={tile.row.mark} size={22} color={theme.colors.ink2} />
+          <ThingIcon glyph={glyph} mark={tile.row.mark} size={22} color={theme.colors.ink2} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           {renaming ?? (

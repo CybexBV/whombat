@@ -624,7 +624,7 @@ describe('Your things, health and Watch', () => {
       const github = mara.things.find((x) => x.id === 'connection:github');
       expect(github).toMatchObject({ kind: 'connection', name: 'GitHub', icon: 'github', status: 'ok' });
       expect(github?.line).toMatch(/^@mara-gh · \d+ repositor(y|ies) on$/);
-      expect(github?.href).toContain('connection=github');
+      expect(github?.href).toBe('/things/connection%3Agithub');
     } finally {
       await t.services.db.delete(githubConnections).where(eq(githubConnections.burrowId, t.burrowId));
     }

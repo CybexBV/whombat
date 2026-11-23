@@ -8,7 +8,7 @@
  * The corner marks sit over the icon, so they live here rather than in the row, which reads top to bottom.
  */
 import { HUMAN_INITIALS_COLOR } from '@whombat/avatars';
-import { agentFaceOf, type ThreadIconFields, thingGlyph, thingMark } from '@whombat/client';
+import { agentFaceOf, type ThreadIconFields, thingMark } from '@whombat/client';
 import { useHomeOverview } from '@whombat/client/react';
 import { thingId } from '@whombat/core';
 import { useEffect, useState } from 'react';
@@ -27,6 +27,7 @@ import { usePhotoSource } from '../avatars/photo';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { repoTone } from '../data/chatInbox';
 import { DEMO_IMAGES } from '../data/demoImages';
+import { phoneThingGlyph } from '../data/thingLook';
 import { useTheAgentHere } from '../data/useAgent';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -176,7 +177,7 @@ function SubjectTile({
   const home = useHomeOverview({ params: { burrow: slug } }, { retry: false });
   const thing = home.data?.things.find((t) => t.id === thingId(kind, id));
   const glyph = thing
-    ? thingGlyph(thing)
+    ? phoneThingGlyph(thing)
     : kind === 'server'
       ? 'server'
       : kind === 'device'

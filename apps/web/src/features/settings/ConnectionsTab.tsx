@@ -4,15 +4,18 @@ import {
   useCatalogConnections,
   useCheckConnection,
   useConnectionsCatalog,
+  useConnectors,
   useFeedbackIntegrations,
   useGitHubStatus,
   useRemoveConnection,
   useRemoveGoogleApp,
   useRepos,
+  useSessionProtocol,
   useSetGoogleApp,
 } from '@whombat/client/react';
 import { thingHref } from '@whombat/core';
 import {
+  type AccountPageId,
   CONNECTOR_PROVIDERS,
   CONNECTOR_SERVICES,
   type Connection,
@@ -20,11 +23,15 @@ import {
   type ConnectorService,
   type ConnectorsStatus,
   clientIdHint,
+  FEEDBACK_THING_ID,
+  GITHUB_THING_ID,
   type GoogleUserType,
+  isAccountPageId,
   NEW_CLIENT_NEEDS_SECRET_TEXT,
   serviceLabel,
 } from '@whombat/core/domain';
 import { formatAgo } from '@whombat/core/text';
+import { ACCOUNT_PAGES_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type DragEvent, type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
 import { useOpenBurrow } from '../../app/routing/openBurrow';
@@ -127,6 +134,10 @@ export function ConnectionsTab({
   navigate,
 }: ConnectionsTabProps) {
   const open = provider ?? outcome?.connected ?? (outcome?.connectError ? 'google' : undefined);
+  const accountPages = protocolAtLeast(useSessionProtocol(), ACCOUNT_PAGES_MINOR);
+  // A sign-in that came back with an error keeps this page: its reason and the fixes are here, not on the account's.
+  const failed = useRef(false);
+  if (outcome?.connectError) failed.current = true;
   // A catalog entry's pages (CX-71, CX-72; AP-756, AP-757).
   const entry = connectableEntry(open);
   // A connection has its own page (connection-pages.md CP-01, CP-18): its Settings tab.
@@ -146,24 +157,30 @@ export function ConnectionsTab({
         navigate={navigate}
       />
     );
-  if (open === 'github')
-    return (
-      <>
-        <ProviderHeader provider={open} />
-        <ReposTab burrow={burrow} />
-      </>
+  if (isAccountPageId(open)) {
+    const settings = (
+      <AccountSettings
+        burrow={burrow}
+        account={open}
+        outcome={outcome}
+        onOutcomeSeen={onOutcomeSeen}
+        navigate={navigate}
+      />
     );
-  if (open === 'feedback')
-    return (
-      <>
-        <ProviderHeader provider={open} />
-        <FeedbackTab burrow={burrow} />
-      </>
+    // A box with accounts' own pages: a connected account's Settings address opens its page instead.
+    return accountPages && !failed.current ? (
+      <ToAccountPage burrow={burrow} account={open} connected={outcome?.connected === open}>
+        {settings}
+      </ToAccountPage>
+    ) : (
+      settings
     );
+  }
   return (
     <ConnectorPages
       burrow={burrow}
-      provider={open === 'google' || open === 'microsoft' || open === 'imap' ? open : undefined}
+      head={null}
+      provider={undefined}
       adding={open === 'add'}
       found={found}
       outcome={outcome}
@@ -171,6 +188,162 @@ export function ConnectionsTab({
       navigate={navigate}
     />
   );
+}
+
+export interface AccountSettingsProps {
+  burrow: string;
+  account: AccountPageId;
+  /**
+   * Drawn inside the account's own page (its Connection tab): without the way back and the logo-and-name header, which
+   * the page's head has.
+   */
+  embedded?: boolean;
+  outcome?: ConnectOutcome;
+  onOutcomeSeen?: () => void;
+  navigate?: (url: string) => void;
+}
+
+/**
+ * An account's settings: GitHub's (sign-in, repositories), Website feedback's (its sites), Google's (the app's setup,
+ * the account, its services, what the assistant may do), Microsoft 365's and Email's. Its page on Settings → Connections,
+ * and its own page's Connection tab.
+ */
+export function AccountSettings({
+  burrow,
+  account,
+  embedded = false,
+  outcome,
+  onOutcomeSeen,
+  navigate,
+}: AccountSettingsProps) {
+  // Inside its page: the page goes once the account is disconnected, so its Settings page opens to connect again.
+  const head = embedded ? (
+    <LeaveWhenDisconnected burrow={burrow} account={account} />
+  ) : (
+    <ProviderHeader provider={account} />
+  );
+  if (account === 'github')
+    return (
+      <>
+        {head}
+        <ReposTab burrow={burrow} />
+      </>
+    );
+  if (account === 'feedback')
+    return (
+      <>
+        {head}
+        <FeedbackTab burrow={burrow} />
+      </>
+    );
+  return (
+    <ConnectorPages
+      burrow={burrow}
+      head={head}
+      provider={account}
+      adding={false}
+      outcome={outcome}
+      onOutcomeSeen={onOutcomeSeen}
+      navigate={navigate}
+    />
+  );
+}
+
+/** On the account's own page: once the account it showed is disconnected, its Settings page (Connect) in its place. */
+function LeaveWhenDisconnected({ burrow, account }: { burrow: string; account: AccountPageId }) {
+  const { thing } = useAccountThing(burrow, account);
+  const navigate = useNavigateHref();
+  const seen = useRef(false);
+  useEffect(() => {
+    if (thing) seen.current = true;
+    else if (seen.current) navigate(`/connections?connection=${account}`, { replace: true });
+  }, [thing, account, navigate]);
+  return null;
+}
+
+/** What an account's thing is (`connection:con_…`, GitHub's, Website feedback's), or null while it isn't connected. */
+export interface AccountThing {
+  /** Still reading whether it is connected. */
+  loading: boolean;
+  thing: string | null;
+  /** The account's address, for the toast after a sign-in (“Google connected: mara@example.com.”). */
+  email: string | null;
+}
+
+/**
+ * An account's thing, as the box names it: Google's, Microsoft 365's and Email's by the person's connection
+ * (`connectors.status`), GitHub's while the Whombat is connected to GitHub, Website feedback's while it has a site.
+ */
+export function useAccountThing(burrow: string, account: AccountPageId): AccountThing {
+  // Only what this account needs is read (a hook given null waits); the same reads as its Settings page.
+  const builtIn = account === 'github' || account === 'feedback';
+  const status = useConnectors(builtIn ? null : {}, { retry: false });
+  const on = account === 'github' ? { params: { burrow } } : null;
+  const github = useGitHubStatus(on);
+  const repos = useRepos(on);
+  const feedback = useFeedbackIntegrations(account === 'feedback' ? { params: { burrow } } : null, {
+    retry: false,
+  });
+  if (account === 'github') {
+    const connected = github.data?.connected ?? repos.data?.githubConnected;
+    // Either answer is enough; both failing leaves the Settings page as it is.
+    const loading = connected === undefined && (github.isLoading || repos.isLoading);
+    return { loading, thing: connected ? GITHUB_THING_ID : null, email: null };
+  }
+  if (account === 'feedback') {
+    const sites = feedback.data?.integrations.length ?? 0;
+    return { loading: feedback.isLoading, thing: sites > 0 ? FEEDBACK_THING_ID : null, email: null };
+  }
+  const conn = status.data?.connections.find((c) => c.provider === account) ?? null;
+  return {
+    loading: status.isLoading,
+    thing: conn ? `connection:${conn.id}` : null,
+    email: conn?.email ?? null,
+  };
+}
+
+/**
+ * A connected account's Settings address on a box with accounts' own pages: its page's Connection tab instead, in
+ * place of this address; just connected through a sign-in elsewhere, its Summary, with the toast this page said. Not
+ * connected (or Google's app still to set up): this page, as it is, for the whole visit, so connecting here (Email's
+ * form, GitHub's sign-in) doesn't take the page away mid-step.
+ */
+function ToAccountPage({
+  burrow,
+  account,
+  connected,
+  children,
+}: {
+  burrow: string;
+  account: AccountPageId;
+  connected: boolean;
+  children: ReactNode;
+}) {
+  const { loading, thing, email } = useAccountThing(burrow, account);
+  const navigate = useNavigateHref();
+  const toast = useToast();
+  // Decided once, by the first answer: the page, or this page for the rest of the visit.
+  const stay = useRef<boolean | null>(null);
+  if (stay.current === null && !loading) stay.current = !thing;
+  const go = stay.current === false;
+  const done = useRef(false);
+  useEffect(() => {
+    if (!go || !thing || done.current) return;
+    done.current = true;
+    if (connected) {
+      const name = connectionName(account);
+      toast.show(email ? `${name} connected: ${email}.` : `${name} connected.`);
+    }
+    navigate(`/things/${encodeURIComponent(thing)}${connected ? '' : '?tab=settings'}`, { replace: true });
+  }, [go, thing, connected, account, email, navigate, toast]);
+  if (go) return null;
+  if (stay.current === null)
+    return (
+      <div className={styles.card}>
+        <SkeletonRows count={3} lines={2} />
+      </div>
+    );
+  return children;
 }
 
 /**
@@ -204,6 +377,7 @@ function ToThingPage({
 /** The overview, or a connector provider's page (Google, Microsoft): both read the connectors' status first. */
 function ConnectorPages({
   burrow,
+  head,
   provider: open,
   adding,
   found = false,
@@ -211,12 +385,18 @@ function ConnectorPages({
   onOutcomeSeen,
   navigate,
 }: Omit<ConnectionsTabProps, 'provider'> & {
+  /** A provider's page header (the way back, its logo and name); none inside the account's own page. */
+  head: ReactNode;
   provider: ConnectorProvider | undefined;
   /** Add a connection (`&connection=add`, AP-1157): the overview's catalog on its own page. */
   adding: boolean;
 }) {
   const query = useConnectorsStatus();
   const status = query.data;
+  // A sign-in that failed keeps the setup and the troubleshooting open, with its reason, after its answer left the
+  // address.
+  const failed = useRef(false);
+  if (outcome?.connectError) failed.current = true;
 
   const loading = (
     <div className={styles.card}>
@@ -242,14 +422,14 @@ function ConnectorPages({
   if (open === 'imap')
     return (
       <>
-        <ProviderHeader provider={open} />
+        {head}
         <ImapConnection status={status} />
       </>
     );
   if (open === 'microsoft')
     return (
       <>
-        <ProviderHeader provider={open} />
+        {head}
         <MicrosoftConnection
           burrow={burrow}
           status={status}
@@ -272,10 +452,10 @@ function ConnectorPages({
   // troubleshooting waits for a sign-in that failed.
   const google = status.connections.find((conn) => conn.provider === 'google');
   const keys = google ? <AccountKeys burrow={burrow} account="Google" services={google.services} /> : null;
-  if (googleWorks(status, outcome))
+  if (googleWorks(status, outcome) && !failed.current)
     return (
       <>
-        <ProviderHeader provider={open} />
+        {head}
         {accounts}
         {keys}
         <GoogleAppSection status={status} folded />
@@ -283,7 +463,7 @@ function ConnectorPages({
     );
   return (
     <>
-      <ProviderHeader provider={open} />
+      {head}
       <GoogleAppSection status={status} />
       {accounts}
       {keys}
@@ -374,6 +554,7 @@ function useConnectionEntries(burrow: string, status: ConnectorsStatus | undefin
           meta: on === 1 ? '1 repository on' : `${on} repositories on`,
           ok: !gh?.error,
           state: gh?.error ? 'Needs attention' : 'Connected',
+          thing: GITHUB_THING_ID,
         }
       : null,
     tile:
@@ -411,6 +592,7 @@ function useConnectionEntries(burrow: string, status: ConnectorsStatus | undefin
               : p === 'imap'
                 ? IMAP_COPY.needsPassword
                 : 'Needs you to sign in again',
+            thing: `connection:${conn.id}`,
           }
         : null,
       tile: availableState(p, status),
@@ -428,6 +610,7 @@ function useConnectionEntries(burrow: string, status: ConnectorsStatus | undefin
             meta: reportsLine(list.reduce((n, { health }) => n + health.reportsLast24h, 0)),
             ok: list.every(({ health }) => health.warnings.length === 0),
             state: list.some(({ health }) => health.warnings.length > 0) ? 'Needs attention' : 'On',
+            thing: FEEDBACK_THING_ID,
           }
         : null,
     tile: { action: 'Set up', note: null },

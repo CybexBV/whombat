@@ -363,6 +363,25 @@ export function parseThingId(value: string): { kind: ThingKind; id: string } | n
   return kind.success && id ? { kind: kind.data, id } : null;
 }
 
+/**
+ * The accounts with a page of their own (session minor 7): Google, Microsoft 365, Email (IMAP), GitHub and Website
+ * feedback, by their catalog id. A page whose `catalogId` is one of these is an account's: the apps draw the account's
+ * own settings (what the Connections tab showed) as its Connection tab.
+ */
+export const ACCOUNT_PAGE_IDS = ['google', 'microsoft', 'imap', 'github', 'feedback'] as const;
+export type AccountPageId = (typeof ACCOUNT_PAGE_IDS)[number];
+
+/** Whether a catalog id is one of the accounts with a page of their own. */
+export function isAccountPageId(value: unknown): value is AccountPageId {
+  return (ACCOUNT_PAGE_IDS as readonly unknown[]).includes(value);
+}
+
+/** GitHub's thing: one GitHub connection per Whombat. */
+export const GITHUB_THING_ID = 'connection:github';
+
+/** Website feedback's thing: one per Whombat, with all its sites. */
+export const FEEDBACK_THING_ID = 'connection:feedback';
+
 /** The thing's page: `/things/<thingId>` (the id URL-encoded). */
 export function thingHref(kind: ThingKind, id: string): string {
   return `/things/${encodeURIComponent(thingId(kind, id))}`;

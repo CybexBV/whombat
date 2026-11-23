@@ -1100,3 +1100,19 @@ chose, under `whombat.app` (Whombat own-address.md OWA-40…OWA-47).
   `box.whombat.app` or `dev.whombat.app`. A box names a host outside the three-word `box.`/`dev.` shape only to a
   session at minor 6 or later; to an older one it leaves the address out (`ownAddress` null, such Whombats out of
   `link.whombats`).
+
+## Session minor 7 of major 5: a page for each account
+
+`SESSION_PROTOCOL` is `{major: 5, minor: 7}` (`ACCOUNT_PAGES_MINOR`). No contracts release: control and the relay don't
+speak these, and everything here is TypeScript only (Whombat connection-dashboards.md).
+
+- **`things.page`** answers for the person's accounts, by the thing ids Home already gives them: Google, Microsoft 365
+  and Email (`connection:<the account's con_ id>`, only for its own person), GitHub (`connection:github`) and Website
+  feedback (`connection:feedback`), one per Whombat. The page's `catalogId` is the account's (`ACCOUNT_PAGE_IDS`:
+  `google`, `microsoft`, `imap`, `github`, `feedback`), `settings` is true, and its Connection tab is the account's own
+  settings, drawn by the apps.
+- **`home.overview`**: an account thing's `href` is its page (`/things/…`), and Website feedback is a thing too. To a
+  session below minor 7 a box gives the account things their page on the Connections tab
+  (`/settings?tab=connections&connection=<provider>`), as before.
+- The apps open an account's page from Connections only for a box at minor 7 or later; an older box keeps the
+  Connections tab's page.

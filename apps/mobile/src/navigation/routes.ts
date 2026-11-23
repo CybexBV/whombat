@@ -118,9 +118,10 @@ export type RootStackParamList = {
   Connect: { catalogId: string; url?: string; error?: string; back?: string; access?: string };
   /**
    * A builtin connection's screen (PC-02): Google, Microsoft 365 and Email (IMAP) — the person's own account, connected
-   * here — GitHub and Website feedback; `whombat://settings/connections/account/google`.
+   * here — GitHub and Website feedback; `whombat://settings/connections/account/google`. `thingId`: the account's page
+   * it was opened from (its Connection), whose What Whombat watches it shows under the account.
    */
-  ConnectAccount: { page: AccountPage | (string & {}); error?: string; back?: string };
+  ConnectAccount: { page: AccountPage | (string & {}); error?: string; back?: string; thingId?: string };
   /**
    * Files (files-space.md FS-07, AP-772…): the conversations with files the viewer may see, and one conversation's
    * Files — by id from the list and the conversation menu, by what a `/files/…` address names (`whombat://files/dm/chat`),

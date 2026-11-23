@@ -82,6 +82,7 @@ export const CONNECTION_MARKS = [
   'pipedrive',
   'plausible',
   'imap',
+  'feedback',
   'synology',
   'qnap',
   'sonarr',
@@ -415,6 +416,14 @@ export const CONNECTION_MARK_DEFINITIONS: Record<ConnectionMarkName, BrandMarkDe
     ],
   },
   imap: ENVELOPE_MARK,
+  // Website feedback: a feedback button on the person's sites, Lucide's `message-square-text`, as its Settings logo.
+  feedback: lucide(
+    'Website feedback',
+    'M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z',
+    'M7 11h10',
+    'M7 15h6',
+    'M7 7h8',
+  ),
   // Synology's wordmark, published black (reversed white on dark); Simple Icons' light grey (#B5B5B6) faded on the light
   // theme's tile: the text colour (AP-3800).
   synology: mark(

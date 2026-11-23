@@ -5,10 +5,11 @@
  * sheet's big buttons (52dp, radius 12). Colours only from the theme.
  */
 import type { MarkLike } from '@whombat/brand';
-import { THING_STATUS_LABELS, type ThingGlyph } from '@whombat/client';
+import { THING_STATUS_LABELS } from '@whombat/client';
 import type { HomeSeverity, ThingStatus } from '@whombat/core';
 import { createContext, type ReactNode, useContext } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import type { PhoneGlyph } from '../data/thingLook';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BrandMark } from './BrandMark';
@@ -22,6 +23,7 @@ import {
   House,
   type LucideIcon,
   Mail,
+  MessageSquare,
   Plug,
   Server,
   Thermometer,
@@ -46,7 +48,7 @@ export function toneOf(theme: Theme, tone: HomeSeverity | ThingStatus | 'ok' | n
   }
 }
 
-const GLYPH_ICONS: Record<ThingGlyph, LucideIcon> = {
+const GLYPH_ICONS: Record<PhoneGlyph, LucideIcon> = {
   server: Server,
   home: House,
   thermometer: Thermometer,
@@ -57,6 +59,8 @@ const GLYPH_ICONS: Record<ThingGlyph, LucideIcon> = {
   device: Thermometer,
   plug: Plug,
   code: Code2,
+  // Website feedback (`phoneThingGlyph`): its logo tile's bubble.
+  message: MessageSquare,
 };
 
 /**
@@ -69,7 +73,7 @@ export function ThingIcon({
   size = 20,
   color,
 }: {
-  glyph: ThingGlyph;
+  glyph: PhoneGlyph;
   mark?: MarkLike | null;
   size?: number;
   color?: string;

@@ -38,6 +38,7 @@ import { capText, htmlToText, replySubject } from './mime';
 import {
   type CalendarEventsInput,
   type FilesCreateInput,
+  type FilesQuota,
   GoogleApiError,
   type GoogleWorkspace,
   type InboxUnread,
@@ -49,6 +50,7 @@ import {
   type MailProviderCursor,
   type MailSearchInput,
   normalizeRfcMessageId,
+  type RecentFile,
   receivedAtOrAfter,
 } from './types';
 
@@ -116,6 +118,8 @@ export interface FakeGoogleState {
   events: FakeEvent[];
   calendarMail: FakeCalendarMail[];
   files: FakeFile[];
+  /** The account's storage: used and its limit in bytes (null: no limit). */
+  quota: FilesQuota;
   contacts: ContactCard[];
   /** Services whose API is “turned off” (`disable`). */
   disabled: Set<ConnectorService>;
@@ -371,6 +375,7 @@ export function seedFakeGoogle(now: Date): FakeGoogleState {
         organization: 'Hetzner Online',
       },
     ],
+    quota: { used: 6.3e9, total: 15e9 },
     disabled: new Set(),
     calls: [],
     nextId: 1,
@@ -406,6 +411,8 @@ const SERVICE_OF: Partial<Record<keyof GoogleWorkspace, ConnectorService>> = {
   filesCreate: 'files',
   filesShare: 'files',
   filesTrash: 'files',
+  filesQuota: 'files',
+  filesRecent: 'files',
   docsEdit: 'docs',
   sheetsRead: 'sheets',
   sheetsWrite: 'sheets',
@@ -1079,6 +1086,27 @@ export class FakeGoogleWorkspace implements GoogleWorkspace {
   async filesTrash(accessToken: string, fileId: string): Promise<void> {
     const state = this.use(accessToken, 'filesTrash');
     this.file(state, fileId).trashed = true;
+  }
+
+  async filesQuota(accessToken: string): Promise<FilesQuota> {
+    return { ...this.use(accessToken, 'filesQuota').quota };
+  }
+
+  async filesRecent(accessToken: string, input: { limit: number }): Promise<RecentFile[]> {
+    const state = this.use(accessToken, 'filesRecent');
+    return state.files
+      .filter((f) => !f.trashed)
+      .sort((a, b) => Date.parse(b.file.modifiedAt ?? '') - Date.parse(a.file.modifiedAt ?? ''))
+      .slice(0, input.limit)
+      .map(({ file: f }) => ({
+        id: f.id,
+        name: f.name,
+        kind: f.kind,
+        modifiedAt: f.modifiedAt,
+        by: f.owners[0] === state.email ? 'You' : (f.owners[0] ?? null),
+        byMe: f.owners[0] === state.email,
+        webUrl: f.webUrl,
+      }));
   }
 
   /* Docs and Sheets ---------------------------------------------------------------------------- */

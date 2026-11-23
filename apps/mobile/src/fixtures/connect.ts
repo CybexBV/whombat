@@ -505,7 +505,10 @@ export function createConnectFixtures({ now, json, burrowId }: ConnectFixtureOpt
           return json(imapAdded);
         }
         case 'connections.remove': {
-          if (params.connectionId === 'con_imap-mara' || params.connectionId === 'con_imap-demo') {
+          if (
+            params.connectionId === 'con_mail_mara_fastmail_com' ||
+            params.connectionId === 'con_imap-demo'
+          ) {
             imapGone = true;
             imapAdded = null;
             return json({ ok: true });

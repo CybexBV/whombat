@@ -4,11 +4,10 @@
  * connection” that opens its own screen (`AddConnectionScreen`), then NEEDS YOU — a connection whose state isn't fine,
  * its state and detail on one line and “Sign in again” or “Open” — then ACCOUNTS · N and APPS AND SERVICES · N, compact
  * rows: logo, name, one mono line with where it is (and
- * “Look only”; AP-1177), a green dot and › or ↗. Your Google / Microsoft 365 accounts are rows like your catalog
- * connections (one kind, one-person-android.md AP-5766). A catalog connection opens its
- * screen, an account its own screen (phone-connect.md PC-02, AP-2902; before, its web page, which the managed app caught
- * and turned back into this list). Opened from Settings' Connections row
- * (`connections.catalog`, CX-75). The Vault screen's language: mono kicker, 25/700 title, intro, grouped lists.
+ * “Look only”; AP-1177), a green dot and › or ↗. Your Google / Microsoft 365 / Email accounts, GitHub and Website
+ * feedback are rows like your catalog connections (one kind, one-person-android.md AP-5766). A catalog connection opens
+ * its screen; an account its page on a box at session minor 7, else its own screen (phone-connect.md PC-02, AP-2902).
+ * Opened from Settings' Connections row (`connections.catalog`, CX-75). The Vault screen's language: mono kicker, 25/700 title, intro, grouped lists.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RefreshControl, ScrollView, View } from 'react-native';
@@ -38,7 +37,10 @@ export function ConnectionsScreen({ navigation }: Props) {
   const { needsYou, accounts, apps, accountsTitle, appsTitle, empty } = connectionsOverview(rows);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
-  /** What pressing a row does: a catalog connection's screen, an account's own screen (AP-2902). */
+  /**
+   * What pressing a row does: a catalog connection's screen; an account's page on a box that has them, else its own
+   * screen (AP-2902).
+   */
   const press = (r: ConnectedRow): (() => void) | undefined => {
     if (r.kind === 'catalog')
       return () =>
@@ -48,6 +50,13 @@ export function ConnectionsScreen({ navigation }: Props) {
           back: CONNECTIONS_TEXT.title,
         });
     const opens = r.opens;
+    if (opens?.screen === 'Thing')
+      return () =>
+        navigation.navigate('Thing', {
+          thingId: opens.thingId,
+          title: r.title,
+          back: CONNECTIONS_TEXT.title,
+        });
     return opens?.screen === 'ConnectAccount'
       ? () => navigation.navigate('ConnectAccount', { page: opens.page, back: CONNECTIONS_TEXT.title })
       : undefined;

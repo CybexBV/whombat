@@ -1117,7 +1117,7 @@ Setup and operation: `docs/github.md`.
   last; every catalog entry has a kind or is named with where it opens (`things/kinds/landing.test.ts`,
   [connection-dashboards.md](docs/decisions/connection-dashboards.md)). Some kinds read only Whombat's own records (a
   report tracker's mirror, the turns sent through an AI gateway: `things/kinds/own/`), and a kind may read a
-  “Sign in with …” connection through its MCP server's read-only tools (`things/kinds/mcp-read.ts`). A Custom
+  “Sign in with …” connection through its MCP server's read-only tools (`things/kinds/mcp-read.ts`). The person's accounts have pages too (`things/accounts/`): Google and Microsoft 365 from the reads the desk's account widgets share (`things/accounts/reads.ts`), Email from its unread count, GitHub from the box's pull request mirror and Website feedback from its reports; their settings page is the apps' Connection tab, and a box links account things to these pages only for a session at minor 7 or later (`things/older-apps.ts`). A Custom
   connection (`custom_mcp`, `custom_api`) may have a page recipe instead (`catalog_connections.page`,
   `things/recipe/`): the assistant names what to read — MCP tools the server marks read-only, or GET paths — and where
   each value goes (Live, Inventory, Trend, a list, the head's facts, Worth a look's lines under the checks `page.broken`

@@ -113,12 +113,18 @@ describe('old Settings addresses (SS-02)', () => {
     expect(app.history.length).toBe(1);
   });
 
+  // GitHub isn't connected in this world: its Settings page. Website feedback has a site: its own page's Connection tab.
   it.each([
-    ['/settings?tab=repos', '/connections?connection=github', 'GitHub'],
-    ['/settings?tab=feedback', '/connections?connection=feedback', 'Website feedback'],
-  ])('opens %s as the connection’s own page %s, in place of the old entry', async (from, to, name) => {
+    ['/settings?tab=repos', '/connections?connection=github', 'GitHub', 2],
+    [
+      '/settings?tab=feedback',
+      `/things/${encodeURIComponent('connection:feedback')}?tab=settings`,
+      'Website feedback',
+      1,
+    ],
+  ])('opens %s as %s, in place of the old entry', async (from, to, name, level) => {
     const app = renderApp(from, world());
-    expect(await screen.findByRole('heading', { name, level: 2 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name, level })).toBeTruthy();
     await waitFor(() => expect(app.location()).toBe(to));
     expect(app.history.length).toBe(1);
   });

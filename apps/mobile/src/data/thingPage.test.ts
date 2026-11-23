@@ -16,6 +16,7 @@ import {
   runsOnTarget,
   shownPanels,
   shownTab,
+  thingSettingsOpens,
   thingSubject,
 } from './thingPage';
 
@@ -72,6 +73,53 @@ describe('tabs', () => {
     expect(shownTab(tabs, 'settings')).toBe('overview');
     expect(shownTab(tabs, 'nope')).toBe('overview');
     expect(shownTab(tabs, undefined)).toBe('overview');
+  });
+});
+
+describe('an account’s Connection', () => {
+  it('stays on GitHub’s and Website feedback’s pages, which have no connection id', () => {
+    for (const id of ['connection:github', 'connection:feedback', 'connection:con_mara']) {
+      const page = world().page(id) as ThingPage;
+      expect(page.catalogId).toBeTruthy();
+      const tabs = phoneThingTabs(page);
+      expect(tabs.filter((t) => t.settings).map((t) => t.label)).toEqual(['Connection']);
+      expect(shownTab(tabs, undefined)).toBe('overview');
+    }
+  });
+
+  it('opens the account’s own screen, by its catalog entry or, before the page answers, by its id', () => {
+    const google = world().page('connection:con_mara') as ThingPage;
+    expect(thingSettingsOpens(google.id, google.catalogId, google.connectionId)).toEqual({
+      screen: 'ConnectAccount',
+      page: 'google',
+    });
+    const email = world().page('connection:con_mail_mara_fastmail_com') as ThingPage;
+    expect(thingSettingsOpens(email.id, email.catalogId, email.connectionId)).toEqual({
+      screen: 'ConnectAccount',
+      page: 'imap',
+    });
+    expect(thingSettingsOpens('connection:github', undefined, null)).toEqual({
+      screen: 'ConnectAccount',
+      page: 'github',
+    });
+    expect(thingSettingsOpens('connection:feedback', null, null)).toEqual({
+      screen: 'ConnectAccount',
+      page: 'feedback',
+    });
+    // An older box's 404 for Microsoft 365: the row the app holds names it.
+    expect(thingSettingsOpens('connection:con_ms', 'microsoft', 'con_ms')).toEqual({
+      screen: 'ConnectAccount',
+      page: 'microsoft',
+    });
+  });
+
+  it('leaves a catalog connection on its Connection screen', () => {
+    const page = ha();
+    expect(thingSettingsOpens(page.id, page.catalogId, page.connectionId)).toEqual({
+      screen: 'Connection',
+      connectionId: 'con_ha',
+    });
+    expect(thingSettingsOpens('device:con_heatpump', null, null)).toBeNull();
   });
 });
 
