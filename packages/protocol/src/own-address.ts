@@ -105,7 +105,7 @@ export function ownAddressLabelOf(host: string): string | null {
 
 /** `https://<host>`: the only web origin a box passkey may carry besides the Android release app's. */
 export function ownAddressOrigin(host: string): string {
-  if (!OwnAddressHost.safeParse(host).success) throw new Error('not an own-address host');
+  if (ownAddressLabelOf(host) === null) throw new Error('not an own-address host');
   return `https://${host}`;
 }
 

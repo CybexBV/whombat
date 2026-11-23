@@ -337,6 +337,7 @@ type AddressCheckResponse struct {
 
 type AddressRenameRequest struct {
 	Label string `json:"label"`
+	Move  *bool  `json:"move,omitempty"` // always true
 }
 
 type AddressRenameResponse struct {
@@ -375,6 +376,7 @@ type KitCredentialsDeclareResponse struct {
 type LinkBeginRequest struct {
 	Registration DeviceRegistration `json:"registration"`
 	Name         *string            `json:"name,omitempty"`
+	OwnNames     *bool              `json:"ownNames,omitempty"` // always true
 }
 
 type LinkBeginResponse struct {
@@ -383,6 +385,7 @@ type LinkBeginResponse struct {
 
 type LinkStatusRequest struct {
 	ClaimLink *string `json:"claimLink,omitempty"`
+	OwnNames  *bool   `json:"ownNames,omitempty"` // always true
 }
 
 type LinkStatusResponse struct {

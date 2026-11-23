@@ -70,10 +70,13 @@ export const ADDRESS_DEVICE_OPS = {
    * `rename_limit` (more than `OWN_ADDRESS_RENAMES_PER_YEAR` in 365 days; 409). Its own label while its zone isn't
    * control's zone of today is a move to that zone (never counted as a rename); its own label in today's zone answers
    * the state as it is. The address being replaced becomes `leaving` for `OWN_ADDRESS_LEAVING_DAYS`; one already leaving
-   * keeps its date, and the one in between stops at once. Audited as `address.renamed` or `address.moved`.
+   * keeps its date, and the one in between stops at once. Audited as `address.renamed` or `address.moved`. `move`
+   * (sent by the manager when it moves itself) makes it a move only: when `label` is no longer the box's live label (the
+   * owner renamed it meanwhile) control changes nothing and answers the state as it is, so a late move never undoes a
+   * rename.
    */
   'address.rename': {
-    body: z.strictObject({ label: OwnAddressLabel }),
+    body: z.strictObject({ label: OwnAddressLabel, move: z.literal(true).optional() }),
     response: z.object({
       label: OwnAddressLabel,
       host: OwnAddressHost,

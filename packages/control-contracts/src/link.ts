@@ -38,6 +38,11 @@ export const LinkLookup = z.object({
    * Absent from an older control, which takes no `terms` in the confirm body.
    */
   termsVersion: TermsVersion.optional(),
+  /**
+   * The box can take a name the person chooses (4.16): its manager said so (`ownNames`) and the account has chosen names
+   * left this year. Absent or false: the account site offers no choice and the box gets a random name.
+   */
+  chooseName: z.boolean().optional(),
 });
 export type LinkLookup = z.infer<typeof LinkLookup>;
 

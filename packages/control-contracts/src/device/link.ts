@@ -40,6 +40,13 @@ export type LinkPending = z.infer<typeof LinkPending>;
  * with `address.rename` of its own label); `leaving`, the earlier address while it still works. Every member but
  * `state` and `since` is optional.
  */
+/**
+ * Sent by a manager that takes chosen names and hosts under `whombat.app` (4.16), with `link.begin` and every
+ * `link.status`. Control remembers it per box: without it a box gets only a random three-word name under the old zone
+ * and no host it couldn't read (an older manager validates them against the older shapes).
+ */
+export const OwnNamesFlag = z.literal(true).optional();
+
 export const DeviceLinkStatus = z.object({
   state: LinkState,
   since: EpochSeconds,
@@ -151,7 +158,11 @@ export const LINK_DEVICE_OPS = {
    * more than 10 an hour per device or address (`rate_limited`). Audited as `link.begun`.
    */
   'link.begin': {
-    body: z.strictObject({ registration: DeviceRegistration, name: hostTextSchema(64).optional() }),
+    body: z.strictObject({
+      registration: DeviceRegistration,
+      name: hostTextSchema(64).optional(),
+      ownNames: OwnNamesFlag,
+    }),
     response: z.object({ link: DeviceLinkStatus }),
   },
   /**
@@ -163,7 +174,7 @@ export const LINK_DEVICE_OPS = {
    * control before 4.13 refuses the member (strict body), so a box sends it only to a control on 4.13.
    */
   'link.status': {
-    body: z.strictObject({ claimLink: OwnAddressClaimSecret.optional() }),
+    body: z.strictObject({ claimLink: OwnAddressClaimSecret.optional(), ownNames: OwnNamesFlag }),
     response: z.object({ link: DeviceLinkStatus }),
   },
   /**

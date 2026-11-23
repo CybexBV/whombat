@@ -7,6 +7,10 @@
     "claimLink": {
       "type": "string",
       "pattern": "^[abcdefghjkmnpqrtvwxy]{6}$"
+    },
+    "ownNames": {
+      "type": "boolean",
+      "const": true
     }
   },
   "additionalProperties": false

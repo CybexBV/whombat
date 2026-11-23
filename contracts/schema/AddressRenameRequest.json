@@ -9,6 +9,10 @@
       "minLength": 3,
       "maxLength": 32,
       "pattern": "^[a-z](-?[a-z0-9])+$"
+    },
+    "move": {
+      "type": "boolean",
+      "const": true
     }
   },
   "required": [
