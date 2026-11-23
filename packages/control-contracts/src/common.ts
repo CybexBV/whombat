@@ -121,8 +121,14 @@ export const CONTROL_REASONS = {
   // The box's own address (4.3; Whombat own-address.md).
   claim_at_address:
     '`claims.start` for a device that has an own-address label and no org (409): that box is set up at its own address.',
-  label_invalid: '`address.register` with a label that isn’t three different words of the list.',
-  label_taken: '`address.register` with a label used before (409): the box draws another.',
+  label_invalid:
+    '`address.register` with a label that isn’t three different words of the list; `address.rename` and `link.confirm` (4.16) with a name that isn’t a label’s shape.',
+  label_taken:
+    '`address.register` with a label used before (409): the box draws another. `address.rename` and `link.confirm` (4.16) with a name another box has or had (409).',
+  label_reserved: '`address.rename` and `link.confirm` with a name given to nobody (409, 4.16).',
+  rename_limit:
+    '`address.rename` past `OWN_ADDRESS_RENAMES_PER_YEAR` renames in 365 days (409, 4.16); a move to a new zone doesn’t count.',
+  own_address_off: '`address.rename` on a control that gives no own addresses (409, 4.16).',
   link_code_invalid:
     '`account.link.lookup` or `account.link` with an unknown code; `account.link.lookup` answers it for expired and used codes too.',
   link_code_expired: '`account.link` with a code whose ten minutes are over.',
@@ -139,7 +145,8 @@ export const CONTROL_REASONS = {
   email_unconfirmed: '`link.confirm` before the account confirmed its e-mail: no address before it is.',
   link_trial_boxes:
     '`link.confirm` for a third box during the free month (403): add a card first (`link.checkout`).',
-  link_off: '`push.register` or `push.send` while the box’s Link is off or ended.',
+  link_off:
+    '`push.register` or `push.send` while the box’s Link is off or ended; `address.rename` (4.16) while it isn’t on or in grace.',
   link_country:
     '`link.checkout` with a `country` outside `LINK_COUNTRIES` (403, 4.10): Whombat Link is sold in EU countries only for now.',
   // Device API and provisioning.

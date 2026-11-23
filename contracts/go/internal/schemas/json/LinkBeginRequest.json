@@ -69,6 +69,10 @@
     "name": {
       "type": "string",
       "pattern": "^(?:[^\\p{Cc}\\p{Cf}\\p{Cs}\\p{Z}]| ){1,64}$"
+    },
+    "ownNames": {
+      "type": "boolean",
+      "const": true
     }
   },
   "required": [

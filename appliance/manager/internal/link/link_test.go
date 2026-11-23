@@ -274,13 +274,13 @@ func TestTicketAnswersCarryTheState(t *testing.T) {
 	}
 	ended := &device.DeviceLinkStatus{State: protocol.LinkStateEnded, Since: b.now.Unix()}
 	b.fc.SetLink(ended)
-	b.keep.Observe(ended)
+	b.keep.Observe(ended, b.keep.AddressMark())
 	r := b.keep.Snapshot()
 	if r.State != protocol.LinkStateEnded || r.Active() || !r.Known() {
 		t.Fatalf("%+v", r)
 	}
 	// Something that isn't the contract's is ignored.
-	b.keep.Observe(&device.DeviceLinkStatus{State: "paused", Since: b.now.Unix()})
+	b.keep.Observe(&device.DeviceLinkStatus{State: "paused", Since: b.now.Unix()}, b.keep.AddressMark())
 	if b.keep.Snapshot().State != protocol.LinkStateEnded {
 		t.Fatal("an invalid state was taken")
 	}
@@ -309,7 +309,7 @@ func TestOffHoldsAtOnceAndControlIsToldLater(t *testing.T) {
 		t.Fatal("leaving lost")
 	}
 	// Ticket answers while leaving don't bring Link back.
-	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()})
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()}, b.keep.AddressMark())
 	if b.keep.Snapshot().Active() {
 		t.Fatal("a ticket answer turned Link back on")
 	}
@@ -538,5 +538,100 @@ func TestCodeAsksSoonThenLessOften(t *testing.T) {
 	}
 	if !b.keep.codeSince.IsZero() {
 		t.Fatal("the run of codes didn't end with the confirm")
+	}
+}
+
+// Control's view of the box's address (4.16) is kept and changes are told: its host, the zone new names get, the
+// earlier address it routes. A control that names the zone and no leaving address means none; FollowAddress takes a
+// rename's answer at once.
+func TestTheAddressFollowsControl(t *testing.T) {
+	b := newBox(t, true)
+	var changes []Record
+	b.keep.OnChange = func(_, after Record) { changes = append(changes, after) }
+	label, host, zone := "maple-otter-river", "maple-otter-river.whombat.app", protocol.OwnAddressZoneWhombatApp
+	leaving := &device.AddressLeaving{Label: label, Host: "maple-otter-river.box.whombat.app", Until: b.now.Unix() + 86400}
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: &label, Host: &host,
+		Zone: &zone, Leaving: leaving}, b.keep.AddressMark())
+	r := b.keep.Snapshot()
+	if r.Host != host || r.Zone != "whombat.app" || r.AddressLeaving == nil || *r.AddressLeaving != *leaving || len(changes) != 1 {
+		t.Fatalf("%+v (%d changes)", r, len(changes))
+	}
+	// An older control says nothing of the address: what the box knows stays.
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()}, b.keep.AddressMark())
+	if r := b.keep.Snapshot(); r.Host != host || r.AddressLeaving == nil {
+		t.Fatalf("%+v", r)
+	}
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: &label, Host: &host, Zone: &zone}, b.keep.AddressMark())
+	if r := b.keep.Snapshot(); r.AddressLeaving != nil || len(changes) != 2 {
+		t.Fatalf("%+v", r)
+	}
+	b.keep.FollowAddress("home", "home.whombat.app", nil)
+	if r := b.keep.Snapshot(); r.Label != "home" || r.Host != "home.whombat.app" || len(changes) != 3 {
+		t.Fatalf("%+v", r)
+	}
+	// Kept across a restart.
+	if r := b.open(t, true).Snapshot(); r.Label != "home" || r.Zone != "whombat.app" {
+		t.Fatalf("%+v", r)
+	}
+}
+
+// An answer to a request sent before the box changed its own address (a ticket or link.status in flight during a
+// rename) may predate the rename at control: it never brings the earlier address back; the next one counts again.
+func TestAnAnswerOlderThanTheBoxsRenameKeepsTheNewAddress(t *testing.T) {
+	b := newBox(t, true)
+	label, host, zone := "maple-otter-river", "maple-otter-river.whombat.app", protocol.OwnAddressZoneWhombatApp
+	b.keep.Observe(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix(), Label: &label, Host: &host,
+		Zone: &zone}, b.keep.AddressMark())
+	before := b.keep.AddressMark()
+	leaving := &device.AddressLeaving{Label: label, Host: host, Until: b.now.Unix() + 86400}
+	b.keep.FollowAddress("home", "home.whombat.app", leaving)
+	grace := protocol.LinkStateGrace
+	b.keep.Observe(&device.DeviceLinkStatus{State: grace, Since: b.now.Unix(), Label: &label, Host: &host, Zone: &zone}, before)
+	r := b.keep.Snapshot()
+	if r.State != grace || r.Label != "home" || r.Host != "home.whombat.app" || r.AddressLeaving == nil || *r.AddressLeaving != *leaving {
+		t.Fatalf("a stale answer moved the address: %+v", r)
+	}
+	other, otherHost := "home-two", "home-two.whombat.app"
+	b.keep.Observe(&device.DeviceLinkStatus{State: grace, Since: b.now.Unix(), Label: &other, Host: &otherHost, Zone: &zone}, b.keep.AddressMark())
+	if r := b.keep.Snapshot(); r.Host != otherHost || r.AddressLeaving != nil {
+		t.Fatalf("a fresh answer didn't count: %+v", r)
+	}
+}
+
+// The box says it takes chosen names with link.begin and every link.status; a control from before them refuses the
+// member, and the box still gets its state without it, offering it again an hour later.
+func TestOwnNamesGoWithLinkBeginAndStatus(t *testing.T) {
+	b := newBox(t, false)
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: b.now.Unix()})
+	if _, err := b.keep.On(context.Background(), "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.fc.BeginOwnNames; len(got) != 1 || !got[0] {
+		t.Fatalf("link.begin: %v", got)
+	}
+	if got := b.fc.StatusOwnNames; len(got) != 1 || !got[0] {
+		t.Fatalf("link.status: %v", got)
+	}
+	b.fc.BeforeOwnNames = true
+	b.fc.SetLink(&device.DeviceLinkStatus{State: protocol.LinkStateGrace, Since: b.now.Unix(), GraceEndsAt: ptr(b.now.Unix() + 86400)})
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if r := b.keep.Snapshot(); r.State != protocol.LinkStateGrace {
+		t.Fatalf("%+v", r)
+	}
+	if got := b.fc.StatusOwnNames; len(got) != 2 || got[1] {
+		t.Fatalf("link.status: %v", got)
+	}
+	b.fc.BeforeOwnNames = false
+	b.now = b.now.Add(claimRetry)
+	if _, err := b.keep.step(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.fc.StatusOwnNames; len(got) != 3 || !got[2] {
+		t.Fatalf("link.status: %v", got)
 	}
 }

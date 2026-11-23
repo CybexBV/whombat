@@ -65,7 +65,7 @@ let
       ownAddressZone = mkOption {
         type = types.str;
         default = "";
-        description = "Where the boxes' own addresses live (box.whombat.app, dev.whombat.app); \"\" for none.";
+        description = "Where the boxes' own addresses live (whombat.app, dev.whombat.app); \"\" for none.";
       };
       supportCaKeys = mkOption {
         type = types.nullOr types.path;

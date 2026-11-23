@@ -14,7 +14,25 @@ export type SessionTransport =
       tls: boolean;
       /** The browser page that opened the session; null for a native app. */
       page: { origin: string; secureContext: boolean } | null;
+      /** At the box's own address: the host the session arrived at (its current one, or the one it is leaving). */
+      host?: string;
     };
+
+/**
+ * The own-address host a session arrived at: a door session's TLS name, else its page's host (the listener let only a
+ * page of that host in). Null for every other way in.
+ */
+export function arrivalHost(transport: SessionTransport | undefined): string | null {
+  if (transport?.via !== 'direct' || transport.network !== 'door') return null;
+  if (transport.host) return transport.host;
+  if (!transport.page) return null;
+  try {
+    const url = new URL(transport.page.origin);
+    return url.protocol === 'https:' && !url.port ? url.hostname : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * What a browser page needs a secure context for (https, or localhost), so a page the box serves over plain HTTP on the
@@ -74,16 +92,17 @@ export function passkeysWorkHere(
 
 /**
  * Which of the person's passkeys a session can use to confirm something: the hosted app's where those work (the apps,
- * the hosted app, a community box's Tailscale page), the box's own on a page at its own address, none anywhere else.
+ * the hosted app, a community box's Tailscale page), the box's own on a page at one of its own hosts (`ownHosts`: the
+ * current one and the one it is leaving), none anywhere else.
  */
 export function stepUpPasskeysHere(
   transport: SessionTransport | undefined,
   relyingParty: { origins: readonly string[] } | null,
-  ownHost: string | null,
+  ownHosts: readonly string[],
 ): 'hosted' | 'box' | null {
   if (passkeysWorkHere(transport, relyingParty)) return 'hosted';
   const page = transport?.via === 'direct' ? transport.page : null;
-  if (ownHost && page?.secureContext && page.origin === `https://${ownHost}`) return 'box';
+  if (page?.secureContext && ownHosts.some((h) => page.origin === `https://${h}`)) return 'box';
   return null;
 }
 

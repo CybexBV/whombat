@@ -13,7 +13,12 @@
  * once.
  */
 
-import { OwnAddressHost, OwnAddressLabel } from '@whombat/protocol';
+import {
+  OwnAddressHost,
+  OwnAddressLabel,
+  OwnAddressNameCandidate,
+  OwnAddressNameVerdict,
+} from '@whombat/protocol';
 import { AsciiText as ascii, LocalIdent as ident, Rfc3339 } from '@whombat/protocol/session';
 import { z } from 'zod';
 
@@ -47,6 +52,12 @@ export const OWN_ADDRESS_ERRORS = [
   'own_address.label_invalid',
   /** 409 (`ownAddressCert`): no certificate yet. */
   'own_address.no_cert',
+  /** 409 (`ownAddressRename`, 4.16): control gives that name to nobody. */
+  'own_address.label_reserved',
+  /** 409 (`ownAddressRename`, 4.16): too many renames in the last year. */
+  'own_address.rename_limit',
+  /** 409 (`ownAddressCheck`, `ownAddressRename`, 4.16): only while Whombat Link is on. */
+  'own_address.link_off',
 ] as const;
 
 /** One certificate's facts. */
@@ -67,8 +78,30 @@ export type OwnAddressAcmeState = z.infer<typeof OwnAddressAcmeState>;
 export const OwnAddressStateRequest = z.strictObject({ v: V });
 /** `POST /v1/own-address/register`: the label the runtime drew. */
 export const OwnAddressRegisterRequest = z.strictObject({ v: V, label: OwnAddressLabel });
-/** `POST /v1/own-address/cert`: the pair the runtime should serve now. */
-export const OwnAddressCertRequest = z.strictObject({ v: V });
+/**
+ * `POST /v1/own-address/cert`: the pair the runtime should serve now for `host` (4.16), the current host when absent; a
+ * host the manager doesn't serve is `own_address.no_cert`.
+ */
+export const OwnAddressCertRequest = z.strictObject({ v: V, host: OwnAddressHost.optional() });
+/** `POST /v1/own-address/check` (4.16): what control says of a name for this box. */
+export const OwnAddressCheckRequest = z.strictObject({ v: V, label: OwnAddressNameCandidate });
+export const OwnAddressCheckResponse = z.object({
+  v: V,
+  label: OwnAddressNameCandidate,
+  verdict: OwnAddressNameVerdict,
+});
+export type OwnAddressCheckResponse = z.infer<typeof OwnAddressCheckResponse>;
+/** `POST /v1/own-address/rename` (4.16): change the name (or move to control's zone with the same label); answers the state. */
+export const OwnAddressRenameRequest = z.strictObject({ v: V, label: OwnAddressLabel });
+
+/** The box's earlier host while it still answers there (4.16). */
+export const OwnAddressLeavingState = z.object({
+  label: OwnAddressLabel,
+  host: OwnAddressHost,
+  /** When it stops: control's date, or the end of the certificate the manager has for it if that comes first. */
+  until: Rfc3339,
+});
+export type OwnAddressLeavingState = z.infer<typeof OwnAddressLeavingState>;
 /** `POST /v1/own-address/ct`: what the certificate watch found. */
 export const OwnAddressCtRequest = z.strictObject({ v: V });
 
@@ -87,6 +120,8 @@ export const OwnAddressStateResponse = z.object({
   }),
   /** The pair `ownAddressCert` would hand out now. */
   cert: OwnAddressCertMeta.optional(),
+  /** The earlier host while it still answers there (4.16): serve it with `ownAddressCert {host}` until `until`. */
+  leaving: OwnAddressLeavingState.optional(),
 });
 export type OwnAddressStateResponse = z.infer<typeof OwnAddressStateResponse>;
 
@@ -127,7 +162,12 @@ export const OwnAddressCtResponse = z.object({
   lastFreshAt: Rfc3339.nullable(),
   /** More than 12 h without a fresh check: the watch was off, or the source failing. */
   missed: z.array(z.object({ from: Rfc3339, to: Rfc3339 })).max(64),
-  /** Only certificates naming the host, a name under it, or exactly `*.<zone>`. */
+  /**
+   * Every host the watch covers (4.16): the current one and the leaving one. Absent from an older manager, which watched
+   * only the current host.
+   */
+  hosts: z.array(OwnAddressHost).max(4).optional(),
+  /** Only certificates naming one of the hosts, a name under it, or exactly `*.<zone>` of its zone. */
   certs: z.array(OwnAddressCtCert).max(256),
   /** What this manager ordered, newest first. */
   ordered: z.array(OwnAddressCertMeta).max(64),

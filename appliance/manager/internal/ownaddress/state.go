@@ -31,12 +31,13 @@ const (
 	stateFile   = "state.json"
 	accountFile = "account.key"
 	orderedFile = "ordered.json"
-	ctFile      = "ct.json"
+	// ctFile is an older manager's record of its one watched host; ct-<host>.json is each host's now.
+	ctFile = "ct.json"
 	// orderedMax is the contract's bound on `ordered` (the newest are kept).
 	orderedMax = 64
 )
 
-// Saved is state.json: the registered label and which pair is current.
+// Saved is state.json: the registered label, which pair is current, and the earlier address while it still answers.
 type Saved struct {
 	Label        string `json:"label,omitempty"`
 	Host         string `json:"host,omitempty"`
@@ -48,6 +49,28 @@ type Saved struct {
 	// Directory is the ACME directory Current came from: a pair from another one (staging before production) is
 	// replaced at once.
 	Directory string `json:"directory,omitempty"`
+	// Leaving is the box's earlier address after a rename or a move, served with the pair it had until it stops.
+	Leaving *Leaving `json:"leaving,omitempty"`
+}
+
+// Leaving is an earlier address the box still answers at. No certificate is ever ordered for it: it is served with the
+// pair it had when it was left, until control's date or that pair's end, whichever comes first; then it is forgotten.
+type Leaving struct {
+	Label string    `json:"label"`
+	Host  string    `json:"host"`
+	Until time.Time `json:"until"`
+	// Pair is the serial of its pair in the directory, Directory the ACME directory it came from (so it can become the
+	// current pair again when the box goes back to this address).
+	Pair      string `json:"pair"`
+	Directory string `json:"directory,omitempty"`
+}
+
+// End is when the leaving address stops: control's date, or the pair's end if that comes first.
+func (l *Leaving) End(p *Pair) time.Time {
+	if p != nil && p.NotAfter.Before(l.Until) {
+		return p.NotAfter
+	}
+	return l.Until
 }
 
 // Pair is a certificate chain and its key, as the runtime serves them.
@@ -288,9 +311,9 @@ func (s *Store) Ordered() ([]local.OwnAddressCertMeta, error) {
 	return ordered, err
 }
 
-// CTState is ct.json: what the certificate watch knows (MG-165).
+// CTState is one host's record of the certificate watch (MG-165), ct-<host>.json.
 type CTState struct {
-	// Host is the name the record is about; a record for another name starts over.
+	// Host is the name the record is about.
 	Host string `json:"host"`
 	// CheckingSince is when this box first started watching that name.
 	CheckingSince time.Time `json:"checkingSince"`
@@ -308,23 +331,62 @@ type Window struct {
 	To   time.Time `json:"to"`
 }
 
-// CT reads ct.json (nil when there is none yet).
-func (s *Store) CT() (*CTState, error) {
+func ctHostFile(host string) string { return "ct-" + host + ".json" }
+
+// CT reads host's record (nil when there is none yet). An older manager's ct.json counts when it is about host.
+func (s *Store) CT(host string) (*CTState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := os.Stat(s.path(ctFile)); errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+	for _, name := range []string{ctHostFile(host), ctFile} {
+		if _, err := os.Stat(s.path(name)); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		var v CTState
+		if err := s.readJSON(name, &v); err != nil {
+			return nil, err
+		}
+		if v.Host == host {
+			return &v, nil
+		}
 	}
-	var v CTState
-	if err := s.readJSON(ctFile, &v); err != nil {
-		return nil, err
-	}
-	return &v, nil
+	return nil, nil
 }
 
-// SaveCT replaces ct.json.
+// SaveCT replaces v.Host's record (an older manager's ct.json about that host goes: the new file holds it now).
 func (s *Store) SaveCT(v *CTState) error {
+	if !hostFileRe.MatchString(v.Host) {
+		return fmt.Errorf("host %q out of shape", v.Host)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.writeJSON(ctFile, v)
+	if err := s.writeJSON(ctHostFile(v.Host), v); err != nil {
+		return err
+	}
+	s.dropLegacyCT(v.Host)
+	return nil
 }
+
+// DropCT forgets host's record: the box no longer answers at that host.
+func (s *Store) DropCT(host string) error {
+	if !hostFileRe.MatchString(host) {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dropLegacyCT(host)
+	if err := os.Remove(s.path(ctHostFile(host))); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// dropLegacyCT removes ct.json when it is about host (mu held).
+func (s *Store) dropLegacyCT(host string) {
+	var v CTState
+	if err := s.readJSON(ctFile, &v); err == nil && v.Host == host {
+		_ = os.Remove(s.path(ctFile))
+	}
+}
+
+// hostFileRe keeps a host safe as part of a file name.
+var hostFileRe = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`)

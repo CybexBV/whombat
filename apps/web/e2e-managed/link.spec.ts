@@ -56,7 +56,7 @@ test('signed out, the box’s code and an email: the link comes back to /link, w
   await expect(page.getByText(/Whombat Link · Free month · until /)).toBeVisible();
   const row = page.locator('[data-link-state="on"]');
   await expect(row).toContainText('Home');
-  await expect(row).toContainText('.box.whombat.app');
+  await expect(row).toContainText('calm-otter-reef.whombat.app');
   // The account's Link org is in the session now; it is never the hosted list's organization.
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your Whombat' })).toBeVisible();

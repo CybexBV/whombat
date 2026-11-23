@@ -1081,3 +1081,22 @@ don't speak these, and everything here is TypeScript only (docs/implementation/m
 - **The catalog**: Find My's entry gains the read tool `findmy_timeline` (`{person?, date?}`, Allowed from the start).
 - **`things.page`**: a Find My connection's page shows its Timeline tab (`timeline`, naming its Mac as its Find My tab
   does) only to a session at minor 5 or later.
+
+## Session minor 6 of major 5: own names (contracts 4.16.0, CT-1792…CT-1799)
+
+`SESSION_PROTOCOL` is `{major: 5, minor: 6}` (`OWN_ADDRESS_NAMES_MINOR`). The box's own address may have a name the person
+chose, under `whombat.app` (Whombat own-address.md OWA-40…OWA-47).
+
+- **`ownAddress.check {label}`** (`OwnAddressNameCandidate`: what the person typed, lower-cased and trimmed) →
+  `{label, verdict, host?}` (`free`, `yours`, `taken`, `reserved`, `invalid`; `host` when free or yours), owners, a read
+  (`safe`).
+- **`ownAddress.rename {label}`** (`OwnAddressLabel`) → `{ownAddress: OwnAddressSummary}`, owners, `never` (it acts at
+  control first). Refusals `OWN_ADDRESS_RENAME_ERROR_CODES`: `label_invalid`, `label_reserved`, `label_taken`,
+  `rename_limit`, `link_off`, `own_address_off`, `own_address_unavailable`, `control_unreachable`.
+- **`OwnAddressSummary.leaving?`** `{host, url, until}`: the earlier address while it still works (30 days after a
+  rename or a move). Older apps strip it.
+- **`address_moved`**: `boxPasskey.register.begin` at the leaving host; new passkeys are made only at the current one.
+- **Hosts**: an own-address host is a name of 3–32 lower-case letters, digits and single hyphens under `whombat.app`,
+  `box.whombat.app` or `dev.whombat.app`. A box names a host outside the three-word `box.`/`dev.` shape only to a
+  session at minor 6 or later; to an older one it leaves the address out (`ownAddress` null, such Whombats out of
+  `link.whombats`).

@@ -3,9 +3,11 @@
  * leaving a Whombat that can't be opened any more, opening one that let this device in already, and a Whombat's
  * directory entry. Each app brings its own environment.
  */
+import type { OwnAddressNameVerdict } from '@whombat/protocol';
 import { useEffect, useRef, useState } from 'react';
 import type { ApplianceSession, ConnectionState } from '../session/types';
 import type { ApplianceSummary, ControlApi } from './control';
+import { createOwnNameChecker, type OwnNameCheck } from './own-name';
 import { letInAlready } from './pairing';
 import { type GoneReason, goneOf } from './retired';
 
@@ -72,4 +74,27 @@ export function useDirectoryEntry(
     };
   }, [env, orgId, device]);
   return entry;
+}
+
+/**
+ * A name for the box's address as it is typed (`createOwnNameChecker`): the check's state, and `type` for each change.
+ * `ask` is control's `link.name.check` at setup and the box's `ownAddress.check` when changing it; `current` is the
+ * box's name now, if it has one.
+ */
+export function useOwnNameCheck(
+  ask: (name: string) => Promise<{ verdict: OwnAddressNameVerdict; host?: string | undefined }>,
+  current?: string | null,
+): { check: OwnNameCheck; type: (typed: string) => void } {
+  const [check, setCheck] = useState<OwnNameCheck>({ kind: 'idle' });
+  const asker = useRef(ask);
+  asker.current = ask;
+  const [checker] = useState(() =>
+    createOwnNameChecker({
+      ask: (name) => asker.current(name),
+      onChange: setCheck,
+      current: current ?? null,
+    }),
+  );
+  useEffect(() => () => checker.dispose(), [checker]);
+  return { check, type: checker.type };
 }

@@ -86,7 +86,9 @@ import {
 } from '@whombat/core/contracts';
 import { basicSnippet, cspAdvice, customLauncherSnippet } from '@whombat/core/feedback';
 import { siteSigningKeyOf } from '@whombat/core/feedback/drop';
+import { ownAddressNameProblem } from '@whombat/core/own-address';
 import { burrow, FEEDBACK_EMBED_URL, feedbackManagedHealth, mara } from '@whombat/fixtures';
+import { OWN_ADDRESS_ZONES, type OwnAddressNameVerdict } from '@whombat/protocol';
 import {
   type ClaimConfirmTags,
   claimBackoffSeconds,
@@ -204,6 +206,8 @@ type ControlBox = Exclude<keyof typeof DEVICES, 'community' | 'own'>;
 
 /** The A3 box's address, and the claim link's secret its screen shows. */
 export const FAKE_OWN_HOST = 'maple-otter-river.dev.whombat.app';
+/** The owner's box passkey under the first address, once the A3 box changed it (`ownRenamed`). */
+const FAKE_MOVED_PASSKEY = 'moved-passkey-under-the-old-address';
 /** The code a box shows while Whombat Link starts (4.4). */
 export const FAKE_LINK_CODE = 'KXQM-PRTV';
 export const FAKE_OWN_CLAIM_LINK = 'kxmprt';
@@ -295,6 +299,12 @@ interface ApplianceState {
     users: Record<string, string>;
     foreign?: boolean;
     missed?: boolean;
+    /** The address it had before a rename, while it still works (4.16). */
+    leaving?: { host: string; until: string } | null;
+    /** Names this box had (`ownAddress.check` says `yours`). */
+    had?: string[];
+    /** Renamed just now: the first status after says it is getting its certificate. */
+    starting?: boolean;
   };
   /** Whombat Link as the box knows it (4.4, whombat-link.md); absent: off. */
   link?: LinkSummary;
@@ -559,6 +569,10 @@ interface FakeLink {
   card?: boolean;
   /** Boxes linked from now on wait for their address (`starting`) until `linkAddress` gives it. */
   addressLater?: boolean;
+  /** The names people chose at confirm (`link.confirm`'s `label`), by device, until the box gets its address. */
+  wanted?: Record<string, string>;
+  /** A name another account's box takes between the check and the confirm (`label_taken` at confirm). */
+  takenMeanwhile?: string | null;
 }
 
 interface WorldState {
@@ -623,6 +637,10 @@ interface WorldState {
   whombatLinks?: { code: string; expiresAt: string; used: boolean }[];
   /** The box target's page shows the A3 box at its own address instead of the community box. */
   ownBox?: boolean;
+  /** The host that page stands for, when not the box's first address (its old or its new one after a rename). */
+  ownPageHost?: string | null;
+  /** `ownAddress.rename` refuses with this code. */
+  ownRenameRefusal?: string | null;
   /** Faults that survive a reload: a sign-in challenge not bound to the device, control refusing registrations. */
   passkeyFaults?: { challenge?: string | null; controlDown?: boolean; enrollDown?: boolean };
 }
@@ -671,6 +689,28 @@ const ORG: ControlOrg = { orgId: 'org_burrowhq', name: 'Burrow HQ' };
 const LINK_LETTERS = 'ABCDEFGHJKMNPQRTVWXY';
 /** Addresses control draws for linked boxes (example words). */
 const FAKE_LINK_LABELS = ['calm-otter-reef', 'brave-heron-dune', 'quiet-maple-cove'];
+
+/** Names other people's Whombats have in the fake world: “That name is taken.” */
+export const FAKE_TAKEN_NAMES: readonly string[] = ['office', 'garden'];
+
+/** `link.name.check` and the box's `ownAddress.check` in the fake world: the rules control keeps, and names in use. */
+function fakeNameCheck(
+  name: string,
+  l: Pick<FakeLink, 'boxes' | 'wanted'>,
+  own?: { label: string; had: readonly string[] },
+): { name: string; verdict: OwnAddressNameVerdict; host?: string } {
+  const problem = ownAddressNameProblem(name);
+  if (problem) return { name, verdict: problem };
+  if (own?.had.includes(name)) return { name, verdict: 'yours', host: `${name}.${OWN_ADDRESS_ZONES.prod}` };
+  const used =
+    FAKE_TAKEN_NAMES.includes(name) ||
+    l.boxes.some((b) => b.label === name) ||
+    Object.values(l.wanted ?? {}).includes(name) ||
+    own?.label === name;
+  return used
+    ? { name, verdict: 'taken' }
+    : { name, verdict: 'free', host: `${name}.${OWN_ADDRESS_ZONES.prod}` };
+}
 const CLOUD = { accountId: 'acc_mara', email: mara.email, name: mara.name };
 /** The appliance-local account Mara claims as (same id as the fixtures' account). */
 const LOCAL = { id: 'acc_mara', name: mara.name };
@@ -766,11 +806,15 @@ function randomCode(): string {
 /** The A3 box's `OwnAddressSummary` (4.3): a certificate for two more months, checked an hour ago. */
 function ownAddressOf(own: NonNullable<ApplianceState['own']>) {
   const at = (h: number) => new Date(Date.now() + h * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const leaving = own.leaving && Date.parse(own.leaving.until) > Date.now() ? own.leaving : null;
   return {
     host: own.host,
     url: `https://${own.host}/`,
-    state: 'ready',
+    state: own.starting ? 'starting' : 'ready',
     reachable: own.reachable,
+    ...(leaving && {
+      leaving: { host: leaving.host, url: `https://${leaving.host}/`, until: leaving.until },
+    }),
     certificateEndsAt: at(24 * 60),
     watch: {
       lastCheckAt: at(-1),
@@ -878,6 +922,14 @@ export interface FakeFaults {
    * secret while unclaimed, and what its certificate watch found (`foreign`, `missed`).
    */
   ownBox(value: boolean, watch?: { foreign?: boolean; missed?: boolean }): void;
+  /**
+   * The A3 box changed its address to `<label>.whombat.app` (4.16): its first address is the leaving one for `days`
+   * more, the account's box passkey stays under it, and the page stands at `page` (`old`: the leaving address, with
+   * the moved banner; `new`: the new one, with the passkeys section's prompt). Null puts the first address back.
+   */
+  ownRenamed(change: { label: string; days?: number; page?: 'old' | 'new' } | null): void;
+  /** `ownAddress.rename` refuses with this code (`rename_limit`, `label_taken`, …); null: it works. */
+  ownRenameRefusal(code: string | null): void;
   /**
    * Whombat Link's state on the box target's box (4.4), or on `device` when given: `grace` ends in a week, `on` may run
    * its free month.
@@ -1846,6 +1898,55 @@ export async function createFakeWorld(): Promise<FakeWorld> {
             a.own.reachable = input.on === true;
             save();
           }
+          const summary = ownAddressOf(a.own);
+          // Its new certificate came a moment after the rename.
+          if (a.own.starting) {
+            a.own.starting = false;
+            save();
+          }
+          return json(200, { ownAddress: summary });
+        }
+        /* Changing it (4.16): owners only, as the reach switch. */
+        case 'ownAddress.check':
+        case 'ownAddress.rename': {
+          const accountId = a.endpoints[me]?.accountId;
+          // The box's one person is its owner.
+          if (!accountId) return err(403, 'forbidden', 'Enrolled devices only.');
+          if (!a.own) return err(503, 'unavailable', 'No own address.', { code: 'own_address_unavailable' });
+          const label = String(input.label ?? '');
+          const current = a.own.host.split('.')[0] ?? '';
+          const others = {
+            boxes: Object.values(state.appliances).flatMap((o) =>
+              o !== a && o.own ? [{ label: o.own.host.split('.')[0] ?? null }] : [],
+            ),
+          } as Pick<FakeLink, 'boxes'>;
+          const check = fakeNameCheck(label, others, { label: current, had: a.own.had ?? [] });
+          if (op === 'ownAddress.check')
+            return json(200, { label, verdict: check.verdict, ...(check.host && { host: check.host }) });
+          const refusal =
+            state.ownRenameRefusal ??
+            (check.verdict === 'free' || check.verdict === 'yours' ? null : `label_${check.verdict}`);
+          if (refusal) {
+            const kind =
+              refusal === 'rename_limit'
+                ? [429, 'rate_limited']
+                : refusal === 'label_invalid'
+                  ? [400, 'validation_failed']
+                  : refusal === 'label_reserved' || refusal === 'link_off'
+                    ? [403, 'not_allowed']
+                    : refusal === 'label_taken'
+                      ? [409, 'conflict']
+                      : [503, 'unavailable'];
+            return err(kind[0] as number, kind[1] as string, 'Refused.', { code: refusal });
+          }
+          const old = a.own.host;
+          // An address already leaving keeps its date; the one in between stops at once.
+          a.own.leaving ??= { host: old, until: new Date(Date.now() + 30 * 86_400_000).toISOString() };
+          if (a.own.leaving.host === check.host) a.own.leaving = null;
+          a.own.had = [...new Set([...(a.own.had ?? []), current])];
+          a.own.host = check.host ?? `${label}.${OWN_ADDRESS_ZONES.prod}`;
+          a.own.starting = true;
+          save();
           return json(200, { ownAddress: ownAddressOf(a.own) });
         }
         case 'account.link.lookup':
@@ -1868,6 +1969,9 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           const acc = accountId ? accountOf(a, accountId) : null;
           if (!accountId || !acc) return err(403, 'forbidden', 'Enrolled devices only.');
           if (!a.own) return err(503, 'unavailable', 'No own address.', { code: 'own_address_unavailable' });
+          // The page at the address the box is leaving: new passkeys only at the current one.
+          if (state.ownBox && a.own.leaving?.host === (state.ownPageHost ?? FAKE_OWN_HOST))
+            return err(409, 'conflict', 'The address moved.', { code: 'address_moved', host: a.own.host });
           const nonce = hex(32);
           const userId = a.own.users[accountId] ?? b64url(32);
           a.own.users[accountId] = userId;
@@ -3384,9 +3488,12 @@ export async function createFakeWorld(): Promise<FakeWorld> {
     Object.assign(b, { state: 'on', since: nowS(), graceEndsAt: null });
     if (!b.label && linkNow().addressLater) Object.assign(b, { state: 'starting' });
     else if (!b.label) {
-      const taken = linkNow().boxes.filter((x) => x.label).length;
-      b.label = FAKE_LINK_LABELS[taken % FAKE_LINK_LABELS.length] ?? 'calm-otter-reef';
-      b.host = `${b.label}.box.whombat.app`;
+      const l = linkNow();
+      const wanted = l.wanted?.[b.device];
+      const taken = l.boxes.filter((x) => x.label).length;
+      b.label = wanted ?? FAKE_LINK_LABELS[taken % FAKE_LINK_LABELS.length] ?? 'calm-otter-reef';
+      b.host = `${b.label}.${OWN_ADDRESS_ZONES.prod}`;
+      if (wanted && l.wanted) delete l.wanted[b.device];
     }
   };
   /** The account has accepted some Subscription Terms (at a confirm, a checkout or the portal), as control asks. */
@@ -3850,13 +3957,30 @@ export async function createFakeWorld(): Promise<FakeWorld> {
         linked: c.used,
         trial: !linkRuns(l) && l.plan.trialAvailable,
         termsVersion: SUBSCRIPTION_TERMS_VERSION,
+        chooseName: !c.used,
       });
     },
-    async linkConfirm(code, terms) {
+    async linkNameCheck(name) {
+      guard();
+      if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
+      // No box is asking at setup: never `yours`.
+      const r = fakeNameCheck(name, linkNow());
+      return later({ ...r, verdict: r.verdict === 'yours' ? 'taken' : r.verdict });
+    },
+    async linkConfirm(code, terms, label) {
       guard();
       if (!state.signedIn) throw new ControlError('signed_out', 'Sign in again.');
       const c = liveCode(code);
       const l = linkNow();
+      // Checked again, as control does inside the confirm: nothing is linked when the name can't be had.
+      if (label && !l.boxes.some((b) => b.device === c.device)) {
+        if (label === l.takenMeanwhile) throw new ControlError('label_taken', 'That name is taken.');
+        const verdict = fakeNameCheck(label, l).verdict;
+        if (verdict === 'taken') throw new ControlError('label_taken', 'That name is taken.');
+        if (verdict === 'reserved') throw new ControlError('label_reserved', 'That name isn’t available.');
+        if (verdict === 'invalid') throw new ControlError('label_invalid', 'That isn’t a name.');
+        l.wanted = { ...l.wanted, [c.device]: label };
+      }
       if (terms && !subscriptionTermsAccepted(terms.version))
         throw new ControlError('terms_outdated', 'The terms have changed.');
       if (!terms && !termsAccepted(l))
@@ -4232,7 +4356,7 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           },
         }),
         secure: () => !state.insecurePage && window.isSecureContext,
-        ownAddress: () => (state.ownBox ? FAKE_OWN_HOST : null),
+        ownAddress: () => (state.ownBox ? (state.ownPageHost ?? FAKE_OWN_HOST) : null),
       };
     },
     connector(target) {
@@ -4340,6 +4464,43 @@ export async function createFakeWorld(): Promise<FakeWorld> {
         state.ownBox = v;
         const own = state.appliances[DEVICES.own]?.own;
         if (own) Object.assign(own, { foreign: watch.foreign === true, missed: watch.missed === true });
+        save();
+      },
+      ownRenamed(change) {
+        const a = state.appliances[DEVICES.own];
+        const own = a?.own;
+        if (!a || !own) return;
+        if (!change) {
+          Object.assign(own, { host: FAKE_OWN_HOST, leaving: null, starting: false });
+          state.ownPageHost = null;
+          a.passkeys = (a.passkeys ?? []).filter((p) => p.id !== FAKE_MOVED_PASSKEY);
+          return save();
+        }
+        const host = `${change.label}.${OWN_ADDRESS_ZONES.prod}`;
+        const until = new Date(Date.now() + (change.days ?? 30) * 86_400_000).toISOString();
+        Object.assign(own, { host, leaving: { host: FAKE_OWN_HOST, until }, starting: false });
+        own.had = [...new Set([...(own.had ?? []), FAKE_OWN_HOST.split('.')[0] ?? ''])];
+        state.ownPageHost = change.page === 'new' ? host : FAKE_OWN_HOST;
+        // The owner's box passkey from before the change, under the old address.
+        const owner = a.claimedBy;
+        if (owner && !(a.passkeys ?? []).some((p) => p.id === FAKE_MOVED_PASSKEY))
+          a.passkeys = [
+            ...(a.passkeys ?? []),
+            {
+              id: FAKE_MOVED_PASSKEY,
+              name: 'Chrome on this Mac',
+              accountId: owner,
+              createdAt: new Date(Date.now() - 20 * 86_400_000).toISOString(),
+              lastUsedAt: null,
+              synced: true,
+              removed: false,
+              rpId: FAKE_OWN_HOST,
+            },
+          ];
+        save();
+      },
+      ownRenameRefusal(code) {
+        state.ownRenameRefusal = code;
         save();
       },
       linkState(linkState, extra = {}, device) {

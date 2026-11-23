@@ -18,13 +18,33 @@ import (
 	"github.com/CybexBV/whombat/appliance/manager/internal/broker"
 	"github.com/CybexBV/whombat/appliance/manager/internal/controlapi"
 	"github.com/CybexBV/whombat/appliance/manager/internal/controlapi/fakecontrol"
+	"github.com/CybexBV/whombat/appliance/manager/internal/link"
 	"github.com/CybexBV/whombat/appliance/manager/internal/ownaddress"
 	"github.com/CybexBV/whombat/appliance/manager/internal/testworld"
+	"github.com/CybexBV/whombat/contracts/go/device"
 	"github.com/CybexBV/whombat/contracts/go/local"
+	"github.com/CybexBV/whombat/contracts/go/protocol"
 )
 
 // startOA is start with an own-address service (nil: a manager without one).
 func startOA(t *testing.T, runtimeUID uint32, on bool) (*fakecontrol.Control, string, *ownaddress.Service) {
+	t.Helper()
+	var mode *ownaddress.Mode
+	if on {
+		mode = &ownaddress.Mode{Enabled: true, Zone: "dev.whombat.app", Directory: "https://ca.example.com/dir"}
+	}
+	return startOAWith(t, runtimeUID, mode, nil)
+}
+
+// startOAWith is startOA in mode (nil: none), with a Link state (nil: none).
+func startOAWith(t *testing.T, runtimeUID uint32, mode *ownaddress.Mode, l broker.Link) (*fakecontrol.Control, string, *ownaddress.Service) {
+	t.Helper()
+	fc, sock, svc, _ := startOAServer(t, runtimeUID, mode, l)
+	return fc, sock, svc
+}
+
+// startOAServer is startOAWith that also gives the server.
+func startOAServer(t *testing.T, runtimeUID uint32, mode *ownaddress.Mode, l broker.Link) (*fakecontrol.Control, string, *ownaddress.Service, *broker.Server) {
 	t.Helper()
 	w := testworld.New(t)
 	fc := fakecontrol.New("dev")
@@ -33,13 +53,16 @@ func startOA(t *testing.T, runtimeUID uint32, on bool) (*fakecontrol.Control, st
 	fc.Devices["dev-1"] = pub
 	cc := &controlapi.Client{BaseURL: fc.Server.URL, Env: "dev", DeviceID: "dev-1", Key: priv}
 	s := &broker.Server{RuntimeUID: runtimeUID, Control: cc, Engine: w.Engine}
+	if l != nil {
+		s.Link = l
+	}
 	var svc *ownaddress.Service
-	if on {
+	if mode != nil {
 		st, err := ownaddress.OpenStore(filepath.Join(t.TempDir(), "own-address"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		svc, err = ownaddress.Open(ownaddress.Mode{Enabled: true, Zone: "dev.whombat.app", Directory: "https://ca.example.com/dir"}, st, nil)
+		svc, err = ownaddress.Open(*mode, st, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +78,7 @@ func startOA(t *testing.T, runtimeUID uint32, on bool) (*fakecontrol.Control, st
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return fc, sock, svc
+	return fc, sock, svc, s
 }
 
 const v1 = `{"v":1}`
@@ -71,6 +94,8 @@ func TestOwnAddressOff(t *testing.T) {
 	for path, body := range map[string]string{
 		local.ManagerPathOwnAddressRegister: `{"v":1,"label":"maple-otter-river"}`,
 		local.ManagerPathOwnAddressCert:     v1, local.ManagerPathOwnAddressCt: v1,
+		local.ManagerPathOwnAddressCheck:  `{"v":1,"label":"home"}`,
+		local.ManagerPathOwnAddressRename: `{"v":1,"label":"home"}`,
 	} {
 		if resp, m := post(t, c, path, body); resp.StatusCode != 404 || errCode(m) != local.OwnAddressErrorOff {
 			t.Fatalf("%s: %d %v", path, resp.StatusCode, m)
@@ -86,7 +111,7 @@ func TestOwnAddressRegister(t *testing.T) {
 	if resp, _ := post(t, c, local.ManagerPathTicket, `{"class":"interactive"}`); resp.StatusCode != 200 {
 		t.Fatal("ticket", resp.StatusCode)
 	}
-	for _, bad := range []string{`{"v":1}`, `{"v":1,"label":"Maple-otter-river"}`, `{"v":1,"label":"maple-otter"}`, `{"v":2,"label":"maple-otter-river"}`, `{"v":1,"label":"maple-otter-river","x":1}`} {
+	for _, bad := range []string{`{"v":1}`, `{"v":1,"label":"Maple-otter-river"}`, `{"v":1,"label":"ma"}`, `{"v":2,"label":"maple-otter-river"}`, `{"v":1,"label":"maple-otter-river","x":1}`} {
 		if resp, _ := post(t, c, local.ManagerPathOwnAddressRegister, bad); resp.StatusCode != 400 {
 			t.Fatalf("%s: %d", bad, resp.StatusCode)
 		}
@@ -194,7 +219,7 @@ func TestOwnAddressOnlyForTheRuntime(t *testing.T) {
 	_, sock, _ := startOA(t, uint32(os.Getuid())+1, true)
 	c := client(sock)
 	for _, path := range []string{local.ManagerPathOwnAddressState, local.ManagerPathOwnAddressRegister, local.ManagerPathOwnAddressCert,
-		local.ManagerPathOwnAddressCt, local.ManagerPathAccountLinkLookup, local.ManagerPathAccountLink, local.ManagerPathKitCredentials} {
+		local.ManagerPathOwnAddressCt, local.ManagerPathOwnAddressCheck, local.ManagerPathOwnAddressRename, local.ManagerPathAccountLinkLookup, local.ManagerPathAccountLink, local.ManagerPathKitCredentials} {
 		if resp, _ := post(t, c, path, v1); resp.StatusCode != 403 {
 			t.Fatalf("%s: %d", path, resp.StatusCode)
 		}
@@ -241,4 +266,230 @@ func TestAccountLinkAndKitCredentialsForwarded(t *testing.T) {
 	if resp, m := post(t, c, local.ManagerPathAccountLinkLookup, `{"code":"ABCD-EFGH"}`); resp.StatusCode != 503 || errCode(m) != "control_unreachable" {
 		t.Fatalf("down: %d %v", resp.StatusCode, m)
 	}
+}
+
+// issue gives svc a current pair for its host, as the order loop would.
+func issue(t *testing.T, svc *ownaddress.Service, serial int64) {
+	t.Helper()
+	_, host := svc.Label()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{SerialNumber: big.NewInt(serial), DNSNames: []string{host},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(90 * 24 * time.Hour)}
+	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	p, err := svc.Store.SavePair([][]byte{der}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.Prober, svc.Orderer = okProber{}, onceOrderer{p}
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.Sleep = func(context.Context, <-chan struct{}, time.Duration) bool { cancel(); return false }
+	svc.Run(ctx)
+}
+
+// The owner's name check and rename go to control; the rename answers the new state, keeps the old host answering
+// with its pair, and drops the cached tickets.
+func TestOwnAddressCheckAndRename(t *testing.T) {
+	t.Parallel()
+	fc, sock, svc := startOA(t, uint32(os.Getuid()), true)
+	c := client(sock)
+	if resp, _ := post(t, c, local.ManagerPathOwnAddressRegister, `{"v":1,"label":"maple-otter-river"}`); resp.StatusCode != 200 {
+		t.Fatal(resp.StatusCode)
+	}
+	issue(t, svc, 0xab12)
+	fc.Set(func(f *fakecontrol.Control) {
+		f.Reserved = map[string]bool{"admin": true}
+		f.Taken = map[string]bool{"taken-name": true}
+	})
+	for label, want := range map[string]string{"home-box": "free", "maple-otter-river": "yours", "admin": "reserved",
+		"taken-name": "taken", "a": "invalid", "-ab": "invalid"} {
+		resp, m := post(t, c, local.ManagerPathOwnAddressCheck, `{"v":1,"label":"`+label+`"}`)
+		if resp.StatusCode != 200 || m["verdict"] != want || m["label"] != label {
+			t.Fatalf("check %s: %d %v", label, resp.StatusCode, m)
+		}
+		b, _ := json.Marshal(m)
+		if _, err := local.ParseOwnAddressCheckResponse(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, bad := range []string{`{"v":1}`, `{"v":1,"label":"Home"}`, `{"v":1,"label":"home","x":1}`} {
+		if resp, _ := post(t, c, local.ManagerPathOwnAddressCheck, bad); resp.StatusCode != 400 {
+			t.Fatalf("check %s: %d", bad, resp.StatusCode)
+		}
+		if resp, _ := post(t, c, local.ManagerPathOwnAddressRename, bad); resp.StatusCode != 400 {
+			t.Fatalf("rename %s: %d", bad, resp.StatusCode)
+		}
+	}
+	for label, want := range map[string]string{"admin": local.OwnAddressErrorLabelReserved, "taken-name": local.OwnAddressErrorLabelTaken} {
+		if resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"`+label+`"}`); resp.StatusCode != 409 || errCode(m) != want {
+			t.Fatalf("rename %s: %d %v", label, resp.StatusCode, m)
+		}
+	}
+	if resp, _ := post(t, c, local.ManagerPathTicket, `{"class":"interactive"}`); resp.StatusCode != 200 {
+		t.Fatal("ticket", resp.StatusCode)
+	}
+	resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"home-box"}`)
+	leaving, _ := m["leaving"].(map[string]any)
+	if resp.StatusCode != 200 || m["host"] != "home-box.dev.whombat.app" || leaving["host"] != "maple-otter-river.dev.whombat.app" {
+		t.Fatalf("rename: %d %v", resp.StatusCode, m)
+	}
+	b, _ := json.Marshal(m)
+	if _, err := local.ParseOwnAddressStateResponse(b); err != nil {
+		t.Fatal(err)
+	}
+	before := fc.Tickets
+	if resp, _ := post(t, c, local.ManagerPathTicket, `{"class":"interactive"}`); resp.StatusCode != 200 || fc.Tickets != before+1 {
+		t.Fatal("the ticket after the rename came from the cache")
+	}
+	// The old host's pair, by its host; the new host has none yet; a host the box doesn't answer at has none.
+	if resp, m := post(t, c, local.ManagerPathOwnAddressCert, `{"v":1,"host":"maple-otter-river.dev.whombat.app"}`); resp.StatusCode != 200 || m["serial"] != "ab12" || m["host"] != "maple-otter-river.dev.whombat.app" {
+		t.Fatalf("old host's cert: %d %v", resp.StatusCode, m)
+	}
+	for _, body := range []string{v1, `{"v":1,"host":"home-box.dev.whombat.app"}`, `{"v":1,"host":"nobody-here.dev.whombat.app"}`} {
+		if resp, m := post(t, c, local.ManagerPathOwnAddressCert, body); resp.StatusCode != 409 || errCode(m) != local.OwnAddressErrorNoCert {
+			t.Fatalf("cert %s: %d %v", body, resp.StatusCode, m)
+		}
+	}
+	// Control's limit and its other refusals.
+	fc.Set(func(f *fakecontrol.Control) { f.RenameLimit = 1 })
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"garden-shed"}`); resp.StatusCode != 409 || errCode(m) != local.OwnAddressErrorRenameLimit {
+		t.Fatalf("limit: %d %v", resp.StatusCode, m)
+	}
+	fc.Set(func(f *fakecontrol.Control) { f.RenameRefuse = "link_off" })
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"garden-shed"}`); resp.StatusCode != 409 || errCode(m) != local.OwnAddressErrorLinkOff {
+		t.Fatalf("link off at control: %d %v", resp.StatusCode, m)
+	}
+	fc.SetDown(true)
+	if resp, m := post(t, c, local.ManagerPathOwnAddressCheck, `{"v":1,"label":"garden-shed"}`); resp.StatusCode != 503 || errCode(m) != "control_unreachable" {
+		t.Fatalf("down: %d %v", resp.StatusCode, m)
+	}
+}
+
+// A prod box under box.whombat.app moves with its own label: the same label under whombat.app, the old host leaving;
+// the Link state names the new host. Asking again changes nothing.
+func TestOwnAddressMove(t *testing.T) {
+	t.Parallel()
+	fl := &fakeLink{rec: link.Record{State: protocol.LinkStateOn, Label: "maple-otter-river"}}
+	mode := &ownaddress.Mode{Enabled: true, Zone: "whombat.app", Directory: "https://ca.example.com/dir"}
+	fc, sock, svc := startOAWith(t, uint32(os.Getuid()), mode, fl)
+	c := client(sock)
+	fc.Set(func(f *fakecontrol.Control) {
+		f.Zone = "box.whombat.app"
+		f.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: 1790000000}
+	})
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRegister, `{"v":1,"label":"maple-otter-river"}`); resp.StatusCode != 200 || m["host"] != "maple-otter-river.box.whombat.app" {
+		t.Fatalf("register: %d %v", resp.StatusCode, m)
+	}
+	issue(t, svc, 0xcd34)
+	fc.Set(func(f *fakecontrol.Control) { f.Zone = "whombat.app" })
+	label, ok := svc.MoveWanted("whombat.app")
+	if !ok {
+		t.Fatal("no move wanted")
+	}
+	resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"`+label+`"}`)
+	leaving, _ := m["leaving"].(map[string]any)
+	if resp.StatusCode != 200 || m["host"] != "maple-otter-river.whombat.app" || leaving["host"] != "maple-otter-river.box.whombat.app" {
+		t.Fatalf("move: %d %v", resp.StatusCode, m)
+	}
+	if r := fl.Snapshot(); r.Host != "maple-otter-river.whombat.app" || r.Label != "maple-otter-river" {
+		t.Fatalf("link state %+v", r)
+	}
+	if resp, m := post(t, c, local.ManagerPathOwnAddressCert, `{"v":1,"host":"maple-otter-river.box.whombat.app"}`); resp.StatusCode != 200 || m["serial"] != "cd34" {
+		t.Fatalf("old host's cert: %d %v", resp.StatusCode, m)
+	}
+	if fc.Renamed["dev-1"] != 0 {
+		t.Fatal("a move counted as a rename")
+	}
+	resp, m2 := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"maple-otter-river"}`)
+	if resp.StatusCode != 200 || m2["host"] != m["host"] || m2["leaving"] == nil {
+		t.Fatalf("again: %d %v", resp.StatusCode, m2)
+	}
+	// Link off: control isn't asked.
+	fl.mu.Lock()
+	fl.rec.State = protocol.LinkStateOff
+	fl.mu.Unlock()
+	calls := fc.RenameCalls
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"home"}`); resp.StatusCode != 409 || errCode(m) != local.OwnAddressErrorLinkOff || fc.RenameCalls != calls {
+		t.Fatalf("link off: %d %v", resp.StatusCode, m)
+	}
+}
+
+// The daemon's move and the owner's rename race: whichever reaches control first, the box ends at the owner's name.
+// The address is held for one change at a time, so the rename waits for a move under way; and a move chosen before
+// the rename that reaches control after it carries move, so control changes nothing and the box keeps the new name.
+func TestALateMoveNeverUndoesARename(t *testing.T) {
+	t.Parallel()
+	const oldHost, movedHost = "maple-otter-river.box.whombat.app", "maple-otter-river.whombat.app"
+	fl := &fakeLink{rec: link.Record{State: protocol.LinkStateOn, Label: "maple-otter-river"}}
+	mode := &ownaddress.Mode{Enabled: true, Zone: "whombat.app", Directory: "https://ca.example.com/dir"}
+	fc, sock, svc, srv := startOAServer(t, uint32(os.Getuid()), mode, fl)
+	c := client(sock)
+	fc.Set(func(f *fakecontrol.Control) {
+		f.Zone = "box.whombat.app"
+		f.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: 1790000000}
+	})
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRegister, `{"v":1,"label":"maple-otter-river"}`); resp.StatusCode != 200 || m["host"] != oldHost {
+		t.Fatalf("register: %d %v", resp.StatusCode, m)
+	}
+	issue(t, svc, 0xcd34)
+	fc.Set(func(f *fakecontrol.Control) { f.Zone = "whombat.app" })
+	label, ok := svc.MoveWanted("whombat.app")
+	if !ok {
+		t.Fatal("no move wanted")
+	}
+
+	// The move holds the address: the owner's rename waits, then renames the moved box.
+	unlock := srv.LockAddress()
+	renamed := make(chan int, 1)
+	go func() {
+		resp, err := c.Post("http://manager"+local.ManagerPathOwnAddressRename, "application/json", strings.NewReader(`{"v":1,"label":"home"}`))
+		if err != nil {
+			renamed <- 0
+			return
+		}
+		resp.Body.Close()
+		renamed <- resp.StatusCode
+	}()
+	select {
+	case code := <-renamed:
+		t.Fatalf("the rename didn't wait for the move: %d", code)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if err := srv.RenameAddress(context.Background(), label, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, h := svc.Label(); h != movedHost {
+		t.Fatalf("moved to %s", h)
+	}
+	unlock()
+	if code := <-renamed; code != 200 {
+		t.Fatalf("rename: %d", code)
+	}
+	if _, h := svc.Label(); h != "home.whombat.app" {
+		t.Fatalf("after the rename: %s", h)
+	}
+	if l := svc.Leaving(); l == nil || l.Host != oldHost {
+		t.Fatalf("leaving %+v", l)
+	}
+
+	// The same move again, late: control changes nothing, and neither does the box.
+	unlock = srv.LockAddress()
+	err := srv.RenameAddress(context.Background(), label, true)
+	unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, h := svc.Label(); h != "home.whombat.app" {
+		t.Fatalf("a late move undid the rename: %s", h)
+	}
+	if l := svc.Leaving(); l == nil || l.Host != oldHost {
+		t.Fatalf("leaving %+v", l)
+	}
+	if r := fl.Snapshot(); r.Host != "home.whombat.app" {
+		t.Fatalf("link state %+v", r)
+	}
+	fc.Set(func(f *fakecontrol.Control) {
+		if a := f.Addresses["dev-1"]; a.Host != "home.whombat.app" || f.Renamed["dev-1"] != 1 {
+			t.Errorf("control: %+v, %d renames", a, f.Renamed["dev-1"])
+		}
+	})
 }

@@ -7,6 +7,11 @@
     "v": {
       "type": "number",
       "const": 1
+    },
+    "host": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
     }
   },
   "required": [

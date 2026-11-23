@@ -1,14 +1,18 @@
 /**
  * The box's own address at control (4.3; Whombat docs/decisions/own-address.md), as device ops the manager signs:
- * registering the label the box drew, linking the box to the person's account with the one-time code from the account's
- * page, and declaring the box's own passkeys so control keeps their backup envelopes. Cross-language. Control checks a
- * label against the word list (`isOwnAddressLabel` in `@whombat/core/own-address`); these schemas know its shape only.
+ * registering the label the box drew, checking and changing its name (4.16), linking the box to the person's account
+ * with the one-time code from the account's page, and declaring the box's own passkeys so control keeps their backup
+ * envelopes. Cross-language. Control checks a drawn label against the word list (`isOwnAddressLabel`) and a chosen name
+ * against the reserved ones (`ownAddressNameProblem`, both in `@whombat/core/own-address`); these schemas know the shape
+ * only.
  */
 import {
   AccountLinkCode,
   BackupPasskeyCredentialId,
   OwnAddressHost,
   OwnAddressLabel,
+  OwnAddressNameCandidate,
+  OwnAddressNameVerdict,
 } from '@whombat/protocol';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
@@ -19,6 +23,17 @@ export const AccountEmail = z
   .min(3)
   .max(254)
   .regex(/^[\x21-\x3f\x41-\x7e]+@[\x21-\x3f\x41-\x7e]+$/);
+
+/**
+ * The box's earlier address while it still works (4.16): after a rename or a move to a new zone, control keeps routing
+ * it to the box until `until` (`OWN_ADDRESS_LEAVING_DAYS` after the change). At most one at a time.
+ */
+export const AddressLeaving = z.object({
+  label: OwnAddressLabel,
+  host: OwnAddressHost,
+  until: EpochSeconds,
+});
+export type AddressLeaving = z.infer<typeof AddressLeaving>;
 
 /** The most box passkeys one declaration names (`kit.credentials.declare`). */
 export const KIT_CREDENTIALS_DECLARE_MAX = 64;
@@ -32,7 +47,42 @@ export const ADDRESS_DEVICE_OPS = {
    */
   'address.register': {
     body: z.strictObject({ label: OwnAddressLabel }),
-    response: z.object({ label: OwnAddressLabel, host: OwnAddressHost, registeredAt: EpochSeconds }),
+    response: z.object({
+      label: OwnAddressLabel,
+      host: OwnAddressHost,
+      registeredAt: EpochSeconds,
+      /** The earlier address while it still works (4.16); absent when none is, and from an older control. */
+      leaving: AddressLeaving.optional(),
+    }),
+  },
+  /**
+   * Whether this box could have `label` as its name (4.16): `yours` for a name it had itself, `free`, `taken`,
+   * `reserved` or `invalid` (any candidate is answered, so the person sees why). Reads only; 60 an hour per device
+   * (`rate_limited`). Refuses a retired device (`device_revoked`).
+   */
+  'address.check': {
+    body: z.strictObject({ label: OwnAddressNameCandidate }),
+    response: z.object({ label: OwnAddressNameCandidate, verdict: OwnAddressNameVerdict }),
+  },
+  /**
+   * Change the box's address (4.16). A label other than its own is a rename: refused with `label_invalid`,
+   * `label_reserved`, `label_taken` (409), `link_off` (Link isn't on or in grace), `own_address_off` (no zone here) and
+   * `rename_limit` (more than `OWN_ADDRESS_RENAMES_PER_YEAR` in 365 days; 409). Its own label while its zone isn't
+   * control's zone of today is a move to that zone (never counted as a rename); its own label in today's zone answers
+   * the state as it is. The address being replaced becomes `leaving` for `OWN_ADDRESS_LEAVING_DAYS`; one already leaving
+   * keeps its date, and the one in between stops at once. Audited as `address.renamed` or `address.moved`. `move`
+   * (sent by the manager when it moves itself) makes it a move only: when `label` is no longer the box's live label (the
+   * owner renamed it meanwhile) control changes nothing and answers the state as it is, so a late move never undoes a
+   * rename.
+   */
+  'address.rename': {
+    body: z.strictObject({ label: OwnAddressLabel, move: z.literal(true).optional() }),
+    response: z.object({
+      label: OwnAddressLabel,
+      host: OwnAddressHost,
+      registeredAt: EpochSeconds,
+      leaving: AddressLeaving.nullable(),
+    }),
   },
   /**
    * Whose account a link code is, so the box can ask “Link to <email>?” before it links. Unknown, expired and used

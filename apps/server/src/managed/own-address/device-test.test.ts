@@ -179,7 +179,10 @@ async function ownAddress(test: DeviceTest | null, log: Logger): Promise<number>
     admit: () => 'ok',
     onStream: async () => 'session',
     web: null,
-    door: ownAddressDoor({ host: () => HOST, context: () => context }, routes),
+    door: ownAddressDoor(
+      { webHosts: () => [HOST], contextFor: (h) => (h === HOST ? context : null) },
+      routes,
+    ),
     guard: new DirectGuard({ ...DOOR_LIMITS, upgradeBurst: 1000 }),
   });
   const own = listener;

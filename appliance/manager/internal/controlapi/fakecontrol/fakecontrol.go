@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -123,6 +124,19 @@ type Control struct {
 	Taken        map[string]bool
 	AddressHost  string
 	AddressCalls int
+	// Names (4.16): address.check and address.rename. Reserved are names control gives nobody; a name a device had is
+	// its own for good (Had) and never another's; AddressLeaving is each device's earlier address while it is routed
+	// (30 days). address.rename with the same label under another zone than Zone is a move (it doesn't count), a new
+	// name counts against RenameLimit (default 3); a rename while an address is leaving keeps that one. CheckCalls and
+	// RenameCalls count the ops; RenameRefuse answers address.rename with that refusal code instead.
+	Reserved       map[string]bool
+	Had            map[string]string
+	AddressLeaving map[string]*device.AddressLeaving
+	Renamed        map[string]int
+	RenameLimit    int
+	CheckCalls     int
+	RenameCalls    int
+	RenameRefuse   string
 	// account.link.lookup, account.link and kit.credentials.declare: Forwarded records "<op> <body>" for each; LinkRefuse
 	// answers the two link ops with that refusal code instead (link_code_invalid … : 409, code in details.code).
 	Forwarded  []string
@@ -144,6 +158,12 @@ type Control struct {
 	// that carries one as a control before contracts 4.13 does (its strict body: 400 validation_failed, bad_body).
 	ClaimLinks             []string
 	StatusBeforeClaimLinks bool
+	// BeginOwnNames and StatusOwnNames: whether each link.begin and link.status carried ownNames (4.16).
+	// BeforeOwnNames answers a link.begin or link.status that carries it as a control before contracts 4.16 does (its
+	// strict body: 400 validation_failed, bad_body).
+	BeginOwnNames  []bool
+	StatusOwnNames []bool
+	BeforeOwnNames bool
 	// support.heartbeat and push.register/unregister: what control took.
 	Heartbeats  []device.SupportReport
 	HeartbeatS  int64
@@ -169,6 +189,12 @@ func (c *Control) LinkCount(op device.DeviceOpName) int {
 
 // SetLink sets the Link state control answers.
 func (c *Control) SetLink(st *device.DeviceLinkStatus) { c.mu.Lock(); c.Link = st; c.mu.Unlock() }
+
+// badBody answers as control does a body its strict schema refuses.
+func badBody(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = fmt.Fprint(w, `{"error":{"code":"validation_failed","message":"The device request is not valid.","details":{"code":"bad_body"}}}`)
+}
 
 // adoptRegistration adds a device link.begin introduces (a box control never saw, LNK-03): control trusts the
 // registration's management key once both its proofs verify, as control does.
@@ -217,11 +243,16 @@ func (c *Control) link(w http.ResponseWriter, env *device.DeviceRequestEnvelope)
 		}
 		var begin device.LinkBeginRequest
 		if json.Unmarshal(env.Body, &begin) == nil {
+			if begin.OwnNames != nil && c.BeforeOwnNames {
+				badBody(w)
+				return
+			}
 			name := ""
 			if begin.Name != nil {
 				name = *begin.Name
 			}
 			c.BeginNames = append(c.BeginNames, name)
+			c.BeginOwnNames = append(c.BeginOwnNames, begin.OwnNames != nil && *begin.OwnNames)
 		}
 		st := c.BeginAnswer
 		if st == nil {
@@ -237,17 +268,17 @@ func (c *Control) link(w http.ResponseWriter, env *device.DeviceRequestEnvelope)
 	case device.DeviceOpNameLinkStatus:
 		var req device.LinkStatusRequest
 		_ = json.Unmarshal(env.Body, &req)
-		if req.ClaimLink != nil && c.StatusBeforeClaimLinks {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprint(w, `{"error":{"code":"validation_failed","message":"The device request is not valid.","details":{"code":"bad_body"}}}`)
+		if (req.ClaimLink != nil && c.StatusBeforeClaimLinks) || (req.OwnNames != nil && c.BeforeOwnNames) {
+			badBody(w)
 			return
 		}
+		c.StatusOwnNames = append(c.StatusOwnNames, req.OwnNames != nil && *req.OwnNames)
 		claim := ""
 		if req.ClaimLink != nil {
 			claim = *req.ClaimLink
 		}
 		c.ClaimLinks = append(c.ClaimLinks, claim)
-		_ = json.NewEncoder(w).Encode(device.LinkStatusResponse{Link: *c.Link})
+		_ = json.NewEncoder(w).Encode(device.LinkStatusResponse{Link: c.withAddress(env.Device, *c.Link)})
 	case device.DeviceOpNameLinkLeave:
 		c.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOff, Since: now, Label: c.Link.Label}
 		_ = json.NewEncoder(w).Encode(device.LinkLeaveResponse{Link: *c.Link})
@@ -468,7 +499,7 @@ func (c *Control) serve(w http.ResponseWriter, r *http.Request) {
 		claims, _ := json.Marshal(map[string]any{"rol": "appliance", "sub": env.Device, "exp": exp.Unix(), "jti": fmt.Sprint(c.Tickets)})
 		jws := "eyJhbGciOiJFZERTQSJ9." + base64.RawURLEncoding.EncodeToString(claims) + ".c2lnbmF0dXJl"
 		_ = json.NewEncoder(w).Encode(device.TicketIssueResponse{Ticket: jws, ExpiresAt: exp.Unix(), Channel: "app",
-			Relay: device.RelayAssignment{Worker: "w1", URL: "wss://relay.dev.whombat.com", ReassignAfter: exp.Unix()}, Link: c.Link})
+			Relay: device.RelayAssignment{Worker: "w1", URL: "wss://relay.dev.whombat.com", ReassignAfter: exp.Unix()}, Link: c.ticketLink(env.Device)})
 	case device.DeviceOpNameLinkBegin, device.DeviceOpNameLinkStatus, device.DeviceOpNameLinkLeave:
 		c.link(w, env)
 	case device.DeviceOpNameLinkWhombats:
@@ -602,6 +633,10 @@ func (c *Control) serve(w http.ResponseWriter, r *http.Request) {
 		c.share(w, env)
 	case device.DeviceOpNameAddressRegister:
 		c.addressRegister(w, env)
+	case device.DeviceOpNameAddressCheck:
+		c.addressCheck(w, env)
+	case device.DeviceOpNameAddressRename:
+		c.addressRename(w, env)
 	case device.DeviceOpNameAccountLinkLookup, device.DeviceOpNameAccountLink, device.DeviceOpNameKitCredentialsDeclare:
 		c.Forwarded = append(c.Forwarded, string(env.Op)+" "+string(env.Body))
 		if c.LinkRefuse != "" && env.Op != device.DeviceOpNameKitCredentialsDeclare {
@@ -780,6 +815,7 @@ func (c *Control) addressRegister(w http.ResponseWriter, env *device.DeviceReque
 		c.Addresses = map[string]device.AddressRegisterResponse{}
 	}
 	if have, ok := c.Addresses[env.Device]; ok {
+		have.Leaving = c.leavingOf(env.Device)
 		_ = json.NewEncoder(w).Encode(have)
 		return
 	}
@@ -788,15 +824,169 @@ func (c *Control) addressRegister(w http.ResponseWriter, env *device.DeviceReque
 		_, _ = w.Write([]byte(`{"error":{"code":"conflict","message":"taken","details":{"code":"label_taken"}}}`))
 		return
 	}
-	zone := c.Zone
-	if zone == "" {
-		zone = "dev.whombat.app"
-	}
-	resp := device.AddressRegisterResponse{Label: req.Label, Host: req.Label + "." + zone, RegisteredAt: c.now().Unix()}
+	resp := device.AddressRegisterResponse{Label: req.Label, Host: req.Label + "." + c.zone(), RegisteredAt: c.now().Unix()}
 	if c.AddressHost != "" {
 		resp.Host = c.AddressHost
 	} else {
 		c.Addresses[env.Device] = resp
+		c.had(req.Label, env.Device)
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// zone is the zone control gives new names (Zone, default dev.whombat.app).
+func (c *Control) zone() string {
+	if c.Zone == "" {
+		return "dev.whombat.app"
+	}
+	return c.Zone
+}
+
+func (c *Control) had(label, dev string) {
+	if c.Had == nil {
+		c.Had = map[string]string{}
+	}
+	c.Had[label] = dev
+}
+
+// zoneOf is the zone host is directly under, as control's own parser has it.
+func zoneOf(host string) string {
+	for _, z := range []string{"box.whombat.app", "dev.whombat.app", "whombat.app"} {
+		if l, ok := strings.CutSuffix(host, "."+z); ok && !strings.Contains(l, ".") {
+			return z
+		}
+	}
+	return ""
+}
+
+// leavingOf is dev's earlier address while it is still routed.
+func (c *Control) leavingOf(dev string) *device.AddressLeaving {
+	l := c.AddressLeaving[dev]
+	if l == nil || l.Until <= c.now().Unix() {
+		return nil
+	}
+	cp := *l
+	return &cp
+}
+
+// withAddress adds control's view of dev's address to a Link state (4.16): host, the zone new names get, and the
+// earlier address while it is routed.
+func (c *Control) withAddress(dev string, st device.DeviceLinkStatus) device.DeviceLinkStatus {
+	a, ok := c.Addresses[dev]
+	if !ok {
+		return st
+	}
+	label, host, zone := a.Label, a.Host, protocol.OwnAddressZone(c.zone())
+	st.Label, st.Host, st.Zone, st.Leaving = &label, &host, &zone, c.leavingOf(dev)
+	return st
+}
+
+// ticketLink is the Link state a ticket carries (nil before Link), with the address as link.status has it.
+func (c *Control) ticketLink(dev string) *device.DeviceLinkStatus {
+	if c.Link == nil {
+		return nil
+	}
+	st := c.withAddress(dev, *c.Link)
+	return &st
+}
+
+// nameVerdict is control's judgement of a name for dev ("" free).
+func (c *Control) nameVerdict(label, dev string) protocol.OwnAddressNameVerdict {
+	switch {
+	case len(label) < protocol.OwnAddressLabelMin || len(label) > protocol.OwnAddressLabelMax || !fakeLabelRe.MatchString(label):
+		return protocol.OwnAddressNameVerdictInvalid
+	case c.Reserved[label]:
+		return protocol.OwnAddressNameVerdictReserved
+	case c.Had[label] == dev:
+		return protocol.OwnAddressNameVerdictYours
+	case c.Taken[label] || c.Had[label] != "":
+		return protocol.OwnAddressNameVerdictTaken
+	}
+	return protocol.OwnAddressNameVerdictFree
+}
+
+var fakeLabelRe = regexp.MustCompile(protocol.OwnAddressLabelPattern)
+
+// addressCheck is control's address.check: what control says of a name for this device.
+func (c *Control) addressCheck(w http.ResponseWriter, env *device.DeviceRequestEnvelope) {
+	req, err := device.ParseAddressCheckRequest(env.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	c.CheckCalls++
+	_ = json.NewEncoder(w).Encode(device.AddressCheckResponse{Label: req.Label, Verdict: c.nameVerdict(req.Label, env.Device)})
+}
+
+// addressRename is control's address.rename: a new name (the old one leaves for 30 days, or the one already leaving
+// stays and the one in between stops), the same label under control's zone (a move), or the same label already there
+// (the state as it is). With move, a label that is no longer the device's changes nothing (the state as it is): a late
+// move never undoes a rename. Back to the name that is leaving, in the same zone, leaves nothing leaving.
+func (c *Control) addressRename(w http.ResponseWriter, env *device.DeviceRequestEnvelope) {
+	req, err := device.ParseAddressRenameRequest(env.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	c.RenameCalls++
+	refuse := func(status int, code string) {
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, `{"error":{"code":"conflict","message":"refused","details":{"code":%q}}}`, code)
+	}
+	if c.RenameRefuse != "" {
+		refuse(http.StatusConflict, c.RenameRefuse)
+		return
+	}
+	a, ok := c.Addresses[env.Device]
+	if !ok {
+		refuse(http.StatusNotFound, "own_address_off")
+		return
+	}
+	now := c.now().Unix()
+	leaving := c.leavingOf(env.Device)
+	switch {
+	case req.Label == a.Label && zoneOf(a.Host) == c.zone():
+	case req.Move != nil && *req.Move && req.Label != a.Label:
+	case req.Label == a.Label:
+		leaving = &device.AddressLeaving{Label: a.Label, Host: a.Host, Until: now + protocol.OwnAddressLeavingDays*86400}
+		a.Host = a.Label + "." + c.zone()
+	default:
+		switch c.nameVerdict(req.Label, env.Device) {
+		case protocol.OwnAddressNameVerdictInvalid:
+			refuse(http.StatusConflict, "label_invalid")
+			return
+		case protocol.OwnAddressNameVerdictReserved:
+			refuse(http.StatusConflict, "label_reserved")
+			return
+		case protocol.OwnAddressNameVerdictTaken:
+			refuse(http.StatusConflict, "label_taken")
+			return
+		}
+		limit := c.RenameLimit
+		if limit == 0 {
+			limit = protocol.OwnAddressRenamesPerYear
+		}
+		if c.Renamed[env.Device] >= limit {
+			refuse(http.StatusConflict, "rename_limit")
+			return
+		}
+		if c.Renamed == nil {
+			c.Renamed = map[string]int{}
+		}
+		c.Renamed[env.Device]++
+		if leaving == nil {
+			leaving = &device.AddressLeaving{Label: a.Label, Host: a.Host, Until: now + protocol.OwnAddressLeavingDays*86400}
+		}
+		a = device.AddressRegisterResponse{Label: req.Label, Host: req.Label + "." + c.zone(), RegisteredAt: now}
+		if leaving.Host == a.Host {
+			leaving = nil
+		}
+		c.had(req.Label, env.Device)
+	}
+	if c.AddressLeaving == nil {
+		c.AddressLeaving = map[string]*device.AddressLeaving{}
+	}
+	c.AddressLeaving[env.Device] = leaving
+	c.Addresses[env.Device] = a
+	_ = json.NewEncoder(w).Encode(device.AddressRenameResponse{Label: a.Label, Host: a.Host, RegisteredAt: a.RegisteredAt, Leaving: leaving})
 }

@@ -95,11 +95,21 @@ function constants(pkg: GoPackage): string {
     num('ControlStreamID', protocol.CONTROL_STREAM_ID);
     num('MaxStreamID', protocol.MAX_STREAM_ID);
     for (const [k, v] of Object.entries(protocol.STREAM_RESET)) num(`StreamReset${goName(k)}`, v);
-    block('The own address (4.3; Whombat own-address.md): shapes only, never the word list.');
+    block(
+      'The own address (4.3, names since 4.16; Whombat own-address.md): shapes only, never the word list or reserved names.',
+    );
     str('OwnAddressLabelPattern', protocol.OWN_ADDRESS_LABEL_RE.source);
+    num('OwnAddressLabelMin', protocol.OWN_ADDRESS_LABEL_MIN);
+    num('OwnAddressLabelMax', protocol.OWN_ADDRESS_LABEL_MAX);
     str('OwnAddressHostPattern', protocol.OWN_ADDRESS_HOST_RE.source);
+    num('OwnAddressHostMax', protocol.OWN_ADDRESS_HOST_MAX);
     str('OwnAddressZoneProd', protocol.OWN_ADDRESS_ZONES.prod);
     str('OwnAddressZoneDev', protocol.OWN_ADDRESS_ZONES.dev);
+    if (protocol.OWN_ADDRESS_OLD_ZONES.length !== 1)
+      throw new Error('OwnAddressZoneOldProd names one old zone');
+    str('OwnAddressZoneOldProd', protocol.OWN_ADDRESS_OLD_ZONES[0]);
+    num('OwnAddressLeavingDays', protocol.OWN_ADDRESS_LEAVING_DAYS);
+    num('OwnAddressRenamesPerYear', protocol.OWN_ADDRESS_RENAMES_PER_YEAR);
     str('OwnAddressClaimPath', protocol.OWN_ADDRESS_CLAIM_PATH);
     num('BoxAssetLinksMaxAgeS', protocol.BOX_ASSET_LINKS_MAX_AGE_S);
     block('Whombat Link (4.4; Whombat whombat-link.md).');

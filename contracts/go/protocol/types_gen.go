@@ -223,19 +223,20 @@ const (
 var TicketChannelValues = []TicketChannel{TicketChannelApp, TicketChannelEnroll}
 
 type AdmissionClaims struct {
-	Iss string        `json:"iss"`
-	Aud string        `json:"aud"`
-	Rol TicketRole    `json:"rol"`
-	Apl string        `json:"apl"`
-	Sub string        `json:"sub"`
-	Org *string       `json:"org,omitempty"`
-	Wrk string        `json:"wrk"`
-	Chn TicketChannel `json:"chn"`
-	Iat int64         `json:"iat"`
-	Nbf int64         `json:"nbf"`
-	Exp int64         `json:"exp"`
-	Jti string        `json:"jti"`
-	Lbl *string       `json:"lbl,omitempty"`
+	Iss  string        `json:"iss"`
+	Aud  string        `json:"aud"`
+	Rol  TicketRole    `json:"rol"`
+	Apl  string        `json:"apl"`
+	Sub  string        `json:"sub"`
+	Org  *string       `json:"org,omitempty"`
+	Wrk  string        `json:"wrk"`
+	Chn  TicketChannel `json:"chn"`
+	Iat  int64         `json:"iat"`
+	Nbf  int64         `json:"nbf"`
+	Exp  int64         `json:"exp"`
+	Jti  string        `json:"jti"`
+	Lbl  *string       `json:"lbl,omitempty"`
+	Plbl *string       `json:"plbl,omitempty"`
 }
 
 type Ed25519Jwk struct {
@@ -336,6 +337,20 @@ type LicenceStatusResult struct {
 	EffectiveAt int64          `json:"effectiveAt"`
 }
 
+// OwnAddressNameVerdict is one of "free", "yours", "taken", "reserved", "invalid".
+type OwnAddressNameVerdict string
+
+const (
+	OwnAddressNameVerdictFree     OwnAddressNameVerdict = "free"
+	OwnAddressNameVerdictYours    OwnAddressNameVerdict = "yours"
+	OwnAddressNameVerdictTaken    OwnAddressNameVerdict = "taken"
+	OwnAddressNameVerdictReserved OwnAddressNameVerdict = "reserved"
+	OwnAddressNameVerdictInvalid  OwnAddressNameVerdict = "invalid"
+)
+
+// OwnAddressNameVerdictValues lists every OwnAddressNameVerdict.
+var OwnAddressNameVerdictValues = []OwnAddressNameVerdict{OwnAddressNameVerdictFree, OwnAddressNameVerdictYours, OwnAddressNameVerdictTaken, OwnAddressNameVerdictReserved, OwnAddressNameVerdictInvalid}
+
 // HostMetricsRange is one of "hour", "day", "week", "month".
 type HostMetricsRange string
 
@@ -397,6 +412,18 @@ const (
 
 // LinkStateValues lists every LinkState.
 var LinkStateValues = []LinkState{LinkStateOff, LinkStateStarting, LinkStateOn, LinkStateGrace, LinkStateEnded}
+
+// OwnAddressZone is one of "whombat.app", "dev.whombat.app", "box.whombat.app".
+type OwnAddressZone string
+
+const (
+	OwnAddressZoneWhombatApp    OwnAddressZone = "whombat.app"
+	OwnAddressZoneDevWhombatApp OwnAddressZone = "dev.whombat.app"
+	OwnAddressZoneBoxWhombatApp OwnAddressZone = "box.whombat.app"
+)
+
+// OwnAddressZoneValues lists every OwnAddressZone.
+var OwnAddressZoneValues = []OwnAddressZone{OwnAddressZoneWhombatApp, OwnAddressZoneDevWhombatApp, OwnAddressZoneBoxWhombatApp}
 
 type NativePushToken struct {
 	Platform string `json:"platform"`

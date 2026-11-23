@@ -431,8 +431,11 @@ export interface RemoteHelpOptions {
   store?: RemoteHelpCursorStore;
   /** The step-up with the hosted app's passkeys (the trust service's); none: nobody confirms with one. */
   passkeys?: StepUpPasskeys | null;
-  /** The step-up with the box's own passkeys, on its own address; none: nobody confirms with one there. */
-  boxPasskeys?: StepUpPasskeys | null;
+  /**
+   * The step-up with the box's own passkeys, on its own address: those of the host the session arrived at (a function
+   * of the session); none: nobody confirms with one there.
+   */
+  boxPasskeys?: StepUpPasskeys | ((session: SessionScope | null) => StepUpPasskeys | null) | null;
   /** Which passkeys this session can use (`stepUpPasskeysHere`); absent: the hosted app's everywhere (tests). */
   passkeysHere?: (session: SessionScope | null) => StepUpKind | null;
   /** Security pushes to the person's devices. */
@@ -502,9 +505,12 @@ export class RemoteHelpService {
     return this.options.passkeysHere ? this.options.passkeysHere(session) : 'hosted';
   }
 
-  /** That kind's step-up; null when nobody can confirm with it here. */
-  #stepUp(kind: StepUpKind | null): StepUpPasskeys | null {
-    if (kind === 'box') return this.options.boxPasskeys ?? null;
+  /** That kind's step-up in this session; null when nobody can confirm with it here. */
+  #stepUp(kind: StepUpKind | null, session: SessionScope | null): StepUpPasskeys | null {
+    if (kind === 'box') {
+      const box = this.options.boxPasskeys;
+      return typeof box === 'function' ? box(session) : (box ?? null);
+    }
     if (kind === 'hosted') return this.options.passkeys ?? null;
     return null;
   }
@@ -729,7 +735,7 @@ export class RemoteHelpService {
     if (!session) throw new ApiError('bad_request', 'Turn on remote help over a session.');
     session.remoteHelpBegin = null;
     const kind = this.#passkeysHere(session);
-    const passkeys = this.#stepUp(kind);
+    const passkeys = this.#stepUp(kind, session);
     if (!kind || !passkeys || !(await passkeys.hasPasskey(account.id))) return { nonce: null, options: null };
     const nonce = randomBytes(32).toString('hex');
     const challenge = passkeyRemoteHelpChallengeBase64url({
@@ -767,7 +773,7 @@ export class RemoteHelpService {
     if (session) session.remoteHelpBegin = null;
     if (input.passkey) {
       const now = this.services.clock();
-      const passkeys = begin ? this.#stepUp(begin.kind) : null;
+      const passkeys = begin ? this.#stepUp(begin.kind, session) : null;
       if (
         !begin ||
         begin.expiresAt <= now ||
@@ -792,7 +798,7 @@ export class RemoteHelpService {
       if (!confirmed) throw remoteHelpRefusal('passkey_failed');
     } else {
       // Someone with a passkey that works where they are confirms with it; someone with none that does, in the dialog.
-      const passkeys = this.#stepUp(this.#passkeysHere(session));
+      const passkeys = this.#stepUp(this.#passkeysHere(session), session);
       if (passkeys && (await passkeys.hasPasskey(account.id))) throw remoteHelpRefusal('passkey_required');
     }
     try {
@@ -924,17 +930,17 @@ interface RemoteHelpOpContext {
 }
 
 /**
- * The step-up's passkeys from the trust service: the hosted app's, the box's own, and which of them a session can use
- * (the box's own only on a page at its own address).
+ * The step-up's passkeys from the trust service: the hosted app's, the box's own of the host the session arrived at,
+ * and which of them a session can use (the box's own only on a page at one of its own hosts).
  */
 export function remoteHelpPasskeys(
   trust: Pick<TrustService, 'passkeys' | 'boxPasskeys' | 'relyingParty' | 'ownAddress'>,
 ): Pick<RemoteHelpOptions, 'passkeys' | 'boxPasskeys' | 'passkeysHere'> {
   return {
     passkeys: trust.passkeys,
-    boxPasskeys: trust.boxPasskeys,
+    boxPasskeys: (session) => trust.boxPasskeys.at(session?.transport),
     passkeysHere: (session) =>
-      stepUpPasskeysHere(session?.transport, trust.relyingParty(), trust.ownAddress?.host() ?? null),
+      stepUpPasskeysHere(session?.transport, trust.relyingParty(), trust.ownAddress?.hosts() ?? []),
   };
 }
 

@@ -27,9 +27,11 @@ import {
   type KnownAppliance,
   linkBannerView,
   type ManagedWhombats,
+  ownAddressToKeep,
   PASSKEY_COPY,
   passkeyName,
   REACH_TEXT,
+  readOwnAddress,
   readReach,
 } from '@whombat/client/managed';
 import { useOnePasskeySetup } from '@whombat/client/managed/react';
@@ -42,6 +44,7 @@ import {
   createScopeGuard,
   createSecureSession,
   createSessionRealtime,
+  type OwnAddressSummary,
   type ScopeGuard,
   scopeFromInfo,
   scopeKey,
@@ -267,6 +270,11 @@ export interface ApplianceRootProps {
   onAccount: (accountId: string) => void;
   /** The box's direct ways changed (`welcome.direct`): remember them for the next connection (HE-50). */
   onDirect: (direct: DirectAddresses | null) => void;
+  /**
+   * The box's own address changed (a rename, or its move to `whombat.app`): remember `https://<host>/` for the next
+   * connection, which dials it first. The old one keeps working for 30 days, so nothing breaks meanwhile.
+   */
+  onOwnAddress?: (url: string) => void;
   /** Other Whombats this phone knows (they'll ask to let it in again too). */
   hasOthers: boolean;
   /** Switch Whombat's sheet (whombat-switcher.md AP-3084). */
@@ -454,6 +462,27 @@ export function ApplianceRoot(props: ApplianceRootProps) {
     if (gone) callbacks.current.onGone(gone);
   }, [state, device]);
 
+  // The box's current own address, as it says each time the connection opens (and as This Whombat → About reads it):
+  // kept when it differs from the one this phone has, so a rename or a move reaches the next connection.
+  const keepOwnAddress = useCallback((own: Pick<OwnAddressSummary, 'host' | 'url'> | null) => {
+    const url = ownAddressToKeep(current.current.ownAddress, own);
+    if (!url) return;
+    current.current = { ...current.current, ownAddress: url };
+    callbacks.current.onOwnAddress?.(url);
+  }, []);
+  const opened = state.status === 'open';
+  useEffect(() => {
+    if (!setup || !opened) return;
+    let live = true;
+    readOwnAddress(setup.raw).then(
+      (own) => live && keepOwnAddress(own),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [setup, opened, keepOwnAddress]);
+
   if (state.status === 'closed') return <Gate state={state} {...props} />;
   if (!setup)
     return (
@@ -466,13 +495,22 @@ export function ApplianceRoot(props: ApplianceRootProps) {
   return (
     <QueryClientProvider client={setup.queryClient}>
       <WhombatClientProvider client={setup.client} realtime={setup.realtime}>
-        <Shell setup={setup} state={state} {...props} />
+        <Shell setup={setup} state={state} keepOwnAddress={keepOwnAddress} {...props} />
       </WhombatClientProvider>
     </QueryClientProvider>
   );
 }
 
-function Shell({ setup, state, ...props }: ApplianceRootProps & { setup: Setup; state: ConnectionState }) {
+function Shell({
+  setup,
+  state,
+  keepOwnAddress,
+  ...props
+}: ApplianceRootProps & {
+  setup: Setup;
+  state: ConnectionState;
+  keepOwnAddress: (own: Pick<OwnAddressSummary, 'host' | 'url'> | null) => void;
+}) {
   // A box this phone joined without a cloud account (its record says so): no control behind it here. The edition in
   // the welcome no longer decides it: every box is the same image now (whombat-link.md LNK-01).
   const community = props.community === true;
@@ -512,8 +550,9 @@ function Shell({ setup, state, ...props }: ApplianceRootProps & { setup: Setup; 
         },
       },
       signOut: () => cb.current.onSignOut(),
+      ownAddressSeen: keepOwnAddress,
     }),
-    [hasKit, hasBringBack],
+    [hasKit, hasBringBack, keepOwnAddress],
   );
   const { appliance, keyPair, email, taps } = props;
   const [note, setNote] = useState<string | null>(null);

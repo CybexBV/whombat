@@ -12,6 +12,7 @@ import type {
   LinkStateResponse,
   NetworkStateResponse,
   OwnAddressCertResponse,
+  OwnAddressCheckResponse,
   OwnAddressCtResponse,
   OwnAddressStateResponse,
   RuntimeAccountLinkLookupRequest,
@@ -128,12 +129,16 @@ export interface ManagerPort extends TailscalePort {
    * The box's own address (docs/decisions/own-address.md): the manager's state, registering the label the runtime drew,
    * the certificate pair it serves and what the certificate watch found. `ManagerCallError` 404 (`own_address.off`, or
    * an older manager without the routes) means this box has none; 409 `own_address.label_taken` / `.label_invalid` on
-   * register, `own_address.no_cert` on cert. Absent on a manager stand-in without them.
+   * register, `own_address.no_cert` on cert. Absent on a manager stand-in without them. `ownAddressCert` takes the host
+   * of the pair (the leaving one, contracts 4.16); without it, the current host's. `ownAddressCheck` and
+   * `ownAddressRename` (4.16) ask control about another name and change to it; an older manager answers 404 there.
    */
   ownAddressState?(): Promise<OwnAddressStateResponse>;
   ownAddressRegister?(label: string): Promise<OwnAddressStateResponse>;
-  ownAddressCert?(): Promise<OwnAddressCertResponse>;
+  ownAddressCert?(host?: string): Promise<OwnAddressCertResponse>;
   ownAddressCt?(): Promise<OwnAddressCtResponse>;
+  ownAddressCheck?(label: string): Promise<OwnAddressCheckResponse>;
+  ownAddressRename?(label: string): Promise<OwnAddressStateResponse>;
   /**
    * Linking the box to the person's Whombat account by the code it shows (own-address.md): the device ops
    * `account.link.lookup` and `account.link`, signed and forwarded by the manager. Errors as `kitEnvelopes`', control's

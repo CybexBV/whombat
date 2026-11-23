@@ -77,6 +77,12 @@ export const AdmissionClaims = z.strictObject({
    * and only once control's switch is on, which comes after the relay takes 4.3 (an older relay refuses the member).
    */
   lbl: OwnAddressLabel.optional(),
+  /**
+   * The box's leaving own-address label (4.16): while its earlier name still works after a rename, in the same tickets as
+   * `lbl` and only when it differs from it (a move to a new zone keeps the label). The relay maps both labels to the
+   * connection. An older relay refuses the member, so control signs it only once the relay takes 4.16.
+   */
+  plbl: OwnAddressLabel.optional(),
 });
 export type AdmissionClaims = z.infer<typeof AdmissionClaims>;
 

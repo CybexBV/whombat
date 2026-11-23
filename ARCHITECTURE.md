@@ -103,20 +103,34 @@ inert: `WHOMBAT_EDITION` is read only where there is no `device.json` (developme
 refuses.
 
 **Own address** (`managed/own-address/`, [own-address.md](docs/decisions/own-address.md)): while Link runs a box also serves
-its page at `<label>.box.whombat.app` (DEV: `<label>.dev.whombat.app`), with TLS ending on the box. Control gives the label
-when Link starts and the manager registers it (with a manager from before Link the runtime draws it), orders the
-certificate (ACME TLS-ALPN-01) and watches Certificate Transparency;
-the runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
+its page at `<name>.whombat.app` (DEV: `<name>.dev.whombat.app`; a box that hasn't moved yet at `<name>.box.whombat.app`, the
+old zone), with TLS ending on the box. The name is three random words, or one the person chose when they confirmed the box
+on the account site (`link.name.check`, `label` on `link.confirm`); the rules for names are core's
+`ownAddressNameProblem`, enforced by control. Control gives the name when Link starts and the manager registers it (with
+a manager from before Link the runtime draws it), orders the certificate (ACME TLS-ALPN-01) and watches Certificate
+Transparency. The owner changes the name later (`ownAddress.rename` → the manager → control's `address.rename`), and a box
+whose host is under the old zone moves itself to control's zone the same way; either way the earlier host stays served
+for 30 days (`leaving`: tickets carry it as `plbl`; the manager keeps that host's certificate and orders none for it,
+and the certificate watch covers both hosts; the runtime serves it with that certificate beside the current host's,
+makes new box passkeys only at the current host, and when the manager's date comes the host stops and the box
+passkeys made for it are removed). The manager makes one address change at a time and takes control's current host
+whenever it differs from its own (a rename whose answer it missed), and its move carries `move`, so it never undoes a
+rename. Screens, device links (`o=`), the claim link and the HTTPS addresses name the current host only. A session below session minor 6 gets no address whose host isn't the older three-word
+`box.`/`dev.` shape (`own-address/older-apps.ts`).
+The runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
 person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch
 calls foreign and raises the notices. The relay's door hands the box raw TLS streams over the relay client
 (`session/relay-client.ts`, `accepts` in the control hello): `web` ones go to a direct listener made for the door (HTTP/2
-with HTTP/1.1 for the page's WebSocket, the host's certificate only, exact `:authority`/Host, the page's CSP as a header,
+with HTTP/1.1 for the page's WebSocket, a certificate per served host chosen by the TLS name, `:authority`/Host and the
+WebSocket's Origin exactly the host the connection arrived at, the page's CSP as a header,
 `assetlinks.json`, limits per visitor address without lockouts), `acme` ones are piped into the manager's ACME socket. A
 box whose first start had the own address on is inside A3 (`appliance_state.shared_route_off`): it is claimed only on a
 page it served (the claim link on its screen at its address, the letters on its local network), never through control,
 code pairing is off, the hosted app's page doesn't open it, and the person links it to their account with a code
-(`account.link`). Box passkeys (`managed/box-passkeys.ts`) have the box's host as RP ID and are declared to control as a
-full set.
+(`account.link`). Box passkeys (`managed/box-passkeys.ts`) have the host a session arrived at as RP ID (the current
+host in the apps), are made only at the current host (`address_moved` at the leaving one) and are declared to control as
+a full set. The certificate watch judges every served host; Cloudflare's two certificates for `*.whombat.app`
+(`OWN_ADDRESS_ZONE_CERTIFICATES`) are known, not foreign, within their dates.
 
 - **Enrolment** (`managed/trust.ts`): a session's endpoint key is enrolled to the person's account, the one that
   claimed the box. A device gets in through the claim (a CPace exchange bound to both Noise keys, with the console's
@@ -1689,14 +1703,18 @@ elsewhere keeps Name your Whombat and Meet your agent. Empty first screens show 
 ([first-day.md](docs/decisions/first-day.md)). The hosted app is
 also the account site for Whombat Link: open sign-up by magic link; the home (`/`) with the person's Whombats, each
 opening at its own address (the one this browser opened last first), and Add a Whombat; `/add` (also `/link`, what a
-box's screen shows) where a person enters the code their Whombat's screen shows and ticks the Subscription Terms; and
+box's screen shows) where a person enters the code their Whombat's screen shows, may choose the name of its address
+(checked as they type) and ticks the Subscription Terms; and
 the account (`/account`, `/billing`) with the Link subscription by the month or the year with a promotion code on
 Stripe's page and its free time (Stripe Checkout to start paying, the portal once Stripe has the subscription, through
 control), the email, the phone app and signing out. An account with an organization made before Link sees its
 Whombats on the home too and keeps its hosted list at `/appliances`
 ([link-account-site.md](docs/app/decisions/link-account-site.md), [account-home.md](docs/app/decisions/account-home.md)).
 On a box's own page with Link, the name at the top of the sidebar opens the account's other Whombats (`link.whombats`,
-through the manager and control) and the way back to the account site. The legal pages are
+through the manager and control) and the way back to the account site. Settings → This Whombat changes the address's
+name; for the 30 days the old address still works, its page says where the box moved and opens the new one with a device
+link, and the phone keeps the address the box reports ([own-address.md](docs/app/decisions/own-address.md)). The legal
+pages are
 `apps/web/src/legal/*.md` at `/legal/…`. Development and the visual harness:
 [docs/app/README.md](docs/app/README.md).
 

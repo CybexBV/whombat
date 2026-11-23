@@ -4,11 +4,19 @@
  * state, and opens Stripe Checkout or the Customer Portal for the one Link subscription (`LINK_OFFER_TEXT`: the first
  * month free, then €2.50 a month or €25 a year a box). Not cross-language: only the hosted app and control use these.
  */
-import { LinkCode, LinkState, OwnAddressClaimUrl, OwnAddressHost, OwnAddressLabel } from '@whombat/protocol';
+import {
+  LinkCode,
+  LinkState,
+  OwnAddressClaimUrl,
+  OwnAddressHost,
+  OwnAddressLabel,
+  OwnAddressNameCandidate,
+} from '@whombat/protocol';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
 import { BillingRedirect, PlanInterval, SubscriptionTerms } from './billing.js';
 import { DeviceId } from './common.js';
+import { AddressLeaving } from './device/address.js';
 import { TermsVersion } from './directory.js';
 import { controlEndpoint } from './endpoint.js';
 
@@ -30,6 +38,11 @@ export const LinkLookup = z.object({
    * Absent from an older control, which takes no `terms` in the confirm body.
    */
   termsVersion: TermsVersion.optional(),
+  /**
+   * The box can take a name the person chooses (4.16): its manager said so (`ownNames`) and the account has chosen names
+   * left this year. Absent or false: the account site offers no choice and the box gets a random name.
+   */
+  chooseName: z.boolean().optional(),
 });
 export type LinkLookup = z.infer<typeof LinkLookup>;
 
@@ -37,8 +50,34 @@ export type LinkLookup = z.infer<typeof LinkLookup>;
  * `link.confirm`: the code's box joins the account's Link. `terms` (4.7): the Subscription Terms the person ticked, sent
  * when the lookup named a `termsVersion`; control records the version it accepted.
  */
-export const LinkConfirmBody = z.strictObject({ code: LinkCode, terms: SubscriptionTerms.optional() });
+export const LinkConfirmBody = z.strictObject({
+  code: LinkCode,
+  terms: SubscriptionTerms.optional(),
+  /**
+   * The name the person chose for the box's address (4.16), checked with `link.name.check` first; absent, the box gets
+   * a random one. Control checks it again when it confirms (`label_invalid`, `label_reserved`, `label_taken`, 409:
+   * nothing is linked then) and gives it with the box's address; a name another box took in between falls back to a
+   * random one, which the person can change later. An older control refuses the member (strict body).
+   */
+  label: OwnAddressLabel.optional(),
+});
 export type LinkConfirmBody = z.infer<typeof LinkConfirmBody>;
+
+/** `link.name.check` (4.16): the name the person is typing for the box's address. */
+export const LinkNameCheckBody = z.strictObject({ name: OwnAddressNameCandidate });
+export type LinkNameCheckBody = z.infer<typeof LinkNameCheckBody>;
+
+/** What a name would be at setup: as `OwnAddressNameVerdict`, without `yours` (no box is asking). */
+export const LinkNameVerdict = z.enum(['free', 'taken', 'reserved', 'invalid']);
+export type LinkNameVerdict = z.infer<typeof LinkNameVerdict>;
+
+/** `host`: the box's address with that name, only when it is `free` (built with control's zone of today). */
+export const LinkNameCheck = z.object({
+  name: OwnAddressNameCandidate,
+  verdict: LinkNameVerdict,
+  host: OwnAddressHost.optional(),
+});
+export type LinkNameCheck = z.infer<typeof LinkNameCheck>;
 
 /**
  * How the Link subscription is paid for (4.6): `month` (€2.50 a box) or `year` (€25 a box). Chosen at checkout, switched
@@ -177,8 +216,10 @@ export const LinkedBox = z.object({
   since: EpochSeconds,
   graceEndsAt: EpochSeconds.nullable(),
   label: OwnAddressLabel.nullable(),
-  /** `<label>.box.whombat.app`, once the box has its address. */
+  /** `<label>.whombat.app` (`<label>.box.whombat.app` for a box that hasn't moved), once the box has its address. */
   host: OwnAddressHost.nullable(),
+  /** The box's earlier address while it still works (4.16); absent when none is, and from an older control. */
+  leaving: AddressLeaving.optional(),
   /** The last ticket the box asked for. */
   lastSeenAt: EpochSeconds.nullable(),
   /**
@@ -215,9 +256,19 @@ export const linkApi = {
     path: '/link/confirm',
     auth: 'session',
     summary:
-      'Add the code’s box to the account’s Link: the e-mail must be confirmed (`email_unconfirmed`), the box not another account’s (`link_other_account`), at most two boxes during the free month (`link_trial_boxes`). `terms` (4.7), when sent, must be the current `SUBSCRIPTION_TERMS_VERSION` (`terms_outdated`, 409) and is recorded as the account’s acceptance; without `terms` an account that has accepted no version is refused (`terms_required`, 400, 4.8). Starts the free month the first time, raises the subscription’s quantity, and gives the box its label (or queues it when the day’s new labels ran out). The code is used up. Audited as `link.confirmed`.',
+      'Add the code’s box to the account’s Link: the e-mail must be confirmed (`email_unconfirmed`), the box not another account’s (`link_other_account`), at most two boxes during the free month (`link_trial_boxes`). `label` (4.16), when sent, is checked in the same transaction (`label_invalid`, `label_reserved`, `label_taken`, 409) and becomes the box’s name when control gives it its address (a random one if another box took it in between). `terms` (4.7), when sent, must be the current `SUBSCRIPTION_TERMS_VERSION` (`terms_outdated`, 409) and is recorded as the account’s acceptance; without `terms` an account that has accepted no version is refused (`terms_required`, 400, 4.8). Starts the free month the first time, raises the subscription’s quantity, and gives the box its label (or queues it when the day’s new labels ran out). The code is used up. Audited as `link.confirmed`.',
     body: LinkConfirmBody,
     response: LinkedBox,
+  }),
+  nameCheck: controlEndpoint({
+    id: 'link.name.check',
+    method: 'POST',
+    path: '/link/name',
+    auth: 'session',
+    summary:
+      'Whether a name the person is typing could be the address of the box they are about to confirm (4.16): `free` (with its `host`), `taken` (another box has or had it), `reserved` or `invalid`. Reads only; 120 an hour per account (`rate_limited`). The answer holds nothing: `link.confirm` checks the name again.',
+    body: LinkNameCheckBody,
+    response: LinkNameCheck,
   }),
   boxes: controlEndpoint({
     id: 'link.boxes',

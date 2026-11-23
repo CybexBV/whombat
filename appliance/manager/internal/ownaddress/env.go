@@ -34,6 +34,9 @@ const (
 	// EnvCT: pebble only, the certificate watch's base URL (a fake Cert Spotter); unset: no watch, so a test label is
 	// never sent to the real one.
 	EnvCT = "WHOMBAT_OWN_ADDRESS_CT"
+	// EnvZone: pebble only, the zone the test box takes its hosts under (default dev.whombat.app), so a loopback test
+	// can run prod's zones and the move from box.whombat.app with a DNS stand-in.
+	EnvZone = "WHOMBAT_OWN_ADDRESS_ZONE"
 )
 
 // Mode is what this box does about its own address.
@@ -42,7 +45,8 @@ type Mode struct {
 	Enabled bool
 	// Why is a short reason for the log (off: why it is off).
 	Why string
-	// Zone is where the box's name lives: box.whombat.app or dev.whombat.app.
+	// Zone is the environment's zone: whombat.app or dev.whombat.app (an older image may name box.whombat.app). Control
+	// says which host the box has; Zones is where that host may be.
 	Zone string
 	// Directory is the ACME directory URL.
 	Directory string
@@ -67,6 +71,10 @@ func Resolve(community bool, deviceEnv, envZone string, getenv func(string) stri
 		zone = protocol.OwnAddressZoneProd
 	}
 	if envZone != "" {
+		if ZonesOf(envZone) == nil {
+			// The hosts' shape knows only Whombat's zones: a box elsewhere could never accept a host from control.
+			return Mode{}, fmt.Errorf("the environment's own-address zone %q is none of Whombat's", envZone)
+		}
 		zone = envZone
 	}
 	v := strings.TrimSpace(getenv(EnvMode))
@@ -92,11 +100,60 @@ func Resolve(community bool, deviceEnv, envZone string, getenv func(string) stri
 		if deviceEnv == "prod" {
 			return Mode{}, errors.New(EnvMode + "=pebble: is for tests and never on a prod box")
 		}
-		// The host's schema knows only the two real zones, so tests use the dev one with a DNS stand-in.
-		return Mode{Enabled: true, Why: EnvMode + "=pebble", Zone: protocol.OwnAddressZoneDev, Directory: dir,
+		// The host's schema knows only Whombat's zones, so tests use one of them with a DNS stand-in: dev's unless
+		// EnvZone names another.
+		testZone := protocol.OwnAddressZoneDev
+		if z := strings.TrimSpace(getenv(EnvZone)); z != "" {
+			if ZonesOf(z) == nil {
+				return Mode{}, fmt.Errorf("%s=%q is none of Whombat's zones", EnvZone, z)
+			}
+			testZone = z
+		}
+		return Mode{Enabled: true, Why: EnvMode + "=pebble", Zone: testZone, Directory: dir,
 			CAFile: strings.TrimSpace(getenv(EnvCA)), ProbeAddr: strings.TrimSpace(getenv(EnvProbe)),
 			CTURL: strings.TrimSpace(getenv(EnvCT))}, nil
 	default:
 		return Mode{}, fmt.Errorf("%s=%q: want off, on, staging or pebble:<directory URL>", EnvMode, v)
 	}
+}
+
+// ZonesOf is every zone a box of an environment with this zone may have its host under: prod's (whombat.app) together
+// with prod's earlier one (box.whombat.app), where boxes stay until they move; dev's alone. nil for a zone that is none
+// of Whombat's.
+func ZonesOf(zone string) []string {
+	switch zone {
+	case protocol.OwnAddressZoneProd, protocol.OwnAddressZoneOldProd:
+		return []string{protocol.OwnAddressZoneProd, protocol.OwnAddressZoneOldProd}
+	case protocol.OwnAddressZoneDev:
+		return []string{protocol.OwnAddressZoneDev}
+	}
+	return nil
+}
+
+// Zones is ZonesOf the mode's zone.
+func (m Mode) Zones() []string { return ZonesOf(m.Zone) }
+
+// OldZone: boxes under this zone move to their environment's newer one once control names it.
+func OldZone(zone string) bool { return zone == protocol.OwnAddressZoneOldProd }
+
+// ZoneOf is the longest of Whombat's zones host is directly under ("" for none): `x.box.whombat.app` is under
+// box.whombat.app, not whombat.app. A zone itself is never a box's host.
+func ZoneOf(host string) string {
+	if host == protocol.OwnAddressZoneOldProd || host == protocol.OwnAddressZoneDev {
+		return ""
+	}
+	for _, z := range []string{protocol.OwnAddressZoneOldProd, protocol.OwnAddressZoneDev, protocol.OwnAddressZoneProd} {
+		if label, ok := strings.CutSuffix(host, "."+z); ok {
+			if !strings.Contains(label, ".") && validLabel(label) {
+				return z
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// validLabel is the label's shape and length (the pattern alone doesn't bound it).
+func validLabel(label string) bool {
+	return len(label) >= protocol.OwnAddressLabelMin && len(label) <= protocol.OwnAddressLabelMax && labelRe.MatchString(label)
 }

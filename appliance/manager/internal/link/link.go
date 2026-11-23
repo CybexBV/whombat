@@ -50,6 +50,11 @@ type Record struct {
 	TrialEndsAt       *time.Time         `json:"trialEndsAt,omitempty"`
 	Label             string             `json:"label,omitempty"`
 	Email             string             `json:"email,omitempty"`
+	// Host, Zone and AddressLeaving are control's view of the box's address: its live host, the zone new names get,
+	// and the earlier address it still routes. The own address follows them (a move, a rename it missed).
+	Host           string                 `json:"host,omitempty"`
+	Zone           string                 `json:"zone,omitempty"`
+	AddressLeaving *device.AddressLeaving `json:"addressLeaving,omitempty"`
 	// CheckedAt is when control last told the box its state; nil before it ever did.
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 	// Carried: a box registered at control before Link (Cybex's own boxes, LNK-37, LNK-50) starts `on`, as it worked
@@ -123,13 +128,31 @@ type Keeper struct {
 	// control from before the field refused it.
 	claim          string
 	claimRefusedAt time.Time
+	// ownNamesRefusedAt is when a control from before chosen names (contracts 4.16) refused the ownNames member.
+	ownNamesRefusedAt time.Time
+	// addressMark counts the box's own changes of its address (FollowAddress). An answer to a request sent before the
+	// latest one may predate it at control, so its address fields don't replace the ones the box just took.
+	addressMark uint64
+	// addressFresh: the address fields came from control (or the box's own change) in this run, not only from the
+	// journal, which a stop between saving the own address and saving this record may have left behind.
+	addressFresh bool
 	// codeSince is when this keeper first saw a code on the screen in the current run of codes (zero: none shows). Only
 	// the poll loop reads and writes it.
 	codeSince time.Time
 }
 
-// claimRetry: how long a box waits before it offers the claim link again to a control that refused the field.
+// claimRetry: how long a box waits before it offers the claim link (or ownNames) again to a control that refused the
+// field.
 const claimRetry = time.Hour
+
+// ownNamesFlag: this manager takes chosen names and hosts under every zone of its environment (contracts 4.16), so
+// control may give it one; without the flag control gives only a random name under the old zone.
+func ownNamesFlag() *bool { t := true; return &t }
+
+// sendOwnNamesLocked: whether to send the flag now (not within an hour of a control refusing it; mu held).
+func (k *Keeper) sendOwnNamesLocked() bool {
+	return k.ownNamesRefusedAt.IsZero() || k.now().Sub(k.ownNamesRefusedAt) >= claimRetry
+}
 
 // Errors of On and Off (the broker maps them to the contract's LINK_ERRORS).
 var (
@@ -221,8 +244,11 @@ func (k *Keeper) unlock() {
 func changed(a, b Record) bool {
 	pa, pb := a.Pending, b.Pending
 	samePending := (pa == nil) == (pb == nil) && (pa == nil || *pa == *pb)
+	la, lb := a.AddressLeaving, b.AddressLeaving
+	sameAddressLeaving := (la == nil) == (lb == nil) && (la == nil || *la == *lb)
 	return a.State != b.State || a.Leaving != b.Leaving || a.Label != b.Label || !samePending ||
-		a.WaitingForAddress != b.WaitingForAddress || !sameTime(a.GraceEndsAt, b.GraceEndsAt)
+		a.WaitingForAddress != b.WaitingForAddress || !sameTime(a.GraceEndsAt, b.GraceEndsAt) ||
+		a.Host != b.Host || a.Zone != b.Zone || !sameAddressLeaving
 }
 
 func sameTime(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
@@ -252,6 +278,18 @@ func adopt(r Record, st *device.DeviceLinkStatus, now time.Time) Record {
 	if st.Email != nil {
 		r.Email = *st.Email
 	}
+	if st.Host != nil {
+		r.Host = *st.Host
+	}
+	if st.Zone != nil {
+		r.Zone = string(*st.Zone)
+		// A control that names the zone says what is leaving too: none when it leaves it out.
+		r.AddressLeaving = nil
+		if st.Leaving != nil {
+			l := *st.Leaving
+			r.AddressLeaving = &l
+		}
+	}
 	t := now.UTC()
 	r.CarriedOff = (r.Carried || r.CarriedOff) && r.State == protocol.LinkStateOff
 	r.CheckedAt, r.Carried = &t, false
@@ -273,9 +311,10 @@ func (k *Keeper) SetClaimLink(secret string) {
 	}
 }
 
-// Observe takes a Link state control sent with another answer (ticket.issue). Ignored while the owner's change runs
-// (its own answer is newer) and while the box is leaving (control's answer to link.leave decides).
-func (k *Keeper) Observe(st *device.DeviceLinkStatus) {
+// Observe takes a Link state control sent with another answer (ticket.issue); mark is AddressMark from before the
+// request went out. Ignored while the owner's change runs (its own answer is newer) and while the box is leaving
+// (control's answer to link.leave decides).
+func (k *Keeper) Observe(st *device.DeviceLinkStatus, mark uint64) {
 	if st == nil || (&device.LinkStatusResponse{Link: *st}).Validate() != nil {
 		return
 	}
@@ -284,7 +323,7 @@ func (k *Keeper) Observe(st *device.DeviceLinkStatus) {
 	if k.busy || k.rec.Leaving {
 		return
 	}
-	if err := k.saveLocked(adopt(k.rec, st, k.now())); err != nil {
+	if err := k.saveLocked(k.adoptLocked(st, mark)); err != nil {
 		k.log().Warn("link: the state control sent wasn't kept", "err", err)
 	}
 	k.poke()
@@ -394,8 +433,23 @@ func (k *Keeper) linkBegin(ctx context.Context, contentProof, name string) (Reco
 	if name != "" {
 		body.Name = &name
 	}
+	k.mu.Lock()
+	mark := k.addressMark
+	if k.sendOwnNamesLocked() {
+		body.OwnNames = ownNamesFlag()
+	}
+	k.mu.Unlock()
 	var out device.LinkBeginResponse
-	if err := k.Control.Do(ctx, device.DeviceOpNameLinkBegin, body, &out); err != nil {
+	err = k.Control.Do(ctx, device.DeviceOpNameLinkBegin, body, &out)
+	if err != nil && body.OwnNames != nil && refusedBody(err) {
+		// A control from before chosen names takes no ownNames (strict body): link.begin matters more.
+		k.mu.Lock()
+		k.ownNamesRefusedAt = k.now()
+		k.mu.Unlock()
+		body.OwnNames = nil
+		err = k.Control.Do(ctx, device.DeviceOpNameLinkBegin, body, &out)
+	}
+	if err != nil {
 		return cur, refusal(err)
 	}
 	if err := out.Validate(); err != nil {
@@ -403,7 +457,7 @@ func (k *Keeper) linkBegin(ctx context.Context, contentProof, name string) (Reco
 	}
 	k.mu.Lock()
 	defer k.unlock()
-	next := adopt(k.rec, &out.Link, k.now())
+	next := k.adoptLocked(&out.Link, mark)
 	next.Leaving, next.ContentProof, next.Name = false, reg.ContentProof, name
 	if err := k.saveLocked(next); err != nil {
 		return k.rec, err
@@ -499,6 +553,56 @@ func (k *Keeper) WantOn(seq uint64) error {
 	return err
 }
 
+// AddressMark is the count of the box's own address changes so far: taken before a request whose answer carries the
+// Link state (Observe).
+func (k *Keeper) AddressMark() uint64 {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.addressMark
+}
+
+// FollowAddress takes the box's new address after a rename, a move or a registration (control's own answer), so the
+// Link state names it before control's next answer does, and no answer to a request sent before it can bring the
+// earlier one back.
+func (k *Keeper) FollowAddress(label, host string, leaving *device.AddressLeaving) {
+	k.mu.Lock()
+	defer k.unlock()
+	k.addressMark++
+	k.addressFresh = true
+	next := k.rec
+	next.Label, next.Host, next.AddressLeaving = label, host, nil
+	if leaving != nil {
+		l := *leaving
+		next.AddressLeaving = &l
+	}
+	if !changed(k.rec, next) {
+		return
+	}
+	if err := k.saveLocked(next); err != nil {
+		k.log().Warn("link: the new name wasn't kept", "err", err)
+	}
+}
+
+// adoptLocked merges control's answer to a request sent at mark (mu held): when the box changed its address since,
+// the answer may predate that change at control, so the address fields stay the box's.
+func (k *Keeper) adoptLocked(st *device.DeviceLinkStatus, mark uint64) Record {
+	next := adopt(k.rec, st, k.now())
+	if mark != k.addressMark {
+		next.Label, next.Host, next.Zone, next.AddressLeaving = k.rec.Label, k.rec.Host, k.rec.Zone, k.rec.AddressLeaving
+	} else if st.Host != nil {
+		k.addressFresh = true
+	}
+	return next
+}
+
+// AddressFresh: control told the box its host in this run (or the box changed it itself), so the record's address is
+// control's latest as far as the box knows.
+func (k *Keeper) AddressFresh() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.addressFresh
+}
+
 // ReachSeen records that the reach file's seq was acted on (without a change to Link).
 func (k *Keeper) ReachSeen(seq uint64) error {
 	k.mu.Lock()
@@ -540,8 +644,8 @@ func (r Record) Status() local.LocalLinkStatus {
 	return out
 }
 
-// refusedClaimLink: control refused the body of link.status (a control from before contracts 4.13 and its strict body).
-func refusedClaimLink(err error) bool {
+// refusedBody: control refused the body of a link op (a control from before one of its members, with its strict body).
+func refusedBody(err error) bool {
 	var he *controlapi.HTTPError
 	code, detail := controlapi.ErrorCodes(err)
 	return errors.As(err, &he) && he.Status == 400 && code == "validation_failed" && detail == "bad_body"
@@ -670,20 +774,29 @@ func (k *Keeper) status(ctx context.Context) error {
 	if claim != "" && !k.claimRefusedAt.IsZero() && k.now().Sub(k.claimRefusedAt) < claimRetry {
 		claim = ""
 	}
-	k.mu.Unlock()
+	mark := k.addressMark
 	req := device.LinkStatusRequest{}
+	if k.sendOwnNamesLocked() {
+		req.OwnNames = ownNamesFlag()
+	}
+	k.mu.Unlock()
 	if claim != "" {
 		req.ClaimLink = &claim
 	}
 	var out device.LinkStatusResponse
 	err := k.Control.Do(ctx, device.DeviceOpNameLinkStatus, req, &out)
-	if err != nil && claim != "" && refusedClaimLink(err) {
-		// A control from before the field takes no member in this body: the state matters more than the link, so ask
-		// again without it, and offer it again later (control may have been updated by then).
+	if err != nil && (claim != "" || req.OwnNames != nil) && refusedBody(err) {
+		// A control from before one of the fields takes no such member in this body: the state matters more than the
+		// fields, so ask again with neither, and offer each again later (control may have been updated by then).
 		k.mu.Lock()
-		k.claimRefusedAt = k.now()
+		if claim != "" {
+			k.claimRefusedAt = k.now()
+		}
+		if req.OwnNames != nil {
+			k.ownNamesRefusedAt = k.now()
+		}
 		k.mu.Unlock()
-		req.ClaimLink = nil
+		req.ClaimLink, req.OwnNames = nil, nil
 		err = k.Control.Do(ctx, device.DeviceOpNameLinkStatus, req, &out)
 	}
 	if err != nil {
@@ -697,5 +810,5 @@ func (k *Keeper) status(ctx context.Context) error {
 	if k.rec.Leaving {
 		return nil
 	}
-	return k.saveLocked(adopt(k.rec, &out.Link, k.now()))
+	return k.saveLocked(k.adoptLocked(&out.Link, mark))
 }

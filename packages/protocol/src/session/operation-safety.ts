@@ -663,6 +663,9 @@ const TABLE = {
   // anything commits here (the same code again for the same account is fine there, but a person checks).
   'ownAddress.status': READ,
   'ownAddress.reach.set': RECEIPT,
+  'ownAddress.check': READ,
+  // Acts at control before it commits: a lost answer is checked by reading the address again.
+  'ownAddress.rename': NEVER,
   'account.link.lookup': READ,
   'account.link': NEVER,
   // Reach and Updates (4.4). Link on and off act at control before anything commits here, and a person checks the

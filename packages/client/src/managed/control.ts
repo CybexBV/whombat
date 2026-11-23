@@ -24,6 +24,7 @@ import {
   LinkedBox,
   type LinkInterval,
   LinkLookup,
+  LinkNameCheck,
   linkApi,
   orgApi,
   type Passkey,
@@ -48,6 +49,7 @@ export type {
   LinkedBox,
   LinkInterval,
   LinkLookup,
+  LinkNameCheck,
   Passkey,
   PasskeyAuthenticateOptions,
   PasskeyRegisterOptions,
@@ -226,6 +228,10 @@ export type ControlErrorCode =
   | 'billing_provider_refused'
   /** `link.checkout` for a country Link isn't sold in (403, 4.10). */
   | 'link_country'
+  /** `link.confirm` with a name for the box's address that isn't one, is kept back, or another box has (409, 4.16). */
+  | 'label_invalid'
+  | 'label_reserved'
+  | 'label_taken'
   | 'forbidden'
   | 'unavailable';
 
@@ -417,9 +423,13 @@ export interface ControlApi {
   /**
    * The code's Whombat joins the account's Link (`email_unconfirmed`, `link_trial_boxes`, the lookup's refusals). `terms`:
    * the Subscription Terms the person ticked, only when the lookup named a `termsVersion` (an older control refuses
-   * it); another version than control's is `terms_outdated`.
+   * it); another version than control's is `terms_outdated`. `label` (4.16): the name the person chose for the box's
+   * address (`label_invalid`, `label_reserved`, `label_taken`: nothing is linked then); without it the box gets a random
+   * one.
    */
-  linkConfirm?(code: string, terms?: { version: string }): Promise<LinkedBox>;
+  linkConfirm?(code: string, terms?: { version: string }, label?: string): Promise<LinkedBox>;
+  /** Whether a name is free for a new box's address (`link.name.check`, 4.16); an older control answers 404. */
+  linkNameCheck?(name: string): Promise<LinkNameCheck>;
   /** The account's Link subscription and its Whombats. */
   linkAccount?(): Promise<LinkAccount>;
   /** Takes a Whombat out of the account's Link. */
@@ -546,6 +556,9 @@ const NAMED_REASONS = new Set<string>([
   'link_no_boxes',
   'billing_provider_refused',
   'link_country',
+  'label_invalid',
+  'label_reserved',
+  'label_taken',
 ] satisfies ControlErrorCode[]);
 
 /** The refusal's reason as `ControlError` names it; exported for the tests. */
@@ -946,9 +959,13 @@ export function createHttpControl(
     async linkLookup(code) {
       return parsed(LinkLookup, await call(linkApi.lookup, { body: { code } }));
     },
-    async linkConfirm(code, terms) {
-      const body = { code, ...(terms && { terms: { version: terms.version } }) };
+    async linkConfirm(code, terms, label) {
+      // Only a chosen name goes: an older control refuses the member (its body is strict).
+      const body = { code, ...(terms && { terms: { version: terms.version } }), ...(label && { label }) };
       return parsed(LinkedBox, await call(linkApi.confirm, { body }));
+    },
+    async linkNameCheck(name) {
+      return parsed(LinkNameCheck, await call(linkApi.nameCheck, { body: { name } }));
     },
     async linkAccount() {
       return parsed(LinkAccount, await call(linkApi.boxes));

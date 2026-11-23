@@ -24,8 +24,9 @@ The customer's data lives on a Whombat appliance at the customer's premises. Cli
 encrypted channel (Noise XX, the appliance's identity pinned), carried one of these ways: straight to the appliance on
 the local network or on the customer's Tailscale network, or, with Whombat Link, through Whombat's relay. Clients try
 the direct ways first; the relay sees only ciphertext either way. A browser loads the app only from a page the
-appliance serves itself over HTTPS: at its own address (`<label>.box.whombat.app`, which the relay's door passes through
-to the appliance, with TLS ending there) or at its Tailscale name. Over plain HTTP it serves no page, only a sentence
+appliance serves itself over HTTPS: at its own address (`<name>.whombat.app`, or `<label>.box.whombat.app` for an
+appliance that hasn't moved yet, which the relay's door passes through to the appliance, with TLS ending there) or at
+its Tailscale name. Over plain HTTP it serves no page, only a sentence
 naming those addresses (section 8).
 
 | Component | Runs where | Operated by | Source | Sees content? |
@@ -305,12 +306,14 @@ unchanged. It never parses them.
 subject, organization id, appliance route id, channel, ticket id, the appliance's own-address label); the browser's
 `Origin` header; connection times; and the size, direction and timing of every message.
 
-**The door to each appliance's own address.** A browser's TLS connection to `<label>.box.whombat.app` reaches the
-relay, which passes it unopened to the appliance by its label. TLS ends on the appliance, whose certificate key never
-leaves it. The door sees the visitor's IP address, the host name and the size and timing of the traffic. Whombat runs
-the DNS for `box.whombat.app`, so it could get a certificate for an appliance's name; the appliance watches
-Certificate Transparency logs and warns its person about any certificate it didn't make itself
-(`docs/decisions/own-address.md`).
+**The door to each appliance's own address.** A browser's TLS connection to `<name>.whombat.app` (or
+`<label>.box.whombat.app`, and the old address for 30 days after a change) reaches the relay, which passes it unopened
+to the appliance by its name. TLS ends on the appliance, whose certificate key never leaves it. The door sees the
+visitor's IP address, the host name and the size and timing of the traffic. Whombat runs the DNS for `whombat.app`, so
+it could get a certificate for an appliance's name; the appliance watches Certificate Transparency logs and warns its
+person about any certificate it didn't make itself (`docs/decisions/own-address.md`). Cloudflare, which runs
+`whombat.app`'s DNS, holds two certificates for `*.whombat.app` until 16 February 2027 (issued before the zone was
+used for appliances); the appliance knows them, doesn't call them foreign, and says so under its address.
 
 **What reaches the appliance:** only that a session is waiting, and its class (`packages/protocol/src/relay.ts`,
 `RelayIncoming`). The relay doesn't pass on the client's IP address or cloud identity.

@@ -406,6 +406,7 @@ export function BoxRoot({ env }: { env: BoxEnvironment }) {
         kind: 'box',
         secure: env.secure(),
         atAddress: (env.ownAddress?.() ?? null) !== null,
+        host: env.ownAddress?.() ?? null,
         ...setupWay(),
       }}
       edition={box.edition ?? 'commercial'}

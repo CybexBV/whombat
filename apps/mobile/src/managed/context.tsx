@@ -141,6 +141,11 @@ export interface ManagedContextValue {
    * login server). From the box's record on this phone, and `welcome.edition` once the session says it.
    */
   community: boolean;
+  /**
+   * The box's own address as a screen read it (`appliance.status`, a rename's answer): the phone keeps it when it
+   * changed, so the next connection dials the current one.
+   */
+  ownAddressSeen?(own: { host: string; url: string } | null): void;
 }
 
 export const ManagedContext = createContext<ManagedContextValue | null>(null);

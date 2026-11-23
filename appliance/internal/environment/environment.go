@@ -69,7 +69,8 @@ type Settings struct {
 	EmbedURL string `json:"embedUrl,omitempty"`
 	// RelayHost is the relay's host name, for the record (the tickets name the relay).
 	RelayHost string `json:"relayHost,omitempty"`
-	// OwnAddressZone is where the boxes' own addresses live (box.whombat.app, dev.whombat.app); "" for none.
+	// OwnAddressZone is where the boxes' own addresses live (whombat.app, dev.whombat.app); "" for none. A prod box may
+	// still have its address under prod's earlier zone (box.whombat.app) until it moves: the manager allows both.
 	OwnAddressZone string `json:"ownAddressZone,omitempty"`
 	// Files are the environment's trust documents in the image, by their name in RunDir (SupportCAName…).
 	Files map[string]string `json:"files,omitempty"`

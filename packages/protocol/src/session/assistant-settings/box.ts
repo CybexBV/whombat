@@ -14,6 +14,9 @@ export const BOX_SETTINGS = {
     'appliance.about',
     'Turn reaching this Whombat’s page from anywhere on or off',
   ),
+  // Its name (4.16): the assistant may look a name up, and change it only after the person's yes on a card.
+  'ownAddress.check': read('appliance.about', 'Check whether a name is free for this Whombat’s address'),
+  'ownAddress.rename': ask('appliance.about', 'Change this Whombat’s address'),
   'account.link.lookup': never('appliance.about', 'Look up whose account a link code is'),
   'account.link': never('appliance.about', 'Link this Whombat to your account'),
   // Reach and Updates (4.4): how the box is reached and where its updates come from are the owner's; the assistant may

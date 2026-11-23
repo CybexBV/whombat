@@ -52,6 +52,15 @@
         ]
       }
     },
+    "hosts": {
+      "maxItems": 4,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
+      }
+    },
     "certs": {
       "maxItems": 256,
       "type": "array",

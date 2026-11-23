@@ -19,7 +19,7 @@ export interface BoxEnvironment {
   /** Whether this page is a secure context (the box's Tailscale page, `localhost`): Web Push and passkeys need one. */
   secure(): boolean;
   /**
-   * The box's own address when this page is it (`<label>.box.whombat.app`, own-address.md): the claim link and the box's
+   * The box's own address when this page is it (`<name>.whombat.app`, own-address.md): the claim link and the box's
    * own passkeys work here. Null on the local network, Tailscale and `localhost`.
    */
   ownAddress?(): string | null;

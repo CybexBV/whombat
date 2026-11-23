@@ -2741,7 +2741,7 @@
                 and .environments.dev.controlUrl == "https://api-dev.whombat.com" and .environments.dev.ownAddressZone == "dev.whombat.app"
                 and .environments.dev.files["support-ca.pub"] == "/etc/whombat/environments/dev/support-ca.pub"
                 and .environments.prod.deviceEnv == "prod" and .environments.prod.controlUrl == "https://api.whombat.com"
-                and .environments.prod.ownAddressZone == "box.whombat.app"' ${c.environment.etc."whombat/environments.json".source}
+                and .environments.prod.ownAddressZone == "whombat.app"' ${c.environment.etc."whombat/environments.json".source}
               jq -e '.platform == "factory" and .requireSecureBoot == true and (has("luksDevices") | not)' ${settings hwSelf}
               # manager.json keeps to the keys the previous manager knows (LNK-24); the helper's channel (ONE-03).
               jq -e '(.tuf | keys - ["pinnedRoot", "metadataUrl", "targetsUrl", "cacheDir", "mirrorDir"]) == []

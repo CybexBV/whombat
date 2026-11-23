@@ -40,12 +40,18 @@ import {
   linkPlanTone,
   linkPriceLine,
   linkYearly,
+  OWN_NAME_TEXT,
+  type OwnNameCheck,
   ownClaimPrefillHash,
+  ownNameChosen,
+  ownNameZoneOf,
   pollLinkAddress,
   SUBSCRIPTION_TERMS_VERSION,
   signInErrorText,
   WHOMBAT_LINK_TEXT as T,
 } from '@whombat/client/managed';
+import { useOwnNameCheck } from '@whombat/client/managed/react';
+import type { OwnAddressNameVerdict } from '@whombat/protocol';
 import { normalizeLinkCode } from '@whombat/protocol';
 import { Check } from 'lucide-react';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
@@ -56,6 +62,8 @@ import { Input } from '../components/Input';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { StatusDot } from '../components/StatusDot';
 import styles from './managed.module.css';
+import { OwnNameField } from './OwnNameField';
+import nameStyles from './OwnNameField.module.css';
 import { ErrorLine, Field, TermsCheck } from './screens';
 
 /** As typed: upper case, the dash after four letters, nothing past eight. */
@@ -228,8 +236,18 @@ export interface LinkCodeScreenProps {
   onAddCard: { label: string; go: (country: string) => void } | null;
   onCode: (code: string) => void;
   onFind: () => void;
-  /** `agreed`: the Subscription Terms were ticked (asked only when the lookup named a version). */
-  onConfirm: (agreed: boolean) => void;
+  /**
+   * `agreed`: the Subscription Terms were ticked (asked only when the lookup named a version). `label`: the name chosen
+   * for the box's address, when the person chose one (else it gets a random name).
+   */
+  onConfirm: (agreed: boolean, label?: string) => void;
+  /**
+   * Checks a name for the box's address (`link.name.check`); absent where control can't (an older one, a test double):
+   * then the confirm step has no Web address row.
+   */
+  onCheckName?: (name: string) => Promise<{ verdict: OwnAddressNameVerdict; host?: string | undefined }>;
+  /** The name confirm sent was taken meanwhile (`label_taken`): the field opens on it again and says so. */
+  nameTaken?: string | null;
   onOtherCode: () => void;
   onAccount: () => void;
 }
@@ -237,6 +255,8 @@ export interface LinkCodeScreenProps {
 export function LinkCodeScreen(props: LinkCodeScreenProps) {
   const { step, code, busy, error, onCode, onFind, onConfirm, onOtherCode, onAccount, onAddCard } = props;
   const [agreed, setAgreed] = useState(false);
+  // The name for its address: null while it gets a random one; `label` once the typed name is free.
+  const [naming, setNaming] = useState<{ label: string | null } | null>(null);
   const [country, setCountry] = useState<LinkCountryChoice>(guessCountry);
   const errorLine = (
     <>
@@ -342,6 +362,16 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
             ))}
           </ul>
         )}
+        {/* Only when control says the box can take a chosen name: an older box, one that already has its address,
+            or an account past its chosen names for the year gets a random name (or keeps its own). */}
+        {!lookup.linked && lookup.chooseName === true && props.onCheckName && (
+          <WebAddressRow
+            ask={props.onCheckName}
+            taken={props.nameTaken ?? null}
+            disabled={busy}
+            onChange={setNaming}
+          />
+        )}
         {!lookup.linked && (
           <p className={styles.status} data-testid="link-terms">
             {after}
@@ -366,8 +396,8 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
             <Button
               variant="primary"
               size="lg"
-              disabled={busy || (askTerms && !agreed)}
-              onClick={() => onConfirm(askTerms && agreed)}
+              disabled={busy || (askTerms && !agreed) || (naming !== null && naming.label === null)}
+              onClick={() => onConfirm(askTerms && agreed, naming?.label ?? undefined)}
             >
               {busy ? ADD_TEXT.confirming : ADD_TEXT.confirm}
             </Button>
@@ -400,6 +430,85 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
         </div>
       </form>
     </AuthLayout>
+  );
+}
+
+/**
+ * Web address, on the confirm step (Whombat own-address.md): a random name unless the person chooses their own, checked
+ * as they type. `onChange` hears null for a random name, else `{label}` with the name once it is free (null until then:
+ * confirm waits).
+ */
+function WebAddressRow({
+  ask,
+  taken,
+  disabled,
+  onChange,
+}: {
+  ask: NonNullable<LinkCodeScreenProps['onCheckName']>;
+  taken: string | null;
+  disabled: boolean;
+  onChange: (naming: { label: string | null } | null) => void;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(taken !== null);
+  const [typed, setTyped] = useState(taken ?? '');
+  const { check: live, type } = useOwnNameCheck(ask);
+  // Confirm found the name taken meanwhile: said here until the person types another.
+  const check: OwnNameCheck =
+    taken !== null && typed === taken ? { kind: 'done', name: taken, verdict: 'taken', host: null } : live;
+  const zone = ownNameZoneOf(check.kind === 'done' ? check.host : null);
+  const label = ownNameChosen(check);
+  const hear = useRef(onChange);
+  hear.current = onChange;
+  useEffect(() => hear.current(open ? { label } : null), [open, label]);
+  if (!open)
+    return (
+      <div className={styles.card} data-row="web-address">
+        <div className={`${styles.row} ${styles.rowWrap}`}>
+          <span className={styles.rowMain}>
+            <span className={styles.rowTitle}>{OWN_NAME_TEXT.row}</span>
+            <span className={styles.rowMeta}>{OWN_NAME_TEXT.random(OWN_NAME_TEXT.randomExample)}</span>
+          </span>
+          <Button variant="link" disabled={disabled} onClick={() => setOpen(true)}>
+            {OWN_NAME_TEXT.choose}
+          </Button>
+        </div>
+      </div>
+    );
+  return (
+    <div className={styles.card} data-row="web-address">
+      <div className={`${styles.row} ${styles.rowWrap}`}>
+        <div className={nameStyles.box}>
+          <label className={styles.label} htmlFor={id}>
+            {OWN_NAME_TEXT.row}
+          </label>
+          <OwnNameField
+            id={id}
+            value={typed}
+            zone={zone}
+            check={check}
+            autoFocus
+            onChange={(next) => {
+              setTyped(next);
+              type(next);
+            }}
+          />
+          <div className={styles.actions}>
+            <Button
+              variant="link"
+              disabled={disabled}
+              onClick={() => {
+                setOpen(false);
+                setTyped('');
+                type('');
+              }}
+            >
+              {OWN_NAME_TEXT.useRandom}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -521,6 +630,7 @@ export function LinkCodeFlow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsCard, setNeedsCard] = useState<string | null>(null);
+  const [nameTaken, setNameTaken] = useState<string | null>(null);
   // The terms ticked at the confirm go along to Checkout when a card is needed (an account may have none yet).
   const [agreedTerms, setAgreedTerms] = useState(false);
   const find = async (typed: string) => {
@@ -550,17 +660,22 @@ export function LinkCodeFlow({
     looked.current = true;
     void find(initialCode);
   }, [initialCode]);
-  const confirm = async (agreed: boolean) => {
+  const confirm = async (agreed: boolean, label?: string) => {
     if (step.kind !== 'found' || !control.linkConfirm) return;
     setBusy(true);
     setError(null);
+    setNameTaken(null);
     try {
       // The terms this site shows; control refuses another version (`terms_outdated`: reload the page).
       const terms = agreed ? { version: SUBSCRIPTION_TERMS_VERSION } : undefined;
       setAgreedTerms(agreed);
-      const box = await control.linkConfirm(step.lookup.code, terms);
+      const box = label
+        ? await control.linkConfirm(step.lookup.code, terms, label)
+        : await control.linkConfirm(step.lookup.code, terms);
       setStep({ kind: 'done', box, trial: step.lookup.trial });
     } catch (e) {
+      // Another Whombat took the name meanwhile: back to the field, which says so; nothing was added.
+      if (label && e instanceof ControlError && e.code === 'label_taken') return setNameTaken(label);
       setError(linkAccountErrorText(e));
       setNeedsCard(e instanceof ControlError ? (CARD_BUTTON[e.code] ?? null) : null);
     } finally {
@@ -594,12 +709,15 @@ export function LinkCodeFlow({
       }
       onCode={setCode}
       onFind={() => void find(code)}
-      onConfirm={(agreed) => void confirm(agreed)}
+      onConfirm={(agreed, label) => void confirm(agreed, label)}
+      {...(control.linkNameCheck && { onCheckName: control.linkNameCheck })}
+      nameTaken={nameTaken}
       onOtherCode={() => {
         setStep({ kind: 'enter' });
         setCode('');
         setError(null);
         setNeedsCard(null);
+        setNameTaken(null);
         window.history.replaceState(null, '', linkPagePath(null));
       }}
       onAccount={onAccount}

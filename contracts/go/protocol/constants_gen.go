@@ -107,13 +107,19 @@ const (
 	StreamResetProtocolError = 9
 	StreamResetInternal      = 10
 
-	// The own address (4.3; Whombat own-address.md): shapes only, never the word list.
-	OwnAddressLabelPattern = "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$"
-	OwnAddressHostPattern  = "^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}[.](box|dev)[.]whombat[.]app$"
-	OwnAddressZoneProd     = "box.whombat.app"
-	OwnAddressZoneDev      = "dev.whombat.app"
-	OwnAddressClaimPath    = "/c/"
-	BoxAssetLinksMaxAgeS   = 86400
+	// The own address (4.3, names since 4.16; Whombat own-address.md): shapes only, never the word list or reserved names.
+	OwnAddressLabelPattern   = "^[a-z](-?[a-z0-9])+$"
+	OwnAddressLabelMin       = 3
+	OwnAddressLabelMax       = 32
+	OwnAddressHostPattern    = "^[a-z](-?[a-z0-9])+[.]((box|dev)[.])?whombat[.]app$"
+	OwnAddressHostMax        = 64
+	OwnAddressZoneProd       = "whombat.app"
+	OwnAddressZoneDev        = "dev.whombat.app"
+	OwnAddressZoneOldProd    = "box.whombat.app"
+	OwnAddressLeavingDays    = 30
+	OwnAddressRenamesPerYear = 3
+	OwnAddressClaimPath      = "/c/"
+	BoxAssetLinksMaxAgeS     = 86400
 
 	// Whombat Link (4.4; Whombat whombat-link.md).
 	LinkCodePattern   = "^[ABCDEFGHJKMNPQRTVWXY]{4}-[ABCDEFGHJKMNPQRTVWXY]{4}$"

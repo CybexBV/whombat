@@ -36,6 +36,19 @@ describe('the own address on the dev stack (plan §4, MG-161)', () => {
       '-door-zone',
       'dev.whombat.app',
     ]);
+    // Several zones go to a relay that takes a list, and stop a relay that takes one.
+    expect(
+      relayDoorArgs(
+        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'whombat.app,box.whombat.app' },
+        `${doorHelp}  -door-zones value\n`,
+      ).args,
+    ).toEqual(['-door-listen', '127.0.0.1:4712', '-door-zones', 'whombat.app,box.whombat.app']);
+    expect(() =>
+      relayDoorArgs(
+        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'whombat.app,box.whombat.app' },
+        doorHelp,
+      ),
+    ).toThrow(/one zone only/);
     const old = relayDoorArgs(
       { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712' },
       'Usage of relay:\n  -listen string\n',

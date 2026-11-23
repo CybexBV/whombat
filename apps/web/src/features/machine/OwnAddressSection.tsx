@@ -1,6 +1,7 @@
 /**
  * Settings → This Whombat → About → ADDRESS (Whombat own-address.md): the box's own
- * address with Copy, the owner's switch “Reach my Whombat's page from anywhere”, when its certificate ends, when
+ * address with Copy and Change (a name of the person's own, the old address working 30 days more), the old address while
+ * it still works, Cloudflare's certificates for `*.whombat.app` while they last, the owner's switch “Reach my Whombat's page from anywhere”, when its certificate ends, when
  * certificates were last checked and every stretch the watch couldn't check. A box without an own address (or before
  * 4.3) shows nothing. The words are the client's `OWN_ADDRESS_TEXT`; `ownAddressView` decides the lines.
  */
@@ -8,10 +9,18 @@ import {
   accountLinkErrorText,
   normalizeLinkCode,
   OWN_ADDRESS_TEXT,
+  OWN_NAME_TEXT,
+  ownAddressCloudflareLine,
+  ownAddressLeavingView,
+  ownAddressRenameErrorText,
   ownAddressView,
+  ownNameChosen,
+  ownNameZoneOf,
   readOwnAddress,
 } from '@whombat/client/managed';
+import { useOwnNameCheck } from '@whombat/client/managed/react';
 import { type ApplianceSession, type OwnAddressSummary, sessionOps } from '@whombat/client/session';
+import { ownAddressLabelOf } from '@whombat/protocol';
 import { useEffect, useId, useState } from 'react';
 import { useAppServices } from '../../app/providers';
 import { Button } from '../../components/Button';
@@ -22,6 +31,8 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { OwnNameField } from '../../managed/OwnNameField';
+import { announceOwnAddress, useOwnAddressChanges } from '../../managed/ownAddressEvents';
 import styles from '../settings/SettingsScreen.module.css';
 import tw from '../settings/ThisWhombat.module.css';
 import m from './Machine.module.css';
@@ -36,11 +47,15 @@ export function OwnAddressSection() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+  const [changing, setChanging] = useState(false);
   const id = useId();
   const toast = useToast();
   // A box that knows Whombat Link answers `reach.get`; one before it doesn't.
   const withLink = useReach(session).reach?.link != null;
 
+  // Read again when the address changed (here, or the banner noticed): the leaving row and the new state.
+  const changes = useOwnAddressChanges();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `changes` only asks again
   useEffect(() => {
     let live = true;
     if (!session) return;
@@ -51,10 +66,12 @@ export function OwnAddressSection() {
     return () => {
       live = false;
     };
-  }, [session]);
+  }, [session, changes]);
 
   if (!own || !session) return null;
   const v = ownAddressView(own);
+  const leaving = ownAddressLeavingView(own);
+  const cloudflare = ownAddressCloudflareLine(own.host);
   const reach = async (on: boolean) => {
     setBusy(true);
     setNote(null);
@@ -79,6 +96,11 @@ export function OwnAddressSection() {
             <span className={styles.rowMeta} role="status">
               {v.state}
             </span>
+            {cloudflare ? (
+              <span className={styles.rowMeta} data-cloudflare="">
+                {cloudflare}
+              </span>
+            ) : null}
           </span>
           <Button
             variant="secondary"
@@ -88,7 +110,19 @@ export function OwnAddressSection() {
           >
             {T.copy}
           </Button>
+          <Button variant="secondary" size="sm" onClick={() => setChanging(true)}>
+            {OWN_NAME_TEXT.change}
+          </Button>
         </div>
+        {leaving ? (
+          <div className={styles.row} data-row="leaving">
+            <StatusDot tone="mut" size={8} label={null} />
+            <span className={styles.rowMain}>
+              <span className={styles.rowTitle}>{leaving.host}</span>
+              <span className={styles.rowMeta}>{leaving.line}</span>
+            </span>
+          </div>
+        ) : null}
         <div className={styles.row} data-row="reach">
           <span className={styles.rowMain}>
             <label className={styles.rowTitle} htmlFor={`${id}-reach`}>
@@ -131,7 +165,112 @@ export function OwnAddressSection() {
         </div>
       </div>
       {linking ? <LinkDialog session={session} onClose={() => setLinking(false)} /> : null}
+      {changing ? (
+        <ChangeDialog
+          session={session}
+          own={own}
+          onClose={() => setChanging(false)}
+          onChanged={(next) => {
+            setOwn(next);
+            setChanging(false);
+            toast.show(OWN_NAME_TEXT.changed(next.host));
+            announceOwnAddress();
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * Change the address (the owner): a name of their own under the same zone, checked as they type, what happens to the
+ * old address, then Change address. The box answers with its new state at once; its certificate follows.
+ */
+function ChangeDialog({
+  session,
+  own,
+  onClose,
+  onChanged,
+}: {
+  session: ApplianceSession;
+  own: OwnAddressSummary;
+  onClose: () => void;
+  onChanged: (own: OwnAddressSummary) => void;
+}) {
+  const N = OWN_NAME_TEXT;
+  const id = useId();
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const { check, type } = useOwnNameCheck(
+    (label) => sessionOps.ownAddressCheck(session, label),
+    ownAddressLabelOf(own.host),
+  );
+  const label = ownNameChosen(check);
+  const zone = ownNameZoneOf(check.kind === 'done' && check.host ? check.host : own.host);
+  const submit = async () => {
+    if (!label) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      onChanged((await sessionOps.ownAddressRename(session, label)).ownAddress);
+    } catch (error) {
+      setProblem(ownAddressRenameErrorText(error));
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal open onOpenChange={(next) => (next ? null : onClose())} width="md">
+      <form
+        className={tw.dialog}
+        noValidate
+        data-own-change=""
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className={tw.dialogHead}>
+          <ModalTitle className={tw.dialogTitle}>{N.changeTitle}</ModalTitle>
+          <ModalDescription className={tw.dialogLead}>{ownAddressView(own).address}</ModalDescription>
+        </div>
+        <div className={m.fields}>
+          <div className={m.field}>
+            <label className={m.label} htmlFor={id}>
+              {N.label}
+            </label>
+            <OwnNameField
+              id={id}
+              value={typed}
+              zone={zone}
+              check={check}
+              autoFocus
+              onChange={(next) => {
+                setTyped(next);
+                setProblem(null);
+                type(next);
+              }}
+            />
+          </div>
+        </div>
+        <span className={tw.dialogNote}>{N.explain}</span>
+        {problem ? (
+          <span className={tw.dialogNote} role="alert" data-problem="">
+            {problem}
+          </span>
+        ) : null}
+        <div className={tw.dialogActions}>
+          <ModalClose asChild>
+            <Button variant="secondary" size="lg">
+              {N.cancel}
+            </Button>
+          </ModalClose>
+          <Button variant="primary" size="lg" type="submit" disabled={busy || !label}>
+            {busy ? N.changing : N.changeAddress}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

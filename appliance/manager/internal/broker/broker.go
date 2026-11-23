@@ -133,6 +133,9 @@ type Server struct {
 	// supportMu guards supportCached, the support route's ticket, kept apart from the runtime's (MG-118).
 	supportMu     sync.Mutex
 	supportCached *device.SupportTicketResponse
+	// addressMu: one change of the own address at a time, whoever starts it (the runtime's register, check and rename
+	// routes, the daemon's follower), so each takes control's answer to the one before it and none is saved out of order.
+	addressMu sync.Mutex
 }
 
 func (s *Server) now() time.Time {
@@ -217,6 +220,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressRegister, s.onlyN(rt, ownAddressBodyMax, s.ownAddressRegister))
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCert, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCert))
 	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCt, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCT))
+	mux.HandleFunc("POST "+local.ManagerPathOwnAddressCheck, s.onlyN(rt, ownAddressBodyMax, s.ownAddressCheck))
+	mux.HandleFunc("POST "+local.ManagerPathOwnAddressRename, s.onlyN(rt, ownAddressBodyMax, s.ownAddressRename))
 	for path, route := range ownAddressForwards {
 		mux.HandleFunc("POST "+path, s.onlyN(rt, route.requestMax, s.share(route)))
 	}
@@ -302,9 +307,13 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request) {
 	// The Link state of control's answer goes to the keeper once s.mu is released (deferred before the lock, so it runs
 	// after the unlock): a change it makes can drop the cached tickets, which takes s.mu.
 	var seen *device.DeviceLinkStatus
+	var mark uint64
+	if s.Link != nil {
+		mark = s.Link.AddressMark()
+	}
 	defer func() {
 		if seen != nil && s.Link != nil {
-			s.Link.Observe(seen)
+			s.Link.Observe(seen, mark)
 		}
 	}()
 	margin := s.TicketMargin

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/CybexBV/whombat/appliance/manager/internal/ownaddress"
 )
@@ -53,7 +54,7 @@ func (d *Daemon) setupOwnAddress(runtimeUID uint32) {
 	svc.Prober = &ownaddress.Prober{Responder: resp, Addr: mode.ProbeAddr}
 	svc.Orderer = &ownaddress.Orderer{Directory: mode.Directory, HTTP: hc, Store: store, Responder: resp, Log: d.Log}
 	if mode.CTURL != "" {
-		svc.Watch = &ownaddress.Watch{BaseURL: mode.CTURL, Store: store, Zone: mode.Zone, Log: d.Log}
+		svc.Watch = &ownaddress.Watch{BaseURL: mode.CTURL, Store: store, Log: d.Log}
 	}
 	d.OwnAddress = svc
 	d.Broker.OwnAddress = svc
@@ -66,9 +67,22 @@ func (d *Daemon) ACMESocket() string {
 	return filepath.Join(filepath.Dir(d.Cfg.APISocket), "acme.sock")
 }
 
-// ownAddressLoop serves the ACME socket and runs the order loop (and with it the certificate watch).
+// ownAddressLoop serves the ACME socket and runs the order loop (and with it the certificate watch), and follows
+// control's view of the address now and then (a move that failed is tried again).
 func (d *Daemon) ownAddressLoop(ctx context.Context) {
 	svc := d.OwnAddress
+	go func() {
+		t := time.NewTicker(followAddressEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				d.followAddress(ctx)
+			}
+		}
+	}()
 	ln, err := svc.Responder.Bind(d.ACMESocket())
 	if err != nil {
 		// Without the socket no validation reaches the manager: the probe fails and says so in the state.
@@ -85,4 +99,62 @@ func (d *Daemon) ownAddressLoop(ctx context.Context) {
 		defer func() { <-served }()
 	}
 	svc.Run(ctx)
+}
+
+// followAddressEvery: how often the box looks again at control's view of its address without a change to it.
+const followAddressEvery = 30 * time.Minute
+
+// followAddress keeps the own address with control's view in the Link state (link.status, tickets), with the own
+// address held (the runtime's rename and check wait meanwhile, and the other way round):
+//   - a box without a label registers the one control gave;
+//   - control's checked host differs from the box's: control is the registry, so the box takes it whatever is leaving
+//     (a rename whose answer never arrived, or one it missed while it was off past the leaving date); what control names
+//     as leaving only decides which earlier pair keeps answering;
+//   - a box whose host is under prod's earlier zone moves to the zone control names (address.rename with its own label
+//     and move, so a move that reaches control after a rename changes nothing), once, while nothing is leaving.
+func (d *Daemon) followAddress(ctx context.Context) {
+	if d.OwnAddress == nil || d.Control == nil || d.Broker == nil || !d.linkActive() {
+		return
+	}
+	unlock := d.Broker.LockAddress()
+	defer unlock()
+	have, haveHost := d.OwnAddress.Label()
+	if have == "" {
+		d.registerLinkLabel(ctx)
+		return
+	}
+	rec := d.Link.Snapshot()
+	if rec.Label != "" && rec.Host != "" && rec.Host != haveHost {
+		if !d.Link.AddressFresh() {
+			// Only the journal's copy so far: control's own answer comes with the next state.
+			return
+		}
+		changed, err := d.OwnAddress.Adopt(ownaddress.Address{Label: rec.Label, Host: rec.Host, Leaving: rec.AddressLeaving})
+		if err != nil {
+			d.warnOnce("own address: control's address in the Link state refused", err)
+			return
+		}
+		d.clearErr("own address: control's address in the Link state refused")
+		if changed {
+			d.Broker.DropTickets()
+			d.Log.Info("own address: took control's address", "from", haveHost, "to", rec.Host)
+		}
+		return
+	}
+	if rec.AddressLeaving != nil || rec.Host != haveHost {
+		return
+	}
+	label, ok := d.OwnAddress.MoveWanted(rec.Zone)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := d.Broker.RenameAddress(ctx, label, true); err != nil {
+		d.warnOnce("own address: the move to the new zone didn't happen yet (tried again later)", err)
+		return
+	}
+	d.clearErr("own address: the move to the new zone didn't happen yet (tried again later)")
+	_, host := d.OwnAddress.Label()
+	d.Log.Info("own address: moved", "from", haveHost, "to", host)
 }

@@ -14,6 +14,7 @@ import {
   LINK_CLAIM_URL_GRACE_MS,
   LINK_OPEN_FALLBACK_MS,
   type LinkAccount,
+  OWN_NAME_TEXT as N,
   SUBSCRIPTION_TERMS_VERSION,
   WHOMBAT_LINK_TEXT as T,
 } from '@whombat/client/managed';
@@ -172,6 +173,134 @@ describe('/link', () => {
     expect(await screen.findByText(T.errors.link_subscribe)).toBeTruthy();
     expect(screen.getByRole('button', { name: T.subscribe })).toBeTruthy();
     expect(screen.queryByRole('button', { name: T.addCard })).toBeNull();
+  });
+});
+
+describe('the Web address on the confirm step', () => {
+  const lookup = async () => ({
+    code: 'KXQM-TRVW',
+    name: null,
+    expiresAt: now + 600,
+    linked: false,
+    trial: true,
+    chooseName: true,
+  });
+  const box = account().boxes[0] as LinkAccount['boxes'][number];
+
+  it('a random name unless the person chooses one; the name is checked and sent with the confirm', async () => {
+    const user = userEvent.setup();
+    const linkNameCheck = vi.fn(async (name: string) =>
+      name === 'office'
+        ? { name, verdict: 'taken' as const }
+        : { name, verdict: 'free' as const, host: `${name}.whombat.app` },
+    );
+    const linkConfirm = vi.fn(async () => box);
+    const control = { linkLookup: lookup, linkConfirm, linkNameCheck, linkAccount: async () => account() };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    expect(await screen.findByText(N.random(N.randomExample))).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: N.choose }));
+    const field = screen.getByLabelText(N.row);
+    expect(screen.getByText(N.privacy)).toBeTruthy();
+    const confirm = screen.getByRole('button', { name: T.confirm }) as HTMLButtonElement;
+    // Nothing typed yet: confirm waits for a free name.
+    expect(confirm.disabled).toBe(true);
+    // A name nobody gets is said at once, without asking control.
+    await user.type(field, 'admin');
+    expect(await screen.findByText(N.reserved)).toBeTruthy();
+    await user.clear(field);
+    await user.type(field, 'office');
+    expect(await screen.findByText(N.taken)).toBeTruthy();
+    expect(confirm.disabled).toBe(true);
+    await user.clear(field);
+    await user.type(field, 'home');
+    expect(await screen.findByText(N.free('home.whombat.app'))).toBeTruthy();
+    expect(confirm.disabled).toBe(false);
+    // Only the name as it stands was asked about once the typing paused.
+    expect(linkNameCheck).not.toHaveBeenCalledWith('hom');
+    await user.click(confirm);
+    expect(await screen.findByRole('heading', { name: T.doneTitle('Home') })).toBeTruthy();
+    expect(linkConfirm).toHaveBeenCalledWith('KXQM-TRVW', undefined, 'home');
+  });
+
+  it('Use a random name goes back, and the confirm sends no name', async () => {
+    const user = userEvent.setup();
+    const linkConfirm = vi.fn(async () => box);
+    const control = {
+      linkLookup: lookup,
+      linkConfirm,
+      linkNameCheck: async (name: string) => ({ name, verdict: 'free' as const }),
+      linkAccount: async () => account(),
+    };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await user.click(await screen.findByRole('button', { name: N.choose }));
+    await user.type(screen.getByLabelText(N.row), 'x');
+    expect(await screen.findByText(N.invalid)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: N.useRandom }));
+    await user.click(screen.getByRole('button', { name: T.confirm }));
+    expect(await screen.findByRole('heading', { name: T.doneTitle('Home') })).toBeTruthy();
+    expect(linkConfirm).toHaveBeenCalledWith('KXQM-TRVW', undefined);
+  });
+
+  it('a name taken meanwhile brings the person back to the field, and nothing was added', async () => {
+    const user = userEvent.setup();
+    const linkConfirm = vi.fn(async (_code: string, _terms?: unknown, label?: string) => {
+      if (label === 'home') throw new ControlError('label_taken', 'That name is taken.');
+      return box;
+    });
+    const control = {
+      linkLookup: lookup,
+      linkConfirm,
+      linkNameCheck: async (name: string) => ({
+        name,
+        verdict: 'free' as const,
+        host: `${name}.whombat.app`,
+      }),
+      linkAccount: async () => account(),
+    };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await user.click(await screen.findByRole('button', { name: N.choose }));
+    const field = screen.getByLabelText(N.row);
+    await user.type(field, 'home');
+    await screen.findByText(N.free('home.whombat.app'));
+    const confirm = screen.getByRole('button', { name: T.confirm }) as HTMLButtonElement;
+    await user.click(confirm);
+    expect(await screen.findByText(N.taken)).toBeTruthy();
+    expect(confirm.disabled).toBe(true);
+    expect(screen.queryByRole('heading', { name: T.doneTitle('Home') })).toBeNull();
+    await user.type(field, '2');
+    await screen.findByText(N.free('home2.whombat.app'));
+    await user.click(confirm);
+    expect(await screen.findByRole('heading', { name: T.doneTitle('Home') })).toBeTruthy();
+    expect(linkConfirm).toHaveBeenLastCalledWith('KXQM-TRVW', undefined, 'home2');
+  });
+
+  it('no row where control can’t check names (an older one)', async () => {
+    const control = { linkLookup: lookup, linkConfirm: async () => box, linkAccount: async () => account() };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await screen.findByRole('button', { name: T.confirm });
+    expect(screen.queryByRole('button', { name: N.choose })).toBeNull();
+  });
+
+  it('no row where control says the box can’t take a chosen name', async () => {
+    const control = {
+      linkLookup: async () => ({ ...(await lookup()), chooseName: false }),
+      linkConfirm: async () => box,
+      linkNameCheck: async (name: string) => ({ name, verdict: 'free' as const }),
+      linkAccount: async () => account(),
+    };
+    render(
+      <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
+    );
+    await screen.findByRole('button', { name: T.confirm });
+    expect(screen.queryByRole('button', { name: N.choose })).toBeNull();
   });
 });
 

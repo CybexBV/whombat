@@ -141,6 +141,11 @@ export interface ManagedContext {
     secure: boolean;
     /** The page is the box's own address (its setup made the passkey there); absent: not known. */
     atAddress?: boolean;
+    /**
+     * The own-address host this page is at (its current one, or the old one for 30 days after a change); null or
+     * absent elsewhere.
+     */
+    host?: string | null;
     /** Its setup came from the account site's link page (Link your Whombat was its first step). */
     fromLink?: boolean;
     /** Its setup had the person's email from the account site (Who are you? wasn't asked). */

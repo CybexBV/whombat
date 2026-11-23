@@ -12433,3 +12433,50 @@ LNK-79; whombat-cloud control CL-255). A minor: two optional members, one manage
   to the account the box is linked to, while nobody claimed it, Link runs and its address exists. The account site
   opens it from Claim it now; absent, it opens the box's root as before. No session op or event is new.
 
+
+## CT-1792…CT-1799 Own names at `<name>.whombat.app` — contracts 4.16.0 (2026-11-23)
+
+A person may choose the name of their Whombat's address when they confirm it on the account site, and change it later;
+prod's zone becomes `whombat.app` (Whombat own-address.md OWA-01, OWA-03, OWA-40…OWA-47). A minor: wider shapes, new
+optional members, new ops and routes. Session minor 6.
+
+- **CT-1792** `OwnAddressLabel` is any name of the shape `^[a-z](-?[a-z0-9])+$`, 3–32 characters
+  (`OWN_ADDRESS_LABEL_MIN`, `OWN_ADDRESS_LABEL_MAX`); `OwnAddressHost` is one label under `whombat.app`,
+  `box.whombat.app` or `dev.whombat.app` (`OWN_ADDRESS_HOST_MAX` 64), and the claim URL and the summary's `url` allow
+  digits. Plain groups only (the cross-language subset). Every three-word label stays valid. Go:
+  `OwnAddressLabelPattern`, `OwnAddressLabelMin`, `OwnAddressLabelMax`, `OwnAddressHostPattern`, `OwnAddressHostMax`.
+  An older relay or manager refuses the new shapes; boxes and control don't use them before both update.
+- **CT-1793** `OWN_ADDRESS_ZONES.prod` is `whombat.app`; `OWN_ADDRESS_OLD_ZONES` is `['box.whombat.app']`; the schema
+  `OwnAddressZone` lists the three; `ownAddressZoneOf(host)` gives the longest known zone and `ownAddressHost` takes any
+  of them. `OWN_ADDRESS_LEAVING_DAYS` (30) and `OWN_ADDRESS_RENAMES_PER_YEAR` (3). Go: `OwnAddressZoneProd`
+  (`whombat.app`), `OwnAddressZoneOldProd`, `OwnAddressLeavingDays`, `OwnAddressRenamesPerYear`. The manager keeps
+  `box.whombat.app` for a prod box that its environment gives no zone, until it moves at control's word.
+- **CT-1794** Core's `ownAddressNameProblem(name)` (`@whombat/core/own-address`): `invalid`, `reserved` (the reserved
+  names, the prefixes `whombat` and `cybex`, a short list of rude words) or null. Only control enforces it; apps use
+  it to say early what control would answer. Not cross-language: the relay and the manager know the shape only.
+- **CT-1795** `AdmissionClaims.plbl` (optional `OwnAddressLabel`): the leaving label in the same tickets as `lbl`, only
+  when it differs. `AdmissionClaims` is strict, so control signs it only once the relay takes 4.16.
+- **CT-1796** Device ops `address.check {label: OwnAddressNameCandidate}` → `{label, verdict}` (`OwnAddressNameVerdict`:
+  `free`, `yours`, `taken`, `reserved`, `invalid`) and `address.rename {label}` → `{label, host, registeredAt, leaving:
+  AddressLeaving | null}`; `address.register`'s answer and `link.status`'s link gain `leaving?` (`AddressLeaving
+  {label, host, until}`), and the link gains `host?` and `zone?`. Control reasons `label_reserved`, `rename_limit`,
+  `own_address_off`; `label_invalid`, `label_taken` and `link_off` cover the new ops. Go: `device.AddressCheckRequest`,
+  `AddressCheckResponse`, `AddressRenameRequest`, `AddressRenameResponse`, `AddressLeaving`,
+  `DeviceLinkStatus.Host|Zone|Leaving`, `protocol.OwnAddressNameVerdict`, `protocol.OwnAddressZone`.
+- **CT-1797** The account site: `link.name.check` (`POST /v1/link/name`, `{name}` → `{name, verdict: free | taken |
+  reserved | invalid, host?}`), `label?` on `link.confirm`'s body (`label_invalid`, `label_reserved`, `label_taken`,
+  409), `leaving?` on `LinkedBox`. An older control refuses `label` (strict body); the account site sends it only to
+  a control on 4.16.
+- **CT-1798** The manager socket: `/v1/own-address/check` (`OwnAddressCheckRequest` → `OwnAddressCheckResponse`) and
+  `/v1/own-address/rename` (`OwnAddressRenameRequest` → `OwnAddressStateResponse`); the state's `leaving?`
+  (`OwnAddressLeavingState {label, host, until}`); `OwnAddressCertRequest.host?` (the pair for that host, the current
+  one when absent); `OwnAddressCtResponse.hosts?` (every host the watch covers; absent from an older manager); errors
+  `own_address.label_reserved`, `.rename_limit`, `.link_off`. Go: `local.ManagerPathOwnAddressCheck`,
+  `ManagerPathOwnAddressRename`, `OwnAddressErrorLabelReserved`, `OwnAddressErrorRenameLimit`, `OwnAddressErrorLinkOff`
+  and the types. An older manager answers 404 on the new paths.
+- **CT-1799** The session, minor 6 (`OWN_ADDRESS_NAMES_MINOR`): `ownAddress.check` (read) and `ownAddress.rename`
+  (owners, never resent: it acts at control first), `OwnAddressSummary.leaving?`, application codes `label_invalid`,
+  `label_reserved`, `label_taken`, `rename_limit`, `link_off`, `own_address_off` (`OWN_ADDRESS_RENAME_ERROR_CODES`) and
+  `address_moved` (`boxPasskey.register.begin` at the leaving host). `OWN_ADDRESS_ZONE_CERTIFICATES` and
+  `ownAddressZoneCertificate(spki, at)` name Cloudflare's two certificates for `*.whombat.app`, which a box doesn't
+  call foreign within their dates.

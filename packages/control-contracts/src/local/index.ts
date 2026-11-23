@@ -12,7 +12,8 @@
  *   box's measurements (CT-334): `POST /v1/host/metrics`; its hardware and
  *   network (0.102, CT-573): `POST /v1/host/hardware`, `POST /v1/network/state`, `POST /v1/network/wifi/scan|join|forget`;
  *   Tailscale (1.0, CT-1255): `POST /v1/tailscale/state|on|off|sign-in|cert`; its other devices (3.11, CT-1635):
- *   `POST /v1/tailscale/peers`; the own address (4.3, `own-address.ts`): `POST /v1/own-address/state|register|cert|ct`,
+ *   `POST /v1/tailscale/peers`; the own address (4.3, `own-address.ts`): `POST /v1/own-address/state|register|cert|ct`
+ *   and (4.16) `check|rename`,
  *   `POST /v1/runtime/account/link-lookup|link`, `POST /v1/backup/kit-credentials`; Whombat Link (4.4, `link.ts`):
  *   `POST /v1/link/state|on|off`, `POST /v1/update/channel`, `/v1/update/channel/set`,
  *   `POST /v1/runtime/push/register|unregister`.
@@ -233,6 +234,18 @@ export const MANAGER_PATHS = {
   ownAddressCert: '/v1/own-address/cert',
   /** Runtime: `OwnAddressCtRequest` → `OwnAddressCtResponse`. 404 `own_address.off`. */
   ownAddressCt: '/v1/own-address/ct',
+  /**
+   * Runtime (4.16): `OwnAddressCheckRequest` → `OwnAddressCheckResponse`, asked of control (`address.check`). 404
+   * `own_address.off`; 409 `own_address.link_off`; 503 `control_unreachable`.
+   */
+  ownAddressCheck: '/v1/own-address/check',
+  /**
+   * Runtime (4.16): `OwnAddressRenameRequest` → `OwnAddressStateResponse`, the manager changes the name at control
+   * (`address.rename`), keeps the earlier host as `leaving` and orders the new host's certificate. 404 `own_address.off`;
+   * 409 `own_address.label_taken`, `.label_invalid`, `.label_reserved`, `.rename_limit`, `.link_off`; 503
+   * `control_unreachable`.
+   */
+  ownAddressRename: '/v1/own-address/rename',
   /**
    * Runtime (4.3): the device ops `account.link.lookup` and `account.link`, bodies and answers exactly theirs; the
    * manager signs and forwards them and answers control's body, with the same error mapping as `kitEnvelopes`.
