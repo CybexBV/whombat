@@ -1419,9 +1419,16 @@ Setup and operation: `docs/github.md`.
   `findmy` automation listens. What was read lives in the box's memory; only for a connection an automation listens to
   does the box keep each person's last place words (`findmy_places`) and sign one `findmy.place_changed` per change,
   which starts the automations (`hosts/findmy-places.ts`). The assistant asks through the connection's `findmy_people`.
+  A connection can keep a timeline of the people the person ticks (its Timeline tab, `connections.findMyTimeline*`,
+  `hosts/findmy-timeline*.ts`): after each read the Find My signer extends or starts one row per stretch of the same
+  place, street and geocoded spot, or of no location or a read that didn't work (`findmy_stops`, no event), the
+  background reads it at least every 15 minutes, and rows go 30 days after their last read. Core's `findMyTimelineDay`
+  turns the rows into a day's stays, trips and gaps; the Mac draws a day's map; only the person sees it, and the
+  assistant reads it through `findmy_timeline` in the person's turns.
   `mac_ui` also runs an element's own action by name (“Play”) and quits an
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
-  ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md)).
+  ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
+  [findmy-timeline.md](docs/decisions/findmy-timeline.md)).
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
