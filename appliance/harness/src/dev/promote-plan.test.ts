@@ -38,9 +38,10 @@ describe('promote: a Beta release to Production on John’s word (ONE-19)', () =
     expect(steps.map((s) => s.kind)).toEqual(['promote', 'wait', 'iso-upload', 'notes']);
     const words = planWords(ID, steps);
     expect(words).toContain('gh-promote');
-    expect(words).toContain('installer/whombat-20261120.1/whombat-installer.iso');
-    expect(words).toContain('installer/latest/');
+    expect(words).toContain("whombat-20261120.1's installer");
+    expect(words).toContain('whombat-installer-vX.Y.iso');
     expect(words).toContain('installer/latest.json');
+    expect(words).toContain('remove every older installer');
   });
 
   it('builds the host’s ISO first when it has none, and leaves the installer alone with --no-iso', () => {
@@ -94,13 +95,27 @@ describe('promote: a Beta release to Production on John’s word (ONE-19)', () =
       day: '2026-11-20',
       installer: {
         host: 'whombat-20261120.1',
-        url: 'https://downloads.example.com/installer/whombat-20261120.1/whombat-installer.iso',
+        url: 'https://downloads.example.com/whombat-installer-v0.3.iso',
+        version: 'v0.3',
       },
     });
     expect(s.startsWith(`### ${ID} in Production (2026-11-20)`)).toBe(true);
     expect(s).toContain(`promote ${ID} --yes`);
-    expect(s).toContain('installer/latest.json');
+    expect(s).toContain('v0.3');
+    expect(s).toContain('https://downloads.example.com/whombat-installer-v0.3.iso');
     expect(promotionSection({ id: ID, day: '2026-11-20', installer: null })).toContain('--no-iso');
+    const kept = promotionSection({
+      id: ID,
+      day: '2026-11-20',
+      installer: {
+        host: 'whombat-20261120.1',
+        url: 'https://downloads.example.com/whombat-installer-v0.4.iso',
+        version: 'v0.4',
+        kept: 'whombat-20261121.1',
+      },
+    });
+    expect(kept).toContain('whombat-20261121.1');
+    expect(kept).toContain('newer');
   });
 
   it('adds its section to the runbook once, however often it runs', () => {
@@ -116,17 +131,26 @@ describe('promote: a Beta release to Production on John’s word (ONE-19)', () =
 
   it('takes the installer kept at a newer release as done, and anything else but up as a failure (R2 B2)', () => {
     const up =
-      '{"releaseId":"whombat-20261120.1","url":"https://d.example.com/installer/whombat-20261120.1/whombat-installer.iso"}';
-    expect(uploadOutcome(0, `x\n${up}`)).toMatchObject({ kind: 'up', host: 'whombat-20261120.1' });
+      '{"releaseId":"whombat-20261120.1","version":"v0.2","url":"https://d.example.com/whombat-installer-v0.2.iso","removed":[]}';
+    expect(uploadOutcome(0, `x\n${up}`)).toMatchObject({
+      kind: 'up',
+      host: 'whombat-20261120.1',
+      version: 'v0.2',
+    });
     const kept =
-      '{"releaseId":"whombat-20261120.1","url":"u","latest":false,"latestKept":"whombat-20261121.1"}';
-    expect(uploadOutcome(3, kept)).toMatchObject({ kind: 'kept', kept: 'whombat-20261121.1' });
+      '{"releaseId":"whombat-20261120.1","latest":false,"latestKept":"whombat-20261121.1","keptVersion":"v0.3","keptUrl":"https://d.example.com/whombat-installer-v0.3.iso"}';
+    expect(uploadOutcome(3, kept)).toMatchObject({
+      kind: 'kept',
+      kept: 'whombat-20261121.1',
+      version: 'v0.3',
+      url: 'https://d.example.com/whombat-installer-v0.3.iso',
+    });
     // As release/upload-iso prints it: jq spreads the object over several lines.
     const spread = JSON.stringify(JSON.parse(up), null, 2);
     expect(uploadOutcome(0, `upload-iso: served\n${spread}\n`)).toMatchObject({
       kind: 'up',
       host: 'whombat-20261120.1',
-      url: 'https://d.example.com/installer/whombat-20261120.1/whombat-installer.iso',
+      url: 'https://d.example.com/whombat-installer-v0.2.iso',
     });
     expect(uploadOutcome(3, JSON.stringify(JSON.parse(kept), null, 2))).toMatchObject({
       kind: 'kept',

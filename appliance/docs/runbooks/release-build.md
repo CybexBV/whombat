@@ -104,14 +104,15 @@ tufrepo gh-promote --dir "$WHOMBAT_RELEASES_DIR" --release whombat-20261120.1   
   unprovisioned (it takes no updates) until the box is reinstalled.
 - A box checks its channel about every hour and takes its newest release; there are no rollouts or waves.
 
-## The installer download (ONE-15, PI-24)
+## The installer download (ENV-22, PI-27)
 
-After a release reaches Production (`promote`), its ISO goes on the download site as `whombat-installer.iso`: its own
-`installer/<release-id>/` and, with `--production`, the fixed links `installer/latest/whombat-installer.iso` and its
-`.sha256` that the website names, then `installer/latest.json` (PI-25). A Beta release's may go up without
-`--production`. Files are compared by digest (PI-26): a release whose installer the site has with other content is
-refused (build a new release), and `latest.json` waits until the site serves the four files as they are here. Nothing
-is uploaded without a task that asks for it.
+After a release reaches Production (`promote`), its ISO goes on the download site under its version, the next one
+after the version `installer/latest.json` names: `whombat-installer-v0.12.iso` and its `.sha256` at the root of the
+site, then `installer/latest.json`, then every older installer is removed from the bucket (6 minutes later, once the
+website's cache can't name it any more). The site holds one installer, and only a Production release's. Files are
+compared by digest (PI-26): another file under the version's name is refused, and `latest.json` waits until the site
+serves both files as they are here. `--version v1.0` sets a higher version by hand, on John's word. Nothing is
+uploaded without a task that asks for it.
 
 ```sh
 release/build iso ~/.cache/whombat-releases/whombat-20261120.1          # iso.json, iso/whombat-installer.iso

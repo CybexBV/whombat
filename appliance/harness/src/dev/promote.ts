@@ -9,8 +9,9 @@
  *   3. the tag `<id>` on the commit the release was built from, pushed (a release of the one repository; one the old
  *      flow built is a commit of the appliance's old repository and gets none);
  *   4. the installer of its host (itself for a host release; `release/build iso <dir>` first when it has none yet) on
- *      the download site with `release/upload-iso <dir> --production`: `installer/<host id>/whombat-installer.iso` and
- *      its `.sha256`, the same two at `installer/latest/` (the website's fixed links), then `installer/latest.json`;
+ *      the download site with `release/upload-iso <dir> --production` (ENV-22): `whombat-installer-vX.Y.iso` and its
+ *      `.sha256` at the root, the next version unless the site has this one, then `installer/latest.json`, then every
+ *      older installer removed;
  *   5. its section in whombat-ops runbooks/appliance/releases.md, committed there.
  *
  *   promote <release-id> [--yes] [--no-iso]
@@ -71,7 +72,7 @@ async function main(): Promise<number> {
   }
   const logDir = join(TMP_DIR, `promote-${a.id}`);
   mkdirSync(logDir, { recursive: true });
-  let installer: { host: string; url: string } | null = null;
+  let installer: plan.PromotedInstaller | null = null;
   let tagged: string | null = null;
   for (const step of steps) {
     say(`${step.words}…`);
@@ -136,11 +137,12 @@ async function main(): Promise<number> {
           throw new Error(
             `release/upload-iso failed (${r.code}; ${join(logDir, 'upload-iso.log')}): ${r.stderr.trim().split('\n').slice(-2).join(' ')}; run promote again, it carries on`,
           );
-        if (outcome.kind === 'kept')
+        if (outcome.kind === 'kept') {
           say(
-            `the site's installer stays at ${outcome.kept}, newer than ${outcome.host}: the fixed links only move forward`,
+            `the site keeps ${outcome.kept}'s installer, newer than ${outcome.host}'s: the installer only moves forward`,
           );
-        installer = { host: outcome.host, url: outcome.url };
+          installer = { host: outcome.host, url: outcome.url, version: outcome.version, kept: outcome.kept };
+        } else installer = { host: outcome.host, url: outcome.url, version: outcome.version };
         break;
       }
       case 'notes': {
