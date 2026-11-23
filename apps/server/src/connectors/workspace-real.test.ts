@@ -1085,3 +1085,54 @@ describe('withAccessToken', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('Drive for an account’s page', () => {
+  it('reads how full the storage is in one call, without a limit when it has none', async () => {
+    let quota: Record<string, string> = { limit: '16106127360', usage: '12600000000' };
+    const { workspace, calls } = mockGoogle((c) =>
+      c.url.pathname.endsWith('/about') ? { json: { storageQuota: quota } } : undefined,
+    );
+    expect(await workspace.filesQuota('tok')).toEqual({ used: 12.6e9, total: 16106127360 });
+    expect(calls[0]?.url.searchParams.get('fields')).toBe('storageQuota(limit,usage)');
+    quota = { usage: '5' };
+    expect(await workspace.filesQuota('tok')).toEqual({ used: 5, total: null });
+  });
+
+  it('lists the newest changed files with who changed them, newest first', async () => {
+    const { workspace, calls } = mockGoogle((c) =>
+      c.url.pathname.endsWith('/files')
+        ? {
+            json: {
+              files: [
+                {
+                  id: 'f1',
+                  name: 'Q4 plan',
+                  mimeType: 'application/vnd.google-apps.document',
+                  modifiedTime: '2026-11-23T09:40:00Z',
+                  webViewLink: 'https://docs.google.com/document/d/f1',
+                  lastModifyingUser: { displayName: 'Mara', me: true },
+                },
+              ],
+            },
+          }
+        : undefined,
+    );
+    expect(await workspace.filesRecent('tok', { limit: 5 })).toEqual([
+      {
+        id: 'f1',
+        name: 'Q4 plan',
+        kind: 'doc',
+        modifiedAt: '2026-11-23T09:40:00Z',
+        by: 'Mara',
+        byMe: true,
+        webUrl: 'https://docs.google.com/document/d/f1',
+      },
+    ]);
+    const q = calls[0]?.url.searchParams;
+    expect([q?.get('orderBy'), q?.get('pageSize'), q?.get('q')]).toEqual([
+      'modifiedTime desc',
+      '5',
+      'trashed = false',
+    ]);
+  });
+});

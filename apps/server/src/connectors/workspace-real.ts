@@ -53,6 +53,7 @@ import {
 import {
   type CalendarEventsInput,
   type FilesCreateInput,
+  type FilesQuota,
   GoogleApiError,
   type GoogleWorkspace,
   type InboxUnread,
@@ -66,6 +67,8 @@ import {
   type MailProviderCursor,
   type MailSearchInput,
   normalizeRfcMessageId,
+  quotaOf,
+  type RecentFile,
   receivedAtOrAfter,
 } from './types';
 
@@ -271,6 +274,12 @@ function eventBody(input: CalendarEventPatch, patch = false): Record<string, unk
       createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
     };
   return body;
+}
+
+/** Drive's `User` as `lastModifyingUser` gives it. */
+interface GoogleUser {
+  displayName?: string;
+  me?: boolean;
 }
 
 interface GoogleFile {
@@ -1138,6 +1147,42 @@ export class RealGoogleWorkspace implements GoogleWorkspace {
       query: { supportsAllDrives: true, fields: 'id,trashed' },
       json: { trashed: true },
     });
+  }
+
+  async filesQuota(accessToken: string): Promise<FilesQuota> {
+    const res = await this.json<{ storageQuota?: { limit?: string; usage?: string } }>(
+      accessToken,
+      'GET',
+      `${DRIVE_API}/about`,
+      { query: { fields: 'storageQuota(limit,usage)' } },
+    );
+    return quotaOf(res.storageQuota?.usage, res.storageQuota?.limit);
+  }
+
+  async filesRecent(accessToken: string, input: { limit: number }): Promise<RecentFile[]> {
+    const limit = Math.min(Math.max(1, input.limit), 20);
+    const res = await this.json<{ files?: (GoogleFile & { lastModifyingUser?: GoogleUser })[] }>(
+      accessToken,
+      'GET',
+      `${DRIVE_API}/files`,
+      {
+        query: {
+          q: 'trashed = false',
+          orderBy: 'modifiedTime desc',
+          pageSize: limit,
+          fields: 'files(id,name,mimeType,modifiedTime,webViewLink,lastModifyingUser(displayName,me))',
+        },
+      },
+    );
+    return (res.files ?? []).slice(0, limit).map((f) => ({
+      id: f.id,
+      name: clip(f.name ?? '', 200),
+      kind: fileKind(f.mimeType ?? 'application/octet-stream'),
+      modifiedAt: f.modifiedTime ?? null,
+      by: f.lastModifyingUser?.displayName ? clip(f.lastModifyingUser.displayName, 120) : null,
+      byMe: f.lastModifyingUser?.me === true,
+      webUrl: httpsUrl(f.webViewLink),
+    }));
   }
 
   /* Docs and Sheets ---------------------------------------------------------------------------- */
