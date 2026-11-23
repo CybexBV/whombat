@@ -1,0 +1,41 @@
+{
+  "object": "list",
+  "results": [
+    {
+      "object": "user",
+      "id": "u-anna",
+      "type": "person",
+      "name": "Anna de Vries",
+      "avatar_url": null,
+      "person": {}
+    },
+    {
+      "object": "user",
+      "id": "u-sam",
+      "type": "person",
+      "name": "Sam Okafor",
+      "avatar_url": null,
+      "person": {}
+    },
+    {
+      "object": "user",
+      "id": "u-lena",
+      "type": "person",
+      "name": "Lena Hoffmann",
+      "avatar_url": null,
+      "person": {}
+    },
+    {
+      "object": "user",
+      "id": "b-whombat",
+      "type": "bot",
+      "name": "Whombat",
+      "avatar_url": null,
+      "bot": { "owner": { "type": "workspace", "workspace": true }, "workspace_name": "Acme" }
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "type": "user",
+  "user": {}
+}

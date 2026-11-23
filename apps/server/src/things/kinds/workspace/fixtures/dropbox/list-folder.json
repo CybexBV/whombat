@@ -1,0 +1,64 @@
+{
+  "entries": [
+    {
+      ".tag": "folder",
+      "name": "Photos",
+      "path_lower": "/photos",
+      "path_display": "/Photos",
+      "id": "id:a4ayc_80_OEAAAAAAAAAXz"
+    },
+    {
+      ".tag": "folder",
+      "name": "Work",
+      "path_lower": "/work",
+      "path_display": "/Work",
+      "id": "id:a4ayc_80_OEAAAAAAAAAY1"
+    },
+    {
+      ".tag": "folder",
+      "name": "Family",
+      "path_lower": "/family",
+      "path_display": "/Family",
+      "id": "id:a4ayc_80_OEAAAAAAAAAY2"
+    },
+    {
+      ".tag": "file",
+      "name": "Taxes 2026.pdf",
+      "path_lower": "/taxes 2026.pdf",
+      "path_display": "/Taxes 2026.pdf",
+      "id": "id:a4ayc_80_OEAAAAAAAAAY3",
+      "client_modified": "2026-10-20T08:10:00Z",
+      "server_modified": "2026-10-20T08:12:00Z",
+      "rev": "a1c10ce0dd78",
+      "size": 482113,
+      "is_downloadable": true
+    },
+    {
+      ".tag": "file",
+      "name": "IMG_2041.jpg",
+      "path_lower": "/img_2041.jpg",
+      "path_display": "/IMG_2041.jpg",
+      "id": "id:a4ayc_80_OEAAAAAAAAAY4",
+      "client_modified": "2026-10-02T17:00:00Z",
+      "server_modified": "2026-10-02T17:01:00Z",
+      "rev": "a1c10ce0dd79",
+      "size": 3145728,
+      "is_downloadable": true
+    },
+    {
+      ".tag": "file",
+      "name": "old-notes.txt",
+      "path_lower": "/old-notes.txt",
+      "path_display": "/old-notes.txt",
+      "id": "id:a4ayc_80_OEAAAAAAAAAY5",
+      "client_modified": "2025-01-05T09:00:00Z",
+      "server_modified": "2025-01-05T09:00:00Z",
+      "rev": "a1c10ce0dd80",
+      "size": 1200,
+      "is_downloadable": true
+    },
+    { ".tag": "deleted", "name": "gone.txt", "path_lower": "/gone.txt", "path_display": "/gone.txt" }
+  ],
+  "cursor": "ZtkX9_EHj3x7PMkVuFIhwKYXEpwpLwyxp9vMKomUhllil9q7eWiAu",
+  "has_more": false
+}
