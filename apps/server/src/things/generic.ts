@@ -2,7 +2,7 @@
  * The Summary of a connection Whombat has no kind for (Notion, a custom API), and of a kind whose read gave nothing,
  * in slots (docs/decisions/service-slots.md): Whombat can't see inside such a service, so it says how the service
  * answers Whombat's checks — “How it answers” (the share answered over the last 7 days, the typical answer time today
- * and its change on last week) and the typical answer time per day as a Trend. The machine's card is the page's, when
+ * and its change on last week, and when Whombat last used it) and the typical answer time per day as a Trend. The machine's card is the page's, when
  * Whombat knows what it runs on. Pure.
  */
 import type { CatalogConnectionRow } from '../connections/types';
@@ -11,7 +11,7 @@ import { countLine, dayKey, daysWith, inventory, lastDays, trend, weekChange } f
 import type { KindView } from './kinds/types';
 import { answerOf } from './panels';
 import type { RawPoint } from './series';
-import { plural } from './words';
+import { plural, span } from './words';
 
 const DAY = 86_400_000;
 
@@ -39,7 +39,7 @@ function share(answered: number, all: number): string {
  * points the health pass keeps (`rtt_ms`, null when a check failed). Each is left out without the readings it needs.
  */
 export function genericSlots(
-  row: Pick<CatalogConnectionRow, 'status' | 'glance'>,
+  row: Pick<CatalogConnectionRow, 'status' | 'glance'> & Partial<Pick<CatalogConnectionRow, 'lastUsedAt'>>,
   rtt: readonly RawPoint[],
   now: Date,
   timeZone: string,
@@ -95,8 +95,19 @@ export function genericSlots(
       }),
     );
   }
+  // What Whombat itself knows when the service shows nothing more: when it last used it for someone.
+  if (row.lastUsedAt !== undefined)
+    items.push(
+      countLine({
+        id: 'last-used',
+        title: 'Last used',
+        icon: 'plug',
+        detail: 'By Whombat',
+        value: row.lastUsedAt ? `${span(t - row.lastUsedAt.getTime())} ago` : 'Not yet',
+      }),
+    );
   const answersPanel = items.length
-    ? inventory({ id: 'answers', title: 'How it answers', meta: 'Whombat’s checks', items })
+    ? inventory({ id: 'answers', title: 'With Whombat', meta: 'Its checks and use', items })
     : null;
 
   const days = lastDays(now, timeZone);

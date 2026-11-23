@@ -174,6 +174,16 @@ export function closingPanels(input: {
 
 const GENERIC_SUGGESTIONS = ['Response time', 'How often it’s used'];
 
+/**
+ * “Show more here” for a connection without a page of its own: a Custom one first offers what's inside it, which the
+ * assistant answers by writing its page.
+ */
+function genericSuggestions(row: Pick<CatalogConnectionRow, 'catalogId'>): string[] {
+  return row.catalogId === 'custom_api' || row.catalogId === 'custom_mcp'
+    ? ['What’s inside', ...GENERIC_SUGGESTIONS]
+    : GENERIC_SUGGESTIONS;
+}
+
 /** A connection's page over `range` (DS-03). */
 export async function connectionPage(
   services: Services,
@@ -338,7 +348,7 @@ export async function connectionPage(
               lookOnly: row.access === 'read',
             }
           : null,
-      suggestions: view?.suggestions ?? GENERIC_SUGGESTIONS,
+      suggestions: view?.suggestions ?? genericSuggestions(row),
     }),
   );
   const settingsTab =

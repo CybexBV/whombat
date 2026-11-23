@@ -1188,7 +1188,7 @@ export function createThingPageFixtures(
 
   /* The generic page, in slots (Whombat service-slots.md: the page of a connection without a kind) ----------- */
 
-  /** “How it answers” and “Answer time”, as the server words them from its checks (`things/generic.ts`). */
+  /** “With Whombat” and “Answer time”, as the server words them from its checks (`things/generic.ts`). */
   function answering(): ThingPagePanel[] {
     const DAY = 24 * HOUR;
     const days = Array.from({ length: 7 }, (_, i) => made - (6 - i) * DAY);
@@ -1201,8 +1201,8 @@ export function createThingPageFixtures(
         place: 'chart',
         span: 1,
         width: 'full',
-        title: 'How it answers',
-        meta: 'Whombat’s checks',
+        title: 'With Whombat',
+        meta: 'Its checks and use',
         items: [
           {
             id: 'answers',
