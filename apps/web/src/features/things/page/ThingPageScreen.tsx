@@ -7,7 +7,8 @@
  * line with what it runs on (“Change” for those who may) and its address — then the tabs: the server's (Summary first,
  * `?tab=`), Activity and Connection (its own settings). The range (`?range=`, the page read again for it, the old page shown meanwhile) is
  * picked beside the charts a figure opens (`?chart=`), and at the tab row's end on the Summary only while a chart card
- * is left. Every tab of the server's is drawn by the one Summary renderer (`dashboard/`). An open page reads again every
+ * is left. Every tab of the server's is drawn by the one Summary renderer (`dashboard/`), except one about a server
+ * (`ThingPageTab.server`): Find My's, drawn from its Mac's own reads (`findmy/`). An open page reads again every
  * `refreshS`
  * while the tab is shown (at least 5 s; a minute without one; contracts 0.121 CT-1010, service-dashboards.md AP-4568),
  * and a read that failed keeps what the page has and says why. Its buttons (CT-1001…CT-1003, CT-1014) share one
@@ -79,6 +80,7 @@ import { LineParts } from '../dashboard/LineParts';
 import { Crumb, PageHead, TabRow, tabsInRow } from '../dashboard/PageHead';
 import type { DashboardContext } from '../dashboard/Panels';
 import { RangePicker } from '../dashboard/RangePicker';
+import { FindMyTab } from '../findmy/FindMyTab';
 import { BackupsKeptHere } from '../KeptHere';
 import { AppLink, ConfirmDialog, Skeleton, useChangeRunner } from '../parts';
 import { PAGE_FRESH_MS, thingPageInput } from '../prefetch';
@@ -90,6 +92,9 @@ import { LookCard } from './LookCard';
 import { RunsOnDialog } from './RunsOnDialog';
 import styles from './ThingPage.module.css';
 import { ActivityTab, SettingsTab } from './ThingTabs';
+
+/** The Find My connection's tab (findmy-connection.md): it names its Mac and is drawn from that Mac's Find My. */
+const FIND_MY_TAB = 'findmy';
 
 /** A failed press's words stay up long enough to read (the server's reason). */
 const FAILED_TOAST_MS = 6000;
@@ -231,6 +236,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
   } else {
     const tabs = thingTabs(page);
     const own = tabs.find((t) => t.key === tab)?.own ?? null;
+    // A tab about a server the page draws from that server's own reads (Find My's names its Mac).
+    const about = tabs.find((t) => t.key === tab)?.server ?? null;
     const summary = tab === tabs[0]?.key;
     const panels = serverTab(page, tab)?.panels ?? [];
     body = (
@@ -289,6 +296,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
             <ActivityTab burrow={burrow} page={page} now={now} timeZone={timeZone} />
           ) : own === 'settings' ? (
             <SettingsTab burrow={burrow} page={page} />
+          ) : about && tab === FIND_MY_TAB ? (
+            <FindMyTab burrow={burrow} serverId={about} />
           ) : (
             <>
               {/* What the assistant found out, at the top of the Summary (look-research-web.md AP-5906). */}

@@ -41,6 +41,7 @@ export function ServerSummary({
   quiet = null,
   technical = null,
   status,
+  links = null,
 }: {
   burrow: string;
   serverId: string;
@@ -56,6 +57,8 @@ export function ServerSummary({
   quiet?: QuietActions | null;
   /** How the server is, for the colour of what the assistant found out (its LookCard). */
   status?: HostServerStatus;
+  /** Links to what reads through this server, after its panels (a Mac's Find My). */
+  links?: ReactNode;
 }) {
   const [, set] = useThingSearch();
   const now = useNow(60_000);
@@ -115,6 +118,7 @@ export function ServerSummary({
         />
       ) : null}
       <Dashboard panels={dash.panels} ctx={ctx} />
+      {links}
       {/* When it keeps this Whombat's backups (backup-places.md AP-6710). */}
       <BackupsKeptHere thing={thing} />
       <TechnicalDetails

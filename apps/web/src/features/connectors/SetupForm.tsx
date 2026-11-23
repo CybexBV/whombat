@@ -78,7 +78,7 @@ import { StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
 import k from './Catalog.module.css';
-import { ExternalLink, Field, GuideSteps } from './CatalogParts';
+import { ExternalLink, Field, GuideSteps, OptionCards } from './CatalogParts';
 import c from './Connectors.module.css';
 import {
   NextcloudWait,
@@ -683,40 +683,55 @@ export function SetupForm({
               onPaste={(text) => fill(method, text)}
             />
           )}
-          {methodFields.map((f) => (
-            <Field
-              key={f.id}
-              id={`${ids}-${f.id}`}
-              label={f.label}
-              help={f.help}
-              problem={problem.fields[f.id]}
-            >
-              {f.guide ? (
-                <textarea
-                  id={`${ids}-${f.id}`}
-                  className={k.textarea}
-                  rows={4}
-                  placeholder={f.placeholder}
-                  value={fields[f.id] ?? ''}
-                  onChange={(e) => setField(f.id, e.target.value)}
-                  aria-invalid={problem.fields[f.id] ? true : undefined}
-                />
-              ) : (
-                <Input
-                  id={`${ids}-${f.id}`}
-                  size="md"
-                  type={f.kind === 'url' ? 'url' : 'text'}
-                  inputMode={f.kind === 'url' ? 'url' : undefined}
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder={f.placeholder}
-                  value={fields[f.id] ?? ''}
-                  onChange={(e) => setField(f.id, e.target.value)}
-                  invalid={!!problem.fields[f.id]}
-                />
-              )}
-            </Field>
-          ))}
+          {methodFields.map((f) =>
+            // A select with its own choices (Find My's Read in the background): radio cards, as a service's choices.
+            f.kind === 'select' && f.options ? (
+              <OptionCards
+                key={f.id}
+                name={`${ids}-${f.id}`}
+                label={f.label}
+                help={f.help}
+                problem={problem.fields[f.id]}
+                options={f.options}
+                value={fields[f.id] ?? f.default ?? ''}
+                disabled={busy}
+                onChange={(v) => setField(f.id, v)}
+              />
+            ) : (
+              <Field
+                key={f.id}
+                id={`${ids}-${f.id}`}
+                label={f.label}
+                help={f.help}
+                problem={problem.fields[f.id]}
+              >
+                {f.guide ? (
+                  <textarea
+                    id={`${ids}-${f.id}`}
+                    className={k.textarea}
+                    rows={4}
+                    placeholder={f.placeholder}
+                    value={fields[f.id] ?? ''}
+                    onChange={(e) => setField(f.id, e.target.value)}
+                    aria-invalid={problem.fields[f.id] ? true : undefined}
+                  />
+                ) : (
+                  <Input
+                    id={`${ids}-${f.id}`}
+                    size="md"
+                    type={f.kind === 'url' ? 'url' : 'text'}
+                    inputMode={f.kind === 'url' ? 'url' : undefined}
+                    spellCheck={false}
+                    autoComplete="off"
+                    placeholder={f.placeholder}
+                    value={fields[f.id] ?? ''}
+                    onChange={(e) => setField(f.id, e.target.value)}
+                    invalid={!!problem.fields[f.id]}
+                  />
+                )}
+              </Field>
+            ),
+          )}
           {ownAuth && method.kind === 'token' && (
             <Field
               id={`${ids}-auth`}

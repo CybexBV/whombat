@@ -63,6 +63,7 @@ import { HeadMenu } from './dashboard/HeadMenu';
 import { Crumb, PageHead, TabRow, tabsInRow } from './dashboard/PageHead';
 import { RangePicker } from './dashboard/RangePicker';
 import { ServerSummary, type ServerTechnicalView } from './dashboard/ServerSummary';
+import { FindMyLink } from './findmy/FindMyLink';
 import { GuestPage } from './guest/GuestPage';
 import { IncusPanel } from './incus/IncusPanel';
 import { LibvirtGuestPage } from './libvirt/LibvirtGuestPage';
@@ -296,6 +297,8 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
               quiet={sq.actions}
               technical={technical}
               status={d.server.status}
+              // A Mac links to the Find My connection that reads it (findmy-connection.md §1.5).
+              links={kind === 'mac' ? <FindMyLink burrow={burrow} serverId={serverId} /> : null}
             />
           ) : kind === 'unraid' ? (
             <UnraidPanel

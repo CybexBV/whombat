@@ -1,6 +1,6 @@
 /**
- * Small pieces of the catalog pages (AP-756, AP-757): a form field in the Google page's language, an outside link, and
- * numbered steps with values to copy.
+ * Small pieces of the catalog pages (AP-756, AP-757): a form field in the Google page's language, a field's choices as
+ * radio cards, an outside link, and numbered steps with values to copy.
  */
 import { CONNECT_FORM_TEXT } from '@whombat/client/connections';
 import type { ReactNode } from 'react';
@@ -8,6 +8,62 @@ import { CopyButton } from '../../components/CopyButton';
 import { Icon } from '../../components/Icon';
 import k from './Catalog.module.css';
 import c from './Connectors.module.css';
+
+/**
+ * A field's choices as radio cards (a `select`'s own options, Find My's Read in the background; or a `fromService`
+ * field's, Find My's Mac): the mono label as the group's name, a card per choice, the help and the problem under them.
+ */
+export function OptionCards({
+  name,
+  label,
+  help,
+  problem,
+  options,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  /** The radio group's name, unique on the page. */
+  name: string;
+  label: string;
+  help?: string | null;
+  problem?: string | null;
+  options: readonly { value: string; label: string; line?: string | null }[];
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <fieldset className={k.fieldset} data-options={name}>
+      <legend className={c.fieldLabel}>{label.toUpperCase()}</legend>
+      <div className={k.scopes}>
+        {options.map((o) => (
+          <label key={o.value} className={k.scope}>
+            <input
+              type="radio"
+              name={name}
+              className={k.radio}
+              value={o.value}
+              checked={value === o.value}
+              disabled={disabled}
+              onChange={() => onChange(o.value)}
+            />
+            <span className={k.scopeText}>
+              <span className={k.scopeTitle}>{o.label}</span>
+              {o.line ? <span className={c.meta}>{o.line}</span> : null}
+            </span>
+          </label>
+        ))}
+      </div>
+      {problem ? (
+        <p className={c.error} role="alert">
+          {problem}
+        </p>
+      ) : null}
+      {help ? <p className={`${c.hint} ${k.narrow}`}>{help}</p> : null}
+    </fieldset>
+  );
+}
 
 /** One form field: the mono label, the input (and a button beside it), the help, a deep link, the problem. */
 export function Field({
