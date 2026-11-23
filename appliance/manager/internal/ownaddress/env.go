@@ -34,6 +34,9 @@ const (
 	// EnvCT: pebble only, the certificate watch's base URL (a fake Cert Spotter); unset: no watch, so a test label is
 	// never sent to the real one.
 	EnvCT = "WHOMBAT_OWN_ADDRESS_CT"
+	// EnvZone: pebble only, the zone the test box takes its hosts under (default dev.whombat.app), so a loopback test
+	// can run prod's zones and the move from box.whombat.app with a DNS stand-in.
+	EnvZone = "WHOMBAT_OWN_ADDRESS_ZONE"
 )
 
 // Mode is what this box does about its own address.
@@ -97,8 +100,16 @@ func Resolve(community bool, deviceEnv, envZone string, getenv func(string) stri
 		if deviceEnv == "prod" {
 			return Mode{}, errors.New(EnvMode + "=pebble: is for tests and never on a prod box")
 		}
-		// The host's schema knows only the two real zones, so tests use the dev one with a DNS stand-in.
-		return Mode{Enabled: true, Why: EnvMode + "=pebble", Zone: protocol.OwnAddressZoneDev, Directory: dir,
+		// The host's schema knows only Whombat's zones, so tests use one of them with a DNS stand-in: dev's unless
+		// EnvZone names another.
+		testZone := protocol.OwnAddressZoneDev
+		if z := strings.TrimSpace(getenv(EnvZone)); z != "" {
+			if ZonesOf(z) == nil {
+				return Mode{}, fmt.Errorf("%s=%q is none of Whombat's zones", EnvZone, z)
+			}
+			testZone = z
+		}
+		return Mode{Enabled: true, Why: EnvMode + "=pebble", Zone: testZone, Directory: dir,
 			CAFile: strings.TrimSpace(getenv(EnvCA)), ProbeAddr: strings.TrimSpace(getenv(EnvProbe)),
 			CTURL: strings.TrimSpace(getenv(EnvCT))}, nil
 	default:

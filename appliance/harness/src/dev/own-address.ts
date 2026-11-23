@@ -11,8 +11,9 @@ const v = (env: Env, name: string): string => env[name]?.trim() ?? '';
 
 /**
  * The relay's door flags (relay RL-36, RL-40) from `WB_MGD_DOOR_LISTEN` (e.g. `100.64.0.5:4712`; empty: no
- * door), `WB_MGD_DOOR_ZONE` (`dev.whombat.app`) and `WB_MGD_DOOR_PROXY_FROM` (the door host's forwarder, CIDRs with
- * commas). `help` is the relay's `-h`: a relay from before the door gets none, and `skipped` says why.
+ * door), `WB_MGD_DOOR_ZONE` (`dev.whombat.app`, or a comma list such as `whombat.app,box.whombat.app` for a relay
+ * that serves several zones) and `WB_MGD_DOOR_PROXY_FROM` (the door host's forwarder, CIDRs with commas). `help` is
+ * the relay's `-h`: a relay from before the door gets none, and `skipped` says why.
  */
 export function relayDoorArgs(env: Env, help: string): { args: string[]; skipped?: string } {
   const listen = v(env, 'WB_MGD_DOOR_LISTEN');
@@ -20,7 +21,9 @@ export function relayDoorArgs(env: Env, help: string): { args: string[]; skipped
   if (!help.includes('door-listen'))
     return { args: [], skipped: 'this relay has no door (before RL-36); WB_MGD_DOOR_LISTEN is ignored' };
   const zone = v(env, 'WB_MGD_DOOR_ZONE') || 'dev.whombat.app';
-  const args = ['-door-listen', listen, '-door-zone', zone];
+  if (zone.includes(',') && !help.includes('door-zones'))
+    throw new Error(`WB_MGD_DOOR_ZONE=${zone}: this relay serves one zone only (before door-zones)`);
+  const args = ['-door-listen', listen, zone.includes(',') ? '-door-zones' : '-door-zone', zone];
   const from = v(env, 'WB_MGD_DOOR_PROXY_FROM');
   if (from) args.push('-door-proxy-protocol-from', from);
   return { args };
