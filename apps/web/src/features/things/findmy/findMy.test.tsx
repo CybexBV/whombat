@@ -26,7 +26,7 @@ import { ThingScreen } from '../ThingScreen';
  * The fixture world with servers, studio in `scenario` and its Find My connection, at `path`, recording Find My's
  * requests that change something.
  */
-function open(scenario: string, path = '/things/connection%3Acon_findmy') {
+function open(scenario: string, path = '/things/connection%3Acon_findmy', { olderBox = false } = {}) {
   localStorage.setItem('whombat.fixtures.mac', scenario);
   const inner = createWebFixtureFetch({ hosts: true, connectors: 'connected' });
   const posts: string[] = [];
@@ -35,7 +35,13 @@ function open(scenario: string, path = '/things/connection%3Acon_findmy') {
     const req = input instanceof Request ? input : new Request(url, init);
     if (req.method !== 'GET' && url.pathname.includes('/find-my'))
       posts.push(url.pathname.replace(/^.*\/find-my/, ''));
-    return inner(req);
+    const res = await inner(req);
+    // A Whombat from before Find My was a connection: its catalog doesn't list it.
+    if (olderBox && url.pathname.endsWith('/connections/catalog')) {
+      const body = (await res.json()) as { entries: { catalogId: string }[] };
+      return Response.json({ ...body, entries: body.entries.filter((e) => e.catalogId !== 'findmy') });
+    }
+    return res;
   });
   const root = createRootRoute({ component: () => <Outlet /> });
   const thing = createRoute({
@@ -108,5 +114,11 @@ describe('the Mac’s page', () => {
     const link = await screen.findByRole('link', { name: /^Find My/ });
     expect(link.getAttribute('href')).toBe('/things/connection%3Acon_findmy');
     expect(screen.queryByRole('tab', { name: /Find My/ })).toBeNull();
+  });
+
+  it('keeps its own Find My tab on a Whombat from before Find My was a connection', async () => {
+    open('1', '/things/server%3Astudio?tab=findmy', { olderBox: true });
+    expect(await screen.findByRole('tab', { name: /Find My/ })).toBeTruthy();
+    expect(await screen.findByText('Reading Find My on studio…')).toBeTruthy();
   });
 });

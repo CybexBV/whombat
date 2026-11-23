@@ -28,6 +28,11 @@ the connection's line from Overview (“4 people · read 5 min ago”). The apps
 they already read (`ConnectionView.fields`, `findMyConnectionOf`), so no new read on the server. An old link to the
 Mac's `?tab=findmy` opens its Summary, where the row is.
 
+A Whombat from before Find My was a connection has no Find My connection to link to: when its catalog answers without
+the `findmy` entry, the Mac keeps its own Find My tab, drawn by the same component (`findMyOnMac`, `useFindMyOnMac`),
+so a newer app takes nothing away from a box that isn't updated yet. No contract change: the catalog already lists
+every entry a box has.
+
 ## FMA-04 Add connection: radio cards for a field's own choices
 
 A `select` with its own `options` (Find My's Read in the background) is radio cards, like a choice the service gives:

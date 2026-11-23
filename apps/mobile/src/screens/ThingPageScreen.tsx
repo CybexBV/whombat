@@ -391,8 +391,14 @@ export function ThingPageScreen({
             {shown === 'activity' ? (
               <ThingActivity page={page} ctx={ctx} />
             ) : shown === FIND_MY_TAB && about ? (
-              // Find My's tab names its Mac and is drawn from that Mac's Find My (findmy-connection.md §1.3).
-              <FindMyPart serverId={about} />
+              // Find My's tab names its Mac and is drawn from that Mac's Find My (findmy-connection.md §1.3); as the
+              // first tab it ends with Ask, as every Summary.
+              <>
+                <FindMyPart serverId={about} />
+                {shown === tabs[0]?.key && subject && !service ? (
+                  <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
+                ) : null}
+              </>
             ) : (
               <>
                 {shown === tabs[0]?.key ? <LookCard page={page} onAsk={askAbout} /> : null}

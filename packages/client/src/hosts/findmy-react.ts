@@ -18,7 +18,7 @@ import type { MacChoice } from '../connections/choices';
 import type { CommitResult } from '../http/types';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from '../react/context';
-import { queryHook, useCatalogConnections } from '../react/queries';
+import { queryHook, useCatalogConnections, useConnectionsCatalog } from '../react/queries';
 import { commitOutcomeText, hostErrorInfo } from './errors';
 import {
   type FindMyConnectionLink,
@@ -30,7 +30,7 @@ import {
   findMyPolls,
   findMyStale,
 } from './findmy';
-import { isMacServer } from './macos';
+import { findMyOnMac, isMacServer } from './macos';
 
 const useFindMyRead = queryHook(api.hosts.findMy);
 const useFleet = queryHook(api.hosts.fleet);
@@ -257,4 +257,13 @@ export function useMacChoices(burrow: string, enabled = true): MacChoice[] | nul
         : null,
     [servers],
   );
+}
+
+/**
+ * Whether a Mac's page keeps its own Find My tab: on a Whombat from before Find My was a connection, whose catalog
+ * doesn't list it (`findMyOnMac`). `enabled`: only a Mac's page asks.
+ */
+export function useFindMyOnMac(enabled: boolean): boolean {
+  const catalog = useConnectionsCatalog(enabled ? {} : null, { retry: false });
+  return enabled && findMyOnMac(catalog.data?.entries);
 }

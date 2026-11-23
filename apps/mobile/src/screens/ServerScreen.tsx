@@ -38,6 +38,7 @@ import {
   isMacServer,
   isUnraidServer,
   MAC_PHONE_TABS,
+  MAC_PHONE_TABS_WITH_FIND_MY,
   SERVER_DASHBOARD_DEFAULT_RANGE,
   SERVER_DASHBOARD_PHONE_RANGES,
   type ServerDashboardHead,
@@ -51,6 +52,7 @@ import {
 import { isLibvirtServer, THIS_WHOMBAT, thisWhombatFact } from '@whombat/client/hosts/mobile';
 import {
   useFindMyConnectionOf,
+  useFindMyOnMac,
   useHostGuests,
   useHostsFleet,
   useHostsLive,
@@ -86,6 +88,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { LevelPill } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
 import { UnderlineTabs } from '../ui/UnderlineTabs';
+import { FindMyPart } from './findmy/FindMyPart';
 import { CardSkeletons, ReadNote } from './home/OverviewParts';
 import { NewChatSheet } from './NewChatSheet';
 import { ServerBackups } from './ServerBackups';
@@ -168,6 +171,8 @@ export function ServerScreen({
   // My connection that reads it (findmy-connection.md §1.5).
   const mac = !!d && isMacServer(d);
   const findMy = useFindMyConnectionOf(slug, mac ? serverId : null);
+  // An older Whombat has no Find My connection: its Mac keeps its own Find My segment until it is updated.
+  const findMyHere = useFindMyOnMac(mac);
   // The other segments name guests (Backups by its guest, Array's stop question by its containers).
   const guests = useHostGuests(
     tab !== 'summary' ? { params: { burrow: slug }, query: { server: serverId, limit: 200 } } : null,
@@ -201,7 +206,7 @@ export function ServerScreen({
   const openUpdates = () => navigation.navigate('ServerUpdates', { serverId, title: shown, back: shown });
   const proxmox = !!d?.proxmox || d?.server.platform === 'proxmox';
   const tabs: ServerTab[] = mac
-    ? [...MAC_PHONE_TABS]
+    ? [...(findMyHere ? MAC_PHONE_TABS_WITH_FIND_MY : MAC_PHONE_TABS)]
     : unraid
       ? ['summary', 'array', 'guests', 'plugins']
       : proxmox || incus || libvirt
@@ -396,6 +401,8 @@ export function ServerScreen({
             </View>
             {shownTab === 'screen' && mac && d ? (
               <MacScreenPart serverId={serverId} serverName={shown} detail={d} now={now} />
+            ) : shownTab === 'findmy' && mac ? (
+              <FindMyPart serverId={serverId} />
             ) : shownTab === 'backups' && incus ? (
               <IncusServerBackups
                 slug={slug}
