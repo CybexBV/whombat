@@ -164,11 +164,13 @@ export const DEVICE_OPS = {
   'kit.credentials.declare': ADDRESS_DEVICE_OPS['kit.credentials.declare'],
   /**
    * Whombat Link (4.4; Whombat whombat-link.md): `link.begin`, `link.status`, `link.leave`, a phone's push token through
-   * the box (`push.register`, `push.unregister`) and remote help's `support.heartbeat`.
+   * the box (`push.register`, `push.unregister`), remote help's `support.heartbeat`, and the account's other Whombats
+   * (`link.whombats`, 4.14).
    */
   'link.begin': LINK_DEVICE_OPS['link.begin'],
   'link.status': LINK_DEVICE_OPS['link.status'],
   'link.leave': LINK_DEVICE_OPS['link.leave'],
+  'link.whombats': LINK_DEVICE_OPS['link.whombats'],
   'push.register': LINK_DEVICE_OPS['push.register'],
   'push.unregister': LINK_DEVICE_OPS['push.unregister'],
   'support.heartbeat': LINK_DEVICE_OPS['support.heartbeat'],

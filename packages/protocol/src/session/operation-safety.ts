@@ -662,6 +662,7 @@ const TABLE = {
   'reach.get': READ,
   'link.on': NEVER,
   'link.off': NEVER,
+  'link.whombats': READ,
   'updates.channel.get': READ,
   'updates.channel.set': NEVER,
   'push.token.set': RECEIPT,

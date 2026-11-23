@@ -9,6 +9,7 @@ import { AccountId } from '@whombat/core/ids';
 import { ReleaseId, UpdateChannel } from '@whombat/release';
 import { z } from 'zod';
 import { LinkCode, LinkPageUrl, LinkState, NativePushToken } from '../link.js';
+import { OwnAddressHost } from '../own-address.js';
 import { OwnAddressSummary } from './own-address.js';
 import { TailscaleStatus } from './tailscale.js';
 
@@ -64,6 +65,25 @@ export const LINK_ERROR_CODES = [
   'control_unreachable',
 ] as const;
 export type LinkErrorCode = (typeof LINK_ERROR_CODES)[number];
+
+/**
+ * `link.whombats` (any enrolled member, 4.14): the other Whombats linked to the same Whombat Link account as this one,
+ * for the menu under the box's name. Each with its name (null until its owner named it), its Link state, its own
+ * address once it has one, and when control last heard from it (control hears from a Whombat about once an hour, so
+ * this says nothing about the last minutes). An empty list while this box's Link doesn't run, from a box or control
+ * that can't tell, and when control can't be reached. A box before 4.14 answers `unknown_op`.
+ */
+export const LinkWhombatSummary = z.object({
+  device: z.string().min(1).max(64),
+  name: z.string().min(1).max(80).nullable(),
+  state: LinkState,
+  host: OwnAddressHost.nullable(),
+  lastSeenAt: Timestamp.nullable(),
+});
+export type LinkWhombatSummary = z.infer<typeof LinkWhombatSummary>;
+export const LinkWhombatsInput = z.strictObject({});
+export const LinkWhombatsOutput = z.object({ whombats: z.array(LinkWhombatSummary).max(100) });
+export type LinkWhombatsOutput = z.infer<typeof LinkWhombatsOutput>;
 
 /**
  * `updates.channel.get` (any enrolled member) and `updates.channel.set` (owners; audited `update.channel_set`): the

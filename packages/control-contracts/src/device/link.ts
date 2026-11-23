@@ -10,11 +10,13 @@ import {
   LinkState,
   NativePushToken,
   OwnAddressClaimSecret,
+  OwnAddressHost,
   OwnAddressLabel,
 } from '@whombat/protocol';
 import { hostTextSchema, PushHandle } from '@whombat/protocol/session';
 import { EpochSeconds } from '@whombat/release';
 import { z } from 'zod';
+import { DeviceId } from '../common.js';
 import { AccountEmail } from './address.js';
 import { DeviceRegistration } from './provisioning.js';
 import { SupportReport } from './status.js';
@@ -47,6 +49,22 @@ export const DeviceLinkStatus = z.object({
 export type DeviceLinkStatus = z.infer<typeof DeviceLinkStatus>;
 
 const Ok = z.object({ ok: z.literal(true) });
+
+/**
+ * One of the other Whombats linked to the same account (4.14), as the box's menu shows it: its name (null until its
+ * owner named it), its Link state, its own address once it has one, and when control last heard from it.
+ */
+export const LinkWhombat = z.object({
+  device: DeviceId,
+  name: hostTextSchema(80).nullable(),
+  state: LinkState,
+  host: OwnAddressHost.nullable(),
+  lastSeenAt: EpochSeconds.nullable(),
+});
+export type LinkWhombat = z.infer<typeof LinkWhombat>;
+
+/** At most this many other Whombats in one answer. */
+export const LINK_WHOMBATS_MAX = 100;
 
 export const LINK_DEVICE_OPS = {
   /**
@@ -92,6 +110,15 @@ export const LINK_DEVICE_OPS = {
   'push.register': {
     body: z.strictObject({ token: NativePushToken }),
     response: z.object({ handle: PushHandle }),
+  },
+  /**
+   * The other Whombats linked to the same account as this box (4.14), for the menu under the box's name: an answer only
+   * while this box's Link runs (`on`, `grace`, or `starting` once confirmed); otherwise, and for a box in no account,
+   * an empty list. Never this box itself, never another account's. Reads only; its own budget of 120 an hour.
+   */
+  'link.whombats': {
+    body: z.strictObject({}),
+    response: z.object({ whombats: z.array(LinkWhombat).max(LINK_WHOMBATS_MAX) }),
   },
   /** The device that gave the token was removed: control forgets the handle. An unknown handle is fine. */
   'push.unregister': {

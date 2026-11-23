@@ -4573,6 +4573,47 @@ export const SCHEMA_CASES: Case[] = [
     ['no since', { link: { state: 'off' } }, false],
     ['a host for a label', { link: { ...linkGrace, label: 'maple-otter-river.box.whombat.app' } }, false],
   ]),
+  ...cases('LinkWhombatsRequest', {}, [['a member', { all: true }, false]]),
+  ...cases(
+    'LinkWhombatsResponse',
+    {
+      whombats: [
+        {
+          device: 'dev_studio01',
+          name: 'Studio',
+          state: 'on',
+          host: 'cedar-lark-meadow.box.whombat.app',
+          lastSeenAt: now,
+        },
+      ],
+    },
+    [
+      ['none', { whombats: [] }, true],
+      [
+        'one not named, without an address yet',
+        {
+          whombats: [{ device: 'dev_cabin01', name: null, state: 'starting', host: null, lastSeenAt: null }],
+        },
+        true,
+      ],
+      [
+        'a label for a host',
+        {
+          whombats: [
+            {
+              device: 'dev_studio01',
+              name: 'Studio',
+              state: 'on',
+              host: 'cedar-lark-meadow',
+              lastSeenAt: now,
+            },
+          ],
+        },
+        false,
+      ],
+      ['no list', {}, false],
+    ],
+  ),
   ...cases('LinkLeaveRequest', {}, [['a reason', { reason: 'moving' }, false]]),
   ...cases('LinkLeaveResponse', { link: { state: 'off', since: now, label: 'maple-otter-river' } }, []),
   ...cases('TicketIssueResponse', { ...ticketResponse, link: linkOn }, [
@@ -4655,6 +4696,8 @@ export const SCHEMA_CASES: Case[] = [
   ...cases('RuntimePushRegisterResponse', { handle: 'hNd1e_0123456789abcdefgh' }, []),
   ...cases('RuntimePushUnregisterRequest', { handle: 'hNd1e_0123456789abcdefgh' }, []),
   ...cases('RuntimePushUnregisterResponse', { ok: true }, []),
+  ...cases('RuntimeLinkWhombatsRequest', {}, []),
+  ...cases('RuntimeLinkWhombatsResponse', { whombats: [] }, []),
   ...cases(
     'ConsoleState',
     {

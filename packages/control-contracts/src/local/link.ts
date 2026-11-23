@@ -104,3 +104,8 @@ export const RuntimePushRegisterRequest = DEVICE_OPS['push.register'].body;
 export const RuntimePushRegisterResponse = DEVICE_OPS['push.register'].response;
 export const RuntimePushUnregisterRequest = DEVICE_OPS['push.unregister'].body;
 export const RuntimePushUnregisterResponse = DEVICE_OPS['push.unregister'].response;
+
+/** `POST /v1/link/whombats` (4.14): the device op `link.whombats`'s own schemas. */
+export const RuntimeLinkWhombatsRequest = DEVICE_OPS['link.whombats'].body;
+export const RuntimeLinkWhombatsResponse = DEVICE_OPS['link.whombats'].response;
+export type RuntimeLinkWhombatsResponse = z.infer<typeof RuntimeLinkWhombatsResponse>;

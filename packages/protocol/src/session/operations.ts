@@ -267,6 +267,8 @@ import {
   LinkOffInput,
   LinkOnInput,
   LinkOutput,
+  LinkWhombatsInput,
+  LinkWhombatsOutput,
   PushTokenClearInput,
   PushTokenSetInput,
   PushTokenSetOutput,
@@ -657,6 +659,8 @@ const SESSION_SPECS = [
   session('reach.get', ReachGetInput, ReachGetOutput, 'app', false),
   session('link.on', LinkOnInput, LinkOutput, 'app'),
   session('link.off', LinkOffInput, LinkOutput, 'app'),
+  // The account's other Whombats, for the menu under the box's name (4.14).
+  session('link.whombats', LinkWhombatsInput, LinkWhombatsOutput, 'app', false),
   session('updates.channel.get', UpdatesChannelGetInput, UpdatesChannelOutput, 'app', false),
   session('updates.channel.set', UpdatesChannelSetInput, UpdatesChannelOutput, 'app'),
   session('push.token.set', PushTokenSetInput, PushTokenSetOutput, 'app'),

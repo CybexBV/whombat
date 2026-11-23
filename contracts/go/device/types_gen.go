@@ -22,7 +22,7 @@ type SupportTicketResponse = TicketIssueResponse
 // ShareViewsRequest is the same schema as ShareDeleteRequest.
 type ShareViewsRequest = ShareDeleteRequest
 
-// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "push.register", "push.unregister", "support.heartbeat".
+// DeviceOpName is one of "ticket.issue", "claim.claimed", "claim.lookup", "status.report", "revocations.report", "push.send", "update.assignment", "update.progress", "licence.renew", "feedback.cards.sync", "feedback.drops.pull", "feedback.drops.ack", "feedback.reporters.publish", "support.ticket", "kit.envelopes.put", "share.put", "share.delete", "share.views", "address.register", "account.link.lookup", "account.link", "kit.credentials.declare", "link.begin", "link.status", "link.leave", "link.whombats", "push.register", "push.unregister", "support.heartbeat".
 type DeviceOpName string
 
 const (
@@ -51,13 +51,14 @@ const (
 	DeviceOpNameLinkBegin                DeviceOpName = "link.begin"
 	DeviceOpNameLinkStatus               DeviceOpName = "link.status"
 	DeviceOpNameLinkLeave                DeviceOpName = "link.leave"
+	DeviceOpNameLinkWhombats             DeviceOpName = "link.whombats"
 	DeviceOpNamePushRegister             DeviceOpName = "push.register"
 	DeviceOpNamePushUnregister           DeviceOpName = "push.unregister"
 	DeviceOpNameSupportHeartbeat         DeviceOpName = "support.heartbeat"
 )
 
 // DeviceOpNameValues lists every DeviceOpName.
-var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
+var DeviceOpNameValues = []DeviceOpName{DeviceOpNameTicketIssue, DeviceOpNameClaimClaimed, DeviceOpNameClaimLookup, DeviceOpNameStatusReport, DeviceOpNameRevocationsReport, DeviceOpNamePushSend, DeviceOpNameUpdateAssignment, DeviceOpNameUpdateProgress, DeviceOpNameLicenceRenew, DeviceOpNameFeedbackCardsSync, DeviceOpNameFeedbackDropsPull, DeviceOpNameFeedbackDropsAck, DeviceOpNameFeedbackReportersPublish, DeviceOpNameSupportTicket, DeviceOpNameKitEnvelopesPut, DeviceOpNameSharePut, DeviceOpNameShareDelete, DeviceOpNameShareViews, DeviceOpNameAddressRegister, DeviceOpNameAccountLinkLookup, DeviceOpNameAccountLink, DeviceOpNameKitCredentialsDeclare, DeviceOpNameLinkBegin, DeviceOpNameLinkStatus, DeviceOpNameLinkLeave, DeviceOpNameLinkWhombats, DeviceOpNamePushRegister, DeviceOpNamePushUnregister, DeviceOpNameSupportHeartbeat}
 
 type DeviceRequestEnvelope struct {
 	V      int64           `json:"v"` // always 1
@@ -364,6 +365,13 @@ type LinkLeaveResponse struct {
 	Link DeviceLinkStatus `json:"link"`
 }
 
+type LinkWhombatsRequest struct {
+}
+
+type LinkWhombatsResponse struct {
+	Whombats []LinkWhombat `json:"whombats"`
+}
+
 type PushRegisterRequest struct {
 	Token protocol.NativePushToken `json:"token"`
 }
@@ -591,6 +599,14 @@ type ShareViews struct {
 	ShareID      string `json:"shareId"`
 	Views        int64  `json:"views"`
 	LastViewedAt *int64 `json:"lastViewedAt,omitempty"`
+}
+
+type LinkWhombat struct {
+	Device     string             `json:"device"`
+	Name       *string            `json:"name"`
+	State      protocol.LinkState `json:"state"`
+	Host       *string            `json:"host"`
+	LastSeenAt *int64             `json:"lastSeenAt"`
 }
 
 type WebPushRegistrationSubscriptionKeys struct {
@@ -1466,6 +1482,38 @@ func ParseLinkLeaveResponse(data []byte) (*LinkLeaveResponse, error) {
 func (v *LinkLeaveResponse) Validate() error { return schemas.ValidateValue("LinkLeaveResponse", v) }
 
 var _ = register("LinkLeaveResponse", func(data []byte) (any, error) { return ParseLinkLeaveResponse(data) })
+
+// ParseLinkWhombatsRequest validates data against the LinkWhombatsRequest JSON Schema and decodes it.
+func ParseLinkWhombatsRequest(data []byte) (*LinkWhombatsRequest, error) {
+	v := new(LinkWhombatsRequest)
+	if err := schemas.Decode("LinkWhombatsRequest", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the LinkWhombatsRequest JSON Schema (as it would be sent).
+func (v *LinkWhombatsRequest) Validate() error {
+	return schemas.ValidateValue("LinkWhombatsRequest", v)
+}
+
+var _ = register("LinkWhombatsRequest", func(data []byte) (any, error) { return ParseLinkWhombatsRequest(data) })
+
+// ParseLinkWhombatsResponse validates data against the LinkWhombatsResponse JSON Schema and decodes it.
+func ParseLinkWhombatsResponse(data []byte) (*LinkWhombatsResponse, error) {
+	v := new(LinkWhombatsResponse)
+	if err := schemas.Decode("LinkWhombatsResponse", data, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// Validate checks v against the LinkWhombatsResponse JSON Schema (as it would be sent).
+func (v *LinkWhombatsResponse) Validate() error {
+	return schemas.ValidateValue("LinkWhombatsResponse", v)
+}
+
+var _ = register("LinkWhombatsResponse", func(data []byte) (any, error) { return ParseLinkWhombatsResponse(data) })
 
 // ParsePushRegisterRequest validates data against the PushRegisterRequest JSON Schema and decodes it.
 func ParsePushRegisterRequest(data []byte) (*PushRegisterRequest, error) {
