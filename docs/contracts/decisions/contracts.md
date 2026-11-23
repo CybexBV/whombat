@@ -12480,3 +12480,15 @@ optional members, new ops and routes. Session minor 6.
   `address_moved` (`boxPasskey.register.begin` at the leaving host). `OWN_ADDRESS_ZONE_CERTIFICATES` and
   `ownAddressZoneCertificate(spki, at)` name Cloudflare's two certificates for `*.whombat.app`, which a box doesn't
   call foreign within their dates.
+
+## CT-1800 More names nobody gets — contracts 4.17.0 (2026-11-23)
+
+Names that pass for a sign-in or payment page, or that devices look up by themselves under a domain, are reserved
+(Whombat own-address.md OWA-54). A minor: `ownAddressNameProblem` refuses more names; no shape changes.
+
+- **CT-1800** `OWN_ADDRESS_RESERVED_NAMES` gains sign-in and payment words (`secure`, `verify`, `wallet`, …) and the
+  names mail programs and devices look up (`autodiscover`, `autoconfig`, `wpad`, `mta-sts`, …);
+  `OWN_ADDRESS_RESERVED_PREFIXES` gains distinctive company names (`paypal`, `google`, `microsoft`, …); the new
+  `OWN_ADDRESS_LOOKALIKE_WORDS` refuses a name that is a company's name or has one as a hyphen-part (`apple-support`),
+  except a drawn label. A name already given stays its box's. Control's own list of operator-reserved names comes on
+  top and is control's alone.
