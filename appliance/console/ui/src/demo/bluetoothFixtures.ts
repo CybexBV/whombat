@@ -112,8 +112,7 @@ const showing = (name: string, p: Partial<BluetoothPairing>) =>
     bluetoothSheet: { open: true, step: { kind: 'pairing', id: 'p-fixture01' } },
   }) as const;
 
-const FOOTER =
-  'Whombat appliance. There is no login on this console.\nFor local recovery, restart and hold Space to open the boot menu, then choose\n"Whombat Recovery".';
+const FOOTER = 'To repair this Whombat, restart it, hold Space and choose Whombat Recovery.';
 
 function claim(state: NonNullable<ConsoleState['claim']>['state']) {
   const s: ConsoleState = {

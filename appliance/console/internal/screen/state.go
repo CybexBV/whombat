@@ -70,6 +70,13 @@ type Screen struct {
 	// only on a claimable screen whose own address is one to open and isn't on the tailnet itself.
 	FallbackTailnet string
 	FallbackInApp   string
+	// PageOpen: a browser has the claim link open and waits for the letters (claimable only, beside an address to open).
+	// The screen then says to type them there, without the link to open, its QR code or the second way in: the page is
+	// already open, and scanning the code would move the claim to another device.
+	PageOpen bool
+	// WaitedLong: this console has shown the wait for the box's web address for WaitLongAfter (the caller sets it, from
+	// its WaitWatch). Only then does the wait offer the claim in the Whombat app on this network.
+	WaitedLong bool
 }
 
 // StartingScreen is what the console shows without a usable state file.
@@ -125,6 +132,7 @@ func Parse(data []byte) (Screen, error) {
 		}
 	}
 	sc.NewLetters = st.NewLetters != nil && *st.NewLetters
+	sc.PageOpen = st.PageOpen != nil && *st.PageOpen && sc.State == Claimable && sc.Openable
 	if st.Code != nil {
 		if Clean(*st.Code) != *st.Code {
 			return Screen{}, errors.New("state file: invalid code")

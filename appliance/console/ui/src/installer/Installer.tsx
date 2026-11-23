@@ -332,9 +332,10 @@ function DiskStep({
                     if (e.key === 'Enter' && disk) onNext();
                   }}
                 />
-                <span className={styles.diskName}>{d.name}</span>
-                <span className={styles.diskModel}>{d.model || d.path}</span>
+                {/* Size and model as a person knows the disk; its device name quiet at the end. */}
                 <span className={styles.diskSize}>{formatSize(d.sizeBytes)}</span>
+                <span className={styles.diskModel}>{d.model}</span>
+                <span className={styles.diskName}>{d.name}</span>
                 {!d.eligible && d.reason && (
                   <span className={styles.diskReason}>{DISK_REASON[d.reason]}</span>
                 )}
@@ -377,7 +378,16 @@ function Erase({
     setError(r?.status === 409 ? T.eraseBusy : T.eraseRefused);
   };
   const name = disk?.name ?? '';
-  const what = disk ? [disk.model, formatSize(disk.sizeBytes)].filter(Boolean).join(', ') : '';
+  // The model in the mono face: the sans face's Q has its tail apart under the letter, which read as an underline.
+  const model = disk?.model ? (
+    <>
+      {' ('}
+      <span className={styles.model}>{disk.model}</span>)
+    </>
+  ) : (
+    ''
+  );
+  const size = disk ? formatSize(disk.sizeBytes) : '';
   // An empty disk loses nothing: the button confirms (Enter on it). One that holds something: its name typed.
   const empty = disk?.empty === true;
   const holds = disk ? diskHolds(disk) : null;
@@ -385,7 +395,7 @@ function Erase({
     <Frame
       kicker={kickerFor(state, 'erase')}
       title={T.eraseTitle}
-      sub={!disk ? T.diskNone : empty ? T.eraseEmptySub(name, what) : T.eraseSub(name, what)}
+      sub={!disk ? T.diskNone : fill(empty ? T.eraseEmptySub : T.eraseSub, size, model)}
       guide={{ say: T.eraseSay }}
       meta={meta}
       actions={

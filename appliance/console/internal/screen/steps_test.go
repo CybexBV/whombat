@@ -3,21 +3,31 @@ package screen
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // A box the network names only by its IPv4 address, claimable in the Whombat app there.
 const inAppFile = `"state":"claimable","code":"KXQM","url":"http://10.100.0.10:4480/claim"`
 
 // Linked, while the box's own web address is still on the way: the wait, not the claim, with the Whombat app on this
-// network as a quiet line under it. The same for Link confirmed and waiting for its address.
+// network as a quiet line under it once the wait took long. The same for Link confirmed and waiting for its address.
 func TestRenderLinkOnWaitsForTheAddress(t *testing.T) {
 	for name, link := range map[string]string{
 		"on":                     `{"state":"on"}`,
 		"starting, address next": `{"state":"starting","waitingForAddress":true}`,
 	} {
 		sc := mustParse(t, reachFile(inAppFile, `{"link":`+link+`}`))
-		if l := sc.LinkShown(now); l == nil || !l.WaitingForAddress || sc.WaitingInApp(now) != "10.100.0.10" {
+		if l := sc.LinkShown(now); l == nil || !l.WaitingForAddress || sc.WaitingInApp(now) != "" {
 			t.Fatalf("%s: %+v", name, l)
+		}
+		// At first the wait alone: the address usually comes in seconds.
+		if f := Render(sc, now, 200, 0, nil); !strings.Contains(f, "web address…") || strings.Contains(f, "10.100.0.10") ||
+			strings.Contains(f, "KXQM") {
+			t.Errorf("%s: the app's line before the wait took long\n%s", name, f)
+		}
+		sc.WaitedLong = true
+		if sc.WaitingInApp(now) != "10.100.0.10" {
+			t.Fatalf("%s: no app's line after a long wait", name)
 		}
 		f := Render(sc, now, 200, 0, nil)
 		for _, w := range []string{"web address…", "10.100.0.10", "KXQM"} {
@@ -114,5 +124,19 @@ func TestHrefs(t *testing.T) {
 	}
 	if (&Link{}).CodeHref("ABCD-EFGH") != "" || sc.Reach.Link.CodeHref("") != "" {
 		t.Fatal("a page without its https address or code")
+	}
+}
+
+// The console counts the wait for the web address itself: long after WaitLongAfter of it, from the start again once
+// another screen showed.
+func TestWaitWatch(t *testing.T) {
+	var w WaitWatch
+	wait := mustParse(t, reachFile(inAppFile, `{"link":{"state":"on"}}`))
+	other := mustParse(t, reachFile(claimableFile, `{"link":{"state":"on"}}`))
+	if w.Long(wait, now) || w.Long(wait, now.Add(WaitLongAfter-time.Second)) || !w.Long(wait, now.Add(WaitLongAfter)) {
+		t.Fatal("not long after WaitLongAfter of the wait")
+	}
+	if w.Long(other, now.Add(WaitLongAfter+time.Second)) || w.Long(wait, now.Add(WaitLongAfter+2*time.Second)) {
+		t.Fatal("the count didn't start again after another screen")
 	}
 }

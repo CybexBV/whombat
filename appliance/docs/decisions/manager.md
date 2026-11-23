@@ -2577,7 +2577,7 @@ name (so an expired code is renewed without the runtime), and `carried` (below).
 - **First state.** A box control registered before Link (`device.json`'s `applianceRoute` is control's, not `local`: Home
   and the DEV stack box, LNK-37) starts `on` with `carried`, so it keeps working as it did until control says otherwise; a
   control from before Link (404 on `link.status`) leaves it so. Every other box starts `off`.
-- **Polling.** None while `off`. While a code shows, `link.status` every 5 s; waiting for an address every minute; on
+- **Polling.** *In part amended by Whombat LNK-88: every 2 s for the first half hour of codes, then every 5 s.* None while `off`. While a code shows, `link.status` every 5 s; waiting for an address every minute; on
   hourly; grace every 15 minutes; ended every 6 hours (so the box sees its owner subscribe again). A code that ran out is
   renewed with `link.begin`. Failures back off from 15 s to 30 minutes.
 - **Off.** Turning Link off takes effect on the box at once (`leaving`): every Link feature stops, and `link.leave` is

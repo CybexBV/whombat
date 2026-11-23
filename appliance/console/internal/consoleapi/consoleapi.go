@@ -25,6 +25,7 @@ type Server struct {
 	footer string
 	now    func() time.Time
 	desk   *desk.Client // nil: no desk socket (the installer's tests, a console without --desk-socket)
+	wait   screen.WaitWatch
 }
 
 // BodyLimits are the request bodies larger than the API's 1 KiB: a recording of up to 30 s, base64 (§2.5; the socket's
@@ -97,6 +98,9 @@ type ReachLink struct {
 	// ExpiresAt (RFC 3339, the server's clock): when the code changes, only when the screen says so (screen.RotatesShown).
 	ExpiresAt         string `json:"expiresAt,omitempty"`
 	WaitingForAddress bool   `json:"waitingForAddress,omitempty"`
+	// InApp is the address to type in the Whombat app on this network once the wait for the web address took long
+	// (screen.WaitingInApp); the page shows it with the claim's letters. Left out before, and outside the wait.
+	InApp string `json:"inApp,omitempty"`
 	// GraceEndsOn is the day grace ends as the text console says it (“25 November”, the box's time zone).
 	GraceEndsOn string `json:"graceEndsOn,omitempty"`
 }
@@ -154,6 +158,9 @@ type Claim struct {
 	QR []string `json:"qr,omitempty"`
 	// Second: the claim is the second of two numbered steps, after Tailscale's (screen.TailscaleFirst).
 	Second bool `json:"second,omitempty"`
+	// PageOpen: a browser has the claim link open (screen.PageOpen). The page says to type the letters there, and gets
+	// no QR code or second way in. Only beside the claim link with its code.
+	PageOpen bool `json:"pageOpen,omitempty"`
 }
 
 // Start is the start problem as the page gets it: its kind and the release the box was installed with ("" none to
@@ -175,6 +182,8 @@ type SignIn struct {
 // State computes what the page shows now.
 func (s *Server) State(ctx context.Context) State {
 	sc := s.load()
+	now := s.now()
+	sc.WaitedLong = s.wait.Long(sc, now)
 	c := Claim{State: sc.State, Code: sc.Code, ClaimURL: sc.URL, AppURL: AppURL(sc.URL), Burrows: sc.Burrows}
 	if sc.State == screen.Claimable && sc.OnTailnet() {
 		c.OnTailnet = true
@@ -192,9 +201,14 @@ func (s *Server) State(ctx context.Context) State {
 		}
 	}
 	if c.ClaimURL != "" && c.Code != "" {
-		c.FallbackTailnet, c.FallbackInApp = sc.FallbackTailnet, sc.FallbackInApp
-		if sc.State == screen.Claimable {
-			c.QR = screen.QRModules(sc.ClaimHref)
+		if sc.PageOpen {
+			// The page is open already: only the letters matter, and a QR code would move the claim to a phone.
+			c.PageOpen = true
+		} else {
+			c.FallbackTailnet, c.FallbackInApp = sc.FallbackTailnet, sc.FallbackInApp
+			if sc.State == screen.Claimable {
+				c.QR = screen.QRModules(sc.ClaimHref)
+			}
 		}
 	}
 	if p := sc.StartShown(); p != nil {
@@ -203,7 +217,6 @@ func (s *Server) State(ctx context.Context) State {
 	if sc.State == screen.Backoff && !sc.RetryAt.IsZero() {
 		c.RetryAt = sc.RetryAt.UTC().Format(time.RFC3339)
 	}
-	now := s.now()
 	c.Second = sc.TailscaleFirst(now)
 	// New letters: only where the page still shows letters (or the wait), and only when this server can pass it on.
 	if c.Code != "" && sc.LettersStay(now) {
@@ -239,7 +252,7 @@ func reach(sc screen.Screen, now time.Time) *Reach {
 	}
 	out := &Reach{}
 	if l := sc.LinkShown(now); l != nil {
-		rl := &ReachLink{State: l.State, WaitingForAddress: l.WaitingForAddress}
+		rl := &ReachLink{State: l.State, WaitingForAddress: l.WaitingForAddress, InApp: sc.WaitingInApp(now)}
 		if code := l.LiveCode(now); code != "" {
 			rl.Code, rl.URL, rl.QR = code, l.URL, screen.QRModules(l.CodeHref(code))
 			if l.RotatesShown(now) {

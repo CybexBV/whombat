@@ -192,6 +192,8 @@ describe('the claim link on the box’s screen', () => {
     const person = await arrive(DOOR, { from: '198.51.100.7', claimLink: link });
     expect(person.answer.t).toBe('welcome');
     expect(sessions().unenrolledClaimLinkSize).toBe(1);
+    // The person's page is open: the screen says to type the letters there.
+    expect(m.runtime.trust.ceremony.consoleState()?.pageOpen).toBe(true);
     expect(refusal(await person.client.request('enroll.claim.local.start', { link }))).toBeNull();
     // None of it reached the claim's own wait.
     expect(await m.runtime.trust.claimBackoff(m.t.services.clock())).toBeNull();

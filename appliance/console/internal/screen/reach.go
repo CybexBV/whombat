@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CybexBV/whombat/contracts/go/local"
@@ -144,12 +145,40 @@ func (s Screen) LinkAwaitsAddress() bool {
 }
 
 // WaitingInApp is the address for the Whombat app on this network while the screen waits for the box's web address,
-// "" when there is none or no letters to enter there: the claim works that way meanwhile.
+// "" when there is none or no letters to enter there, and until the wait took long (WaitedLong): the claim works that
+// way meanwhile, but the address usually comes in seconds, and a second way at once only makes the person wonder which.
 func (s Screen) WaitingInApp(now time.Time) string {
-	if l := s.LinkShown(now); l == nil || !l.WaitingForAddress || s.State != Claimable || s.Code == "" {
+	if l := s.LinkShown(now); l == nil || !l.WaitingForAddress || s.State != Claimable || s.Code == "" || !s.WaitedLong {
 		return ""
 	}
 	return s.InApp
+}
+
+// WaitLongAfter is how long the screen shows the wait for the box's web address before it offers the claim in the
+// Whombat app on this network.
+const WaitLongAfter = 2 * time.Minute
+
+// WaitWatch remembers since when a console has shown the wait for the box's web address: the file says that the box
+// waits, not since when. Each console keeps its own (the text console's loop, the graphical console's server), so a
+// console that starts again counts again.
+type WaitWatch struct {
+	mu    sync.Mutex
+	since time.Time
+}
+
+// Long reports whether s, the screen at now, has shown the wait for WaitLongAfter; it starts the count when the wait
+// shows and ends it when it doesn't.
+func (w *WaitWatch) Long(s Screen, now time.Time) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if l := s.LinkShown(now); l == nil || !l.WaitingForAddress {
+		w.since = time.Time{}
+		return false
+	}
+	if w.since.IsZero() {
+		w.since = now
+	}
+	return now.Sub(w.since) >= WaitLongAfter
 }
 
 // CodeHref is the Link page with the code in its address (“https://app.whombat.com/link?code=ABCD-EFGH”), which opens

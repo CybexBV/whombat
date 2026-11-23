@@ -11,12 +11,11 @@ import (
 	"github.com/CybexBV/whombat/contracts/go/protocol"
 )
 
-// Banner is the console's footer: the words the getty banner shows on the other VTs (base.nix,
-// whombat.console.banner). The appliance passes its own copy with --footer-file; this default keeps
-// dev/console and the tests identical to it.
-const Banner = `Whombat appliance. There is no login on this console.
-For local recovery, restart and hold Space to open the boot menu, then choose
-"Whombat Recovery" (you will need your disk recovery key).`
+// Footer is the console's footer: one plain line on how to repair the box (console.nix, whombat.console.footer). The
+// other VTs keep the getty banner's longer words, for whoever switches to them. The appliance passes its own copy with
+// --footer-file; this default keeps dev/console and the tests identical to it. The recovery menu asks for the disk
+// recovery key itself where the box has one.
+const Footer = "To repair this Whombat, restart it, hold Space and choose Whombat Recovery."
 
 // FooterShown reports whether the footer (the console and recovery note) shows under this screen: not while the person
 // is setting the box up (the claim, or Link's code and its wait on a box nobody claimed), where it is words they don't
@@ -95,7 +94,7 @@ const (
 	wordLinkConfirm      = "Sign in or create an account there, then confirm this Whombat."
 	wordLinkRotates      = "The code changes in %d min."
 	wordLinkWaiting      = "Waiting for this Whombat’s web address…"
-	wordLinkWaitingHint  = "Whombat Link is on. New web addresses are handed out in turn, and this one usually comes within a few minutes. This Whombat asks again every minute by itself; this screen changes when the address is ready."
+	wordLinkWaitingHint  = "Whombat Link is on. The web address usually comes within a minute, and this screen changes by itself."
 	wordLinkStarting     = "Starting Whombat Link…"
 	wordLinkGrace        = "Whombat Link ends on %s. Turn on Tailscale in the Whombat app to keep a way in, and check your paper backup details."
 	wordLinkEnded        = "Whombat Link has ended. Subscribe again at app.whombat.com, or turn on Tailscale: in the Whombat app at home, or in the recovery menu (hold Space at power-on)."
@@ -104,9 +103,13 @@ const (
 	wordClaimOpenTailnet = "On a device on your tailnet, open %s and enter"
 )
 
-// While the screen waits for the box's web address (Link confirmed, or on with the address still coming), the Whombat
-// app on this network claims it already: one quiet line under the wait, with the letters to enter there.
-const wordLinkWaitingInApp = "Or claim it now: in the Whombat app on this network, type %s and enter %s."
+// When the wait for the box's web address takes long (Screen.WaitingInApp), the Whombat app on this network claims it
+// already: one quiet line under the wait, with the letters to enter there.
+const wordLinkWaitingInApp = "Taking long? Claim it in the Whombat app on this network: type %s and enter %s."
+
+// A browser has the claim link open (Screen.PageOpen): the letters are all the person needs, so the screen says only
+// where to type them.
+const wordClaimPageOpen = "Type these letters on the page that just opened"
 
 // Tailscale's step and the claim, numbered while Tailscale asks for something and the claim has no address to open
 // (Screen.TailscaleFirst): the sign-in comes first, and the line under the claim says the app on this network works
@@ -157,6 +160,13 @@ func body(s Screen, now time.Time) ([]string, string) {
 		rotates := wordClaimRotates
 		if s.LettersStay(now) {
 			rotates = fmt.Sprintf(wordClaimStays, MinutesLeft(s.LettersUntil, now))
+		}
+		if s.PageOpen {
+			lines := []string{wordClaimPageOpen, "", codeMarker, "", rotates}
+			if s.NewLetters {
+				lines = append(lines, wordNewLetters)
+			}
+			return lines, s.Code
 		}
 		lines := []string{title, "", fmt.Sprintf(open, at), "", codeMarker, "", rotates}
 		if s.NewLetters {

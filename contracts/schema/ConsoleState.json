@@ -52,6 +52,10 @@
       "maxLength": 256,
       "pattern": "^https?:[/][/][\\x21-\\x7e]+$"
     },
+    "pageOpen": {
+      "type": "boolean",
+      "const": true
+    },
     "burrows": {
       "type": "object",
       "properties": {

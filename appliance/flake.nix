@@ -1467,8 +1467,9 @@
             pkgs.runCommand "console-check" { } ''
               bin=${c.whombat.console.package}/bin/whombat-console
               a=$($bin --once --file /nonexistent --width 100)
-              b=$($bin --once --file /nonexistent --width 100 --footer-file ${pkgs.writeText "banner" c.whombat.console.banner})
-              [ "$a" = "$b" ] || { echo "the console's default footer is not the appliance banner"; exit 1; }
+              b=$($bin --once --file /nonexistent --width 100 --footer-file ${pkgs.writeText "footer" c.whombat.console.footer})
+              [ "$a" = "$b" ] || { echo "the console's default footer is not the appliance's"; exit 1; }
+              printf '%s' "$a" | grep -q 'hold Space'
               printf '%s' "$a" | grep -q 'Starting Whombat…'
               printf '{"v":1,"state":"claimable","code":"KXQM","url":"https://dev.whombat.com/claim"}' > ok.json
               $bin --once --file ok.json | grep -q 'open dev.whombat.com/claim and enter'
