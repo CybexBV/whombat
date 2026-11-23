@@ -81,7 +81,9 @@ box's registration from `device.json` with the content key, the manager adds its
 on or in grace the runtime also gives the manager the box's name through `link.on` whenever it is named or renamed, so
 the account site shows it (`LinkService.tellName`; the manager sends only a name control lacks, once control says Link
 still runs). `reach.get`
-answers Link, the own address and Tailscale in one; `updates.channel.get/set` pass the update channel to and from the
+answers Link, the own address and Tailscale in one; `link.whombats` the account's other Whombats for the menu under the
+box's name (the manager forwards the device op while Link runs; the runtime keeps the answer a minute and answers none
+when it can't tell); `updates.channel.get/set` pass the update channel to and from the
 manager (the helper keeps it). Grace is one Inbox item and one push asking to turn on Tailscale and to check the backup
 details' paper copy; once ended, one Inbox item says what still works and how to come back
 (`link/notices.ts`). The screen shows Link's code while it starts and Tailscale's sign-in link (`ConsoleState.reach`). A
@@ -1661,12 +1663,16 @@ anywhere) (`BoxSetup`, `boxSetupSteps`), then onboarding's Set up your AI (Conti
 now). The Whombat is made by itself as “Mara’s Whombat” with Dusty as its agent, both changed in Settings; onboarding
 elsewhere keeps Name your Whombat and Meet your agent. Empty first screens show one step, not empty sections
 ([first-day.md](docs/decisions/first-day.md)). The hosted app is
-also the account site for Whombat Link: open sign-up by magic link, `/link` where a person enters the code their
-Whombat's screen shows and ticks the Subscription Terms, and Your Whombats (`/account`, `/billing`) with each Whombat's
-Open at its own address (the one this browser opened last first), the Link subscription by the month or the year with
-a promotion code on Stripe's page and its free time (Stripe Checkout to start paying, the portal once Stripe has the
-subscription, through control) and each Whombat's Link state; an account with an organization made before Link keeps
-its hosted list ([link-account-site.md](docs/app/decisions/link-account-site.md)). The legal pages are
+also the account site for Whombat Link: open sign-up by magic link; the home (`/`) with the person's Whombats, each
+opening at its own address (the one this browser opened last first), and Add a Whombat; `/add` (also `/link`, what a
+box's screen shows) where a person enters the code their Whombat's screen shows and ticks the Subscription Terms; and
+the account (`/account`, `/billing`) with the Link subscription by the month or the year with a promotion code on
+Stripe's page and its free time (Stripe Checkout to start paying, the portal once Stripe has the subscription, through
+control), the email, the phone app and signing out. An account with an organization made before Link sees its
+Whombats on the home too and keeps its hosted list at `/appliances`
+([link-account-site.md](docs/app/decisions/link-account-site.md), [account-home.md](docs/app/decisions/account-home.md)).
+On a box's own page with Link, the name at the top of the sidebar opens the account's other Whombats (`link.whombats`,
+through the manager and control) and the way back to the account site. The legal pages are
 `apps/web/src/legal/*.md` at `/legal/…`. Development and the visual harness:
 [docs/app/README.md](docs/app/README.md).
 

@@ -1801,6 +1801,23 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           save();
           return json(200, { ok: true });
         }
+        /* The account's other Whombats (4.14), for the menu under the box's name: the world's other linked boxes. */
+        case 'link.whombats': {
+          if (!a.endpoints[me]?.accountId) return err(403, 'forbidden', 'Enrolled devices only.');
+          const running = (l: LinkSummary | undefined) =>
+            l?.state === 'on' || l?.state === 'grace' || l?.state === 'starting';
+          if (!running(a.link)) return json(200, { whombats: [] });
+          const whombats = Object.values(state.appliances)
+            .filter((o) => o.device !== device && running(o.link))
+            .map((o) => ({
+              device: o.device,
+              name: o.name || null,
+              state: o.link?.state ?? 'on',
+              host: o.own?.host ?? null,
+              lastSeenAt: now,
+            }));
+          return json(200, { whombats });
+        }
         /* The box's own address (4.3, own-address.md): its state, the switch, linking, its own passkeys. */
         case 'ownAddress.status':
         case 'ownAddress.reach.set': {
@@ -3496,10 +3513,11 @@ export async function createFakeWorld(): Promise<FakeWorld> {
       guard();
       return later(state.signedIn ? cloudSession() : null);
     },
-    async requestSignInLink(_email, next = '/appliances') {
+    async requestSignInLink(_email, next) {
       guard();
-      // Control's format: the token in the fragment (control src/auth/magic-link.ts); `next` only when safe.
-      state.lastLink = `/auth/verify#token=${hex(16)}&next=${encodeURIComponent(isSafeNext(next) ? next : '/appliances')}`;
+      // Control's format: the token in the fragment (control src/auth/magic-link.ts); `next` only when given and safe.
+      const nextPart = next && isSafeNext(next) ? `&next=${encodeURIComponent(next)}` : '';
+      state.lastLink = `/auth/verify#token=${hex(16)}${nextPart}`;
       save();
       await later(null);
     },

@@ -49,6 +49,7 @@ import {
   type ScreenSignInAsking,
   type ScreenSignInDeps,
   type ScreenSignInStep,
+  SIGN_IN_NEW_TEXT,
   type SignupInfo,
   screenSignInRequest,
   screenSignInStart,
@@ -63,6 +64,7 @@ import {
 import { type ApplianceSession, OperationError, sessionOps } from '@whombat/client/session';
 import { formatSignupCode, normaliseSignupCode, type SignupMode } from '@whombat/control-contracts';
 import { normalizeClaimSecret } from '@whombat/protocol/session';
+import { ArrowRight } from 'lucide-react';
 import {
   type FormEvent,
   type ReactNode,
@@ -141,6 +143,7 @@ export function SignInScreen({
   onWaitlist,
   passkey,
   onLookAround,
+  onAdd,
 }: {
   onSend: (email: string) => Promise<void>;
   /** A line under the form (`/signup` with an invite code: it is kept, AP-125). */
@@ -154,6 +157,8 @@ export function SignInScreen({
   passkey?: PasskeySignIn;
   /** “Look around without a Whombat”: the demo world (docs/app/decisions/look-around.md). */
   onLookAround?: () => void;
+  /** Someone new starts with the code on their Whombat's screen; the account is made on the way. */
+  onAdd?: () => void;
 }) {
   const gated = mode !== 'open';
   const [email, setEmail] = useState('');
@@ -275,6 +280,17 @@ export function SignInScreen({
         {passkey && <p className={styles.hint}>{PASSKEY_COPY.signInHint}</p>}
         {note && <p className={styles.hint}>{note}</p>}
       </form>
+      {onAdd && (
+        <>
+          <p className={styles.divider}>{SIGN_IN_NEW_TEXT.divider}</p>
+          <div className={styles.newRow}>
+            <span className={styles.newLine}>{SIGN_IN_NEW_TEXT.line}</span>
+            <Button variant="link" onClick={onAdd} iconEnd={<Icon icon={ArrowRight} size={15} />}>
+              {SIGN_IN_NEW_TEXT.add}
+            </Button>
+          </div>
+        </>
+      )}
       {onLookAround && (
         <div className={styles.actions}>
           <Button variant="link" onClick={onLookAround}>

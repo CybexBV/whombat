@@ -79,8 +79,8 @@ describe('the code a /link address carries', () => {
     expect(linkCodeOf('')).toBeNull();
   });
   it('keeps the code in the sign-in link’s next', () => {
-    expect(linkPagePath('KXQM-TRVW')).toBe('/link?code=KXQM-TRVW');
-    expect(linkPagePath(null)).toBe('/link');
+    expect(linkPagePath('KXQM-TRVW')).toBe('/add?code=KXQM-TRVW');
+    expect(linkPagePath(null)).toBe('/add');
   });
 });
 

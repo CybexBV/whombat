@@ -1,13 +1,15 @@
 /**
- * Whombat Link at the account site (link-account-site.md): the code as typed, `/link` from a code in the address to
- * the confirm, and Your Whombats with the plan's one button and each Whombat's Link.
+ * Whombat Link at the account site (link-account-site.md, account-home.md): the code as typed, `/add` from a code in
+ * the address to the confirm, the account with the plan's one button, and the home with each Whombat.
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
+  ADD_TEXT,
   type ControlApi,
   ControlError,
   type ControlSession,
+  HOME_TEXT,
   LINK_ADDRESS_POLL_EVERY_MS,
   LINK_CLAIM_URL_GRACE_MS,
   LINK_OPEN_FALLBACK_MS,
@@ -16,7 +18,8 @@ import {
   WHOMBAT_LINK_TEXT as T,
 } from '@whombat/client/managed';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LinkAccountScreen, LinkCodeFlow, typedLinkCode } from './LinkAccount';
+import { AccountScreen, HomeScreen } from './Home';
+import { LinkCodeFlow, typedLinkCode } from './LinkAccount';
 
 afterEach(() => window.history.replaceState(null, '', '/'));
 
@@ -72,7 +75,7 @@ describe('/link', () => {
     render(
       <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
     );
-    expect(await screen.findByRole('heading', { name: T.confirmTitle('Home') })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: ADD_TEXT.confirmName('Home') })).toBeTruthy();
     expect(screen.getByText(T.trial)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: T.confirm }));
     expect(await screen.findByRole('heading', { name: T.doneTitle('Home') })).toBeTruthy();
@@ -131,7 +134,7 @@ describe('/link', () => {
     render(
       <LinkCodeFlow control={control as unknown as ControlApi} initialCode="KXQM-TRVW" onAccount={vi.fn()} />,
     );
-    expect(await screen.findByRole('heading', { name: T.confirmTitle(T.yourWhombat) })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: ADD_TEXT.confirmTitle })).toBeTruthy();
     // Not named yet: the code on its screen says which Whombat this is.
     expect(screen.getByText('KXQM-TRVW', { exact: false })).toBeTruthy();
     // A control before 4.6 (no `discount`): the month only.
@@ -320,10 +323,20 @@ describe('Your Whombats', () => {
     checkout: null,
     onRetry: vi.fn(),
     onPlan: vi.fn(async () => {}),
-    onRemove: vi.fn(async () => null),
-    onLink: vi.fn(),
+    onHome: vi.fn(),
+    onAccount: vi.fn(),
+    onPhone: vi.fn(),
     onSignOut: vi.fn(),
     onDeleteAccount: vi.fn(),
+  };
+  const home = {
+    session,
+    onRetry: vi.fn(),
+    onRemove: vi.fn(async () => null),
+    onAdd: vi.fn(),
+    onAccount: vi.fn(),
+    onPhone: vi.fn(),
+    onSignOut: vi.fn(),
     lastOpened: null,
     onOpen: vi.fn(),
   };
@@ -348,19 +361,15 @@ describe('Your Whombats', () => {
   afterEach(() => document.removeEventListener('click', stay, true));
 
   it('the free month: its line, Add a card, the Whombat with its address', () => {
-    render(<LinkAccountScreen {...props} account={account()} />);
+    render(<AccountScreen {...props} account={account()} />);
     const plan = screen.getByRole('list', { name: T.plan });
     expect(within(plan).getByText(/^Free month · until /)).toBeTruthy();
     expect(within(plan).getByRole('button', { name: T.addCard })).toBeTruthy();
-    const boxes = screen.getByRole('list', { name: T.accountTitle });
-    expect(within(boxes).getByText(/calm-otter-reef\.box\.whombat\.app/)).toBeTruthy();
-    // Without an organization this site opens, no way to the old list.
-    expect(screen.queryByRole('button', { name: T.openHere })).toBeNull();
   });
 
   it('back from Checkout, says “subscribed” only once a card is on file, then offers Manage subscription', () => {
     const { unmount } = render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         checkout="done"
         account={account({ state: 'trialing', cardOnFile: false })}
@@ -370,34 +379,31 @@ describe('Your Whombats', () => {
     expect(screen.getByRole('button', { name: T.addCard })).toBeTruthy();
     unmount();
     render(
-      <LinkAccountScreen
-        {...props}
-        checkout="done"
-        account={account({ state: 'trialing', cardOnFile: true })}
-      />,
+      <AccountScreen {...props} checkout="done" account={account({ state: 'trialing', cardOnFile: true })} />,
     );
     expect(screen.getByTestId('link-notice').textContent).toBe(T.subscribed);
     expect(screen.getByRole('button', { name: T.manage })).toBeTruthy();
   });
 
   it('Included has no button; grace says until when and Tailscale', () => {
-    const { unmount } = render(<LinkAccountScreen {...props} account={account({ state: 'comp' })} />);
+    const { unmount } = render(<AccountScreen {...props} account={account({ state: 'comp' })} />);
     const plan = screen.getByRole('list', { name: T.plan });
     expect(within(plan).queryByRole('button')).toBeNull();
     expect(within(plan).getByText(T.planIncluded, { exact: false })).toBeTruthy();
     unmount();
     const ending = account({ state: 'cancelled' });
     ending.boxes = ending.boxes.map((b) => ({ ...b, state: 'grace', graceEndsAt: now + 5 * 86_400 }));
-    render(<LinkAccountScreen {...props} account={ending} />);
+    render(<AccountScreen {...props} account={ending} />);
     expect(screen.getByTestId('link-notice').textContent).toContain('Tailscale');
     expect(screen.getByRole('button', { name: T.subscribeAgain })).toBeTruthy();
   });
 
-  it('Remove asks first', async () => {
+  it('Remove asks first, behind ⋯', async () => {
     const user = userEvent.setup();
     const onRemove = vi.fn(async () => null);
-    render(<LinkAccountScreen {...props} onRemove={onRemove} account={account({ state: 'active' })} />);
-    await user.click(screen.getByRole('button', { name: T.removeLabel('Home') }));
+    render(<HomeScreen {...home} onRemove={onRemove} account={account({ state: 'active' })} />);
+    await user.click(screen.getByRole('button', { name: HOME_TEXT.more('Home') }));
+    await user.click(screen.getByRole('button', { name: HOME_TEXT.remove }));
     expect(onRemove).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: T.removeIt }));
     expect(onRemove).toHaveBeenCalledTimes(1);
@@ -407,36 +413,103 @@ describe('Your Whombats', () => {
     const user = userEvent.setup();
     document.addEventListener('click', stay, true);
     const onOpen = vi.fn();
-    render(<LinkAccountScreen {...props} onOpen={onOpen} account={account({ state: 'active' })} />);
-    const open = screen.getByRole('link', { name: T.openName('Home') });
+    render(<HomeScreen {...home} onOpen={onOpen} account={account({ state: 'active' })} />);
+    expect(screen.getByRole('heading', { name: HOME_TEXT.title(1) })).toBeTruthy();
+    const open = screen.getByRole('link', { name: HOME_TEXT.openName('Home') });
     expect(open.getAttribute('href')).toBe('https://calm-otter-reef.box.whombat.app/');
     expect(open.getAttribute('target')).toBeNull();
-    const boxes = screen.getByRole('list', { name: T.accountTitle });
-    expect(within(boxes).queryByRole('link')).toBeNull();
+    expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1);
+    expect(screen.getByText('calm-otter-reef.box.whombat.app')).toBeTruthy();
     await user.click(open);
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ device: 'dev_7KQ2M4XD' }));
   });
 
   it('more Whombats: each with Open where its address works, the one opened last first', () => {
-    render(<LinkAccountScreen {...props} lastOpened="dev_9QW3R5YZ" account={two({ state: 'active' })} />);
-    expect(screen.queryByTestId('link-open-only')).toBeNull();
-    const boxes = screen.getByRole('list', { name: T.accountTitle });
+    render(<HomeScreen {...home} lastOpened="dev_9QW3R5YZ" account={two({ state: 'active', boxes: 2 })} />);
+    expect(screen.queryByTestId('home-only')).toBeNull();
+    const boxes = screen.getByRole('list', { name: HOME_TEXT.title(3) });
     const names = within(boxes)
       .getAllByRole('listitem')
-      .map((li) => ['Office', 'Home', 'Cabin'].find((name) => li.textContent?.startsWith(name)));
-    expect(names).toEqual(['Office', 'Home', 'Cabin']);
+      .map((li) => li.getAttribute('data-whombat'));
+    expect(names).toEqual(['dev_9QW3R5YZ', 'dev_7KQ2M4XD', 'dev_2MN4P6RT']);
+    expect(within(boxes).getByText(HOME_TEXT.openedLast)).toBeTruthy();
     expect(
       within(boxes)
-        .getByRole('link', { name: T.openName('Office') })
+        .getByRole('link', { name: HOME_TEXT.openName('Office') })
         .getAttribute('href'),
     ).toBe('https://quiet-heron-dune.box.whombat.app/');
-    expect(within(boxes).queryByRole('link', { name: T.openName('Cabin') })).toBeNull();
+    expect(within(boxes).queryByRole('link', { name: HOME_TEXT.openName('Cabin') })).toBeNull();
+    // The plan in one line at the foot, with how many Whombats.
+    expect(screen.getByText(/^Whombat Link · .+ · 2 Whombats$/)).toBeTruthy();
+  });
+
+  it('a Whombat control hasn’t heard from for hours says since when', () => {
+    const quiet = account({ state: 'active' });
+    quiet.boxes = quiet.boxes.map((b) => ({ ...b, lastSeenAt: now - 5 * 3600 }));
+    render(<HomeScreen {...home} account={quiet} />);
+    expect(screen.getByText(/^Not heard from since 5 hours ago$/)).toBeTruthy();
+    // It may be back: Open stays.
+    expect(screen.getByRole('link', { name: HOME_TEXT.openName('Home') })).toBeTruthy();
+  });
+
+  it('no Whombat yet: the three steps and the code right here', async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn();
+    const none = account({ state: 'none', boxes: 0, trialAvailable: true });
+    none.boxes = [];
+    render(<HomeScreen {...home} onAdd={onAdd} account={none} />);
+    expect(screen.getByRole('heading', { name: HOME_TEXT.emptyTitle })).toBeTruthy();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    await user.type(screen.getByLabelText(T.code), 'kqxmtrvw');
+    await user.click(screen.getByRole('button', { name: T.find }));
+    expect(onAdd).toHaveBeenCalledWith('KQXM-TRVW');
+  });
+
+  it('an older organization’s Whombat opens on this site; one linked at its own address opens nowhere here', async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const none = account({ state: 'none', boxes: 0 });
+    none.boxes = [];
+    const old = {
+      device: 'dev_OLD1',
+      orgId: 'org_old',
+      name: 'Workshop',
+      state: 'claimed' as const,
+      contentPeerId: '12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH',
+      lastSeenAt: now,
+      revocationsPending: 0,
+    };
+    render(
+      <HomeScreen
+        {...home}
+        onOpen={onOpen}
+        account={none}
+        hosted={[old, { ...old, device: 'dev_OLD2', name: 'Barn', ownAddress: true }]}
+      />,
+    );
+    expect(screen.getByText(HOME_TEXT.elsewhere)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: HOME_TEXT.openName('Barn') })).toBeNull();
+    await user.click(screen.getByRole('button', { name: HOME_TEXT.openName('Workshop') }));
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ device: 'dev_OLD1' }));
+  });
+
+  it('the account menu: the account, the phone app and signing out', async () => {
+    const user = userEvent.setup();
+    const onSignOut = vi.fn();
+    render(<HomeScreen {...home} onSignOut={onSignOut} account={account()} />);
+    const button = screen.getByRole('button', { name: HOME_TEXT.menu.label(session.account.email) });
+    await user.click(button);
+    const menu = document.getElementById(button.getAttribute('aria-controls') ?? '') as HTMLElement;
+    expect(within(menu).getByRole('button', { name: HOME_TEXT.menu.account })).toBeTruthy();
+    expect(within(menu).getByRole('button', { name: HOME_TEXT.menu.phone })).toBeTruthy();
+    await user.click(within(menu).getByRole('button', { name: HOME_TEXT.menu.signOut }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('during free time the plan says until when, and the price as what follows (#15)', () => {
     const grantEnd = now + 180 * 86_400;
     const { unmount } = render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         account={account({
           state: 'trialing',
@@ -453,12 +526,10 @@ describe('Your Whombats', () => {
     expect(screen.getByTestId('link-discount').textContent).toBe(T.fromCode('FRIENDS'));
     expect(screen.getByTestId('link-price').textContent).toMatch(/^Then €25 a year for each Whombat from /);
     expect(within(plan).queryByText(T.paidYear)).toBeNull();
-    const boxes = screen.getByRole('list', { name: T.accountTitle });
-    expect(within(boxes).getByText(/^Free until /)).toBeTruthy();
     unmount();
 
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         account={account({
           state: 'active',
@@ -478,23 +549,20 @@ describe('Your Whombats', () => {
     // Before CL-218 the trial is stretched to the grant's end (the same second); from it `trialEndsAt` is the month's.
     for (const trialEndsAt of [grantEnd, now + 20 * 86_400]) {
       const { unmount } = render(
-        <LinkAccountScreen
+        <AccountScreen
           {...props}
           account={account({ state: 'trialing', trialEndsAt, currentPeriodEnd: grantEnd, discount: grant })}
         />,
       );
       expect(screen.queryByText(/Free month/)).toBeNull();
       expect(within(screen.getByRole('list', { name: T.plan })).getByText(/^Free until /)).toBeTruthy();
-      expect(
-        within(screen.getByRole('list', { name: T.accountTitle })).getByText(/^Free until /),
-      ).toBeTruthy();
       unmount();
     }
   });
 
   it('paid, the plan says what it pays; part off says so beside it', () => {
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         account={account({
           state: 'active',
@@ -517,7 +585,7 @@ describe('Your Whombats', () => {
     const user = userEvent.setup();
     const onPlan = vi.fn(async (_choice: unknown) => {});
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'none', trialAvailable: false, discount: null })}
@@ -548,7 +616,7 @@ describe('Your Whombats', () => {
     const onPlan = vi.fn(async (_choice: unknown) => {});
     const grant = { percentOff: 100, endsAt: now + 120 * 86_400, code: null };
     const { unmount } = render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'trialing', trialEndsAt: null, cardOnFile: false, discount: grant })}
@@ -561,7 +629,7 @@ describe('Your Whombats', () => {
     unmount();
 
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'active', cardOnFile: true, interval: 'year', discount: null })}
@@ -577,7 +645,7 @@ describe('Your Whombats', () => {
     const onPlan = vi.fn(async (_choice: unknown) => {});
     onPlan.mockRejectedValueOnce(new ControlError('no_subscription', 'No subscription.'));
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'active', cardOnFile: true, discount: null })}
@@ -596,7 +664,7 @@ describe('Your Whombats', () => {
     const onPlan = vi.fn(async (_choice: unknown) => {});
     onPlan.mockRejectedValueOnce(new ControlError('terms_required', 'Terms.'));
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'none', trialAvailable: false, discount: null })}
@@ -621,7 +689,7 @@ describe('Your Whombats', () => {
     const user = userEvent.setup();
     const onPlan = vi.fn(async (_choice: unknown) => {});
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         account={account({ state: 'none', trialAvailable: false, discount: null })}
@@ -644,7 +712,7 @@ describe('Your Whombats', () => {
 
   it('no Whombat linked: no Subscribe, one line to link one (the free month starts then)', () => {
     const { unmount } = render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         account={account({ state: 'none', boxes: 0, trialAvailable: true, discount: null })}
       />,
@@ -654,7 +722,7 @@ describe('Your Whombats', () => {
     expect(screen.getByText(T.needsBox)).toBeTruthy();
     unmount();
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         account={account({ state: 'cancelled', boxes: 0, trialAvailable: false, discount: null })}
       />,
@@ -669,7 +737,7 @@ describe('Your Whombats', () => {
     const busy = 'A payment page is already open for your Whombat Link until 14:05 UTC. Finish it there.';
     onPlan.mockRejectedValueOnce(new ControlError('checkout_busy', busy));
     render(
-      <LinkAccountScreen
+      <AccountScreen
         {...props}
         onPlan={onPlan}
         openPage="year"
@@ -691,7 +759,7 @@ describe('Your Whombats', () => {
     const onPlan = vi.fn(async (_choice: unknown) => {});
     for (const boxes of [1, 0]) {
       const { unmount } = render(
-        <LinkAccountScreen
+        <AccountScreen
           {...props}
           onPlan={onPlan}
           account={account({
@@ -716,7 +784,7 @@ describe('Your Whombats', () => {
   });
 
   it('an older control (no discount said): the month only, no choice', () => {
-    render(<LinkAccountScreen {...props} account={account({ state: 'none', trialAvailable: false })} />);
+    render(<AccountScreen {...props} account={account({ state: 'none', trialAvailable: false })} />);
     expect(screen.getByText(T.priceMonth)).toBeTruthy();
     expect(screen.queryByRole('radiogroup')).toBeNull();
   });

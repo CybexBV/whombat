@@ -20,8 +20,8 @@ export function readVerifyFragment(loc: { pathname: string; hash: string }): Mag
   const token = params.get('token');
   if (!token) return null;
   const next = params.get('next');
-  // Only paths of this app (the contract's same-origin check, CT-48).
-  return { token, next: next && isSafeNext(next) ? next : '/appliances' };
+  // Only paths of this app (the contract's same-origin check, CT-48); else the home, the person's Whombats.
+  return { token, next: next && isSafeNext(next) ? next : '/' };
 }
 
 /**

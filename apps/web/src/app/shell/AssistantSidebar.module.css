@@ -164,6 +164,27 @@
   color: var(--ink2);
 }
 
+/* On a box's own page the menu's Whombats and actions are links to their own addresses and the account site. */
+a.whombat,
+a.whombatAction {
+  text-decoration: none;
+}
+
+.whombatOut {
+  flex: none;
+  margin-left: auto;
+  color: var(--mut);
+}
+
+/* A Whombat that doesn't open now (getting its address, Link off or ended): shown, not a link. */
+.whombatOff {
+  cursor: default;
+}
+
+.whombatOff:hover {
+  background: none;
+}
+
 .whombatAction {
   color: var(--ink2);
   font: 400 14.5px var(--font-sans);

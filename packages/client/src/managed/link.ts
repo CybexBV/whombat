@@ -61,8 +61,8 @@ export const WHOMBAT_LINK_TEXT = {
    * No Whombat linked: nothing to pay for yet (control answers `link_no_boxes`). The free month starts when the first
    * Whombat is linked, never with Subscribe.
    */
-  needsBox: 'Link a Whombat to start your free month.',
-  needsBoxAgain: 'Link a Whombat first, then subscribe.',
+  needsBox: 'Add a Whombat to start your free month.',
+  needsBoxAgain: 'Add a Whombat first, then subscribe.',
   /** A payment page this browser opened is still open: the same interval answers it again. */
   backToPage: (price: string) => `Back to the payment page (${price})`,
   /** The Subscription Terms ticked before a Whombat joins (`link.confirm`). */
@@ -70,7 +70,7 @@ export const WHOMBAT_LINK_TEXT = {
   termsLink: 'Whombat Subscription Terms',
 
   /* `/link` */
-  linkTitle: 'Link your Whombat',
+  linkTitle: 'Add your Whombat',
   linkSub: 'Enter the code your Whombat shows on its screen.',
   signedOutSub:
     'Enter the code your Whombat shows on its screen and your email address. We email you a link to sign in, or to make your account.',
@@ -83,8 +83,7 @@ export const WHOMBAT_LINK_TEXT = {
   again: 'Use another address',
   find: 'Continue',
   finding: 'Checking…',
-  confirmTitle: (name: string) => `Add ${name} to Whombat Link?`,
-  alreadyTitle: (name: string) => `${name} is already linked`,
+  alreadyTitle: (name: string) => `${name} is already in your account`,
   yourWhombat: 'your Whombat',
   yourWhombatTitle: 'Your Whombat',
   /**
@@ -95,10 +94,10 @@ export const WHOMBAT_LINK_TEXT = {
   what: 'You can open it from anywhere, get its notifications on your phone, and it gets its own web address.',
   joins: 'It joins your subscription.',
   needsPlan: 'It turns on once you subscribe.',
-  confirm: 'Link it',
-  confirming: 'Linking…',
+  confirm: 'Add it',
+  confirming: 'Adding…',
   otherCode: 'Use another code',
-  doneTitle: (name: string) => `${name} is linked`,
+  doneTitle: (name: string) => `${name} is added`,
   doneNext: 'It gets its own address in a moment. Its screen then shows where to open it.',
   doneNeedsPlan: 'It turns on once you subscribe to Whombat Link.',
   /**
@@ -111,7 +110,7 @@ export const WHOMBAT_LINK_TEXT = {
   addressSlow: 'This is taking longer than usual. Its screen shows where to open it once it’s ready.',
   /** The wait, step by step: linked, its web address, its page answering. */
   progress: {
-    linked: 'Linked to your account',
+    linked: 'Added to your account',
     address: 'Getting its web address',
     page: 'Waiting for its page to answer',
     open: 'Opening its page',
@@ -143,8 +142,7 @@ export const WHOMBAT_LINK_TEXT = {
   manage: 'Manage subscription',
   subscribeAgain: 'Subscribe again',
   opening: 'Opening…',
-  noBoxes:
-    'No Whombats linked yet. On your Whombat choose Whombat Link: its screen then shows a code to enter here.',
+  noBoxes: 'No Whombats yet. Your Whombat’s screen shows a code: add it here with that code.',
   boxOn: 'On',
   boxIncluded: 'On · Included',
   boxTrial: (day: string) => `Free month · until ${day}`,
@@ -174,7 +172,7 @@ export const WHOMBAT_LINK_TEXT = {
   checkAgain: 'Check again',
   loadFailed: 'Couldn’t load your Whombats. Check your connection and try again.',
   retry: 'Try again',
-  linkEntry: 'Link a Whombat',
+  linkEntry: 'Add a Whombat',
   openHere: 'Open a Whombat here',
   /** The older Whombats list's way to this page. */
   entry: 'Whombat Link',
@@ -191,7 +189,7 @@ export const WHOMBAT_LINK_TEXT = {
     terms_required: 'Agree to the Whombat Subscription Terms first.',
     promotion_code_invalid: 'That code doesn’t work. Check it, or leave it empty.',
     checkout_busy: 'Try again in a moment.',
-    link_no_boxes: 'Link a Whombat first, then subscribe.',
+    link_no_boxes: 'Add a Whombat first, then subscribe.',
     link_country:
       'Whombat Link is only sold in EU countries for now. Your Whombat keeps working at home without it.',
     promotion_code_on_payment_page: 'Enter the code on the payment page: it has a field for it.',
@@ -227,9 +225,12 @@ export function linkCodeOf(search: string): string | null {
   return raw ? normalizeLinkCode(raw) : null;
 }
 
-/** The `/link` path that keeps a code (the sign-in link's `next`). */
+/**
+ * The page that adds a Whombat, keeping a code (the sign-in link's `next`): `/add`. The box's screen still shows `/link`,
+ * which opens the same page.
+ */
 export function linkPagePath(code: string | null): string {
-  return code ? `/link?code=${code}` : '/link';
+  return code ? `/add?code=${code}` : '/add';
 }
 
 const day = (s: number, timeZone?: string) => licenceDay(new Date(s * 1000).toISOString(), timeZone);

@@ -37,25 +37,25 @@ for (const size of ['desktop', 'phone'] as const)
 
       const home = await fake<string>(page, 'linkCode', 'Home');
       await page.goto(`/link?code=${home}`);
-      await heading('Link your Whombat');
+      await heading('Add your Whombat');
       await page.getByLabel('Email').fill('mara@burrowhq.example');
       await shot('link-signed-out');
       await page.getByRole('button', { name: 'Email me a link' }).click();
       await heading('Check your email');
       await page.goto(await fake<string>(page, 'lastLink'));
-      await heading('Add Home to Whombat Link?');
+      await heading('Add Home?');
       await shot('link-confirm-trial');
       await agree(page);
-      await page.getByRole('button', { name: 'Link it' }).click();
-      await heading('Home is linked');
+      await page.getByRole('button', { name: 'Add it' }).click();
+      await heading('Home is added');
       await shot('link-done');
-      // One Whombat: Your Whombats leads with one big Open.
+      // One Whombat: the home leads with one big Open.
       await page.getByRole('button', { name: 'Your Whombats' }).click();
-      await expect(page.getByTestId('link-open-only')).toBeVisible();
+      await expect(page.getByTestId('home-only')).toBeVisible();
       await shot('account-one-open');
 
-      await page.goto('/link');
-      await heading('Link your Whombat');
+      await page.goto('/add');
+      await heading('Add a Whombat');
       await page.getByLabel('Code from its screen').fill('ABCD-EFGH');
       await page.getByRole('button', { name: 'Continue' }).click();
       await expect(page.getByText('That code doesn’t work.', { exact: false })).toBeVisible();
@@ -63,11 +63,14 @@ for (const size of ['desktop', 'phone'] as const)
 
       await page.goto(`/link?code=${await fake<string>(page, 'linkCode', 'Office')}`);
       await agree(page);
-      await page.getByRole('button', { name: 'Link it' }).click();
-      await heading('Office is linked');
+      await page.getByRole('button', { name: 'Add it' }).click();
+      await heading('Office is added');
       await page.getByRole('button', { name: 'Your Whombats' }).click();
       await heading('Your Whombats');
       await expect(page.locator('[data-link-state="on"]')).toHaveCount(2);
+      await shot('home-two');
+      await page.goto('/account');
+      await heading('Account');
       await shot('account-trial');
 
       // The free month's Add a card: busy, then an account without accepted terms.
@@ -86,11 +89,12 @@ for (const size of ['desktop', 'phone'] as const)
       await page.getByRole('button', { name: 'Add a card' }).click();
       await expect(page.getByText('Agree to the Whombat Subscription Terms first.')).toBeVisible();
       await shot('account-terms-required');
-      await page.reload();
-
-      await page.getByRole('button', { name: 'Remove Office from Whombat Link' }).click();
-      await shot('account-remove-confirm');
+      await page.goto('/');
+      await page.getByRole('button', { name: 'More for Office' }).click();
+      await page.getByRole('button', { name: 'Remove from Whombat Link' }).click();
+      await shot('home-remove-confirm');
       await page.getByRole('button', { name: 'Cancel' }).click();
+      await page.goto('/account');
 
       const boxes = (await fake<{ link: { boxes: { device: string }[] } }>(page, 'state')).link.boxes;
       const now = Math.floor(Date.now() / 1000);

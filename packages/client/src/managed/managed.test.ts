@@ -47,11 +47,11 @@ describe('magic links opened in the app', () => {
     ).toEqual({ token: 'abcDEF_123-x', next: '/appliances' });
     expect(parseMagicLinkUrl('http://localhost:4830/auth/verify#token=t1', ui)).toEqual({
       token: 't1',
-      next: '/appliances',
+      next: '/',
     });
     expect(parseMagicLinkUrl('whombat://auth/verify#token=t2', ui)).toEqual({
       token: 't2',
-      next: '/appliances',
+      next: '/',
     });
   });
   it('refuses other hosts, other paths and query tokens', () => {
@@ -59,15 +59,13 @@ describe('magic links opened in the app', () => {
     expect(parseMagicLinkUrl('https://app.whombat.com/appliances#token=t', ui)).toBeNull();
     expect(parseMagicLinkUrl('https://app.whombat.com/auth/verify?token=t', ui)).toBeNull();
     expect(parseMagicLinkUrl('whombat://approvals/12', ui)).toBeNull();
-    expect(readVerifyFragment({ pathname: '/auth/verify', hash: '#token=t&next=//evil' })?.next).toBe(
-      '/appliances',
-    );
+    expect(readVerifyFragment({ pathname: '/auth/verify', hash: '#token=t&next=//evil' })?.next).toBe('/');
     // The contract's same-origin check (CT-48): encoded slashes and backslashes are refused too.
     for (const next of ['/%2fevil.example', '/\\evil', '/a\\b', 'https://evil', '/a b'])
       expect(
         readVerifyFragment({ pathname: '/auth/verify', hash: `#token=t&next=${encodeURIComponent(next)}` })
           ?.next,
-      ).toBe('/appliances');
+      ).toBe('/');
     expect(
       readVerifyFragment({ pathname: '/auth/verify', hash: '#token=t&next=%2Fappliances%2Fdev_1%2Fpair' })
         ?.next,

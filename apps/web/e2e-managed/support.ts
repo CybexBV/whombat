@@ -62,10 +62,9 @@ export async function signIn(page: Page, { nearby = ['fresh'] }: { nearby?: Box[
   expect(link).toMatch(/^\/auth\/verify#token=/);
   await page.goto(link);
   const list = page.getByRole('heading', { name: 'Pick a Whombat' });
-  const account = page.getByRole('heading', { name: 'Your Whombats' });
-  await expect(list.or(account)).toBeVisible();
-  // From the start page a sign-in lands on Your Whombats; the hosted list is one click on.
-  if (await account.isVisible()) await page.getByRole('button', { name: 'Open a Whombat here' }).click();
+  // A sign-in lands on the home; the organization's own list stays at /appliances.
+  await expect(page.getByRole('heading', { name: /^(Your Whombats?|Add your Whombat)$/ })).toBeVisible();
+  await page.goto('/appliances');
   await expect(list).toBeVisible();
   // The list is shown once the look is done.
   await expect(
