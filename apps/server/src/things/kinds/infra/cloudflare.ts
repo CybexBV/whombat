@@ -5,7 +5,9 @@
  * Read with an API token only, through API v4: `/zones`, `/accounts`, each account's tunnels and a healthy tunnel's
  * connections, each site's certificate packs (kept an hour) and one GraphQL query for the traffic (kept 5 minutes,
  * `httpRequests1hGroups`, else `httpRequestsAdaptiveGroups` without threats). What the token may not read is left out.
- * A “Sign in with Cloudflare” (MCP) connection reads nothing here: a calm line says an API token shows it.
+ * A “Sign in with Cloudflare” (MCP) connection reads nothing here: its server's only tool that reads is `whoami` (who
+ * signed in); `search`, `execute` and `docs` aren't marked read-only (cloudflare/mcp). A line under the name says an
+ * API token shows it, and a hint in Worth a look links Settings once someone turns it on.
  */
 import type {
   ThingLine,
@@ -1092,8 +1094,15 @@ export function cloudflareCardView(input: CfInput): KindView {
 /** A “Sign in with Cloudflare” connection: its tools are the agent's; the page needs an API token (SD-S16). */
 export const viaToken = (row: Pick<CatalogConnectionRow, 'signIn'>) => row.signIn === 'token';
 
+/**
+ * What the page says under the name when signed in with Cloudflare: the hint below starts off, as advice about settings
+ * does, so without this line the page wouldn't say why it shows nothing of Cloudflare's own.
+ */
+export const TOKEN_HINT = 'An API token shows its traffic and tunnels here.';
+
 export function signInView(): KindView {
   return {
+    problem: TOKEN_HINT,
     machine: 'after',
     charts: [],
     notices: [
