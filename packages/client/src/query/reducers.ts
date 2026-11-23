@@ -12,6 +12,7 @@ import {
   type AuditPage,
   type CanvasComment,
   type CanvasDetail,
+  type FindMyWatchView,
   type Grant,
   groupCommentThreads,
   INBOX_SECTIONS,
@@ -277,6 +278,11 @@ export const cardPatchers = {
       c.kind === 'schedule' && c.scheduleId === schedule.id && c.schedule
         ? { ...c, schedule: { ...schedule, prompt: schedule.prompt ?? c.schedule.prompt } }
         : c,
+  /** A Find My watch as it is now on its card (findmy-watch.md): cancelled from its card, before `message.updated`. */
+  findMyWatch:
+    (watch: FindMyWatchView) =>
+    (c: MessageCard): MessageCard =>
+      c.kind === 'findmy_watch' && c.watchId === watch.id ? { ...c, watch } : c,
 };
 
 /** Map every message inside a messages container (page, infinite pages, thread, single message). */

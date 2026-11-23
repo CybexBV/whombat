@@ -780,6 +780,8 @@ export interface AssistantFixtureOptions {
   chat?: boolean;
   /** Tonight's server work in Chat (`chatChannel.ts`, AP-4306); default `EXPO_PUBLIC_WHOMBAT_TASKS=1`. */
   tasks?: boolean;
+  /** Two one-time Find My watches in Chat (`chatChannel.ts`, findmy-watch.md); default `EXPO_PUBLIC_WHOMBAT_WATCHES=1`. */
+  watches?: boolean;
   /** The sign-in cards in Chat (`chatChannel.ts`, AP-6680); default `EXPO_PUBLIC_WHOMBAT_SIGNIN=1`. */
   signIns?: boolean;
   /** Councils in Chat (`council.ts`, council.md); default `EXPO_PUBLIC_WHOMBAT_COUNCIL=1`. */
@@ -1048,6 +1050,7 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
           setTimer,
           replyDelayMs,
           tasks: options.tasks ?? process.env.EXPO_PUBLIC_WHOMBAT_TASKS === '1',
+          watches: options.watches ?? process.env.EXPO_PUBLIC_WHOMBAT_WATCHES === '1',
           signIns: options.signIns ?? process.env.EXPO_PUBLIC_WHOMBAT_SIGNIN === '1',
           councils: options.councils ?? process.env.EXPO_PUBLIC_WHOMBAT_COUNCIL === '1',
           code: options.code ?? ['1', 'jobs'].includes(process.env.EXPO_PUBLIC_WHOMBAT_CODE ?? ''),

@@ -9,6 +9,8 @@ import type {
   DeployCard,
   DeviceSkillCard,
   FeatureRequestView,
+  FindMyWatchStatus,
+  FindMyWatchView,
   MessageCard,
   Plan,
   ReportCard,
@@ -27,6 +29,7 @@ import {
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_TYPE_LABELS,
   featureRequestOutcome,
+  findMyWatchCardLines,
   formatTaskDuration,
   planProgress,
   reportCardState,
@@ -128,6 +131,9 @@ export function cardDisplay(card: MessageCard): CardDisplay {
       // A thing's plan (handle-it.md): a card while it waits, is taken or says what was done; one line once no longer
       // needed.
       return lookPlanCardView(card.plan)?.state === 'gone' || !card.plan ? 'line' : 'full';
+    case 'findmy_watch':
+      // A Find My watch is a card with Cancel while it watches, one line once it ended (findmy-watch.md).
+      return card.watch?.status === 'watching' ? 'full' : 'line';
     default:
       return 'full';
   }
@@ -249,6 +255,37 @@ export function turnFailedLine(card: Pick<TurnFailedCard, 'retriedAt'>, timeZone
     lead: 'Turn failed',
     detail: card.retriedAt ? `Tried again at ${formatClock(card.retriedAt, timeZone)}` : null,
     tone: 'mut',
+  };
+}
+
+/* A one-time Find My watch ------------------------------------------------------------------------------------- */
+
+/** A watch's dot: watching live, seen to happen ok, its Find My gone warn, stopped by someone or by time quiet. */
+export const FIND_MY_WATCH_TONES = {
+  watching: 'live',
+  happened: 'ok',
+  cancelled: 'mut',
+  expired: 'mut',
+  stopped: 'warn',
+} as const satisfies Record<FindMyWatchStatus, SettledLine['tone']>;
+
+/** The watch card's few words of its own: its button, and why a Cancel didn't go through (the rest is core's). */
+export const FIND_MY_WATCH_WORDS = {
+  cancel: 'Cancel',
+  failed: 'That didn’t work. Try again in a moment.',
+} as const;
+
+/**
+ * An ended watch's one line, in core's words (`findMyWatchCardLines`) split at its last ` · ` the way a task's line
+ * is, so what happened is the lead and when it happened the detail: “Noor Visser left Keizersgracht” · “14:05”.
+ */
+export function findMyWatchLine(watch: FindMyWatchView, timeZone: string, nowMs: number): SettledLine {
+  const { title } = findMyWatchCardLines(watch, timeZone, nowMs);
+  const at = title.lastIndexOf(' · ');
+  return {
+    lead: at < 0 ? title : title.slice(0, at),
+    detail: at < 0 ? null : title.slice(at + 3),
+    tone: FIND_MY_WATCH_TONES[watch.status],
   };
 }
 

@@ -12,6 +12,8 @@ import {
   decidedLine,
   deploySettledLine,
   deviceSkillLine,
+  FIND_MY_WATCH_WORDS,
+  findMyWatchLine,
   namesWithAsker,
   nextAt,
   planLine,
@@ -33,6 +35,7 @@ import {
   useBootstrapSelect,
   useChangeWindow,
   useDecideApproval,
+  useFindMyWatchCancel,
   useRetryTurn,
   useScheduleAction,
   useUndoApproval,
@@ -44,6 +47,8 @@ import {
   type Bootstrap,
   canRetryTurn,
   type DeployCard,
+  type FindMyWatchCard as FindMyWatchCardData,
+  findMyWatchCardLines,
   type Message,
   type MessageCard as MessageCardData,
   type ReportCard as ReportCardData,
@@ -79,11 +84,12 @@ import { AssessmentCard } from './AssessmentCard';
 import assessmentStyles from './AssessmentCard.module.css';
 import { AutomationPlanCardContainer } from './AutomationPlanCardContainer';
 import { CouncilCard } from './CouncilCard';
-import { CardTimeZoneContext, useCardLook } from './cardLook';
+import { CardTimeZoneContext, useCardLook, useCardStill, useCardTimeZone } from './cardLook';
 import { DelegationCard } from './DelegationCard';
 import { DeviceSkillCardContainer } from './DeviceSkillCardContainer';
 import { DigestCard } from './DigestCard';
 import { FeatureRequestCardContainer } from './FeatureRequestCardContainer';
+import { FindMyWatchCard } from './FindMyWatchCard';
 import { GuideCardContainer } from './GuideCardContainer';
 import { AnswerCard, CommitsCard, PillCard } from './ListCards';
 import { LookPlanCardContainer } from './LookPlanCard';
@@ -384,6 +390,9 @@ function MessageCardBody({
             lead={(authorId ? principals(authorId) : theAgentOf(boot?.principals))?.name ?? null}
           />
         );
+      case 'findmy_watch':
+        // A one-time Find My watch with Cancel while it watches (findmy-watch.md); once ended, its line.
+        return <FindMyWatchCardContainer burrow={burrow} card={card} />;
       default:
         // A card kind this client doesn't know yet: the message's own text still shows (FB-16).
         return null;
@@ -539,6 +548,17 @@ function SettledCardLine({
           {opened}
         </SettledLine>
       );
+    case 'findmy_watch':
+      // An ended watch is one line and nothing to open; a watch nobody can read any more leaves the message's words.
+      return card.watch ? (
+        <SettledLine
+          line={findMyWatchLine(card.watch, timeZone, Date.now())}
+          label={findMyWatchCardLines(card.watch, timeZone, Date.now()).title}
+          card="findmy_watch"
+          size={size}
+          id={anchorId}
+        />
+      ) : null;
     case 'turn_failed': {
       const agent = name(card.agentId)?.name ?? 'The agent';
       return (
@@ -771,6 +791,40 @@ function ScheduleCardContainer({
       onCancel={cancel.onCancel}
       busy={cancel.busy}
       problem={cancel.problem}
+    />
+  );
+}
+
+/**
+ * A Find My watch while it watches, with Cancel (`connections.findMyWatchCancel`): the answer turns it into its line at
+ * once. A card shown as it was earlier has no Cancel.
+ */
+function FindMyWatchCardContainer({ burrow, card }: { burrow: string; card: FindMyWatchCardData }) {
+  const timeZone = useCardTimeZone();
+  const still = useCardStill();
+  const cancel = useFindMyWatchCancel();
+  const [problem, setProblem] = useState<string | null>(null);
+  const watch = card.watch;
+  if (!watch) return null;
+  const onCancel = async () => {
+    if (cancel.isPending) return;
+    setProblem(null);
+    try {
+      const result = await cancel.mutateAsync({ params: { burrow, watchId: card.watchId }, body: {} });
+      if (result.status !== 'ok')
+        setProblem(result.status === 'blocked' ? result.message : FIND_MY_WATCH_WORDS.failed);
+    } catch (e) {
+      setProblem(writeProblem(e));
+    }
+  };
+  return (
+    <FindMyWatchCard
+      watch={watch}
+      timeZone={timeZone}
+      nowMs={Date.now()}
+      onCancel={still ? undefined : () => void onCancel()}
+      busy={cancel.isPending}
+      problem={problem}
     />
   );
 }
