@@ -46,7 +46,7 @@ import {
   writeGrants,
 } from './commands';
 import { republishPlanCardsById } from './plan-cards';
-import { laterWords, newerDefinition } from './release-gate';
+import { laterWords } from './release-gate';
 import { automationGrants, loadAutomationRow, publishAutomation } from './store';
 
 /** A zod failure as the problems `draft_automation` answers: “recipe.when.repo: Invalid input”. */
@@ -109,7 +109,7 @@ export const proposeAutomationPlan = defineCommand({
     const { definition, problems } = await proposedDefinition(ctx, input);
     if (!definition || problems.length) return { automationId: existing?.id ?? null, planId: null, problems };
     // One the release the box would go back to can't run waits for the next update: the agent tells the person.
-    if (newerDefinition(definition) && !(await ctx.services.newerAutomations.ready()))
+    if (await ctx.services.newerAutomations.holds(definition))
       return { automationId: existing?.id ?? null, planId: null, problems: [laterWords(definition)] };
 
     const draft = definition as unknown as JsonObject;

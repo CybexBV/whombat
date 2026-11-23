@@ -25,6 +25,14 @@ export const MAIL_AUTOMATIONS_LATER = 'Mail automations come with the next updat
 /** The same about one that changes things in their connected services. */
 export const ACTION_AUTOMATIONS_LATER =
   'Automations that change things in your connected services come with the next update.';
+/** The same about one that starts when someone arrives or leaves on Find My. */
+export const FIND_MY_AUTOMATIONS_LATER = 'Find My automations come with the next update.';
+
+/**
+ * The first schema of a release that runs findmy automations (`runtime_releases.schema`): a release the box would go
+ * back to knows them when it recorded this migration or a later one.
+ */
+export const FIND_MY_SCHEMA = '0016_findmy_places';
 
 type Json = unknown;
 
@@ -43,11 +51,20 @@ function startedByMail(definition: Json): boolean {
   return listOf(definition, 'triggers').some((t) => kindOf(t) === 'mail') || kindOf(when) === 'mail';
 }
 
+/** A definition (or a saved draft, valid or not) started when someone arrives or leaves on Find My. */
+export function startedByFindMy(definition: Json): boolean {
+  const recipe =
+    definition && typeof definition === 'object' ? (definition as { recipe?: Json }).recipe : null;
+  const when = recipe && typeof recipe === 'object' ? (recipe as { when?: Json }).when : null;
+  return listOf(definition, 'triggers').some((t) => kindOf(t) === 'findmy') || kindOf(when) === 'findmy';
+}
+
 /** Whether a definition (or a saved draft, valid or not) has anything the release before these automations lacks. */
 export function newerDefinition(definition: Json): boolean {
   if (!definition || typeof definition !== 'object') return false;
   return (
     startedByMail(definition) ||
+    startedByFindMy(definition) ||
     listOf(definition, 'steps').some(
       (s) =>
         kindOf(s) === 'connection_actions' ||
@@ -58,12 +75,13 @@ export function newerDefinition(definition: Json): boolean {
 
 /** Whether a run is one of them: started by mail, or of such a definition. */
 export function newerRun(run: { trigger: { kind: string }; definition: Json }): boolean {
-  return run.trigger.kind === 'mail' || newerDefinition(run.definition);
+  return run.trigger.kind === 'mail' || run.trigger.kind === 'findmy' || newerDefinition(run.definition);
 }
 
 /** The line said instead of making, turning on or running such an automation. */
 export function laterWords(definition: Json): string {
-  return startedByMail(definition) ? MAIL_AUTOMATIONS_LATER : ACTION_AUTOMATIONS_LATER;
+  if (startedByMail(definition)) return MAIL_AUTOMATIONS_LATER;
+  return startedByFindMy(definition) ? FIND_MY_AUTOMATIONS_LATER : ACTION_AUTOMATIONS_LATER;
 }
 
 /**
@@ -118,6 +136,19 @@ export async function knownRelease(db: Database, releaseId: string): Promise<boo
   return !!row;
 }
 
+/** The newest migration `releaseId` had when it recorded itself, or null (not recorded, or it didn't say). */
+export async function releaseSchema(db: Database, releaseId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ schema: runtimeReleases.schema })
+    .from(runtimeReleases)
+    .where(eq(runtimeReleases.releaseId, releaseId));
+  return row?.schema ?? null;
+}
+
+/** Whether a recorded schema (`0016_findmy_places`) is `FIND_MY_SCHEMA` or later: migrations are numbered in order. */
+export const schemaKnowsFindMy = (schema: string | null): boolean =>
+  schema !== null && schema >= FIND_MY_SCHEMA;
+
 /**
  * Whether this box may make, turn on and run automations the release before them can't run. Off in production until
  * the managed runtime follows the manager's update facts (`follow`) and they name a release that knows them.
@@ -126,11 +157,15 @@ export class NewerAutomationsGate {
   #facts: (() => UpdateFacts | null) | null = null;
   /** Releases found in `runtime_releases`: a recorded one stays recorded. */
   readonly #known = new Set<string>();
+  /** Releases found there with a schema that runs findmy automations. */
+  readonly #knowsFindMy = new Set<string>();
 
   constructor(
     private readonly config: Pick<Config, 'NODE_ENV' | 'WHOMBAT_RELEASE_ID'>,
     /** Whether a release is in `runtime_releases` (`knownRelease`). */
     private readonly known: (releaseId: string) => Promise<boolean>,
+    /** The schema a release recorded there (`releaseSchema`); absent: none is known to run findmy automations. */
+    private readonly schemaOf: (releaseId: string) => Promise<string | null> = async () => null,
   ) {}
 
   /** The managed runtime's update facts, as the manager last pushed them. */
@@ -148,8 +183,36 @@ export class NewerAutomationsGate {
     return true;
   }
 
+  /**
+   * Whether findmy automations may be made, turned on and run, and their connections keep places: as `ready`, with a
+   * release to go back to that recorded a schema from `FIND_MY_SCHEMA` on (the release before them would refuse the
+   * whole definition of one, and send it unchanged to phones that can't read it).
+   */
+  async findMyReady(): Promise<boolean> {
+    if (this.config.NODE_ENV !== 'production') return true;
+    const target = rollbackTarget(this.#facts?.() ?? null, this.config.WHOMBAT_RELEASE_ID?.trim() || null);
+    if (target.kind !== 'release') return target.kind === 'none';
+    if (this.#knowsFindMy.has(target.id)) return true;
+    if (!schemaKnowsFindMy(await this.schemaOf(target.id))) return false;
+    this.#knowsFindMy.add(target.id);
+    return true;
+  }
+
+  /** Whether `definition` waits for the next update now: such an automation isn't made, turned on or run. */
+  async holds(definition: Json): Promise<boolean> {
+    if (!newerDefinition(definition)) return false;
+    return !(await this.ready()) || (startedByFindMy(definition) && !(await this.findMyReady()));
+  }
+
+  /** Whether a run waits for the next update now, kept as it is until it may go on. */
+  async holdsRun(run: { trigger: { kind: string }; definition: Json }): Promise<boolean> {
+    if (!newerRun(run)) return false;
+    if (!(await this.ready())) return true;
+    return (run.trigger.kind === 'findmy' || startedByFindMy(run.definition)) && !(await this.findMyReady());
+  }
+
   /** Refuses `definition` with the line the person is told, while such automations wait for the next update. */
   async refuse(definition: Json): Promise<void> {
-    if (newerDefinition(definition) && !(await this.ready())) throw conflict(laterWords(definition));
+    if (await this.holds(definition)) throw conflict(laterWords(definition));
   }
 }
