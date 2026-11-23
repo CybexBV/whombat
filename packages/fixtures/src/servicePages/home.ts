@@ -571,7 +571,7 @@ const ESPHOME_URL = 'http://10.100.0.30:6052';
 
 /** Mara's devices: config, name, state, the ESPHome it runs, its address, what it needs. */
 const DEVICES: [string, string, 'online' | 'offline', string, string, ('update' | 'changed')?][] = [
-  ['garage-door', 'Garage door opener', 'offline', '2026.9.2', '10.100.0.71', 'update'],
+  ['garage-door', 'Garage door opener', 'offline', '2026.10.0', '10.100.0.71'],
   ['hallway-motion', 'Hallway motion', 'online', '2026.9.2', '10.100.0.62', 'update'],
   ['kitchen-sensor', 'Kitchen sensor', 'online', '2026.9.2', '10.100.0.60', 'update'],
   ['living-room-plug', 'Living room plug', 'online', '2026.10.0', '10.100.0.64', 'changed'],
@@ -594,16 +594,31 @@ const esphome: FixtureServicePage = {
   fields: { url: ESPHOME_URL },
   make: (ctx) => {
     const { button, clock, head, summary } = kit(ctx);
-    /** Devices whose install was started here: the kitchen sensor builds now. */
-    const installing = new Set<string>(['kitchen-sensor']);
+    /** Installs and when each started: the kitchen sensor builds now. One takes 30 seconds here. */
+    const started = new Map<string, number>([['kitchen-sensor', ctx.now()]]);
+    const done = new Set<string>();
+    const INSTALL_MS = 30_000;
+    /** Installs that ran their time are done: the device runs this ESPHome and needs nothing more. */
+    const settle = () => {
+      for (const [config, at] of started)
+        if (ctx.now() - at >= INSTALL_MS) {
+          started.delete(config);
+          done.add(config);
+        }
+    };
+    const needOf = (d: (typeof DEVICES)[number]) => (done.has(d[0]) ? undefined : d[5]);
+    const runsOf = (d: (typeof DEVICES)[number]) => (done.has(d[0]) ? '2026.10.0' : d[3]);
     const confirm = (label: string, name: string) => ({
       title: `${label} ${name}?`,
       body: 'ESPHome builds its firmware and sends it over the network. The device restarts and is gone for a moment.',
       button: label,
     });
     const page = (): ThingPage => {
-      const waiting = DEVICES.filter(([config, , , , , need]) => need && !installing.has(config));
-      const older = DEVICES.filter(([, , , , , need]) => need === 'update').length;
+      settle();
+      const installing = new Set(started.keys());
+      const waiting = DEVICES.filter((d) => needOf(d) && !installing.has(d[0]));
+      const older = DEVICES.filter((d) => needOf(d) === 'update').length;
+      const changed = DEVICES.filter((d) => needOf(d) === 'changed').length;
       const live: ThingPageItem[] = [
         ...DEVICES.filter(([config]) => installing.has(config)).map(([config, name], i) => ({
           id: `job-${config}`,
@@ -616,7 +631,9 @@ const esphome: FixtureServicePage = {
         ...waiting
           .slice()
           .sort((a, b) => Number(a[2] === 'offline') - Number(b[2] === 'offline'))
-          .map(([config, name, state, runs, , need]): ThingPageItem => {
+          .map((d): ThingPageItem => {
+            const [config, name, state, runs] = d;
+            const need = needOf(d);
             const label = need === 'update' ? 'Update' : 'Install';
             return {
               id: `${config}.yaml`,
@@ -641,7 +658,10 @@ const esphome: FixtureServicePage = {
       ];
       const rows = DEVICES.slice()
         .sort((a, b) => Number(a[2] !== 'offline') - Number(b[2] !== 'offline'))
-        .map(([config, name, state, runs, address, need]) => {
+        .map((d) => {
+          const [config, name, state, , address] = d;
+          const need = needOf(d);
+          const runs = runsOf(d);
           const label = need === 'update' ? 'Update' : 'Install';
           return {
             id: `${config}.yaml`,
@@ -681,10 +701,25 @@ const esphome: FixtureServicePage = {
       const meta = [
         installing.size ? `${installing.size} installing` : '',
         waiting.length ? `${waiting.length} waiting` : '',
-        'ESPHome 2026.10.0 is here',
+        older ? 'ESPHome 2026.10.0 is here' : '',
       ]
         .filter(Boolean)
         .join(' · ');
+      // Nothing waits or installs: Live lists the devices, offline first, as the server does.
+      const now: ThingPageItem[] = DEVICES.slice()
+        .sort((a, b) => Number(a[2] !== 'offline') - Number(b[2] !== 'offline') || a[1].localeCompare(b[1]))
+        .slice(0, 6)
+        .map((d) => ({
+          id: `now-${d[0]}.yaml`,
+          title: d[1],
+          icon: 'device' as const,
+          detail:
+            d[2] === 'offline'
+              ? `Offline since ${clock(5 * HOUR)} · ${runsOf(d)} · ${d[4]}`
+              : `Online · ${runsOf(d)} · ${d[4]}`,
+          tone: d[2] === 'offline' ? ('warn' as const) : ('ok' as const),
+        }));
+      const quiet = !installing.size && !waiting.length;
       return {
         ...head({
           id: ESPHOME,
@@ -699,29 +734,43 @@ const esphome: FixtureServicePage = {
         verdict: 'ESPHome is fine: 13 of 14 devices are online.',
         buttons: [],
         // An install runs: the page asks again every 5 seconds.
-        refreshS: 5,
+        ...(installing.size ? { refreshS: 5 } : {}),
         tabs: summary([
-          {
-            kind: 'list',
-            id: 'updates',
-            place: 'chart',
-            span: 2,
-            title: 'To update',
-            meta,
-            buttons: [
-              button({
-                action: 'install-all',
-                label: 'Update all',
-                icon: 'up',
-                confirm: {
-                  title: `Update ${older} devices?`,
-                  body: 'ESPHome builds each one’s firmware and sends it over the network, one after another. Each restarts; one that is offline gets it when it is back.',
-                  button: 'Update all',
-                },
-              }),
-            ],
-            items: live,
-          },
+          quiet
+            ? {
+                kind: 'list',
+                id: 'now',
+                place: 'chart',
+                span: 2,
+                title: 'Devices now',
+                meta: '13 online · 1 offline',
+                items: now,
+              }
+            : {
+                kind: 'list',
+                id: 'updates',
+                place: 'chart',
+                span: 2,
+                title: 'To update',
+                ...(meta ? { meta } : {}),
+                ...(older
+                  ? {
+                      buttons: [
+                        button({
+                          action: 'install-all',
+                          label: 'Update all',
+                          icon: 'up',
+                          confirm: {
+                            title: older === 1 ? 'Update 1 device?' : `Update ${older} devices?`,
+                            body: 'ESPHome builds each one’s firmware and sends it over the network, one after another. Each restarts; one that is offline gets it when it is back.',
+                            button: 'Update all',
+                          },
+                        }),
+                      ],
+                    }
+                  : {}),
+                items: live,
+              },
           {
             kind: 'list',
             id: 'inventory',
@@ -744,17 +793,23 @@ const esphome: FixtureServicePage = {
                 title: 'Up to date',
                 icon: 'update',
                 right: String(14 - older),
-                figure: { value: String(14 - older), note: `${older} on an older ESPHome`, tone: 'warn' },
+                figure: older
+                  ? { value: String(14 - older), note: `${older} on an older ESPHome`, tone: 'warn' }
+                  : { value: '14', note: 'All on 2026.10.0', tone: 'ok' },
                 url: ESPHOME_URL,
               },
-              {
-                id: 'changed',
-                title: 'Changed since installed',
-                icon: 'log',
-                right: '1',
-                figure: { value: '1', note: 'Install to use it' },
-                url: ESPHOME_URL,
-              },
+              ...(changed
+                ? [
+                    {
+                      id: 'changed',
+                      title: 'Changed since installed',
+                      icon: 'log' as const,
+                      right: String(changed),
+                      figure: { value: String(changed), note: 'Install to use it' },
+                      url: ESPHOME_URL,
+                    },
+                  ]
+                : []),
               {
                 id: 'found',
                 title: 'Found on the network',
@@ -787,25 +842,35 @@ const esphome: FixtureServicePage = {
     };
     return {
       page,
-      row: () => ({
-        line: '14 devices',
-        facts: [
-          { label: 'Online', value: '13 of 14' },
-          { label: 'Updates', value: '3' },
-        ],
-      }),
+      row: () => {
+        settle();
+        return {
+          line: '14 devices',
+          facts: [
+            { label: 'Online', value: '13 of 14' },
+            { label: 'Updates', value: String(DEVICES.filter((d) => needOf(d) === 'update').length) },
+          ],
+        };
+      },
       action: ({ action, target }) => {
+        settle();
         if (action === 'install-all') {
-          const n = DEVICES.filter(([c, , , , , need]) => need === 'update' && !installing.has(c));
+          const n = DEVICES.filter((d) => needOf(d) === 'update' && !started.has(d[0]));
           if (!n.length) return null;
-          for (const [c] of n) installing.add(c);
-          return { message: `Updating ${n.length} devices. ESPHome builds them one after another.` };
+          for (const [c] of n) started.set(c, ctx.now());
+          return {
+            message:
+              n.length === 1
+                ? 'Updating 1 device. ESPHome builds it first.'
+                : `Updating ${n.length} devices. ESPHome builds them one after another.`,
+          };
         }
         const d = DEVICES.find(([c]) => `${c}.yaml` === target);
-        if (action === 'install' && d?.[5] && !installing.has(d[0])) {
-          installing.add(d[0]);
+        const need = d ? needOf(d) : undefined;
+        if (action === 'install' && d && need && !started.has(d[0])) {
+          started.set(d[0], ctx.now());
           return {
-            message: `${d[5] === 'update' ? 'Updating' : 'Installing'} ${d[1]}. ESPHome builds it first.`,
+            message: `${need === 'update' ? 'Updating' : 'Installing'} ${d[1]}. ESPHome builds it first.`,
           };
         }
         return null;
