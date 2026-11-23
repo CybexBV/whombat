@@ -249,6 +249,21 @@ describe('Add a connection (AP-1173…AP-1175)', () => {
     expect(dropbox?.tag).toBeNull();
   });
 
+  it('says Add a Mac first on Find My without a Mac, and opens Add a server', () => {
+    const rows = addConnectionRows(
+      allStatuses({ findmy: { available: false, reason: 'needs_mac' } }),
+      [],
+      'hq',
+    );
+    const findMy = rows.find((r) => r.id === 'findmy');
+    expect(findMy?.note).toBe('Add a Mac first');
+    expect(findMy?.tag).toBeNull();
+    expect(findMy?.opens).toEqual({ screen: 'AddServer' });
+    // With a Mac it opens its Connect screen, as every entry.
+    const ready = addConnectionRows(allStatuses(), [], 'hq').find((r) => r.id === 'findmy');
+    expect(ready?.opens).toEqual({ screen: 'Connect', catalogId: 'findmy' });
+  });
+
   it('leaves out a report tracker without a driver here, and offers one with a driver', () => {
     const none = addConnectionRows(
       allStatuses({ tracker: { available: false, reason: 'no_driver' } }),

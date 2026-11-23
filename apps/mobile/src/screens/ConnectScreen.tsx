@@ -210,6 +210,13 @@ export function ConnectScreen({ route, navigation }: Props) {
                 variant="secondary"
                 onPress={() => navigation.navigate('WhombatAbout', { at: 'reach' })}
               />
+            ) : addressReasonOf(status) === 'needs_mac' ? (
+              // Find My reads through a Mac: Add a server, where the Mac is added (findmy-connection.md §1.2).
+              <Button
+                label={CATALOG_REASON_TEXT.needsMacAction}
+                variant="secondary"
+                onPress={() => navigation.navigate('AddServer', { back: entry.name })}
+              />
             ) : null}
           </Panel>
         ) : (
@@ -794,21 +801,39 @@ function ConnectForm({
           onPaste={(text) => fill(method, text)}
         />
       ) : null}
-      {methodFields.map((f) => (
-        <FormField
-          key={f.id}
-          label={f.label}
-          value={fields[f.id] ?? ''}
-          onChangeText={(v) => setField(f.id, v)}
-          placeholder={f.placeholder}
-          hint={f.help}
-          error={problem.fields[f.id]}
-          multiline={!!f.guide}
-          mono={f.kind === 'url'}
-          keyboardType={f.kind === 'url' ? 'url' : 'default'}
-          {...PLAIN_INPUT}
-        />
-      ))}
+      {methodFields.map((f) =>
+        // A select with its own choices (Find My's Read in the background): radio cards, as a service's choices.
+        f.kind === 'select' && f.options ? (
+          <View key={f.id} style={{ gap: 8 }}>
+            <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
+              {f.label.toUpperCase()}
+            </Text>
+            <RadioCards
+              label={f.label}
+              value={fields[f.id] ?? f.default ?? ''}
+              onChange={(v) => setField(f.id, v)}
+              disabled={busy}
+              options={f.options.map((o) => ({ value: o.value, title: o.label }))}
+            />
+            {problem.fields[f.id] ? <FormMessage text={problem.fields[f.id] ?? null} /> : null}
+            {f.help ? <Note>{f.help}</Note> : null}
+          </View>
+        ) : (
+          <FormField
+            key={f.id}
+            label={f.label}
+            value={fields[f.id] ?? ''}
+            onChangeText={(v) => setField(f.id, v)}
+            placeholder={f.placeholder}
+            hint={f.help}
+            error={problem.fields[f.id]}
+            multiline={!!f.guide}
+            mono={f.kind === 'url'}
+            keyboardType={f.kind === 'url' ? 'url' : 'default'}
+            {...PLAIN_INPUT}
+          />
+        ),
+      )}
       {ownAuth && method.kind === 'token' ? (
         <FormField
           label={

@@ -34,8 +34,6 @@ export const SERVER_COPY = {
   plugins: 'Plugins',
   /** A Mac's (macos-servers.md MAC-34). */
   screen: 'Screen',
-  /** A Mac's Find My (docs/implementation/macos/findmy.md). */
-  findmy: 'Find My',
   noGuests: 'Nothing runs on this server.',
   guestsFailed: 'This list didn’t load.',
   /** The fold at the foot of the Summary: versions, processor, address, helper, storage and pools. */

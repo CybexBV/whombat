@@ -1,15 +1,18 @@
 /**
- * A Mac's Find My segment on the phone (docs/implementation/macos/findmy.md §5): the people Find My shows on the Mac,
- * read when the segment opens on an old read, every 15 minutes while it stays open and on “Read again”; the Mac's map
- * in the app's theme with each person's avatar and first name on it, ＋ and − to zoom and “Fit everyone”; and for one
- * person “Show exactly”, Find My's own map cut from the Mac's screen, in a sheet. The words are the web's
- * (`findMyView`, `FIND_MY_WORDS`); the screen's own reason comes first, as on the Screen segment.
+ * The Find My connection's Find My tab on the phone (docs/implementation/macos/findmy.md §5, findmy-connection.md §1.3):
+ * the people Find My shows on the Mac the connection reads, read when the tab opens on an old read, every 15 minutes
+ * while it stays open and on “Read again”; the Mac's map in the app's theme with each person's avatar and first name on
+ * it, ＋ and − to zoom and “Fit everyone”; under it how the box reads while nobody looks; and for one person “Show
+ * exactly”, Find My's own map cut from the Mac's screen, in a sheet. The words are the web's (`findMyView`,
+ * `FIND_MY_WORDS`); the screen's own reason comes first, as on the Mac's Screen segment. The tab names the Mac
+ * (`ThingPageTab.server`); its page is read here.
  */
 import { HUMAN_TONES, initialsFor } from '@whombat/avatars';
 import {
   FIND_MY_WORDS,
   type FindMyPersonRow,
   type FindMyRegion,
+  findMyBackgroundLine,
   findMyCanZoom,
   findMyExactView,
   findMyMapAsk,
@@ -20,28 +23,44 @@ import {
   hostErrorInfo,
   macScreenView,
 } from '@whombat/client/hosts';
-import { useFindMyMap, useFindMyPicture, useFindMyTab } from '@whombat/client/hosts/react';
+import { useFindMyMap, useFindMyPicture, useFindMyTab, useHostServer } from '@whombat/client/hosts/react';
 import type { HostFindMy, HostServerDetail } from '@whombat/core';
 import { useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
 import { HumanAvatar } from '../../avatars/Avatars';
-import { useBurrowBase, useNowStore } from '../../data/BurrowProvider';
+import { useBurrowBase, useNow, useNowStore } from '../../data/BurrowProvider';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard } from '../../ui/assistant';
 import { Minus, Plus } from '../../ui/icons';
-import { Button } from '../../ui/primitives';
+import { Button, ErrorState } from '../../ui/primitives';
 import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { showFailure } from '../feedback';
 import { CardQuiet } from '../guest/parts';
+import { CardSkeletons } from '../home/OverviewParts';
 
 /** The map's height: room for a town without pushing the people off the screen. */
 const MAP_HEIGHT = 232;
 
 const toneOf = (p: Pick<FindMyPersonRow, 'tone'>) => HUMAN_TONES[p.tone] ?? HUMAN_TONES[0];
 
-export function MacFindMyPart({
+/** The tab of the Find My connection whose Mac is `serverId`: the Mac's page first, for its screen's switches. */
+export function FindMyPart({ serverId }: { serverId: string }) {
+  const { slug } = useBurrowBase();
+  const now = useNow().getTime();
+  const q = useHostServer({ params: { burrow: slug, serverId } }, { retry: false });
+  const d = q.data;
+  if (d)
+    return <FindMyRead serverId={serverId} serverName={d.server.name ?? serverId} detail={d} now={now} />;
+  return q.error ? (
+    <ErrorState text={hostErrorInfo(q.error).message} onRetry={() => void q.refetch()} />
+  ) : (
+    <CardSkeletons label={FIND_MY_WORDS.title} count={2} />
+  );
+}
+
+function FindMyRead({
   serverId,
   serverName,
   detail,
@@ -104,6 +123,8 @@ export function MacFindMyPart({
             people={view.people}
           />
         ) : null}
+        {/* How the box reads while nobody looks: only then, every few minutes, or for an automation. */}
+        {tab.state ? <CardQuiet>{findMyBackgroundLine(tab.state.background)}</CardQuiet> : null}
         {view.anyLocated ? <CardQuiet>{FIND_MY_WORDS.note}</CardQuiet> : null}
         <View style={{ flexDirection: 'row', padding: 14, paddingTop: view.anyLocated ? 0 : 4 }}>
           <Button
