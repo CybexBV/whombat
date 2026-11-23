@@ -128,8 +128,11 @@ full set.
   the box's page answers, showing step by step what it waits for meanwhile (`own-address/claim-handover.ts`). Under the
   claim link the
   screen names a second way in that nobody outside can keep busy, the Tailscale page or the address on the local
-  network (`ConsoleState.fallbackUrl`)
-  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, LNK-79…LNK-84, [own-address.md](docs/decisions/own-address.md)
+  network (`ConsoleState.fallbackUrl`). While a browser has the claim link open (a session that showed it, kept for
+  10 s after its last one), the screen says only to type the letters on that page (`ConsoleState.pageOpen`). After
+  Link it the screen moves within seconds: the manager asks control every 2 s while a code shows (for the first half
+  hour of codes) and the runtime reads the manager every second while Link starts
+  ([whombat-link.md](docs/decisions/whombat-link.md) LNK-59…LNK-77, LNK-79…LNK-84, LNK-88, LNK-89, [own-address.md](docs/decisions/own-address.md)
   OWA-34…OWA-37, OWA-39). Other ways in: six letters on the box's own screen (`managed/screen-signin.ts`), pairing from another of the person's
   devices, a device link, a passkey the box verifies itself (`managed/passkeys.ts`) or the recovery kit. A passkey
   uses an owner public key in its authenticator user handle and signs the list of Whombats it opens. Control stores
