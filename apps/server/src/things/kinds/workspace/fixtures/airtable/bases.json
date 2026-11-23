@@ -1,0 +1,9 @@
+{
+  "bases": [
+    { "id": "appLkNDICXNqxSDhG", "name": "Apartment Hunting", "permissionLevel": "create" },
+    { "id": "appSW9R5uCNmRmfl6", "name": "Project Tracker", "permissionLevel": "edit" },
+    { "id": "appQ8v2nRtP4mKx1a", "name": "Content calendar", "permissionLevel": "read" },
+    { "id": "appZ7kD3wHs9LpQ2b", "name": "Team portal", "permissionLevel": "interfaceOnly" },
+    { "id": "not-a-base", "name": "Broken" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "results": [],
+  "type": "workspace_search",
+  "notices": [
+    {
+      "type": "plan_restricted",
+      "fields": ["sort"],
+      "message": "Sorting by date needs Full Notion MCP on Business or Enterprise.",
+      "upgrade_url": "https://www.notion.so/pricing"
+    }
+  ]
+}
