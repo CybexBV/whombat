@@ -20,7 +20,7 @@ import { AccountLinkCode, type DirectRoute } from '@whombat/protocol/session';
 import { OperationError, type OwnAddressSummary, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 
-/** The own-address host this page is on (`<label>.box.whombat.app`, `<label>.dev.whombat.app`), or null. */
+/** The own-address host this page is on (`<name>.whombat.app`, `<label>.box.whombat.app`, `<name>.dev.whombat.app`), or null. */
 export function ownAddressOfPage(hostname: string): string | null {
   const host = hostname.toLowerCase().replace(/\.$/, '');
   return ownAddressLabelOf(host) === null ? null : host;
@@ -100,9 +100,12 @@ export function ownAddressRoute(url: string | null | undefined): DirectRoute | n
   return { way: 'tailscale', socket: `wss://${m[1]}${DIRECT_PATH}`, web: `https://${m[1]}/` };
 }
 
-/** Whether `host` is an own-address host (the box's RP ID for its own passkeys). */
+/**
+ * Whether `host` is an own-address host (the box's RP ID for its own passkeys). A zone itself (`box.whombat.app`,
+ * `dev.whombat.app`) has a name's shape under `whombat.app` but is never a box's.
+ */
 export function isOwnAddressHost(host: string): boolean {
-  return OwnAddressHost.safeParse(host).success;
+  return OwnAddressHost.safeParse(host).success && ownAddressLabelOf(host) !== null;
 }
 
 /* The setup at the address ----------------------------------------------------------------------------------------- */

@@ -199,6 +199,10 @@ export const WHOMBAT_LINK_TEXT = {
     billing_provider_error: 'Our payment provider didn’t answer. Try again later.',
     not_found: 'That Whombat isn’t in your Whombat Link any more.',
     rate_limited: 'Too many tries. Wait a few minutes, then try again.',
+    /** The name chosen for its address (4.16): another box took it meanwhile, or it can't be had. */
+    label_taken: 'That name is taken.',
+    label_reserved: 'That name isn’t available.',
+    label_invalid: 'Use 3 to 32 lower-case letters, digits and single hyphens, starting with a letter.',
     unavailable: 'Couldn’t reach Whombat. Check your connection and try again.',
     failed: 'That didn’t work. Try again.',
   },
