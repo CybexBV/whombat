@@ -149,10 +149,19 @@ function mockServer(
   return { fetch, calls };
 }
 
+/**
+ * A box before accounts' own pages (session minor 6): a connected account's Settings page is where it is managed. A
+ * newer box opens the account's own page instead, whose Connection tab draws the same.
+ */
+const OLDER_BOX = { protocolMinor: 6 };
+
 /** Google's page, on the Connections page (settings-groups.md); `path` another address that lands there. */
 async function openTab(status: ConnectorsStatus, options: { path?: string } = {}) {
   const server = mockServer(status);
-  const app = renderApp(options.path ?? '/connections?connection=google', mockedServices(server.fetch));
+  const app = renderApp(
+    options.path ?? '/connections?connection=google',
+    mockedServices(server.fetch, OLDER_BOX),
+  );
   await screen.findByRole('heading', { level: 2, name: 'Google' });
   expect(document.querySelector('[data-connections-page="google"]')).toBeTruthy();
   await screen.findByText(/^(Set up )?[Ff]or this Whombat$/);
@@ -382,10 +391,16 @@ describe('Connections → Google', () => {
 const ACCOUNTS = '/settings?tab=connections';
 
 describe('Settings → Connections, the overview (AP-673; connections-redesign.md AP-1157…AP-1166; sidebar-tabs.md)', () => {
-  async function openOverview(status: ConnectorsStatus, options: { bare?: boolean; path?: string } = {}) {
+  async function openOverview(
+    status: ConnectorsStatus,
+    options: { bare?: boolean; path?: string; protocolMinor?: number } = {},
+  ) {
     const server = mockServer(status, options);
     const user = userEvent.setup();
-    const app = renderApp(options.path ?? ACCOUNTS, mockedServices(server.fetch));
+    const app = renderApp(
+      options.path ?? ACCOUNTS,
+      mockedServices(server.fetch, options.protocolMinor ? { protocolMinor: options.protocolMinor } : {}),
+    );
     if (options.path) await screen.findByRole('searchbox', { name: 'Search connections' });
     else await screen.findByText('What this Whombat is signed in to, and how.');
     return { ...server, app, user };
@@ -407,6 +422,7 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
         google: { ...baseStatus().google, app: CONFIGURED, tested: true },
         connections: [connection()],
       }),
+      OLDER_BOX,
     );
     const connected = screen.getByRole('region', { name: 'ACCOUNTS' });
     const row = within(connected).getByRole('link', {
@@ -439,6 +455,7 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
         google: { ...baseStatus().google, app: CONFIGURED },
         connections: [connection({ status: 'needs_reauth', reauthReason: 'revoked' })],
       }),
+      OLDER_BOX,
     );
     const needs = screen.getByRole('region', { name: 'NEEDS YOU' });
     const row = within(needs).getByRole('link', { name: /^Google\s*mara\.oduya@example\.com/ });
@@ -524,7 +541,7 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
 
   it('lists GitHub and Website feedback beside Google, each opening its own page in Connections (SS-05)', async () => {
     // GitHub is an account, Website feedback an app (sidebar-tabs.md).
-    const first = await openOverview(baseStatus());
+    const first = await openOverview(baseStatus(), OLDER_BOX);
     const github = await screen.findByRole('link', { name: /^GitHub\s*@acme/ });
     expect(github.textContent).not.toMatch(/repositor(y|ies) on/);
     expect(github.querySelector('svg')).toBeTruthy();
@@ -537,7 +554,7 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
     expect(screen.queryByText('WORKING DIRECTORY')).toBeNull();
     first.app.unmount();
 
-    const { app, user } = await openOverview(baseStatus());
+    const { app, user } = await openOverview(baseStatus(), OLDER_BOX);
     const panel = within(document.getElementById('settings-panel') as HTMLElement);
     const feedback = await panel.findByRole('link', { name: /^Website feedback/ });
     await user.click(feedback);
@@ -579,6 +596,100 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
         name: /^Website feedback/,
       }),
     ).toBeTruthy();
+  });
+});
+
+describe('Accounts with a page of their own (a box at session minor 7)', () => {
+  const WORKS = { google: { ...baseStatus().google, app: CONFIGURED, tested: true } };
+  const GOOGLE_PAGE = `/things/${encodeURIComponent('connection:con_mara')}`;
+
+  it('opens a connected account’s page from its row; an older box keeps its Settings page', async () => {
+    const server = mockServer(
+      baseStatus({
+        ...WORKS,
+        connections: [connection({ status: 'needs_reauth', reauthReason: 'revoked' })],
+      }),
+    );
+    renderApp(ACCOUNTS, mockedServices(server.fetch));
+    await screen.findByText('What this Whombat is signed in to, and how.');
+    const accounts = within(screen.getByRole('region', { name: 'ACCOUNTS' }));
+    expect(accounts.getByRole('link', { name: /^GitHub/ }).getAttribute('href')).toBe(
+      `/things/${encodeURIComponent('connection:github')}`,
+    );
+    const panel = within(document.getElementById('settings-panel') as HTMLElement);
+    expect((await panel.findByRole('link', { name: /^Website feedback/ })).getAttribute('href')).toBe(
+      `/things/${encodeURIComponent('connection:feedback')}`,
+    );
+    // Signed out: its Connection tab, where Reconnect is.
+    const needs = within(screen.getByRole('region', { name: 'NEEDS YOU' }));
+    expect(needs.getByRole('link', { name: /^Google/ }).getAttribute('href')).toBe(
+      `${GOOGLE_PAGE}?tab=settings`,
+    );
+    cleanup();
+
+    renderApp(ACCOUNTS, mockedServices(mockServer(baseStatus()).fetch, OLDER_BOX));
+    await screen.findByText('What this Whombat is signed in to, and how.');
+    expect(
+      within(screen.getByRole('region', { name: 'ACCOUNTS' }))
+        .getByRole('link', { name: /^GitHub/ })
+        .getAttribute('href'),
+    ).toBe('/settings?tab=connections&connection=github');
+  });
+
+  it('opens a connected account’s Settings address as its page’s Connection tab, in place of the address', async () => {
+    const server = mockServer(baseStatus({ ...WORKS, connections: [connection()] }));
+    const app = renderApp('/settings?tab=connections&connection=google', mockedServices(server.fetch));
+    await waitFor(() => expect(app.location()).toBe(`${GOOGLE_PAGE}?tab=settings`));
+    expect(app.history.length).toBe(1);
+    cleanup();
+
+    // GitHub, by its own thing.
+    const github = renderApp(
+      '/connections?connection=github',
+      mockedServices(mockServer(baseStatus()).fetch),
+    );
+    await waitFor(() =>
+      expect(github.location()).toBe(`/things/${encodeURIComponent('connection:github')}?tab=settings`),
+    );
+  });
+
+  it('keeps the Settings page of an account that isn’t connected', async () => {
+    const server = mockServer(baseStatus(WORKS));
+    const app = renderApp('/connections?connection=google', mockedServices(server.fetch));
+    expect(await screen.findByRole('button', { name: 'Connect Google' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Google' })).toBeTruthy();
+    expect(app.location()).toBe('/connections?connection=google');
+    cleanup();
+
+    // Nothing at all connected: GitHub's page stays too.
+    renderApp(
+      '/connections?connection=github',
+      mockedServices(mockServer(baseStatus(), { bare: true }).fetch),
+    );
+    expect(await screen.findByRole('heading', { level: 2, name: 'GitHub' })).toBeTruthy();
+  });
+
+  it('opens the account’s Summary after a sign-in came back, with its toast', async () => {
+    const server = mockServer(baseStatus({ ...WORKS, connections: [connection()] }));
+    const app = renderApp(
+      '/settings?tab=connections&connection=google&connected=google',
+      mockedServices(server.fetch),
+    );
+    await waitFor(() => expect(app.location()).toBe(GOOGLE_PAGE));
+    expect(await screen.findByText('Google connected: mara.oduya@example.com.')).toBeTruthy();
+  });
+
+  it('keeps the Settings page after a sign-in that failed, with its reason', async () => {
+    const failed = renderApp(
+      '/settings?tab=connections&connection=google&connect_error=access_denied',
+      mockedServices(mockServer(baseStatus({ ...WORKS, connections: [connection()] })).fetch),
+    );
+    expect(
+      await screen.findByText('Google didn’t connect: access wasn’t allowed. Try again and choose Allow.'),
+    ).toBeTruthy();
+    // The answer leaves the address; the page stays, with the reason.
+    await waitFor(() => expect(failed.location()).toBe('/connections?connection=google'));
+    expect(screen.getByText(/access wasn’t allowed/)).toBeTruthy();
   });
 });
 

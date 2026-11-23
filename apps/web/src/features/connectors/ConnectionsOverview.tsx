@@ -19,6 +19,7 @@ import {
   sameNameKeys,
   settingsConnectionGroups,
 } from '@whombat/client/connections';
+import { useSessionProtocol } from '@whombat/client/react';
 import { thingHref } from '@whombat/core';
 import {
   CATALOG_CATEGORY_LABELS,
@@ -29,6 +30,7 @@ import {
   catalogEntry,
   FOUND_SERVER_ID,
 } from '@whombat/core/domain';
+import { ACCOUNT_PAGES_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { ChevronRight, MessageSquareText, Plus, Search, Server } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import type { ConnectionPage } from '../../app/routing/search';
@@ -163,9 +165,17 @@ export interface ConnectionEntry {
   page: ConnectionPage;
   /**
    * Connected: the row's detail after the name (an account or a login in mono, `plain` for a name), its meta line and
-   * its state.
+   * its state; `thing` is the account's own page (`connection:con_…`, `connection:github`), which a box at session
+   * minor 7 or later answers.
    */
-  connected: { detail: string | null; plain?: boolean; meta: string; ok: boolean; state: string } | null;
+  connected: {
+    detail: string | null;
+    plain?: boolean;
+    meta: string;
+    ok: boolean;
+    state: string;
+    thing?: string | null;
+  } | null;
   /** Not connected: the tile's button and the line under it. */
   tile: { action: string; note: string | null };
 }
@@ -204,8 +214,8 @@ export interface HaveRow {
   page: string;
   search: { tab: 'connections'; connection: string; id?: string };
   /**
-   * A catalog connection's own page (connection-pages.md CP-01): the row opens it instead of its Settings page; null for
-   * a builtin.
+   * The connection's own page (connection-pages.md CP-01): the row opens it instead of its Settings page; null for a
+   * builtin on a box without accounts' own pages.
    */
   thing: string | null;
   name: string;
@@ -223,8 +233,16 @@ export interface HaveRow {
   note: string | null;
 }
 
-/** Every connection in the overview's order: the builtins (GitHub, Google, Microsoft, Website feedback), then the catalog's. */
-export function haveRows(entries: readonly ConnectionEntry[], catalogRows: readonly CatalogRow[]): HaveRow[] {
+/**
+ * Every connection in the overview's order: the builtins (GitHub, Google, Microsoft, Website feedback), then the
+ * catalog's. `accountPages`: the box answers accounts' own pages (session minor 7), so a connected account's row opens
+ * its page; an older box's opens its Settings page.
+ */
+export function haveRows(
+  entries: readonly ConnectionEntry[],
+  catalogRows: readonly CatalogRow[],
+  accountPages = false,
+): HaveRow[] {
   const rows: HaveRow[] = [];
   for (const entry of entries) {
     const conn = entry.connected;
@@ -233,7 +251,7 @@ export function haveRows(entries: readonly ConnectionEntry[], catalogRows: reado
       key: entry.page,
       page: entry.page,
       search: providerSearch(entry.page),
-      thing: null,
+      thing: accountPages && conn.thing ? `/things/${encodeURIComponent(conn.thing)}` : null,
       name: connectionName(entry.page),
       address: conn.detail,
       plain: conn.plain ?? false,
@@ -301,7 +319,11 @@ export function ConnectionsOverview({
   // What the overview says first (AP-1158), the assistant by its name in the assistant shell (AP-1802).
   const words = useConnectionWords(burrow);
   const home = useConnectionsBack();
-  const rows = haveRows(entries, catalog?.rows ?? []);
+  const rows = haveRows(
+    entries,
+    catalog?.rows ?? [],
+    protocolAtLeast(useSessionProtocol(), ACCOUNT_PAGES_MINOR),
+  );
   // A row's own page is read while the pointer rests on it (page-speed.md AP-2660).
   const linkProps = useThingLinkProps(burrow);
   const has = new Set(rows.map((r) => r.page));

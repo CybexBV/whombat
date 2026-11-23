@@ -31,6 +31,18 @@
   min-width: 0;
 }
 
+/* On a narrow screen a card row's buttons go under its name, as Settings' rows do (an account's Reconnect, Disconnect). */
+@media (max-width: 720px) {
+  .head {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .head > .main {
+    min-width: min(240px, 100%);
+  }
+}
+
 .name {
   font-size: 15px;
   font-weight: 600;

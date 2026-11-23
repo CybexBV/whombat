@@ -83,6 +83,10 @@ function mockServer(
 
 /** GitHub's page in Connections (was Repositories, `?tab=repos`, and Software Dev, `?tab=dev`; SS-05). */
 const GITHUB = '/connections?connection=github';
+/** GitHub's own page, where a box at session minor 7 opens it. */
+const GITHUB_PAGE = `/things/${encodeURIComponent('connection:github')}`;
+/** A box before accounts' own pages: GitHub's page in Connections is where it is managed. */
+const OLDER_BOX = { protocolMinor: 6 };
 
 describe('SettingsScreen', () => {
   it('shows GitHub connected status and every repo with nothing to pick, and no Members tab', async () => {
@@ -99,19 +103,22 @@ describe('SettingsScreen', () => {
     // A Whombat is one person's (one-person.md AP-5670).
     expect(screen.queryByText('Members')).toBeNull();
 
-    // GitHub is a connection (SS-05): its row in Connections, a group on the home, opens its page.
+    // GitHub is a connection (SS-05): its row in Connections, a group on the home, opens its own page, whose
+    // Connection tab is GitHub's settings.
     await user.click(screen.getByRole('link', { name: 'Back to Settings' }));
     await user.click(await screen.findByRole('link', { name: /^Connections/ }));
     await waitFor(() => expect(app.location()).toBe(`/settings?tab=connections`));
     await user.click(await screen.findByRole('link', { name: /^GitHub\s*@acme/ }));
-    await waitFor(() => expect(app.location()).toBe(GITHUB));
-    expect(await screen.findByText('@acme')).toBeTruthy();
+    await waitFor(() => expect(app.location()).toBe(GITHUB_PAGE));
+    await user.click(await screen.findByRole('tab', { name: 'Connection' }));
+    const tab = within(document.getElementById('thing-panel') as HTMLElement);
+    expect(await tab.findByText('@acme')).toBeTruthy();
     // Every repository the account owns is the agent's (agent-repos.md AGR-08, AGR-12): listed, nothing to switch or pick.
-    expect(screen.getByText(/every repository @acme owns/)).toBeTruthy();
+    expect(tab.getByText(/every repository @acme owns/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
     const list = (await screen.findByText('REPOSITORIES')).closest('section') as HTMLElement;
     for (const repo of REPOS) expect(await within(list).findByText(repo.fullName)).toBeTruthy();
-    expect(screen.queryByRole('switch')).toBeNull();
+    expect(within(list).queryByRole('switch')).toBeNull();
     expect(screen.queryByText('ADD FROM GITHUB')).toBeNull();
     expect(screen.queryByRole('textbox', { name: /owner\/name/ })).toBeNull();
   });
@@ -131,7 +138,7 @@ describe('SettingsScreen quiet states (TODO 16.4)', () => {
   it.each([['REPOSITORIES', GITHUB, REPOS[0]?.fullName ?? '']])(
     'shows skeleton rows while %s are loading',
     async (label, path, first) => {
-      renderApp(path, mockedServices(mockServer({ delayMs: 60 })));
+      renderApp(path, mockedServices(mockServer({ delayMs: 60 }), OLDER_BOX));
       const card = (await screen.findByText(label)).closest('section') as HTMLElement;
       expect(card.querySelector('[data-state="loading"]')).not.toBeNull();
       await within(card).findByText(first);
@@ -152,7 +159,7 @@ describe('SettingsScreen quiet states (TODO 16.4)', () => {
     'keeps showing loaded %s when a later refetch fails',
     async (what, path, query, first) => {
       const options = { reposFail: false };
-      const services = mockedServices(mockServer(options));
+      const services = mockedServices(mockServer(options), OLDER_BOX);
       renderApp(path, services);
       const heading = await screen.findByRole('heading', { level: 2, name: 'GitHub' });
       const panel = heading.closest('[data-connections-page]') as HTMLElement;

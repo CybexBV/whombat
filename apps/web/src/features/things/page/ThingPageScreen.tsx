@@ -59,7 +59,7 @@ import {
   type ThingPageAction,
   thingHref,
 } from '@whombat/core';
-import { FIND_MY_TIMELINE_TAB, placeKindOfCatalog } from '@whombat/core/domain';
+import { FIND_MY_TIMELINE_TAB, isAccountPageId, placeKindOfCatalog } from '@whombat/core/domain';
 import { formatClock } from '@whombat/core/text';
 import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -403,8 +403,9 @@ function Head({
   const [asking, setAsking] = useState<ThingPageAction | null>(null);
   const runsOn = page.runsOn ? runsOnParts(page.runsOn.name) : null;
   // Choosing what it runs on is a connection's (CP-08); asked only of one with an address of its own (a cloud service
-  // like Hetzner runs on nothing Whombat watches) that isn't part of a server (CP-10).
-  const pick = page.kind === 'connection' && !!page.connectionId;
+  // like Hetzner runs on nothing Whombat watches) that isn't part of a server (CP-10). An account's address is its
+  // mail address or login: it runs on nothing of the person's.
+  const pick = page.kind === 'connection' && !!page.connectionId && !isAccountPageId(page.catalogId);
   const ask = pick && !!page.address && !page.partOf;
   // The first line: the status, what it runs on, the address and when it was checked; the rest under More detail.
   const { checked, detail } = headFacts(page.facts);

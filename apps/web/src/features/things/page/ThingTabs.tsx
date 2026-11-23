@@ -7,7 +7,7 @@
  */
 import { useChanges, useTheAgent } from '@whombat/client/react';
 import type { ThingPage } from '@whombat/core';
-import { catalogEntry } from '@whombat/core/domain';
+import { catalogEntry, isAccountPageId } from '@whombat/core/domain';
 import { useState } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { SkeletonRows } from '../../../components/ListState';
@@ -15,6 +15,7 @@ import { ConnectionPage } from '../../connectors/ConnectionPage';
 import { connectableEntry } from '../../connectors/catalog';
 import { DoneList } from '../../home/DoneList';
 import home from '../../home/Home.module.css';
+import { AccountSettings } from '../../settings/ConnectionsTab';
 import { Card } from '../parts';
 import { WatchSettings } from '../quiet/WatchSettings';
 import styles from './ThingPage.module.css';
@@ -77,9 +78,18 @@ export function ActivityTab({
 
 /**
  * Settings: what Settings → Connections shows for it, then What Whombat watches there (quiet-notices.md QN-15;
- * AP-4826): its checks' switches and what is excepted, with Undo.
+ * AP-4826): its checks' switches and what is excepted, with Undo. An account's (Google, Microsoft 365, Email, GitHub,
+ * Website feedback) is that account's own settings page: sign-in, services, what the assistant may do, repositories,
+ * sites.
  */
 export function SettingsTab({ burrow, page }: { burrow: string; page: ThingPage }) {
+  if (page.kind === 'connection' && isAccountPageId(page.catalogId))
+    return (
+      <div className={styles.settings}>
+        <AccountSettings burrow={burrow} account={page.catalogId} embedded />
+        <WatchSettings burrow={burrow} thing={page.id} />
+      </div>
+    );
   const device = page.kind === 'device';
   const entry = device ? catalogEntry('device') : connectableEntry(page.catalogId);
   if (!entry || !page.connectionId)
