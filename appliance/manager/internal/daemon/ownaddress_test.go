@@ -142,3 +142,65 @@ func TestOwnAddressMovesItself(t *testing.T) {
 		}
 	})
 }
+
+// The owner renamed the moved box, and control took it, but the answer never reached the box. Control's next state
+// names the new host and still the first one as leaving (not the box's): the box takes control's host, orders its
+// certificate, and keeps answering at the first host with its pair; the name in between stops.
+func TestOwnAddressTakesARenameItMissed(t *testing.T) {
+	t.Parallel()
+	label := "maple-otter-river"
+	const oldHost, newHost, homeHost = "maple-otter-river.box.whombat.app", "maple-otter-river.whombat.app", "home.whombat.app"
+	h := startDaemonWith(t, nil, func(d *daemon.Daemon) {
+		svc := d.OwnAddress
+		svc.Mode.Zone = "whombat.app"
+		svc.Prober, svc.Orderer, svc.Watch = okProber{}, selfOrderer{svc.Store}, nil
+	}, func(_ *testworld.World, fc *fakecontrol.Control, _ *config.Config) {
+		fc.Zone = "box.whombat.app"
+		fc.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: 1790000000, Label: &label}
+	})
+	svc := h.d.OwnAddress
+	var first string
+	h.eventually("a certificate for the first host", func() bool {
+		c, ok := svc.Cert("")
+		if ok && c.Host == oldHost {
+			first = c.Serial
+		}
+		return first != ""
+	}, func() string { return fmt.Sprintf("%+v", svc.State()) })
+	h.fc.Set(func(f *fakecontrol.Control) { f.Zone = "whombat.app" })
+	if code, body := post(t, h, local.ManagerPathTicket, ticketBody); code != http.StatusOK {
+		t.Fatalf("ticket: %d %s", code, body)
+	}
+	h.eventually("the move", func() bool {
+		c, ok := svc.Cert("")
+		return ok && c.Host == newHost
+	}, func() string { return fmt.Sprintf("%+v", svc.State()) })
+
+	// The rename happens at control; its answer is lost.
+	h.fc.Set(func(f *fakecontrol.Control) {
+		for dev := range f.Addresses {
+			f.Addresses[dev] = device.AddressRegisterResponse{Label: "home", Host: homeHost, RegisteredAt: 1790000500}
+		}
+	})
+	if code, body := post(t, h, local.ManagerPathTicket, ticketBody); code != http.StatusOK {
+		t.Fatalf("ticket: %d %s", code, body)
+	}
+	h.eventually("control's host and its certificate", func() bool {
+		c, ok := svc.Cert("")
+		return ok && c.Host == homeHost
+	}, func() string { return fmt.Sprintf("%+v", svc.State()) })
+	if st := svc.State(); st.Leaving == nil || st.Leaving.Host != oldHost {
+		t.Fatalf("%+v", st)
+	}
+	if c, ok := svc.Cert(oldHost); !ok || c.Serial != first {
+		t.Fatal("the first host lost its pair")
+	}
+	if _, ok := svc.Cert(newHost); ok {
+		t.Fatal("the name in between still answers")
+	}
+	h.fc.Set(func(f *fakecontrol.Control) {
+		if f.RenameCalls != 1 {
+			t.Errorf("%d renames, want only the move", f.RenameCalls)
+		}
+	})
+}

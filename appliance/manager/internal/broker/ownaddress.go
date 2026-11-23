@@ -92,6 +92,8 @@ func (s *Server) ownAddressRegister(w http.ResponseWriter, r *http.Request) {
 	if s.ownAddressOff(w) || s.noControl(w) {
 		return
 	}
+	unlock := s.LockAddress()
+	defer unlock()
 	// A box registers one label; once the manager has one, that is the answer, whatever was sent (a new name is a
 	// rename).
 	if label, _ := s.OwnAddress.Label(); label != "" {
@@ -127,6 +129,9 @@ func (s *Server) ownAddressRegister(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.tickets = nil
 	s.mu.Unlock()
+	if s.Link != nil {
+		s.Link.FollowAddress(resp.Label, resp.Host, resp.Leaving)
+	}
 	writeJSON(w, http.StatusOK, s.OwnAddress.State())
 }
 
@@ -236,6 +241,8 @@ func (s *Server) ownAddressCheck(w http.ResponseWriter, r *http.Request) {
 	if s.ownAddressOff(w) || s.ownAddressLinkOff(w) {
 		return
 	}
+	unlock := s.LockAddress()
+	defer unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), ownAddressOpTimeout)
 	defer cancel()
 	var resp device.AddressCheckResponse
@@ -263,9 +270,11 @@ func (s *Server) ownAddressRename(w http.ResponseWriter, r *http.Request) {
 	if s.ownAddressOff(w) || s.ownAddressLinkOff(w) {
 		return
 	}
+	unlock := s.LockAddress()
+	defer unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), ownAddressOpTimeout)
 	defer cancel()
-	if err := s.RenameAddress(ctx, req.Label); err != nil {
+	if err := s.RenameAddress(ctx, req.Label, false); err != nil {
 		var bad *badAnswer
 		if errors.As(err, &bad) {
 			s.log().Error("own address: control's answer to address.rename refused", "err", err)
@@ -284,16 +293,29 @@ type badAnswer struct{ err error }
 func (e *badAnswer) Error() string { return e.err.Error() }
 func (e *badAnswer) Unwrap() error { return e.err }
 
+// LockAddress holds the own address for one change (register, check, rename, the daemon's follower) until the
+// returned func is called.
+func (s *Server) LockAddress() (unlock func()) {
+	s.addressMu.Lock()
+	return s.addressMu.Unlock
+}
+
 // RenameAddress asks control for label as the box's name (address.rename, signed by the box) and takes the answer: a
 // new name, or the same label under control's zone (a move). Either way the earlier host keeps answering while control
 // says so, cached tickets go (the next one carries the new label, and the earlier one as plbl), and the Link state
-// names the new label. The owner's rename and the manager's own move both come here.
-func (s *Server) RenameAddress(ctx context.Context, label string) error {
+// names the new label. The owner's rename and the manager's own move (move: control changes nothing when label is no
+// longer the box's, so a late move never undoes a rename) both come here, with LockAddress held.
+func (s *Server) RenameAddress(ctx context.Context, label string, move bool) error {
 	if s.OwnAddress == nil || s.Control == nil {
 		return errors.New("this Whombat has no own address")
 	}
+	req := device.AddressRenameRequest{Label: label}
+	if move {
+		t := true
+		req.Move = &t
+	}
 	var resp device.AddressRenameResponse
-	if err := s.Control.Do(ctx, device.DeviceOpNameAddressRename, device.AddressRenameRequest{Label: label}, &resp); err != nil {
+	if err := s.Control.Do(ctx, device.DeviceOpNameAddressRename, req, &resp); err != nil {
 		return err
 	}
 	if err := resp.Validate(); err != nil {
@@ -307,7 +329,7 @@ func (s *Server) RenameAddress(ctx context.Context, label string) error {
 		s.DropTickets()
 	}
 	if s.Link != nil {
-		s.Link.FollowAddress(resp.Label, resp.Host)
+		s.Link.FollowAddress(resp.Label, resp.Host, resp.Leaving)
 	}
 	return nil
 }

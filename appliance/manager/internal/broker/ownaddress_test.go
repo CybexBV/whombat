@@ -39,6 +39,13 @@ func startOA(t *testing.T, runtimeUID uint32, on bool) (*fakecontrol.Control, st
 // startOAWith is startOA in mode (nil: none), with a Link state (nil: none).
 func startOAWith(t *testing.T, runtimeUID uint32, mode *ownaddress.Mode, l broker.Link) (*fakecontrol.Control, string, *ownaddress.Service) {
 	t.Helper()
+	fc, sock, svc, _ := startOAServer(t, runtimeUID, mode, l)
+	return fc, sock, svc
+}
+
+// startOAServer is startOAWith that also gives the server.
+func startOAServer(t *testing.T, runtimeUID uint32, mode *ownaddress.Mode, l broker.Link) (*fakecontrol.Control, string, *ownaddress.Service, *broker.Server) {
+	t.Helper()
 	w := testworld.New(t)
 	fc := fakecontrol.New("dev")
 	t.Cleanup(fc.Close)
@@ -71,7 +78,7 @@ func startOAWith(t *testing.T, runtimeUID uint32, mode *ownaddress.Mode, l broke
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return fc, sock, svc
+	return fc, sock, svc, s
 }
 
 const v1 = `{"v":1}`
@@ -404,4 +411,85 @@ func TestOwnAddressMove(t *testing.T) {
 	if resp, m := post(t, c, local.ManagerPathOwnAddressRename, `{"v":1,"label":"home"}`); resp.StatusCode != 409 || errCode(m) != local.OwnAddressErrorLinkOff || fc.RenameCalls != calls {
 		t.Fatalf("link off: %d %v", resp.StatusCode, m)
 	}
+}
+
+// The daemon's move and the owner's rename race: whichever reaches control first, the box ends at the owner's name.
+// The address is held for one change at a time, so the rename waits for a move under way; and a move chosen before
+// the rename that reaches control after it carries move, so control changes nothing and the box keeps the new name.
+func TestALateMoveNeverUndoesARename(t *testing.T) {
+	t.Parallel()
+	const oldHost, movedHost = "maple-otter-river.box.whombat.app", "maple-otter-river.whombat.app"
+	fl := &fakeLink{rec: link.Record{State: protocol.LinkStateOn, Label: "maple-otter-river"}}
+	mode := &ownaddress.Mode{Enabled: true, Zone: "whombat.app", Directory: "https://ca.example.com/dir"}
+	fc, sock, svc, srv := startOAServer(t, uint32(os.Getuid()), mode, fl)
+	c := client(sock)
+	fc.Set(func(f *fakecontrol.Control) {
+		f.Zone = "box.whombat.app"
+		f.Link = &device.DeviceLinkStatus{State: protocol.LinkStateOn, Since: 1790000000}
+	})
+	if resp, m := post(t, c, local.ManagerPathOwnAddressRegister, `{"v":1,"label":"maple-otter-river"}`); resp.StatusCode != 200 || m["host"] != oldHost {
+		t.Fatalf("register: %d %v", resp.StatusCode, m)
+	}
+	issue(t, svc, 0xcd34)
+	fc.Set(func(f *fakecontrol.Control) { f.Zone = "whombat.app" })
+	label, ok := svc.MoveWanted("whombat.app")
+	if !ok {
+		t.Fatal("no move wanted")
+	}
+
+	// The move holds the address: the owner's rename waits, then renames the moved box.
+	unlock := srv.LockAddress()
+	renamed := make(chan int, 1)
+	go func() {
+		resp, err := c.Post("http://manager"+local.ManagerPathOwnAddressRename, "application/json", strings.NewReader(`{"v":1,"label":"home"}`))
+		if err != nil {
+			renamed <- 0
+			return
+		}
+		resp.Body.Close()
+		renamed <- resp.StatusCode
+	}()
+	select {
+	case code := <-renamed:
+		t.Fatalf("the rename didn't wait for the move: %d", code)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if err := srv.RenameAddress(context.Background(), label, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, h := svc.Label(); h != movedHost {
+		t.Fatalf("moved to %s", h)
+	}
+	unlock()
+	if code := <-renamed; code != 200 {
+		t.Fatalf("rename: %d", code)
+	}
+	if _, h := svc.Label(); h != "home.whombat.app" {
+		t.Fatalf("after the rename: %s", h)
+	}
+	if l := svc.Leaving(); l == nil || l.Host != oldHost {
+		t.Fatalf("leaving %+v", l)
+	}
+
+	// The same move again, late: control changes nothing, and neither does the box.
+	unlock = srv.LockAddress()
+	err := srv.RenameAddress(context.Background(), label, true)
+	unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, h := svc.Label(); h != "home.whombat.app" {
+		t.Fatalf("a late move undid the rename: %s", h)
+	}
+	if l := svc.Leaving(); l == nil || l.Host != oldHost {
+		t.Fatalf("leaving %+v", l)
+	}
+	if r := fl.Snapshot(); r.Host != "home.whombat.app" {
+		t.Fatalf("link state %+v", r)
+	}
+	fc.Set(func(f *fakecontrol.Control) {
+		if a := f.Addresses["dev-1"]; a.Host != "home.whombat.app" || f.Renamed["dev-1"] != 1 {
+			t.Errorf("control: %+v, %d renames", a, f.Renamed["dev-1"])
+		}
+	})
 }

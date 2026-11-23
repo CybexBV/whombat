@@ -46,10 +46,13 @@ type Link interface {
 	Snapshot() link.Record
 	On(ctx context.Context, contentProof, name string) (link.Record, error)
 	Off(ctx context.Context) (link.Record, error)
-	Observe(st *device.DeviceLinkStatus)
+	// Observe takes the Link state a ticket carried; mark is AddressMark from before the ticket was asked for.
+	Observe(st *device.DeviceLinkStatus, mark uint64)
 	SetClaimLink(secret string)
-	// FollowAddress takes the box's new name into the Link state after a rename or a move.
-	FollowAddress(label, host string)
+	// FollowAddress takes the box's new address into the Link state after a rename, a move or a registration;
+	// AddressMark counts those, so an answer to an earlier request doesn't bring the earlier address back.
+	FollowAddress(label, host string, leaving *device.AddressLeaving)
+	AddressMark() uint64
 }
 
 // linkBodyMax: {v: 1, contentProof (128 hex), name (64)} and the push routes' token.

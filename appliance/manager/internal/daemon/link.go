@@ -270,6 +270,7 @@ func (d *Daemon) whileLinkActive(ctx context.Context, f func(context.Context)) {
 
 // registerLinkLabel registers the label control gave with Link (LNK-13: control gives it, the manager registers it and
 // orders the certificate). A box that has its label already keeps it: a new name comes by a rename (followAddress).
+// Called with the own address held (followAddress).
 func (d *Daemon) registerLinkLabel(ctx context.Context) {
 	if d.OwnAddress == nil || d.Control == nil || !d.linkActive() {
 		return
@@ -295,6 +296,7 @@ func (d *Daemon) registerLinkLabel(ctx context.Context) {
 	}
 	d.clearErr("own address: the label from Whombat Link wasn't registered (tried again with the next state)")
 	d.Broker.DropTickets() // the next ticket carries the label (lbl)
+	d.Link.FollowAddress(resp.Label, resp.Host, resp.Leaving)
 	d.Log.Info("own address: label from Whombat Link registered", "label", label)
 }
 

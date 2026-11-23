@@ -113,8 +113,9 @@ whose host is under the old zone moves itself to control's zone the same way; ei
 for 30 days (`leaving`: tickets carry it as `plbl`; the manager keeps that host's certificate and orders none for it,
 and the certificate watch covers both hosts; the runtime serves it with that certificate beside the current host's,
 makes new box passkeys only at the current host, and when the manager's date comes the host stops and the box
-passkeys made for it are removed). Screens, device links (`o=`), the claim link and the HTTPS addresses name the
-current host only. A session below session minor 6 gets no address whose host isn't the older three-word
+passkeys made for it are removed). The manager makes one address change at a time and takes control's current host
+whenever it differs from its own (a rename whose answer it missed), and its move carries `move`, so it never undoes a
+rename. Screens, device links (`o=`), the claim link and the HTTPS addresses name the current host only. A session below session minor 6 gets no address whose host isn't the older three-word
 `box.`/`dev.` shape (`own-address/older-apps.ts`).
 The runtime polls the manager (`own-address/state.ts`; every few seconds right after Link moves, so the address a
 person who just linked the box waits for is served soon), records each certificate before it serves it, keeps what the watch

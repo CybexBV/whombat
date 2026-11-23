@@ -2863,19 +2863,24 @@ under one of its environment's zones.
   becoming active, runs `followAddress`, and so does a timer every 30 minutes while Link is active (a move that failed
   is tried again then).
 - **The move**: the box's host is under `box.whombat.app`, control names another of its zones, control's host is the
-  box's own, and nothing is leaving (neither the box nor control knows one) → `address.rename` with the box's own label.
-  Only updated boxes move; an older box stays at `<label>.box.whombat.app`, which keeps working.
-- **A rename the box missed**: control's host differs from the box's and control names the box's host as leaving (its
-  answer to the rename never arrived) → the box takes control's address as a rename. Without that sign the box keeps
-  its own: a `link.status` answer fetched before the box's own rename must not take it back.
-- One `followAddress` at a time; each reads the newest state.
-- The Link record's label and host follow a rename or a move at once (`Keeper.FollowAddress`), before control's next
-  answer says so.
-- Tests: daemon `TestOwnAddressMovesItself`; link `TestTheAddressFollowsControl`; broker `TestOwnAddressMove`.
+  box's own, and nothing is leaving (neither the box nor control knows one) → `address.rename` with the box's own label
+  and `move: true`, so control changes nothing when the label is no longer the box's live one (the owner renamed it
+  meanwhile): a late move never undoes a rename. Only updated boxes move; an older box stays at
+  `<label>.box.whombat.app`, which keeps working.
+- **Control is the truth for the current host.** Whenever control's checked host (`link.status`/ticket `host`) differs
+  from the box's and fits the environment's zones, the box takes it, whatever control names as leaving: a rename whose
+  answer was lost or not saved, or one the box missed while it was off past the leaving date. `leaving` only decides
+  which earlier pair keeps answering (MG-188). So a box always ends on control's host with a certificate ordered for it.
+  Older answers can't take the box's own rename back: MG-192.
+- `followAddress` runs with the own address held (MG-192), so it never overlaps the runtime's rename or another follower.
+- The Link record's label, host and leaving follow a register, rename or move at once (`Keeper.FollowAddress`), before
+  control's next answer says so.
+- Tests: daemon `TestOwnAddressMovesItself`, `TestOwnAddressTakesARenameItMissed`; link `TestTheAddressFollowsControl`;
+  broker `TestOwnAddressMove`, `TestALateMoveNeverUndoesARename`.
 
 ## MG-188 The leaving address: served with its pair, never ordered, then forgotten (2026-11-23; Whombat own-address.md)
 
-- `state.json` gains `leaving {label, host, until, pair}` (`Previous` still means the current host's previous pair). A
+- `state.json` gains `leaving {label, host, until, pair, directory}` (`Previous` still means the current host's previous pair). A
   rename or a move whose answer names the box's current host as leaving keeps that host with its current pair; the new
   host has no pair yet and is probed and ordered at once (the quick probes of a new label apply).
 - It is served until `min(until, the pair's notAfter)`; **no order is ever made for it** (Let's Encrypt's weekly budget
@@ -2884,11 +2889,16 @@ under one of its environment's zones.
 - **At most one.** A rename while one is leaving keeps it when control names it (its date as control says), and the
   name in between stops at once with its pair. A leaving address without a pair (renamed before its certificate came)
   leaves nothing to serve and isn't kept. An answer without `leaving` never ends one early: its date does.
+- **Back to the leaving address** (the owner renames back before its date): its pair, still valid while it is leaving,
+  becomes the current pair again with its ACME directory, so the address that already works keeps working and no order
+  is made until its usual renewal (two thirds of its life). The name in between stops with its files, unless control
+  names it as leaving. A leaving address saved without `directory` (none was ever written so) is ordered again.
 - A certificate that arrives for a host the box left during the order is dropped (and so is the probe's: the loop
   starts over with the new host).
 - `/v1/own-address/state` answers `leaving {label, host, until}` with the effective end.
 - Tests: `TestMoveKeepsTheOldPairAsLeaving`, `TestRenameAndRenameDuringLeaving`, `TestLeavingStopsAndIsForgotten`,
-  `TestRenameBeforeACertificateLeavesNothing`, `TestOrderForALeftHostIsDropped`; against Pebble `TestPebbleRename`.
+  `TestRenameBeforeACertificateLeavesNothing`, `TestOrderForALeftHostIsDropped`, `TestBackToTheLeavingAddressKeepsItsPair`,
+  `TestControlsHostIsTakenWhateverIsLeaving`; against Pebble `TestPebbleRename`.
 
 ## MG-189 The certificate watch covers every served host (2026-11-23; Whombat own-address.md)
 
@@ -2919,8 +2929,36 @@ POST /v1/own-address/rename {v:1, label}  → 200 OwnAddressStateResponse | 404 
   starting, on or in grace (otherwise `409 own_address.link_off`, control isn't asked). Control's `own_address_off` is
   `404 own_address.off`; its `link_off` is `409 own_address.link_off`.
 - A rename's answer is taken like the move's (MG-188), the cached tickets are dropped (the next carries the new `lbl`
-  and the leaving `plbl`), the Link state names the new label, and the route answers the new state.
-- `register` keeps its rule: once the box has a label that is the answer (a new name is a rename).
-- fakecontrol: `address.check`, `address.rename` (rename, move, limit, at most one leaving), `link.status` and tickets
-  with `host`, `zone`, `leaving`.
-- Tests: broker `TestOwnAddressCheckAndRename`, `TestOwnAddressMove`, `TestOwnAddressOff`, `TestOwnAddressOnlyForTheRuntime`.
+  and the leaving `plbl`), the Link state names the new address and leaving, and the route answers the new state.
+- `register`, `check` and `rename` run with the own address held (MG-192). `register` keeps its rule: once the box has
+  a label that is the answer (a new name is a rename).
+- fakecontrol: `address.check`, `address.rename` (rename, move, `move: true` that changes nothing for a label no longer
+  the device's, back to the leaving name leaves nothing leaving, limit, at most one leaving), `link.status` and tickets
+  with `host`, `zone`, `leaving`; `ownNames` recorded per `link.begin`/`link.status`, `BeforeOwnNames` refuses it.
+- Tests: broker `TestOwnAddressCheckAndRename`, `TestOwnAddressMove`, `TestALateMoveNeverUndoesARename`,
+  `TestOwnAddressOff`, `TestOwnAddressOnlyForTheRuntime`.
+
+## MG-191 The manager says it takes chosen names (2026-11-23; Whombat own-address.md, contracts 4.16)
+
+- Every `link.begin` and `link.status` carries `ownNames: true`: this manager reads chosen names and hosts under every
+  zone of its environment, so control may give it one. Control gives a manager that doesn't say so only a random
+  three-word name under the old zone, which an older manager can read.
+- A control from before 4.16 refuses the member (its strict body: `400 validation_failed`, `bad_body`). The box then asks
+  again without it (`link.status` without the claim link too) and offers it again an hour later, as with the claim
+  link (MG-185): the Link state matters more than the flag.
+- Tests: link `TestOwnNamesGoWithLinkBeginAndStatus`, `TestAControlBeforeClaimLinksStillGivesTheState`.
+
+## MG-192 One path for address changes; an older answer never moves the box back (2026-11-23; review of own names)
+
+- **One at a time.** The broker holds one lock for the own address (`Server.LockAddress`): the runtime's `register`,
+  `check` and `rename` routes and the daemon's `followAddress` (register, move, taking control's host) each run under
+  it. So a rename waits for a move under way, two renames are saved in the order control took them, and each change
+  starts from the state the one before left.
+- **No answer older than the box's own change.** The Link keeper counts the box's own address changes
+  (`FollowAddress` after a register, rename or move). A `link.status` or ticket answer to a request sent before the
+  latest one may predate it at control, so its address fields (label, host, zone, leaving) don't replace the record's;
+  the rest of the state is taken as usual. Control has no address revision to compare, and the count needs none.
+- **After a restart** the follower takes a host from the Link record only once control has told it one in this run
+  (`Keeper.AddressFresh`): the journal's copy may be older than the own address's own state (a stop between the two
+  saves).
+- Tests: link `TestAnAnswerOlderThanTheBoxsRenameKeepsTheNewAddress`; broker `TestALateMoveNeverUndoesARename`.

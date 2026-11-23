@@ -63,7 +63,7 @@ func (f *fakeLink) Off(context.Context) (link.Record, error) {
 	f.rec = link.Record{State: protocol.LinkStateOff, Since: time.Unix(1790000000, 0)}
 	return f.rec, nil
 }
-func (f *fakeLink) Observe(st *device.DeviceLinkStatus) {
+func (f *fakeLink) Observe(st *device.DeviceLinkStatus, _ uint64) {
 	f.mu.Lock()
 	f.observed = append(f.observed, st.State)
 	hook := f.onObserve
@@ -73,11 +73,13 @@ func (f *fakeLink) Observe(st *device.DeviceLinkStatus) {
 	}
 }
 
-func (f *fakeLink) FollowAddress(label, host string) {
+func (f *fakeLink) FollowAddress(label, host string, leaving *device.AddressLeaving) {
 	f.mu.Lock()
-	f.rec.Label, f.rec.Host = label, host
+	f.rec.Label, f.rec.Host, f.rec.AddressLeaving = label, host, leaving
 	f.mu.Unlock()
 }
+
+func (f *fakeLink) AddressMark() uint64 { return 0 }
 
 func (f *fakeLink) SetClaimLink(secret string) {
 	f.mu.Lock()

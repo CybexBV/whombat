@@ -262,3 +262,85 @@ func TestAdoptChecksEveryHost(t *testing.T) {
 		t.Fatal("a leaving address of another environment")
 	}
 }
+
+// Back to the address that is leaving: its pair, still valid, is the current one again at once (with its directory,
+// so no order follows), and the name in between stops with its files.
+func TestBackToTheLeavingAddressKeepsItsPair(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)}
+	s, st, o := newServiceIn(t, c, "whombat.app")
+	adopt(t, s, Address{Label: "maple-otter-river", Host: newHost})
+	_, states := step(t, s, c, 1)
+	first := states[0].Cert.Serial
+	leaving := &device.AddressLeaving{Label: "maple-otter-river", Host: newHost, Until: c.now().Add(30 * 24 * time.Hour).Unix()}
+	adopt(t, s, Address{Label: "home", Host: homeHost, Leaving: leaving})
+	_, states = step(t, s, c, 1)
+	between := states[0].Cert.Serial
+	if o.n != 2 {
+		t.Fatalf("orders %v", o.hosts)
+	}
+	c.add(24 * time.Hour)
+	// Control leaves nothing leaving when the box goes back to the name that was.
+	if !adopt(t, s, Address{Label: "maple-otter-river", Host: newHost}) {
+		t.Fatal("going back changed nothing")
+	}
+	r := s.State()
+	if *r.Host != newHost || r.Cert == nil || r.Cert.Serial != first || r.Leaving != nil {
+		t.Fatalf("after going back: %+v", r)
+	}
+	if cert, ok := s.Cert(""); !ok || cert.Serial != first || cert.Host != newHost {
+		t.Fatalf("current pair %+v", cert)
+	}
+	if !pairFiles(t, st, first) || pairFiles(t, st, between) {
+		t.Fatal("the files of the pair kept, or of the name in between")
+	}
+	_, states = step(t, s, c, 1)
+	if o.n != 2 || states[0].Acme.State != "valid" || states[0].Cert.Serial != first {
+		t.Fatalf("an order after going back: %v, %+v", o.hosts, states[0])
+	}
+	// Kept across a restart.
+	s2, err := Open(s.Mode, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2.Now = c.now
+	if r := s2.State(); r.Cert == nil || r.Cert.Serial != first {
+		t.Fatalf("after a restart: %+v", r)
+	}
+}
+
+// A rename the box never heard of (its answer lost, or the box off past the leaving date): control's host is taken
+// whatever control names as leaving, and its certificate ordered. An earlier pair answers only for the host control
+// still names.
+func TestControlsHostIsTakenWhateverIsLeaving(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)}
+	s, _, o := newServiceIn(t, c, "whombat.app")
+	adopt(t, s, Address{Label: "maple-otter-river", Host: oldHost})
+	step(t, s, c, 1)
+	until := c.now().Add(30 * 24 * time.Hour).Unix()
+	adopt(t, s, Address{Label: "maple-otter-river", Host: newHost,
+		Leaving: &device.AddressLeaving{Label: "maple-otter-river", Host: oldHost, Until: until}})
+	step(t, s, c, 1)
+	// Control renamed newHost to home and keeps oldHost leaving; the box missed the answer.
+	if !adopt(t, s, Address{Label: "home", Host: homeHost,
+		Leaving: &device.AddressLeaving{Label: "maple-otter-river", Host: oldHost, Until: until}}) {
+		t.Fatal("control's host not taken")
+	}
+	if r := s.State(); *r.Host != homeHost || r.Leaving == nil || r.Leaving.Host != oldHost {
+		t.Fatalf("%+v", r)
+	}
+	if _, ok := s.Cert(newHost); ok {
+		t.Fatal("the name in between still answers")
+	}
+	_, states := step(t, s, c, 1)
+	if o.hosts[len(o.hosts)-1] != homeHost || states[0].Cert == nil {
+		t.Fatalf("orders %v", o.hosts)
+	}
+	// Past every leaving date, control names another host and nothing leaving: taken, nothing kept.
+	c.add(60 * 24 * time.Hour)
+	if !adopt(t, s, Address{Label: "garden-shed", Host: "garden-shed.whombat.app"}) {
+		t.Fatal("control's host not taken")
+	}
+	if r := s.State(); *r.Host != "garden-shed.whombat.app" || r.Leaving != nil || r.Cert != nil {
+		t.Fatalf("%+v", r)
+	}
+}

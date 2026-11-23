@@ -59,8 +59,10 @@ type Leaving struct {
 	Label string    `json:"label"`
 	Host  string    `json:"host"`
 	Until time.Time `json:"until"`
-	// Pair is the serial of its pair in the directory.
-	Pair string `json:"pair"`
+	// Pair is the serial of its pair in the directory, Directory the ACME directory it came from (so it can become the
+	// current pair again when the box goes back to this address).
+	Pair      string `json:"pair"`
+	Directory string `json:"directory,omitempty"`
 }
 
 // End is when the leaving address stops: control's date, or the pair's end if that comes first.

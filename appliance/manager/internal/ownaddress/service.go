@@ -308,10 +308,12 @@ func (s *Service) Accept(resp *device.AddressRegisterResponse) error {
 // Control is the registry, but the box's name never leaves its environment: the host must be the label directly under
 // one of the environment's zones.
 //
+// Control's host is taken whatever control names as leaving: that only decides which earlier pair keeps answering.
 // A new host takes over at once (its certificate is ordered now, after a probe). The host it replaces keeps answering
 // with the pair it has when control names it as leaving; an earlier address already leaving stays when control still
 // names it (a rename during a move: the name in between stops at once). There is at most one leaving address, and an
-// answer without one never ends it early: its date does.
+// answer without one never ends it early: its date does. Going back to the address that is leaving makes its pair the
+// current one again (no order while it is valid), so the address that already works keeps working.
 func (s *Service) Adopt(a Address) (changed bool, err error) {
 	if !s.Mode.fits(a.Label, a.Host) {
 		return false, fmt.Errorf("%w (label %q, host %q, zone %s)", ErrHostMismatch, a.Label, a.Host, s.Mode.Zone)
@@ -340,13 +342,19 @@ func (s *Service) Adopt(a Address) (changed bool, err error) {
 	} else {
 		next = Saved{Label: a.Label, Host: a.Host, RegisteredAt: a.RegisteredAt}
 		leavingPair = nil
+		back := cur.Leaving != nil && cur.Leaving.Host == a.Host && s.leaving != nil
+		if back {
+			next.Current, next.Directory = cur.Leaving.Pair, cur.Leaving.Directory
+		}
 		switch {
 		case lv == nil:
 		case lv.Host == cur.Host && cur.Label != "" && s.pair != nil:
-			next.Leaving = &Leaving{Label: cur.Label, Host: cur.Host, Until: time.Unix(lv.Until, 0).UTC(), Pair: cur.Current}
+			next.Leaving = &Leaving{Label: cur.Label, Host: cur.Host, Until: time.Unix(lv.Until, 0).UTC(), Pair: cur.Current,
+				Directory: cur.Directory}
 			leavingPair = s.pair
-		case cur.Leaving != nil && lv.Host == cur.Leaving.Host:
-			next.Leaving = &Leaving{Label: cur.Leaving.Label, Host: cur.Leaving.Host, Until: time.Unix(lv.Until, 0).UTC(), Pair: cur.Leaving.Pair}
+		case cur.Leaving != nil && lv.Host == cur.Leaving.Host && !back:
+			next.Leaving = &Leaving{Label: cur.Leaving.Label, Host: cur.Leaving.Host, Until: time.Unix(lv.Until, 0).UTC(),
+				Pair: cur.Leaving.Pair, Directory: cur.Leaving.Directory}
 			leavingPair = s.leaving
 		}
 		if next.Leaving != nil && !s.now().Before(next.Leaving.End(leavingPair)) {
@@ -360,9 +368,15 @@ func (s *Service) Adopt(a Address) (changed bool, err error) {
 		return false, err
 	}
 	changed = next.Host != cur.Host
-	s.saved, s.leaving = next, leavingPair
+	current := s.pair
 	if changed {
-		s.pair = nil
+		current = nil
+		if next.Current != "" {
+			current = s.leaving // back to the address that was leaving: its pair
+		}
+	}
+	s.saved, s.leaving, s.pair = next, leavingPair, current
+	if changed {
 		s.soonUntil = s.now().Add(probeSoonFor)
 		if err := s.Store.Prune(next.keep()...); err != nil {
 			s.log().Warn("own address: pruning old pairs", "err", err)
@@ -370,7 +384,8 @@ func (s *Service) Adopt(a Address) (changed bool, err error) {
 		if cur.Label == "" {
 			s.log().Info("own address: registered", "host", a.Host)
 		} else {
-			s.log().Info("own address: the address changed", "from", cur.Host, "to", a.Host, "leaving", next.Leaving != nil)
+			s.log().Info("own address: the address changed", "from", cur.Host, "to", a.Host, "leaving", next.Leaving != nil,
+				"pairKept", next.Current != "")
 		}
 	}
 	select {

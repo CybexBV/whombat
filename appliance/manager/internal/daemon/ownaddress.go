@@ -104,24 +104,31 @@ func (d *Daemon) ownAddressLoop(ctx context.Context) {
 // followAddressEvery: how often the box looks again at control's view of its address without a change to it.
 const followAddressEvery = 30 * time.Minute
 
-// followAddress keeps the own address with control's view in the Link state (link.status, tickets): it registers the
-// label control gave a box that has none; it moves a box whose host is under prod's earlier zone to the zone control
-// names (address.rename with its own label), once and only while nothing is leaving; and it takes a rename the box
-// missed, when control says the box's host is the one leaving. One at a time, each with the newest state.
+// followAddress keeps the own address with control's view in the Link state (link.status, tickets), with the own
+// address held (the runtime's rename and check wait meanwhile, and the other way round):
+//   - a box without a label registers the one control gave;
+//   - control's checked host differs from the box's: control is the registry, so the box takes it whatever is leaving
+//     (a rename whose answer never arrived, or one it missed while it was off past the leaving date); what control names
+//     as leaving only decides which earlier pair keeps answering;
+//   - a box whose host is under prod's earlier zone moves to the zone control names (address.rename with its own label
+//     and move, so a move that reaches control after a rename changes nothing), once, while nothing is leaving.
 func (d *Daemon) followAddress(ctx context.Context) {
-	if d.OwnAddress == nil || d.Control == nil || !d.linkActive() {
+	if d.OwnAddress == nil || d.Control == nil || d.Broker == nil || !d.linkActive() {
 		return
 	}
-	d.addressMu.Lock()
-	defer d.addressMu.Unlock()
+	unlock := d.Broker.LockAddress()
+	defer unlock()
 	have, haveHost := d.OwnAddress.Label()
 	if have == "" {
 		d.registerLinkLabel(ctx)
 		return
 	}
 	rec := d.Link.Snapshot()
-	if rec.Label != "" && rec.Host != "" && rec.Host != haveHost && rec.AddressLeaving != nil && rec.AddressLeaving.Host == haveHost {
-		// Control renamed the box and routes its host as the earlier one: the answer to the rename never arrived.
+	if rec.Label != "" && rec.Host != "" && rec.Host != haveHost {
+		if !d.Link.AddressFresh() {
+			// Only the journal's copy so far: control's own answer comes with the next state.
+			return
+		}
 		changed, err := d.OwnAddress.Adopt(ownaddress.Address{Label: rec.Label, Host: rec.Host, Leaving: rec.AddressLeaving})
 		if err != nil {
 			d.warnOnce("own address: control's address in the Link state refused", err)
@@ -130,11 +137,11 @@ func (d *Daemon) followAddress(ctx context.Context) {
 		d.clearErr("own address: control's address in the Link state refused")
 		if changed {
 			d.Broker.DropTickets()
-			d.Log.Info("own address: took control's new address", "host", rec.Host)
+			d.Log.Info("own address: took control's address", "from", haveHost, "to", rec.Host)
 		}
 		return
 	}
-	if rec.AddressLeaving != nil || (rec.Host != "" && rec.Host != haveHost) {
+	if rec.AddressLeaving != nil || rec.Host != haveHost {
 		return
 	}
 	label, ok := d.OwnAddress.MoveWanted(rec.Zone)
@@ -143,7 +150,7 @@ func (d *Daemon) followAddress(ctx context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	if err := d.Broker.RenameAddress(ctx, label); err != nil {
+	if err := d.Broker.RenameAddress(ctx, label, true); err != nil {
 		d.warnOnce("own address: the move to the new zone didn't happen yet (tried again later)", err)
 		return
 	}

@@ -158,6 +158,12 @@ type Control struct {
 	// that carries one as a control before contracts 4.13 does (its strict body: 400 validation_failed, bad_body).
 	ClaimLinks             []string
 	StatusBeforeClaimLinks bool
+	// BeginOwnNames and StatusOwnNames: whether each link.begin and link.status carried ownNames (4.16).
+	// BeforeOwnNames answers a link.begin or link.status that carries it as a control before contracts 4.16 does (its
+	// strict body: 400 validation_failed, bad_body).
+	BeginOwnNames  []bool
+	StatusOwnNames []bool
+	BeforeOwnNames bool
 	// support.heartbeat and push.register/unregister: what control took.
 	Heartbeats  []device.SupportReport
 	HeartbeatS  int64
@@ -183,6 +189,12 @@ func (c *Control) LinkCount(op device.DeviceOpName) int {
 
 // SetLink sets the Link state control answers.
 func (c *Control) SetLink(st *device.DeviceLinkStatus) { c.mu.Lock(); c.Link = st; c.mu.Unlock() }
+
+// badBody answers as control does a body its strict schema refuses.
+func badBody(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = fmt.Fprint(w, `{"error":{"code":"validation_failed","message":"The device request is not valid.","details":{"code":"bad_body"}}}`)
+}
 
 // adoptRegistration adds a device link.begin introduces (a box control never saw, LNK-03): control trusts the
 // registration's management key once both its proofs verify, as control does.
@@ -231,11 +243,16 @@ func (c *Control) link(w http.ResponseWriter, env *device.DeviceRequestEnvelope)
 		}
 		var begin device.LinkBeginRequest
 		if json.Unmarshal(env.Body, &begin) == nil {
+			if begin.OwnNames != nil && c.BeforeOwnNames {
+				badBody(w)
+				return
+			}
 			name := ""
 			if begin.Name != nil {
 				name = *begin.Name
 			}
 			c.BeginNames = append(c.BeginNames, name)
+			c.BeginOwnNames = append(c.BeginOwnNames, begin.OwnNames != nil && *begin.OwnNames)
 		}
 		st := c.BeginAnswer
 		if st == nil {
@@ -251,11 +268,11 @@ func (c *Control) link(w http.ResponseWriter, env *device.DeviceRequestEnvelope)
 	case device.DeviceOpNameLinkStatus:
 		var req device.LinkStatusRequest
 		_ = json.Unmarshal(env.Body, &req)
-		if req.ClaimLink != nil && c.StatusBeforeClaimLinks {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprint(w, `{"error":{"code":"validation_failed","message":"The device request is not valid.","details":{"code":"bad_body"}}}`)
+		if (req.ClaimLink != nil && c.StatusBeforeClaimLinks) || (req.OwnNames != nil && c.BeforeOwnNames) {
+			badBody(w)
 			return
 		}
+		c.StatusOwnNames = append(c.StatusOwnNames, req.OwnNames != nil && *req.OwnNames)
 		claim := ""
 		if req.ClaimLink != nil {
 			claim = *req.ClaimLink
@@ -903,7 +920,8 @@ func (c *Control) addressCheck(w http.ResponseWriter, env *device.DeviceRequestE
 
 // addressRename is control's address.rename: a new name (the old one leaves for 30 days, or the one already leaving
 // stays and the one in between stops), the same label under control's zone (a move), or the same label already there
-// (the state as it is).
+// (the state as it is). With move, a label that is no longer the device's changes nothing (the state as it is): a late
+// move never undoes a rename. Back to the name that is leaving, in the same zone, leaves nothing leaving.
 func (c *Control) addressRename(w http.ResponseWriter, env *device.DeviceRequestEnvelope) {
 	req, err := device.ParseAddressRenameRequest(env.Body)
 	if err != nil {
@@ -928,6 +946,7 @@ func (c *Control) addressRename(w http.ResponseWriter, env *device.DeviceRequest
 	leaving := c.leavingOf(env.Device)
 	switch {
 	case req.Label == a.Label && zoneOf(a.Host) == c.zone():
+	case req.Move != nil && *req.Move && req.Label != a.Label:
 	case req.Label == a.Label:
 		leaving = &device.AddressLeaving{Label: a.Label, Host: a.Host, Until: now + protocol.OwnAddressLeavingDays*86400}
 		a.Host = a.Label + "." + c.zone()
@@ -959,6 +978,9 @@ func (c *Control) addressRename(w http.ResponseWriter, env *device.DeviceRequest
 			leaving = &device.AddressLeaving{Label: a.Label, Host: a.Host, Until: now + protocol.OwnAddressLeavingDays*86400}
 		}
 		a = device.AddressRegisterResponse{Label: req.Label, Host: req.Label + "." + c.zone(), RegisteredAt: now}
+		if leaving.Host == a.Host {
+			leaving = nil
+		}
 		c.had(req.Label, env.Device)
 	}
 	if c.AddressLeaving == nil {
