@@ -29,13 +29,17 @@ import { findMyConnectionRow, findMyConnections, listenedFindMyConnections } fro
 /** `principals.system` of the Find My signer. */
 export const SYSTEM_FINDMY = 'findmy';
 
-/** The burrow's Find My signer: signs the places it keeps and each change of place an automation listens for. */
+/**
+ * The burrow's Find My signer: keeps the places, signs each change of place an automation listens for, and writes the
+ * timeline's rows without an event (`findmy-timeline.ts`).
+ */
 export const findMyPrincipal = burrowSystemPrincipal({
   system: SYSTEM_FINDMY,
   name: 'Find My',
   handle: 'findmy',
-  doing: 'Notices when people arrive or leave, for the automations that listen to Find My.',
-  job: 'Notices when someone arrives somewhere or leaves, as Find My on your Mac shows it, for your automations.',
+  doing:
+    'Notices when people arrive or leave, for the automations that listen to Find My, and keeps the timeline you turned on.',
+  job: 'Notices when someone arrives somewhere or leaves, as Find My on your Mac shows it, for your automations, and keeps the Find My timeline you turned on.',
   line: { type: 'findmy.system_principal', where: 'Find My' },
 });
 

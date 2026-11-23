@@ -1,11 +1,12 @@
 /**
- * Reading Find My in the background (docs/decisions/findmy-connection.md): one loop for the box. A Find My connection
- * reads without anyone looking when its Read in the background isn't Off, or when a live automation listens to it (then
- * at least every 15 minutes, `FIND_MY_LISTENED_MS`). Each read is the page's own (`FindMyStore.refresh`): it leaves a
- * Mac someone is using alone, and then tries again after 2 minutes; it puts a locked Mac back. A read that fails waits
- * twice as long each time, up to an hour. While a connection reads, what was read stays in memory; once it stops, the
- * hour after the last look applies. It stops when the connection is removed, its Mac is gone, or it is Off with nothing
- * listening.
+ * Reading Find My in the background (docs/decisions/findmy-connection.md, findmy-timeline.md): one loop for the box. A
+ * Find My connection reads without anyone looking when its Read in the background isn't Off, or when a live automation
+ * listens to it or it keeps a timeline (then at least every 15 minutes, `FIND_MY_LISTENED_MS`). Each read is the page's
+ * own (`FindMyStore.refresh`): it leaves a Mac someone is using alone, and then tries again after 2 minutes; it puts a
+ * locked Mac back. A read that fails waits twice as long each time, up to an hour. While a connection reads, what was
+ * read stays in memory; once it stops, the hour after the last look applies. It stops when the connection is removed,
+ * its Mac is gone, or it is Off with nothing listening and no timeline. Each pass also deletes the timeline rows past
+ * their 30 days.
  */
 import { FIND_MY_LISTENED_MS, type HostFindMy, type HostFindMyCode } from '@whombat/core';
 import { onConnectionLifecycle } from '../connections/lifecycle';
@@ -20,6 +21,7 @@ import {
   macsOf,
 } from './findmy-connection';
 import { findMyPlacesFor } from './findmy-places';
+import { findMyTimelineFor, timelineConnectionIds } from './findmy-timeline';
 import { hostsFor, WHOMBAT_ACTOR } from './service';
 
 /** A Find My connection that reads in the background now. */
@@ -142,7 +144,13 @@ export class FindMyBackground {
     const want = serverId.toLowerCase();
     const paces = this.#plans.filter((p) => p.serverId.toLowerCase() === want).map((p) => p.pace);
     const fastest = paces.sort((a, b) => a.everyMinutes - b.everyMinutes)[0];
-    return fastest ? { everyMinutes: fastest.everyMinutes, automation: fastest.automation } : null;
+    return fastest
+      ? {
+          everyMinutes: fastest.everyMinutes,
+          automation: fastest.automation,
+          ...(fastest.timeline ? { timeline: true } : {}),
+        }
+      : null;
   }
 }
 
@@ -151,10 +159,20 @@ const BACKGROUND_ACTOR = { ...WHOMBAT_ACTOR, role: 'admin' as const };
 
 /**
  * The plans from the database and the fleet: every Find My connection whose Mac is one of the servers and runs macOS,
- * and that reads in the background by its own setting or because a live automation listens to it. Places kept for
- * connections nothing listens to any more go here too. Throws when the fleet can't be read (the pass keeps its plans).
+ * and that reads in the background by its own setting, because a live automation listens to it or because it keeps a
+ * timeline. Places kept for connections nothing listens to any more go here too, and timeline days past their 30.
+ * Throws when the fleet can't be read (the pass keeps its plans).
  */
 async function plansOf(services: Services): Promise<FindMyPlan[]> {
+  // The timeline's 30 days hold with or without the hosts service, and a failure there doesn't stop the reads.
+  await findMyTimelineFor(services)
+    .expire(services.clock())
+    .catch((err: unknown) =>
+      services.log.warn(
+        { err: err instanceof Error ? err.name : 'error' },
+        'Find My: old timeline days weren’t deleted',
+      ),
+    );
   const hosts = hostsFor(services);
   if (!hosts.present) return [];
   const rows = await findMyConnections(services.db);
@@ -163,6 +181,7 @@ async function plansOf(services: Services): Promise<FindMyPlan[]> {
   const listened = ready ? await listenedFindMyConnections(services.db) : new Map<string, string>();
   if (ready) await findMyPlacesFor(services).clearUnlistened(listened);
   if (!rows.length) return [];
+  const timelines = await timelineConnectionIds(services.db);
   const macs = macsOf(await hosts.fleetRaw());
   const plans: FindMyPlan[] = [];
   for (const row of rows) {
@@ -173,18 +192,27 @@ async function plansOf(services: Services): Promise<FindMyPlan[]> {
       row.fields.background,
       listened.get(row.id) ?? null,
       FIND_MY_LISTENED_MS / 60_000,
+      timelines.has(row.id),
     );
     if (pace) plans.push({ connectionId: row.id, serverId: mac.id, label: mac.name, pace });
   }
   return plans;
 }
 
-/** One background read of a Mac through the process's Find My store, without counting as a look. */
+/**
+ * One background read of a Mac through the process's Find My store, without counting as a look. One that didn't work
+ * (no new read, and why) is noted on the connection's timeline when it keeps one.
+ */
 async function readOf(services: Services, plan: FindMyPlan): Promise<HostFindMyCode | null> {
   const store = findMyFor(services);
+  const before = store.peek(plan.serverId)?.readAt ?? null;
   store.refresh(hostsFor(services), plan.serverId, BACKGROUND_ACTOR, plan.label, { look: false });
   await store.idle(plan.serverId);
-  return store.peek(plan.serverId)?.problem?.code ?? null;
+  const after = store.peek(plan.serverId);
+  const code = after?.problem?.code ?? null;
+  if (code !== null && (after?.readAt ?? null) === before)
+    await findMyTimelineFor(services).failed(plan.serverId, plan.connectionId, code, services.clock());
+  return code;
 }
 
 /** The box's background reading: the loop with its start and its nudge. */
@@ -216,6 +244,7 @@ export class FindMyBackgroundService extends FindMyBackground {
     const services = this.services;
     findMyFor(services).onRead((serverId, people, at) => {
       void findMyPlacesFor(services).noted(serverId, people, at);
+      void findMyTimelineFor(services).noted(serverId, people, at);
     });
     // A Find My connection added, changed or removed is read (or not) from the next pass, which starts now.
     onConnectionLifecycle(services, (event) => {
