@@ -20,10 +20,10 @@ import {
   type DeskWidgetSpec,
 } from '@whombat/core';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
-import { providerWorkspace } from '../../connectors/providers';
 import { ConnectionUnavailableError, GoogleApiError, type InboxUnread } from '../../connectors/types';
 import { connections, prChecks, principals, prReviewers, pullRequests, repos } from '../../db/schema/index';
 import type { Services } from '../../services';
+import { accountCalendar, accountUnread, heldAt, UNREAD_NEWEST } from '../../things/accounts/reads';
 import {
   ACCOUNT_PANELS,
   ACCOUNT_REFRESH_S,
@@ -47,12 +47,11 @@ import {
 import { type Kept, RETRY_MS } from './resolve';
 import type { Resolved, WidgetCtx } from './types';
 
-/** How long each read is kept (ms). */
+/** How long each read is kept (ms); the calendar and mail are read through the reads an account's page shares. */
 export const ACCOUNT_KEEP_MS = { calendar: 5 * 60_000, mail: 2 * 60_000, github: 60_000 } as const;
 /** The newest unread mails read with the count. */
-export const UNREAD_NEWEST = 5;
-/** Today's calendar items read at most. */
-const CALENDAR_LIMIT = 50;
+export { UNREAD_NEWEST };
+
 /** Open pull requests read at most (the widgets show twelve; the rest are counted). */
 const PULLS_MAX = 200;
 
@@ -77,6 +76,11 @@ export interface AccountReads {
   hasRepos(ctx: WidgetCtx): Promise<boolean>;
   /** Its open pull requests, as the mirror knows them. */
   pulls(ctx: WidgetCtx): Promise<AccountPull[]>;
+  /**
+   * When the calendar or mail just read was read, when the read came from what an account's page read earlier (the
+   * widget keeps it only what is left of its time); absent or null: now.
+   */
+  readAt?(ctx: WidgetCtx, row: AccountRow, source: 'calendar' | 'mail'): Date | null;
 }
 
 type Source = 'calendar' | 'mail' | 'github';
@@ -126,24 +130,6 @@ function fixable(err: unknown, row: AccountRow): string | null {
   return null;
 }
 
-/** A call with the person's token, once more with a fresh one when the provider refused it (HTTP 401). */
-async function withToken<T>(
-  services: Services,
-  ctx: WidgetCtx,
-  row: AccountRow,
-  call: (token: string) => Promise<T>,
-): Promise<T> {
-  const token = await services.google.tokens.accessFor(ctx.viewer.accountId, row.provider);
-  try {
-    return await call(token);
-  } catch (err) {
-    if (!(err instanceof GoogleApiError && err.reason === 'unauthorized')) throw err;
-    return call(
-      await services.google.tokens.accessFor(ctx.viewer.accountId, row.provider, { forceRefresh: true }),
-    );
-  }
-}
-
 /** The checks of a head as one word: any failed, else any still going, else passing; null with none. */
 export function checksOf(states: readonly string[]): AccountPull['checks'] {
   if (states.length === 0) return null;
@@ -171,19 +157,16 @@ export function dbAccountReads(services: Services): AccountReads {
       return rows;
     },
     async calendar(ctx, row, window) {
-      return withToken(services, ctx, row, (token) =>
-        providerWorkspace(services, row.provider).calendarEvents(token, {
-          calendarId: 'primary',
-          from: window.from,
-          to: window.to,
-          limit: CALENDAR_LIMIT,
-        }),
-      );
+      return (await accountCalendar(services, ctx.viewer.accountId, row, window)).value;
     },
     async unread(ctx, row, newest) {
-      return withToken(services, ctx, row, (token) =>
-        providerWorkspace(services, row.provider).inboxUnread(token, { newest }),
-      );
+      const { value } = await accountUnread(services, ctx.viewer.accountId, row);
+      return { count: value.count, newest: value.newest.slice(0, newest) };
+    },
+    readAt(ctx, row, source) {
+      return source === 'calendar'
+        ? heldAt(services, 'calendar', row.id, todayWindow(ctx.now, ctx.timeZone))
+        : heldAt(services, 'unread', row.id);
     },
     async hasRepos(ctx) {
       const [row] = await db
@@ -333,12 +316,17 @@ export class AccountWidgets {
     if (kept.due(key))
       kept.start([key], async () => {
         const data = await this.#read(ctx, spec, want, () => kept.peek(key).has);
+        // What an account's page read a minute ago is kept only for what is left of its time.
         const keepMs =
           data.kind === 'problem'
             ? RETRY_MS
-            : ACCOUNT_KEEP_MS[
-                data.kind === 'calendar' ? 'calendar' : data.kind === 'mail' ? 'mail' : 'github'
-              ];
+            : Math.max(
+                RETRY_MS,
+                ACCOUNT_KEEP_MS[
+                  data.kind === 'calendar' ? 'calendar' : data.kind === 'mail' ? 'mail' : 'github'
+                ] -
+                  (ctx.now.getTime() - data.at),
+              );
         return new Map([[key, { value: data, keepMs }]]);
       });
     return [key];
@@ -385,13 +373,15 @@ export class AccountWidgets {
         text: calendar ? ACCOUNT_WORDS.problems.noCalendar : ACCOUNT_WORDS.problems.noMail,
       };
     try {
+      const readAt = (source: 'calendar' | 'mail') =>
+        Math.min(ctx.now.getTime(), this.#reads.readAt?.(ctx, row, source)?.getTime() ?? ctx.now.getTime());
       if (calendar) {
         const window = todayWindow(ctx.now, ctx.timeZone);
         const events = await this.#reads.calendar(ctx, row, window);
-        return { kind: 'calendar', provider: row.provider, email: row.email, events, at: ctx.now.getTime() };
+        return { kind: 'calendar', provider: row.provider, email: row.email, events, at: readAt('calendar') };
       }
       const unread = await this.#reads.unread(ctx, row, UNREAD_NEWEST);
-      return { kind: 'mail', provider: row.provider, unread, at: ctx.now.getTime() };
+      return { kind: 'mail', provider: row.provider, unread, at: readAt('mail') };
     } catch (err) {
       const words = fixable(err, row);
       if (words) return { kind: 'problem', provider: row.provider, text: words };
