@@ -374,11 +374,13 @@ describe('every connection gets a page (CP-06, CP-10)', () => {
   it('a Proxmox connection to a watched server is part of it, on its page and on Home', async () => {
     const p = await page(mara, thingId('connection', proxmoxId));
     expect(p.partOf).toBe('server:basalt');
-    expect(p.tabs[0]?.panels.find((x) => x.id === 'part-of')).toMatchObject({
-      kind: 'text',
-      body: expect.stringContaining('basalt’s page'),
+    // Its Summary is basalt from what Whombat knows of it: what is on it, and basalt as the machine, linked.
+    const panels = p.tabs[0]?.panels ?? [];
+    expect(panels.find((x) => x.id === 'inventory')).toMatchObject({ kind: 'list', title: 'On basalt' });
+    expect(panels.find((x) => x.id === 'machine')).toMatchObject({
       link: { kind: 'href', href: '/things/server%3Abasalt' },
     });
+    expect(panels.find((x) => x.id === 'part-of')).toBeUndefined();
     const [principal] = await t.services.db.select().from(principals).where(eq(principals.id, IDS.mara));
     const burrow = await t.services.db.query.burrows.findFirst();
     if (!principal || !burrow) throw new Error('viewer');

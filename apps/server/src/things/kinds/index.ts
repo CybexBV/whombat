@@ -15,6 +15,7 @@ import { INFRA_KINDS } from './infra/index';
 import { MEDIA_KINDS } from './media/index';
 import { PS5_KIND } from './ps5';
 import type { KindModule } from './registry';
+import { SERVER_KINDS } from './servers/index';
 import { STORAGE_KINDS } from './storage/index';
 
 export const KIND_MODULES: Record<string, KindModule> = {
@@ -24,6 +25,7 @@ export const KIND_MODULES: Record<string, KindModule> = {
   ...INFRA_KINDS,
   ...STORAGE_KINDS,
   ...BUSINESS_KINDS,
+  ...SERVER_KINDS,
   ps5: PS5_KIND,
   findmy: FIND_MY_KIND,
 };
