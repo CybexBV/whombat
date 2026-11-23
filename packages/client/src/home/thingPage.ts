@@ -49,7 +49,13 @@ export const THING_SETTINGS_TAB = 'settings';
 export function thingTabs(page: Pick<ThingPage, 'tabs' | 'settings'>): ThingTabView[] {
   const tabs: ThingTabView[] = page.tabs
     .filter((t) => t.key !== THING_ACTIVITY_TAB && t.key !== THING_SETTINGS_TAB)
-    .map((t) => ({ key: t.key, label: t.label, count: t.count ?? null, own: null, server: t.server ?? null }));
+    .map((t) => ({
+      key: t.key,
+      label: t.label,
+      count: t.count ?? null,
+      own: null,
+      server: t.server ?? null,
+    }));
   tabs.push({ key: THING_ACTIVITY_TAB, label: 'Activity', count: null, own: 'activity', server: null });
   // The connection's own settings: “Connection”, beside a service's own settings tab (service-settings.md SST-06).
   if (page.settings)

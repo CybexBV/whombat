@@ -15,7 +15,10 @@ export const FIND_MY_CONNECTION_ID = 'con_findmy';
 export const FIND_MY_THING = thingId('connection', FIND_MY_CONNECTION_ID);
 
 /** What the person picked when connecting it: the Mac, and Read in the background every 15 minutes. */
-export const FIND_MY_CONNECTION_FIELDS: Readonly<Record<string, string>> = { mac: MAC_SERVER, background: '15' };
+export const FIND_MY_CONNECTION_FIELDS: Readonly<Record<string, string>> = {
+  mac: MAC_SERVER,
+  background: '15',
+};
 
 /** The connection as `connections.list` and `connections.tools` carry it. */
 export function findMyConnectionView(at: string, over: Partial<ConnectionView> = {}): ConnectionView {

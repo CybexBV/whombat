@@ -100,7 +100,9 @@ export function findMyMacs(
   connections: readonly Pick<ConnectionView, 'id' | 'catalogId' | 'fields'>[] | null | undefined,
 ): { connectionId: string; serverId: string }[] {
   return (connections ?? []).flatMap((c) =>
-    c.catalogId === FIND_MY_CATALOG_ID && c.fields.mac ? [{ connectionId: c.id, serverId: c.fields.mac }] : [],
+    c.catalogId === FIND_MY_CATALOG_ID && c.fields.mac
+      ? [{ connectionId: c.id, serverId: c.fields.mac }]
+      : [],
   );
 }
 

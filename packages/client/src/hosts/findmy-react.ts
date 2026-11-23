@@ -14,6 +14,7 @@ import {
   type HostFindMyMap,
 } from '@whombat/core/domain';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { MacChoice } from '../connections/choices';
 import type { CommitResult } from '../http/types';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from '../react/context';
@@ -29,8 +30,10 @@ import {
   findMyPolls,
   findMyStale,
 } from './findmy';
+import { isMacServer } from './macos';
 
 const useFindMyRead = queryHook(api.hosts.findMy);
+const useFleet = queryHook(api.hosts.fleet);
 /** The Mac's map picture (`hosts.findMyMap`), an export read. `useFindMyMap` keeps the last one on screen. */
 export const useHostFindMyMap = queryHook(api.hosts.findMyMap);
 /** Find My's own map of one person (`hosts.findMyPicture`), an export read. `useFindMyPicture` follows `exact`. */
@@ -238,4 +241,20 @@ export function useFindMyHome(burrow: string): string[] {
     const names = reads.flatMap((r) => (r.data as HostFindMy | undefined)?.people ?? []);
     return [...new Set(names.filter(findMyAtHome).map((p) => p.name))];
   }, [stamp]);
+}
+
+/**
+ * The person's Macs as the choices of a Find My connection's Mac (findmy-connection.md §2.1), from the servers Whombat
+ * watches, by the name the person sees; null until the fleet answers (or when `enabled` is false).
+ */
+export function useMacChoices(burrow: string, enabled = true): MacChoice[] | null {
+  const fleet = useFleet(enabled ? { params: { burrow } } : null, { retry: false });
+  const servers = fleet.data?.servers;
+  return useMemo(
+    () =>
+      servers
+        ? servers.filter((server) => isMacServer({ server })).map((s) => ({ id: s.id, name: s.name ?? s.id }))
+        : null,
+    [servers],
+  );
 }

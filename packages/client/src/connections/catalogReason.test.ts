@@ -12,7 +12,9 @@ describe('catalog reasons that say what to do first', () => {
 
   it('says nothing for an entry that can be connected or has its own UI', () => {
     expect(addressReasonOf({ catalogId: 'findmy', available: true, reason: null })).toBeNull();
-    expect(addressReasonOf({ catalogId: 'dropbox', available: false, reason: 'app_not_configured' })).toBeNull();
+    expect(
+      addressReasonOf({ catalogId: 'dropbox', available: false, reason: 'app_not_configured' }),
+    ).toBeNull();
     expect(addressReasonOf(undefined)).toBeNull();
   });
 });

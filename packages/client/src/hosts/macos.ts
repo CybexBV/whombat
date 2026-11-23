@@ -31,28 +31,21 @@ export function isMacServer(
 /** What the UI calls a Mac's kind. */
 export const MAC_KIND_WORD = 'Mac';
 
-export type MacServerTab = 'summary' | 'screen' | 'findmy' | 'storage' | 'sensors' | 'system';
+export type MacServerTab = 'summary' | 'screen' | 'storage' | 'sensors' | 'system';
 
 /**
- * A Mac's tabs: the Screen and Find My after the Summary, then every server's; no machines or backups of its own. The
- * phone has the first three (`MAC_PHONE_TABS`).
+ * A Mac's tabs: the Screen after the Summary, then every server's; no machines or backups of its own. Find My is a
+ * connection of its own (docs/implementation/macos/findmy-connection.md), which the Summary links to. The phone has the
+ * first two (`MAC_PHONE_TABS`).
  */
-export const MAC_SERVER_TABS: readonly MacServerTab[] = [
-  'summary',
-  'screen',
-  'findmy',
-  'storage',
-  'sensors',
-  'system',
-];
+export const MAC_SERVER_TABS: readonly MacServerTab[] = ['summary', 'screen', 'storage', 'sensors', 'system'];
 
 /** The Mac's tabs on the phone: storage, sensors and the system stay on the web. */
-export const MAC_PHONE_TABS = ['summary', 'screen', 'findmy'] as const satisfies readonly MacServerTab[];
+export const MAC_PHONE_TABS = ['summary', 'screen'] as const satisfies readonly MacServerTab[];
 
 export const MAC_SERVER_TAB_WORDS: Record<MacServerTab, string> = {
   summary: 'Summary',
   screen: 'Screen',
-  findmy: 'Find My',
   storage: 'Storage',
   sensors: 'Sensors',
   system: 'System',

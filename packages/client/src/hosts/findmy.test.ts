@@ -251,7 +251,12 @@ describe('reading in the background', () => {
 
 describe('the Find My connection a Mac reads for', () => {
   const findMy = { id: 'con_findmy', catalogId: 'findmy', label: 'Find My', fields: { mac: 'studio' } };
-  const other = { id: 'con_ha', catalogId: 'homeassistant', label: 'Home Assistant', fields: { mac: 'studio' } };
+  const other = {
+    id: 'con_ha',
+    catalogId: 'homeassistant',
+    label: 'Home Assistant',
+    fields: { mac: 'studio' },
+  };
 
   it('is the Find My connection whose mac is that server', () => {
     expect(findMyConnectionOf([other, findMy], 'studio')).toEqual({
