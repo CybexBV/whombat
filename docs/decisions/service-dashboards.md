@@ -101,7 +101,7 @@ follow SD-07/SD-08; ✱ = confirmed first. Tabs come after the Summary; every pa
 
 | # | Decision | Why |
 |---|----------|-----|
-| SD-70 | UniFi Network, Hetzner and Fusebox keep their pages; Proxmox VE and Unraid stay part of their server (CP-10); Device keeps its readings page (CP-13); Google, Microsoft 365, Email, GitHub, Website feedback and the tracker are accounts or sources, not Services pages; Dropbox, Notion, Airtable, API and MCP connections keep the generic page with “Show more here”. | Their APIs have no glance worth a page (Airtable's free plan allows 1,000 calls a month), or they have one already. |
+| SD-70 | **Superseded in part by connection-dashboards.md CDB-05 (report tracker), CDB-40 (Dropbox, Notion, Airtable) and CDB-60 (Proxmox VE, Unraid).** UniFi Network, Hetzner and Fusebox keep their pages; Proxmox VE and Unraid stay part of their server (CP-10); Device keeps its readings page (CP-13); Google, Microsoft 365, Email, GitHub, Website feedback and the tracker are accounts or sources, not Services pages; Dropbox, Notion, Airtable, API and MCP connections keep the generic page with “Show more here”. | Their APIs have no glance worth a page (Airtable's free plan allows 1,000 calls a month), or they have one already. |
 
 ## Server details
 
