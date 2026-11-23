@@ -69,6 +69,7 @@ describe('Whombat Link', () => {
       'reach.get',
       'link.on',
       'link.off',
+      'link.whombats',
       'updates.channel.get',
       'updates.channel.set',
       'push.token.set',
@@ -80,6 +81,7 @@ describe('Whombat Link', () => {
       expect(ASSISTANT_SETTINGS[op as keyof typeof ASSISTANT_SETTINGS], op).toBeDefined();
     }
     expect(SESSION_OPERATIONS.get('reach.get')?.mutating).toBe(false);
+    expect(SESSION_OPERATIONS.get('link.whombats')?.mutating).toBe(false);
     expect(SESSION_OPERATIONS.get('link.on')?.mutating).toBe(true);
     for (const op of ['link.on', 'link.off', 'updates.channel.set'])
       expect(ASSISTANT_SETTINGS[op as keyof typeof ASSISTANT_SETTINGS].access, op).toBe('never');

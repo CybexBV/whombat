@@ -3,6 +3,8 @@
  *
  * - `reach.get {}` (any of the person's devices): Link's state (null on a box that can't have Link), the own address
  *   (null while it has none) and Tailscale (null where the box can't use it), in one answer.
+ * - `link.whombats {}` (any of the person's devices): the other Whombats linked to the same account, for the menu under
+ *   the box's name; an empty list while Link doesn't run or control can't be asked.
  * - `link.on {}`, `link.off {}` (the owner): Whombat Link on or off, through the manager, each a signed appliance event
  *   (`link.on`, `link.off`). Refusals carry `details.code` from `LINK_ERROR_CODES`.
  * - `updates.channel.get {}`, `updates.channel.set {channel}` (the owner sets): the update channel the helper keeps;
@@ -13,6 +15,7 @@
 import { LOCAL_API_VERSION } from '@whombat/control-contracts/local';
 import type {
   LinkOutput,
+  LinkWhombatsOutput,
   PushTokenSetInput,
   PushTokenSetOutput,
   ReachGetOutput,
@@ -74,6 +77,10 @@ export const LINK_SESSION_HANDLERS = {
       ownAddress: c.ownAddress?.summary() ?? null,
       tailscale: tailscale ?? null,
     };
+  },
+  'link.whombats': async (c: SessionOpContext): Promise<LinkWhombatsOutput> => {
+    requirePerson(c.principal);
+    return { whombats: (await c.link?.whombats()) ?? [] };
   },
   'link.on': async (c: SessionOpContext): Promise<LinkOutput> => {
     const { account, endpointId } = requirePerson(c.principal);

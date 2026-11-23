@@ -11,6 +11,8 @@ package broker
 //	POST /v1/link/claim             {v: 1, claimLink?}              runtime → 200 LocalOk (kept for link.status)
 //	POST /v1/runtime/push/register  {token}                         runtime → control's push.register answer
 //	POST /v1/runtime/push/unregister {handle}                       runtime → control's push.unregister answer
+//	POST /v1/link/whombats          {}                              runtime → control's link.whombats answer | 404 link.unavailable |
+//	                                                                          503 control_unreachable | 502 control_refused
 //
 // Turning Link off answers `off` at once: the box stops using Link before control has heard of it, and the manager
 // tells control (link.leave) as soon as it answers.
@@ -242,6 +244,40 @@ func (s *Server) pushUnregister(w http.ResponseWriter, r *http.Request) {
 	var out local.RuntimePushUnregisterResponse
 	if err := s.Control.Do(r.Context(), device.DeviceOpNamePushUnregister, req, &out); err != nil {
 		s.controlErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// linkWhombats asks control for the other Whombats linked to the same account, for the menu under the box's name: the
+// device op's body and answer, unchanged. Only while Link runs: a box with Link off or ended has no account to ask
+// about, and one with Link off never talks to control.
+func (s *Server) linkWhombats(w http.ResponseWriter, r *http.Request) {
+	if s.Control == nil || s.Link == nil || !s.Link.Active() {
+		writeErr(w, http.StatusNotFound, local.LinkErrorUnavailable, "Whombat Link doesn't run on this Whombat")
+		return
+	}
+	b, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	req, err := local.ParseRuntimeLinkWhombatsRequest(b)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), linkOpTimeout)
+	defer cancel()
+	var out local.RuntimeLinkWhombatsResponse
+	if err := s.Control.Do(ctx, device.DeviceOpNameLinkWhombats, req, &out); err != nil {
+		s.linkErr(w, err)
+		return
+	}
+	if out.Whombats == nil {
+		out.Whombats = []device.LinkWhombat{}
+	}
+	if err := out.Validate(); err != nil {
+		writeErr(w, http.StatusBadGateway, "control_refused", "control's answer isn't a list of Whombats")
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

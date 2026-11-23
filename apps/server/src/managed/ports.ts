@@ -28,6 +28,7 @@ import type {
   RuntimeKitCredentialsResponse,
   RuntimeKitEnvelopesRequest,
   RuntimeKitEnvelopesResponse,
+  RuntimeLinkWhombatsResponse,
   RuntimePushRegisterRequest,
   RuntimePushRegisterResponse,
   RuntimePushUnregisterRequest,
@@ -208,6 +209,12 @@ export interface ManagerPort extends TailscalePort {
    * one it had. 404 from an older manager.
    */
   linkClaim?(request: z.input<typeof LinkClaimRequest>): Promise<void>;
+  /**
+   * The other Whombats linked to the same account (4.14, the device op `link.whombats`), for the menu under the box's
+   * name. 404 `link.unavailable` while Link doesn't run (an older manager answers 404 too); 503 `control_unreachable`;
+   * 502 `control_refused`.
+   */
+  linkWhombats?(): Promise<RuntimeLinkWhombatsResponse>;
   /** The update channel (4.4): read and the owner's change. 404 `update.channel_unavailable`; 409 `busy`. */
   updateChannel?(): Promise<UpdateChannelResponse>;
   updateChannelSet?(request: z.input<typeof UpdateChannelSetRequest>): Promise<UpdateChannelResponse>;

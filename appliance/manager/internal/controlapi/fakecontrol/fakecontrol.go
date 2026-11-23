@@ -149,6 +149,9 @@ type Control struct {
 	HeartbeatS  int64
 	PushTokens  []protocol.NativePushToken
 	PushDropped []string
+	// Whombats: what link.whombats answers (nil: none); WhombatsCalls counts the asks.
+	Whombats      []device.LinkWhombat
+	WhombatsCalls int
 
 	v6 *http.Server // the IPv6 loopback listener of ServeDualStack
 }
@@ -464,6 +467,17 @@ func (c *Control) serve(w http.ResponseWriter, r *http.Request) {
 			Relay: device.RelayAssignment{Worker: "w1", URL: "wss://relay.dev.whombat.com", ReassignAfter: exp.Unix()}, Link: c.Link})
 	case device.DeviceOpNameLinkBegin, device.DeviceOpNameLinkStatus, device.DeviceOpNameLinkLeave:
 		c.link(w, env)
+	case device.DeviceOpNameLinkWhombats:
+		if _, err := device.ParseLinkWhombatsRequest(env.Body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		c.WhombatsCalls++
+		list := c.Whombats
+		if list == nil {
+			list = []device.LinkWhombat{}
+		}
+		_ = json.NewEncoder(w).Encode(device.LinkWhombatsResponse{Whombats: list})
 	case device.DeviceOpNameSupportHeartbeat:
 		req, err := device.ParseSupportHeartbeatRequest(env.Body)
 		if err != nil {

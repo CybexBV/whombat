@@ -85,6 +85,8 @@ import {
   RuntimeKitCredentialsResponse,
   RuntimeKitEnvelopesRequest,
   RuntimeKitEnvelopesResponse,
+  RuntimeLinkWhombatsRequest,
+  RuntimeLinkWhombatsResponse,
   RuntimePushRegisterRequest,
   RuntimePushRegisterResponse,
   RuntimePushRequest,
@@ -538,6 +540,13 @@ export class ManagerSocketClient implements ManagerPort {
   /** The claim link is a secret: the request is never logged. */
   async linkClaim(body: z.input<typeof LinkClaimRequest>) {
     LocalOk.parse(await this.call(MANAGER_PATHS.linkClaim, LinkClaimRequest.parse(body)));
+  }
+
+  /** Asks control through the manager: a read, but one that waits for control. */
+  async linkWhombats() {
+    return RuntimeLinkWhombatsResponse.parse(
+      await this.call(MANAGER_PATHS.linkWhombats, RuntimeLinkWhombatsRequest.parse({})),
+    );
   }
 
   async updateChannel() {

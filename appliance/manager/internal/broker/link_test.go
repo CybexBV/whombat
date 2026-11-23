@@ -286,3 +286,67 @@ func TestLinkRoutesWithoutLink(t *testing.T) {
 		t.Fatalf("%d %v", resp.StatusCode, m)
 	}
 }
+
+// The account's other Whombats: control's answer passed on as is while Link runs, nothing asked of control otherwise,
+// and an outage or a refusal as the other Link routes say them.
+func TestLinkWhombatsRoute(t *testing.T) {
+	t.Parallel()
+	fl := &fakeLink{}
+	fc, sock := startLink(t, fl)
+	c := client(sock)
+	for _, st := range []protocol.LinkState{protocol.LinkStateOff, protocol.LinkStateEnded} {
+		fl.set(st)
+		resp, m := post(t, c, local.ManagerPathLinkWhombats, `{}`)
+		if resp.StatusCode != 404 || m["error"].(map[string]any)["code"] != local.LinkErrorUnavailable {
+			t.Fatalf("%s: %d %v", st, resp.StatusCode, m)
+		}
+	}
+	if fc.WhombatsCalls != 0 {
+		t.Fatalf("control asked while Link didn't run: %d", fc.WhombatsCalls)
+	}
+	fl.set(protocol.LinkStateOn)
+	resp, m := post(t, c, local.ManagerPathLinkWhombats, `{}`)
+	if list, ok := m["whombats"].([]any); resp.StatusCode != 200 || !ok || len(list) != 0 {
+		t.Fatalf("none: %d %v", resp.StatusCode, m)
+	}
+	host := "cedar-lark-meadow.box.whombat.app"
+	fc.Set(func(c *fakecontrol.Control) {
+		c.Whombats = []device.LinkWhombat{
+			{Device: "dev-studio", Name: ptrOf("Studio"), State: protocol.LinkStateOn, Host: &host, LastSeenAt: ptrOf(int64(1790000000))},
+			{Device: "dev-cabin", State: protocol.LinkStateStarting},
+		}
+	})
+	resp, m = post(t, c, local.ManagerPathLinkWhombats, `{}`)
+	list, _ := m["whombats"].([]any)
+	if resp.StatusCode != 200 || len(list) != 2 {
+		t.Fatalf("two: %d %v", resp.StatusCode, m)
+	}
+	studio, cabin := list[0].(map[string]any), list[1].(map[string]any)
+	if studio["name"] != "Studio" || studio["host"] != host || studio["lastSeenAt"] != float64(1790000000) ||
+		cabin["name"] != nil || cabin["host"] != nil || cabin["state"] != "starting" {
+		t.Fatalf("%v", list)
+	}
+	if resp, _ := post(t, c, local.ManagerPathLinkWhombats, `{"all":true}`); resp.StatusCode != 400 {
+		t.Fatalf("a member: %d", resp.StatusCode)
+	}
+	fc.SetDown(true)
+	resp, m = post(t, c, local.ManagerPathLinkWhombats, `{}`)
+	if resp.StatusCode != 503 || m["error"].(map[string]any)["code"] != "control_unreachable" {
+		t.Fatalf("down: %d %v", resp.StatusCode, m)
+	}
+	fc.SetDown(false)
+	// A Whombat control sends without a valid address is refused, not passed on.
+	bad := "cedar-lark-meadow"
+	fc.Set(func(c *fakecontrol.Control) {
+		c.Whombats = []device.LinkWhombat{{Device: "dev-studio", State: protocol.LinkStateOn, Host: &bad}}
+	})
+	if resp, m := post(t, c, local.ManagerPathLinkWhombats, `{}`); resp.StatusCode != 502 {
+		t.Fatalf("a label for a host: %d %v", resp.StatusCode, m)
+	}
+	// Without a keeper: no Link here.
+	_, bare, _ := start(t, uint32(os.Getuid()), nil)
+	if resp, m := post(t, client(bare), local.ManagerPathLinkWhombats, `{}`); resp.StatusCode != 404 ||
+		m["error"].(map[string]any)["code"] != local.LinkErrorUnavailable {
+		t.Fatalf("no keeper: %d %v", resp.StatusCode, m)
+	}
+}
