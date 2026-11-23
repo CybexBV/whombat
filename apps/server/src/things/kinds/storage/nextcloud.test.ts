@@ -10,7 +10,9 @@ import type { KindNotice } from './lines';
 import { StatusProblem } from './net';
 import {
   figures,
+  freePoint,
   NEXTCLOUD_CHECKS,
+  NEXTCLOUD_FREE_KEY,
   NEXTCLOUD_KIND,
   type NextcloudInfo,
   type NextcloudSnapshot,
@@ -22,6 +24,7 @@ import {
   parseUsers,
   readNextcloud,
   shortVersion,
+  spaceUsed,
 } from './nextcloud';
 import { checked, fakeServices, fixture, panel } from './test-helpers';
 
@@ -175,6 +178,29 @@ describe('Nextcloud’s page in slots (SD-57, service-slots.md)', () => {
     ]);
     expect(v.panels.some((p) => p.id === 'apps')).toBe(false);
     expect(v.notices).toEqual([]);
+  });
+
+  it('draws Space used from its own readings of the free space, and keeps the free space as a point', () => {
+    const s = snap();
+    expect(freePoint(s)[NEXTCLOUD_FREE_KEY]).toBeGreaterThan(0);
+    const DAY = 86_400_000;
+    // Free space in GB at the end of each of the last 15 days: 5 GB less a day, then 20 GB freed yesterday.
+    const free = Array.from({ length: 15 }, (_, i) => ({
+      at: new Date(now.getTime() - (14 - i) * DAY),
+      value: i === 13 ? 1000 - 5 * 12 + 20 : 1000 - 5 * i,
+    }));
+    const v = checked(nextcloudView({ snapshot: s, url, now, timeZone: 'UTC', free }));
+    expect(slotProblems(v)).toEqual([]);
+    const week = panel(v, 'week', 'chart');
+    expect(week?.title).toBe('Space used');
+    // The day space was freed draws no bar; the week's net is the figure.
+    expect(week?.series[0]?.values).toEqual([5, 5, 5, 5, 5, 0, 30]);
+    expect(week?.figure?.value).toBe('+35 GB');
+    // Without its users read, no People: Inventory and the Trend share the row with the machine card.
+    expect(v.panels.map((p) => p.id)).toEqual(['cloud', 'week']);
+    // Fewer than two days: no Trend.
+    expect(spaceUsed({ snapshot: s, url, now, timeZone: 'UTC', free: free.slice(-1) })).toBeNull();
+    expect(spaceUsed({ snapshot: s, url })).toBeNull();
   });
 
   it('marks a user near their quota amber with the quota under them, and one turned off', () => {

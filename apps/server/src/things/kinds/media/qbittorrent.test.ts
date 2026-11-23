@@ -6,10 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Services } from '../../../services';
 import { slotProblems } from '../slots';
 import {
+  downloadedPoint,
+  downloadedWeek,
   parseMaindata,
   QBITTORRENT_KIND,
   QBT_ACTIONS,
   QBT_CHECKS,
+  QBT_DL_KEY,
   type QbtInput,
   type QbtSnapshot,
   qbtActivity,
@@ -88,6 +91,29 @@ describe('qBittorrent page and checks', () => {
     ]);
     expect(queue?.kind === 'gallery' && queue.items[1]?.badge?.text).toBe('Stalled');
     expect(panel(view.panels, 'done')?.kind).toBe('list');
+  });
+
+  it('draws what was downloaded each day this week from its own readings of the all-time figure', () => {
+    // 95 GB downloaded all time now; the statistics were reset five days ago.
+    const base = snap();
+    const s = { ...base, state: { ...base.state, alltimeDlBytes: 95e9 } };
+    expect(downloadedPoint(s)).toEqual({ [QBT_DL_KEY]: 95 });
+    // The last reading of each of the 14 days before today: 20 GB a day.
+    const DAY = 86_400_000;
+    const levels = [100, 120, 140, 160, 180, 200, 220, 240, 260, 5, 25, 45, 65, 85];
+    const downloaded = levels.map((value, i) => ({ at: new Date(now.getTime() - (14 - i) * DAY), value }));
+    const week = downloadedWeek({ ...input(s), downloaded });
+    if (week?.kind !== 'chart') throw new Error('a Trend');
+    // The day of the reset draws no bar; today's is what qBittorrent says now.
+    expect(week.series[0]?.values).toEqual([20, null, 20, 20, 20, 20, 10]);
+    expect(week.labels?.at(-1)).toBe('Today');
+    expect(week.figure).toMatchObject({ value: '110 GB', rest: 'this week' });
+    expect(week.stats?.[0]?.[0]?.text).toBe('−21 %');
+    const view = qbtView(input(s, { downloaded }));
+    expect(slotProblems(view)).toEqual([]);
+    expect(view.panels.map((p) => p.id)).toContain('week');
+    // No readings yet: no Trend.
+    expect(downloadedWeek({ ...input(s), downloaded: [] })).toBeNull();
   });
 
   it('reports card KPIs and desk activity', () => {
