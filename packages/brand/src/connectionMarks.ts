@@ -29,6 +29,8 @@
  * GitHub Actions (Whombat service-dashboards.md “GitHub Actions”): Simple Icons 16.35.0 `githubactions` (CC0) in its blue.
  * T3 Code (Whombat t3code.md): the “T3” of its own logo (MIT, © 2026 T3 Tools Inc., `assets/prod/logo.svg`), white letters
  * on a black tile there; the letters alone in `currentColor` here, as GitHub's black mark, so they read on either theme.
+ * Find My (docs/implementation/macos/findmy-connection.md) has a neutral mark of Whombat's own, drawn in Lucide's stroke:
+ * a location pin over two people. Apple's Find My icon is never shown.
  */
 import type { BrandMarkDefinition } from './marks.js';
 
@@ -86,6 +88,7 @@ export const CONNECTION_MARKS = [
   'radarr',
   't3code',
   'ps5',
+  'findmy',
 ] as const;
 export type ConnectionMarkName = (typeof CONNECTION_MARKS)[number];
 
@@ -313,6 +316,16 @@ export const CONNECTION_MARK_DEFINITIONS: Record<ConnectionMarkName, BrandMarkDe
     'Report tracker',
     'M22 12h-6l-2 3h-4l-2-3H2',
     'M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+  ),
+  // Find My: a mark of Whombat's own in Lucide's stroke (never Apple's icon): a location pin over two people.
+  findmy: lucide(
+    'Find My',
+    'M16.5 7.5c0 3-3 6-4.5 7.5c-1.5-1.5-4.5-4.5-4.5-7.5a4.5 4.5 0 0 1 9 0z',
+    'M10.5 7.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',
+    'M3 15a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
+    'M1.5 23a3.5 3.5 0 0 1 7 0',
+    'M17 15a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
+    'M15.5 23a3.5 3.5 0 0 1 7 0',
   ),
   // Lucide's `search` (ISC), its circle as a path: NZBHydra2's own logo is GPL artwork.
   nzbhydra: lucide('NZBHydra2', 'm21 21-4.34-4.34', 'M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0'),
