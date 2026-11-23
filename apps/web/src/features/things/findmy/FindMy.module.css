@@ -7,10 +7,14 @@
   cursor: default;
 }
 
-/* The note about spots follows the background line in the same foot, without a second rule. */
-.noteAfter {
-  border-top: 0;
-  padding-top: 0;
+/* Under the map: how the box reads, then where the spots are, two lines in one foot. */
+.foot {
+  display: grid;
+  gap: 4px;
+}
+
+.foot > p {
+  margin: 0;
 }
 
 .status {

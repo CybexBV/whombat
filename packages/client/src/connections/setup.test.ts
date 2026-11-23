@@ -31,10 +31,13 @@ import {
   limitNote,
   nameHelp,
   networksText,
+  READ_THROUGH_MAC_STEP_TITLE,
   raiseNote,
   readPaste,
   recommended,
+  SETUP_STEP_TITLES,
   setupSteps,
+  setupStepTitle,
   signInNote,
   taglineOf,
   takesPaste,
@@ -73,6 +76,12 @@ describe('the connect form’s steps (CS-50, AP-843)', () => {
     expect(identifies(entry('proxmox'))).toBe(true);
     expect(identifies(entry('custom_mcp'))).toBe(false);
     expect(identifies(entry('todoist'))).toBe(false);
+  });
+
+  it('asks Find My how to read, not how to sign in: it reads through a Mac', () => {
+    expect(setupSteps(entry('findmy'))).toEqual(['access', 'signIn']);
+    expect(setupStepTitle(entry('findmy'), 'signIn')).toBe(READ_THROUGH_MAC_STEP_TITLE);
+    expect(setupStepTitle(entry('proxmox'), 'signIn')).toBe(SETUP_STEP_TITLES.signIn);
   });
 
   it('asks nothing about agents for an entry only automations use (a report tracker, TA-02)', () => {

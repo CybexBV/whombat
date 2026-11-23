@@ -112,14 +112,13 @@ function FindMyRead({
         {view.anyLocated ? (
           <FindMyMap burrow={burrow} serverId={serverId} name={name} state={tab.state} people={view.people} />
         ) : null}
-        {/* How the box reads while nobody looks: only then, every few minutes, or for an automation. */}
+        {/* How the box reads while nobody looks (only then, every few minutes, or for an automation), and where the
+            spots are, in one foot under the map. */}
         {tab.state ? (
-          <p className={styles.cardNote} data-findmy-background="">
-            {findMyBackgroundLine(tab.state.background)}
-          </p>
-        ) : null}
-        {view.anyLocated ? (
-          <p className={`${styles.cardNote} ${fm.noteAfter}`}>{FIND_MY_WORDS.note}</p>
+          <div className={`${styles.cardNote} ${fm.foot}`}>
+            <p data-findmy-background="">{findMyBackgroundLine(tab.state.background)}</p>
+            {view.anyLocated ? <p>{FIND_MY_WORDS.note}</p> : null}
+          </div>
         ) : null}
       </Card>
 

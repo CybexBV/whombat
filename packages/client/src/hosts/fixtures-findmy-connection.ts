@@ -71,7 +71,7 @@ export function findMyConnectionPage(readAt: string, range: HostSeriesRange = '2
     icon: 'findmy',
     status: 'ok',
     badge: 'Connected',
-    facts: [[{ text: 'Through ' }, { text: MAC_SERVER, strong: true }]],
+    facts: [],
     runsOn: null,
     settings: true,
     tabs: [{ key: 'findmy', label: 'Find My', server: MAC_SERVER, panels: [] }],

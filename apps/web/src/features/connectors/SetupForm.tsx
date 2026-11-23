@@ -42,11 +42,11 @@ import {
   pasteLabel,
   readPaste,
   recommended,
-  SETUP_STEP_TITLES,
   type SetupStep,
   secretWords,
   serviceLoginBody,
   setupSteps,
+  setupStepTitle,
   signInNote,
   signingInText,
   takesPaste,
@@ -855,7 +855,7 @@ export function SetupForm({
             <div className={c.stepMain}>
               <h3 className={c.stepTitle}>
                 <span className={c.srOnly}>Step {i + 1}: </span>
-                {step === 'access' ? words.mayDoQuestion : SETUP_STEP_TITLES[step]}
+                {step === 'access' ? words.mayDoQuestion : setupStepTitle(entry, step)}
               </h3>
               <div className={k.stepBody}>{stepBody[step]}</div>
             </div>
