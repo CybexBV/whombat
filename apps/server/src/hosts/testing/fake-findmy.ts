@@ -29,9 +29,10 @@ export const FAKE_PEOPLE: FakePerson[] = [
     chosen: ['Home', 'Nearby', 'Damrak 1, Amsterdam', '5 minutes ago'],
   },
   {
+    // Further away: Find My says how far, with a decimal comma in Dutch.
     name: 'Ruben Visser',
-    row: ['Nearby', 'Lelystad', '5 min ago'],
-    chosen: ['Lelystad', 'Stationsplein 2, Lelystad', '5 min ago'],
+    row: ['5,5 km', 'Lelystad', '5 min ago'],
+    chosen: ['5,5 km', 'Stationsplein 2, Lelystad', '5 min ago'],
   },
   { name: 'Noor Visser', row: ['No location found'] },
 ];

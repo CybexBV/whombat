@@ -80,6 +80,12 @@ export type FindMyTiming = { -readonly [K in keyof typeof FIND_MY_TIMING]: numbe
 /** Find My's word for a person near the Mac. Only English is known; in other languages it reads as their place. */
 const NEARBY = 'nearby';
 
+/**
+ * How far away someone is (“5,5 km”, “800 m”, “3.4 mi”): never a street, though a decimal comma looks like one, and no
+ * place either.
+ */
+const DISTANCE = /^[<~≈]?\s*\d+(?:[.,]\d+)?\s*(?:km|m|mi|ft|yd)$/i;
+
 /** A row of Find My's sidebar, in Find My's own words. */
 export interface FindMyRow {
   name: string;
@@ -99,16 +105,16 @@ export function rowParts(description: string): string[] {
 
 /**
  * A sidebar row's description as name, place, street, when and nearby: “Mara Visser · Nearby · Home · Now”, a selected
- * row “Mara Visser · Home · Nearby · Damrak 1, Amsterdam · 5 minutes ago”. The name is first and the when last; the
- * street is the part with a comma; the place is what is left. A row of two parts (“Mara’s Keys · No location found”)
- * has no place.
+ * row “Mara Visser · Home · Nearby · Damrak 1, Amsterdam · 5 minutes ago”, someone further away “Ruben Visser · 5,5 km
+ * · Lelystad · Now”. The name is first and the when last; a distance is left out; the street is the part with a comma;
+ * the place is what is left. A row of two parts (“Mara’s Keys · No location found”) has no place.
  */
 export function parseFindMyRow(description: string): FindMyRow | null {
   const parts = rowParts(description);
   const name = parts[0];
   if (!name) return null;
   const when = parts.length >= 2 ? (parts[parts.length - 1] ?? null) : null;
-  const middle = parts.length >= 3 ? parts.slice(1, -1) : [];
+  const middle = parts.length >= 3 ? parts.slice(1, -1).filter((p) => !DISTANCE.test(p)) : [];
   const nearby = middle.some((p) => p.toLowerCase() === NEARBY);
   const address = middle.find((p) => p.includes(',')) ?? null;
   const place = middle.find((p) => p !== address && p.toLowerCase() !== NEARBY) ?? null;
