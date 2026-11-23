@@ -11,7 +11,6 @@ import {
   ADD_TEXT,
   BOX_SETUP_TEXT,
   billingRedirectUrl,
-  COPY,
   type ControlApi,
   ControlError,
   type ControlSession,
@@ -320,7 +319,6 @@ export function LinkCodeScreen(props: LinkCodeScreenProps) {
   }
   if (step.kind === 'found') {
     const { lookup, plan } = step;
-    const name = lookup.name ?? T.yourWhombat;
     const runs = plan ? linkPlanRuns(plan) : false;
     const price = plan ? linkPriceLine(plan) : T.priceMonth;
     const after = lookup.trial ? T.trial : runs ? `${T.joins} ${price}` : `${T.needsPlan} ${price}`;
