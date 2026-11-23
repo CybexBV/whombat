@@ -7,6 +7,8 @@
  *
  * - the agent's schedules: weekdays at 08:30 (active, made in Mara's Chat with its card there), tomorrow at 09:00 (active),
  *   every 30 minutes (paused), the weekly summary (ran its 90 days).
+ * - two one-time Find My watches in Mara's Chat (findmy-watch.md), each a thread of its own: Noor Visser leaving
+ *   Keizersgracht (watching, with Cancel) and Ruben Dekker arriving at Home (it happened). Made-up people.
  *
  * State lives in the closure (one world per fetch); every answer is built to the contracts' schemas.
  */
@@ -17,6 +19,9 @@ import {
   type Burrow,
   type ChatThread,
   type ChatThreadsResponse,
+  type FindMyWatchView,
+  findMyWatchStartText,
+  type MessageCard,
   type MessagePage,
   scheduleActions,
   scheduleEndsAt,
@@ -52,6 +57,7 @@ const ENDPOINTS = API_ENDPOINTS.filter((e) =>
     'schedules.resume',
     'schedules.remove',
     'burrows.setAgentsReachLan',
+    'connections.findMyWatchCancel',
   ].includes(e.id),
 ) as readonly AnyEndpoint[];
 
@@ -131,15 +137,76 @@ function seedSchedules(): Map<string, AgentScheduleView[]> {
 }
 
 function scheduleMessage(view: AgentScheduleView): Message {
+  return chatMessage(
+    SCHEDULE_MESSAGE,
+    T('11:21'),
+    'I’ll check last night’s backups every weekday at 08:30 and post a line here.',
+    { kind: 'schedule', scheduleId: view.id, schedule: view },
+  );
+}
+
+/** The messages in Mara's Chat that carry a Find My watch's card, by watch. */
+export const FIND_MY_WATCH_MESSAGES: Readonly<Record<string, string>> = {
+  fmw_noor: 'msg_findmy_watch_noor',
+  fmw_ruben: 'msg_findmy_watch_ruben',
+};
+
+function seedWatches(): Map<string, FindMyWatchView> {
+  return new Map<string, FindMyWatchView>([
+    [
+      'fmw_noor',
+      {
+        id: 'fmw_noor',
+        name: 'Noor Visser',
+        change: 'leaves',
+        place: 'Keizersgracht',
+        status: 'watching',
+        startedAt: T('11:05'),
+        endsAt: T('11:05', '2026-09-24'),
+        endedAt: null,
+        to: null,
+      },
+    ],
+    [
+      'fmw_ruben',
+      {
+        id: 'fmw_ruben',
+        name: 'Ruben Dekker',
+        change: 'arrives',
+        place: 'Home',
+        status: 'happened',
+        startedAt: T('08:40'),
+        endsAt: T('08:40', '2026-09-24'),
+        endedAt: T('10:42'),
+        to: 'Home',
+      },
+    ],
+  ]);
+}
+
+function watchMessage(view: FindMyWatchView): Message {
+  return chatMessage(
+    FIND_MY_WATCH_MESSAGES[view.id] ?? `msg_${view.id}`,
+    view.startedAt,
+    findMyWatchStartText(view),
+    {
+      kind: 'findmy_watch',
+      watchId: view.id,
+      watch: view,
+    },
+  );
+}
+
+function chatMessage(id: string, createdAt: string, text: string, card: MessageCard): Message {
   return {
-    id: SCHEDULE_MESSAGE,
+    id,
     conversationId: CHAT,
     authorId: WHOMBAT_ID,
-    createdAt: T('11:21'),
+    createdAt,
     editedAt: null,
-    text: 'I’ll check last night’s backups every weekday at 08:30 and post a line here.',
+    text,
     mentions: [],
-    card: { kind: 'schedule', scheduleId: view.id, schedule: view },
+    card,
     suggestions: [],
     more: null,
     attachments: [],
@@ -162,6 +229,7 @@ export interface ResourcefulFixtures {
 export function createResourcefulFixtures(options: { seed?: boolean } = {}): ResourcefulFixtures {
   const seed = options.seed ?? false;
   const schedules = seed ? seedSchedules() : new Map<string, AgentScheduleView[]>();
+  const watches = seed ? seedWatches() : new Map<string, FindMyWatchView>();
   let reachLan = true;
   /** Risk-row approvals decided with “Always allow” (RA-06): their scope reads `agent`. */
   const alwaysAllowed = new Set<number>();
@@ -218,6 +286,16 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
         endedReason: 'cancelled',
         nextAt: null,
       })),
+    // The watch card's Cancel (findmy-watch.md): the watch as it is now; one that already ended answers as it is.
+    'connections.findMyWatchCancel': (p) => {
+      const w = watches.get(p.watchId ?? '');
+      if (!w) return problem('not_found', 'No such watch.', 404);
+      const now = new Date().toISOString();
+      const changed: FindMyWatchView =
+        w.status === 'watching' ? { ...w, status: 'cancelled', endedAt: now } : w;
+      watches.set(w.id, changed);
+      return json(changed);
+    },
     'burrows.setAgentsReachLan': async (_p, body, req, inner) => {
       reachLan = body.agentsReachLan === true;
       const url = new URL(req.url, 'http://fixtures.local');
@@ -278,6 +356,21 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
           topic: null,
           more: null,
         });
+      // A watch's message is a thread of Chat's too.
+      const watched = [...watches.values()].find(
+        (w) =>
+          req.method === 'GET' &&
+          path === `/burrows/${burrow.slug}/messages/${FIND_MY_WATCH_MESSAGES[w.id]}/thread`,
+      );
+      if (watched)
+        return json({
+          root: watchMessage(watched),
+          replies: [],
+          conversationId: CHAT,
+          where: 'Chat',
+          topic: null,
+          more: null,
+        });
       const m = match(req);
       if (!m) return null;
       const route = routes[m.ep.id];
@@ -299,9 +392,14 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
       }
       const dusties = seed ? (schedules.get(WHOMBAT_HANDLE) ?? []) : [];
       const backups = dusties.find((s) => s.id === 'sch_backups');
-      // Chat's list of open threads has the schedule's message as a thread of its own (chat-inbox-web.md).
+      // The messages this layer adds to Mara's Chat: the schedule's and the watches'.
+      const roots = [
+        ...(backups ? [scheduleMessage(backups)] : []),
+        ...[...watches.values()].map(watchMessage),
+      ];
+      // Chat's list of open threads has each as a thread of its own (chat-inbox-web.md).
       if (
-        backups &&
+        roots.length > 0 &&
         path === `/burrows/${burrow.slug}/chats/threads` &&
         (url.searchParams.get('room') ?? 'chat') === 'chat' &&
         url.searchParams.get('state') !== 'settled' &&
@@ -309,33 +407,37 @@ export function createResourcefulFixtures(options: { seed?: boolean } = {}): Res
         !url.searchParams.has('subjectKind')
       ) {
         const page = (await response.json()) as ChatThreadsResponse;
-        if (page.threads.some((t) => t.rootId === SCHEDULE_MESSAGE)) return json(page);
-        const root = scheduleMessage(backups);
-        const thread: ChatThread = {
-          conversationId: CHAT as ChatThread['conversationId'],
-          room: 'chat',
-          rootId: root.id,
-          authorId: root.authorId,
-          text: root.text,
-          subject: null,
-          createdAt: root.createdAt,
-          replyCount: 0,
-          lastAt: root.createdAt,
-          working: false,
-          waiting: false,
-          settled: null,
-        };
-        const threads = [...page.threads, thread].sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+        const added = roots
+          .filter((root) => !page.threads.some((t) => t.rootId === root.id))
+          .map(
+            (root): ChatThread => ({
+              conversationId: CHAT as ChatThread['conversationId'],
+              room: 'chat',
+              rootId: root.id,
+              authorId: root.authorId,
+              text: root.text,
+              subject: null,
+              createdAt: root.createdAt,
+              replyCount: 0,
+              lastAt: root.createdAt,
+              working: false,
+              waiting: false,
+              settled: null,
+            }),
+          );
+        const threads = [...page.threads, ...added].sort(
+          (a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt),
+        );
         return json({ ...page, threads });
       }
       if (
-        backups &&
+        roots.length > 0 &&
         path === `/burrows/${burrow.slug}/conversations/${CHAT}/messages` &&
         !url.searchParams.has('before')
       ) {
         const page = (await response.json()) as MessagePage;
-        if (page.messages.some((m) => m.id === SCHEDULE_MESSAGE)) return json(page);
-        return json({ ...page, messages: [...page.messages, scheduleMessage(backups)] });
+        const added = roots.filter((root) => !page.messages.some((m) => m.id === root.id));
+        return json({ ...page, messages: [...page.messages, ...added] });
       }
       return response;
     },

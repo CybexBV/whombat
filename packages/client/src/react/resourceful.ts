@@ -5,7 +5,7 @@
  * server's sentence.
  */
 import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { AgentScheduleView, Burrow } from '@whombat/core';
+import type { AgentScheduleView, Burrow, FindMyWatchView } from '@whombat/core';
 import { type AnyEndpoint, api } from '@whombat/core/contracts';
 import type { CallInput, CommitResult, ResponseData } from '../http/types';
 import { patchMessages } from '../query/apply';
@@ -82,6 +82,21 @@ export function useScheduleAction<
   E extends typeof api.schedules.pause | typeof api.schedules.resume | typeof api.schedules.remove,
 >(ep: E) {
   return useWrite(ep, (qc, data) => applySchedule(qc, data.schedule));
+}
+
+/* A one-time Find My watch (findmy-watch.md) ----------------------------------------------------------------------- */
+
+/** A watch as it is now on its card in every conversation the client holds. */
+export function applyFindMyWatch(qc: QueryClient, watch: FindMyWatchView): void {
+  patchMessages({ qc }, (m) => patchCard(m, cardPatchers.findMyWatch(watch)));
+}
+
+/**
+ * The watch card's Cancel (`connections.findMyWatchCancel`): the card turns into its line from the answer at once; the
+ * server's `message.updated` says the same a moment later.
+ */
+export function useFindMyWatchCancel() {
+  return useWrite(api.connections.findMyWatchCancel, applyFindMyWatch);
 }
 
 /* The LAN switch (RA-41) ------------------------------------------------------------------------------------------ */

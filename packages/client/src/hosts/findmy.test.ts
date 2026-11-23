@@ -245,6 +245,22 @@ describe('reading in the background', () => {
     expect(
       findMyBackgroundLine({ everyMinutes: 15, automation: 'Tell me when Mara gets home', timeline: true }),
     ).not.toContain('timeline');
+    // A one-time watch says whom it watches, over the timeline; an automation's name still wins.
+    const watching = findMyBackgroundLine({
+      everyMinutes: 5,
+      automation: null,
+      timeline: true,
+      watching: 'Noor Visser',
+    });
+    expect(watching).toContain('Noor Visser');
+    expect(watching).not.toContain('timeline');
+    expect(
+      findMyBackgroundLine({
+        everyMinutes: 5,
+        automation: 'Tell me when Mara gets home',
+        watching: 'Noor Visser',
+      }),
+    ).not.toContain('Noor Visser');
   });
 
   it('names hours as hours', () => {

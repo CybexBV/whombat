@@ -61,6 +61,7 @@ import {
   useConversation,
   useDeleteMessage,
   useEditMessage,
+  useFindMyWatchCancel,
   useGuideAct,
   useHandoffs,
   useMarkRead,
@@ -620,6 +621,9 @@ export function ChatView({
     },
     onError: feedback.onError,
   });
+  // A Find My watch card's Cancel (findmy-watch.md): the answer turns the card into its line at once, as the server's
+  // `message.updated` does a moment later.
+  const cancelWatch = useFindMyWatchCancel();
   // A card's Change something puts the cursor in the reply box, as a new `focusKey` from the screen does.
   const [replyFocus, setReplyFocus] = useState(0);
   const qc = useQueryClient();
@@ -1224,6 +1228,12 @@ export function ChatView({
       navigation.navigate('VaultEntry', { entryId, title: name, back: backLabel }),
     decideReport: (reportId, option) =>
       decideReport.mutate({ params: { burrow: slug, id: reportId }, body: { option } }),
+    // A refusal says why, as the other cards' answers do.
+    cancelFindMyWatch: (watchId) =>
+      cancelWatch.mutate(
+        { params: { burrow: slug, watchId }, body: {} },
+        { onSuccess: feedback.onResult, onError: feedback.onError },
+      ),
     // In its thread the reply box is right here; elsewhere its thread opens.
     replyHere: (message) => {
       if (threadRootId) setReplyFocus((n) => n + 1);
@@ -1274,6 +1284,7 @@ export function ChatView({
   const retryingDispatch = retry.isPending ? (retry.variables?.dispatchId ?? null) : null;
   const reactingTo = react.isPending ? (react.variables?.messageId ?? null) : null;
   const decidingReport = decideReport.isPending ? (decideReport.variables?.params.id ?? null) : null;
+  const cancellingWatch = cancelWatch.isPending ? (cancelWatch.variables?.params.watchId ?? null) : null;
   const branchRooms = bootstrap.sidebar.branchRooms;
   const earlierRow: MessageRowProps['earlier'] = threadView.more ? (loadingOlder ? 'busy' : 'idle') : 'none';
   const moreBusy = more.isPending;
@@ -1332,6 +1343,7 @@ export function ChatView({
           work={work}
           runRetrying={runNumber !== null && retryingRun === runNumber}
           reportBusy={reportHere}
+          watchCancelling={cancellingWatch !== null && item.card?.findMyWatch?.watchId === cancellingWatch}
           branchRoomId={
             prNumber !== null ? (branchRooms.find((r) => r.prNumber === prNumber)?.id ?? null) : null
           }
@@ -1384,6 +1396,7 @@ export function ChatView({
       threadWorkFor,
       retryingRun,
       decidingReport,
+      cancellingWatch,
       branchRooms,
       threadRootId,
       earlierRow,

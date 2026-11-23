@@ -38,6 +38,8 @@ export const PEOPLE_SETTINGS = {
   'connections.findMyTimelineDelete': NONE,
   'connections.findMyTimelineMap': NONE,
   'connections.findMyTimelineSet': NONE,
+  // The assistant starts and stops its watches through its own tool (findmy_watch).
+  'connections.findMyWatchCancel': NONE,
   'connections.finishGoogle': NONE,
   'connections.finishMicrosoft': NONE,
   'connections.finishOAuth': NONE,

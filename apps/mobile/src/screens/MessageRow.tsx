@@ -8,7 +8,7 @@
  */
 import type { MarkLike } from '@whombat/brand';
 import type { GuideActInput, ThreadStage, WorkLine } from '@whombat/client';
-import { authorStatus, jobResultView, wordsUnderCard } from '@whombat/client';
+import { authorStatus, FIND_MY_WATCH_WORDS, jobResultView, wordsUnderCard } from '@whombat/client';
 import type { Message, Principal, Receipt } from '@whombat/core';
 import { Children, memo, type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { type AccessibilityActionEvent, Pressable, View } from 'react-native';
@@ -115,6 +115,8 @@ export interface RowHandlers {
   /** A “Saved to your Vault · Plex” line under a message (VS-07; AP-4037): the entry, `name` its title while it loads. */
   openVaultEntry(entryId: string, name: string): void;
   decideReport(reportId: string, option: number): void;
+  /** A Find My watch card's Cancel (findmy-watch.md). */
+  cancelFindMyWatch(watchId: string): void;
   /** A council's or a delegation's Change something (council.md CNL-20): the cursor in the message's thread's reply box. */
   replyHere(message: Message): void;
   loadEarlier(): void;
@@ -195,6 +197,8 @@ export interface MessageRowProps {
   /** Its run's Try again is running. */
   runRetrying: boolean;
   reportBusy: boolean;
+  /** Its Find My watch's Cancel is running. */
+  watchCancelling?: boolean;
   /** Its run's pull request's branch room. */
   branchRoomId: string | null;
   /** “Load earlier replies” under a thread's root (MX-09). */
@@ -236,6 +240,7 @@ export const MessageRow = memo(function MessageRow({
   work,
   runRetrying,
   reportBusy,
+  watchCancelling = false,
   branchRoomId,
   earlier,
   swipe = null,
@@ -355,6 +360,22 @@ export const MessageRow = memo(function MessageRow({
     };
   };
 
+  // A Find My watch while it watches (findmy-watch.md): Cancel, a 44dp button as the run's Try again is.
+  const watchCardProps = (card: CardSummary) => {
+    const watch = card.findMyWatch;
+    if (!watch) return {};
+    return {
+      buttons: [
+        {
+          label: FIND_MY_WATCH_WORDS.cancel,
+          variant: 'secondary' as const,
+          busy: watchCancelling,
+          onPress: () => on.cancelFindMyWatch(watch.watchId),
+        },
+      ],
+    };
+  };
+
   /** A message's card as the card: tapping opens what it is about (an approval, a run), its links and buttons. */
   const fullCard = (card: CardSummary, collapse?: () => void) => (
     <CardSummaryView
@@ -378,6 +399,7 @@ export const MessageRow = memo(function MessageRow({
       {...runCardProps(card)}
       {...deployCardProps(card)}
       {...taskCardProps(card)}
+      {...watchCardProps(card)}
       {...(collapse ? { collapse } : {})}
       door={
         card.approvalDoor?.waiting && card.approvalNumber !== null
@@ -451,7 +473,14 @@ export const MessageRow = memo(function MessageRow({
       );
     } else if (item.display === 'line' && item.line)
       // A server task's outcome is the line's point: two lines, so the phone doesn't cut it before its time (AP-4305).
-      shown = <SettledLineView line={item.line} onOpen={collapse} lines={card.task ? 2 : 1} />;
+      // An ended Find My watch is the line and nothing more: its card would only say it again.
+      shown = (
+        <SettledLineView
+          line={item.line}
+          onOpen={card.kind === 'findmy_watch' ? undefined : collapse}
+          lines={card.task ? 2 : 1}
+        />
+      );
     else shown = fullCard(card);
     if (!item.inside.length) return shown;
     return (

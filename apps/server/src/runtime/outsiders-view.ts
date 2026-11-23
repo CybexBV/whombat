@@ -54,6 +54,7 @@ const CARD_WORDS: Readonly<Record<Exclude<MessageCard['kind'], 'approval' | 'rep
   feature_request: 'a feature request',
   council: 'a council',
   delegation: 'work handed to T3 Code',
+  findmy_watch: 'a watch for someone to leave or arrive',
 };
 
 /** What an outsiders' turn reads of a message with a card (or a job's result) of `kind`. */

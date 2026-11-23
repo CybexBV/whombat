@@ -16,6 +16,7 @@ import { TURN_FAILURE_REASON_MAX, TurnFailureCode } from './dispatch.js';
 import { FeatureRequestCard, StoredFeatureRequestCard } from './feature-request.js';
 import { AssessmentCard, StoredAssessmentCard } from './feedback-assessment.js';
 import { ReportCard, StoredReportCard } from './feedback-card.js';
+import { FindMyWatchCard, StoredFindMyWatchCard } from './findmy-watch.js';
 import { GuideCard } from './guides.js';
 import { LinkRef } from './links.js';
 import { LookPlanCard, StoredLookPlanCard } from './look-research.js';
@@ -238,6 +239,10 @@ export const MessageCard = z.discriminatedUnion('kind', [
    * shape stored.
    */
   DelegationCard,
+  /**
+   * A one-time Find My watch with Cancel (Whombat findmy-watch.md); server-made (`findmy_watch`), resolved on read.
+   */
+  FindMyWatchCard,
 ]);
 export type MessageCard = z.infer<typeof MessageCard>;
 export const CARD_KINDS = [
@@ -263,6 +268,7 @@ export const CARD_KINDS = [
   'feature_request',
   'council',
   'delegation',
+  'findmy_watch',
 ] as const;
 
 export type PlanCard = z.infer<typeof PlanCard>;
@@ -299,13 +305,14 @@ export const StoredCard = z.discriminatedUnion('kind', [
   StoredFeatureRequestCard,
   CouncilCard,
   DelegationCard,
+  StoredFindMyWatchCard,
 ]);
 export type StoredCard = z.infer<typeof StoredCard>;
 
 /**
  * Cards an agent may post directly with `post_card` (run and approval cards come from their tools). Never `report`,
  * `guide`, `turn_failed`, `assessment`, `schedule`, `deploy`, `device_skill`, `task`, `automation_plan`, `look_plan`,
- * `feature_request`, `council` or `delegation`: those only the server makes, so an agent can't forge one (AG-02; a schedule card from `schedule`,
+ * `feature_request`, `council`, `delegation` or `findmy_watch`: those only the server makes, so an agent can't forge one (AG-02; a schedule card from `schedule`,
  * RA-30; a deploy card from `record_deploy`, CT-297; a task card from a followed server task, CT-880; a plan from
  * `draft_automation`; a feature request from its step).
  */
@@ -349,6 +356,7 @@ const CARD_KIND_NAMES: Readonly<Record<(typeof CARD_KINDS)[number], string>> = {
   feature_request: 'A feature request',
   council: 'A council',
   delegation: 'Tasks to hand over',
+  findmy_watch: 'A watch',
 };
 
 /** The first non-empty line of a string field, or null. */

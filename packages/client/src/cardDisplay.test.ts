@@ -1,4 +1,5 @@
 import {
+  type FindMyWatchView,
   type MessageCard,
   type ReportCard,
   type ScheduleCard,
@@ -23,6 +24,8 @@ import {
   approvalLine,
   cardDisplay,
   deploySettledLine,
+  FIND_MY_WATCH_TONES,
+  findMyWatchLine,
   foldIntoRuns,
   planLine,
   reportHeaderOnly,
@@ -369,5 +372,55 @@ describe('an image’s preview over a session (contracts 0.55, CT-298)', () => {
     expect(resourceKey(ref)).toBe('att:hq:att_1');
     expect(resourceKey({ ...ref, variant: 'original' })).toBe('att:hq:att_1');
     expect(resourceKey({ ...ref, variant: 'preview' })).toBe('att:hq:att_1:preview');
+  });
+});
+
+describe('a one-time Find My watch (findmy-watch.md)', () => {
+  const AMS = 'Europe/Amsterdam';
+  const now = Date.parse('2026-11-23T12:00:00Z');
+  const watch: FindMyWatchView = {
+    id: 'fmw_noor',
+    name: 'Noor Visser',
+    change: 'leaves',
+    place: 'Keizersgracht',
+    status: 'watching',
+    startedAt: '2026-11-23T11:00:00Z',
+    endsAt: '2026-11-24T11:00:00Z',
+    endedAt: null,
+    to: null,
+  };
+  const card = (w: FindMyWatchView | null): MessageCard => ({
+    kind: 'findmy_watch',
+    watchId: 'fmw_noor',
+    watch: w,
+  });
+
+  it('is the card while it watches and a line once it ended or can’t be read', () => {
+    expect(cardDisplay(card(watch))).toBe('full');
+    expect(cardDisplay(card({ ...watch, status: 'cancelled', endedAt: '2026-11-23T11:30:00Z' }))).toBe(
+      'line',
+    );
+    expect(cardDisplay(card(null))).toBe('line');
+  });
+
+  it('splits what happened from when, in the tone of how it ended', () => {
+    const happened = findMyWatchLine(
+      { ...watch, status: 'happened', endedAt: '2026-11-23T13:05:00Z', to: 'Amstelveen' },
+      AMS,
+      now,
+    );
+    expect(happened.lead).toContain('Noor Visser');
+    expect(happened.lead).not.toContain(' · ');
+    expect(happened.detail).toBe('14:05');
+    expect(happened.tone).toBe('ok');
+    const cancelled = findMyWatchLine(
+      { ...watch, status: 'cancelled', endedAt: '2026-11-23T11:30:00Z' },
+      AMS,
+      now,
+    );
+    expect(cancelled.lead).toContain('Noor Visser');
+    expect(cancelled.detail).toBeNull();
+    expect(cancelled.tone).toBe(FIND_MY_WATCH_TONES.cancelled);
+    expect(findMyWatchLine({ ...watch, status: 'stopped' }, AMS, now).tone).toBe('warn');
   });
 });

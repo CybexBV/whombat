@@ -97,6 +97,8 @@ export interface FixtureServerOptions {
   chat?: boolean;
   /** Tonight's server work in Chat (`chatChannel.ts`, AP-4306); default `EXPO_PUBLIC_WHOMBAT_TASKS=1`. */
   tasks?: boolean;
+  /** Two one-time Find My watches in Chat (`chatChannel.ts`, findmy-watch.md); default `EXPO_PUBLIC_WHOMBAT_WATCHES=1`. */
+  watches?: boolean;
   /** The sign-in cards in Chat (`chatChannel.ts`, AP-6680); default `EXPO_PUBLIC_WHOMBAT_SIGNIN=1`. */
   signIns?: boolean;
   /** Councils in Chat (`council.ts`, council.md); default `EXPO_PUBLIC_WHOMBAT_COUNCIL=1`. */
@@ -396,6 +398,7 @@ export function createFixtureServer(options: FixtureServerOptions): FixtureServe
           ...(options.si !== undefined ? { si: options.si } : {}),
           ...(options.chat !== undefined ? { chat: options.chat } : {}),
           ...(options.tasks !== undefined ? { tasks: options.tasks } : {}),
+          ...(options.watches !== undefined ? { watches: options.watches } : {}),
           ...(options.signIns !== undefined ? { signIns: options.signIns } : {}),
           ...(options.councils !== undefined ? { councils: options.councils } : {}),
           ...(options.delegation !== undefined ? { delegation: options.delegation } : {}),

@@ -29,6 +29,11 @@
  * With `code` (`EXPO_PUBLIC_WHOMBAT_CODE=1`) Mara's software work (`code.ts`) is in Chat's threads too: their rows'
  * work line (a council's round, a checklist's tasks) and `conversations.handoffs`, what T3 Code does for them, which
  * the job view in their threads draws. `chats.place`, which an older app may still call, answers the thread as it is.
+ * With `watches` (`EXPO_PUBLIC_WHOMBAT_WATCHES=1`, findmy-watch.md) two one-time Find My watches are in Chat, each in a
+ * thread of Mara's ask: Noor Visser leaving Keizersgracht, still watching with Cancel (`connections.findMyWatchCancel`
+ * turns it cancelled on its message, `message.updated`), and Ruben Dekker arriving at Home, which happened. Made-up
+ * people.
+ *
  * Pure TypeScript over `Response`; every answer parses with its endpoint's schema (tested).
  */
 
@@ -53,7 +58,10 @@ import {
   type DeviceSkillCard,
   type FeatureDecisionChoice,
   type FeatureRequestView,
+  type FindMyWatchView,
   featureValueText,
+  findMyWatchEndText,
+  findMyWatchStartText,
   type GuideCard,
   GuideVaultAsk,
   type Handoff,
@@ -111,6 +119,8 @@ export const CHAT_ROOTS = {
   shop: 'msg_chat-shop',
   plans: 'msg_chat-plans',
   tasks: 'msg_chat-tasks',
+  watchNoor: 'msg_chat-watch-noor',
+  watchRuben: 'msg_chat-watch-ruben',
   prod1: 'msg_chat-prod1',
   githubCode: 'msg_chat-github-code',
   nas: 'msg_chat-nas',
@@ -140,6 +150,8 @@ export interface ChatChannelOptions {
   replyDelayMs: number;
   /** Tonight's server work with its task cards (AP-4306); off by default. */
   tasks?: boolean;
+  /** Two one-time Find My watches (findmy-watch.md): one watching, one that happened. Off by default. */
+  watches?: boolean;
   /**
    * The sign-in cards (vault-simplify.md VLT-42, VLT-44; app vault-asks.md AP-6680): prod-1 refused Neo's key, and
    * github.com sent a code after its login was saved. Off by default.
@@ -530,6 +542,7 @@ export function createChatChannelFixtures(options: ChatChannelOptions) {
     msg(CHAT_ROOTS.firmware, chatId, mara.id, at('14:04'), 'Is there new firmware for the access points?'),
   );
   if (options.tasks) taskThread();
+  if (options.watches) watchThreads();
   if (options.signIns) signInThreads();
   if (options.councils) councilThreadsIn();
   if (options.delegation) delegationThreadIn(options.delegation);
@@ -768,6 +781,70 @@ export function createChatChannelFixtures(options: ChatChannelOptions) {
       );
       emit(`conv:${chatId}`, { type: 'message.updated', message: next });
     }, options.taskEndMs ?? 30_000);
+  }
+
+  /**
+   * Two one-time Find My watches (findmy-watch.md), each in the thread of Mara's ask: Noor's still watching (its card
+   * with Cancel), Ruben's happened (its card one line, and what Whombat posted when it saw it).
+   */
+  function watchThreads() {
+    const made = now().getTime();
+    const ago = (minutes: number) => new Date(made - minutes * 60_000).toISOString();
+    const later = (minutes: number) => new Date(made + minutes * 60_000).toISOString();
+    const noor: FindMyWatchView = {
+      id: 'fmw_noor',
+      name: 'Noor Visser',
+      change: 'leaves',
+      place: 'Keizersgracht',
+      status: 'watching',
+      startedAt: ago(20),
+      endsAt: later(24 * 60 - 20),
+      endedAt: null,
+      to: null,
+    };
+    const ruben: FindMyWatchView = {
+      id: 'fmw_ruben',
+      name: 'Ruben Dekker',
+      change: 'arrives',
+      place: 'Home',
+      status: 'happened',
+      startedAt: ago(140),
+      endsAt: later(24 * 60 - 140),
+      endedAt: ago(45),
+      to: 'Home',
+    };
+    const card = (w: FindMyWatchView): Partial<Message> => ({
+      card: { kind: 'findmy_watch', watchId: w.id, watch: w },
+    });
+    thread(
+      chat,
+      msg(CHAT_ROOTS.watchNoor, chatId, mara.id, ago(21), 'Tell me when Noor leaves where she is now'),
+      [[assistantId, noor.startedAt, findMyWatchStartText(noor), card(noor)]],
+    );
+    thread(chat, msg(CHAT_ROOTS.watchRuben, chatId, mara.id, ago(141), 'Tell me when Ruben gets home'), [
+      [assistantId, ruben.startedAt, findMyWatchStartText(ruben), card(ruben)],
+      [assistantId, ruben.endedAt ?? ago(45), findMyWatchEndText(ruben) ?? ''],
+    ]);
+  }
+
+  /** The watch card's Cancel: the watch cancelled on its message, out to the room; one that ended answers as it is. */
+  function cancelWatch(watchId: string): FindMyWatchView | null {
+    for (const [rootId, list] of chat.replies) {
+      const i = list.findIndex((m) => m.card?.kind === 'findmy_watch' && m.card.watchId === watchId);
+      const was = list[i];
+      if (was?.card?.kind !== 'findmy_watch' || !was.card.watch) continue;
+      const watch = was.card.watch;
+      if (watch.status !== 'watching') return watch;
+      const next: FindMyWatchView = { ...watch, status: 'cancelled', endedAt: now().toISOString() };
+      const message: Message = { ...was, card: { ...was.card, watch: next } };
+      chat.replies.set(
+        rootId,
+        list.map((m, j) => (j === i ? message : m)),
+      );
+      emit(`conv:${chatId}`, { type: 'message.updated', message });
+      return next;
+    }
+    return null;
   }
 
   const feedback: RoomState = {
@@ -1113,6 +1190,10 @@ export function createChatChannelFixtures(options: ChatChannelOptions) {
             next: all.length > limit ? (page.at(-1) ? order(page.at(-1) as ChatThread) : null) : null,
             ...(before ? {} : { settledCount: here.filter((t) => t.settled).length }),
           });
+        }
+        case 'connections.findMyWatchCancel': {
+          const watch = cancelWatch(params.watchId ?? '');
+          return watch ? json(watch) : notFound('No such watch');
         }
         case 'chats.place': {
           // An older app moving a thread: every thread stays in Chat, so it answers the thread as it is.
