@@ -3,7 +3,8 @@
  * CP-01): **Activity** — the changes here, newest first, Whombat's and people's (“You”, Whombat HR-05; app
  * home-redesign.md AP-2213), with Undo while it can be undone and “Show more” —
  * and **Settings** — what Settings → Connections showed for it (sign-in, Look only or Manage, who looks after it, the
- * checks, the tools and their tiers), without its head; a device's actions and their tiers.
+ * checks, the tools and their tiers), without its head; a device's actions and their tiers. A 1Password connection's
+ * page opens on its own **1Password** tab: KEPT IN STEP (Whombat onepassword-sync.md; app onepassword-sync.md).
  */
 import { useChanges, useTheAgent } from '@whombat/client/react';
 import type { ThingPage } from '@whombat/core';
@@ -13,6 +14,7 @@ import { LoadErrorNote } from '../../../app/runtime';
 import { SkeletonRows } from '../../../components/ListState';
 import { ConnectionPage } from '../../connectors/ConnectionPage';
 import { connectableEntry } from '../../connectors/catalog';
+import { OnePasswordSection } from '../../connectors/OnePasswordParts';
 import { DoneList } from '../../home/DoneList';
 import home from '../../home/Home.module.css';
 import { AccountSettings } from '../../settings/ConnectionsTab';
@@ -108,6 +110,18 @@ export function SettingsTab({ burrow, page }: { burrow: string; page: ThingPage 
         device={device}
       />
       <WatchSettings burrow={burrow} thing={page.id} />
+    </div>
+  );
+}
+
+/**
+ * The 1Password connection's own tab, which its page opens on: the vault, what is kept in step, the guard's question,
+ * what isn't in the Vault and Sync now, from `connections.onePassword` (the server's tab has no panels).
+ */
+export function OnePasswordTab({ burrow, connectionId }: { burrow: string; connectionId: string }) {
+  return (
+    <div className={styles.settings}>
+      <OnePasswordSection burrow={burrow} conn={{ id: connectionId }} />
     </div>
   );
 }

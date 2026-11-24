@@ -9,7 +9,8 @@
  * picked beside the charts a figure opens (`?chart=`), and at the tab row's end on the Summary only while a chart card
  * is left. Every tab of the server's is drawn by the one Summary renderer (`dashboard/`), except one about a server
  * (`ThingPageTab.server`): Find My's and its Timeline, drawn from the Mac's own reads and the connection's timeline
- * (`findmy/`), the Timeline only when the box sends it. An open page reads again every
+ * (`findmy/`), the Timeline only when the box sends it, and a 1Password connection's own tab, drawn from its sync's
+ * read (`OnePasswordTab`). An open page reads again every
  * `refreshS`
  * while the tab is shown (at least 5 s; a minute without one; contracts 0.121 CT-1010, service-dashboards.md AP-4568),
  * and a read that failed keeps what the page has and says why. Its buttons (CT-1001…CT-1003, CT-1014) share one
@@ -59,8 +60,14 @@ import {
   type ThingPageAction,
   thingHref,
 } from '@whombat/core';
-import { FIND_MY_TIMELINE_TAB, isAccountPageId, placeKindOfCatalog } from '@whombat/core/domain';
+import {
+  FIND_MY_TIMELINE_TAB,
+  isAccountPageId,
+  isVaultSyncConnection,
+  placeKindOfCatalog,
+} from '@whombat/core/domain';
 import { formatClock } from '@whombat/core/text';
+import { ONEPASSWORD_TAB } from '@whombat/core/vault';
 import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
@@ -93,7 +100,7 @@ import { THING_ICONS } from '../thingIcons';
 import { LookCard } from './LookCard';
 import { RunsOnDialog } from './RunsOnDialog';
 import styles from './ThingPage.module.css';
-import { ActivityTab, SettingsTab } from './ThingTabs';
+import { ActivityTab, OnePasswordTab, SettingsTab } from './ThingTabs';
 
 /** The Find My connection's tab (findmy-connection.md): it names its Mac and is drawn from that Mac's Find My. */
 const FIND_MY_TAB = 'findmy';
@@ -298,6 +305,8 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
             <ActivityTab burrow={burrow} page={page} now={now} timeZone={timeZone} />
           ) : own === 'settings' ? (
             <SettingsTab burrow={burrow} page={page} />
+          ) : tab === ONEPASSWORD_TAB && page.connectionId && isVaultSyncConnection(page.catalogId ?? '') ? (
+            <OnePasswordTab burrow={burrow} connectionId={page.connectionId} />
           ) : about && tab === FIND_MY_TAB ? (
             <FindMyTab burrow={burrow} serverId={about} />
           ) : about && tab === FIND_MY_TIMELINE_TAB && page.connectionId ? (

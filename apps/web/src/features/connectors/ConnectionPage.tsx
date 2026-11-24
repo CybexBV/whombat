@@ -15,8 +15,9 @@
  * the generic one; Whombat ai-gateway.md AIG-01, AIG-05, AIG-06; AP-1117) has none of them either, but which tools go
  * through it, the pool's line and CLAUDE CODE AND CODEX with a switch per tool (`GatewayParts`); removing it says what
  * the server says when Fusebox couldn't be told (AIG-03, AP-1119). 1Password (Whombat onepassword-sync.md) has none of
- * the agent's parts and no last use, but KEPT IN STEP (`OnePasswordParts`), and Remove asks whether the entries it kept
- * in step stay in the Vault. Settings' cards, the Google page's checks and footer, the Vault's tool rows.
+ * the agent's parts and no last use, and Remove asks whether the entries it kept in step stay in the Vault; KEPT IN
+ * STEP is its page's own 1Password tab (`OnePasswordParts`), not here. Settings' cards, the Google page's checks and
+ * footer, the Vault's tool rows.
  */
 import { createLink, useNavigate } from '@tanstack/react-router';
 import {
@@ -112,7 +113,6 @@ import {
   useGatewayOf,
   useGatewayPool,
 } from './GatewayParts';
-import { OnePasswordSection } from './OnePasswordParts';
 import { useConnectionWords } from './useConnectionWords';
 
 const RouterButtonLink = createLink(ButtonLink);
@@ -209,8 +209,6 @@ export function ConnectionPage({
       />
       {/* Claude Code and ChatGPT through it (AIG-05, AP-1117): the switches, where the runtime has `ai.gateway`. */}
       {gateway && <GatewaySwitchesSection burrow={burrow} entry={entry} conn={conn} />}
-      {/* The Vault kept in step with a 1Password vault: the sync's state, Sync now and the guard's answers. */}
-      {usedByVaultSync(entry) && <OnePasswordSection burrow={burrow} conn={conn} />}
       <SignInSection burrow={burrow} entry={entry} conn={conn} leave={leave} againAsked={againAsked} />
       {usedByAgents(entry) && (
         <ToolsSection burrow={burrow} conn={conn} tools={data.tools} truncated={data.truncated} />

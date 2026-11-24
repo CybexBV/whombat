@@ -1,13 +1,14 @@
 /**
  * A 1Password vault kept in step with the Vault (Whombat onepassword-sync.md; app onepassword-sync.md), against the
- * fixture world's (onePasswordFixtures.ts): the connection's page without the agent's parts but KEPT IN STEP — the
+ * fixture world's (onePasswordFixtures.ts): the connection's page opening on its own 1Password tab, KEPT IN STEP — the
  * vault, the counts, the last check and Sync now, the waiting, failing and read-only lines, what isn't in the Vault and
- * why, the guard's removals with their two answers —, Remove asking what becomes of the entries, the Vault's tag and
- * line, and the Inbox card's answers.
+ * why, the guard's removals with their two answers —, its Connection tab without the agent's parts and with Remove
+ * asking what becomes of the entries, the Vault's tag and line, and the Inbox card's answers.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ONEPASSWORD_APP_TEXT } from '@whombat/client';
+import { thingHref } from '@whombat/core';
 import { api, buildPath } from '@whombat/core/contracts';
 import {
   ONEPASSWORD_WORDS,
@@ -24,7 +25,8 @@ import { fixtureServices, mockedServices, renderApp } from '../../test/renderApp
 
 pinMockDate();
 
-const PAGE = '/connections?connection=onepassword&id=con_fixture_1password';
+/** The connection's own page, which opens on its 1Password tab. */
+const PAGE = thingHref('connection', 'con_fixture_1password');
 const world = (onePassword: OnePasswordFixtureKind) =>
   fixtureServices({ connectors: 'connected', onePassword });
 
@@ -48,10 +50,21 @@ function recorded(onePassword: OnePasswordFixtureKind) {
 const keptInStep = () =>
   screen.findByRole('region', { name: ONEPASSWORD_APP_TEXT.section }, { timeout: 12_000 });
 
+/** The page's Connection tab: the connection's own details, Replace token and Remove. */
+async function connectionTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('tab', { name: 'Connection' }));
+  return screen.findByRole('region', { name: 'CONNECTION' }, { timeout: 12_000 });
+}
+
 describe('the 1Password connection’s page', () => {
-  it('shows the sync instead of the agent’s parts: the vault, the counts, the last check and what isn’t in', async () => {
+  it('opens on its 1Password tab: the vault, the counts, the last check and what isn’t in', async () => {
+    const user = userEvent.setup();
     renderApp(PAGE, world('synced'));
     const part = await keptInStep();
+    // The server's own tab leads, the Summary after it.
+    const tabs = within(screen.getByRole('tablist', { name: '1Password sections' })).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['1Password', 'Summary', 'Activity', 'Connection']);
+    expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     expect(await within(part).findByText('Whombat')).toBeTruthy();
     expect(within(part).getByText('6 logins and API tokens kept in step')).toBeTruthy();
     expect(within(part).getByText('Last checked 3 min ago')).toBeTruthy();
@@ -64,8 +77,10 @@ describe('the 1Password connection’s page', () => {
     );
     expect(within(part).queryByRole('button', { name: ONEPASSWORD_WORDS.removeHere })).toBeNull();
 
-    // The agent never uses it: no level, handle, last use, tools or automations' words.
-    const card = screen.getByRole('region', { name: 'CONNECTION' });
+    // The Connection tab keeps the connection's own details. The agent never uses it: no level, handle, last use,
+    // tools or automations' words, and the sync isn't drawn a second time.
+    const card = await connectionTab(user);
+    expect(screen.queryByRole('region', { name: ONEPASSWORD_APP_TEXT.section })).toBeNull();
     expect(within(card).queryByText('LAST USED')).toBeNull();
     expect(within(card).queryByText(/CALLS IT$/)).toBeNull();
     expect(within(card).queryByText(/MAY DO$/)).toBeNull();
@@ -134,6 +149,7 @@ describe('the 1Password connection’s page', () => {
     const { services, sent, vaultNames } = recorded('synced');
     renderApp(PAGE, services);
     await keptInStep();
+    await connectionTab(user);
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.getByText(ONEPASSWORD_APP_TEXT.removeAsk('1Password'))).toBeTruthy();
     const keep = screen.getByRole('radio', { name: ONEPASSWORD_WORDS.disconnectKeep }) as HTMLInputElement;
