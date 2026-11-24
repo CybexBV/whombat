@@ -24,6 +24,7 @@ import {
   type ConversationDetail,
   type ConversationSummary,
   chatTitleFrom,
+  type DeskWidgetSpec,
   type DeviceActionChoice,
   type DeviceSkillCard,
   type Grant,
@@ -37,6 +38,7 @@ import {
   type NeedsYouItem,
   needsYouCount,
   needsYouGroupOf,
+  type OverviewLayout,
   osMark,
   type Plan,
   type ThingSummary,
@@ -62,6 +64,7 @@ import {
   firstDayBackupItem,
   firstDayWelcome,
 } from './firstDayFixtures';
+import { createOverviewFixtures } from './overviewFixtures';
 
 const API = '/api/v1';
 const B = `${API}/burrows/${burrow.slug}`;
@@ -598,6 +601,8 @@ export function createOneFixtures(
 
   const allThings = (): ThingSummary[] =>
     options.moreThings ? withServiceThings(things, options.moreThings()) : things;
+  // Arranging the Overview (overview-arranged.md): its layout and its tiles' figures.
+  const arranging = createOverviewFixtures(allThings);
 
   const automationsToday: AutomationToday[] = [
     {
@@ -936,6 +941,7 @@ export function createOneFixtures(
       // What an agent changed (HR-05): a person's own edits stay on the thing's page.
       doneRecently: changes.filter((c) => c.actor.kind !== 'person').slice(0, 5),
       chats: homeChats(),
+      arranged: arranging.arranged(),
       generatedAt: new Date(clock()).toISOString(),
     };
   }
@@ -1102,6 +1108,12 @@ export function createOneFixtures(
       switch (route) {
         case 'GET /home':
           return json(overview());
+        case 'PUT /overview/layout':
+          return json(arranging.arrange((await body<{ layout: OverviewLayout }>(req)).layout));
+        case 'POST /overview/views':
+          return json(arranging.views((await body<{ widgets: DeskWidgetSpec[] }>(req)).widgets));
+        case 'GET /overview/figures':
+          return json(arranging.figures(url.searchParams.get('thing') ?? undefined));
         case 'GET /watch': {
           const all = url.searchParams.get('state') === 'all';
           // An older app's Watch: never the heads-ups.

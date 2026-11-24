@@ -1,38 +1,73 @@
 import { Link } from '@tanstack/react-router';
 import {
+  ARRANGE_WORDS,
+  addTile,
+  arrangePins,
+  arrangeTiles,
   CHAT_WORDS,
   type ConnectionsTab,
   type HomeSlot,
+  homeGreeting,
   homeSection,
   homeSections,
   homeStatus,
   homeWebSlots,
+  layoutNow,
+  moveTileBy,
+  moveTileTo,
   NEEDS_YOU_WORDS,
+  OVERVIEW_PAGE_WORDS,
+  OVERVIEW_STARTING_TOP,
   OVERVIEW_WORDS,
   type OverviewSectionView,
   overviewHeadline,
   overviewSectionAnchor,
   overviewSectionForTab,
   overviewSections,
+  overviewSpecs,
   overviewTiles,
+  ownFace,
+  rangeOfTile,
+  readAgo,
   readState,
+  removeTile,
+  setPin,
+  setTopFigure,
+  showId,
+  showOnTile,
+  sizeTile,
+  statusText,
+  todayMoments,
+  viewFace,
 } from '@whombat/client';
 import { EVERYTHING_RUNNING_HREF, isHostsUnavailable } from '@whombat/client/hosts';
-import { useHomeOverview, useTheAgent } from '@whombat/client/react';
-import { ChevronRight, Plus } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useRef } from 'react';
+import {
+  useArrangeOverview,
+  useHomeOverview,
+  useMoveWidget,
+  useOverviewViews,
+  useTheAgent,
+} from '@whombat/client/react';
+import type { OverviewLayout } from '@whombat/core';
+import { Check, ChevronRight, Plus, Settings } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { INBOX_PATH } from '../../app/shell/location';
+import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { StatusMark } from '../../components/StatusMark';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
 import { AddServerDialog } from '../things/AddServer';
 import { AppLink } from '../things/parts';
+import { useThingLinkProps } from '../things/prefetch';
 import { RepointServersDialog } from '../things/RepointServers';
 import { useThingSearch } from '../things/search';
+import a from './Arranged.module.css';
+import { ArrangedTiles, TileLogo, thingColor } from './ArrangedTiles';
+import { ArrangePanel, type PanelTarget } from './ArrangePanel';
 import { EmptyConnections } from './EmptyConnections';
 import styles from './Home.module.css';
 import o from './Overview.module.css';
-import { OverviewConnections } from './OverviewConnections';
+import { BrokenActions, OverviewPulse, OverviewToday, type PulseFigure } from './OverviewPulse';
 import { OverviewServers, RowPlaceholders, useOverviewFleet } from './OverviewServers';
 import { ReadNote } from './ReadState';
 import { useHandleIt } from './useHandleIt';
@@ -88,12 +123,13 @@ function Section({
 }
 
 /**
- * Overview on one page (docs/decisions/overview-one-page.md): the title with the status sentence when nothing is broken
- * and the jump links on the right, the broken thing and how many other things need the person
- * (overview-server-connection-final.md OSC-01), then **Servers** (one list, a row a server), **Connections** (small
- * tiles) and **Pinned** (what was pinned from a chat), each with its heading, count and line. An old `?tab=` scrolls to
- * its section once. Add a server opens here (`?add=1`), and Point them here (`?repoint=1`, backup-file.md AP-4417).
- * Live through `home.changed`, `hosts:<burrowId>` and the shell's own writes.
+ * Overview (docs/decisions/overview-one-page.md, overview-arranged.md): the title with the jump links and **Arrange**;
+ * the summary card (the broken thing with *Look into it*, or how things are, and the four figures the person chose);
+ * **Today**; **Connections** (the tiles as the person arranged them, OVA-01…OVA-06); **Servers** (one list, a row a
+ * server); **Pinned** (what was pinned from a chat). Arrange shows a gear on every tile, figure and pinned chart, lets
+ * tiles be dragged and saves each change at once. An old `?tab=` scrolls to its section once. Add a server opens here
+ * (`?add=1`), and Point them here (`?repoint=1`, backup-file.md AP-4417). Live through `home.changed`,
+ * `hosts:<burrowId>` and the shell's own writes.
  */
 export function HomeScreen({ burrow }: HomeScreenProps) {
   const { me, timeZone } = useBurrowContext(burrow);
@@ -129,13 +165,106 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
   const views = useMemo(() => overviewSections(sections, hosts.servers), [sections, hosts.servers]);
   const view = (key: ConnectionsTab) => views.find((v) => v.key === key) ?? null;
   // A section with nothing in it isn't drawn; Connections stays for whoever may add one (its link is in its heading).
-  const shown = views.filter((v) => v.key !== 'services' || v.count > 0 || canAdd);
+  // Connections come before Servers (overview-arranged.md OVA-07).
+  const shown = views
+    .filter((v) => v.key !== 'services' || v.count > 0 || canAdd)
+    .sort((a, b) => SECTION_ORDER.indexOf(a.key) - SECTION_ORDER.indexOf(b.key));
   const tiles = useMemo(
     () => (data ? overviewTiles(thingRows, data.things, now, timeZone, agent?.name ?? null) : []),
     [data, thingRows, now, timeZone, agent?.name],
   );
   // Nothing connected, no servers, nothing pinned: one card and one step instead of empty sections (first-day.md).
   const empty = !!data && !homeSection(sections, 'servers') && thingRows.length === 0 && pinned.length === 0;
+
+  /* Arranging (overview-arranged.md): an older Whombat sends no layout and offers no Arrange. */
+  const arranged = data?.arranged;
+  const canArrange = canAdd && arranged !== undefined;
+  const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<PanelTarget | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const arrange = useArrangeOverview(burrow);
+  const movePin = useMoveWidget(burrow);
+  const arrangeButton = useRef<HTMLButtonElement>(null);
+  const tileSet = useMemo(() => arrangeTiles(arranged, tiles), [arranged, tiles]);
+  const top = arranged?.top?.length ? arranged.top : OVERVIEW_STARTING_TOP;
+  const specs = useMemo(
+    () =>
+      arranged === undefined
+        ? null
+        : overviewSpecs(
+            tileSet.shown.map((x) => x.tile),
+            top,
+          ),
+    [arranged, tileSet.shown, top],
+  );
+  const tileViews = useOverviewViews(burrow, specs).data;
+  const pinSet = useMemo(
+    () =>
+      arrangePins(
+        arranged,
+        pinned.map((slot) => ({ ...slot, id: slot.panel.id })),
+      ),
+    [arranged, pinned],
+  );
+  const save = (edit: (layout: OverviewLayout) => OverviewLayout) => {
+    setProblem(null);
+    const next = edit(layoutNow(arranged, thingRows));
+    arrange.mutate(next, {
+      onSuccess: (r) => {
+        if (r.status !== 'ok') setProblem(ARRANGE_WORDS.couldntSave);
+      },
+      onError: () => setProblem(ARRANGE_WORDS.couldntSave),
+    });
+  };
+  const stopArranging = () => {
+    setPanel(null);
+    setEditing(false);
+    arrangeButton.current?.focus();
+  };
+  // Esc closes the panel, then ends arranging.
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (panel) setPanel(null);
+      else stopArranging();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const rowOf = (thing: string) => tiles.find((t) => t.row.id === thing)?.row ?? null;
+  const figures: PulseFigure[] = data
+    ? top.map((t) => {
+        if ('own' in t)
+          return {
+            key: `own:${t.own}`,
+            face: ownFace(t.own, data, thingRows, hosts.servers ?? null, agent?.name ?? null),
+          };
+        const row = rowOf(t.thing);
+        const v = tileViews?.get(showId(t));
+        const face = (v && viewFace(v)) || {
+          value: '—',
+          unit: null,
+          label: row?.name ?? '',
+          line: null,
+          tone: null,
+          spark: null,
+          parts: null,
+        };
+        return {
+          key: showId(t),
+          face,
+          color: thingColor(t.thing),
+          ...(row ? { logo: <TileLogo row={row} size={13} /> } : {}),
+        };
+      })
+    : [];
+  const moveTile = (thing: string, by: -1 | 1) => save((l) => moveTileBy(l, thing, by));
+  const linkProps = useThingLinkProps(burrow);
+  const day = useMemo(
+    () => (data ? todayMoments(data, now, timeZone, agent?.name ?? null) : null),
+    [data, now, timeZone, agent?.name],
+  );
 
   // An old `?tab=` address (the tabs before) scrolls to its section once, when it is there.
   const arrived = useRef(false);
@@ -149,27 +278,41 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
   const serversView = view('servers');
   const pinnedView = view('pinned');
 
+  const tone = headline?.kind === 'broken' ? 'bad' : (status?.tone ?? 'ok');
+  const statusWords = status ? statusText(status.parts) : '';
+  const strong = status?.parts.find((p) => p.strong)?.text ?? null;
+  const pulseHeading =
+    headline?.kind === 'broken' && headlineItem ? (
+      <Link to={INBOX_PATH} search={{ item: headlineItem.id } as never}>
+        {headline.title}
+      </Link>
+    ) : tone === 'ok' ? (
+      OVERVIEW_PAGE_WORDS.fine
+    ) : (
+      (strong ?? statusWords).replace(/\.$/, '')
+    );
+  const serverCount = hosts.servers?.length ?? 0;
+  const pulseBody =
+    headline?.kind === 'broken'
+      ? headline.detail || null
+      : tone === 'ok'
+        ? `${OVERVIEW_PAGE_WORDS.watching(words.Name, serverCount, tileSet.shown.length + tileSet.removed.length)} ${statusWords.replace(/^All good\.\s*/, '')}`.trim()
+        : strong
+          ? statusWords.slice(statusWords.indexOf(strong) + strong.length).trim() || null
+          : null;
+  const greeting = data
+    ? [
+        homeGreeting(me?.name ?? null, now, timeZone),
+        formatDay(now, timeZone),
+        OVERVIEW_PAGE_WORDS.read(readAgo(data.generatedAt, now)),
+      ].join(' · ')
+    : '';
+
   return (
     <div className={styles.scroll} data-screen="home">
-      <div className={o.page}>
+      <div className={cx(o.page, editing && a.editing)}>
         <header className={o.head}>
           <h1>{CHAT_WORDS.dashboard}</h1>
-          {headline?.kind === 'status' && status ? (
-            <p className={o.sentence} data-tone={status.tone}>
-              {status.tone === 'ok' ? <span className={o.okDot} aria-hidden="true" /> : null}
-              <span>
-                {status.parts.map((part, i) =>
-                  part.strong ? (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: the sentence's pieces in order
-                    <b key={i}>{part.text}</b>
-                  ) : (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: the sentence's pieces in order
-                    <span key={i}>{part.text}</span>
-                  ),
-                )}
-              </span>
-            </p>
-          ) : null}
           {data && !empty && shown.length > 1 ? (
             <nav className={o.jump} aria-label={OVERVIEW_WORDS.onThisPage}>
               {shown.map((v) => (
@@ -194,51 +337,31 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
               ))}
             </nav>
           ) : null}
+          {canArrange && data && !empty ? (
+            <button
+              ref={arrangeButton}
+              type="button"
+              className={a.arrange}
+              aria-pressed={editing}
+              aria-label={editing ? ARRANGE_WORDS.doneLabel : ARRANGE_WORDS.arrangeLabel}
+              onClick={() => (editing ? stopArranging() : setEditing(true))}
+              data-arrange="toggle"
+            >
+              <Icon icon={editing ? Check : Settings} size={16} />
+              <span>{editing ? ARRANGE_WORDS.done : ARRANGE_WORDS.arrange}</span>
+            </button>
+          ) : null}
         </header>
         <div className={o.body}>
-          {headline?.kind === 'broken' && headlineItem ? (
-            <>
-              {/* The broken thing first: its title (to its Inbox row), its consequence, one Look into it. */}
-              <section className={o.broken} aria-labelledby="overview-broken" data-overview="broken">
-                <div className={o.brokenText}>
-                  <h2 id="overview-broken">
-                    <Link
-                      to={INBOX_PATH}
-                      search={{ item: headlineItem.id } as never}
-                      className={o.brokenTitle}
-                    >
-                      {headline.title}
-                    </Link>
-                  </h2>
-                  {headline.detail ? <p>{headline.detail}</p> : null}
-                </div>
-                {headline.busy ? (
-                  <span className={o.busy}>
-                    {headline.busy === 'looking'
-                      ? NEEDS_YOU_WORDS.looking(words)
-                      : NEEDS_YOU_WORDS.fixing(words)}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className={o.lookButton}
-                    disabled={handleIt.busy}
-                    aria-describedby="overview-broken"
-                    onClick={() => handleIt.run(headlineItem)}
-                  >
-                    {OVERVIEW_WORDS.lookIntoIt}
-                  </button>
-                )}
-              </section>
-              {headline.others > 0 ? (
-                <Link to={INBOX_PATH} className={o.others}>
-                  {OVERVIEW_WORDS.others(headline.others)}
-                  <Icon icon={ChevronRight} size={13} />
-                </Link>
-              ) : null}
-            </>
+          {editing ? (
+            <div className={a.editbar} role="status">
+              <span>
+                <b>{ARRANGE_WORDS.barTitle}</b> <span className={a.onWide}>{ARRANGE_WORDS.barBody}</span>
+                <span className={a.onPhone}>{ARRANGE_WORDS.barBodyPhone}</span>
+              </span>
+              {problem ? <span className={a.problem}>{problem}</span> : null}
+            </div>
           ) : null}
-
           {read === 'failed' ? (
             // The first read failed: nothing saved to show, so no figures that could look current.
             <ReadNote
@@ -276,6 +399,70 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
                   onRetry={() => void refetch()}
                 />
               ) : null}
+              <OverviewPulse
+                tone={tone}
+                greeting={greeting}
+                heading={pulseHeading}
+                body={pulseBody}
+                actions={
+                  headline?.kind === 'broken' && headlineItem ? (
+                    <BrokenActions
+                      busyWords={
+                        headline.busy === 'looking'
+                          ? NEEDS_YOU_WORDS.looking(words)
+                          : headline.busy === 'fixing'
+                            ? NEEDS_YOU_WORDS.fixing(words)
+                            : null
+                      }
+                      others={headline.others > 0 ? OVERVIEW_WORDS.others(headline.others) : null}
+                      disabled={handleIt.busy}
+                      onLook={() => handleIt.run(headlineItem)}
+                      look={OVERVIEW_WORDS.lookIntoIt}
+                    />
+                  ) : null
+                }
+                figures={figures}
+                editing={editing}
+                onGear={(index) => setPanel({ kind: 'top', index })}
+              />
+              {day?.moments.length ? (
+                <OverviewToday moments={day.moments} now={day.now} done={day.done} planned={day.planned} />
+              ) : null}
+              {servicesView && shown.includes(servicesView) ? (
+                <Section
+                  view={servicesView}
+                  links={
+                    canAdd ? (
+                      <Link
+                        to="/connections"
+                        // Add a connection's own page (connections-catalog.md AP-1157), here on Overview.
+                        search={{ connection: 'add' } as never}
+                        className={o.link}
+                        data-add="connection"
+                      >
+                        <Icon icon={Plus} size={14} />
+                        {OVERVIEW_WORDS.addConnection}
+                      </Link>
+                    ) : null
+                  }
+                >
+                  {tiles.length ? (
+                    <ArrangedTiles
+                      shown={tileSet.shown}
+                      removed={tileSet.removed.length + pinSet.removed.length}
+                      views={tileViews}
+                      viewId={showId}
+                      editing={editing}
+                      linkProps={linkProps}
+                      onGear={(thing) => setPanel({ kind: 'tile', thing })}
+                      onAdd={() => setPanel({ kind: 'add' })}
+                      onDrop={(thing, onto) => save((l) => moveTileTo(l, thing, onto))}
+                    />
+                  ) : (
+                    <p className={o.note}>Nothing connected yet.</p>
+                  )}
+                </Section>
+              ) : null}
               {serversView ? (
                 <Section
                   view={serversView}
@@ -305,45 +492,30 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
                   />
                 </Section>
               ) : null}
-              {servicesView && shown.includes(servicesView) ? (
-                <Section
-                  view={servicesView}
-                  links={
-                    canAdd ? (
-                      <Link
-                        to="/connections"
-                        // Add a connection's own page (connections-catalog.md AP-1157), here on Overview.
-                        search={{ connection: 'add' } as never}
-                        className={o.link}
-                        data-add="connection"
-                      >
-                        <Icon icon={Plus} size={14} />
-                        {OVERVIEW_WORDS.addConnection}
-                      </Link>
-                    ) : null
-                  }
-                >
-                  {tiles.length ? (
-                    <OverviewConnections burrow={burrow} tiles={tiles} />
-                  ) : (
-                    <p className={o.note}>Nothing connected yet.</p>
-                  )}
-                </Section>
-              ) : null}
-              {pinnedView && pinned.length ? (
+              {pinnedView && pinSet.shown.length ? (
                 <Section view={pinnedView}>
                   <div className={styles.grid}>
-                    {pinned.map((slot) => (
-                      <WidgetCard
-                        key={slot.key}
-                        className={styles[slot.place]}
-                        burrow={burrow}
-                        widget={slot.panel}
-                        index={slot.index}
-                        count={slot.count}
-                        timeZone={timeZone}
-                        now={now}
-                      />
+                    {pinSet.shown.map((slot, i) => (
+                      <div key={slot.key} className={cx(styles[slot.size], a.pinWrap)} data-size={slot.size}>
+                        <WidgetCard
+                          burrow={burrow}
+                          widget={slot.panel}
+                          index={i}
+                          count={pinSet.shown.length}
+                          timeZone={timeZone}
+                          now={now}
+                        />
+                        {editing ? (
+                          <button
+                            type="button"
+                            className={a.gear}
+                            aria-label={ARRANGE_WORDS.changePin(slot.panel.title)}
+                            onClick={() => setPanel({ kind: 'pin', id: slot.id })}
+                          >
+                            <Icon icon={Settings} size={17} />
+                          </button>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 </Section>
@@ -352,6 +524,47 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
           )}
         </div>
       </div>
+      {editing && panel && data ? (
+        <ArrangePanel
+          burrow={burrow}
+          target={panel}
+          tiles={tileSet.shown}
+          removedTiles={tileSet.removed}
+          pins={pinSet.shown.map((p) => ({ id: p.id, title: p.panel.title, size: p.size }))}
+          removedPins={pinSet.removed.map((p) => ({ id: p.id, title: p.panel.title }))}
+          top={top}
+          views={tileViews}
+          thingName={(thing) => rowOf(thing)?.name ?? thing}
+          thingLogo={(thing) => {
+            const row = rowOf(thing);
+            return row ? <TileLogo row={row} size={14} /> : null;
+          }}
+          problem={problem}
+          onShow={(thing, show) => save((l) => showOnTile(l, thing, show))}
+          onRange={(thing, range) => save((l) => rangeOfTile(l, thing, range))}
+          onSize={(thing, size) => save((l) => sizeTile(l, thing, size))}
+          onMoveTile={moveTile}
+          onRemoveTile={(thing) => {
+            save((l) => removeTile(l, thing));
+            setPanel(null);
+          }}
+          onAddTile={(thing) => save((l) => addTile(l, thing))}
+          onTop={(index, t) => save((l) => setTopFigure(l, index, t))}
+          onPinSize={(id, size) => save((l) => setPin(l, id, { size }))}
+          onMovePin={(id, by) => {
+            const order = pinned.map((p) => p.panel.id);
+            const i = pinSet.shown.findIndex((p) => p.id === id);
+            const neighbour = pinSet.shown[i + by];
+            if (neighbour) movePin.mutate({ widgetId: id, position: order.indexOf(neighbour.id) });
+          }}
+          onRemovePin={(id) => {
+            save((l) => setPin(l, id, { hidden: true }));
+            setPanel(null);
+          }}
+          onAddPin={(id) => save((l) => setPin(l, id, { hidden: undefined }))}
+          onClose={() => setPanel(null)}
+        />
+      ) : null}
       {repointing ? (
         <RepointServersDialog
           burrow={burrow}
@@ -374,4 +587,17 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
       ) : null}
     </div>
   );
+}
+
+/** The sections in the page's order (overview-arranged.md OVA-07). */
+const SECTION_ORDER: readonly ConnectionsTab[] = ['services', 'servers', 'pinned'];
+
+/** “Tuesday 24 November”. */
+function formatDay(now: number, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(now);
 }

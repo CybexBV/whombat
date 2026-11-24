@@ -379,7 +379,9 @@ export function ownFace(
   const label = ARRANGE_WORDS.ownNames[own];
   switch (own) {
     case 'servers': {
-      const all = fleet ?? [];
+      // Without the servers' list (no hosts service, or not read yet) there is nothing to count.
+      if (!fleet?.length) return face({ value: '—', label, line: null });
+      const all = fleet;
       const bad = all.filter((s) => s.status === 'bad' || s.status === 'offline').length;
       const warn = all.filter((s) => s.status === 'warn').length;
       const ok = all.length - bad - warn;
@@ -446,4 +448,113 @@ export function ownFace(
 /** The name of a figure at the top as its picker lists it. */
 export function topKey(top: OverviewLayoutTop): string {
   return 'own' in top ? `own:${top.own}` : showId(top);
+}
+
+/* The summary card and Today -------------------------------------------------------------------------------------- */
+
+export const OVERVIEW_PAGE_WORDS = {
+  live: 'Live',
+  fine: 'Everything’s fine',
+  read: (ago: string) => `read ${ago}`,
+  justNow: 'just now',
+  minAgo: (n: number) => `${n} min ago`,
+  watching: (assistant: string, servers: number, connections: number) =>
+    `${assistant} keeps an eye on ${servers} ${servers === 1 ? 'server' : 'servers'} and ${connections} ${connections === 1 ? 'connection' : 'connections'}.`,
+  today: 'Today',
+  todayLine: (done: number, planned: number) =>
+    planned
+      ? `${done} ${done === 1 ? 'thing' : 'things'} so far · ${planned} planned`
+      : `${done} ${done === 1 ? 'thing' : 'things'} so far`,
+  allActivity: 'All activity',
+  now: 'Now',
+  showAll: (n: number) => `Show all ${n}`,
+  showFewer: 'Show fewer',
+  failed: 'failed',
+  automation: 'Automation',
+} as const;
+
+/** How long ago Home was read, for “read just now”, “read 3 min ago”. */
+export function readAgo(at: string | number | Date, now: number): string {
+  const ms = now - new Date(at).getTime();
+  const min = Math.floor(ms / 60_000);
+  return min < 1 ? OVERVIEW_PAGE_WORDS.justNow : OVERVIEW_PAGE_WORDS.minAgo(min);
+}
+
+export type TodayTone = 'done' | 'bad' | 'plan';
+
+export interface TodayMoment {
+  key: string;
+  /** Minutes since the local midnight, where the dot sits on the day's line. */
+  minute: number;
+  /** “21:00”. */
+  time: string;
+  text: string;
+  /** Where it came from: the automation, or the assistant. */
+  from: string;
+  tone: TodayTone;
+  href: string | null;
+}
+
+/**
+ * The day's moments in time order: what the assistant finished and the automations that ran or failed so far, and
+ * the automations still planned today. `now` as minutes since midnight for the line's Now.
+ */
+export function todayMoments(
+  data: Pick<HomeOverview, 'doneToday' | 'automationsToday'>,
+  now: number,
+  timeZone: string,
+  assistant: string | null,
+): { moments: TodayMoment[]; now: number; done: number; planned: number } {
+  const minuteOf = (at: string | number) => {
+    const p = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(at));
+    const h = Number(p.find((x) => x.type === 'hour')?.value ?? 0);
+    const m = Number(p.find((x) => x.type === 'minute')?.value ?? 0);
+    return h * 60 + m;
+  };
+  const dayOf = (at: string | number) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+      new Date(at),
+    );
+  const today = dayOf(now);
+  const hhmm = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const who = assistant?.trim() || 'Your assistant';
+  const moments: TodayMoment[] = [];
+  for (const d of data.doneToday ?? []) {
+    if (dayOf(d.at) !== today) continue;
+    const minute = minuteOf(d.at);
+    moments.push({
+      key: `d:${d.id}`,
+      minute,
+      time: hhmm(minute),
+      text: d.text,
+      from: who,
+      tone: 'done',
+      href: d.href ?? null,
+    });
+  }
+  for (const a of data.automationsToday ?? []) {
+    if (dayOf(a.at) !== today) continue;
+    const minute = minuteOf(a.at);
+    moments.push({
+      key: `a:${a.id}:${a.at}`,
+      minute,
+      time: hhmm(minute),
+      text: a.name,
+      from:
+        a.state === 'failed'
+          ? `${OVERVIEW_PAGE_WORDS.automation} · ${OVERVIEW_PAGE_WORDS.failed}`
+          : OVERVIEW_PAGE_WORDS.automation,
+      tone: a.state === 'failed' ? 'bad' : a.state === 'scheduled' ? 'plan' : 'done',
+      href: `/automations/${a.id}`,
+    });
+  }
+  moments.sort((x, y) => x.minute - y.minute || x.key.localeCompare(y.key));
+  const planned = moments.filter((m) => m.tone === 'plan').length;
+  return { moments, now: minuteOf(now), done: moments.length - planned, planned };
 }
