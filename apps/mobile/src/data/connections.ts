@@ -47,6 +47,7 @@ import {
   GITHUB_THING_ID,
   gatewayKindOf,
   isGatewayConnection,
+  isVaultSyncConnection,
   NEW_TOOL_LABEL,
   type Tone,
   thingId,
@@ -709,6 +710,11 @@ export interface ConnectionDetail {
    * connection. It has no tools or guide.
    */
   gateway: { kind: GatewayKind } | null;
+  /**
+   * The Vault kept in step with a vault elsewhere (1Password; Whombat onepassword-sync.md): the agent never uses it, so
+   * it has no level, tools or guide; the screen shows the sync instead.
+   */
+  vaultSync: boolean;
   /** The last check's lines that aren't fine, with what they said. */
   checks: ConnectionCheckLine[];
   tools: ConnectionToolRow[];
@@ -733,6 +739,9 @@ export function connectionDetail(
   const entry = catalogEntry(c.catalogId);
   const kind = gatewayKindOf(c.catalogId);
   const gateway = kind ? { kind } : null;
+  const vaultSync = isVaultSyncConnection(c.catalogId);
+  // Neither the gateway nor the Vault's sync is the agent's: no tools, nothing it is told.
+  const agents = !gateway && !vaultSync;
   const checked = c.checkedAt
     ? `Checked ${formatAgo(c.checkedAt, now, timeZone)}`
     : CONNECTIONS_TEXT.notChecked;
@@ -747,12 +756,13 @@ export function connectionDetail(
     checked,
     connectedBy: `Connected by ${c.connectedBy.name}`,
     gateway,
+    vaultSync,
     checks: c.checks.flatMap((k) =>
       k.state !== 'ok' && k.message ? [{ id: k.id, tone: CHECK_TONES[k.state], message: k.message }] : [],
     ),
-    tools: gateway ? [] : response.tools.map(connectionToolRow),
-    guide: gateway ? null : response.guide.trim() || null,
-    truncated: response.truncated && !gateway ? CONNECTIONS_TEXT.truncated : null,
+    tools: agents ? response.tools.map(connectionToolRow) : [],
+    guide: agents ? response.guide.trim() || null : null,
+    truncated: response.truncated && agents ? CONNECTIONS_TEXT.truncated : null,
     logo: row.logo,
     webPath: row.webPath,
     stateLabel: [`${row.state.label}`, checked].join(' · '),

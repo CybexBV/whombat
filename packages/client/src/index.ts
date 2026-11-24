@@ -48,6 +48,7 @@ export * from './mermaid';
 export * from './modelEffort';
 export * from './movedCard';
 export * from './notifications';
+export * from './onePassword';
 export * from './paths';
 export * from './places';
 export * from './prompts';

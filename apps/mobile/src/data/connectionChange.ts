@@ -5,6 +5,7 @@
  * Remove, in the web's words, and signing a connection made with a code in again with a new one (T3 Code's pairing code).
  * Who it's for is shown, not changed (the Whombat has no way to change it; the web doesn't either). Pure.
  */
+import { ONEPASSWORD_APP_TEXT } from '@whombat/client';
 import {
   codeSignInAgain,
   raiseNote,
@@ -12,6 +13,7 @@ import {
   sessionSecret,
   usedByAutomations,
   usedByGateway,
+  usedByVaultSync,
 } from '@whombat/client/connections';
 import {
   type CatalogEntry,
@@ -178,8 +180,12 @@ function lowerFirst(label: string): string {
   return /^[A-Z][a-z]/.test(label) ? `${label[0]?.toLowerCase()}${label.slice(1)}` : label;
 }
 
-/** What Remove asks first (the web's words, by what stops; the agent by its name, AP-4945, AP-4991). */
+/**
+ * What Remove asks first (the web's words, by what stops; the agent by its name, AP-4945, AP-4991). The Vault's sync
+ * (1Password) asks it above its two choices for the entries it kept in step.
+ */
 export function removeAsk(entry: CatalogEntry, conn: Pick<ConnectionView, 'label'>, agent: string): string {
+  if (usedByVaultSync(entry)) return ONEPASSWORD_APP_TEXT.removeAsk(conn.label);
   if (usedByGateway(entry))
     return `Remove ${conn.label}? Claude Code and ChatGPT run on your own sign-in again.`;
   if (usedByAutomations(entry))

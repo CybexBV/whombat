@@ -6,8 +6,10 @@
  * the old one; an OAuth client's secret too; a session's two-step code when the service asks, Synology's, AP-3958),
  * Reconnect (a sign-in elsewhere in the browser or Nextcloud's login, on the same connection; nothing that would make a
  * second one, AP-2920), Sign in again on the service's own page (Plex's, AP-3957) or with a new code (T3 Code's pairing
- * code: the steps to make one and its field) and Remove (asked first). Before, a button opened the web page.
+ * code: the steps to make one and its field) and Remove (asked first; the Vault's sync asks in place whether the
+ * entries it kept in step stay in the Vault). Before, a button opened the web page.
  */
+import { disconnectQuery, ONEPASSWORD_APP_TEXT, ONEPASSWORD_DISCONNECT_OPTIONS } from '@whombat/client';
 import {
   accessChoices,
   type ChoiceSetting,
@@ -25,6 +27,7 @@ import {
   SIGN_IN_AGAIN_TEXT,
   setSecretBody,
   usedByAgents,
+  usedByVaultSync,
 } from '@whombat/client/connections';
 import { useMacChoices } from '@whombat/client/hosts/react';
 import { useConnectionWrite } from '@whombat/client/react';
@@ -36,6 +39,7 @@ import {
   catalogSignIn,
 } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
+import type { OnePasswordDisconnectChoice } from '@whombat/core/vault';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { elsewhereWay, opensItself, type PendingLogin } from '../../data/connectForm';
@@ -423,6 +427,9 @@ export function SignInBlock({
   const [codeError, setCodeError] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [login, setLogin] = useState<PendingLogin | null>(null);
+  // Removing the Vault's sync (1Password) asks in place what becomes of the entries it kept in step.
+  const [confirming, setConfirming] = useState(false);
+  const [vaultEntries, setVaultEntries] = useState<OnePasswordDisconnectChoice>('keep');
   const view = signInView(entry, conn, true, agent.Name);
   const method = catalogSignIn(entry, conn.signIn);
   // Made with a code (T3 Code's pairing code): a refusal is in that sign-in's words.
@@ -549,24 +556,33 @@ export function SignInBlock({
     }
   }
 
+  /** Removes it; the Vault's sync carries the person's choice for its entries (`vaultEntries`). */
+  function disconnectNow() {
+    setProblem(null);
+    const query = disconnectQuery(entry, vaultEntries);
+    void disconnect
+      .mutateAsync({ params: { burrow: slug, connectionId: conn.id }, ...(query ? { query } : {}) })
+      .then(
+        (result) => {
+          if (result.status !== 'ok') return;
+          // A Fusebox that didn't answer keeps Whombat's client: the server says so (AIG-03).
+          const notice = (result.data as { notice?: string | null }).notice?.trim();
+          showNotice(notice || CONNECTION_CHANGE_TEXT.removed(conn.label));
+          onRemoved();
+        },
+        (err) => setProblem(connectProblem(err).message),
+      );
+  }
+
   function remove() {
+    if (usedByVaultSync(entry)) {
+      setVaultEntries('keep');
+      setConfirming(true);
+      return;
+    }
     Alert.alert(CONNECTION_CHANGE_TEXT.removeNamed(conn.label), removeAsk(entry, conn, agent.Name), [
       { text: CONNECTION_CHANGE_TEXT.cancel, style: 'cancel' },
-      {
-        text: CONNECTION_CHANGE_TEXT.removeNamed(conn.label),
-        style: 'destructive',
-        onPress: () =>
-          void disconnect.mutateAsync({ params: { burrow: slug, connectionId: conn.id } }).then(
-            (result) => {
-              if (result.status !== 'ok') return;
-              // A Fusebox that didn't answer keeps Whombat's client: the server says so (AIG-03).
-              const notice = (result.data as { notice?: string | null }).notice?.trim();
-              showNotice(notice || CONNECTION_CHANGE_TEXT.removed(conn.label));
-              onRemoved();
-            },
-            (err) => setProblem(connectProblem(err).message),
-          ),
-      },
+      { text: CONNECTION_CHANGE_TEXT.removeNamed(conn.label), style: 'destructive', onPress: disconnectNow },
     ]);
   }
 
@@ -675,6 +691,30 @@ export function SignInBlock({
                     style={{ flex: 1 }}
                   />
                 </View>
+              </View>
+            ) : confirming ? (
+              // Keep the entries in your Vault (the default) or Remove them too; 1Password itself never changes.
+              <View style={{ gap: 10 }}>
+                <Note>{removeAsk(entry, conn, agent.Name)}</Note>
+                <RadioCards
+                  label={ONEPASSWORD_APP_TEXT.removeChoice}
+                  value={vaultEntries}
+                  onChange={setVaultEntries}
+                  disabled={disconnect.isPending}
+                  options={ONEPASSWORD_DISCONNECT_OPTIONS.map((o) => ({ value: o.value, title: o.label }))}
+                />
+                <Button
+                  label={CONNECTION_CHANGE_TEXT.removeNamed(conn.label)}
+                  variant="secondary"
+                  busy={disconnect.isPending}
+                  onPress={disconnectNow}
+                />
+                <Button
+                  label={CONNECTION_CHANGE_TEXT.cancel}
+                  variant="quiet"
+                  disabled={disconnect.isPending}
+                  onPress={() => setConfirming(false)}
+                />
               </View>
             ) : (
               <View style={{ gap: 8 }}>

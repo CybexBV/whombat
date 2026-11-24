@@ -95,6 +95,11 @@ describe('the connect form’s steps (CS-50, AP-843)', () => {
     );
   });
 
+  it('asks nothing about agents or automations for the Vault’s sync (1Password)', () => {
+    expect(setupSteps(entry('onepassword'))).toEqual(['signIn']);
+    expect(nameHelp(entry('onepassword'))).not.toMatch(/agent|automations/);
+  });
+
   it('offers sign in once with the other sign-ins', () => {
     const nextcloud = entry('nextcloud');
     // Nextcloud's own login first since contracts 0.111 (SG-15f): no password, works for every account.

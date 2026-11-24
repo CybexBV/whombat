@@ -794,6 +794,23 @@
   overflow-wrap: anywhere;
 }
 
+/* How an entry kept in step with 1Password stands there, under what it is; a problem in the warning colour. */
+.detailWhat + .detailWhat {
+  padding-top: 2px;
+}
+
+.detailWhat[data-tone="warn"] {
+  color: var(--warn);
+}
+
+/* An entry kept in step with 1Password: its tag after the name, wrapping under it on a narrow row. */
+.entryName {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
 .pageNotes {
   display: flex;
   flex-direction: column;

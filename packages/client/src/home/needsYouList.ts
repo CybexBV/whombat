@@ -184,10 +184,14 @@ export function isNeedsYouWaiting(item: Pick<NeedsYouItem, 'kind'>): boolean {
   return WAITING_KINDS.has(item.kind);
 }
 
-/** The server's own buttons a row keeps: the asks' and where it is done (`open`); a line's Look into it and snooze are drawn here. */
+/**
+ * The server's own buttons a row keeps: the asks' and where it is done (`open`), and on a line the answers it asks for
+ * itself (the 1Password guard's “Remove them here too” and “Keep them here”); a line's Look into it and snooze are
+ * drawn here.
+ */
 function ownActions(item: Pick<NeedsYouItem, 'kind' | 'actions'>): NeedsYouAction[] {
   if (!isNeedsYouLine(item)) return item.actions.filter((a) => a.kind !== 'snooze');
-  return item.actions.filter((a) => a.kind === 'open');
+  return item.actions.filter((a) => a.kind === 'open' || a.kind === 'onepassword_removals');
 }
 
 const actionButton = (a: NeedsYouAction, look?: NeedsYouButton['look']): NeedsYouButton => ({
@@ -281,6 +285,20 @@ export function needsYouButtons(
     const lead = buttons.findIndex((b) => !b.more);
     return buttons.map((b, i) => (i === lead || b.more ? b : { ...b, more: true }));
   };
+  // The 1Password guard asks a question with two answers (Whombat onepassword-sync.md): both are the way forward, so
+  // both stay in sight; the rest waits in More.
+  const answers = own.filter((a) => a.kind === 'onepassword_removals');
+  if (answers.length)
+    return [
+      ...answers.map((a) => actionButton(a)),
+      ...own
+        .filter((a) => a.kind !== 'onepassword_removals')
+        .map((a) => ({ ...actionButton(a), more: true })),
+      { ...settle, more: true },
+      ...talk,
+      snooze,
+      ...stop,
+    ];
   if (research) {
     const out: NeedsYouButton[] = [];
     if (research.fix) out.push({ id: 'fix', kind: 'fix', label: research.fix, look: 'primary' });

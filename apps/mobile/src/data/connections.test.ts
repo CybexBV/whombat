@@ -601,6 +601,38 @@ describe('an AI gateway (Whombat ai-gateway.md AIG-01, AIG-05; AP-1123)', () => 
     ).toBeNull();
   });
 
+  it('shows the Vault’s sync (1Password) without the agent’s parts either', () => {
+    const detail = connectionDetail(
+      {
+        connection: connection({
+          id: 'con_1p',
+          catalogId: 'onepassword',
+          label: '1Password',
+          handle: 'onepassword',
+          detail: null,
+          transport: 'rest',
+          fields: { vault: 'k3ntq6b7f2x4yhd5wzmuv9cj8a', entries: 'put' },
+          toolCount: 0,
+        }),
+        tools: [tool()],
+        guide: 'Make a vault in 1Password for Whombat.',
+        truncated: true,
+      },
+      SEED_NOW,
+      SEED_TIME_ZONE,
+      'hq',
+    );
+    expect(detail).toMatchObject({ vaultSync: true, gateway: null, tools: [], guide: null, truncated: null });
+    expect(
+      connectionDetail(
+        { connection: connection(), tools: [], guide: '', truncated: false },
+        SEED_NOW,
+        SEED_TIME_ZONE,
+        'hq',
+      ).vaultSync,
+    ).toBe(false);
+  });
+
   it('offers Fusebox and the AI gateway only where the runtime has ai.gateway', () => {
     const ids = (gateway: boolean) => addConnectionRows(null, [], 'hq', { gateway }).map((r) => r.id);
     expect(ids(true)).toEqual(expect.arrayContaining(['fusebox', 'ai_gateway']));

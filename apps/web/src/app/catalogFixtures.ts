@@ -777,6 +777,20 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
           if (rows.some((r) => r.connection.catalogId === 'findmy' && r.connection.fields.mac === fields.mac))
             return refuse(409, 'check_failed', `Find My on ${fields.mac} is already connected.`);
         }
+        // 1Password's token sees two vaults: the person picks the one Whombat keeps in step (onepassword-sync.md).
+        if (catalogId === 'onepassword' && !fields.vault)
+          return refuse(
+            409,
+            'field_choice_needed',
+            'This token can see two vaults. Choose the one for Whombat.',
+            {
+              field: 'vault',
+              options: [
+                { value: 'k3ntq6b7f2x4yhd5wzmuv9cj8a', label: 'Whombat' },
+                { value: 'm4pqr7c8g3y5zje6xanw0dk9b1', label: 'Shared with Whombat' },
+              ],
+            },
+          );
         if (catalogId === 'moneybird' && !fields.administration)
           return refuse(
             409,
