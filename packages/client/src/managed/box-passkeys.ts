@@ -16,6 +16,7 @@ import { kitKeyFromPrf, newKitPrfSalt, toBase64url } from '@whombat/core/backup'
 import {
   type BackupPasskeyKeyOutput,
   BOX_PASSKEY_TIMEOUT_MS,
+  type BoxPasskeyFailedStage,
   boxPasskeyRegisterChallengeBase64url,
   passkeyEnrollChallengeBase64url,
 } from '@whombat/protocol/session';
@@ -27,11 +28,14 @@ import { prfOutputOf, prfRefused } from './passkey-backup-key';
 import {
   canonicalAssertion,
   canonicalRegistration,
+  operationReason,
   type PasskeyCreationOptionsJSON,
   PasskeyError,
   type PasskeyPlatform,
   type PasskeyRequestOptionsJSON,
   type PasskeySetupStep,
+  passkeyErrorOf,
+  passkeyFailureDetail,
 } from './passkeys';
 
 /** The relying party's display name in the password manager. */
@@ -109,14 +113,18 @@ export async function createBoxPasskey(input: {
   onPrompt?: (step: PasskeySetupStep) => void;
 }): Promise<BoxPasskeyMade> {
   const { session, platform, appliance } = input;
-  const begin = await sessionOps.boxPasskeyRegisterBegin(session);
-  const salt = newKitPrfSalt();
-  const saltText = toBase64url(salt);
-  input.onPrompt?.('create');
-  const raw = await platform.create(boxPasskeyCreationOptions(begin, appliance, saltText));
-  let prf = prfOutputOf(raw);
-  const refused = prfRefused(raw);
+  let stage: BoxPasskeyFailedStage = 'begin';
+  let prf: Uint8Array | null = null;
   try {
+    const begin = await sessionOps.boxPasskeyRegisterBegin(session);
+    const salt = newKitPrfSalt();
+    const saltText = toBase64url(salt);
+    stage = 'create';
+    input.onPrompt?.('create');
+    const raw = await platform.create(boxPasskeyCreationOptions(begin, appliance, saltText));
+    prf = prfOutputOf(raw);
+    const refused = prfRefused(raw);
+    stage = 'register';
     const saved = await sessionOps.boxPasskeyRegister(session, {
       nonce: begin.nonce,
       response: canonicalRegistration(raw),
@@ -125,19 +133,26 @@ export async function createBoxPasskey(input: {
     const id = saved.id;
     // The passkey is made from here on: a backup key it couldn't arm says so, never that the passkey failed.
     try {
-      return await armBoxPasskey(id);
+      return await armBoxPasskey(id, salt, saltText, refused);
     } catch (error) {
       const code = error instanceof OperationError ? error.code : null;
-      return {
-        id,
-        backups: code === 'not_implemented' || code === 'unknown_op' ? 'no_backups' : 'not_armed',
-      };
+      const noBackups = code === 'not_implemented' || code === 'unknown_op';
+      if (!noBackups) reportBoxPasskeyFailure(session, 'backups', error);
+      return { id, backups: noBackups ? 'no_backups' : 'not_armed' };
     }
+  } catch (error) {
+    reportBoxPasskeyFailure(session, stage, error);
+    throw error;
   } finally {
     prf?.fill(0);
   }
 
-  async function armBoxPasskey(id: string): Promise<BoxPasskeyMade> {
+  async function armBoxPasskey(
+    id: string,
+    salt: Uint8Array,
+    saltText: string,
+    refused: boolean,
+  ): Promise<BoxPasskeyMade> {
     if (!prf && !refused && platform.prf) {
       // No PRF at creation (some platforms answer it only on use): one more touch for the backup key.
       input.onPrompt?.('unlock');
@@ -169,6 +184,40 @@ export async function createBoxPasskey(input: {
       id,
     );
     return { id, backups: bringBack.setup === 'verified' ? 'verified' : 'saving', bringBack };
+  }
+}
+
+/**
+ * Tells the box why making its passkey stopped, so the reason is in its log for support: the page shows the person only
+ * a short sentence. Never waits and never fails: a box that doesn't take it (older, or the session gone) loses a line.
+ */
+export function reportBoxPasskeyFailure(
+  session: ApplianceSession,
+  stage: BoxPasskeyFailedStage,
+  error: unknown,
+): void {
+  const code = passkeyErrorOf(error) ?? 'cancelled';
+  // The platform's own error (a browser's DOMException), when the page kept it.
+  const raw =
+    error instanceof Error ? (error.cause as { name?: unknown; message?: unknown } | undefined) : undefined;
+  const cause =
+    raw && typeof raw.name === 'string' ? { name: raw.name, message: String(raw.message ?? '') } : null;
+  const name =
+    error instanceof OperationError
+      ? operationReason(error)
+      : (cause?.name ?? (error instanceof Error ? error.name : undefined));
+  const detail = cause ? `${cause.name}: ${cause.message}` : passkeyFailureDetail(error);
+  try {
+    void sessionOps
+      .boxPasskeyFailed(session, {
+        stage,
+        code,
+        ...(name && /^[A-Za-z0-9_.:-]{1,64}$/.test(name) && { name }),
+        detail: detail.slice(0, 300),
+      })
+      .catch(() => {});
+  } catch {
+    // The input didn't fit the contract: nothing to tell.
   }
 }
 

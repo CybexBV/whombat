@@ -205,12 +205,15 @@ function extensionResults(credential: PublicKeyCredential): Record<string, unkno
 /** The browser's refusals in this module's words. */
 export function passkeyFailure(error: unknown): Error {
   const name = (error as { name?: string } | null)?.name;
-  if (name === 'NotAllowedError' || name === 'AbortError') return new PasskeyCancelled();
-  if (name === 'InvalidStateError') return new PasskeyError('exists');
-  if (name === 'SecurityError' || name === 'NotSupportedError') return new PasskeyError('unsupported');
+  // The browser's own error stays as the cause: the screen says the short sentence, the box's log says this.
+  const cause = { cause: error };
+  if (name === 'NotAllowedError' || name === 'AbortError') return new PasskeyCancelled(cause);
+  if (name === 'InvalidStateError') return new PasskeyError('exists', undefined, cause);
+  if (name === 'SecurityError' || name === 'NotSupportedError')
+    return new PasskeyError('unsupported', undefined, cause);
   return error instanceof PasskeyError || error instanceof PasskeyCancelled
     ? error
-    : new PasskeyError('failed');
+    : new PasskeyError('failed', undefined, cause);
 }
 
 /**

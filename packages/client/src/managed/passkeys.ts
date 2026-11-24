@@ -238,8 +238,9 @@ export function keepOnlyLivePasskeys(
 /** The person dismissed the passkey prompt (or it was aborted): nothing to say, nothing changed. */
 export class PasskeyCancelled extends Error {
   override name = 'PasskeyCancelled';
-  constructor() {
-    super('The passkey prompt was dismissed.');
+  /** `cause`: the platform's own error, when there was one (the box's log names it). */
+  constructor(options?: ErrorOptions) {
+    super('The passkey prompt was dismissed.', options);
   }
 }
 
@@ -275,11 +276,13 @@ export type PasskeyErrorCode =
 
 export class PasskeyError extends Error {
   override name = 'PasskeyError';
+  /** `cause`: the platform's own error, when there was one (the box's log names it). */
   constructor(
     readonly code: PasskeyErrorCode,
     message: string = code,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 

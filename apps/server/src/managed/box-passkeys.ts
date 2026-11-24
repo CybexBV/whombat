@@ -31,6 +31,7 @@ import {
 import { ownAddressOrigin } from '@whombat/protocol/own-address';
 import {
   BOX_PASSKEY_TIMEOUT_MS,
+  type BoxPasskeyFailedInput,
   boxPasskeyRegisterChallengeBase64url,
   PASSKEY_ANDROID_ORIGINS,
   PASSKEY_ENROLL_FAILURES_PER_HOUR,
@@ -687,11 +688,50 @@ export const BOX_PASSKEY_SESSION_HANDLERS = {
     ),
   'boxPasskey.register.begin': (c: {
     trust: TrustService;
+    services: Services;
     session: SessionScope | null;
     principal: SessionPrincipal;
-  }) => c.trust.boxPasskeys.registerBegin(c.principal, c.session),
+  }) => logRefusal(c.services, 'begin', c.trust.boxPasskeys.registerBegin(c.principal, c.session)),
   'boxPasskey.register': (
-    c: { trust: TrustService; session: SessionScope | null; principal: SessionPrincipal },
+    c: { trust: TrustService; services: Services; session: SessionScope | null; principal: SessionPrincipal },
     input: Parameters<BoxPasskeyService['register']>[2],
-  ) => c.trust.boxPasskeys.register(c.principal, c.session, input),
+  ) => logRefusal(c.services, 'register', c.trust.boxPasskeys.register(c.principal, c.session, input)),
+  'boxPasskey.failed': async (
+    c: { services: Services; principal: SessionPrincipal },
+    input: BoxPasskeyFailedInput,
+  ) => {
+    requireEnrolled(c.principal);
+    c.services.log.warn(
+      {
+        stage: input.stage,
+        code: input.code,
+        name: input.name,
+        detail: input.detail,
+        peer: c.principal.peerId,
+      },
+      'box passkey: making one failed on the page',
+    );
+    return { ok: true as const };
+  },
 } as const;
+
+/**
+ * Making a passkey that the box refused, in its log with the reason: the page shows the person only a short sentence,
+ * and support reads the rest here.
+ */
+async function logRefusal<T>(services: Services, stage: 'begin' | 'register', work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (err) {
+    const reason =
+      err instanceof ApiError
+        ? {
+            code: err.code,
+            detail: (err.extra.details as { code?: unknown } | undefined)?.code,
+            err: err.message,
+          }
+        : { err: String(err) };
+    services.log.warn({ stage, ...reason }, 'box passkey: making one was refused');
+    throw err;
+  }
+}

@@ -8,6 +8,7 @@ import {
   BackupPasskeyVerifyConfirmInput,
   BoxPasskeyEnrollBeginOutput,
   BoxPasskeyEnrollInput,
+  BoxPasskeyFailedInput,
   BoxPasskeyRegisterBeginOutput,
   BoxPasskeyRegisterInput,
   EnrollClaimLocalStartInput,
@@ -1026,6 +1027,9 @@ export const sessionOps = {
     input: z.input<typeof BoxPasskeyRegisterInput>,
     o?: CallOptions,
   ) => run(s, 'boxPasskey.register', BoxPasskeyRegisterInput.parse(input), PasskeyRegisterOutput, o),
+  /** Why making one failed, for the box's log; a box before this answers `unknown_op`. */
+  boxPasskeyFailed: (s: ApplianceSession, input: z.input<typeof BoxPasskeyFailedInput>, o?: CallOptions) =>
+    run(s, 'boxPasskey.failed', BoxPasskeyFailedInput.parse(input), OkOutput, o),
   /* The box's own address (4.3): a box before 4.3 answers `unknown_op` (no own address yet). */
   /** Its address, certificate and certificate watch; null when it has none. */
   ownAddressStatus: (s: ApplianceSession, o?: CallOptions) =>

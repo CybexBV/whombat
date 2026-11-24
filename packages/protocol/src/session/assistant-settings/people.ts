@@ -142,6 +142,7 @@ export const PEOPLE_SETTINGS = {
   // Box passkeys (4.3): the person's own, like the hosted ones.
   'boxPasskey.enroll': NONE,
   'boxPasskey.enroll.begin': NONE,
+  'boxPasskey.failed': NONE,
   'boxPasskey.register': never('you.devices', 'Add a passkey for this Whombat’s own address'),
   'boxPasskey.register.begin': NONE,
 

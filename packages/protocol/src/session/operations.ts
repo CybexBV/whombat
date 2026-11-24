@@ -102,6 +102,7 @@ import {
   BoxPasskeyEnrollBeginInput,
   BoxPasskeyEnrollBeginOutput,
   BoxPasskeyEnrollInput,
+  BoxPasskeyFailedInput,
   BoxPasskeyRegisterBeginInput,
   BoxPasskeyRegisterBeginOutput,
   BoxPasskeyRegisterInput,
@@ -639,6 +640,8 @@ const SESSION_SPECS = [
     true,
   ),
   session('boxPasskey.register', BoxPasskeyRegisterInput, PasskeyRegisterOutput, 'app'),
+  // Why making one failed, for the box's log (nothing is stored).
+  session('boxPasskey.failed', BoxPasskeyFailedInput, OkOutput, 'app', true, true),
   // The box's own address (4.3): its state, the owner's switch, and linking the box to the person's account by a code.
   session('ownAddress.status', OwnAddressStatusInput, OwnAddressStatusOutput, 'app', false),
   session('ownAddress.reach.set', OwnAddressReachSetInput, OwnAddressReachSetOutput, 'app'),

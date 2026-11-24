@@ -338,6 +338,19 @@ describe('box passkeys', () => {
     expect(again.user.id).toBe(begin.user.id);
   });
 
+  it('take the page’s reason when making one failed, only from the person’s own devices', async () => {
+    const failed = { stage: 'create', code: 'failed', name: 'UnknownError', detail: 'UnknownError: no luck' };
+    expect(await owner.request('boxPasskey.failed', failed)).toMatchObject({
+      t: 'result',
+      output: { ok: true },
+    });
+    const stranger = await m.client(undefined, { transport: LAN });
+    expect((await stranger.request('boxPasskey.failed', failed)) as Answer).not.toMatchObject({
+      t: 'result',
+    });
+    stranger.close();
+  });
+
   async function join(o: {
     origin?: string;
     bindTo?: string;

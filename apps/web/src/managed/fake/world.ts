@@ -1964,6 +1964,9 @@ export async function createFakeWorld(): Promise<FakeWorld> {
           save();
           return json(200, { email: CLOUD.email, linkedAt: now });
         }
+        // The box only logs why making a passkey failed: nothing to keep here.
+        case 'boxPasskey.failed':
+          return json(200, { ok: true });
         case 'boxPasskey.register.begin': {
           const accountId = a.endpoints[me]?.accountId;
           const acc = accountId ? accountOf(a, accountId) : null;
