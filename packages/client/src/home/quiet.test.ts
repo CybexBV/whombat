@@ -369,7 +369,7 @@ describe('Worth a look in two parts', () => {
       quiet: { state: 'snoozed', words: 'until 23:00', at: AT, held: 'window' },
     });
     expect(noticeGroups([updates, ignored, held]).foldLabel).toBe(
-      'Show 1 heads-up, 1 ignored and 1 kept quiet',
+      'Show 1 heads-up, 1 ignored and 1 on hold',
     );
   });
 

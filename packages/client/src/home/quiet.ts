@@ -271,7 +271,7 @@ export function noticeGroups<
   const parts = [
     fyi.length ? `${fyi.length} heads-up${fyi.length === 1 ? '' : 's'}` : null,
     quietWords,
-    held ? `${held} kept quiet` : null,
+    held ? `${held} on hold` : null,
   ];
   const said = parts.filter((p): p is string => !!p);
   const words = said.length > 2 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said.join(' and ');

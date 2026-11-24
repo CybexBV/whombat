@@ -22,7 +22,7 @@ export interface StripLines<T> {
   quiet: T[];
   /**
    * Lines quiet with the whole thing (kept quiet, or down because of something else; monitoring.md MON-04, MON-07):
-   * folded behind their own “Show N kept quiet”, since the line under the page's head already says why.
+   * folded behind their own “Show N on hold”, since the line under the page's head already says why.
    */
   held: T[];
   /** Every line in the order the strip draws them. */

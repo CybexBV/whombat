@@ -62,7 +62,7 @@ describe('keep quiet for a while (MON-04)', () => {
     const worth = await screen.findByRole('region', { name: 'Worth a look' }, T);
     // The hold's heads-up line is for apps that don't draw the line under the head.
     expect(within(worth).queryByText(/^Quiet until/, { selector: 'b' })).toBeNull();
-    await user.click(within(worth).getByRole('button', { name: /^Show \d+ kept quiet$/ }));
+    await user.click(within(worth).getByRole('button', { name: /^Show \d+ on hold$/ }));
     const ap = within(worth)
       .getByText('AP Paardenstal is offline', { exact: false })
       .closest('[data-notice]');
