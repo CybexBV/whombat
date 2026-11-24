@@ -260,6 +260,7 @@ export const HISTORY_WORDS = {
   still: 'still going',
   /** The fold under the incidents with a server's own alerts. */
   alerts: (n: number) => `Show ${n} ${n === 1 ? 'alert' : 'alerts'} from the server`,
+  hideAlerts: 'Hide the alerts from the server',
   fewer: 'Show fewer',
   failed: 'What happened couldn’t load. Try again.',
 } as const;
