@@ -160,6 +160,7 @@ async function page(ctx: KindCtx) {
       : null,
   ]);
   const seen = uptimeSeen(check, row, now, timeZone);
+  const latency = seen.points[RTT_KEY];
   const days = lastDays(now, timeZone);
   const values = pointsByDay(points.get(RTT_KEY) ?? [], days.keys, timeZone, 'mean');
   const measured = values.filter((v): v is number => v !== null);
@@ -185,6 +186,15 @@ async function page(ctx: KindCtx) {
             detail: clip(row.fields.address ?? 'A script or job reports when it runs.', 300),
           },
           { id: 'runner', title: `From ${from}`, detail: `Every ${plural(every, 'minute')}` },
+          ...(latency != null
+            ? [
+                {
+                  id: 'latency',
+                  title: heartbeat ? 'Run time' : 'Answer time',
+                  detail: `${figure(latency)} ms`,
+                },
+              ]
+            : []),
           ...(certificate
             ? [
                 {

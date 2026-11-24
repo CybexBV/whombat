@@ -600,6 +600,7 @@ describe('Website or address connections', () => {
     expect(saved).toContainEqual(expect.objectContaining({ key: RTT_KEY, value: 82 }));
     const p = await page(mara, thingId('connection', connection.id));
     expect(JSON.stringify(p)).toContain('Answering');
+    expect(JSON.stringify(p)).toContain('82 ms');
     expect(JSON.stringify(p)).toContain('example.com/ready');
 
     Object.assign(hubCheck, { status: 'down', last: { at: at.toISOString(), ok: false }, stale: true });
