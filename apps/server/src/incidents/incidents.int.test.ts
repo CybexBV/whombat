@@ -7,7 +7,7 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { catalogConnections, events, incidents, notifications } from '../db/schema/index';
+import { catalogConnections, events, incidents, notifications, wayOutOutages } from '../db/schema/index';
 import { thePerson } from '../domain/the-person';
 import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { insertConnection } from '../test/connections';
@@ -166,5 +166,35 @@ describe('an outage, its push and its history', () => {
     const out = history.structuredContent as { incidents: { name: string; minutes: number }[] };
     expect(out.incidents.map((i) => [i.name, i.minutes])).toEqual([['Plex', 20]]);
     await mcp.close();
+  });
+
+  it('includes saved internet outages in all-things history', async () => {
+    await t.services.pipeline.transactAccount((tx) =>
+      tx.insert(wayOutOutages).values({
+        id: 'wo_history',
+        step: 'internet',
+        startedAt: new Date(T0.getTime() - 25 * MIN),
+        endedAt: new Date(T0.getTime() - 15 * MIN),
+      }),
+    );
+    const token = await agentTokenFor(t.services, TEST_BURROW_ID, mine.agentId, mine.dmId);
+    const mcp = await mcpClient(t.baseUrl, token.token);
+    try {
+      const all = await mcp.client.callTool({ name: 'watch_history', arguments: {} });
+      expect(all.isError).toBeFalsy();
+      expect(all.structuredContent).toMatchObject({
+        wayOutOutages: [
+          {
+            words: expect.stringContaining('internet was down'),
+            started: expect.any(String),
+            ended: expect.any(String),
+          },
+        ],
+      });
+      const one = await mcp.client.callTool({ name: 'watch_history', arguments: { thing: 'plex' } });
+      expect(one.structuredContent).not.toHaveProperty('wayOutOutages');
+    } finally {
+      await mcp.close();
+    }
   });
 });

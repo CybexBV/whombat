@@ -1465,11 +1465,13 @@ Setup and operation: `docs/github.md`.
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it. The health
-  pass reads that result and repairs a missing check. Disconnect removes it. Its hub id is kept on the connection
+  pass reads the current result, counts any probes the hub recorded as failed since the last pass in uptime history,
+  and repairs a missing check. Check again reports the saved check's current result. Disconnect removes the connection
+  and tries to delete its hub check. The health pass removes checks whose connection is gone. Its hub id is kept on the connection
   and the hub knows its owner, so only the connection's own lines reach Inbox and Watch. The assistant can ask the
   person to start one on a chat card (`connection_add`) and read the latest result (`uptime_status`). The page's
   Summary has its status and answer time. The person's check-in page also shows the command for the LAN listener,
-  using the listener's pinned public key.
+  using the listener's pinned public key. The catalog offers this form from session minor 9.
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
@@ -1520,7 +1522,9 @@ Setup and operation: `docs/github.md`.
   ([ui-refresh-chat.md](docs/decisions/ui-refresh-chat.md)).
   The health pass filters to eligible connections before it takes a batch. A check that answers while its kind's
   details stay unreadable for an hour gets a heads-up until a read works. A known machine's card says when it was
-  last backed up or that no job covers it, and the connection gets a line when a scheduled backup is overdue.
+  last backed up, when its last attempt failed, or that no job covers it. The overdue line uses the last successful
+  backup from the job or its stored backup volumes. A covered machine with a failed attempt and no known successful
+  backup also gets the line.
 - **What Whombat watches** starts calm: every check of a kind, a device, a mail account or a server says whether it
   starts on (`startsOn`), and only the very important ones Whombat can act on do. A check that starts off is left out
   everywhere, as one switched off, until the person turns it on (`watch_ons`); `things/quiet/defaults.ts` keeps the
@@ -1555,8 +1559,8 @@ Setup and operation: `docs/github.md`.
 - **Whombat's own way out** (`managed/way-out.ts`): every minute the server process checks its router (the default
   gateway from `/proc/net/route`, a TCP connect where a refusal counts), the internet (TCP connects to Whombat's own
   service and an anycast address, by their last address) and name lookups (the system resolver). A step failing for
-  two minutes is an outage (`way_out_outages`, kept for history) and one Inbox item that starts on (“The internet is
-  down since 14:02”), listing the connections down with it. A development box and tests never probe unless
+  two minutes is an outage (`way_out_outages`, included in all-things `watch_history`) and one Inbox item that starts
+  on (“The internet is down since 14:02”), listing the connections down with it. A development box and tests never probe unless
   `WHOMBAT_WAY_OUT=on`.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); link previews and the Vault add their own
@@ -1682,9 +1686,10 @@ Setup and operation: `docs/github.md`.
   thing. The tap opens the thing's look thread, else its page (the Inbox for several). When the last incident a push
   named ends, its row is read and a managed box clears the phone's notification. The health
   pass stores whether each check answered (`up`, 1 or 0; none when the check couldn't run), so the hourly roll-up keeps
-  an hour's share; uptime weighs each point by the time it stands for, at most an hour. Every page (a connection's,
-  device's, account's and a server's, whose down time is its offline alerts in the hosts service and its incidents)
-  says its week in one line (`uptime`, also one of a page's facts), `things.history` lists a thing's incidents over 30
+  an hour's share. Live points weigh up to seven and a half minutes and rolled-up points up to an hour. Every page (a
+  connection's, device's, account's and a server's) says its week in one line (`uptime`, also one of a page's facts).
+  A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
+  `things.history` lists a thing's incidents over 30
   or 90 days, and the assistant reads all of it with `watch_status` and `watch_history` (`incidents/agent.ts`).
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).

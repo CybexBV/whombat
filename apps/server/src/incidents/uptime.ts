@@ -4,6 +4,7 @@
  * 99.6 % this week · down 3 times, 41 min”, “Up all week”. Pure.
  */
 import type { ThingTextPart, ThingUptime } from '@whombat/core';
+import { HEALTH_POINT_MS, pointRollupBefore } from '../things/points';
 import type { RawPoint } from '../things/series';
 import { dayMonth, line } from '../things/words';
 
@@ -12,10 +13,6 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 /** The period a page's line covers. */
 export const UPTIME_WEEK_MS = 7 * DAY;
-/** A point stands for the time until the next one, never longer than an hour (a rolled-up hour): a gap isn't “up”. */
-const POINT_MAX_MS = HOUR;
-/** The health pass's beat: what a lone point stands for. */
-const STEP_MS = 5 * MINUTE;
 
 /**
  * Whether the thing answered, point by point, oldest first: its `up` points, and before the first of them (points kept
@@ -45,8 +42,7 @@ export interface UpShare {
 
 /**
  * The share of `[from, to]` the thing answered (`upPoints`' output), each point weighed by the time it stands for: until
- * the next point, at most an hour. So a rolled-up hour weighs twelve times a 5-minute point, and a gap (Whombat was off)
- * weighs nothing beyond an hour. The last point stands for as long as the one before it.
+ * the next point, at most 7.5 minutes for a health reading or an hour for a rollup. The rest of a gap has no reading.
  */
 export function upShare(points: readonly RawPoint[], from: Date, to: Date): UpShare {
   const inside = points.filter(
@@ -54,15 +50,14 @@ export function upShare(points: readonly RawPoint[], from: Date, to: Date): UpSh
   );
   let covered = 0;
   let up = 0;
+  const rolledBefore = pointRollupBefore(to);
   for (const [i, p] of inside.entries()) {
+    const at = p.at.getTime();
+    const rolled = at < rolledBefore && at % HOUR === 0;
+    const expected = rolled ? HOUR : HEALTH_POINT_MS;
     const next = inside[i + 1];
-    const prev = inside[i - 1];
-    const gap = next
-      ? next.at.getTime() - p.at.getTime()
-      : prev
-        ? p.at.getTime() - prev.at.getTime()
-        : STEP_MS;
-    const weight = Math.max(0, Math.min(gap, POINT_MAX_MS));
+    const gap = next ? next.at.getTime() - at : expected;
+    const weight = Math.max(0, Math.min(gap, rolled ? HOUR : expected * 1.5));
     covered += weight;
     up += weight * Math.min(1, Math.max(0, p.value as number));
   }
@@ -155,7 +150,7 @@ export function uptimeLine(input: UptimeInput): { text: string; parts: ThingText
   const { share, downs, downMinutes } = input;
   if (share === null && downs === 0) return null;
   const days = input.days ?? 7;
-  const whole = input.now.getTime() - input.from.getTime() >= days * DAY - 12 * HOUR;
+  const whole = input.now.getTime() - input.from.getTime() >= days * DAY;
   const period = !whole
     ? `since ${dayMonth(input.from, input.timeZone)}`
     : days === 7

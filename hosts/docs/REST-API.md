@@ -404,6 +404,9 @@ the Mac's facts, below). Proxmox VE wins over unRAID. Every view has
 `backup_place` ("Backup places" under "Manage"; `null` from an older
 agent).
 
+After a server reports, `server.first_report_at` gives the time of its earliest retained reading.
+For rolled-up history it gives the start of the bucket.
+
 A Mac's `macos` block (`null` where the Mac doesn't say; snake_case of
 the agent's `Report.MacOS`):
 
@@ -2056,6 +2059,12 @@ visible, and its alerts keep their state until a fresh result arrives.
 `uptime_24h` is a percentage and `latency_24h` holds 96 points over 24
 hours. `GET /checks` includes both. The other routes answer `null` and
 `[]`. `ping_url` is set for heartbeat checks when the caller is an admin.
+
+`GET /checks/{id}?since=&until=` also reports `period_status` for the
+retained samples in that period. Both times are RFC 3339. At second
+precision the start is exclusive and the end inclusive. The status is
+`down` if any sample failed, `up` if all recorded samples succeeded, or
+`unseen` if the period contains no samples.
 
 **`POST /checks`** and **`PATCH /checks/{id}`** (every field optional in
 PATCH):

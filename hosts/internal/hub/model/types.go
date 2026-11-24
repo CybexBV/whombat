@@ -350,6 +350,7 @@ func (d Detail) MarshalJSON() ([]byte, error) {
 
 // DetailServer is the header / meta strip data.
 type DetailServer struct {
+	FirstReportAt *Time         `json:"first_report_at,omitempty"`
 	ID            string        `json:"id"`
 	Hostname      string        `json:"hostname"`
 	Group         string        `json:"group"`

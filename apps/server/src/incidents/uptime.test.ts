@@ -23,23 +23,32 @@ describe('how much of the time it answered', () => {
   it('weighs a rolled-up hour as twelve 5-minute checks', () => {
     // A rolled-up hour where it answered half the time, then 12 five-minute checks that all answered.
     const points = [
-      { at: ago(3 * HOUR), value: 0.5 },
+      { at: ago(60 * HOUR), value: 0.5 },
       ...Array.from({ length: 12 }, (_, i) => ({ at: ago(2 * HOUR - i * 5 * MIN), value: 1 })),
     ];
     const share = upShare(points, ago(UPTIME_WEEK_MS), NOW);
-    // The hour stands for 60 min (until the next point, at most an hour): 30 of 120 minutes missed.
+    // The rolled-up point covers one hour. The gap between it and the live readings adds no weight.
     expect(share.share).toBeCloseTo(90 / 120, 3);
     expect(share.missedMs).toBe(30 * MIN);
   });
 
-  it('doesn’t count a gap as up', () => {
+  it.each([0, 1])('caps a live reading of %s before a gap', (value) => {
     const points = [
-      { at: ago(10 * HOUR), value: 1 },
-      { at: ago(2 * HOUR), value: 0 },
-      { at: ago(2 * HOUR - 5 * MIN), value: 0 },
+      { at: ago(10 * HOUR), value },
+      { at: ago(2 * HOUR), value: 1 - value },
+      { at: ago(2 * HOUR - 5 * MIN), value: 1 - value },
     ];
-    // The first point stands for an hour, not eight.
-    expect(upShare(points, ago(UPTIME_WEEK_MS), NOW).share).toBeCloseTo(60 / 70, 3);
+    const share = upShare(points, ago(UPTIME_WEEK_MS), NOW);
+    expect(share.coveredMs).toBe(17.5 * MIN);
+    expect(share.missedMs).toBe((value === 1 ? 10 : 7.5) * MIN);
+  });
+
+  it('counts the latest failing pass as soon as it is recorded', () => {
+    const points = [
+      { at: ago(5 * MIN), value: 1 },
+      { at: NOW, value: 0 },
+    ];
+    expect(upShare(points, ago(HOUR), NOW).missedMs).toBe(5 * MIN);
   });
 
   it('falls back to the response time before the first up point', () => {

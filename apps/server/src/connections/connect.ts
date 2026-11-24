@@ -1682,11 +1682,17 @@ export async function recheckConnection(
       fields: row.fields,
       credential,
       burrowId: viewer.burrowId,
+      connectionId: row.id,
     });
   } catch (err) {
     if (!(err instanceof ConnectionAuthError)) throw err;
     const fresh = (await connectionRow(services.db, row.id)) ?? row;
     return { row: fresh, checks: fresh.checks };
+  }
+  // A failed or unseen probe is a check result. The saved connection stays active so its health poll keeps running.
+  if (outcome.uptime !== undefined) {
+    const recorded = await recordChecks(services, row, outcome.checks);
+    return { row: recorded, checks: recorded.checks };
   }
   if (outcome.refused) {
     await markNeedsReauth(services, row, oauth ? 'revoked' : 'token_invalid', {
@@ -1755,15 +1761,9 @@ export async function disconnectConnection(
     if (viewer.principal.kind !== 'person') throw forbidden('Only you can change connections.');
     const { eventId } = await withUptimeCheck(services, id, async () => {
       const fresh = await visibleConnection(services.db, viewer, id);
-      await removeUptimeCheck(services, fresh, actorOf(viewer.principal, 'admin')).catch((err) => {
-        if (err instanceof CommandStopped) throw err;
-        throw connectionError(
-          'check_failed',
-          {},
-          'Whombat couldn’t remove the check. Try again in a moment.',
-        );
-      });
-      return ok(await remove());
+      const removed = ok(await remove());
+      await removeUptimeCheck(services, fresh, actorOf(viewer.principal, 'admin'));
+      return removed;
     });
     await emitConnectionLifecycle(services, { type: 'removed', connectionId: id });
     return { eventId, notice: null };

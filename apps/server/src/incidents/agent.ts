@@ -26,6 +26,7 @@ import { homeOverview, things } from '../home/overview';
 import type { HostsActor } from '../hosts/client';
 import { HEARTBEAT_RULE } from '../hosts/quiet-lines';
 import { badRequest, forbidden, notFound } from '../lib/errors';
+import { wayOutHistory, wayOutHistoryWords } from '../managed/way-out';
 import type { ToolContext, ToolHandler } from '../mcp/tools';
 import { loadPrincipalRow, type PrincipalRow } from '../read/principals';
 import { outsidersTurn } from '../runtime/person';
@@ -209,7 +210,7 @@ export async function watchHistoryTool(
     if (!(await thingVisible(services, viewer, thing))) throw notFound('Thing');
   }
   const parsed = thing ? parseThingId(thing) : null;
-  const [rows, alerts] = await Promise.all([
+  const [rows, alerts, wayOut] = await Promise.all([
     incidentsSince(services.db, burrowId, from, thing),
     // The servers' alerts: one server's, or every server's when no thing was named.
     !thing || parsed?.kind === 'server'
@@ -218,6 +219,7 @@ export async function watchHistoryTool(
           since: from,
         })
       : Promise.resolve(undefined),
+    thing ? [] : wayOutHistory(services.db, from),
   ]);
   // Uptime for the thing asked about, else for each thing that had something.
   const things = thing ? [thing] : [...new Set(rows.map((r) => r.thingId))].slice(0, 20);
@@ -247,11 +249,9 @@ export async function watchHistoryTool(
   const note =
     alerts === null
       ? 'The servers’ alerts couldn’t be read just now.'
-      : !rows.length && !resolved.length
+      : !rows.length && !resolved.length && !wayOut.length
         ? 'Nothing went down or had a problem in this period.'
-        : !thing && rows.length
-          ? 'Everything not listed answered the whole time.'
-          : undefined;
+        : undefined;
   return {
     status: 'ok',
     from: momentWords(from, now, timeZone),
@@ -259,6 +259,15 @@ export async function watchHistoryTool(
     incidents: rows.slice(0, LIST_MAX).map((r) => agentIncident(r, now, timeZone)),
     uptime,
     serverAlerts: resolved.slice(0, LIST_MAX).map((a) => agentAlert(a, now, timeZone)),
+    ...(!thing
+      ? {
+          wayOutOutages: wayOut.slice(0, LIST_MAX).map((o) => ({
+            words: wayOutHistoryWords(o, timeZone),
+            started: momentWords(o.startedAt, now, timeZone),
+            ...(o.endedAt ? { ended: momentWords(o.endedAt, now, timeZone) } : {}),
+          })),
+        }
+      : {}),
     ...(note ? { note } : {}),
   };
 }

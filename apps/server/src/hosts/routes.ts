@@ -27,7 +27,7 @@ import {
   VAULT_SSH_SERVERS_MAX,
 } from '@whombat/core';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
-import { hostsAlertsSince, serverUptime } from '../incidents/history';
+import { hostsAlertsSince, serverFirstReportAt, serverUptime } from '../incidents/history';
 import { UPTIME_WEEK_MS } from '../incidents/uptime';
 import { ApiError, forbidden, notAllowed, notFound } from '../lib/errors';
 import type { PrincipalRow } from '../read/principals';
@@ -1091,6 +1091,7 @@ export const hostsRoutes: RouteDef[] = [
       ctx.access.burrow.id,
       serverId,
       offline,
+      serverFirstReportAt(raw),
       now,
       ctx.access.burrow.timeZone,
     ).catch(() => null);

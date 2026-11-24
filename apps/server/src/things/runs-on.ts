@@ -16,7 +16,7 @@ import { catalogEntry, type HostGuest, type HostServer, type ThingRunsOn, thingH
 import type { CatalogConnectionRow } from '../connections/types';
 import type { StoredRunsOn } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
-import { arr, obj, toHostBackupJob, toHostGuest, toHostServer } from '../hosts/map';
+import { arr, obj, toHostBackupJob, toHostBackupVolumes, toHostGuest, toHostServer } from '../hosts/map';
 import { type HostsService, hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import type { Services } from '../services';
 import { resolveHost } from '../vault/net';
@@ -354,6 +354,8 @@ export interface MachineFigures {
   diskTotalGb: number | null;
   uptimeS: number | null;
   lastBackup: { at: string; result: string } | null;
+  /** A backup that exists even though the latest attempt failed. */
+  lastSuccessfulBackupAt?: string | null;
   /** A Proxmox backup job covers it (null: unknown). */
   backupJob: boolean | null;
   /** Longest normal gap of its most frequent known backup job. */
@@ -500,7 +502,7 @@ async function loadMachine(
       if (!raw) return null;
       const guest = toHostGuest(raw, at.serverId);
       const G = `${S}/guests/${seg(at.guestId)}`;
-      const [config, metrics, jobs] = await Promise.all([
+      const [config, metrics, jobs, backups] = await Promise.all([
         guest.platform === 'pve'
           ? hosts
               .call<unknown>({ path: `${G}/config`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
@@ -512,11 +514,20 @@ async function loadMachine(
               .call<unknown>({ path: `${S}/backup-jobs`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
               .catch(() => null)
           : null,
+        guest.platform === 'pve' && guest.backupJob && guest.lastBackup?.result === 'error'
+          ? hosts
+              .call<unknown>({ path: `${G}/backups`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+              .catch(() => null)
+          : null,
       ]);
       return {
         ...guestFigures(guest, at.serverId, config, metrics),
         name: at.runsOn.name,
         backupRhythmMs: backupRhythm(arr(obj(jobs).items).map(toHostBackupJob), guest),
+        lastSuccessfulBackupAt:
+          toHostBackupVolumes(backups).find(
+            (b) => b.verified !== 'failed' && Number.isFinite(Date.parse(b.created ?? '')),
+          )?.created ?? null,
       };
     }
     const fleet = await hosts.fleetRaw();

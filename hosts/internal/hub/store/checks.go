@@ -105,6 +105,16 @@ func (s *Store) DeleteCheck(ctx context.Context, id string) error {
 // CheckSeriesOwner is the series owner of a check's history ("check:<id>").
 func CheckSeriesOwner(id string) string { return "check:" + id }
 
+// CheckPeriod reports whether samples were taken and whether any failed.
+// Check samples have second precision, and adjacent periods share a boundary.
+func (s *Store) CheckPeriod(ctx context.Context, id string, since, until time.Time) (seen, failed bool, err error) {
+	var lowest sql.NullFloat64
+	err = s.r.QueryRowContext(ctx, `SELECT MIN(value) FROM metrics_raw
+		WHERE series_id = (SELECT id FROM series WHERE server_id = ? AND name = 'up')
+		AND ts > ? AND ts <= ?`, CheckSeriesOwner(id), since.Unix(), until.Unix()).Scan(&lowest)
+	return lowest.Valid, lowest.Valid && lowest.Float64 == 0, err
+}
+
 // SaveCheckState stores a check's latest result (JSON) and since when its
 // state (ok / failing) holds.
 func (s *Store) SaveCheckState(ctx context.Context, id string, result []byte, since time.Time) error {

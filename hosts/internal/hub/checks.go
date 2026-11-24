@@ -451,26 +451,27 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 // ---- API --------------------------------------------------------------------------
 
 type checkJSON struct {
-	ID         string             `json:"id"`
-	Name       string             `json:"name"`
-	Kind       string             `json:"kind"`
-	Target     string             `json:"target"`
-	Runner     string             `json:"runner"`
-	IntervalS  int                `json:"interval_s"`
-	TimeoutS   int                `json:"timeout_s"`
-	GraceS     int                `json:"grace_s"`
-	Options    store.CheckOptions `json:"options"`
-	Enabled    bool               `json:"enabled"`
-	Status     string             `json:"status"` // up | down | pending | disabled
-	Since      *string            `json:"since"`
-	Last       *checkResultJSON   `json:"last"`
-	LastPing   *string            `json:"last_ping"`
-	Uptime24h  *float64           `json:"uptime_24h"`
-	Latency24h []*float64         `json:"latency_24h"`
-	PingURL    *string            `json:"ping_url"` // heartbeat checks, admins only
-	Owner      string             `json:"owner,omitempty"`
-	Stale      bool               `json:"stale"`
-	CreatedBy  string             `json:"created_by"`
+	ID           string             `json:"id"`
+	Name         string             `json:"name"`
+	Kind         string             `json:"kind"`
+	Target       string             `json:"target"`
+	Runner       string             `json:"runner"`
+	IntervalS    int                `json:"interval_s"`
+	TimeoutS     int                `json:"timeout_s"`
+	GraceS       int                `json:"grace_s"`
+	Options      store.CheckOptions `json:"options"`
+	Enabled      bool               `json:"enabled"`
+	Status       string             `json:"status"` // up | down | pending | disabled
+	Since        *string            `json:"since"`
+	Last         *checkResultJSON   `json:"last"`
+	LastPing     *string            `json:"last_ping"`
+	Uptime24h    *float64           `json:"uptime_24h"`
+	Latency24h   []*float64         `json:"latency_24h"`
+	PeriodStatus string             `json:"period_status,omitempty"`
+	PingURL      *string            `json:"ping_url"` // heartbeat checks, admins only
+	Owner        string             `json:"owner,omitempty"`
+	Stale        bool               `json:"stale"`
+	CreatedBy    string             `json:"created_by"`
 }
 
 type checkResultJSON struct {
@@ -558,7 +559,30 @@ func (h *Hub) apiGetCheck(w http.ResponseWriter, r *http.Request, p *principal) 
 	if !ok {
 		return errNotFound
 	}
-	writeJSON(w, r, http.StatusOK, h.checkJSONOf(r.Context(), c, p.rank() >= store.RoleRank(admin), false))
+	out := h.checkJSONOf(r.Context(), c, p.rank() >= store.RoleRank(admin), false)
+	if sinceText := r.URL.Query().Get("since"); sinceText != "" {
+		since, err := time.Parse(time.RFC3339, sinceText)
+		until, endErr := time.Parse(time.RFC3339, r.URL.Query().Get("until"))
+		if err != nil || endErr != nil || since.After(until) {
+			return apiErr(http.StatusBadRequest, "invalid_range", "Give the start and end of the check period.")
+		}
+		if cutoff := h.now().Add(-store.RawRetention); since.Before(cutoff) {
+			since = cutoff
+		}
+		seen, failed, err := h.store.CheckPeriod(r.Context(), c.ID, since, until)
+		if err != nil {
+			return err
+		}
+		switch {
+		case failed:
+			out.PeriodStatus = "down"
+		case seen:
+			out.PeriodStatus = "up"
+		default:
+			out.PeriodStatus = "unseen"
+		}
+	}
+	writeJSON(w, r, http.StatusOK, out)
 	return nil
 }
 

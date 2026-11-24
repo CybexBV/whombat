@@ -16,8 +16,15 @@ export type { RawPoint } from './series';
 
 /** How long points are kept (DS-11). */
 export const POINTS_KEEP_MS = 30 * 24 * 3600_000;
+/** How often the health pass records a point. */
+export const HEALTH_POINT_MS = 5 * 60_000;
 /** How long 5-minute points stay before they are rolled into hours. */
 export const POINTS_FINE_MS = 48 * 3600_000;
+const HOUR_MS = 3600_000;
+
+/** An hour rolls up once it is old enough in full. */
+export const pointRollupBefore = (now: Date) =>
+  Math.floor((now.getTime() - POINTS_FINE_MS) / HOUR_MS) * HOUR_MS;
 
 /** The response time key (ms; null: the check failed). */
 export const RTT_KEY = 'rtt_ms';
@@ -111,7 +118,7 @@ export async function readPoints(
  */
 export async function rollUpPoints(services: Services, now = services.clock()): Promise<void> {
   const keepFrom = new Date(now.getTime() - POINTS_KEEP_MS);
-  const fineFrom = new Date(now.getTime() - POINTS_FINE_MS);
+  const fineFrom = new Date(pointRollupBefore(now));
   await services.pipeline.transactAccount(async (tx) => {
     await tx.delete(connectionPoints).where(lt(connectionPoints.at, keepFrom));
     // Each hour (UTC, whatever the session's zone) with more than one point, or one point off the hour, becomes one

@@ -14,6 +14,7 @@ import {
   type ThingPageTab,
   type ThingPanelPlace,
   type ThingStatus,
+  UPTIME_ID,
 } from '@whombat/core';
 import { toolRowAlwaysAsks } from '../connections/sync';
 import type { CatalogConnectionRow, ConnectionToolRow } from '../connections/types';
@@ -371,7 +372,8 @@ export function genericNotices(
       confirm: 2,
       badge: 'It answered with an error',
     });
-  if (row.status !== 'needs_reauth')
+  // Website or address has its own live lines. Its stored result belongs in Settings.
+  if (row.status !== 'needs_reauth' && row.catalogId !== UPTIME_ID)
     for (const c of row.checks.filter((x) => x.state === 'error').slice(0, 3)) {
       // This unauthenticated service calls its readiness probe “credential” too.
       if (row.catalogId === 'ps5' && c.id === 'credential') continue;
