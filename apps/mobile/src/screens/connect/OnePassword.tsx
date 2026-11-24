@@ -1,5 +1,5 @@
 /**
- * The 1Password connection's own part on the phone (Whombat onepassword-sync.md OPW-24, OPW-26, OPW-50; app
+ * The 1Password connection's own part on the phone (Whombat onepassword-sync.md; app
  * onepassword-sync.md), the web's KEPT IN STEP at phone width: the vault's name over how many entries are kept in step,
  * the waiting, failing or read-only line, the last check with Sync now, “1Password says 4 items are gone” with their
  * names and the two answers, and NOT IN YOUR VAULT with each item's reason. It reads what the last pass stored

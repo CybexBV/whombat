@@ -777,7 +777,7 @@ export function createCatalogFixtures({ connected }: { connected: boolean }) {
           if (rows.some((r) => r.connection.catalogId === 'findmy' && r.connection.fields.mac === fields.mac))
             return refuse(409, 'check_failed', `Find My on ${fields.mac} is already connected.`);
         }
-        // 1Password's token sees two vaults: the person picks the one Whombat keeps in step (onepassword-sync.md OPW-01).
+        // 1Password's token sees two vaults: the person picks the one Whombat keeps in step (onepassword-sync.md).
         if (catalogId === 'onepassword' && !fields.vault)
           return refuse(
             409,

@@ -1,5 +1,5 @@
 /**
- * The 1Password connection's own part (Whombat onepassword-sync.md OPW-24, OPW-26, OPW-50; app onepassword-sync.md): on
+ * The 1Password connection's own part (Whombat onepassword-sync.md; app onepassword-sync.md): on
  * its page, instead of the agent's level, handle, last use and tools (the agent never uses it), KEPT IN STEP — the
  * vault's name, how many entries are kept in step, the waiting, failing or read-only line, “1Password says 4 items are
  * gone” with their names and the two answers, “Not in your Vault” with each item's reason, and the last check with
