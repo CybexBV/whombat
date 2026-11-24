@@ -368,9 +368,7 @@ describe('Worth a look in two parts', () => {
       nature: 'problem',
       quiet: { state: 'snoozed', words: 'until 23:00', at: AT, held: 'window' },
     });
-    expect(noticeGroups([updates, ignored, held]).foldLabel).toBe(
-      'Show 1 heads-up, 1 ignored and 1 on hold',
-    );
+    expect(noticeGroups([updates, ignored, held]).foldLabel).toBe('Show 1 heads-up, 1 ignored and 1 on hold');
   });
 
   it('keeps a heads-up with a button of its own in sight, without counting it', () => {
