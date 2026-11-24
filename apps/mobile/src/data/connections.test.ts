@@ -368,8 +368,8 @@ describe('Add a connection (AP-1173…AP-1175)', () => {
     // The whole catalog, Fusebox and the AI gateway included where the runtime has gateways.
     expect(
       addSearchPlaceholder(addConnectionRows(null, [], 'hq', { gateway: true, imap: true }).length),
-    ).toBe('Search 58 services');
-    expect(addSearchPlaceholder(addConnectionRows(statuses, [], 'hq').length)).toBe('Search 54 services');
+    ).toBe('Search 59 services');
+    expect(addSearchPlaceholder(addConnectionRows(statuses, [], 'hq').length)).toBe('Search 55 services');
     expect(addSearchPlaceholder(1)).toBe('Search 1 service');
   });
 

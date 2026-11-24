@@ -13,6 +13,8 @@ const ELSEWHERE: Record<string, string> = {
   custom_api: 'the page the assistant writes for it, from what it can read',
   custom_mcp: 'the page the assistant writes for it, from what it can read',
   device: 'its own page of readings',
+  // Until the sync's own page is built: then this line goes (the last test here says so).
+  onepassword: 'the connection page’s 1Password part',
   whombat_servers: 'each server’s own page',
 };
 
