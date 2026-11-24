@@ -72,7 +72,7 @@ import { displayName, PART_OF, partOfServer, within } from './part-of';
 import { DISK_GB_KEY, DISK_PCT_KEY, POINTS_KEEP_MS, RTT_KEY, readPoints } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
 import type { LooseNotice } from './quiet/types';
-import { type MarkedLines, markLines } from './quiet/wire';
+import { heldPage, type MarkedLines, markLines } from './quiet/wire';
 import {
   hostsServing,
   type MachineFigures,
@@ -307,8 +307,16 @@ export async function connectionPage(
     ),
   ];
   linesSink?.(lines);
-  const marked = await markLines(services.db, lines, { quiet, states, now, timeZone });
-  const status = headStatus(row, view, marked);
+  const marked = await markLines(services.db, lines, {
+    quiet,
+    states,
+    now,
+    timeZone,
+    mayEnd: viewer.principal.kind === 'person',
+  });
+  // Kept quiet, or down because of something else (monitoring.md MON-04, MON-07).
+  const held = heldPage(marked, headStatus(row, view, marked));
+  const status = held.head;
   // Worth a look is a strip on top, there only while it has a line (quiet ones too, so Undo stays in reach).
   if (marked.items.length)
     summary.push({
@@ -411,6 +419,7 @@ export async function connectionPage(
     ...(partOf ? { partOf } : {}),
     ...rangeFields(range, slotted && !followsRange(tabs[0]?.panels ?? []) ? [range] : kind?.ranges),
     ...(view ? { refreshS: refreshOf(view) } : {}),
+    ...held.fields,
   };
 }
 

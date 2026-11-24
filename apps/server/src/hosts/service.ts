@@ -16,6 +16,7 @@ import type { Database } from '../db/client';
 import { burrows } from '../db/schema/index';
 import type { Logger } from '../services';
 import { NO_QUIET, type QuietBook, quietBook, thingQuiet } from '../things/quiet/store';
+import { activeWindow, keptQuiet as heldQuiet } from '../things/quiet/windows';
 import { quietNames, quietOf } from '../things/quiet/wire';
 import { untilWords } from '../things/quiet/words';
 import { fleetHints } from './agent-updates';
@@ -600,13 +601,24 @@ export class HostsService {
     });
     const banner = detail.banner;
     const bannerAlert = banner?.alertId ? alerts.find((a) => a.id === banner.alertId) : undefined;
+    // Kept quiet until a time (monitoring.md MON-04): the page says so with End now (servers are the person's).
+    const window = activeWindow(quiet?.windows, now);
+    const keptQuiet = window
+      ? heldQuiet(window, {
+          now,
+          timeZone: zone,
+          names: await quietNames(this.deps.db, [window]).catch(() => new Map<string, string>()),
+          canEnd: true,
+        })
+      : null;
     return {
       ...detail,
+      ...(keptQuiet ? { keptQuiet } : {}),
       server:
         status === 'pending' || status === 'offline'
           ? detail.server
           : { ...detail.server, status: verdict.status, statusNote: verdict.note },
-      banner: bannerAlert && bannerAlert.attention === false ? null : banner,
+      banner: (bannerAlert && bannerAlert.attention === false) || keptQuiet ? null : banner,
       hints,
     };
   }

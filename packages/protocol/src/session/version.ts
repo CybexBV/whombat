@@ -98,6 +98,13 @@ export const OWN_ADDRESS_NAMES_MINOR = 6;
 /** Session protocol minor (major 5) that reads automations started by Find My (the `findmy` trigger and source). */
 export const FIND_MY_MINOR = 4;
 
+/**
+ * Session protocol minor (major 5) that keeps things quiet for a while (`things.keepQuiet`, `things.endQuiet`, a page's
+ * `keptQuiet` and `causedBy`, a quiet line's `held`; Whombat monitoring.md MON-04, MON-07). An older app gets the same
+ * words as a heads-up line and reads quiet lines as snoozed or ignored.
+ */
+export const KEEP_QUIET_MINOR = 9;
+
 /** Session protocol minor (major 5) that draws a Find My connection's Timeline tab (`connections.findMyTimeline…`). */
 export const FIND_MY_TIMELINE_MINOR = 5;
 

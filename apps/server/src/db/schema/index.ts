@@ -41,6 +41,7 @@ export * from './onepassword';
 export * from './principals';
 export * from './prompts';
 export * from './quiet';
+export * from './quiet-windows';
 export * from './repo-manager';
 export * from './repo-setup';
 export * from './schedules';

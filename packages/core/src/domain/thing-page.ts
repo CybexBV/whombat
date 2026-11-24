@@ -47,7 +47,15 @@ import { Timestamp } from './common.js';
 import { HomeHref, ThingKind, ThingStatus } from './home.js';
 import { HostSeriesRange } from './hosts.js';
 import { LookResearch } from './look-research.js';
-import { NoticeCheck, NoticeIgnore, NoticeNature, NoticeQuiet, NoticeSubject } from './quiet.js';
+import {
+  KeptQuiet,
+  NoticeCheck,
+  NoticeIgnore,
+  NoticeNature,
+  NoticeQuiet,
+  NoticeSubject,
+  ThingCause,
+} from './quiet.js';
 import { ThingLogo } from './thing-logo.js';
 
 /** A tab's, panel's, figure's or series' key: `overview`, `integrations`, `cpu`. */
@@ -938,6 +946,13 @@ export const ThingPage = z.object({
    * looked (an older Whombat).
    */
   research: LookResearch.optional(),
+  /**
+   * Kept quiet until a time (Whombat monitoring.md MON-04, MON-05): the page draws its words under the head with End
+   * now when `canEnd`. Worth a look also carries the words as a heads-up for an app that doesn't draw this.
+   */
+  keptQuiet: KeptQuiet.optional(),
+  /** Down because of something else (MON-07, MON-08): the badge says it (“Not answering while pve-02 is down”). */
+  causedBy: ThingCause.optional(),
 });
 export type ThingPage = z.infer<typeof ThingPage>;
 

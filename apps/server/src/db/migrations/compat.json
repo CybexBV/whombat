@@ -153,6 +153,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "How the Overview is arranged (docs/decisions/overview-arranged.md): one nullable jsonb column on burrows. The release before it never reads or writes it, and a row it wrote reads as before there."
+    },
+    "0024_quiet_windows": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Keeping things quiet for a while, causes and the way out (docs/decisions/monitoring.md MON-04…MON-08): three new tables. The release before it never reads or writes them."
     }
   }
 }

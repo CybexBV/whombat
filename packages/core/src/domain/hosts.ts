@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
-import { NoticeQuiet } from './quiet.js';
+import { KeptQuiet, NoticeQuiet } from './quiet.js';
 
 const N = z.number().nullable();
 const OptN = N.optional();
@@ -1336,6 +1336,11 @@ export const HostServerDetail = z.object({
   libvirt: HostLibvirtDetail.optional(),
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
+  /**
+   * Kept quiet until a time (Whombat monitoring.md MON-04, MON-05): the page draws its words with End now when
+   * `canEnd`; its alerts are muted by a maintenance window meanwhile.
+   */
+  keptQuiet: KeptQuiet.optional(),
 });
 export type HostServerDetail = z.infer<typeof HostServerDetail>;
 

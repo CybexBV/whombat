@@ -11,6 +11,7 @@ import { type RouteDef, route } from '../routes/define';
 import { runThingAction } from './actions';
 import { thingPage } from './page';
 import { quietThingNotice, setThingWatch, thingWatch } from './quiet/service';
+import { endThingQuiet, keepThingQuiet } from './quiet/window-service';
 import { pageRange } from './series';
 import { setRunsOn } from './set-runs-on';
 
@@ -68,6 +69,24 @@ export const thingRoutes: RouteDef[] = [
       await viewerOf(ctx),
       thingParam(ctx.params.thing),
       ctx.body,
+      ctx.access.burrow.timeZone,
+    ),
+  ),
+  // Keep quiet for a while, and End now (monitoring.md MON-04).
+  route(api.things.keepQuiet, async (ctx) =>
+    keepThingQuiet(
+      ctx.services,
+      await viewerOf(ctx),
+      thingParam(ctx.params.thing),
+      ctx.body,
+      ctx.access.burrow.timeZone,
+    ),
+  ),
+  route(api.things.endQuiet, async (ctx) =>
+    endThingQuiet(
+      ctx.services,
+      await viewerOf(ctx),
+      thingParam(ctx.params.thing),
       ctx.access.burrow.timeZone,
     ),
   ),

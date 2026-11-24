@@ -9,11 +9,19 @@
  * - `propose_device_skill`: the device's profile, tested, as a `device_skill` card for the owner to switch on.
  * - `watch_checks`: what Whombat watches on a connection, server or device, and switching a check off or on when the
  *   person said so (Whombat docs/decisions/on-purpose.md).
+ * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
+ *   (Whombat docs/decisions/monitoring.md MON-04).
  */
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';
 import { WIDGET_REFRESH_MAX_S, WIDGET_REFRESH_MIN_S, WidgetSource } from '../domain/home.js';
-import { NoticeCheck, NoticeNature, NoticeSubjectId } from '../domain/quiet.js';
+import {
+  KEEP_QUIET_MAX_MINUTES,
+  KEEP_QUIET_MIN_MINUTES,
+  NoticeCheck,
+  NoticeNature,
+  NoticeSubjectId,
+} from '../domain/quiet.js';
 import { DeviceSkillProposalId, WidgetId } from '../ids.js';
 import { commitOutcome } from './errors.js';
 import type { McpTool } from './mcp.js';
@@ -137,6 +145,27 @@ export const ONE_MCP_TOOLS = {
       watched: z.boolean().optional(),
     }),
     output: commitOutcome({ checks: z.array(AgentWatchCheck) }),
+    requiredKey: null,
+    readOnly: false,
+    personal: true,
+  }),
+  quiet_until: oneTool({
+    name: 'quiet_until',
+    title: 'Keep quiet for a while',
+    description:
+      'Keep a connection, server or device quiet until a time, or for some minutes, with an optional short note (“Moving the NAS”): until then its problems make no look, Inbox item or push, and a server’s alerts are muted too. When it ends, what is still wrong counts again. With end: true it ends now. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle. Without until, minutes or end it only says whether it is kept quiet. Do it only when the person told you to in this conversation (“keep the NAS quiet tonight”); it shows in what you did, with Undo.',
+    input: z.object({
+      thing: z.string().trim().min(1).max(220),
+      /** When it ends, with its offset (“2026-11-24T23:00:00+01:00”). */
+      until: z.iso.datetime({ offset: true }).optional(),
+      minutes: z.number().int().min(KEEP_QUIET_MIN_MINUTES).max(KEEP_QUIET_MAX_MINUTES).optional(),
+      note: z.string().trim().min(1).max(120).optional(),
+      end: z.boolean().optional(),
+    }),
+    output: commitOutcome({
+      /** How it is kept quiet now (“Quiet until 23:00 · Moving the NAS”); null when it isn't. */
+      quiet: z.object({ words: z.string(), until: z.string() }).nullable(),
+    }),
     requiredKey: null,
     readOnly: false,
     personal: true,

@@ -94,8 +94,52 @@ export const NoticeQuiet = z.object({
   until: Timestamp.optional(),
   by: QuietBy.optional(),
   at: Timestamp,
+  /**
+   * Quiet as part of the whole thing rather than this line (Whombat monitoring.md MON-04, MON-07): `window` while the
+   * thing is kept quiet (its page's `keptQuiet`, ended with End now, not Undo), `cause` while it is down because of
+   * something else (its page's `causedBy`). Absent: the line's own Ignore or snooze. An app before session minor 9
+   * leaves it out and reads the line as snoozed (a window) or ignored (a cause).
+   */
+  held: z.enum(['window', 'cause']).optional(),
 });
 export type NoticeQuiet = z.infer<typeof NoticeQuiet>;
+
+/* Keep quiet for a while, and one cause (Whombat monitoring.md MON-04, MON-05, MON-07) ----------------------------- */
+
+/** The shortest and longest a thing can be kept quiet. */
+export const KEEP_QUIET_MIN_MINUTES = 5;
+export const KEEP_QUIET_MAX_MINUTES = 31 * 24 * 60;
+
+/**
+ * A server, connection or device kept quiet until a time (MON-04): while it holds, its lines colour nothing and make no
+ * look, Inbox item, incident or push. `words` is the page's line as drawn (“Quiet until 23:00 · Moving the NAS”);
+ * `whombat` when Whombat keeps it quiet for its own planned work (MON-05, “Whombat is updating it”); `canEnd` when the
+ * caller may end it now (`things.endQuiet`, End now). `by` absent: Whombat.
+ */
+export const KeptQuiet = z.object({
+  id: z.string().min(1).max(64),
+  words: z.string().min(1).max(160),
+  since: Timestamp,
+  until: Timestamp,
+  note: z.string().min(1).max(120).optional(),
+  by: QuietBy.optional(),
+  whombat: z.boolean().optional(),
+  canEnd: z.boolean(),
+});
+export type KeptQuiet = z.infer<typeof KeptQuiet>;
+
+/**
+ * What a thing is down because of (MON-07, MON-08): the server it runs on that is down, its machine that stopped or is
+ * kept quiet, or the internet (`box:network`). `thing` is the cause's id (`server:pve-02`); `words` the page's line
+ * (“Not answering while pve-02 is down”); `href` the cause's page when it has one.
+ */
+export const ThingCause = z.object({
+  thing: z.string().min(3).max(220),
+  name: z.string().min(1).max(80),
+  words: z.string().min(1).max(160),
+  href: z.string().min(1).max(500).optional(),
+});
+export type ThingCause = z.infer<typeof ThingCause>;
 
 /** Remind me tomorrow: until this hour tomorrow in the Whombat's time zone (QN-12, Home's snooze). */
 export const QUIET_SNOOZE_HOUR = 9;
@@ -141,6 +185,19 @@ export const QUIET_WORDS = {
   always: 'always',
   watchEmpty: 'Nothing to watch here yet.',
   natures: { problem: 'Problem', you: 'Only you', fyi: 'Heads-up' } satisfies Record<NoticeNature, string>,
+  /** Keep quiet for a while (MON-04): the ⋯ item, its choices, the page's line and its button. */
+  keepQuiet: 'Keep quiet for a while',
+  keepQuietHour: 'For an hour',
+  keepQuietTonight: 'Until tonight',
+  keepQuietMorning: 'Until tomorrow morning',
+  keepQuietPick: 'Until a time you pick',
+  keepQuietNote: 'Note (optional)',
+  keptUntil: 'Quiet until {time}',
+  endNow: 'End now',
+  toastKept: 'Quiet until {time}.',
+  toastEnded: 'Whombat watches {name} again.',
+  /** A thing down because of something else (MON-07): “Not answering while pve-02 is down”. */
+  notAnswering: 'Not answering {words}',
 } as const;
 
 /** Fills `{hole}`s of a quiet word; a hole without a value stays as it is. */

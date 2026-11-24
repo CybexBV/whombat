@@ -24,7 +24,16 @@ import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
 import { ArrangeOverviewBody, OverviewLayout, OverviewViewsQuery } from '../domain/overview-layout.js';
-import { NoticeCheck, NoticeQuiet, NoticeRef, NoticeSubject, ThingWatch } from '../domain/quiet.js';
+import {
+  KEEP_QUIET_MAX_MINUTES,
+  KEEP_QUIET_MIN_MINUTES,
+  KeptQuiet,
+  NoticeCheck,
+  NoticeQuiet,
+  NoticeRef,
+  NoticeSubject,
+  ThingWatch,
+} from '../domain/quiet.js';
 import {
   ThingButtonValue,
   ThingImageRef,
@@ -432,6 +441,26 @@ export const SetThingWatchBody = z.object({
 });
 export type SetThingWatchBody = z.infer<typeof SetThingWatchBody>;
 
+/**
+ * Keep a server, connection or device quiet (`things.keepQuiet`; Whombat monitoring.md MON-04): until `until`, or for
+ * `minutes`, with an optional `note` (“Moving the NAS”). A thing kept quiet already gets the new end and note. Session
+ * minor 9.
+ */
+export const KeepQuietBody = z
+  .object({
+    until: Timestamp.optional(),
+    minutes: z.number().int().min(KEEP_QUIET_MIN_MINUTES).max(KEEP_QUIET_MAX_MINUTES).optional(),
+    note: z.string().trim().min(1).max(120).optional(),
+  })
+  .refine((b) => (b.until === undefined) !== (b.minutes === undefined), {
+    message: 'Say until when, or for how long',
+    path: ['until'],
+  });
+export type KeepQuietBody = z.infer<typeof KeepQuietBody>;
+/** The thing as it is kept quiet now; null after `things.endQuiet`. */
+export const KeepQuietResponse = z.object({ keptQuiet: KeptQuiet.nullable() });
+export type KeepQuietResponse = z.infer<typeof KeepQuietResponse>;
+
 export const thingEndpoints = {
   page: endpoint({
     id: 'things.page',
@@ -482,6 +511,25 @@ export const thingEndpoints = {
     params: B.extend({ thing: ThingParam }),
     body: SetThingWatchBody,
     response: ThingWatch,
+  }),
+  keepQuiet: endpoint({
+    id: 'things.keepQuiet',
+    method: 'POST',
+    path: '/burrows/:burrow/things/:thing/keep-quiet',
+    summary:
+      'Keep a server, connection or device quiet until a time or for some minutes, with an optional note (session minor 9): its lines colour nothing and make no look, Inbox item, incident or push until then; a server’s alerts are muted in the hosts service too. Signed as the person with Undo. `not_allowed` where the person may not manage the thing.',
+    params: B.extend({ thing: ThingParam }),
+    body: KeepQuietBody,
+    response: KeepQuietResponse,
+  }),
+  endQuiet: endpoint({
+    id: 'things.endQuiet',
+    method: 'POST',
+    path: '/burrows/:burrow/things/:thing/keep-quiet/end',
+    summary:
+      'End now: a thing kept quiet is watched again at once, and what is still wrong counts from the start (session minor 9). `not_found` when it isn’t kept quiet.',
+    params: B.extend({ thing: ThingParam }),
+    response: KeepQuietResponse,
   }),
 };
 

@@ -24,6 +24,8 @@ import { type QuietThing, quietNotice, setWatch } from './commands';
 import { checkStartsOn } from './defaults';
 import { type ThingQuiet, thingQuiet } from './store';
 import type { KindCheck, LooseNotice } from './types';
+import { endThingQuiet } from './window-service';
+import { activeWindow } from './windows';
 import {
   type QuietAnswer,
   type QuietRequest,
@@ -69,7 +71,7 @@ function accountTarget(services: Services, viewer: ConnectionViewer, target: Acc
 }
 
 /** The thing behind a thingId for this person, or `not_found`; servers are the servers' part's. */
-async function quietTarget(
+export async function quietTarget(
   services: Services,
   viewer: ConnectionViewer,
   value: string,
@@ -158,7 +160,19 @@ export async function quietThingNotice(
           eq(noticeQuiets.subject, subject),
         ),
       );
-    if (!row) throw notFound('Quiet');
+    if (!row) {
+      // A line quiet with the whole thing kept quiet: Undo there (an app that has no End now) ends the window.
+      if (
+        activeWindow(
+          (await thingQuiet(services.db, target.thing.owner, target.thing.id)).windows,
+          services.clock(),
+        )
+      ) {
+        await endThingQuiet(services, viewer, value, timeZone);
+        return { notice, quiet: null };
+      }
+      throw notFound('Quiet');
+    }
     input = {
       thing: target.thing,
       line: {

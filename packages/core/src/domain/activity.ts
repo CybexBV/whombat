@@ -162,6 +162,7 @@ const WHOMBAT_VERBS: Record<string, readonly [string, string]> = {
   report_done: ['Noting what I did', 'Noted what I did'],
   look_report: ['Noting what I found', 'Noted what I found'],
   watch_checks: ['Checking what Whombat watches', 'Checked what Whombat watches'],
+  quiet_until: ['Keeping it quiet', 'Kept it quiet'],
 };
 
 /**
