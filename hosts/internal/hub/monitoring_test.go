@@ -3,6 +3,8 @@ package hub
 import (
 	"context"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -117,6 +119,129 @@ func TestStaleCheckKeepsLastResultAndHoldsAlerts(t *testing.T) {
 	}
 }
 
+func TestCheckEditsStartFreshAndResolvePreviousAlerts(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&start)
+	e, admin := adminEnv(t, func(c *Config) { c.Now = func() time.Time { return *clock.Load() } })
+	e.enroll(admin, "basalt", "Lab")
+	ctx := context.Background()
+	advance := func(at time.Time) { clock.Store(&at) }
+	report := func(checks ...proto.CheckResult) {
+		e.h.ingestReport(ctx, "basalt", &proto.Report{At: e.h.now(), Checks: checks})
+	}
+	create := func() checkJSON {
+		t.Helper()
+		var check checkJSON
+		admin.json(http.MethodPost, "/api/v1/checks", map[string]any{
+			"name": "Website", "kind": "http", "target": "https://example.com", "runner": "basalt",
+		}, 201, &check)
+		return check
+	}
+	original := create()
+	cert := start.Add(48 * time.Hour)
+	report(proto.CheckResult{ID: original.ID, At: start, OK: true, CertNotAfter: &cert})
+	e.h.evaluateCheckAlerts(ctx)
+	open := e.h.alerts.Open("")
+	if len(open) != 1 || open[0].Rule != RuleCheckCert {
+		t.Fatalf("expected certificate alert, got %+v", open)
+	}
+
+	editAt := start.Add(10 * time.Minute)
+	advance(editAt)
+	report()
+	var edited checkJSON
+	path := "/api/v1/checks/" + original.ID
+	admin.json(http.MethodGet, path, nil, 200, &edited)
+	if !edited.Stale || edited.Last == nil {
+		t.Fatalf("previous result should be stale: %+v", edited)
+	}
+	fresh := create()
+	if fresh.Stale || fresh.Status != "pending" || fresh.Last != nil {
+		t.Fatalf("new check after a gap: %+v", fresh)
+	}
+	admin.json(http.MethodPatch, path, map[string]any{"target": "https://example.org"}, 200, &edited)
+	if edited.Stale || edited.Status != "pending" || edited.Last != nil {
+		t.Fatalf("edited check after a gap: %+v", edited)
+	}
+	if _, ok := e.h.alerts.Find(open[0].ID); ok {
+		t.Fatal("the edited target's certificate alert is still open")
+	}
+	stored, err := e.h.store.ListChecks(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range stored {
+		if !check.ProbeChangedAt.Equal(editAt) {
+			t.Fatalf("check %s has probe time %s, want %s", check.ID, check.ProbeChangedAt, editAt)
+		}
+	}
+	advance(editAt.Add(e.h.cfg.HeartbeatTimeout + time.Second))
+	admin.json(http.MethodGet, path, nil, 200, &edited)
+	if !edited.Stale {
+		t.Fatalf("a gap after the edit should count: %+v", edited)
+	}
+}
+
+func TestCheckResultFreshnessCorrectsBothClockDirections(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	e, admin := adminEnv(t, func(c *Config) { c.Now = func() time.Time { return now } })
+	e.enroll(admin, "basalt", "Lab")
+	ctx := context.Background()
+	for _, skew := range []float64{45, -45} {
+		e.h.mu.Lock()
+		s := e.h.servers["basalt"]
+		s.skew, s.reportAt, s.reportGapAt = &skew, now, now.Add(-30*time.Second)
+		e.h.mu.Unlock()
+		var check checkJSON
+		admin.json(http.MethodPost, "/api/v1/checks", map[string]any{
+			"name": "Website", "kind": "http", "target": "https://example.com", "runner": "basalt",
+		}, 201, &check)
+		read := func(age time.Duration, wantStale bool) {
+			t.Helper()
+			at := now.Add(-age)
+			e.h.checkResult(ctx, "basalt", proto.CheckResult{
+				ID: check.ID, At: at.Add(time.Duration(skew) * time.Second), OK: true,
+			})
+			admin.json(http.MethodGet, "/api/v1/checks/"+check.ID, nil, 200, &check)
+			if check.Stale != wantStale || check.Last == nil || check.Last.At != at.Format(time.RFC3339) {
+				t.Fatalf("skew %v, age %s: %+v, last %+v", skew, age, check, check.Last)
+			}
+		}
+		read(40*time.Second, true)
+		read(10*time.Second, false)
+	}
+}
+
+func TestHeartbeatFirstDeadlineStartsAtKindChange(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&start)
+	e, admin := adminEnv(t, func(c *Config) { c.Now = func() time.Time { return *clock.Load() } })
+	e.enroll(admin, "basalt", "Lab")
+	var check checkJSON
+	admin.json(http.MethodPost, "/api/v1/checks", map[string]any{
+		"name": "Website", "kind": "http", "target": "https://example.com", "runner": "basalt",
+	}, 201, &check)
+	editAt := start.Add(24 * time.Hour)
+	clock.Store(&editAt)
+	path := "/api/v1/checks/" + check.ID
+	admin.json(http.MethodPatch, path, map[string]any{"kind": "heartbeat", "interval_s": 60, "grace_s": 15}, 200, &check)
+	status := func(elapsed time.Duration, want string) {
+		t.Helper()
+		at := editAt.Add(elapsed)
+		clock.Store(&at)
+		e.h.heartbeatChecks(context.Background())
+		admin.json(http.MethodGet, path, nil, 200, &check)
+		if check.Status != want {
+			t.Fatalf("after %s: status %s, want %s", elapsed, check.Status, want)
+		}
+	}
+	status(0, "pending")
+	status(75*time.Second, "pending")
+	status(76*time.Second, "down")
+}
+
 func TestWatchLimitsPersistAndClearAtTheirScope(t *testing.T) {
 	e, admin := adminEnv(t, nil)
 	e.enroll(admin, "basalt", "Lab")
@@ -154,6 +279,102 @@ func TestWatchLimitsPersistAndClearAtTheirScope(t *testing.T) {
 	if len(settings.Limits) != 1 || len(settings.Rules) != 0 || len(e.audit("server.watch_changed")) != 3 {
 		t.Fatalf("watch settings: %+v", settings)
 	}
+}
+
+func TestWatchLimitChangeResolvesOnlyAffectedAlertsImmediately(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Second)
+	var clock atomic.Pointer[time.Time]
+	clock.Store(&start)
+	e, admin := adminEnv(t, func(c *Config) { c.Now = func() time.Time { return *clock.Load() } })
+	e.enroll(admin, "basalt", "Lab")
+	path := "/api/v1/servers/basalt/watch"
+	put := func(rule, entity string, value any) {
+		t.Helper()
+		admin.json(http.MethodPut, path, map[string]any{"rule": rule, "entity": entity, "limit": value}, 200, nil)
+	}
+	put(rules.RuleSpaceHigh, "fs:/photos", 91)
+
+	ctx := context.Background()
+	report := func(at time.Time) {
+		clock.Store(&at)
+		worn := 92.0
+		e.h.ingestReport(ctx, "basalt", &proto.Report{At: at,
+			Filesystems: []proto.Filesystem{
+				{Mount: "/files", SizeBytes: 100, UsedBytes: 93, InodesTotal: 100, InodesUsed: 96},
+				{Mount: "/photos", SizeBytes: 100, UsedBytes: 93},
+			},
+			Disks: []proto.Disk{{Device: "nvme0n1", Type: "nvme", WearPct: &worn}},
+		})
+	}
+	report(start)
+	report(start.Add(2 * time.Minute))
+	open := func(rule, entity string) bool {
+		t.Helper()
+		for _, a := range e.h.alerts.Open("basalt") {
+			if a.Rule == rule && a.Entity == entity {
+				return true
+			}
+		}
+		return false
+	}
+	for _, entity := range []string{"fs:/files", "fs:/photos"} {
+		if !open(rules.RuleSpaceHigh, entity) {
+			t.Fatalf("space alert for %s did not open", entity)
+		}
+	}
+	if !open(rules.RuleInodesHigh, "fs:/files") || !open(rules.RuleWearCritical, "nvme0n1") {
+		t.Fatal("the inode and wear alerts did not open")
+	}
+	put(rules.RuleSpaceHigh, "", 95)
+	if open(rules.RuleSpaceHigh, "fs:/files") || !open(rules.RuleSpaceHigh, "fs:/photos") ||
+		!open(rules.RuleInodesHigh, "fs:/files") || !open(rules.RuleWearCritical, "nvme0n1") {
+		t.Fatal("only the space alert inheriting the changed limit should resolve")
+	}
+	put(rules.RuleInodesHigh, "fs:/files", 99)
+	if open(rules.RuleInodesHigh, "fs:/files") {
+		t.Fatal("the inode alert did not resolve")
+	}
+	put(rules.RuleWearCritical, "", 95)
+	if open(rules.RuleWearCritical, "nvme0n1") || !open(rules.RuleWearHigh, "nvme0n1") {
+		t.Fatal("the wear alert should drop to warning immediately")
+	}
+	put(rules.RuleSpaceHigh, "fs:/photos", nil)
+	if open(rules.RuleSpaceHigh, "fs:/photos") {
+		t.Fatal("clearing the item limit should restore the higher server limit")
+	}
+}
+
+func TestWatchWarningLimitMustBeBelowCritical(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	e.enroll(admin, "basalt", "Lab")
+	ctx := context.Background()
+	e.h.ingestReport(ctx, "basalt", &proto.Report{At: e.h.now(), Sensors: []proto.Sensor{
+		{ID: proto.SensorCPU, TempC: 40, LimitC: 90},
+		{ID: proto.SensorBoard, TempC: 40, LimitC: 95},
+	}})
+	path := "/api/v1/servers/basalt/watch"
+	put := func(rule, entity string, value any, unitBound string) {
+		t.Helper()
+		body := map[string]any{"rule": rule, "entity": entity, "limit": value}
+		if unitBound == "" {
+			admin.json(http.MethodPut, path, body, 200, nil)
+			return
+		}
+		var problem struct{ Code, Detail string }
+		admin.json(http.MethodPut, path, body, 400, &problem)
+		if problem.Code != "invalid_limit" || !strings.Contains(problem.Detail, unitBound) {
+			t.Fatalf("unexpected refusal: %+v", problem)
+		}
+	}
+	put(rules.RuleTempHigh, proto.SensorCPU, 90, "below the critical limit of 90 °C")
+	put(rules.RuleTempHigh, "", 92, "below the critical limit of 90 °C")
+	put(rules.RuleTempCritical, proto.SensorCPU, 100, "")
+	put(rules.RuleTempHigh, "", 92, "")
+	put(rules.RuleTempCritical, proto.SensorCPU, nil, "above the warning limit of 92 °C")
+	put(rules.RuleWearHigh, "nvme0n1", 95, "below the critical limit of 90 %")
+	put(rules.RuleWearHigh, "nvme0n1", 88, "")
+	put(rules.RuleWearCritical, "", 85, "above the warning limit of 88 %")
+	put(rules.RuleWearCritical, "", 96, "")
 }
 
 func TestGuestStopAfterHubActionIsQuiet(t *testing.T) {

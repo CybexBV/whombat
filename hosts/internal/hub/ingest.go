@@ -67,10 +67,13 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 	var changes []change
 	var stopped []string
 	var policyOff, hostShellOff bool
+	// Keep the cached report and its alert evaluation together with watch edits.
+	h.watch.change.Lock()
 	h.mu.Lock()
 	s, exists := h.servers[id]
 	if !exists {
 		h.mu.Unlock()
+		h.watch.change.Unlock()
 		return
 	}
 	prev := s.report
@@ -153,6 +156,19 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		policyChanged = prev.Policy != r.Policy
 	}
 	h.mu.Unlock()
+
+	managed := func(rule, entity string) bool {
+		if rule != rules.RuleGuestStopped {
+			return notHeartbeat(rule)
+		}
+		if strings.HasPrefix(entity, "libvirt/") {
+			return libvirtSeen && !unreadStops[entity]
+		}
+		return dockerSeen && !unreadStops[entity]
+	}
+	h.applyAlerts(ctx, h.alerts.EvaluateScoped(id, conds, managed, now))
+	h.watch.change.Unlock()
+
 	if policyChanged {
 		// The agent's agent.toml changed (a reload or restart): record it, the
 		// hub toggles alone do not tell the whole story.
@@ -168,16 +184,6 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 				"host_power": onOff(pol.HostPower), "update": onOff(pol.Update), "manage": onOff(pol.Manage)}})
 	}
 
-	managed := func(rule, entity string) bool {
-		if rule != rules.RuleGuestStopped {
-			return notHeartbeat(rule)
-		}
-		if strings.HasPrefix(entity, "libvirt/") {
-			return libvirtSeen && !unreadStops[entity]
-		}
-		return dockerSeen && !unreadStops[entity]
-	}
-	h.applyAlerts(ctx, h.alerts.EvaluateScoped(id, conds, managed, now))
 	for _, cr := range r.Checks {
 		h.checkResult(ctx, id, cr)
 	}

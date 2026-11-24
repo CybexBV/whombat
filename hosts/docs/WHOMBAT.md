@@ -421,14 +421,19 @@ autostart libvirt VM that crashed can open a critical `guest.stopped`
 alert if it stays stopped. Stops the hub requested stay quiet.
 
 Custom limits for disk use, inodes, SSD wear and temperature apply to the
-server unless the alert's entity has its own. A limit change keeps the same
-watch switch. Whombat signs the change as the person and uses
+server unless the alert's entity has its own. The hub rechecks its latest
+readings and closes alerts that fall below the new limit right away.
+Temperature and SSD wear warning limits must stay below their critical
+limits. A limit change keeps the same watch switch. Whombat signs the change as the person and uses
 `expected_limit` to take it back only while their edit still holds.
 
 A connection's check has `owner: "whombat:connection:<id>"` and uses the
 single-check route to read `last`, including latency and the certificate's
 end date. A stale check has no current answer. Its previous `last.at`
-stays available for “Not checked since …”.
+stays available for “Not checked since …”. A new or edited probe waits
+for its own first result, and its wait counts from when the settings took
+effect. A check-in gets its full period and grace time from that point
+until its first ping.
 
 Hints (conditions near a limit, not alerts yet) are `hints[]` of `GET
 /fleet` and `GET /servers/{id}`. Headless, a heartbeat check's `ping_url`

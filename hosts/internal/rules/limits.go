@@ -24,6 +24,28 @@ func ValidLimit(rule string, value float64) bool {
 	return ValidLimitRule(rule) && value >= 1 && value <= maximum
 }
 
+// LimitPair gives the warning and critical rules that share a reading.
+func LimitPair(rule string) (warning, critical string) {
+	switch rule {
+	case RuleTempHigh, RuleTempCritical:
+		return RuleTempHigh, RuleTempCritical
+	case RuleWearHigh, RuleWearCritical:
+		return RuleWearHigh, RuleWearCritical
+	}
+	return "", ""
+}
+
+func warningThreshold(find LimitLookup, rule, entity string, fallback, critical float64) (float64, bool) {
+	if value, ok := find.threshold(rule, entity, fallback); value < critical {
+		return value, ok
+	}
+	// A sensor's own limit can change after a custom warning was set.
+	if fallback >= critical {
+		fallback = TempWarnThreshold(critical)
+	}
+	return fallback, false
+}
+
 func (find LimitLookup) threshold(rule, entity string, fallback float64) (float64, bool) {
 	if find != nil {
 		if value, ok := find(rule, entity); ok {

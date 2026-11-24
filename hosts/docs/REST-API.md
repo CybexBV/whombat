@@ -702,9 +702,10 @@ characters), 400 `bad_request`, 403 `forbidden` (viewers), 404
 **`PUT /servers/{id}/watch`** also takes `{"rule": string, "entity"?: string, "limit": number | null}`.
 Omit `entity` for a whole server. An item's limit takes precedence over the
 server's limit, and clearing either with `null` restores what it inherits.
-The next report uses the new limit. A server can keep up to 500 custom
-limits. The alert opens when the reading reaches the limit, with the
-rule's usual delay. A change sends `watch.changed` and `server.updated`
+The hub checks its latest report as soon as the limit changes. An alert
+that falls below its new limit resolves right away. Alerts still open with
+the rule's usual delay. A server can keep up to 500 custom limits.
+A change sends `watch.changed` and `server.updated`
 and is audited with `limit` in the details.
 
 | Rules | Limit |
@@ -715,6 +716,9 @@ and is audited with `limit` in the details.
 An optional `expected_limit` checks the old value, with `null` meaning no
 custom limit at that scope. A mismatch gives 409 `limit_changed`.
 A limit outside the range or on any other rule gives 400 `invalid_limit`.
+Temperature and SSD wear warning limits must be below each affected item's
+critical limit. A change that would violate that order also gives
+400 `invalid_limit`, with the limit to stay above or below in `detail`.
 
 ## Maintenance
 
@@ -2052,6 +2056,7 @@ connection handles those alerts.
 `disabled`. If the runner's reports or results stop coming, `stale` is
 `true` and the check is `pending`. Its last result and timestamp stay
 visible, and its alerts keep their state until a fresh result arrives.
+The hub corrects result times for the agent's clock skew.
 `last` also has `error` and `answer` (DNS) when set.
 `uptime_24h` is a percentage and `latency_24h` holds 96 points over 24
 hours. `GET /checks` includes both. The other routes answer `null` and
@@ -2079,7 +2084,10 @@ handshake), `insecure` (skip certificate verification), `dns_type` (`A`,
 `AAAA`, `CNAME`, `MX`, `TXT`), `dns_server` (`host[:port]`), `expect` (dns:
 substring of an answer), `cert_warn_days` (0 to 365, 0 = 14).
 
-A probe change waits for a result from the new settings.
+A probe change resolves alerts for its previous settings and waits for a
+new result. Until the first result, freshness counts from the change and
+only newer report gaps count. A check-in's first deadline is its period
+plus its grace time from when the check-in settings took effect.
 Response: the check. Errors: 400 `invalid_name`, `invalid_option`,
 `invalid_interval`, `invalid_grace`, `invalid_runner`, `invalid_owner`, `invalid_check`
 (kind, target, interval, timeout or options rejected); 404 `not_found`

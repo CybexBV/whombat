@@ -34,11 +34,19 @@ const (
 type checkState struct {
 	Result   proto.CheckResult `json:"result"`
 	ProbeRev string            `json:"probe_rev,omitempty"`
+	HubAt    time.Time         `json:"hub_at,omitzero"`
 	Fails    int               `json:"fails"` // consecutive failures
 	// Heartbeat checks.
 	LastPing *time.Time `json:"last_ping,omitempty"` // last successful ping
 	Started  *time.Time `json:"started,omitempty"`   // the job said it started
 	since    time.Time
+}
+
+func (st *checkState) resultTime() time.Time {
+	if !st.HubAt.IsZero() {
+		return st.HubAt
+	}
+	return st.Result.At
 }
 
 type checkSet struct {
@@ -154,8 +162,10 @@ func (h *Hub) runChecks(ctx context.Context) {
 			for _, r := range h.checks.runner.Results() {
 				h.checkResult(ctx, "hub", r)
 			}
+			h.checks.config.Lock()
 			h.heartbeatChecks(ctx)
 			h.evaluateCheckAlerts(ctx)
+			h.checks.config.Unlock()
 		}
 	}
 }
@@ -196,13 +206,24 @@ func (h *Hub) checkResult(ctx context.Context, runner string, r proto.CheckResul
 	if r.LatencyMs != nil && (*r.LatencyMs < 0 || *r.LatencyMs > 3600e3 || *r.LatencyMs != *r.LatencyMs) {
 		r.LatencyMs = nil
 	}
-	if now := h.now(); r.At.IsZero() || r.At.After(now.Add(time.Minute)) {
-		r.At = now // the runner's clock is off
-	}
 	h.recordCheck(ctx, c, r, nil)
 }
 
 func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResult, mutate func(*checkState)) {
+	now := h.now()
+	at := r.At
+	if r.At.IsZero() {
+		r.At, at = now, now
+	} else if c.Runner != "hub" {
+		h.mu.RLock()
+		if s := h.servers[c.Runner]; s != nil && s.skew != nil {
+			at = at.Add(-time.Duration(*s.skew * float64(time.Second)))
+		}
+		h.mu.RUnlock()
+	}
+	if at.After(now) {
+		at = now
+	}
 	h.checks.mu.Lock()
 	current, exists := h.checks.byID(c.ID)
 	if !exists || current.ProbeRev != c.ProbeRev || !current.Enabled {
@@ -219,18 +240,19 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResul
 		return
 	}
 	wasOK, had := st.Result.OK, !st.Result.At.IsZero()
-	if c.Runner != "hub" && had && (r.At.Sub(st.Result.At) > h.checkResultWindow(c) || h.checkStale(c, st, h.now())) {
+	if c.Runner != "hub" && had && (at.Sub(st.resultTime()) > h.checkResultWindow(c) || h.checkStale(c, st, now)) {
 		had = false
 		st.Fails = 0
 	}
-	st.Result = r
+	// Keep the agent's timestamp to recognize repeats, even if its clock offset changes.
+	st.Result, st.HubAt = r, at
 	if r.OK {
 		st.Fails = 0
 	} else {
 		st.Fails++
 	}
 	if !had || wasOK != r.OK {
-		st.since = r.At
+		st.since = at
 	}
 	if mutate != nil {
 		mutate(st)
@@ -248,7 +270,7 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResul
 	if r.LatencyMs != nil {
 		vals["latency_ms"] = *r.LatencyMs
 	}
-	if _, _, err := h.store.InsertSamples(ctx, store.CheckSeriesOwner(c.ID), []store.Sample{{TS: r.At.Unix(), Values: vals}}); err != nil {
+	if _, _, err := h.store.InsertSamples(ctx, store.CheckSeriesOwner(c.ID), []store.Sample{{TS: at.Unix(), Values: vals}}); err != nil {
 		h.log.Error("check sample", "check", c.ID, "err", err)
 	}
 	if !had || wasOK != r.OK {
@@ -257,8 +279,8 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResul
 }
 
 // heartbeatChecks records a failure for heartbeats that are overdue: no
-// ping within the period plus the grace time (counted from the check's
-// creation until the first ping). An overdue check records at most one
+// ping within the period plus the grace time (counted from when the
+// check-in settings took effect until the first ping). An overdue check records at most one
 // result a minute.
 func (h *Hub) heartbeatChecks(ctx context.Context) {
 	now := h.now()
@@ -273,7 +295,7 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 			continue
 		}
 		st := h.checks.stateFor(c)
-		last, msg := c.CreatedAt, "No ping since the check was created"
+		last, msg := c.ProbeChangedAt, "No ping since the check-in was set up"
 		if st != nil && st.LastPing != nil {
 			last, msg = *st.LastPing, "No ping for "+rules.FormatDuration(now.Sub(*st.LastPing))
 		}
@@ -300,17 +322,20 @@ func (h *Hub) checkStale(c store.Check, st *checkState, now time.Time) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	s := h.servers[c.Runner]
+	window := h.checkResultWindow(c)
+	if st == nil || st.Result.At.IsZero() {
+		if s != nil && !s.reportAt.IsZero() {
+			gap := s.reportAt.Add(h.cfg.HeartbeatTimeout)
+			if (!now.Before(gap) && gap.After(c.ProbeChangedAt)) || s.reportGapAt.After(c.ProbeChangedAt) {
+				return true
+			}
+		}
+		return now.Sub(c.ProbeChangedAt) > window
+	}
 	if s == nil || s.reportAt.IsZero() || now.Sub(s.reportAt) >= h.cfg.HeartbeatTimeout {
 		return true
 	}
-	if st == nil || st.Result.At.IsZero() {
-		return !s.reportGapAt.IsZero() || now.Sub(c.CreatedAt) > h.checkResultWindow(c)
-	}
-	at := st.Result.At
-	if s.skew != nil && at.Before(s.reportAt) {
-		at = at.Add(-time.Duration(*s.skew * float64(time.Second)))
-	}
-	return at.Before(s.reportGapAt) || now.Sub(at) > h.checkResultWindow(c)
+	return st.resultTime().Before(s.reportGapAt) || now.Sub(st.resultTime()) > window
 }
 
 func (h *Hub) checkResultWindow(c store.Check) time.Duration {
@@ -329,11 +354,11 @@ func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 		}
 		name, ent := c.Name, "check:"+c.ID
 		st := h.checks.stateFor(c)
-		if h.checkStale(c, st, now) {
-			held[ent] = true
+		if st == nil || st.Result.At.IsZero() {
 			continue
 		}
-		if st == nil || st.Result.At.IsZero() {
+		if h.checkStale(c, st, now) {
+			held[ent] = true
 			continue
 		}
 		r := st.Result
@@ -492,7 +517,7 @@ func (h *Hub) checkJSONOf(ctx context.Context, c store.Check, admin bool, withSe
 	out.Stale = h.checkStale(c, st, h.now())
 	if st != nil && !st.Result.At.IsZero() {
 		r := st.Result
-		out.Last = &checkResultJSON{At: r.At.UTC().Format(time.RFC3339), OK: r.OK, LatencyMs: r.LatencyMs, Error: r.Error,
+		out.Last = &checkResultJSON{At: st.resultTime().UTC().Format(time.RFC3339), OK: r.OK, LatencyMs: r.LatencyMs, Error: r.Error,
 			StatusCode: r.StatusCode, Answer: r.Answer}
 		if r.CertNotAfter != nil {
 			out.Last.CertNotAfter = tsp(*r.CertNotAfter)
@@ -649,7 +674,8 @@ func (h *Hub) apiCreateCheck(w http.ResponseWriter, r *http.Request, p *principa
 	if err := decodeJSON(r, &req); err != nil {
 		return err
 	}
-	c := store.Check{ID: newID("ck_"), Enabled: true, CreatedBy: p.user.Username, CreatedAt: h.now()}
+	now := h.now()
+	c := store.Check{ID: newID("ck_"), Enabled: true, CreatedBy: p.user.Username, CreatedAt: now, ProbeChangedAt: now}
 	if req.Owner != nil {
 		c.Owner = strings.TrimSpace(*req.Owner)
 		if len(c.Owner) > 160 || !validEntity(c.Owner) {
@@ -692,12 +718,22 @@ func (h *Hub) apiPatchCheck(w http.ResponseWriter, r *http.Request, p *principal
 	if old.Kind != c.Kind || (c.Kind != store.CheckHeartbeat &&
 		(old.Runner != c.Runner || old.Enabled != c.Enabled || specOf(old) != specOf(c))) {
 		c.ProbeRev = newID("")
+		c.ProbeChangedAt = h.now()
+	} else if c.Kind == store.CheckHeartbeat && (old.IntervalS != c.IntervalS || old.GraceS != c.GraceS) {
+		c.ProbeChangedAt = h.now()
 	}
 	if err := h.store.PutCheck(r.Context(), c); err != nil {
 		return err
 	}
 	if err := h.loadChecks(r.Context()); err != nil {
 		return err
+	}
+	if old.ProbeRev != c.ProbeRev {
+		// Alerts for the previous target cannot say anything about the new one.
+		match := func(rule, entity string) bool {
+			return (rule == RuleCheckDown || rule == RuleCheckCert) && entity == "check:"+c.ID
+		}
+		h.applyAlerts(r.Context(), h.alerts.EvaluateChange("", nil, match, h.now()))
 	}
 	h.checksChanged()
 	h.auditReq(r, p, store.AuditRecord{Event: "check.updated", Outcome: "ok", Details: map[string]string{"check_id": c.ID, "name": c.Name}})

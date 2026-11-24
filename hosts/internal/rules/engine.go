@@ -127,6 +127,16 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 
 // EvaluateScoped checks whether an individual alert can resolve.
 func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(rule, entity string) bool, now time.Time) Changes {
+	return e.evaluate(server, conds, managed, false, now)
+}
+
+// EvaluateChange applies a settings change. Conditions that disappear in its
+// scope resolve right away because the settings changed, not the readings.
+func (e *Engine) EvaluateChange(server string, conds []Condition, managed func(rule, entity string) bool, now time.Time) Changes {
+	return e.evaluate(server, conds, managed, true, now)
+}
+
+func (e *Engine) evaluate(server string, conds []Condition, managed func(rule, entity string) bool, changed bool, now time.Time) Changes {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var ch Changes
@@ -141,6 +151,7 @@ func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(r
 		e.open[server] = open
 	}
 	off := func(rule, entity string) bool { return server != "" && e.Off != nil && e.Off(server, rule, entity) }
+	cleared := func(rule, entity string) bool { return off(rule, entity) || (changed && managed(rule, entity)) }
 	if server != "" && e.Off != nil {
 		kept := make([]Condition, 0, len(conds))
 		for _, c := range conds {
@@ -187,10 +198,11 @@ func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(r
 		}
 	}
 	for k, a := range open {
-		if _, ok := desired[k]; ok || a.Severity != SevCritical || off(a.Rule, a.Entity) {
+		if _, ok := desired[k]; ok || a.Severity != SevCritical || cleared(a.Rule, a.Entity) {
 			continue
 		}
-		if t := tr[k]; t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
+		// A settings edit leaves other open critical alerts in charge of their entity.
+		if t := tr[k]; (changed && !managed(a.Rule, a.Entity)) || (t != nil && now.Sub(t.lastTrue) < a.ClearAfter) {
 			critical[a.Rule[:dot(a.Rule)]+"|"+a.Entity] = true
 		}
 	}
@@ -253,7 +265,7 @@ func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(r
 			continue
 		}
 		t := tr[k]
-		if !suppressed[k] && !off(a.Rule, a.Entity) && t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
+		if !suppressed[k] && !cleared(a.Rule, a.Entity) && t != nil && now.Sub(t.lastTrue) < a.ClearAfter {
 			continue
 		}
 		r := now
