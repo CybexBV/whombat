@@ -172,6 +172,13 @@ export const ConfigSchema = z
      */
     WHOMBAT_SUPPORT: z.enum(['fake', 'fake-prod', 'off']).optional(),
     /**
+     * 1Password for the Vault's sync (docs/decisions/onepassword-sync.md): `real`, 1Password's SDK in its worker for
+     * every token; `fake`, Whombat's own stand-in 1Password in process answers tokens that start with `ops_dev_` (its
+     * made-up vaults and items) and the worker the rest. Unset: the stand-in in development, `real` in tests and
+     * production. Never `fake` in production.
+     */
+    WHOMBAT_ONEPASSWORD: z.enum(['real', 'fake']).optional(),
+    /**
      * The machine's boot id (docs/decisions/desk-display.md DK-75, desk-display-server.md DK-S73), for a runtime whose
      * sandbox hides `/proc/sys` (the appliance's `ProcSubset=pid`): systemd's `%b`. Unset (or not a boot id): read from
      * `/proc/sys/kernel/random/boot_id`; neither: an unlock that stays never outlives a restart.
@@ -650,6 +657,8 @@ export function productionIssues(_raw: Record<string, string>, cfg: Config): str
     issues.push('WHOMBAT_BLUETOOTH: the fake Bluetooth service is for development and tests');
   if (cfg.WHOMBAT_SUPPORT === 'fake' || cfg.WHOMBAT_SUPPORT === 'fake-prod')
     issues.push('WHOMBAT_SUPPORT: the fake support service is for development and tests');
+  if (cfg.WHOMBAT_ONEPASSWORD === 'fake')
+    issues.push('WHOMBAT_ONEPASSWORD: the stand-in 1Password is for development and tests');
   if (!cfg.WHOMBAT_CONTENT_KEY_FILE)
     issues.push("WHOMBAT_CONTENT_KEY_FILE: required in production (the box's content identity)");
   if (!cfg.WHOMBAT_MANAGER_SOCKET) issues.push('WHOMBAT_MANAGER_SOCKET: required in production');

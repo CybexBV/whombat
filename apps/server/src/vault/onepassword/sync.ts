@@ -11,6 +11,7 @@ import type { Services } from '../../services';
 import { runOnePasswordPass } from './pass';
 import { type OnePasswordApi, OnePasswordPool } from './pool';
 import { onePasswordConnections } from './store';
+import { onePasswordStandInOn, StandInOnePassword } from './testing/standin';
 
 const overrides = new WeakMap<Services, OnePasswordApi>();
 
@@ -23,6 +24,7 @@ export function useOnePasswordForTests(services: Services, api: OnePasswordApi):
 export class OnePasswordSync {
   readonly #services: Services;
   #pool: OnePasswordPool | null = null;
+  #standIn: StandInOnePassword | null = null;
   #timer: NodeJS.Timeout | null = null;
   #dueAt: number | null = null;
   #running: Promise<void> | null = null;
@@ -38,10 +40,24 @@ export class OnePasswordSync {
     this.#services = services;
   }
 
-  /** What the pass and the check talk to: the worker, or a test's stand-in. */
+  /**
+   * What the pass and the check talk to: the worker, a test's stand-in, or on a development box the stand-in 1Password
+   * for `ops_dev_` tokens in front of the worker (`testing/standin.ts`; never in production).
+   */
   get api(): OnePasswordApi {
     const override = overrides.get(this.#services);
     if (override) return override;
+    return this.standIn ?? this.#worker();
+  }
+
+  /** Development's stand-in 1Password, or null where it isn't on (always in production). */
+  get standIn(): StandInOnePassword | null {
+    if (!onePasswordStandInOn(this.#services.config)) return null;
+    this.#standIn ??= new StandInOnePassword(() => this.#worker());
+    return this.#standIn;
+  }
+
+  #worker(): OnePasswordPool {
     this.#pool ??= new OnePasswordPool({ log: this.#services.log });
     return this.#pool;
   }
