@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -121,6 +122,11 @@ func (e *Engine) Load(alerts []Alert) {
 // alerts whose rule satisfies managed can be resolved by this call (so the
 // report rules and the heartbeat rule can be evaluated independently).
 func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule string) bool, now time.Time) Changes {
+	return e.EvaluateScoped(server, conds, func(rule, _ string) bool { return managed(rule) }, now)
+}
+
+// EvaluateScoped checks whether an individual alert can resolve.
+func (e *Engine) EvaluateScoped(server string, conds []Condition, managed func(rule, entity string) bool, now time.Time) Changes {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var ch Changes
@@ -243,7 +249,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 	sort.Strings(okeys)
 	for _, k := range okeys {
 		a := open[k]
-		if _, ok := desired[k]; ok || !managed(a.Rule) {
+		if _, ok := desired[k]; ok || !managed(a.Rule, a.Entity) {
 			continue
 		}
 		t := tr[k]
@@ -264,7 +270,7 @@ func (e *Engine) Evaluate(server string, conds []Condition, managed func(rule st
 		if c := open[k]; c != nil && now.Sub(t.lastTrue) < c.ClearAfter {
 			continue
 		}
-		if r := ruleOfKey(k); managed(r) {
+		if rule, entity, _ := strings.Cut(k, ":"); managed(rule, entity) {
 			delete(tr, k)
 		}
 	}
@@ -278,15 +284,6 @@ func dot(rule string) int {
 		}
 	}
 	return len(rule)
-}
-
-func ruleOfKey(k string) string {
-	for i := 0; i < len(k); i++ {
-		if k[i] == ':' {
-			return k[:i]
-		}
-	}
-	return k
 }
 
 // ResolveOff resolves at once the server's open alerts that Off switches

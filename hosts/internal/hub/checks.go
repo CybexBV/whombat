@@ -32,8 +32,9 @@ const (
 
 // checkState is a check's latest result and how long its state holds.
 type checkState struct {
-	Result proto.CheckResult `json:"result"`
-	Fails  int               `json:"fails"` // consecutive failures
+	Result   proto.CheckResult `json:"result"`
+	ProbeRev string            `json:"probe_rev,omitempty"`
+	Fails    int               `json:"fails"` // consecutive failures
 	// Heartbeat checks.
 	LastPing *time.Time `json:"last_ping,omitempty"` // last successful ping
 	Started  *time.Time `json:"started,omitempty"`   // the job said it started
@@ -41,6 +42,7 @@ type checkState struct {
 }
 
 type checkSet struct {
+	config sync.Mutex
 	mu     sync.RWMutex
 	list   []store.Check
 	state  map[string]*checkState
@@ -52,16 +54,18 @@ func (h *Hub) loadChecks(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	h.checks.mu.Lock()
+	defer h.checks.mu.Unlock()
+	if h.checks.state != nil {
+		h.checks.list = list
+		return nil
+	}
 	res, since, err := h.store.CheckStates(ctx)
 	if err != nil {
 		return err
 	}
-	h.checks.mu.Lock()
-	defer h.checks.mu.Unlock()
 	h.checks.list = list
-	if h.checks.state == nil {
-		h.checks.state = map[string]*checkState{}
-	}
+	h.checks.state = map[string]*checkState{}
 	for id, b := range res {
 		var st checkState
 		if json.Unmarshal(b, &st) == nil {
@@ -72,9 +76,26 @@ func (h *Hub) loadChecks(ctx context.Context) error {
 	return nil
 }
 
+// A changed spec gets a new runner ID. A report with the previous result
+// may still be in flight or waiting in the agent's report cache.
+func probeID(c store.Check) string {
+	if c.ProbeRev == "" {
+		return c.ID
+	}
+	return c.ID + "." + c.ProbeRev
+}
+
+// stateFor is called with the check lock held.
+func (s *checkSet) stateFor(c store.Check) *checkState {
+	if st := s.state[c.ID]; st != nil && st.ProbeRev == c.ProbeRev {
+		return st
+	}
+	return nil
+}
+
 func specOf(c store.Check) proto.CheckSpec {
 	o := c.Options
-	return proto.CheckSpec{ID: c.ID, Kind: c.Kind, Target: c.Target, IntervalS: c.IntervalS, TimeoutS: c.TimeoutS,
+	return proto.CheckSpec{ID: probeID(c), Kind: c.Kind, Target: c.Target, IntervalS: c.IntervalS, TimeoutS: c.TimeoutS,
 		ExpectStatus: o.ExpectStatus, Keyword: o.Keyword, TLS: o.TLS, InsecureTLS: o.InsecureTLS, DNSType: o.DNSType,
 		DNSServer: o.DNSServer, Expect: o.Expect}
 }
@@ -142,7 +163,12 @@ func (h *Hub) runChecks(ctx context.Context) {
 func (h *Hub) checkByID(id string) (store.Check, bool) {
 	h.checks.mu.RLock()
 	defer h.checks.mu.RUnlock()
-	for _, c := range h.checks.list {
+	return h.checks.byID(id)
+}
+
+// byID is called with the check lock held.
+func (s *checkSet) byID(id string) (store.Check, bool) {
+	for _, c := range s.list {
 		if c.ID == id {
 			return c, true
 		}
@@ -154,10 +180,12 @@ func (h *Hub) checkByID(id string) (store.Check, bool) {
 // report carried it). Results for checks the runner does not own are
 // ignored; repeated results (same time) are recorded once.
 func (h *Hub) checkResult(ctx context.Context, runner string, r proto.CheckResult) {
-	c, ok := h.checkByID(r.ID)
-	if !ok || c.Runner != runner || c.Kind == store.CheckHeartbeat || !c.Enabled {
+	id, _, _ := strings.Cut(r.ID, ".")
+	c, ok := h.checkByID(id)
+	if !ok || r.ID != probeID(c) || c.Runner != runner || c.Kind == store.CheckHeartbeat || !c.Enabled {
 		return
 	}
+	r.ID = id
 	r.Error = cleanText(r.Error, 300)
 	if len(r.Answer) > 8 {
 		r.Answer = r.Answer[:8]
@@ -176,9 +204,14 @@ func (h *Hub) checkResult(ctx context.Context, runner string, r proto.CheckResul
 
 func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResult, mutate func(*checkState)) {
 	h.checks.mu.Lock()
-	st := h.checks.state[c.ID]
+	current, exists := h.checks.byID(c.ID)
+	if !exists || current.ProbeRev != c.ProbeRev || !current.Enabled {
+		h.checks.mu.Unlock()
+		return
+	}
+	st := h.checks.stateFor(c)
 	if st == nil {
-		st = &checkState{}
+		st = &checkState{ProbeRev: c.ProbeRev}
 		h.checks.state[c.ID] = st
 	}
 	if !r.At.IsZero() && !st.Result.At.IsZero() && !r.At.After(st.Result.At) && mutate == nil {
@@ -186,6 +219,10 @@ func (h *Hub) recordCheck(ctx context.Context, c store.Check, r proto.CheckResul
 		return
 	}
 	wasOK, had := st.Result.OK, !st.Result.At.IsZero()
+	if c.Runner != "hub" && had && (r.At.Sub(st.Result.At) > h.checkResultWindow(c) || h.checkStale(c, st, h.now())) {
+		had = false
+		st.Fails = 0
+	}
 	st.Result = r
 	if r.OK {
 		st.Fails = 0
@@ -235,7 +272,7 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 		if c.Kind != store.CheckHeartbeat || !c.Enabled {
 			continue
 		}
-		st := h.checks.state[c.ID]
+		st := h.checks.stateFor(c)
 		last, msg := c.CreatedAt, "No ping since the check was created"
 		if st != nil && st.LastPing != nil {
 			last, msg = *st.LastPing, "No ping for "+rules.FormatDuration(now.Sub(*st.LastPing))
@@ -254,17 +291,51 @@ func (h *Hub) heartbeatChecks(ctx context.Context) {
 	}
 }
 
+// checkStale uses report freshness for the runner and allows for the probe's
+// interval, jitter, timeout and time to send the result.
+func (h *Hub) checkStale(c store.Check, st *checkState, now time.Time) bool {
+	if !c.Enabled || c.Runner == "hub" || c.Kind == store.CheckHeartbeat {
+		return false
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	s := h.servers[c.Runner]
+	if s == nil || s.reportAt.IsZero() || now.Sub(s.reportAt) >= h.cfg.HeartbeatTimeout {
+		return true
+	}
+	if st == nil || st.Result.At.IsZero() {
+		return !s.reportGapAt.IsZero() || now.Sub(c.CreatedAt) > h.checkResultWindow(c)
+	}
+	at := st.Result.At
+	if s.skew != nil && at.Before(s.reportAt) {
+		at = at.Add(-time.Duration(*s.skew * float64(time.Second)))
+	}
+	return at.Before(s.reportGapAt) || now.Sub(at) > h.checkResultWindow(c)
+}
+
+func (h *Hub) checkResultWindow(c store.Check) time.Duration {
+	return time.Duration(c.IntervalS+c.IntervalS/20+c.TimeoutS)*time.Second + h.cfg.HeartbeatTimeout
+}
+
 // evaluateCheckAlerts turns the check states into alerts (hub-level).
 func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 	now := h.now()
 	var conds []rules.Condition
+	held := map[string]bool{}
 	h.checks.mu.RLock()
 	for _, c := range h.checks.list {
-		st := h.checks.state[c.ID]
-		if !c.Enabled || st == nil || st.Result.At.IsZero() {
+		if !c.Enabled || strings.HasPrefix(c.Owner, "whombat:connection:") {
 			continue
 		}
 		name, ent := c.Name, "check:"+c.ID
+		st := h.checks.stateFor(c)
+		if h.checkStale(c, st, now) {
+			held[ent] = true
+			continue
+		}
+		if st == nil || st.Result.At.IsZero() {
+			continue
+		}
 		r := st.Result
 		failing := !r.OK && (st.Fails >= 2 || c.Kind == store.CheckHeartbeat)
 		if failing {
@@ -298,7 +369,8 @@ func (h *Hub) evaluateCheckAlerts(ctx context.Context) {
 		}
 	}
 	h.checks.mu.RUnlock()
-	h.applyAlerts(ctx, h.alerts.Evaluate("", conds, func(r string) bool { return strings.HasPrefix(r, "check.") }, now))
+	managed := func(rule, entity string) bool { return strings.HasPrefix(rule, "check.") && !held[entity] }
+	h.applyAlerts(ctx, h.alerts.EvaluateScoped("", conds, managed, now))
 }
 
 // ---- heartbeat pings --------------------------------------------------------------
@@ -338,10 +410,10 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 	case "", "success", "0":
 	case "start":
 		h.checks.mu.Lock()
-		if st := h.checks.state[c.ID]; st != nil {
+		if st := h.checks.stateFor(c); st != nil {
 			st.Started = &now
 		} else {
-			h.checks.state[c.ID] = &checkState{Started: &now}
+			h.checks.state[c.ID] = &checkState{Started: &now, ProbeRev: c.ProbeRev}
 		}
 		h.checks.mu.Unlock()
 		fmt.Fprintln(w, "ok")
@@ -359,7 +431,7 @@ func (h *Hub) servePing(w http.ResponseWriter, r *http.Request) {
 	res := proto.CheckResult{ID: c.ID, At: now, OK: ok, Error: msg}
 	h.checks.mu.RLock()
 	started := (*time.Time)(nil)
-	if st := h.checks.state[c.ID]; st != nil && st.Started != nil {
+	if st := h.checks.stateFor(c); st != nil && st.Started != nil {
 		started = st.Started
 	}
 	h.checks.mu.RUnlock()
@@ -396,6 +468,8 @@ type checkJSON struct {
 	Uptime24h  *float64           `json:"uptime_24h"`
 	Latency24h []*float64         `json:"latency_24h"`
 	PingURL    *string            `json:"ping_url"` // heartbeat checks, admins only
+	Owner      string             `json:"owner,omitempty"`
+	Stale      bool               `json:"stale"`
 	CreatedBy  string             `json:"created_by"`
 }
 
@@ -411,10 +485,12 @@ type checkResultJSON struct {
 
 func (h *Hub) checkJSONOf(ctx context.Context, c store.Check, admin bool, withSeries bool) checkJSON {
 	out := checkJSON{ID: c.ID, Name: c.Name, Kind: c.Kind, Target: c.Target, Runner: c.Runner, IntervalS: c.IntervalS,
-		TimeoutS: c.TimeoutS, GraceS: c.GraceS, Options: c.Options, Enabled: c.Enabled, Status: "pending", CreatedBy: c.CreatedBy,
+		TimeoutS: c.TimeoutS, GraceS: c.GraceS, Options: c.Options, Enabled: c.Enabled, Status: "pending", Owner: c.Owner, CreatedBy: c.CreatedBy,
 		Latency24h: []*float64{}}
 	h.checks.mu.RLock()
-	if st := h.checks.state[c.ID]; st != nil && !st.Result.At.IsZero() {
+	st := h.checks.stateFor(c)
+	out.Stale = h.checkStale(c, st, h.now())
+	if st != nil && !st.Result.At.IsZero() {
 		r := st.Result
 		out.Last = &checkResultJSON{At: r.At.UTC().Format(time.RFC3339), OK: r.OK, LatencyMs: r.LatencyMs, Error: r.Error,
 			StatusCode: r.StatusCode, Answer: r.Answer}
@@ -435,6 +511,8 @@ func (h *Hub) checkJSONOf(ctx context.Context, c store.Check, admin bool, withSe
 	h.checks.mu.RUnlock()
 	if !c.Enabled {
 		out.Status = "disabled"
+	} else if out.Stale {
+		out.Status = "pending"
 	}
 	if admin && c.Kind == store.CheckHeartbeat && c.Token != "" {
 		u := h.cfg.PublicURL
@@ -475,7 +553,17 @@ func (h *Hub) apiChecks(w http.ResponseWriter, r *http.Request, p *principal) er
 	return nil
 }
 
+func (h *Hub) apiGetCheck(w http.ResponseWriter, r *http.Request, p *principal) error {
+	c, ok := h.checkByID(r.PathValue("id"))
+	if !ok {
+		return errNotFound
+	}
+	writeJSON(w, r, http.StatusOK, h.checkJSONOf(r.Context(), c, p.rank() >= store.RoleRank(admin), false))
+	return nil
+}
+
 type checkReq struct {
+	Owner     *string             `json:"owner"`
 	Name      *string             `json:"name"`
 	Kind      *string             `json:"kind"`
 	Target    *string             `json:"target"`
@@ -555,11 +643,19 @@ func (h *Hub) applyCheck(c *store.Check, req checkReq) error {
 }
 
 func (h *Hub) apiCreateCheck(w http.ResponseWriter, r *http.Request, p *principal) error {
+	h.checks.config.Lock()
+	defer h.checks.config.Unlock()
 	var req checkReq
 	if err := decodeJSON(r, &req); err != nil {
 		return err
 	}
 	c := store.Check{ID: newID("ck_"), Enabled: true, CreatedBy: p.user.Username, CreatedAt: h.now()}
+	if req.Owner != nil {
+		c.Owner = strings.TrimSpace(*req.Owner)
+		if len(c.Owner) > 160 || !validEntity(c.Owner) {
+			return apiErr(http.StatusBadRequest, "invalid_owner", "Give the check a valid owner.")
+		}
+	}
 	if err := h.applyCheck(&c, req); err != nil {
 		return err
 	}
@@ -576,7 +672,9 @@ func (h *Hub) apiCreateCheck(w http.ResponseWriter, r *http.Request, p *principa
 }
 
 func (h *Hub) apiPatchCheck(w http.ResponseWriter, r *http.Request, p *principal) error {
-	c, ok := h.checkByID(r.PathValue("id"))
+	h.checks.config.Lock()
+	defer h.checks.config.Unlock()
+	old, ok := h.checkByID(r.PathValue("id"))
 	if !ok {
 		return errNotFound
 	}
@@ -584,8 +682,16 @@ func (h *Hub) apiPatchCheck(w http.ResponseWriter, r *http.Request, p *principal
 	if err := decodeJSON(r, &req); err != nil {
 		return err
 	}
+	if req.Owner != nil {
+		return apiErr(http.StatusBadRequest, "invalid_owner", "A check’s owner is set when it is created.")
+	}
+	c := old
 	if err := h.applyCheck(&c, req); err != nil {
 		return err
+	}
+	if old.Kind != c.Kind || (c.Kind != store.CheckHeartbeat &&
+		(old.Runner != c.Runner || old.Enabled != c.Enabled || specOf(old) != specOf(c))) {
+		c.ProbeRev = newID("")
 	}
 	if err := h.store.PutCheck(r.Context(), c); err != nil {
 		return err
@@ -600,6 +706,8 @@ func (h *Hub) apiPatchCheck(w http.ResponseWriter, r *http.Request, p *principal
 }
 
 func (h *Hub) apiDeleteCheck(w http.ResponseWriter, r *http.Request, p *principal) error {
+	h.checks.config.Lock()
+	defer h.checks.config.Unlock()
 	id := r.PathValue("id")
 	c, ok := h.checkByID(id)
 	if !ok {

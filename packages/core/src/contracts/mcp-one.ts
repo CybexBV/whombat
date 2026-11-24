@@ -13,7 +13,13 @@
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';
 import { WIDGET_REFRESH_MAX_S, WIDGET_REFRESH_MIN_S, WidgetSource } from '../domain/home.js';
-import { NoticeCheck, NoticeNature, NoticeSubjectId } from '../domain/quiet.js';
+import {
+  NoticeCheck,
+  NoticeNature,
+  NoticeSubjectId,
+  ThingWatchLimit,
+  WatchLimitValue,
+} from '../domain/quiet.js';
 import { DeviceSkillProposalId, WidgetId } from '../ids.js';
 import { commitOutcome } from './errors.js';
 import type { McpTool } from './mcp.js';
@@ -57,6 +63,7 @@ export const AgentWatchCheck = z.object({
   on: z.boolean(),
   /** Items (or the whole thing) left out, ignored or snoozed, in plain words: “Garage AP: not watched”. */
   except: z.array(z.string()).optional(),
+  limit: ThingWatchLimit.optional(),
 });
 export type AgentWatchCheck = z.infer<typeof AgentWatchCheck>;
 
@@ -127,7 +134,7 @@ export const ONE_MCP_TOOLS = {
     name: 'watch_checks',
     title: 'What Whombat watches',
     description:
-      'See what Whombat watches on a connection, server or device, or switch one check off or on. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle. Without watched it only lists the checks. With check and watched: false Whombat stops watching it, for the whole thing or, with subject (an item’s id as Whombat gave it) and subjectName, for that item, until someone turns it on again; watched: true turns it back on. Switch one off only when the person told you to in this conversation (it is on purpose, they don’t want to hear about it) or pressed your step for it; when something only looks deliberate, ask them or offer it as your step. It shows in what you did, with Undo.',
+      'See what Whombat watches on a connection, server or device, or switch one check off or on. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle. Without watched or limit it lists the checks. For a server check that shows a limit, use check and limit to set it in the returned unit, or null to clear it. Include subject and subjectName to change only that item. Change a limit only when the person asked you to in this conversation or pressed your proposed step for it. With check and watched: false Whombat stops watching it, for the whole thing or, with subject (an item’s id as Whombat gave it) and subjectName, for that item, until someone turns it on again; watched: true turns it back on. Switch one off only when the person told you to in this conversation (it is on purpose, they don’t want to hear about it) or pressed your step for it; when something only looks deliberate, ask them or offer it as your step. It shows in what you did, with Undo.',
     input: z.object({
       thing: z.string().trim().min(1).max(220),
       check: NoticeCheck.optional(),
@@ -135,6 +142,7 @@ export const ONE_MCP_TOOLS = {
       /** The item's name as people know it (“Garage AP”), with `subject`. */
       subjectName: z.string().trim().min(1).max(80).optional(),
       watched: z.boolean().optional(),
+      limit: WatchLimitValue.nullable().optional(),
     }),
     output: commitOutcome({ checks: z.array(AgentWatchCheck) }),
     requiredKey: null,

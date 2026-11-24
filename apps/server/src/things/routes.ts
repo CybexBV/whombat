@@ -4,9 +4,10 @@
  * and Ignore, Remind me tomorrow and What Whombat watches. The managed dispatcher runs
  * these same handlers.
  */
-import { api } from '@whombat/core';
+import { api, parseThingId } from '@whombat/core';
 import { viewerOf } from '../connections/routes';
-import { forbidden } from '../lib/errors';
+import { setServerWatchLimit } from '../hosts/quiet';
+import { badRequest, forbidden } from '../lib/errors';
 import { type RouteDef, route } from '../routes/define';
 import { runThingAction } from './actions';
 import { thingPage } from './page';
@@ -71,6 +72,21 @@ export const thingRoutes: RouteDef[] = [
       ctx.access.burrow.timeZone,
     ),
   ),
+  route(api.things.setWatchLimit, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person')
+      throw forbidden('Only you can change a server’s alert limit.');
+    const thing = parseThingId(thingParam(ctx.params.thing));
+    if (thing?.kind !== 'server') throw badRequest('Choose a server to change its alert limit.');
+    return setServerWatchLimit(
+      ctx.services,
+      {
+        burrowId: ctx.access.burrow.id,
+        actorId: ctx.access.principal.id,
+        serverId: thing.id,
+      },
+      ctx.body,
+    );
+  }),
   route(api.connections.setRunsOn, async (ctx) =>
     setRunsOn(ctx.services, await viewerOf(ctx), ctx.params.connectionId, ctx.body),
   ),

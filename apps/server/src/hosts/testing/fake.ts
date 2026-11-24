@@ -94,6 +94,7 @@ const FAKE_SERVER_RULES = new Set([
   'net.link_down',
   'host.oom',
   'guest.restart_loop',
+  'guest.stopped',
 ]);
 /**
  * A server's switches as the hub works them out for the caller (hosts `model.Perms`; task-feedback.md TF-02):
@@ -156,6 +157,7 @@ export class FakeHostsService implements ManageHost {
   }
   /** Rules switched off per server (`GET`/`PUT /servers/{id}/watch`, hosts HS-194…HS-196). */
   readonly watchOffs = new Map<string, Json[]>();
+  readonly watchLimits = new Map<string, Json[]>();
   /** Each server's own note while it warns (HS-190: only while an alert asks for attention). */
   readonly #notes = new Map<string, unknown>();
   /** Each detail's banner while its alert asks for attention (the hub's banner is for attention alerts only). */
@@ -646,6 +648,15 @@ export class FakeHostsService implements ManageHost {
       },
       { method: 'GET', path: `${api}/checks`, handler: () => ok(this.checks) },
       { method: 'POST', path: `${api}/checks`, handler: (r) => this.#addCheck(r) },
+      {
+        method: 'GET',
+        path: `${api}/checks/*`,
+        handler: (r, [id]) => {
+          const check = this.checks.find((c) => c.id === id);
+          if (!check) return problem(404, 'not_found', 'Not found.');
+          return ok(r.role === 'admin' ? check : { ...check, ping_url: null });
+        },
+      },
       {
         method: 'DELETE',
         path: `${api}/checks/*`,
@@ -1286,7 +1297,7 @@ export class FakeHostsService implements ManageHost {
         String(a.rule).localeCompare(String(b.rule)) ||
         String(a.entity ?? '').localeCompare(String(b.entity ?? '')),
     );
-    return ok({ rules: rows });
+    return ok({ rules: rows, limits: this.watchLimits.get(serverId) ?? [] });
   }
 
   /** `PUT /servers/{id}/watch` (operator): one rule off or on again; an open alert of it resolves (HS-196). */
@@ -1296,8 +1307,24 @@ export class FakeHostsService implements ManageHost {
     const body = (r.body ?? {}) as Json;
     const rule = String(body.rule ?? '');
     if (!FAKE_SERVER_RULES.has(rule)) return problem(400, 'invalid_rule', 'Not a server rule.');
-    if (typeof body.off !== 'boolean') return problem(400, 'invalid_value', 'Say off: true or false.');
     const entity = typeof body.entity === 'string' ? body.entity : '';
+    if (Object.hasOwn(body, 'limit')) {
+      const limits = this.watchLimits.get(serverId) ?? [];
+      const index = limits.findIndex((l) => l.rule === rule && (l.entity ?? '') === entity);
+      if (Object.hasOwn(body, 'expected_limit') && (limits[index]?.value ?? null) !== body.expected_limit)
+        return problem(409, 'limit_changed', 'The limit changed meanwhile.');
+      if (index >= 0) limits.splice(index, 1);
+      if (body.limit !== null) limits.push({ rule, ...(entity ? { entity } : {}), value: body.limit });
+      this.watchLimits.set(serverId, limits);
+      this.emit('watch.changed', {
+        server: serverId,
+        rule,
+        ...(entity ? { entity } : {}),
+        limit: body.limit,
+      });
+      return this.#watch(serverId);
+    }
+    if (typeof body.off !== 'boolean') return problem(400, 'invalid_value', 'Say off: true or false.');
     const rows = this.watchOffs.get(serverId) ?? [];
     const at = rows.findIndex((o) => o.rule === rule && (o.entity ?? '') === entity);
     if (body.off && at < 0) {
@@ -1354,6 +1381,8 @@ export class FakeHostsService implements ManageHost {
       options: body.options ?? {},
       enabled: body.enabled ?? true,
       status: 'pending',
+      stale: false,
+      ...(typeof body.owner === 'string' ? { owner: body.owner } : {}),
       since: null,
       last: null,
       last_ping: null,

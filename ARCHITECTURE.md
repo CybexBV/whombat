@@ -1403,8 +1403,13 @@ Setup and operation: `docs/github.md`.
   name ([accounts.md](docs/decisions/accounts.md)).
 - **Servers** (`apps/server/src/hosts/`): the hosts service (`hosts/`, the program `whombat-hosts`) owns the agents on monitored servers, their
   history, alerts and consoles; the server talks to it over its socket, signs every change the person makes, relays
-  consoles through the session, and gives the agent the built-in Servers connection, which acts without asking
-  unless the person sets a server to ask before risky actions; powering off, restarting or updating the server this
+  consoles through the session. Probe checks report when their agent stops sending fresh results and keep
+  their previous result's time. The hosts service leaves a stale check's alerts alone until it sees a fresh result.
+  Connection-owned checks use the connection's alerts. The hub alerts when an Unraid Docker container set to start
+  automatically runs out of memory or an autostart libvirt VM crashes and stays stopped. Stops the hub requested
+  stay quiet. The server gives the agent the built-in Servers
+  connection, which acts without asking unless the person sets a server to ask before risky actions. Powering off,
+  restarting or updating the server this
   Whombat runs on always asks. A server's name, which the person can give it (“Attic server”), is Whombat's own
   (`server_names`, `hosts/names.ts`): read into memory with every fleet read, so every word a person reads uses it
   (`serverLabel`), while links, the hosts service and the tools keep the id and also find the server by the name
@@ -1511,6 +1516,9 @@ Setup and operation: `docs/github.md`.
   An Ignore ends when its line gets worse or is gone for 12 passes in a row (`FIXED_PASSES`, about an hour). The
   assistant reads and switches checks with `watch_checks` (`things/quiet/agent.ts`), switching only when the person's own
   message started the turn; the switch is the person's, recorded with the assistant on it (`things.watch`) and an Undo.
+  Each server can set or clear alert limits for disk use, inodes, SSD wear and temperatures
+  (`things.setWatchLimit` or `watch_checks` on the person's word). An item can have its own limit. The hosts service
+  keeps the limits with the server's watch settings, and Whombat signs the change with Undo.
   Inbox items carry the check behind them (`watch`) for *Stop watching this*.
   [on-purpose.md](docs/decisions/on-purpose.md)
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public

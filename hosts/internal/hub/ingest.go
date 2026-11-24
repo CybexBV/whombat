@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"regexp"
+	"strings"
 	"time"
 
 	"rackoon/internal/hub/model"
@@ -73,10 +74,13 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		return
 	}
 	prev := s.report
+	if !s.reportAt.IsZero() && now.Sub(s.reportAt) >= h.cfg.HeartbeatTimeout {
+		s.reportGapAt = s.reportAt.Add(h.cfg.HeartbeatTimeout)
+	}
 	s.report, s.reportAt, s.dirty = r, now, true
 	s.memo.Observe(r, now)
 	s.macHelperOff = model.HelperOffSince(s.macHelperOff, r, now)
-	conds := append(rules.HostConditions(r), s.memo.Conditions(now)...)
+	conds := append(rules.HostConditionsWithLimits(r, h.watch.limitsFor(id)), s.memo.Conditions(now)...)
 	for _, v := range r.Volumes() {
 		if days, ok := s.forecast[v.Entity]; ok {
 			if c, ok := rules.FullSoonCondition(v.Entity, v.Label, days); ok {
@@ -90,10 +94,30 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 	if v := cleanText(r.Agent.Version, 32); v != "" {
 		s.meta.AgentVersion = v
 	}
+	dockerSeen := r.Docker != nil && r.Docker.Error == ""
+	libvirtSeen := r.Libvirt != nil && r.Libvirt.Error == ""
 	seen := map[string]bool{}
+	unreadStops := map[string]bool{}
 	for _, g := range r.AllGuests() {
 		gid := model.GuestID(g.Platform, g.ID)
 		seen[gid] = true
+		if guestStopUnread(g) {
+			unreadStops[g.Platform+"/"+g.ID] = true
+		}
+		switch g.Platform {
+		case proto.PlatformDocker:
+			if dockerSeen {
+				if c, ok := rules.GuestStoppedCondition(g, false); ok && !s.plannedStop(gid, *g.FinishedAt) {
+					conds = append(conds, c)
+				}
+			}
+		case proto.PlatformLibvirt:
+			if libvirtSeen {
+				if c, ok := s.libvirtStoppedCondition(g, gid, now); ok {
+					conds = append(conds, c)
+				}
+			}
+		}
 		if old, ok := s.guestStates[gid]; ok && old != g.State {
 			changes = append(changes, change{gid, g.State})
 			if g.State == proto.StateStopped {
@@ -106,6 +130,20 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 		if !seen[gid] {
 			delete(s.guestStates, gid)
 			stopped = append(stopped, gid)
+		}
+	}
+	for gid := range s.guestStops {
+		platform, _, _ := strings.Cut(gid, ":")
+		observed := (platform == proto.PlatformDocker && dockerSeen) || (platform == proto.PlatformLibvirt && libvirtSeen)
+		if observed && !seen[gid] {
+			delete(s.guestStops, gid)
+		}
+	}
+	if libvirtSeen {
+		for gid := range s.libvirtCrashes {
+			if !seen[gid] {
+				delete(s.libvirtCrashes, gid)
+			}
 		}
 	}
 	var policyChanged bool
@@ -130,7 +168,16 @@ func (h *Hub) ingestReport(ctx context.Context, id string, r *proto.Report) {
 				"host_power": onOff(pol.HostPower), "update": onOff(pol.Update), "manage": onOff(pol.Manage)}})
 	}
 
-	h.applyAlerts(ctx, h.alerts.Evaluate(id, conds, notHeartbeat, now))
+	managed := func(rule, entity string) bool {
+		if rule != rules.RuleGuestStopped {
+			return notHeartbeat(rule)
+		}
+		if strings.HasPrefix(entity, "libvirt/") {
+			return libvirtSeen && !unreadStops[entity]
+		}
+		return dockerSeen && !unreadStops[entity]
+	}
+	h.applyAlerts(ctx, h.alerts.EvaluateScoped(id, conds, managed, now))
 	for _, cr := range r.Checks {
 		h.checkResult(ctx, id, cr)
 	}
@@ -225,7 +272,15 @@ func (h *Hub) ingestEvent(id string, ev proto.Event) {
 			h.mu.Unlock()
 			return
 		}
-		if old, known := s.guestStates[gid]; !known || old == state {
+		old, known := s.guestStates[gid]
+		if !known {
+			h.mu.Unlock()
+			return
+		}
+		if ev.Platform == proto.PlatformLibvirt {
+			s.noteLibvirtGuestEvent(gid, ev, h.now())
+		}
+		if old == state {
 			h.mu.Unlock()
 			return
 		}

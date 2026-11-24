@@ -404,4 +404,18 @@ CREATE TABLE server_disk_usage (
 	PRIMARY KEY (server_id, mount)
 ) WITHOUT ROWID
 `,
+	// 15: check ownership and per-server alert limits.
+	`
+ALTER TABLE checks ADD COLUMN owner TEXT NOT NULL DEFAULT ''
+--;
+ALTER TABLE checks ADD COLUMN probe_rev TEXT NOT NULL DEFAULT ''
+--;
+CREATE TABLE watch_limits (
+	server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+	rule      TEXT NOT NULL,
+	entity    TEXT NOT NULL DEFAULT '',
+	value     REAL NOT NULL,
+	PRIMARY KEY (server_id, rule, entity)
+) WITHOUT ROWID
+`,
 }

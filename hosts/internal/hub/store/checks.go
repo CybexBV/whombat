@@ -24,6 +24,8 @@ type Check struct {
 	Token     string // heartbeat: the secret in the ping URL
 	GraceS    int    // heartbeat: tolerated lateness
 	Enabled   bool
+	ProbeRev  string // changes when a probe needs new results
+	Owner     string // optional owner assigned when the check is created
 	CreatedBy string
 	CreatedAt time.Time
 }
@@ -40,14 +42,14 @@ type CheckOptions struct {
 	CertWarnDays int    `json:"cert_warn_days,omitempty"` // default 14
 }
 
-const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at`
+const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at, owner, probe_rev`
 
 func scanCheck(row interface{ Scan(...any) error }) (Check, error) {
 	var c Check
 	var opts string
 	var ca int64
 	err := row.Scan(&c.ID, &c.Name, &c.Kind, &c.Target, &c.Runner, &c.IntervalS, &c.TimeoutS, &opts, &c.Token, &c.GraceS,
-		&c.Enabled, &c.CreatedBy, &ca)
+		&c.Enabled, &c.CreatedBy, &ca, &c.Owner, &c.ProbeRev)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -79,12 +81,12 @@ func (s *Store) ListChecks(ctx context.Context) ([]Check, error) {
 // PutCheck inserts or replaces a check.
 func (s *Store) PutCheck(ctx context.Context, c Check) error {
 	opts, _ := json.Marshal(c.Options)
-	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, target = excluded.target,
 		runner = excluded.runner, interval_s = excluded.interval_s, timeout_s = excluded.timeout_s, options = excluded.options,
-		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled`,
+		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled, probe_rev = excluded.probe_rev`,
 		c.ID, c.Name, c.Kind, c.Target, c.Runner, c.IntervalS, c.TimeoutS, string(opts), c.Token, c.GraceS, b2i(c.Enabled),
-		c.CreatedBy, ms(c.CreatedAt))
+		c.CreatedBy, ms(c.CreatedAt), c.Owner, c.ProbeRev)
 	return err
 }
 

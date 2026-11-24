@@ -78,3 +78,40 @@ func (s *Store) DeleteWatchOff(ctx context.Context, server, rule, entity string)
 	n, _ := res.RowsAffected()
 	return n > 0, nil
 }
+
+// WatchLimit replaces a rule's default threshold for a server or one entity.
+type WatchLimit struct {
+	Server string
+	Rule   string
+	Entity string
+	Value  float64
+}
+
+func (s *Store) ListWatchLimits(ctx context.Context, server string) ([]WatchLimit, error) {
+	rows, err := s.r.QueryContext(ctx, `SELECT server_id, rule, entity, value FROM watch_limits
+		WHERE ? = '' OR server_id = ? ORDER BY server_id, rule, entity`, server, server)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WatchLimit
+	for rows.Next() {
+		var w WatchLimit
+		if err := rows.Scan(&w.Server, &w.Rule, &w.Entity, &w.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) PutWatchLimit(ctx context.Context, w WatchLimit) error {
+	_, err := s.w.ExecContext(ctx, `INSERT INTO watch_limits(server_id, rule, entity, value) VALUES (?, ?, ?, ?)
+		ON CONFLICT(server_id, rule, entity) DO UPDATE SET value = excluded.value`, w.Server, w.Rule, w.Entity, w.Value)
+	return err
+}
+
+func (s *Store) DeleteWatchLimit(ctx context.Context, server, rule, entity string) error {
+	_, err := s.w.ExecContext(ctx, `DELETE FROM watch_limits WHERE server_id = ? AND rule = ? AND entity = ?`, server, rule, entity)
+	return err
+}

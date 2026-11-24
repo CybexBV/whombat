@@ -176,6 +176,7 @@ func (h *Hub) dataRoutes(handle func(pattern, role string, f handlerFunc)) {
 	handle("POST /api/v1/servers/{id}/exec", viewer, h.apiExec)
 	handle("POST /api/v1/servers/{id}/screen", viewer, h.apiScreen)
 	handle("GET /api/v1/checks", viewer, h.apiChecks)
+	handle("GET /api/v1/checks/{id}", viewer, h.apiGetCheck)
 	handle("POST /api/v1/checks", admin, h.apiCreateCheck)
 	handle("PATCH /api/v1/checks/{id}", admin, h.apiPatchCheck)
 	handle("DELETE /api/v1/checks/{id}", admin, h.apiDeleteCheck)

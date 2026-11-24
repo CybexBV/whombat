@@ -8,7 +8,15 @@
  * The call itself runs before this commit (the ops are `never` resent, contracts CT-339), so a refusal signs nothing:
  * the hosts service audits refused attempts under the person's name itself.
  */
-import { ConversationId, GuideCard, thingHref } from '@whombat/core';
+import {
+  ChangeId,
+  ConversationId,
+  GuideCard,
+  NoticeCheck,
+  NoticeSubject,
+  thingHref,
+  WatchLimitValue,
+} from '@whombat/core';
 import { z } from 'zod';
 import { type CommitResult, defineCommand } from '../commit/types';
 import { postMessage } from '../domain/messages';
@@ -248,4 +256,57 @@ export const recordServerQuiet = defineCommand({
   },
 });
 
-export const HOSTS_COMMANDS = [recordHostsChange, askAddServer, setServerAsks, recordServerQuiet];
+export const WATCH_LIMIT_CHANGE = 'hosts.watch_limit';
+
+export const ServerWatchLimitUndo = z.object({
+  serverId: z.string().min(1).max(200),
+  check: NoticeCheck,
+  subject: NoticeSubject.optional(),
+  previous: WatchLimitValue.nullable(),
+  limit: WatchLimitValue.nullable(),
+});
+
+export const recordServerWatchLimit = defineCommand({
+  name: WATCH_LIMIT_CHANGE,
+  schema: ServerWatchLimitUndo.extend({
+    name: z.string().min(1).max(80),
+    agentId: z.string().min(1).max(64).optional(),
+    undoes: ChangeId.optional(),
+  }),
+  async apply(_tx, ctx, { name, agentId, undoes, ...input }) {
+    if (ctx.actor.kind !== 'person') throw forbidden('Only you can change a server’s alert limit.');
+    const { serverId, limit } = input;
+    const title = limit === null ? `Cleared the limit for ${name}` : `Changed the limit for ${name}`;
+    await ctx.emit({
+      type: WATCH_LIMIT_CHANGE,
+      kind: 'System',
+      text: null,
+      where: null,
+      payload: input,
+    });
+    const changeId = await recordChange(ctx, {
+      burrowId: ctx.burrow.id,
+      actorId: ctx.actor.id,
+      personId: ctx.actor.id,
+      ...(agentId ? { agentId } : {}),
+      kind: WATCH_LIMIT_CHANGE,
+      ...(undoes
+        ? { undoes: { changeId: undoes, byId: ctx.actor.id } }
+        : { undo: { kind: WATCH_LIMIT_CHANGE, payload: input, until: null } }),
+      title,
+      subject: { kind: 'server', id: serverId, name: serverLabel(serverId) },
+      link: thingHref('server', serverId),
+      at: ctx.now,
+    });
+    publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['things', 'watch', 'needsYou']);
+    return { changeId };
+  },
+});
+
+export const HOSTS_COMMANDS = [
+  recordHostsChange,
+  askAddServer,
+  setServerAsks,
+  recordServerQuiet,
+  recordServerWatchLimit,
+];

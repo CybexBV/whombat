@@ -282,7 +282,7 @@ func (h *Hub) promMetrics() *promSet {
 	var rows []checkRow
 	h.checks.mu.RLock()
 	for _, c := range h.checks.list {
-		st := h.checks.state[c.ID]
+		st := h.checks.stateFor(c)
 		if !c.Enabled || st == nil || st.Result.At.IsZero() {
 			continue
 		}

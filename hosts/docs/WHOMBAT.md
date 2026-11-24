@@ -391,13 +391,15 @@ REST-API "Alerts", "Watch settings", "Maintenance", "Checks".
 | `hosts.alerts.list` | `GET /alerts?state=open\|resolved\|all&server=&severity=&rule=&q=` | viewer |
 | `hosts.alerts.ack` | `POST /alerts/{id}/ack {note?, minutes?}` (`minutes` 1–43200 snoozes) | operator |
 | `hosts.alerts.unack` | `DELETE /alerts/{id}/ack` | operator |
-| `hosts.watch.get` | `GET /servers/{id}/watch` → `{rules: [{rule, entity?, off: true, by, at}]}` | viewer |
+| `hosts.watch.get` | `GET /servers/{id}/watch` → `{rules: [{rule, entity?, off: true, by, at}], limits: [{rule, entity?, value}]}` | viewer |
 | `hosts.watch.set` | `PUT /servers/{id}/watch {rule, entity?, off}` → the same | operator |
+| `things.setWatchLimit` | `PUT /servers/{id}/watch {rule, entity?, limit, expected_limit?}` → the same. `null` clears a limit | operator |
 | `hosts.maintenance.list` | `GET /maintenance` | viewer |
 | `hosts.maintenance.create` | `POST /maintenance {scope: server\|group\|all, target, starts_at?, ends_at? \| duration_min, weekdays?, start_time?, tz?, note?}` | operator |
 | `hosts.maintenance.remove` | `DELETE /maintenance/{id}` | operator |
 | `hosts.checks.list` | `GET /checks` | viewer |
-| `hosts.checks.create` | `POST /checks {name, kind: http\|tcp\|ping\|dns\|heartbeat, target, runner?, interval_s?, timeout_s?, grace_s?, options?}`; `PATCH /checks/{id}` | admin |
+| `hosts.getCheck` | `GET /checks/{id}` | viewer |
+| `hosts.checks.create` | `POST /checks {name, kind: http\|tcp\|ping\|dns\|heartbeat, target, runner?, interval_s?, timeout_s?, grace_s?, options?, owner?}` and `PATCH /checks/{id}` | admin |
 | `hosts.checks.remove` | `DELETE /checks/{id}` | admin |
 
 **Quiet notices** (Whombat QN-23; decisions HS-190…HS-197). A server's
@@ -413,6 +415,20 @@ within its server). What Whombat's menu does on a server's line:
 | Remind me tomorrow | `POST /alerts/{id}/ack {minutes}` up to 09:00 in the Whombat's zone; also ends on a rise | in Whombat |
 | Undo | `DELETE /alerts/{id}/ack` | in Whombat |
 | Stop watching {disk, guest …} / this | `PUT /servers/{id}/watch {rule, entity: <alert's entity>, off: true}`, or without `entity` for the whole rule; `off: false` undoes | in Whombat |
+
+An autostart Unraid Docker container that ran out of memory or an
+autostart libvirt VM that crashed can open a critical `guest.stopped`
+alert if it stays stopped. Stops the hub requested stay quiet.
+
+Custom limits for disk use, inodes, SSD wear and temperature apply to the
+server unless the alert's entity has its own. A limit change keeps the same
+watch switch. Whombat signs the change as the person and uses
+`expected_limit` to take it back only while their edit still holds.
+
+A connection's check has `owner: "whombat:connection:<id>"` and uses the
+single-check route to read `last`, including latency and the certificate's
+end date. A stale check has no current answer. Its previous `last.at`
+stays available for “Not checked since …”.
 
 Hints (conditions near a limit, not alerts yet) are `hints[]` of `GET
 /fleet` and `GET /servers/{id}`. Headless, a heartbeat check's `ping_url`
@@ -768,7 +784,7 @@ admin-only events arrive). Data shapes: `docs/REST-API.md` "Events".
 | `server.updated` `{id, status, status_note, current, last_seen, agent_connected}`, `server.online`, `server.offline` `{id, at}`, `server.settings_changed`, `server.deleted` `{id}` | `hosts.server` |
 | `guest.state_changed` `{server, id, state}` | `hosts.guest` |
 | `alert.opened`, `alert.updated`, `alert.resolved` (the alert object; `alert.updated` also when the severity changes) | `hosts.alert` |
-| `watch.changed` `{server, rule, entity?, off}` | a server's watch settings changed: refetch `GET /servers/{id}/watch` |
+| `watch.changed` `{server, rule, entity?, off or limit}` | a server's watch settings changed: refetch `GET /servers/{id}/watch` |
 | `action.finished` `{action_id, server, guest, action, result, message, state, noop, code}`, `task.finished` `{server, guest, task, op, result: ok\|warning\|error, message, new_id?, code?}` (`new_id`: an image's fingerprint after publish or image.download; `code`: `task_failed`, `not_found`, `timeout`, a package task's `busy`) | `hosts.task` |
 | `enrollment.pending` `{id, hostname}` (admins) | Needs you: a server waits for approval (not sent for a pre-approved one) |
 | `enrollment.approved` `{id, server_id, hostname}` (admins) | the enrollment became a server (pre-approved or by hand): clear Needs you |

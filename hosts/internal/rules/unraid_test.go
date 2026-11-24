@@ -86,7 +86,7 @@ func TestUnraidHints(t *testing.T) {
 func TestUnraidRAIDLink(t *testing.T) {
 	r := &proto.Report{RAID: []proto.RAIDArray{{Name: "unraid", Level: "unraid", State: "degraded", Devices: 2, Active: 1},
 		{Name: "md0", Level: "raid1", State: "degraded", Devices: 2, Active: 1}}}
-	for _, c := range healthConditions(r) {
+	for _, c := range healthConditions(r, nil) {
 		if c.Rule != RuleRAIDDegraded {
 			continue
 		}

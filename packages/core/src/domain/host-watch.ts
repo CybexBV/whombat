@@ -63,6 +63,7 @@ const RULES_ON: ReadonlySet<string> = new Set([
   'sensor.fan_failed',
   'host.oom',
   'guest.restart_loop',
+  'guest.stopped',
   'disk.full_soon',
   'check.down',
   'check.cert_expiring',
@@ -213,6 +214,7 @@ export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
     true,
     'newer',
   ),
+  alert('guest.stopped', 'Machines stopping on their own', 'problem', 'Until it runs again.', true),
   alert('disk.full_soon', 'Disks about to fill up', 'problem', 'Until it gets fuller.', true),
   // The hub's own (hub/checks.go, hub/api_alerts.go): not about one server.
   alert('check.down', 'Checks failing', 'problem', 'Until it’s up again.', true),
@@ -473,6 +475,22 @@ export function hostHintCheck(kind: string): HostWatchCheck {
     perItem: true,
     startsOn: false,
   };
+}
+
+/** Limits the hosts service accepts for alert rules. */
+export const HOST_WATCH_LIMITS = {
+  'sensor.temp_high': { unit: '°C', min: 1, max: 150 },
+  'sensor.temp_critical': { unit: '°C', min: 1, max: 150 },
+  'disk.wear_high': { unit: '%', min: 1, max: 100, defaultValue: 75 },
+  'disk.wear_critical': { unit: '%', min: 1, max: 100, defaultValue: 90 },
+  'disk.space_high': { unit: '%', min: 1, max: 100, defaultValue: 90 },
+  'fs.inodes_high': { unit: '%', min: 1, max: 100, defaultValue: 90 },
+} as const;
+
+export function hostWatchLimit(rule: string | undefined) {
+  if (rule && Object.hasOwn(HOST_WATCH_LIMITS, rule)) {
+    return HOST_WATCH_LIMITS[rule as keyof typeof HOST_WATCH_LIMITS];
+  }
 }
 
 const BY_CHECK = new Map(HOST_WATCH_CHECKS.map((c) => [c.check as string, c]));

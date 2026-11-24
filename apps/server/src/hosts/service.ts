@@ -33,7 +33,7 @@ import {
 } from './client';
 import { HostsEventStream, type HostsSseEvent } from './events';
 import { type HubInfo, type HubReconnecting, holdCovers, reconnectingOf, toHubInfo } from './hub';
-import { arr, hintGuests, obj, toHostFleet, ts } from './map';
+import { arr, hintGuests, obj, toHostFleet, toHostWatchLimits, ts } from './map';
 import { loadServerNames } from './names-store';
 import {
   ackPeople,
@@ -475,13 +475,17 @@ export class HostsService {
     return agents.find((a) => obj(a).server_id === serverId) ?? null;
   }
 
-  /** A server's watch settings (cached a minute; `watch.changed` forgets them): the rules switched off. */
-  watchRaw(serverId: string): Promise<HostWatchOff[]> {
+  async watchRaw(serverId: string): Promise<HostWatchOff[]> {
+    return (await this.watchSettingsRaw(serverId)).rules;
+  }
+
+  /** A server's watch settings, cached a minute or until the hub reports a change. */
+  watchSettingsRaw(serverId: string) {
     return this.#cached(`watch:${serverId}`, TTL.watch, () =>
       this.call<unknown>({
         path: `${HOSTS_API}/servers/${seg(serverId)}/watch`,
         actor: WHOMBAT_ACTOR,
-      }).then(watchOffsOf),
+      }).then((raw) => ({ rules: watchOffsOf(raw), limits: toHostWatchLimits(raw) })),
     );
   }
 
@@ -502,6 +506,20 @@ export class HostsService {
     });
     this.forget(`watch:${serverId}`, `watch-dot:${serverId}`, 'fleet');
     return watchOffsOf(raw);
+  }
+
+  async setWatchLimit(
+    serverId: string,
+    body: { rule: string; entity?: string; limit: number | null; expectedLimit: number | null },
+    actor: HostsActor,
+  ) {
+    await this.call({
+      method: 'PUT',
+      path: `${HOSTS_API}/servers/${seg(serverId)}/watch`,
+      body: { rule: body.rule, entity: body.entity, limit: body.limit, expected_limit: body.expectedLimit },
+      actor: { ...actor, role: actor.role === 'admin' ? 'admin' : 'operator' },
+    });
+    this.forget(`watch:${serverId}`, `watch-dot:${serverId}`, 'fleet');
   }
 
   /**
