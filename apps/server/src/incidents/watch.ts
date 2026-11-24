@@ -3,23 +3,22 @@
  * looks as the desk does (`deskLooks` over Home's things and the servers' cards) for each burrow's person, opens and
  * ends incidents from them (`plan.ts`) and pushes once for what has been down a while. A look's line is one that counts
  * already (watched, not quiet, confirmed): what the person quieted makes no look. A look something else took down with it
- * (`causedBy`) records its cause and never pushes.
+ * (`causedBy`) records its cause and never pushes, nor does an incident while its thing is kept quiet or down because of
+ * something else. A thing held or not seen keeps its incident open: only seeing it fine again ends it.
  *
  * What it saw on the pass before is kept in memory: after a restart nothing opens or ends until the second pass.
  */
 import type { IncidentNature } from '@whombat/core';
-import { eq } from 'drizzle-orm';
 import { burrows } from '../db/schema/index';
-import { deskFleet, deskLooks } from '../desk/glance';
 import type { DeskLook } from '../desk/shapes';
-import { thePerson } from '../domain/the-person';
-import { type HomeViewer, things } from '../home/overview';
 import { startOfLocalDay } from '../home/time';
 import { serversPrincipal } from '../hosts/principal';
 import { LOOK_RANK, liveRows } from '../looks/research';
 import type { Services } from '../services';
+import { holdsIncident } from './holds';
+import { type LiveLooks, readLiveLooks, seenFine } from './looks';
 import {
-  incidentPushText,
+  type OpenIncident,
   type PassBefore,
   type PushCandidate,
   planIncidents,
@@ -27,6 +26,7 @@ import {
   type SeenLook,
 } from './plan';
 import {
+  anyIncident,
   findingsPushedSince,
   incidentsPass,
   incidentsPush,
@@ -35,12 +35,10 @@ import {
   pruneIncidents,
   pushesSince,
 } from './store';
-import { deliverThingWatches } from './thing-watch';
+import { deliverThingWatches, settleSeenBack } from './thing-watch';
 
 /** How often the watcher looks: as the look watcher. */
 export const INCIDENTS_WATCH_MS = 60_000;
-/** Every look counts here, not only the desk's first ones. */
-const LOOKS_MAX = 200;
 /** How often incidents older than 90 days are removed. */
 const PRUNE_EVERY_MS = 60 * 60_000;
 
@@ -74,18 +72,10 @@ export async function watchIncidents(
   before: PassBefore | null,
 ): Promise<PassBefore | null> {
   const now = services.clock();
-  const [burrow] = await services.db.select().from(burrows).where(eq(burrows.id, burrowId));
-  const person = await thePerson(services.db, burrowId);
-  if (!burrow || !person) return null;
-  const viewer: HomeViewer = { burrow, principal: person };
   // A pass that can't read Home says nothing: nothing opens, nothing ends.
-  const thingList = await things(services, viewer, now).catch(() => null);
-  if (!thingList) return null;
-  let serversRead = true;
-  const fleet = await deskFleet(services, burrowId).catch(() => {
-    serversRead = false;
-    return null;
-  });
+  const live = await readLiveLooks(services, burrowId, now);
+  if (!live) return null;
+  const { burrow, fleet, serversRead } = live;
   // The assistant's research of a look as bad or worse began when the trouble did, or later.
   const research = new Map((await liveRows(services.db, burrowId)).map((r) => [r.lookKey, r] as const));
   const sinceOf = (look: DeskLook): Date | null => {
@@ -98,11 +88,18 @@ export async function watchIncidents(
     ].filter((d) => !Number.isNaN(d.getTime()));
     return times.length ? new Date(Math.min(...times.map((d) => d.getTime()))) : null;
   };
-  const looks = deskLooks(fleet?.cards ?? [], thingList, LOOKS_MAX)
-    .map((l) => seenLookOf(l, sinceOf(l)))
-    .filter((l): l is SeenLook => l !== null);
-  const open = (await openIncidents(services.db, burrowId)).map(openIncidentOf);
-  const plan = planIncidents({ looks, open, before, serversRead, now });
+  const looks = live.looks.map((l) => seenLookOf(l, sinceOf(l))).filter((l): l is SeenLook => l !== null);
+  const rows = await openIncidents(services.db, burrowId);
+  const open = rows.map(openIncidentOf);
+  const plan = planIncidents({
+    looks,
+    open,
+    before,
+    serversRead,
+    blind: await blindThings(services, burrowId, live, open, looks, now),
+    noneYet: !rows.length && !(await anyIncident(services.db, burrowId)),
+    now,
+  });
   const signer = () => serversPrincipal(services, burrowId);
   if (plan.opened.length || plan.changed.length || plan.ended.length)
     await services.pipeline.commit(
@@ -117,20 +114,68 @@ export async function watchIncidents(
       },
       { burrowId, actorId: await signer() },
     );
-  await pushDue(services, burrowId, burrow.timeZone, now, signer);
+  await pushDue(services, burrowId, burrow.timeZone, now, signer, new Set(looks.map((l) => l.thing)));
+  // “Tell me when Plex is back” while Plex had no outage of its own (it was down because of its server): seeing it
+  // answer again is what it waits for.
+  await settleSeenBack(services, burrowId, seenFine(live)).catch((err) =>
+    services.log.warn(
+      { err: String(err), burrowId },
+      'incidents: watches waiting for a return could not be read',
+    ),
+  );
   return plan.seen;
 }
 
-/** Pushes the incidents that are due now, as one push. */
+/**
+ * The open incidents' things that have no look now but that Whombat didn't see fine either: held (kept quiet, or down
+ * because of something else) or not seen (a check that couldn't run, a thing not checked yet).
+ */
+async function blindThings(
+  services: Services,
+  burrowId: string,
+  live: LiveLooks,
+  open: readonly OpenIncident[],
+  looks: readonly SeenLook[],
+  now: Date,
+): Promise<Set<string>> {
+  const withLook = new Set(looks.map((l) => l.thing));
+  // A server is seen through its card (a server not read is the plan's own case), the rest through Home's things.
+  const listed = new Map(live.thingList.filter((t) => t.kind !== 'server').map((t) => [t.id, t] as const));
+  const blind = new Set<string>();
+  for (const inc of open) {
+    if (withLook.has(inc.thing)) continue;
+    const t = listed.get(inc.thing);
+    if (
+      (t && (t.status === 'unknown' || t.causedBy || t.quietUntil)) ||
+      (await holdsIncident(services.db, burrowId, inc.thing, now))
+    )
+      blind.add(inc.thing);
+  }
+  return blind;
+}
+
+/**
+ * Pushes the incidents that are due now, as one push: only of things still bad on this pass (`bad`), not one seen fine
+ * while its incident waits to end, nor one kept quiet or down because of something else.
+ */
 async function pushDue(
   services: Services,
   burrowId: string,
   timeZone: string,
   now: Date,
   signer: () => Promise<string>,
+  bad: ReadonlySet<string>,
 ): Promise<void> {
   const open = (await openIncidents(services.db, burrowId)).map(openIncidentOf);
-  const waiting = open.filter((i) => !i.pushedAt && !i.cause);
+  const waiting: OpenIncident[] = [];
+  for (const i of open)
+    if (
+      !i.pushedAt &&
+      !i.cause &&
+      bad.has(i.thing) &&
+      !(await holdsIncident(services.db, burrowId, i.thing, now))
+    )
+      waiting.push(i);
   if (!waiting.length) return;
   const oldest = new Date(Math.min(...waiting.map((i) => i.startedAt.getTime())));
   const [findings, pushes] = await Promise.all([
@@ -143,9 +188,10 @@ async function pushDue(
   }));
   const group = planPush({ open: candidates, pushedToday: pushes.total, pushedTodayOf: pushes.of, now });
   if (!group.length) return;
+  // The words are made in the push's own commit, from what is still open and not held then.
   await services.pipeline.commit(
     incidentsPush,
-    { ids: group.map((i) => i.id), text: incidentPushText(group) },
+    { ids: group.map((i) => i.id) },
     { burrowId, actorId: await signer() },
   );
 }

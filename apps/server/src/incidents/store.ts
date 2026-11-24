@@ -6,9 +6,11 @@
  *   Opening signs `thing.down` or `thing.problem`, a problem going down `thing.down`, ending `thing.back`
  *   (`ThingIncidentEvent`, no text: they show in no feed), and automations are nudged. When the last incident a push
  *   named ends, its push is withdrawn quietly: its inbox row is read, and on a managed Whombat the phone's notification
- *   goes (a content-free clear). Nothing says it's back.
+ *   goes (a content-free clear). Nothing says it's back. Home's `things` hears of each opening, worsening and end, so
+ *   an open page's “What happened” reads again.
  * - **`incidents.push`** (the watcher): marks the incidents one push names as pushed, then sends it through the
- *   notifications (Do not disturb and quiet hours hold it as any other).
+ *   notifications (Do not disturb and quiet hours hold it as any other). Whether each is still open and not kept quiet
+ *   or down because of something else is checked again in its commit, and its words name only those left.
  */
 import {
   INCIDENTS_KEEP_DAYS,
@@ -38,11 +40,13 @@ import { publishNotificationsRead } from '../domain/notification-read';
 import { notify } from '../domain/notify';
 import { GENERIC_PUSH_TITLE } from '../domain/push-preview';
 import { thePerson } from '../domain/the-person';
+import { homeAudience, publishHomeChanged } from '../home/notify';
 import { SYSTEM_SERVERS } from '../hosts/principal';
 import { forbidden } from '../lib/errors';
 import { loadConversationRow } from '../read/conversations';
 import { loadPrincipalRow } from '../read/principals';
-import type { OpenIncident } from './plan';
+import { holdsIncident } from './holds';
+import { incidentPushText, type OpenIncident, pushOrder } from './plan';
 import { claimThingWatches, deliverThingWatches } from './thing-watch';
 
 /** Incidents are kept this long after they ended. */
@@ -65,6 +69,8 @@ const Opened = z.object({
   subject: z.string().max(160),
   cause: Cause,
   startedAt: z.iso.datetime({ offset: true }),
+  /** Bad before Whombat watched: kept as told, so it never pushes. */
+  pushed: z.boolean().optional(),
 });
 const Changed = z.object({
   id: z.string().min(1).max(80),
@@ -205,6 +211,8 @@ export const incidentsPass = defineCommand({
           startedAt: new Date(o.startedAt),
           causeThing: o.cause?.thing ?? null,
           causeName: o.cause?.name ?? null,
+          // Told without a push of its own: no group, so it counts in no day's pushes and nothing is withdrawn.
+          ...(o.pushed ? { pushedAt: ctx.now } : {}),
         })
         // Opened by another pass meanwhile: that one stands.
         .onConflictDoNothing()
@@ -229,6 +237,7 @@ export const incidentsPass = defineCommand({
         signed++;
       }
     }
+    let moved = signed > 0;
     const groups: string[] = [];
     for (const e of input.ended) {
       const [row] = await tx
@@ -239,9 +248,12 @@ export const incidentsPass = defineCommand({
       if (!row) continue;
       await sign(ctx, THING_BACK, row);
       signed++;
+      moved = true;
       if (row.pushGroup && !row.withdrawnAt) groups.push(row.pushGroup);
     }
     await withdrawPushes(ctx, [...new Set(groups)]);
+    // An open page's “What happened” reads again when an outage opens, gets worse or ends.
+    if (moved) publishHomeChanged(ctx, await homeAudience(ctx, ctx.burrow.id), ['things']);
     const services = ctx.services;
     if (signed) ctx.after(async () => services.automations.nudge());
     return { signed };
@@ -284,20 +296,17 @@ async function pushLink(ctx: ApplyContext, group: readonly IncidentRow[]) {
 
 /**
  * Marks the incidents one push names as pushed (one group), then sends it: one inbox row and one push for the person,
- * “Needs you”, in the words `text` gives. Incidents already pushed, ended or with a cause meanwhile are left out.
+ * “Needs you”. Incidents already pushed, ended, with a cause, or kept quiet or down because of something else meanwhile
+ * are left out, and the words name only those still in it.
  */
 export const incidentsPush = defineCommand({
   name: 'incidents.push',
-  schema: z.object({
-    ids: z.array(z.string().min(1).max(80)).min(1).max(50),
-    text: z.string().min(1).max(300),
-  }),
+  schema: z.object({ ids: z.array(z.string().min(1).max(80)).min(1).max(50) }),
   async apply(tx, ctx, input) {
     await requireSigner(tx, ctx.actor.id);
-    const group = newId('incident');
-    const rows = await tx
-      .update(incidents)
-      .set({ pushedAt: ctx.now, pushGroup: group })
+    const candidates = await tx
+      .select()
+      .from(incidents)
       .where(
         and(
           eq(incidents.burrowId, ctx.burrow.id),
@@ -307,9 +316,21 @@ export const incidentsPush = defineCommand({
           isNull(incidents.causeThing),
         ),
       )
-      .returning();
+      .for('update');
+    const ids: string[] = [];
+    for (const row of candidates)
+      if (!(await holdsIncident(tx, ctx.burrow.id, row.thingId, ctx.now))) ids.push(row.id);
     const person = await thePerson(tx, ctx.burrow.id);
-    if (!rows.length || !person) return { pushed: 0 };
+    if (!ids.length || !person) return { pushed: 0 };
+    const group = newId('incident');
+    const rows = (
+      await tx
+        .update(incidents)
+        .set({ pushedAt: ctx.now, pushGroup: group })
+        .where(and(eq(incidents.burrowId, ctx.burrow.id), inArray(incidents.id, ids)))
+        .returning()
+    ).sort((a, b) => pushOrder(openIncidentOf(a), openIncidentOf(b)));
+    if (!rows.length) return { pushed: 0 };
     const { link, messageId } = { messageId: undefined, ...(await pushLink(ctx, rows)) };
     const draft = {
       burrowId: ctx.burrow.id,
@@ -318,7 +339,7 @@ export const incidentsPush = defineCommand({
       kind: 'needs_you' as const,
       actorId: ctx.actor.id,
       where: rows.length === 1 ? (rows[0] as IncidentRow).name.slice(0, 120) : 'Overview',
-      text: input.text,
+      text: incidentPushText(rows.map(openIncidentOf)),
       link,
       createdAt: ctx.now,
       dedupKey: pushKey(group),
@@ -342,6 +363,16 @@ export async function openIncidents(db: Db | Tx, burrowId: string): Promise<Inci
     .from(incidents)
     .where(and(eq(incidents.burrowId, burrowId), isNull(incidents.endedAt)))
     .orderBy(incidents.startedAt);
+}
+
+/** Whether a burrow has any incident kept (open or within the last 90 days). */
+export async function anyIncident(db: Db | Tx, burrowId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(eq(incidents.burrowId, burrowId))
+    .limit(1);
+  return !!row;
 }
 
 /** An incident row as the planner weighs it. */
@@ -408,7 +439,9 @@ export async function pushesSince(
   const rows = await db
     .select({ thing: incidents.thingId, group: incidents.pushGroup })
     .from(incidents)
-    .where(and(eq(incidents.burrowId, burrowId), gte(incidents.pushedAt, from)));
+    .where(
+      and(eq(incidents.burrowId, burrowId), gte(incidents.pushedAt, from), isNotNull(incidents.pushGroup)),
+    );
   const of = new Map<string, number>();
   for (const r of rows) of.set(r.thing, (of.get(r.thing) ?? 0) + 1);
   return { total: new Set(rows.map((r) => r.group)).size, of };

@@ -1,19 +1,30 @@
 /**
  * Postgres keeps the signed incident, automation claim and chat watch across commits and engine restarts.
- * Drive the incident writer directly so the clock can cross a deadline without waiting on health passes.
+ * Drive the incident writer directly so the clock can cross a deadline without waiting on health passes; a
+ * connection's stored glance says which of its lines count when a delayed start reaches its deadline.
  */
 import { type AutomationDefinitionInput, type AutomationTriggerInput, THING_BACK } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { expect, it } from 'vitest';
 import { sendMessage } from '../commands/messages';
-import { dispatches, events, incidents, quietWindows, thingWatches } from '../db/schema/index';
+import {
+  catalogConnections,
+  dispatches,
+  events,
+  incidents,
+  quietWindows,
+  thingCauses,
+  thingWatches,
+} from '../db/schema/index';
 import { serversPrincipal } from '../hosts/principal';
 import { loadMessages } from '../read/messages';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
+import type { GlanceLine } from '../things/quiet/glance';
 import { thingWatchTool } from './agent';
 import { incidentsPass } from './store';
 import { cancelThingWatch, deliverThingWatches } from './thing-watch';
+import { watchIncidents } from './watch';
 
 const w = useAutomationWorld();
 const MINUTE = 60_000;
@@ -36,6 +47,7 @@ async function open(
   thing: string,
   nature: 'down' | 'problem',
   cause: { thing: string; name: string } | null = null,
+  check = 'conn.answers',
 ) {
   await sign({
     opened: [
@@ -45,7 +57,7 @@ async function open(
         name: 'Plex',
         nature,
         words: 'Not answering',
-        check: 'plex.down',
+        check,
         subject: '',
         cause,
         startedAt: w.now().toISOString(),
@@ -66,17 +78,41 @@ function close(id: string) {
   return sign({ opened: [], changed: [], ended: [{ id, endedAt: w.now().toISOString() }] });
 }
 
-async function connection(handle: string) {
+async function connection(handle: string, label = handle === 'plex' ? 'Plex' : 'Media') {
   const id = await insertConnection(w.services, {
     catalogId: 'homeassistant',
     burrowId: w.burrowId,
-    label: handle === 'plex' ? 'Plex' : 'Media',
+    label,
     handle,
     fields: { url: 'http://127.0.0.1:9' },
     secret: 'test-token',
   });
   return `connection:${id}`;
 }
+
+/** A line as the health pass keeps it in the glance. */
+const line = (check: string, title: string, more: Partial<GlanceLine> = {}): GlanceLine => ({
+  check,
+  tone: 'bad',
+  nature: 'problem',
+  title,
+  seen: 2,
+  ...more,
+});
+
+/** What the last health pass stored for a connection: its lines that count (none: it answers and is fine). */
+async function lines(thing: string, list: GlanceLine[]) {
+  const offline = list.some((l) => l.offline);
+  await w.services.db
+    .update(catalogConnections)
+    .set({
+      glance: { status: offline ? 'offline' : list.length ? 'bad' : 'ok', facts: [], lines: list },
+      glanceAt: w.now(),
+    })
+    .where(eq(catalogConnections.id, thing.slice('connection:'.length)));
+}
+
+const NOT_ANSWERING = line('conn.answers', 'Whombat can’t reach it', { confirm: 2, offline: true });
 
 async function watch(thing: string, event: 'down' | 'back', minutes?: number) {
   const { id: messageId } = await w.ok(IDS.mara, sendMessage, {
@@ -110,7 +146,7 @@ it('runs once for an incident, remembers a delay after restart, and replies to a
   const problem = { kind: 'thing', event: 'problem', thing } as const;
   const down = { kind: 'thing', event: 'down', thing } as const;
   const immediate = await w.publish(definition([problem, down]), { name: 'Plex has trouble' });
-  const delayed = await w.publish(definition([{ ...problem, forMinutes: 10, check: 'plex.down' }]), {
+  const delayed = await w.publish(definition([{ ...problem, forMinutes: 10, check: 'conn.answers' }]), {
     name: 'Plex stays down',
   });
   const recovery = await w.publish(
@@ -144,6 +180,8 @@ it('runs once for an incident, remembers a delay after restart, and replies to a
   expect((await watch(thing, 'down')).watch.status).toBe('happened');
 
   await w.restart();
+  // Still not answering when the wait is over: the line it waited on counts.
+  await lines(thing, [NOT_ANSWERING]);
   w.advance(8 * MINUTE);
   await w.settle();
   expect(await w.runs(delayed)).toHaveLength(0);
@@ -219,4 +257,64 @@ it('skips dependent, quiet and ended incidents, and settles expired or cancelled
   const thread = await replies(expired.messageId);
   expect(thread).toHaveLength(2);
   expect(thread.find((m) => m.card)?.card).toMatchObject({ watch: { status: 'expired' } });
+});
+
+it('doesn’t start a delayed automation whose check cleared while another line keeps the incident open', async () => {
+  const thing = await connection('ups', 'UPS');
+  const named = await w.publish(
+    definition([{ kind: 'thing', event: 'problem', thing, forMinutes: 10, check: 'conn.check' }]),
+    { name: 'Shut down after ten minutes on battery' },
+  );
+  const unnamed = await w.publish(definition([{ kind: 'thing', event: 'problem', thing, forMinutes: 10 }]), {
+    name: 'Any problem for ten minutes',
+  });
+  const disk = line('machine.disk', 'The disk is almost full');
+  await lines(thing, [line('conn.check', 'On battery'), disk]);
+  const incidentId = await open(thing, 'problem', null, 'conn.check');
+  await w.settle();
+  // Power is back at minute 6; the disk line keeps the incident open.
+  w.advance(6 * MINUTE);
+  await lines(thing, [disk]);
+  w.advance(5 * MINUTE);
+  await w.settle();
+  expect(await w.runs(named)).toHaveLength(0);
+  expect(await w.runs(unnamed)).toHaveLength(0);
+  const [row] = await w.services.db.select().from(incidents).where(eq(incidents.id, incidentId));
+  expect(row?.endedAt).toBeNull();
+});
+
+it('tells when a thing down because of its server answers again', async () => {
+  const thing = await connection('sonarr', 'Sonarr');
+  await lines(thing, [NOT_ANSWERING]);
+  await w.services.pipeline.transact(w.burrowId, async ({ tx }) => {
+    await tx.insert(thingCauses).values({
+      ownerId: w.burrowId,
+      thingId: thing,
+      causeThing: 'server:pve-02',
+      causeName: 'pve-02',
+      words: 'while pve-02 is down',
+      since: w.now(),
+      checkedAt: w.now(),
+    });
+  });
+  const back = await watch(thing, 'back');
+  expect(back.watch.status).toBe('watching');
+  const [card] = await replies(back.messageId);
+  expect(card?.text).toContain('pve-02');
+  expect(card?.text).toContain('answers again');
+  // Still down with its server: nothing yet.
+  let before = await watchIncidents(w.services, w.burrowId, null);
+  const status = async () =>
+    (await w.services.db.select().from(thingWatches).where(eq(thingWatches.id, back.watch.id)))[0]?.status;
+  expect(await status()).toBe('watching');
+  // pve-02 is back and so is Sonarr: no outage of its own, yet it answers again.
+  w.advance(MINUTE);
+  await w.services.db.delete(thingCauses).where(eq(thingCauses.thingId, thing));
+  await lines(thing, []);
+  before = await watchIncidents(w.services, w.burrowId, before);
+  expect(before).not.toBeNull();
+  expect(await status()).toBe('happened');
+  const thread = await replies(back.messageId);
+  expect(thread).toHaveLength(2);
+  expect(thread.find((m) => !m.card)?.text).toContain('Sonarr is back');
 });
