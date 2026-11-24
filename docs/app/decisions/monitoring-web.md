@@ -1,4 +1,4 @@
-# Monitoring on the web (AP-9930 … AP-9940)
+# Monitoring on the web (AP-9930 … AP-9940, AP-9941 … AP-9959)
 
 The web side of Whombat's monitoring (docs/decisions/monitoring.md MON-01…MON-16), built on 2026-11-24 from the
 server's contracts at session minor 9. No mock covers these parts: they are made of the thing pages' own pieces (the ⋯
@@ -79,3 +79,41 @@ entry whose two levels let the assistant do the same (Website or address only re
 blackbox kept quiet until 23:00 (“Moving the NAS”), UniFi until tomorrow 09:00, Home Assistant not answering while its
 machine is stopped, pve-02's VM storage over its limit, each page's week and 30 days of what happened. Keep quiet, End
 now, the history and the limits answer without it too.
+
+## Council round 1 (2026-11-25)
+
+### AP-9941 A held line never offers Undo
+
+A line held by the window offers End now wherever it is drawn, a server's own tabs (System, Sensors, an Unraid
+server's Array) as much as the Summary; End now ends the whole window. Where End now can't be offered (a Whombat that
+doesn't keep things quiet), a held line has no button: its own Undo can't end a window, and the server would refuse
+it. A line held by a cause still offers neither.
+
+### AP-9942 The head says the hold once
+
+While the line under the head is drawn, the head's state pill is left out when it says the line's words: kept quiet,
+the server's badge is the window's first words (“Quiet until 23:00”); down because of something else, the cause's
+words. Its own state while kept quiet (“1 offline”) keeps the pill. The same rule as the phone's head (AP-9904,
+`holdSaysBadge` in `@whombat/client`). A server's badge is its own state, never the hold's, so a server's head keeps
+it.
+
+### AP-9943 A list says the window before the cause
+
+A thing kept quiet and down because of something else says “Quiet until 23:00” in lists, as its page does (the window
+first, `holdView`): someone chose it, and it holds whatever the cause. Overview's tile greys for a cause only when the
+cause's words are what it says.
+
+### AP-9944 What happened says each outage once
+
+A server's alert that it stopped checking in (`agent.heartbeat_missing`) is left out of What happened when a `down`
+incident of the same server was open at the same time: the incident already says it. The server's other alerts, open,
+sit under a small heading “From the server” after the incidents and their “Show N more”, so each fold stays with its
+own list.
+
+### AP-9945 Only what this Whombat's catalog lists
+
+Add a connection offers an entry only when the Whombat's `connections.catalog` lists it, as the phone does: an entry
+it doesn't list is newer than it (an older box) and nothing there could connect it. Until the catalog answers, or when
+it fails, every entry is offered. The entry's own page, reached by a link, says it can't be connected on this Whombat
+yet.
+

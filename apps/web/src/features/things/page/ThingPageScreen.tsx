@@ -23,6 +23,7 @@ import {
   ApiError,
   CHAT_WORDS,
   headFacts,
+  holdSaysBadge,
   holdView,
   KEEP_QUIET_WORDS,
   LOOK_PLAN_WORDS,
@@ -278,6 +279,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
           buttons={buttons}
           onPickRunsOn={() => setPicking(true)}
           onKeepQuiet={mayKeep ? () => setKeeping(true) : null}
+          stateInHold={!!hold && holdSaysBadge(page)}
         />
         {hold ? <HoldLine view={hold} onEnd={() => void keepQuiet.end()} busy={keepQuiet.busy} /> : null}
         {query.error && !query.isPlaceholderData ? (
@@ -441,6 +443,7 @@ function Head({
   buttons,
   onPickRunsOn,
   onKeepQuiet,
+  stateInHold = false,
 }: {
   burrow: string;
   page: ThingPage;
@@ -448,6 +451,8 @@ function Head({
   onPickRunsOn: () => void;
   /** Keep quiet… in ⋯ (monitoring.md MON-04); null where the viewer may not or the Whombat can't. */
   onKeepQuiet: (() => void) | null;
+  /** The hold's line under the head says the state pill's words: the pill is left out, as on the phone. */
+  stateInHold?: boolean;
 }) {
   const headButtons = page.buttons ?? [];
   // Restart's question, from ⋯.
@@ -466,7 +471,7 @@ function Head({
     <PageHead
       {...headLook(page)}
       name={page.name}
-      badge={{ tone: thingBadgeTone(page.status), text: page.badge }}
+      badge={stateInHold ? null : { tone: thingBadgeTone(page.status), text: page.badge }}
       statusFirst
       verdict={page.verdict ?? null}
       detail={detail.length ? detail.map((line) => <Fact key={factKey(line)} line={line} />) : null}

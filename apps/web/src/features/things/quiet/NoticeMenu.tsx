@@ -58,8 +58,9 @@ export function NoticeMenu({
 }
 
 /**
- * Undo on a quiet line, for who may quiet it; End now on a line quiet because the thing is kept quiet (`onEnd`, else the
- * line's Undo, which ends the window too); nothing on a line quiet because of its cause (it lifts when the cause is back).
+ * Undo on a quiet line, for who may quiet it; End now on a line quiet because the thing is kept quiet (`onEnd`: the
+ * line's own Undo can't end the window, so without it there is no button); nothing on a line quiet because of its cause
+ * (it lifts when the cause is back).
  */
 export function QuietUndo({
   line,
@@ -80,17 +81,17 @@ export function QuietUndo({
   const held = heldLine(line);
   if (held === 'cause') return null;
   if (held === 'window')
-    return (
+    return onEnd ? (
       <button
         type="button"
         className={cx(styles.undo, className)}
         disabled={ending || actions.busy(ref)}
         aria-label={`${KEEP_QUIET_WORDS.endNow}: ${line.title}`}
-        onClick={() => (onEnd ? onEnd() : actions.undo(ref))}
+        onClick={onEnd}
       >
         {KEEP_QUIET_WORDS.endNow}
       </button>
-    );
+    ) : null;
   return (
     <button
       type="button"

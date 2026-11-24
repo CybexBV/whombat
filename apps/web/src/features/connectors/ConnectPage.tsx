@@ -85,8 +85,9 @@ export function ConnectPage({
             <SkeletonRows count={2} lines={2} />
           ) : status?.available === false && status.reason === 'off' ? (
             <p className={styles.empty}>{entry.name} is turned off on this Whombat.</p>
-          ) : status?.available === false && status.reason === 'no_driver' ? (
-            // A link to a tracker nothing here can read: the catalog doesn't offer it either.
+          ) : (status?.available === false && status.reason === 'no_driver') || (catalog.data && !status) ? (
+            // A link to a tracker nothing here can read, or to an entry newer than this Whombat: the catalog doesn't
+            // offer it either.
             <p className={styles.empty}>{`${entry.name} can’t be connected on this Whombat yet.`}</p>
           ) : address ? (
             <>

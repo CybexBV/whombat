@@ -28,6 +28,7 @@ import { TimeChart } from '../../../components/charts';
 import { cx } from '../../../components/cx';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { Card, Empty, StateCell } from '../parts';
+import { useServerEndQuiet } from '../quiet/KeepQuiet';
 import { useServerQuiet } from '../quiet/useQuiet';
 import styles from '../Things.module.css';
 import type { TabProps } from './tabProps';
@@ -45,6 +46,8 @@ export function SensorsTab({ burrow, serverId, detail, timeZone }: TabProps) {
   );
   // Its lines with the ⋯ menu, quiet ones greyed (quiet-notices.md AP-4828).
   const sq = useServerQuiet(burrow, serverId);
+  // A line held because the server is kept quiet ends with it: End now, as under the page's head.
+  const end = useServerEndQuiet(burrow, serverId, detail.server.name ?? serverId);
   const hints = serverWatch(
     [],
     detail.hints.filter((h) => h.section === 'sensors'),
@@ -63,7 +66,7 @@ export function SensorsTab({ burrow, serverId, detail, timeZone }: TabProps) {
   const scale = tempScale(all, hottest ? warmFrom(hottest.limitC) : null);
   return (
     <>
-      <WatchNotices burrow={burrow} rows={hints} quiet={sq.actions} />
+      <WatchNotices burrow={burrow} rows={hints} quiet={sq.actions} onEnd={end.onEnd} ending={end.ending} />
       <Card
         title="Temperatures"
         meta={

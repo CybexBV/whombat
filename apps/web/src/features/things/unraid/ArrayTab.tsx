@@ -31,6 +31,7 @@ import { type ReactNode, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Card, Dot, Empty, StateCell } from '../parts';
+import { useServerEndQuiet } from '../quiet/KeepQuiet';
 import { useServerQuiet } from '../quiet/useQuiet';
 import { useThingSearch } from '../search';
 import styles from '../Things.module.css';
@@ -53,6 +54,8 @@ export function ArrayTab({ burrow, serverId, detail, timeZone }: UnraidTabProps)
   const [dialog, setDialog] = useState<UnraidDialog | null>(null);
   // Its alerts with the ⋯ menu, quiet ones greyed (quiet-notices.md AP-4828).
   const sq = useServerQuiet(burrow, serverId);
+  // A line held because the server is kept quiet ends with it: End now, as under the page's head.
+  const end = useServerEndQuiet(burrow, serverId, detail.server.name ?? serverId);
   const alerts = serverWatch(
     (detail.alerts ?? []).filter((a) => a.section === 'array' || a.section === 'storage'),
     [],
@@ -67,7 +70,7 @@ export function ArrayTab({ burrow, serverId, detail, timeZone }: UnraidTabProps)
   const started = u.array.state === 'started';
   return (
     <>
-      <WatchNotices burrow={burrow} rows={alerts} quiet={sq.actions} />
+      <WatchNotices burrow={burrow} rows={alerts} quiet={sq.actions} onEnd={end.onEnd} ending={end.ending} />
       <UnraidHints burrow={burrow} detail={detail} section="array" onDialog={setDialog} />
       <ArrayCard burrow={burrow} detail={detail} u={u} access={access} full onDialog={setDialog} />
       <DiskCard
