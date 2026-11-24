@@ -6,6 +6,7 @@
  * connection isn't in Home's health pass (it is no agent's).
  */
 import {
+  ONEPASSWORD_TAB,
   ONEPASSWORD_WATCH_CHECKS,
   ONEPASSWORD_WORDS,
   type OnePasswordSyncView,
@@ -20,9 +21,6 @@ import type { KindCheck, KindNotice } from '../quiet/types';
 import { line } from '../words';
 import type { KindModule } from './registry';
 import type { KindView } from './types';
-
-/** The key of the tab the apps draw the sync on. */
-export const ONEPASSWORD_TAB = 'onepassword';
 
 export const ONEPASSWORD_CHECKS: readonly KindCheck[] = ONEPASSWORD_WATCH_CHECKS;
 

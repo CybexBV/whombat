@@ -19,6 +19,12 @@ import { VAULT_ENTRIES_MAX, VAULT_NAME_MAX, type VaultEntrySource } from './sche
 /* The connection page's part ----------------------------------------------------------------------- */
 
 /**
+ * The key of the 1Password connection's own tab, which its page opens on: the apps draw the part below there, from
+ * `connections.onePassword`, not from panels. The Connection tab keeps only the connection's own details.
+ */
+export const ONEPASSWORD_TAB = 'onepassword';
+
+/**
  * How the last pass ended: `ok`; `paused` (the guard holds removals for the person); `waiting` (1Password's limit, until
  * `nextTryAt`); `failing` (it couldn't finish: `problem` says why).
  */
