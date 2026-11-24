@@ -114,14 +114,14 @@ export function quietMenu(n: QuietLine): QuietMenuView | null {
 
 /**
  * A quiet line's grey words (QN-14): “Ignored by John until it’s back online”; a line quiet with the whole thing says
- * why (monitoring.md MON-04, MON-07): “Kept quiet by Mara until 23:00”, “Quiet while homeassistant is stopped”. Null
- * when the line isn't quiet.
+ * why (monitoring.md MON-04, MON-07): “Kept quiet by Mara until 23:00” for a window someone kept, “On hold while
+ * homeassistant is stopped” for a cause, which nobody kept quiet. Null when the line isn't quiet.
  */
 export function quietLineText(n: Pick<ThingPageNotice, 'quiet'>): string | null {
   const q = n.quiet;
   if (!q) return null;
   if (q.held === 'window') return q.by ? `Kept quiet by ${q.by.name} ${q.words}` : `Kept quiet ${q.words}`;
-  if (q.held === 'cause') return `Quiet ${q.words}`;
+  if (q.held === 'cause') return `On hold ${q.words}`;
   return quietLine(q);
 }
 
