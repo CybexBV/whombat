@@ -191,10 +191,14 @@ export async function entrySources(
     const link = byEntry.get(row.id);
     const syncedAt = isoOrNull(link?.syncedAt ?? null);
     if (link) {
-      if (link.state === 'creating') out.set(row.id, { kind: 'onepassword', state: 'pending', syncedAt });
-      else if (link.problem)
-        out.set(row.id, { kind: 'onepassword', state: 'problem', syncedAt, problem: link.problem });
-      else if (link.state === 'synced') out.set(row.id, { kind: 'onepassword', state: 'synced', syncedAt });
+      // Paired with an item now: removing the entry archives that item.
+      const paired = link.state === 'synced' && link.itemId !== null;
+      if (link.problem)
+        out.set(row.id, { kind: 'onepassword', state: 'problem', syncedAt, problem: link.problem, paired });
+      else if (link.state === 'creating')
+        out.set(row.id, { kind: 'onepassword', state: 'pending', syncedAt, paired });
+      else if (link.state === 'synced')
+        out.set(row.id, { kind: 'onepassword', state: 'synced', syncedAt, paired });
       continue;
     }
     const connectionId = connectionOf.get(row.burrowId);
@@ -202,8 +206,14 @@ export async function entrySources(
     out.set(
       row.id,
       readOnly.has(connectionId)
-        ? { kind: 'onepassword', state: 'problem', syncedAt: null, problem: ONEPASSWORD_WORDS.readOnly }
-        : { kind: 'onepassword', state: 'pending', syncedAt: null },
+        ? {
+            kind: 'onepassword',
+            state: 'problem',
+            syncedAt: null,
+            problem: ONEPASSWORD_WORDS.readOnly,
+            paired: false,
+          }
+        : { kind: 'onepassword', state: 'pending', syncedAt: null, paired: false },
     );
   }
   return out;

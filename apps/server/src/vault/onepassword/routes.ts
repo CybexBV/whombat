@@ -47,8 +47,8 @@ export const onePasswordRoutes: RouteDef[] = [
       throw new ApiError('conflict', ONEPASSWORD_SYNC_LATER.readOnly);
     if (services.maintenance.paused || services.maintenance.held)
       throw new ApiError('conflict', ONEPASSWORD_SYNC_LATER.paused);
-    const sync = onePasswordSyncFor(services);
-    sync.request(0);
+    // Sync now reads the vault in full, whatever its version says.
+    onePasswordSyncFor(services).request(0, 'now');
     return onePasswordSyncView(services.db, row, true);
   }),
 

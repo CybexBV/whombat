@@ -5,7 +5,7 @@
  * 1Password's version wins (where both already agree, only the base is renewed). An item that isn't in the vault any
  * more leaves its entry a Whombat entry like any other.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import type { Db, Tx } from '../../db/client';
 import { vaultOnePasswordLinks, vaultOnePasswordState } from '../../db/schema/index';
 import type { Services } from '../../services';
@@ -46,12 +46,30 @@ export async function relinkOnePassword(
     return;
   }
   const [taken] = await tx
-    .select({ id: vaultOnePasswordLinks.id })
+    .select({ id: vaultOnePasswordLinks.id, entryId: vaultOnePasswordLinks.entryId })
     .from(vaultOnePasswordLinks)
     .where(
       and(eq(vaultOnePasswordLinks.connectionId, connection.id), eq(vaultOnePasswordLinks.itemId, itemId)),
     );
-  if (taken) return;
+  if (taken) {
+    // The item waits to be archived because its entry was removed: the entry brought back takes that pair again, with
+    // no base (1Password's version wins), and nothing is archived or made twice.
+    if (taken.entryId === null)
+      await tx
+        .update(vaultOnePasswordLinks)
+        .set({
+          entryId,
+          state: 'synced',
+          base: null,
+          itemVersion: null,
+          itemUpdatedAt: null,
+          refused: null,
+          problem: null,
+          updatedAt: now,
+        })
+        .where(eq(vaultOnePasswordLinks.id, taken.id));
+    return;
+  }
   await tx.insert(vaultOnePasswordLinks).values({
     id: `opl_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`,
     burrowId,
@@ -73,12 +91,19 @@ export async function relinkOnePassword(
 
 /**
  * After a whole-box restore (the database is the backup's): every link forgets its base and every state its vault's
- * version, so the next pass reads every item and 1Password's version wins. Run while the box is still quarantined, so
- * no pass runs before it.
+ * version, so the next pass reads every item and 1Password's version wins. The backup's unfinished work goes too: an
+ * item waiting to be archived for an entry removed before the backup was taken stays in 1Password, and an item being
+ * made is looked for by its marker again (its entry is unpaired now). Run while the box is still quarantined, so no
+ * pass runs before it; doing it again changes nothing.
  */
 export async function forgetOnePasswordBases(services: Pick<Services, 'pipeline'>): Promise<void> {
   await services.pipeline.transactAccount(async (tx) => {
-    await tx.update(vaultOnePasswordLinks).set({ base: null, itemVersion: null, itemUpdatedAt: null });
+    await tx
+      .delete(vaultOnePasswordLinks)
+      .where(or(isNull(vaultOnePasswordLinks.entryId), eq(vaultOnePasswordLinks.state, 'creating')));
+    await tx
+      .update(vaultOnePasswordLinks)
+      .set({ base: null, itemVersion: null, itemUpdatedAt: null, refused: null });
     await tx.update(vaultOnePasswordState).set({ contentVersion: null });
   });
 }

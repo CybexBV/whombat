@@ -56,7 +56,14 @@ import { serverLabel } from '../hosts/self';
 import { OutboundError } from '../lib/outbound';
 import { ok } from '../routes/define';
 import type { Services } from '../services';
-import { ONEPASSWORD_CONNECTION_EXISTS, onePasswordConnectionOf } from '../vault/onepassword/store';
+import {
+  ONEPASSWORD_CONNECTION_EXISTS,
+  onePasswordConnectionOf,
+  onePasswordState,
+  onePasswordVaultId,
+} from '../vault/onepassword/store';
+import { onePasswordSyncFor } from '../vault/onepassword/sync';
+import { onePasswordTokenMissesVault } from '../vault/onepassword/words';
 import {
   type CheckCredential,
   type CheckOutcome,
@@ -715,6 +722,18 @@ export async function requireNoOtherVaultSync(
   if (!isVaultSyncConnection(entry)) return;
   if (await onePasswordConnectionOf(services.db, viewer.burrowId))
     throw connectionError('limit_reached', { max: 1 }, ONEPASSWORD_CONNECTION_EXISTS);
+}
+
+/** A new 1Password token that can't see the connection's vault is refused, naming the vault. */
+async function requireTokenSeesVault(
+  services: Services,
+  row: CatalogConnectionRow,
+  outcome: CheckOutcome,
+): Promise<void> {
+  const vaultId = onePasswordVaultId(row);
+  if (!vaultId || serviceChoices(outcome.json).some((o) => o.value === vaultId)) return;
+  const state = await onePasswordState(services.db, row.id);
+  throw connectionError('check_failed', {}, onePasswordTokenMissesVault(state?.vaultTitle ?? null));
 }
 
 /** Where Fusebox's management API is, with the management key as the entry sends it and the pinned certificate. */
@@ -1531,6 +1550,8 @@ export async function replaceConnectionSecret(
     credential,
   });
   requireCheckPassed(outcome);
+  // 1Password: a new token must see the vault the connection keeps in step (there is no choosing another here).
+  if (isVaultSyncConnection(entry)) await requireTokenSeesVault(services, row, outcome);
   // A Fusebox's new management key makes Whombat's client key again, in place of the old one (ai-gateway.md AIG-03).
   const made = await provisionGatewayKey(services, viewer, entry, {
     baseUrl: row.baseUrl,
@@ -1661,12 +1682,17 @@ export async function disconnectConnection(
   vaultEntries?: OnePasswordDisconnectChoice,
 ): Promise<{ eventId: string | null; notice: string | null }> {
   const row = await visibleConnection(services.db, viewer, id);
-  const { eventId } = ok(
-    await services.pipeline.commit(
+  const remove = () =>
+    services.pipeline.commit(
       removeConnection,
       { connectionId: row.id, ...(vaultEntries ? { vaultEntries } : {}) },
       { burrowId: viewer.burrowId, actorId: viewer.principal.id },
-    ),
+    );
+  // The Vault's sync: a write to 1Password going on ends first, and none starts after the connection is gone.
+  const { eventId } = ok(
+    isVaultSyncConnection(row.catalogId)
+      ? await onePasswordSyncFor(services).withoutWrites(remove)
+      : await remove(),
   );
   await emitConnectionLifecycle(services, { type: 'removed', connectionId: row.id });
   services.guides.track('connection revoke', () => revokeConnectionTokens(services, row));

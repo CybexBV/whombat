@@ -44,7 +44,11 @@ import { loadConversationRow } from '../read/conversations';
 import { burrowView } from '../read/views';
 import { toApproval } from '../read/work';
 import type { Services } from '../services';
-import { linkOnePassword, removeSyncedEntries } from '../vault/onepassword/commands';
+import {
+  linkOnePassword,
+  onePasswordConnectionChanged,
+  removeSyncedEntries,
+} from '../vault/onepassword/commands';
 import { ONEPASSWORD_CONNECTION_EXISTS, onePasswordConnectionOf } from '../vault/onepassword/store';
 import { connectionError } from './errors';
 import { automaticLabel } from './labels';
@@ -276,6 +280,8 @@ export const changeConnection = defineCommand({
     // A gateway's name is in the switches and the pool (AIG-05).
     if (isGatewayCatalogId(row.catalogId) && before.label !== row.label)
       await publishGatewayChange(ctx, row.id, event.id);
+    // A 1Password connection's new token or vault: what the sync knew of the old one goes (onepassword-sync.md).
+    if (isVaultSyncConnection(row.catalogId)) await onePasswordConnectionChanged(ctx, before, row);
     return { row, eventId: event.id };
   },
 });

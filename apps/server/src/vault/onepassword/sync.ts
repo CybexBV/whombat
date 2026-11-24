@@ -1,19 +1,22 @@
 /**
  * When the 1Password sync runs (docs/decisions/onepassword-sync.md OPW-20): one pass at a time, when the server starts
  * read-write, every 10 minutes, 10 seconds after a change to a Vault entry (a few changes make one pass), and on Sync
- * now; reasons that come together make one pass. Never in read-only mode, during a maintenance pause, drain or
- * quarantine: the next reason after it ends runs one. Home's health and the connection page read the stored state and
- * never wait for a pass.
+ * now; reasons that come together make one pass. A change to an entry asks 1Password nothing unless something waits in
+ * Whombat (a use of an entry is a change too). Never in read-only mode, during a maintenance pause, drain or quarantine:
+ * the next reason after it ends runs one. A disconnect and a drain wait for a write to 1Password going on, and no pass
+ * writes after them. Home's health and the connection page read the stored state and never wait for a pass.
  */
 import { join } from 'node:path';
 import { defaultWhombatHome } from '@whombat/agent-runtime/host';
 import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS } from '@whombat/core';
 import { outsideCommandScope } from '../../commit/scope';
 import { onConnectionLifecycle } from '../../connections/lifecycle';
+import { connectionRow } from '../../connections/store';
 import type { Services } from '../../services';
-import { runOnePasswordPass } from './pass';
+import { onVaultReachChanged } from '../reach-changed';
+import { type OnePasswordPassReason, type OnePasswordWriteGate, runOnePasswordPass } from './pass';
 import { type OnePasswordApi, OnePasswordPool } from './pool';
-import { onePasswordConnections } from './store';
+import { ONEPASSWORD_CATALOG_ID, onePasswordConnections } from './store';
 import { onePasswordStandInOn, StandInOnePassword } from './testing/standin';
 
 const overrides = new WeakMap<Services, OnePasswordApi>();
@@ -24,7 +27,9 @@ export function useOnePasswordForTests(services: Services, api: OnePasswordApi):
   overrides.set(services, api);
 }
 
-export class OnePasswordSync {
+const errName = (err: unknown) => (err instanceof Error ? err.name : 'error');
+
+export class OnePasswordSync implements OnePasswordWriteGate {
   readonly #services: Services;
   #pool: OnePasswordPool | null = null;
   #standIn: StandInOnePassword | null = null;
@@ -33,8 +38,14 @@ export class OnePasswordSync {
   #running: Promise<void> | null = null;
   /** Another pass asked for while one ran: after how long (the shortest asked for). */
   #again: number | null = null;
+  /** Why the next pass runs. */
+  #asked = new Set<OnePasswordPassReason>();
   /** Entries changed while a pass ran: those the pass didn't change itself ask for another. */
   #seen = new Set<string>();
+  /** Writes to 1Password going on now, and those waiting for them to end (a disconnect, a drain's question). */
+  #writes = 0;
+  #holds = 0;
+  #idle: (() => void)[] = [];
   #stops: (() => void)[] = [];
   #started = false;
   #closed = false;
@@ -73,6 +84,45 @@ export class OnePasswordSync {
     return this.#running !== null || this.#timer !== null;
   }
 
+  /** Whether a write to 1Password is going on now (a drain waits for it). */
+  get writing(): boolean {
+    return this.#writes > 0;
+  }
+
+  /** A pass's write may start: not while something waits for the writes to end, nor while the box is paused. */
+  enter(): boolean {
+    const services = this.#services;
+    if (
+      this.#holds > 0 ||
+      this.#closed ||
+      services.schemaAccess === 'read-only' ||
+      services.maintenance.paused ||
+      services.maintenance.held
+    )
+      return false;
+    this.#writes++;
+    return true;
+  }
+
+  leave(): void {
+    this.#writes = Math.max(0, this.#writes - 1);
+    if (this.#writes === 0) for (const done of this.#idle.splice(0)) done();
+  }
+
+  /**
+   * Runs `fn` once no write to 1Password is going on, and lets none start meanwhile (disconnecting: nothing is written
+   * after the connection is gone). Called outside the database's write lock.
+   */
+  async withoutWrites<T>(fn: () => Promise<T>): Promise<T> {
+    this.#holds++;
+    try {
+      while (this.#writes > 0) await new Promise<void>((resolve) => this.#idle.push(resolve));
+      return await fn();
+    } finally {
+      this.#holds--;
+    }
+  }
+
   /** Starts the reasons: a pass now, every 10 minutes, after a Vault change, after the connection's token changed. */
   start(): void {
     if (this.#started || this.#services.schemaAccess === 'read-only') return;
@@ -92,20 +142,30 @@ export class OnePasswordSync {
       services.bus.onFrame((frame) => {
         if (frame.event.type !== 'vault.updated' || !frame.event.entryId) return;
         if (this.#running) this.#seen.add(frame.event.entryId);
-        else this.request(ONEPASSWORD_CHANGE_DELAY_MS);
+        // A use, a refusal or an edit: the pass looks at what waits here first and asks 1Password only then.
+        else this.request(ONEPASSWORD_CHANGE_DELAY_MS, 'change');
       }),
     );
-    // A new token or vault: a pass soon. A connection removed: nothing to do (its rows went with it).
+    // A new token or vault of the 1Password connection: a pass soon, reading in full. Other connections' don't matter.
     this.#stops.push(
-      onConnectionLifecycle(services, (event) => {
-        if (event.type === 'credential') this.request(0);
+      onConnectionLifecycle(services, async (event) => {
+        if (event.type !== 'credential') return;
+        const row = await connectionRow(services.db, event.connectionId);
+        if (row?.catalogId === ONEPASSWORD_CATALOG_ID) this.request(0, 'now');
       }),
     );
+    // The home networks changed: items and pairs held for an address Whombat may not reach are looked at again.
+    this.#stops.push(onVaultReachChanged(services, () => this.request(0, 'network')));
   }
 
-  /** A pass within `delayMs` (an earlier one already asked for stands). */
-  request(delayMs: number): void {
+  /** A pass within `delayMs` (an earlier one already asked for stands), for `reason` (a regular pass by default). */
+  request(delayMs: number, reason: OnePasswordPassReason = 'tick'): void {
     if (this.#closed || this.#services.schemaAccess === 'read-only') return;
+    this.#asked.add(reason);
+    this.#schedule(delayMs);
+  }
+
+  #schedule(delayMs: number): void {
     const due = Date.now() + Math.max(0, delayMs);
     if (this.#running) {
       // A reason while a pass runs: one more pass after it, with the shortest delay asked for.
@@ -121,15 +181,22 @@ export class OnePasswordSync {
     this.#timer.unref();
   }
 
+  #take(): Set<OnePasswordPassReason> {
+    const reasons = this.#asked;
+    this.#asked = new Set();
+    return reasons;
+  }
+
   /** Runs the passes now and waits for them (tests, and Sync now's own wait when one is already running). */
-  async runNow(): Promise<void> {
+  async runNow(reason: OnePasswordPassReason = 'tick'): Promise<void> {
     if (this.#timer) {
       clearTimeout(this.#timer);
       this.#timer = null;
       this.#dueAt = null;
     }
     if (this.#running) await this.#running;
-    this.#running = this.#runAll().finally(() => {
+    this.#asked.add(reason);
+    this.#running = this.#runAll(this.#take()).finally(() => {
       this.#running = null;
     });
     await this.#running;
@@ -152,40 +219,52 @@ export class OnePasswordSync {
       this.#again = 0;
       return;
     }
-    this.#running = this.#runAll().finally(() => {
+    this.#running = this.#runAll(this.#take()).finally(() => {
       this.#running = null;
       const again = this.#again;
       this.#again = null;
-      if (again !== null) this.request(again);
+      if (again !== null) this.#schedule(again);
     });
   }
 
-  async #runAll(): Promise<void> {
+  /** The passes for these reasons. Never rejects: a failure is logged by its name, and the next reason tries again. */
+  async #runAll(reasons: ReadonlySet<OnePasswordPassReason>): Promise<void> {
     const services = this.#services;
-    // A maintenance pause, a drain or a quarantine: no pass; the next reason after it runs one.
-    if (services.schemaAccess === 'read-only' || services.maintenance.paused || services.maintenance.held)
-      return;
-    this.#seen.clear();
-    const touched = new Set<string>();
     try {
-      for (const connection of await onePasswordConnections(services.db)) {
-        try {
-          const outcome = await runOnePasswordPass(services, connection.id, { api: this.api, touched });
-          if (outcome.ran && outcome.outcome === 'failing')
-            services.log.info({ connectionId: connection.id }, '1Password sync: the pass couldn’t finish');
-        } catch (err) {
-          services.log.warn(
-            { connectionId: connection.id, err: err instanceof Error ? err.name : 'error' },
-            '1Password sync: the pass failed',
-          );
+      // A maintenance pause, a drain or a quarantine: no pass; the next reason after it runs one.
+      if (services.schemaAccess === 'read-only' || services.maintenance.paused || services.maintenance.held)
+        return;
+      this.#seen.clear();
+      const touched = new Set<string>();
+      try {
+        for (const connection of await onePasswordConnections(services.db)) {
+          try {
+            const outcome = await runOnePasswordPass(services, connection.id, {
+              api: this.api,
+              touched,
+              reasons,
+              gate: this,
+            });
+            if (outcome.ran && outcome.outcome === 'failing')
+              services.log.info({ connectionId: connection.id }, '1Password sync: the pass couldn’t finish');
+          } catch (err) {
+            services.log.warn(
+              { connectionId: connection.id, err: errName(err) },
+              '1Password sync: the pass failed',
+            );
+          }
+        }
+      } finally {
+        // Entries the person changed while the pass ran (not the pass's own changes) get a pass of their own.
+        const theirs = [...this.#seen].some((id) => !touched.has(id));
+        this.#seen.clear();
+        if (theirs) {
+          this.#asked.add('change');
+          this.#again = Math.min(this.#again ?? ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_CHANGE_DELAY_MS);
         }
       }
-    } finally {
-      // Entries the person changed while the pass ran (not the pass's own changes) get a pass of their own.
-      const theirs = [...this.#seen].some((id) => !touched.has(id));
-      this.#seen.clear();
-      if (theirs)
-        this.#again = Math.min(this.#again ?? ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_CHANGE_DELAY_MS);
+    } catch (err) {
+      services.log.warn({ err: errName(err) }, '1Password sync: the passes couldn’t start');
     }
   }
 }

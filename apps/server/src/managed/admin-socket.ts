@@ -55,6 +55,7 @@ import { aiClients, clientAdapters, ManagerClients } from '../clients/service';
 import { checkSchema } from '../db/migrate';
 import { dispatches } from '../db/schema/index';
 import { describeStale } from '../lib/housekeeping';
+import { onePasswordSyncFor } from '../vault/onepassword/sync';
 import { buildInfo } from '../version';
 import { acceptFactsPush } from './facts';
 import { groupId } from './groups';
@@ -417,6 +418,15 @@ export class AdminSocket {
           estimatedMs: 5_000,
         });
     }
+    // A write to 1Password going on finishes; the sync starts none while the drain holds.
+    if (onePasswordSyncFor(services).writing)
+      blockers.push({
+        kind: 'job',
+        id: ident('onepassword-sync'),
+        description: ascii('the 1Password sync is writing a change'),
+        since: now.toISOString(),
+        estimatedMs: 5_000,
+      });
     if (services.maintenance.activeWrites > 0)
       blockers.push({
         kind: 'other',

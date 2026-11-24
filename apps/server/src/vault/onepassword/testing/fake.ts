@@ -1,8 +1,9 @@
 /**
  * An in-memory 1Password for tests (docs/decisions/onepassword-sync.md): vaults with a `contentVersion` that grows with
  * every change, items with versions and times, archiving, a `put` refused for a stale version, “too many requests”,
- * refused tokens, a read-only token, and a create that is made but whose answer is lost. It speaks `OnePasswordApi`,
- * as the worker's pool does, and records every call (never a value).
+ * refused tokens, a read-only token, a create that is made but whose answer is lost, items a `get` can't read this
+ * time, and a call held until the test lets it go. It speaks `OnePasswordApi`, as the worker's pool does, and records
+ * every call (never a value).
  */
 import type {
   OnePasswordItem,
@@ -63,6 +64,9 @@ export class FakeOnePassword implements OnePasswordApi {
   readonly failNext = new Map<string, OnePasswordFailure[]>();
   /** The next `create`s are made in the vault, but their answers are lost (the worker died after sending them). */
   loseCreates = 0;
+  /** Items a `get` answers as `failed` (1Password couldn't read them this time), as the SDK's batch does. */
+  readonly unreadable = new Set<string>();
+  readonly #pauses = new Map<string, { reached: () => void; gate: Promise<void> }>();
   #clock: number;
 
   /** `clockStart`: when its times start (development's stand-in starts at now, so they stay later than kept ones). */
@@ -210,9 +214,35 @@ export class FakeOnePassword implements OnePasswordApi {
     return this.calls.filter((c) => c === name).length;
   }
 
+  /**
+   * Holds the next call of a name until `release`: `reached` resolves when it arrives (before it is recorded or
+   * answered), so a test can change Whombat while a pass waits on 1Password.
+   */
+  pause(name: string): { reached: Promise<void>; release: () => void } {
+    let reached: () => void = () => {};
+    const arrived = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.#pauses.set(name, { reached, gate });
+    return { reached: arrived, release };
+  }
+
+  async #held(name: string): Promise<void> {
+    const pause = this.#pauses.get(name);
+    if (!pause) return;
+    this.#pauses.delete(name);
+    pause.reached();
+    await pause.gate;
+  }
+
   /* OnePasswordApi ----------------------------------------------------------------------------- */
 
   async check(token: string) {
+    await this.#held('check');
     const t = this.#enter('check', token);
     return {
       vaults: t.vaults.map((id) => ({ id, title: this.vault(id).title })),
@@ -220,6 +250,7 @@ export class FakeOnePassword implements OnePasswordApi {
   }
 
   async overview(token: string, vaultId: string): Promise<OnePasswordVaultOverview> {
+    await this.#held('overview');
     this.#enter('overview', token, vaultId);
     const v = this.vault(vaultId);
     return {
@@ -236,6 +267,7 @@ export class FakeOnePassword implements OnePasswordApi {
   }
 
   async list(token: string, vaultId: string): Promise<OnePasswordItemOverview[]> {
+    await this.#held('list');
     this.#enter('list', token, vaultId);
     return [...this.vault(vaultId).items.values()].map((i) => ({
       id: i.id,
@@ -251,20 +283,24 @@ export class FakeOnePassword implements OnePasswordApi {
   }
 
   async get(token: string, vaultId: string, itemIds: readonly string[]) {
+    await this.#held('get');
     this.#enter('get', token, vaultId);
     if (itemIds.length > 50) throw new OnePasswordError('invalid', 'At most 50 items at once.');
     const v = this.vault(vaultId);
     const items: OnePasswordItem[] = [];
     const missing: string[] = [];
+    const failed: string[] = [];
     for (const id of itemIds) {
       const item = v.items.get(id);
-      if (item) items.push(clone(item));
+      if (this.unreadable.has(id)) failed.push(id);
+      else if (item) items.push(clone(item));
       else missing.push(id);
     }
-    return { items, missing, failed: [] };
+    return { items, missing, failed };
   }
 
   async create(token: string, input: OnePasswordNewItem): Promise<OnePasswordItem> {
+    await this.#held('create');
     const t = this.#enter('create', token, input.vaultId);
     if (t.readOnly) throw new OnePasswordError('forbidden', 'You do not have permission to create items.');
     const item = this.#store(input.vaultId, clone(input));
@@ -276,6 +312,7 @@ export class FakeOnePassword implements OnePasswordApi {
   }
 
   async put(token: string, input: OnePasswordItem): Promise<OnePasswordItem> {
+    await this.#held('put');
     const t = this.#enter('put', token, input.vaultId);
     if (t.readOnly)
       throw new OnePasswordError('forbidden', 'You do not have permission to update this item.');
@@ -292,6 +329,7 @@ export class FakeOnePassword implements OnePasswordApi {
   }
 
   async archive(token: string, vaultId: string, itemId: string): Promise<void> {
+    await this.#held('archive');
     const t = this.#enter('archive', token, vaultId);
     if (t.readOnly)
       throw new OnePasswordError('forbidden', 'You do not have permission to archive this item.');

@@ -1,8 +1,8 @@
 /**
  * The 1Password sync in the Inbox (docs/decisions/onepassword-sync.md OPW-24, OPW-51, OPW-K13): “1Password says 4 items
- * are gone” with “Remove them here too” and “Keep them here” while the guard holds removals, “Whombat can’t reach
- * 1Password” while passes can't finish, a token that can only read, and (off unless the person turns it on) the
- * limit's wait. Each is read from the stored state, follows What Whombat watches for the connection (its checks), and
+ * are gone” with “Remove them here too” and “Keep them here” while the guard holds removals, a card titled by what went
+ * wrong (“Whombat can’t reach 1Password”, …) from the second pass in a row that can't finish, a token that can only
+ * read, and (off unless the person turns it on) the limit's wait. Each is read from the stored state, follows What Whombat watches for the connection (its checks), and
  * goes by itself when the state moves on.
  */
 import {
@@ -10,6 +10,7 @@ import {
   ONEPASSWORD_WORDS,
   type OnePasswordRemovalAnswer,
   onePasswordGoneTitle,
+  onePasswordRemovalsBody,
   onePasswordWaitingLine,
   thingHref,
   thingId,
@@ -21,6 +22,7 @@ import { loadPrincipalRow } from '../../read/principals';
 import { quietNow } from '../../things/quiet/defaults';
 import { quietBook } from '../../things/quiet/store';
 import { ONEPASSWORD_CATALOG_ID } from './store';
+import { ONEPASSWORD_FAILING_AFTER, onePasswordFailingTitle, onePasswordProblemText } from './words';
 
 type Row = typeof catalogConnections.$inferSelect;
 type State = typeof vaultOnePasswordState.$inferSelect;
@@ -32,7 +34,7 @@ export function onePasswordItems(
   connection: Pick<Row, 'id' | 'label'>,
   state: Pick<
     State,
-    'outcome' | 'problem' | 'readOnly' | 'removals' | 'nextTryAt' | 'checkedAt' | 'updatedAt'
+    'outcome' | 'problem' | 'readOnly' | 'removals' | 'nextTryAt' | 'checkedAt' | 'updatedAt' | 'failures'
   >,
   timeZone: string,
 ): NeedsYouItem[] {
@@ -59,7 +61,7 @@ export function onePasswordItems(
       severity: 'warn',
       nature: 'you',
       title: onePasswordGoneTitle(removals.entries.length),
-      body: 'Whombat kept them in your Vault for now. Remove them here too, or keep them only in Whombat.',
+      body: clip(onePasswordRemovalsBody(removals.entries.map((e) => e.name)), 600),
       at: removals.since,
       subject,
       href,
@@ -67,7 +69,8 @@ export function onePasswordItems(
         {
           id: 'remove',
           label: ONEPASSWORD_WORDS.removeHere,
-          style: 'primary',
+          // Neither is the recommended one, and removing can't be undone: both alike, as on the page.
+          style: 'secondary',
           kind: 'onepassword_removals',
           removals: answer('remove'),
         },
@@ -82,15 +85,16 @@ export function onePasswordItems(
       watch: { thing, check: 'onepassword.paused', name: connection.label.slice(0, 220) },
     });
   }
-  if (state.outcome === 'failing')
+  // A single pass that couldn't finish is usually a blip: the card waits for the second in a row.
+  if (state.outcome === 'failing' && state.failures >= ONEPASSWORD_FAILING_AFTER)
     items.push({
       id: `onepassword:${connection.id}:failing`,
       ref,
       kind: 'connection',
       severity: 'bad',
       nature: 'problem',
-      title: 'Whombat can’t reach 1Password',
-      body: clip(state.problem ?? ONEPASSWORD_WORDS.unreachable, 600),
+      title: onePasswordFailingTitle(state.problem),
+      body: clip(onePasswordProblemText(state.problem), 600),
       at,
       subject,
       href,
@@ -147,7 +151,7 @@ export async function onePasswordNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[
   if (
     !state ||
     (!state.readOnly &&
-      state.outcome !== 'failing' &&
+      !(state.outcome === 'failing' && state.failures >= ONEPASSWORD_FAILING_AFTER) &&
       state.outcome !== 'paused' &&
       state.outcome !== 'waiting')
   )
