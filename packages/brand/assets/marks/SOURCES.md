@@ -123,6 +123,7 @@ implies no endorsement.
 | `unifi_network.svg` | Ubiquiti | Simple Icons `ubiquiti` (<https://www.ui.com>) | CC0-1.0 |
 | `unifi_protect.svg` | Ubiquiti | Simple Icons `ubiquiti` (<https://www.ui.com>) | CC0-1.0 |
 | `unraid.svg` | Unraid | Simple Icons `unraid` (<https://unraid.net>) | CC0-1.0 |
+| `uptime.svg` | Website or address | Lucide `activity` | ISC |
 | `voidlinux.svg` | Void Linux | Simple Icons `voidlinux` (<https://alpha.de.repo.voidlinux.org/logos/void-dark2.svg>) | CC0-1.0 |
 | `xubuntu.svg` | Xubuntu | Simple Icons `xubuntu` (<https://commons.wikimedia.org/wiki/File:Xubuntu_Icon.svg>) | CC0-1.0 |
 | `zorin.svg` | Zorin | Simple Icons `zorin` (<https://zorin.com/press>) | CC0-1.0 |
