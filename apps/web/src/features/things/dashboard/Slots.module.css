@@ -846,10 +846,16 @@
 /* The heads-ups' own row, folded until asked for (overview-server-connection-final.md). */
 .stripHeadsUps {
   display: block;
+  width: 100%;
   min-height: 44px;
   padding: 4px 14px 4px 62px;
   border-top: 1px solid var(--line);
   text-align: left;
+}
+
+/* Right under the band: its own rule is the band's. */
+.stripHead + .stripHeadsUps {
+  border-top: none;
 }
 
 .stripMore:focus-visible {

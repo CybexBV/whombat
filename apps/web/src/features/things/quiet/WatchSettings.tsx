@@ -4,17 +4,26 @@
  * Settings tab and a server's System tab, one switch per check in plain words, “Off since 20 Oct (John)” under one
  * switched off, and what is excepted (“Not for: Garage AP until it’s back · Attic AP always”), each with Undo. Look only
  * and guests see the same list with the switches greyed and no Undo (`mayChange` false). Nothing on a Whombat without
- * `things.quiet`.
+ * `things.quiet`. A server's check with a limit says it under its name (“Warns above 85 %”, a disk with its own beside
+ * it) with Change the limit (monitoring.md MON-15).
  */
-import { QUIET_TOASTS, thingWatchView, type WatchCheckView } from '@whombat/client';
+import {
+  LIMIT_WORDS,
+  limitLine,
+  limitView,
+  QUIET_TOASTS,
+  thingWatchView,
+  type WatchCheckView,
+} from '@whombat/client';
 import { type QuietActions, useThingWatch } from '@whombat/client/react';
-import { QUIET_WORDS } from '@whombat/core';
+import { type NoticeSubject, QUIET_WORDS, type ThingWatchCheck } from '@whombat/core';
 import { type ReactNode, useId } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { SkeletonRows } from '../../../components/ListState';
 import { Toggle } from '../../../components/Toggle';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
 import { Card } from '../parts';
+import { useLimitSheet } from './ChangeLimit';
 import styles from './Quiet.module.css';
 import { useThingQuiet } from './useQuiet';
 
@@ -23,6 +32,8 @@ export function WatchSettings({ burrow, thing }: { burrow: string; thing: string
   const now = useNow(60_000);
   const q = useThingWatch({ params: { burrow, thing } }, { retry: false });
   const actions = useThingQuiet(burrow, thing);
+  const limits = useLimitSheet(burrow, thing);
+  const checks = new Map((q.data?.checks ?? []).map((c) => [c.check, c]));
   let body: ReactNode;
   if (q.error && !q.data)
     body = (
@@ -45,6 +56,15 @@ export function WatchSettings({ burrow, thing }: { burrow: string; thing: string
             row={r}
             actions={view.mayChange ? actions : null}
             mayChange={view.mayChange}
+            check={checks.get(r.check) ?? null}
+            onLimit={
+              view.mayChange
+                ? (c, subject) => {
+                    const v = limitView(c, subject);
+                    if (v) limits.openFor(v);
+                  }
+                : null
+            }
           />
         ))}
       </div>
@@ -53,6 +73,7 @@ export function WatchSettings({ burrow, thing }: { burrow: string; thing: string
   return (
     <Card title={QUIET_WORDS.watchTitle} id="watching">
       {body}
+      {limits.sheet}
     </Card>
   );
 }
@@ -61,13 +82,20 @@ function WatchRow({
   row,
   actions,
   mayChange,
+  check,
+  onLimit,
 }: {
   row: WatchCheckView;
   actions: QuietActions | null;
   mayChange: boolean;
+  /** The check as the server sent it: its limit, when it has one. */
+  check: ThingWatchCheck | null;
+  /** Change the limit, for the whole server or one item; none for who may not. */
+  onLimit: ((check: ThingWatchCheck, subject?: NoticeSubject) => void) | null;
 }) {
   const id = useId();
   const busy = actions?.busy({ check: row.check }) ?? false;
+  const limit = check && row.on ? limitLine(check) : null;
   return (
     <div className={styles.watchRow} data-check={row.check}>
       <div className={styles.watchText}>
@@ -75,6 +103,37 @@ function WatchRow({
           {row.name}
         </span>
         {row.offLine ? <small className={styles.watchOff}>{row.offLine}</small> : null}
+        {limit && check ? (
+          <div className={styles.except} data-limit={row.check}>
+            <span className={styles.exceptLabel}>{limit.words}</span>
+            {limit.items.map((i) => (
+              <span key={i.subject.id} className={styles.chip}>
+                {i.subject.name}
+                <span className={styles.chipWords}>{i.words}</span>
+                {onLimit ? (
+                  <button
+                    type="button"
+                    className={styles.chipUndo}
+                    aria-label={`${LIMIT_WORDS.menu}: ${i.subject.name}`}
+                    onClick={() => onLimit(check, i.subject)}
+                  >
+                    Change
+                  </button>
+                ) : null}
+              </span>
+            ))}
+            {onLimit ? (
+              <button
+                type="button"
+                className={styles.limitBtn}
+                aria-label={`${LIMIT_WORDS.menu}: ${row.name}`}
+                onClick={() => onLimit(check)}
+              >
+                {LIMIT_WORDS.menu}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {row.exceptions.length ? (
           <div className={styles.except}>
             <span className={styles.exceptLabel}>{QUIET_WORDS.watchNot}</span>

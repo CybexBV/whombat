@@ -10,7 +10,16 @@
  * once asked for (`?ask=1`), with a notice's question ready to send. Live through `hosts:<burrowId>` (AP-1304,
  * AP-1308).
  */
-import { CHAT_WORDS, OVERVIEW_WORDS, partsOf, readingsMoment } from '@whombat/client';
+import {
+  CHAT_WORDS,
+  holdView,
+  KEEP_QUIET_WORDS,
+  limitNow,
+  lineLimit,
+  OVERVIEW_WORDS,
+  partsOf,
+  readingsMoment,
+} from '@whombat/client';
 import {
   arrayGroups,
   detailGuests,
@@ -72,6 +81,8 @@ import { MacPanel } from './macos/MacPanel';
 import { type ServerPowerAction, ServerPowerDialog } from './manage/ServerPowerDialog';
 import { AppLink, Skeleton } from './parts';
 import { useThingLinkProps } from './prefetch';
+import { useLimitSheet } from './quiet/ChangeLimit';
+import { HoldLine, KeepQuietDialog, useKeepsQuiet, useThingKeepQuiet } from './quiet/KeepQuiet';
 import { useServerQuiet } from './quiet/useQuiet';
 import { useThingSearch } from './search';
 import styles from './Things.module.css';
@@ -183,6 +194,12 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
 
   // The name a person gave it (“The Titan”), else its id.
   const name = d?.server.name ?? d?.server.id ?? serverId;
+  // Keep quiet for a while and End now (monitoring.md MON-04), and Change the limit (MON-15), for who may.
+  const keeps = useKeepsQuiet();
+  const keepQuiet = useThingKeepQuiet(burrow, thingId('server', serverId), name);
+  const [keeping, setKeeping] = useState(false);
+  const limits = useLimitSheet(burrow, thingId('server', serverId));
+  const hold = keeps && d?.keptQuiet ? holdView({ keptQuiet: d.keptQuiet }) : null;
   const onAsk = (question?: string) => {
     setDraft(question ?? null);
     set({ ask: '1', chat: 'new' }, { replace: true });
@@ -249,7 +266,9 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
           timeZone={zone}
           onShell={() => set({ console: 'host' })}
           onScreen={() => set({ console: 'screen' })}
+          onKeepQuiet={keeps && sq.mayQuiet ? () => setKeeping(true) : null}
         />
+        {hold ? <HoldLine view={hold} onEnd={() => void keepQuiet.end()} busy={keepQuiet.busy} /> : null}
         {detail.error ? (
           // A refresh failed: the page keeps its readings, from its own report's time.
           <ReadNote
@@ -309,6 +328,16 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
               status={d.server.status}
               // A Mac links to the Find My connection that reads it (findmy-connection.md §1.5).
               links={kind === 'mac' ? <FindMyLink burrow={burrow} serverId={serverId} /> : null}
+              endQuiet={keeps ? () => void keepQuiet.end() : null}
+              endingQuiet={keepQuiet.busy}
+              limitFor={
+                sq.mayQuiet
+                  ? (line) => {
+                      const v = lineLimit(line, sq.checks);
+                      return v ? { now: limitNow(v), open: () => limits.openFor(v) } : null;
+                    }
+                  : null
+              }
             />
           ) : kind === 'unraid' ? (
             <UnraidPanel
@@ -375,6 +404,16 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
           }}
         />
       ) : null}
+      {limits.sheet}
+      {keeps && sq.mayQuiet ? (
+        <KeepQuietDialog
+          open={keeping}
+          burrow={burrow}
+          name={name}
+          actions={keepQuiet}
+          onClose={() => setKeeping(false)}
+        />
+      ) : null}
       {search.console && d ? (
         <ConsoleDialog
           burrow={burrow}
@@ -399,6 +438,7 @@ function ServerHead({
   timeZone,
   onShell,
   onScreen,
+  onKeepQuiet,
 }: {
   burrow: string;
   serverId: string;
@@ -407,6 +447,8 @@ function ServerHead({
   onShell: () => void;
   /** A Mac's screen (macos-servers.md). */
   onScreen: () => void;
+  /** Keep quiet… in ⋯ (monitoring.md MON-04); null where the viewer may not or the Whombat can't. */
+  onKeepQuiet: (() => void) | null;
 }) {
   const now = useNow(30_000);
   const head = serverDashboardHead(detail);
@@ -439,6 +481,8 @@ function ServerHead({
           <>
             <ReadTime at={serverReportAt(detail)} now={now} timeZone={timeZone} />
             {head.idLine ? <span className={styles.idLine}>{head.idLine}</span> : null}
+            {/* Its week in one line (monitoring.md MON-09), where a service's page has it. */}
+            {detail.uptime ? <span>{detail.uptime.text}</span> : null}
           </>
         }
         renaming={
@@ -475,6 +519,7 @@ function ServerHead({
               allowed={rc.hostPower !== false}
               reason={rc.hostPowerReason}
               thisWhombat={hostsThisWhombat(detail.server)}
+              onKeepQuiet={onKeepQuiet}
             />
           </>
         }
@@ -537,6 +582,7 @@ function ServerMore({
   allowed,
   reason,
   thisWhombat = false,
+  onKeepQuiet,
 }: {
   burrow: string;
   serverId: string;
@@ -550,6 +596,8 @@ function ServerMore({
   reason?: string | null;
   /** This Whombat runs on it: the question says it goes down too (IU-02). */
   thisWhombat?: boolean;
+  /** Keep quiet… (monitoring.md MON-04): before Restart, as it goes with planned work. */
+  onKeepQuiet: (() => void) | null;
 }) {
   const [ask, setAsk] = useState<ServerPowerAction | null>(null);
   const powerOff = allowed ? null : (reason ?? 'Restarting this server from Whombat is switched off.');
@@ -577,6 +625,9 @@ function ServerMore({
             disabled: 'reason' in shell,
             reason: 'reason' in shell ? shell.reason : null,
           },
+          ...(onKeepQuiet
+            ? [{ key: 'keep-quiet', label: KEEP_QUIET_WORDS.menu, onSelect: onKeepQuiet }]
+            : []),
           {
             key: 'restart',
             label: `Restart ${name}`,

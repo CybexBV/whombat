@@ -7,7 +7,7 @@
  */
 import { QUIET_TOASTS } from '@whombat/client';
 import { type QuietActions, useQuietActions, useThingWatch } from '@whombat/client/react';
-import { thingId } from '@whombat/core';
+import { type ThingWatchCheck, thingId } from '@whombat/core';
 import { useToast } from '../../../components/Toast';
 import { useBurrowContext } from '../../messaging/useRoom';
 
@@ -33,6 +33,8 @@ export function useThingQuiet(burrow: string, thing: string): QuietActions {
 export interface ServerQuiet {
   mayQuiet: boolean;
   actions: QuietActions;
+  /** What Whombat watches on it: the checks with their limits (Change the limit, monitoring.md MON-15). */
+  checks: readonly ThingWatchCheck[] | null;
 }
 
 /** A server's quiet (QN-10, QN-23): `things.watch`'s `mayChange`, read once and kept a minute. */
@@ -46,5 +48,5 @@ export function useServerQuiet(burrow: string, serverId: string): ServerQuiet {
     },
   );
   const actions = useThingQuiet(burrow, thing);
-  return { mayQuiet: !!watch.data?.mayChange, actions };
+  return { mayQuiet: !!watch.data?.mayChange, actions, checks: watch.data?.checks ?? null };
 }
