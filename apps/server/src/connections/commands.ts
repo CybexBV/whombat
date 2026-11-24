@@ -15,7 +15,9 @@ import {
   conversationLabel,
   defaultConnectionLabel,
   handleFor,
+  isVaultSyncConnection,
   type JsonValue,
+  OnePasswordDisconnectChoice,
   thingId,
   topics,
 } from '@whombat/core';
@@ -42,6 +44,8 @@ import { loadConversationRow } from '../read/conversations';
 import { burrowView } from '../read/views';
 import { toApproval } from '../read/work';
 import type { Services } from '../services';
+import { linkOnePassword, removeSyncedEntries } from '../vault/onepassword/commands';
+import { ONEPASSWORD_CONNECTION_EXISTS, onePasswordConnectionOf } from '../vault/onepassword/store';
 import { connectionError } from './errors';
 import { automaticLabel } from './labels';
 import { emitConnectionLifecycle } from './lifecycle';
@@ -192,6 +196,13 @@ export const addConnection = defineCommand({
       if (existing)
         throw connectionError('gateway_exists', {}, AI_GATEWAY_COPY.exists(gatewayName(existing)));
     }
+    const vaultSync = isVaultSyncConnection(input.values.catalogId);
+    if (vaultSync) {
+      // At most one 1Password connection per burrow (OPW-01), checked again here so two at once can't both get in.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`vault_sync:${ctx.burrow.id}`}))`);
+      if (await onePasswordConnectionOf(tx, ctx.burrow.id))
+        throw connectionError('limit_reached', { max: 1 }, ONEPASSWORD_CONNECTION_EXISTS);
+    }
     const row = await insertConnection(
       tx,
       { ...input.values, burrowId: ctx.burrow.id, connectedById: ctx.actor.id },
@@ -206,6 +217,7 @@ export const addConnection = defineCommand({
     });
     // Its switches start off (AIG-05): a burrow's stored switches of an earlier gateway connection don't apply.
     if (gateway) await publishGatewayChange(ctx, row.id, event.id);
+    if (vaultSync) await linkOnePassword(ctx, row);
     return { row, eventId: event.id };
   },
 });
@@ -270,12 +282,19 @@ export const changeConnection = defineCommand({
 
 export const removeConnection = defineCommand({
   name: 'catalog_connection.remove',
-  schema: z.object({ connectionId: z.string() }),
+  schema: z.object({
+    connectionId: z.string(),
+    /** A 1Password connection: its entries stay in the Vault (`keep`, absent) or go with it (OPW-50). */
+    vaultEntries: OnePasswordDisconnectChoice.optional(),
+  }),
   requiredKey: () => manage('remove a connection'),
   async apply(tx, ctx, input) {
     requirePerson(ctx);
     const row = await lockedRow(tx, ctx.burrow.id, input.connectionId);
     await withdrawConnectionApprovals(ctx, row.id, `${row.label} was removed`);
+    // “Remove them too”: the entries kept in step with it go, through the Vault's own removal; 1Password stays as it is.
+    if (isVaultSyncConnection(row.catalogId) && input.vaultEntries === 'remove')
+      await removeSyncedEntries(ctx, row.id);
     const event = await ctx.emit({
       type: 'connection.removed',
       kind: 'System',

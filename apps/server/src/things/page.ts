@@ -25,6 +25,7 @@ import {
   catalogEntry,
   connectionHost,
   isGatewayConnection,
+  isVaultSyncConnection,
   parseThingId,
   type ThingLine,
   type ThingPage,
@@ -341,8 +342,9 @@ export async function connectionPage(
     : null;
   if (card) summary.push(card);
   const items = accessItems(entry, row, tools);
-  // A gateway is no agent's (fusebox-page.md FP-01): nothing to say about what Whombat may do with it.
-  const gateway = isGatewayConnection(entry);
+  // A gateway is no agent's (fusebox-page.md FP-01), nor is the Vault's sync (onepassword-sync.md OPW-01): nothing to
+  // say about what Whombat may do with it.
+  const gateway = isGatewayConnection(entry) || isVaultSyncConnection(entry);
   summary.push(
     ...closingPanels({
       changes: changed,

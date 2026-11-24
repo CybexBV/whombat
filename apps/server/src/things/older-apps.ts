@@ -8,9 +8,13 @@
  *   the Connections tab as before, and Website feedback, which its sidebar never had, is left out
  *   (docs/decisions/connection-dashboards.md).
  *
+ * - An app below minor 8 can't draw a 1Password connection's page or answer its Inbox card: the catalog it is offered
+ *   leaves 1Password out (docs/decisions/onepassword-sync.md).
+ *
  * A newer app, and anything outside a session, gets the answer as it is.
  */
 import {
+  type ConnectionsCatalogStatus,
   FEEDBACK_THING_ID,
   FIND_MY_TIMELINE_TAB,
   type HomeOverview,
@@ -18,7 +22,11 @@ import {
   type ThingPageTab,
   type ThingSummary,
 } from '@whombat/core';
-import { ACCOUNT_PAGES_MINOR, FIND_MY_TIMELINE_MINOR } from '@whombat/protocol/session';
+import {
+  ACCOUNT_PAGES_MINOR,
+  FIND_MY_TIMELINE_MINOR,
+  ONEPASSWORD_SYNC_MINOR,
+} from '@whombat/protocol/session';
 import { mailThingHref } from '../home/mail-glance';
 import { SUMMARY_TAB } from './panels';
 
@@ -57,12 +65,22 @@ export function thingsFor(things: readonly ThingSummary[], minor: number | undef
     );
 }
 
+/** Whether a session at `minor` is offered 1Password; outside a session (`undefined`), it is. */
+export const readsOnePassword = (minor: number | undefined) =>
+  minor === undefined || minor >= ONEPASSWORD_SYNC_MINOR;
+
 /**
  * An op's answer as an app at `minor` reads it: `things.page`'s without what it can't draw, `home.overview`'s things as
- * it opens them, every other op's as it is.
+ * it opens them, `connections.catalog`'s without 1Password below minor 8, every other op's as it is.
  */
 export function thingAnswerFor(op: string, body: unknown, minor: number | undefined): unknown {
   if (!body || typeof body !== 'object') return body;
+  if (op === 'connections.catalog' && !readsOnePassword(minor)) {
+    const status = body as ConnectionsCatalogStatus;
+    return Array.isArray(status.entries)
+      ? { ...status, entries: status.entries.filter((e) => e.catalogId !== 'onepassword') }
+      : body;
+  }
   if (op === 'home.overview' && !readsAccountPages(minor)) {
     const overview = body as HomeOverview;
     return Array.isArray(overview.things) ? { ...overview, things: thingsFor(overview.things, minor) } : body;

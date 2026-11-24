@@ -105,7 +105,12 @@ export const connectionCatalogRoutes = [
 
   route(api.connections.disconnect, async (ctx) => {
     const viewer = await viewerOf(ctx);
-    const { eventId, notice } = await disconnectConnection(ctx.services, viewer, ctx.params.connectionId);
+    const { eventId, notice } = await disconnectConnection(
+      ctx.services,
+      viewer,
+      ctx.params.connectionId,
+      ctx.query.vaultEntries,
+    );
     return { ok: true as const, eventId, notice };
   }),
 
