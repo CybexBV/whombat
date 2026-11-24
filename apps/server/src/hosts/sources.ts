@@ -109,6 +109,8 @@ export function serverThing(s: HostServer): ThingSummary {
     ...(status !== 'ok' && s.statusNote?.trim() ? { reason: reasonWords(s.statusNote).slice(0, 160) } : {}),
     facts,
     href: thingHref('server', s.id),
+    // Kept quiet until a time (monitoring.md MON-04), as Home's connections and devices say it.
+    ...(verdict?.quietUntil ? { quietUntil: verdict.quietUntil } : {}),
   };
 }
 
@@ -156,10 +158,12 @@ export function alertNeedsYou(a: HostAlert): NeedsYouItem {
 
 /**
  * An alert on Watch, with its acknowledgement or snooze (QN-22): an open one only while it asks for attention; muted
- * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`).
+ * by maintenance or held back while its parent is offline, it was put aside too (`acknowledged`). Its server kept quiet
+ * snoozes it until the window ends (monitoring.md MON-04).
  */
 export function alertWatch(a: HostAlert, now: Date): WatchItem {
-  const until = a.acknowledged?.until ?? null;
+  const held = a.quiet?.held === 'window' ? (a.quiet.until ?? null) : null;
+  const until = held ?? a.acknowledged?.until ?? null;
   const snoozed = until !== null && Date.parse(until) > now.getTime();
   const line = alertLine(a);
   const nature = line.nature;
@@ -173,13 +177,16 @@ export function alertWatch(a: HostAlert, now: Date): WatchItem {
     body: a.detail.slice(0, 600),
     at: a.openedAt,
     ...(a.serverId ? { serverId: a.serverId, href: thingHref('server', a.serverId) } : {}),
-    state: a.acknowledged
-      ? snoozed
+    state:
+      held && snoozed
         ? 'snoozed'
-        : 'acknowledged'
-      : a.attention || a.state !== 'open'
-        ? 'open'
-        : 'acknowledged',
+        : a.acknowledged
+          ? snoozed
+            ? 'snoozed'
+            : 'acknowledged'
+          : a.attention || a.state !== 'open'
+            ? 'open'
+            : 'acknowledged',
     ...(snoozed && until ? { snoozedUntil: until } : {}),
     nature,
     ...(watch ? { watch } : {}),

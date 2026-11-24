@@ -7,7 +7,7 @@
  * (`window-service.ts`) so the servers' tools can use it without the pages' modules.
  */
 import { randomIdBody, thingId } from '@whombat/core';
-import { and, eq, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { quietWindows } from '../../db/schema/index';
 import { homeAudience, publishHomeChanged } from '../../home/notify';
 import { HOSTS_API, seg } from '../../hosts/client';
@@ -159,14 +159,25 @@ export async function keepQuietForWork(
   }
 }
 
-/** Whombat's work ended at `at`: its window holds 15 minutes more, then ends by itself. Never throws. */
+/**
+ * Whombat's work ended at `at`: its window holds 15 minutes more, then ends by itself. Written as every write is, and
+ * Home told, so an open page says the new end. Never throws.
+ */
 export async function workEnded(services: Services, work: string, at = services.clock()): Promise<void> {
   try {
     const endsAt = new Date(at.getTime() + AFTER_WORK_MS);
-    await services.db
-      .update(quietWindows)
-      .set({ endsAt })
+    const open = await services.db
+      .select({ id: quietWindows.id, ownerId: quietWindows.ownerId })
+      .from(quietWindows)
       .where(and(eq(quietWindows.work, work), isNull(quietWindows.endedAt)));
+    for (const w of open)
+      await services.pipeline.transact(w.ownerId, async (session) => {
+        await session.tx
+          .update(quietWindows)
+          .set({ endsAt })
+          .where(and(eq(quietWindows.id, w.id), isNull(quietWindows.endedAt)));
+        publishHomeChanged(session, await homeAudience(session, w.ownerId), ['things', 'watch', 'needsYou']);
+      });
   } catch (err) {
     services.log.warn({ err: err instanceof Error ? err.name : 'error' }, 'quiet window: work end not noted');
   }
@@ -174,35 +185,66 @@ export async function workEnded(services: Services, work: string, at = services.
 
 /** How long a window that ended stays: what a page of history can still say. */
 const WINDOWS_KEEP_MS = 90 * 24 * 3600_000;
+/** After a restart, windows that ran out this long before the first sweep are still told of. */
+const RAN_OUT_LOOKBACK_MS = 2 * 60_000;
+/** When each Whombat's sweep last ran: windows that ran out since are told of once. */
+const lastSweep = new WeakMap<Services, Date>();
 
 /**
  * The minute's sweep: windows that are over give their maintenance window back to the hosts service, and windows ended
- * long ago go. Returns how many maintenance windows were removed.
+ * long ago go. Home hears of windows that ran out by themselves since the last sweep, so an open page stops saying
+ * “Quiet until …”. Every write goes through the commit pipeline, per burrow. Returns how many maintenance windows were
+ * removed.
  */
 export async function sweepQuietWindows(services: Services, now = services.clock()): Promise<number> {
-  const over = await services.db
-    .select()
-    .from(quietWindows)
-    .where(
-      and(
-        isNotNull(quietWindows.maintenanceId),
-        or(isNotNull(quietWindows.endedAt), lte(quietWindows.endsAt, now)),
+  const since = lastSweep.get(services) ?? new Date(now.getTime() - RAN_OUT_LOOKBACK_MS);
+  lastSweep.set(services, now);
+  const [over, ranOut, old] = await Promise.all([
+    services.db
+      .select()
+      .from(quietWindows)
+      .where(
+        and(
+          isNotNull(quietWindows.maintenanceId),
+          or(isNotNull(quietWindows.endedAt), lte(quietWindows.endsAt, now)),
+        ),
       ),
-    );
-  let removed = 0;
+    services.db
+      .select({ ownerId: quietWindows.ownerId })
+      .from(quietWindows)
+      .where(
+        and(isNull(quietWindows.endedAt), gt(quietWindows.endsAt, since), lte(quietWindows.endsAt, now)),
+      ),
+    services.db
+      .select({ id: quietWindows.id, ownerId: quietWindows.ownerId })
+      .from(quietWindows)
+      .where(
+        and(
+          lte(quietWindows.endsAt, new Date(now.getTime() - WINDOWS_KEEP_MS)),
+          isNull(quietWindows.maintenanceId),
+        ),
+      ),
+  ]);
+  const given: { id: string; ownerId: string }[] = [];
   if (over.length && hostsFor(services).present)
-    for (const w of over) {
-      if (!w.maintenanceId || !(await removeMaintenance(services, w.maintenanceId))) continue;
-      await services.db.update(quietWindows).set({ maintenanceId: null }).where(eq(quietWindows.id, w.id));
-      removed++;
-    }
-  await services.db
-    .delete(quietWindows)
-    .where(
-      and(
-        lte(quietWindows.endsAt, new Date(now.getTime() - WINDOWS_KEEP_MS)),
-        isNull(quietWindows.maintenanceId),
-      ),
-    );
-  return removed;
+    for (const w of over)
+      if (w.maintenanceId && (await removeMaintenance(services, w.maintenanceId))) given.push(w);
+  const owners = new Set([...given, ...ranOut, ...old].map((w) => w.ownerId));
+  for (const owner of owners)
+    await services.pipeline.transact(owner, async (session) => {
+      const mineGiven = given.filter((w) => w.ownerId === owner).map((w) => w.id);
+      const mineOld = old.filter((w) => w.ownerId === owner).map((w) => w.id);
+      if (mineGiven.length)
+        await session.tx
+          .update(quietWindows)
+          .set({ maintenanceId: null })
+          .where(inArray(quietWindows.id, mineGiven));
+      if (mineOld.length)
+        await session.tx
+          .delete(quietWindows)
+          .where(and(inArray(quietWindows.id, mineOld), isNull(quietWindows.maintenanceId)));
+      if (mineGiven.length || ranOut.some((w) => w.ownerId === owner))
+        publishHomeChanged(session, await homeAudience(session, owner), ['things', 'watch', 'needsYou']);
+    });
+  return given.length;
 }

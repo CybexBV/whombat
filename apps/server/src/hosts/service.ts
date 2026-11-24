@@ -14,6 +14,7 @@ import { asc } from 'drizzle-orm';
 import type { Config } from '../config';
 import type { Database } from '../db/client';
 import { burrows } from '../db/schema/index';
+import type { QuietWindowRow } from '../db/schema/quiet-windows';
 import type { Logger } from '../services';
 import { NO_QUIET, type QuietBook, quietBook, thingQuiet } from '../things/quiet/store';
 import { activeWindow, keptQuiet as heldQuiet } from '../things/quiet/windows';
@@ -38,10 +39,11 @@ import { arr, hintGuests, obj, toHostFleet, toHostWatchLimits, ts } from './map'
 import { loadServerNames } from './names-store';
 import {
   ackPeople,
-  alertQuiet,
   HEARTBEAT_RULE,
+  HUB_LEVEL,
   keepVerdict,
   type MarkedHints,
+  markAlertQuiet,
   markHints,
   serverThingId,
   serverVerdict,
@@ -550,15 +552,27 @@ export class HostsService {
 
   /** One alert with its quiet (QN-14): a realtime frame's, as the fleet and the page mark theirs. */
   async withQuiet(alert: HostAlert): Promise<HostAlert> {
-    if (alert.attention || alert.state !== 'open') return alert;
+    if (alert.state !== 'open') return alert;
     const now = this.deps.clock();
-    const zone = (await this.homeBurrow().catch(() => null))?.timeZone ?? 'UTC';
-    const names = await quietNames(
-      this.deps.db,
-      ackPeople([alert]).map((byId) => ({ byId })),
-    ).catch(() => new Map<string, string>());
-    const quiet = alertQuiet(alert, { now, names, untilWords: (until) => untilWords(until, now, zone) });
-    return quiet ? { ...alert, quiet } : alert;
+    const burrow = await this.homeBurrow().catch(() => null);
+    const zone = burrow?.timeZone ?? 'UTC';
+    // Its server kept quiet holds it too, also while the hub still asks for attention (monitoring.md MON-04).
+    const window =
+      burrow && alert.serverId && !HUB_LEVEL(alert.rule)
+        ? activeWindow(
+            (await thingQuiet(this.deps.db, burrow.id, serverThingId(alert.serverId)).catch(() => null))
+              ?.windows,
+            now,
+          )
+        : null;
+    if (alert.attention && !window) return alert;
+    const names = await quietNames(this.deps.db, [
+      ...ackPeople([alert]).map((byId) => ({ byId })),
+      ...(window ? [window] : []),
+    ]).catch(() => new Map<string, string>());
+    const marked = { ...alert };
+    markAlertQuiet(marked, window, { now, names, untilWords: (until) => untilWords(until, now, zone) });
+    return marked;
   }
 
   /** Whether the hosts service doesn't watch whether a server is online (a failed read: it does). */
@@ -590,16 +604,18 @@ export class HostsService {
       : null;
     const marked = markHints(detail.hints, quiet ?? NO_QUIET, now, hintGuests);
     const alerts = detail.alerts ?? [];
+    // Kept quiet until a time (monitoring.md MON-04): every open alert of it is held with the window.
+    const window = activeWindow(quiet?.windows, now);
     const names = await quietNames(this.deps.db, [
       ...ackPeople(alerts).map((byId) => ({ byId })),
       ...marked.hints.map((m) => ({ byId: m.row?.byId ?? null })),
+      ...(window ? [window] : []),
     ]).catch(() => new Map<string, string>());
     const zone = burrow?.timeZone ?? 'UTC';
     const words = (until: Date) => untilWords(until, now, zone);
-    for (const a of alerts) {
-      const q = alertQuiet(a, { now, names, untilWords: words });
-      if (q) a.quiet = q;
-    }
+    const verdictAlerts = alerts.map((a) => ({ ...a }));
+    for (const a of alerts)
+      markAlertQuiet(a, a.serverId === id ? window : null, { now, names, untilWords: words });
     const hints = marked.hints.map((m) =>
       m.row ? { ...m.hint, quiet: quietOf(m.row, names, now, zone) } : m.hint,
     );
@@ -611,7 +627,7 @@ export class HostsService {
         statusNote: detail.server.statusNote,
       },
       pending: status === 'pending',
-      alerts,
+      alerts: verdictAlerts,
       hints: detail.hints,
       quiet: quiet ?? NO_QUIET,
       now,
@@ -619,16 +635,8 @@ export class HostsService {
     });
     const banner = detail.banner;
     const bannerAlert = banner?.alertId ? alerts.find((a) => a.id === banner.alertId) : undefined;
-    // Kept quiet until a time (monitoring.md MON-04): the page says so with End now (servers are the person's).
-    const window = activeWindow(quiet?.windows, now);
-    const keptQuiet = window
-      ? heldQuiet(window, {
-          now,
-          timeZone: zone,
-          names: await quietNames(this.deps.db, [window]).catch(() => new Map<string, string>()),
-          canEnd: true,
-        })
-      : null;
+    // The page says so with End now (servers are the person's).
+    const keptQuiet = window ? heldQuiet(window, { now, timeZone: zone, names, canEnd: true }) : null;
     return {
       ...detail,
       ...(keptQuiet ? { keptQuiet } : {}),
@@ -668,8 +676,12 @@ export class HostsService {
     const hold = out.servers.some((s) => s.status === 'offline') ? await this.reconnecting() : null;
     const kept: typeof out.hints = [];
     const hintRows: MarkedHints['hints'] = [];
+    // Servers kept quiet now, by id (monitoring.md MON-04): their open alerts are held with the window.
+    const windows = new Map<string, QuietWindowRow>();
     for (const s of out.servers) {
       const quiet = book?.of(serverThingId(s.id)) ?? NO_QUIET;
+      const window = activeWindow(quiet.windows, now);
+      if (window) windows.set(s.id, window);
       const mine = hints.filter((h) => h.serverId === s.id);
       const marked = markHints(mine, quiet, now, hintGuests);
       for (const m of marked.hints) {
@@ -704,7 +716,7 @@ export class HostsService {
         s.status = verdict.status;
         s.statusNote = verdict.note;
       }
-      keepVerdict(s, verdict);
+      keepVerdict(s, window ? { ...verdict, quietUntil: window.endsAt.toISOString() } : verdict);
     }
     // Hints of servers the fleet doesn't list (another group) stay as they are.
     const listed = new Set(out.servers.map((s) => s.id));
@@ -712,12 +724,11 @@ export class HostsService {
     const names = await quietNames(this.deps.db, [
       ...ackPeople(out.alerts).map((byId) => ({ byId })),
       ...hintRows.map((m) => ({ byId: m.row?.byId ?? null })),
+      ...windows.values(),
     ]).catch(() => new Map<string, string>());
     const words = (until: Date) => untilWords(until, now, zone);
-    for (const a of out.alerts) {
-      const quiet = alertQuiet(a, { now, names, untilWords: words });
-      if (quiet) a.quiet = quiet;
-    }
+    for (const a of out.alerts)
+      markAlertQuiet(a, a.serverId ? windows.get(a.serverId) : null, { now, names, untilWords: words });
     for (const m of hintRows) if (m.row) m.hint.quiet = quietOf(m.row, names, now, zone);
   }
 

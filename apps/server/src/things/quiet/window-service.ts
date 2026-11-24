@@ -10,6 +10,7 @@
  * the pages' part, loaded when asked: the servers' tools reach this file's neighbours without the pages' modules.
  */
 import {
+  KEEP_QUIET_MIN_MINUTES,
   type KeepQuietBody,
   type KeepQuietResponse,
   type KeptQuiet,
@@ -17,13 +18,14 @@ import {
   parseThingId,
   thingId,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { connectionByHandle } from '../../connections/context';
 import type { ConnectionViewer } from '../../connections/store';
 import { burrows, quietWindows } from '../../db/schema/index';
 import type { QuietWindowRow } from '../../db/schema/quiet-windows';
 import { turnPerson } from '../../domain/turn-person';
 import type { DirectUndoCtx, DirectUndoResult, RecordedChange } from '../../home/registry';
+import { arr, obj } from '../../hosts/map';
 import { serverLabel } from '../../hosts/self';
 import { hostsFor } from '../../hosts/service';
 import { ApiError, badRequest, forbidden, notAllowed, notFound } from '../../lib/errors';
@@ -45,17 +47,26 @@ const KEEP_MAX_MS = 31 * 24 * 3600_000;
 export const QUIET_ASK_FIRST_TEXT =
   'Only the person keeps things quiet. Ask them first; once they say so in this conversation, call quiet_until again.';
 
-/** The thing a window is about, as the commands take it; a server's when the hosts service watches it here. */
+/**
+ * The thing a window is about, as the commands take it; a server's when the hosts service watches it here. `known`: a
+ * server must be one the hosts service lists (keeping quiet); a fleet that can't be read now doesn't stop the person's
+ * word, and End now still finds a window of a server that has gone.
+ */
 async function windowThing(
   services: Services,
   viewer: ConnectionViewer,
   value: string,
   timeZone: string,
+  opts: { known?: boolean } = {},
 ): Promise<QuietThing> {
   const parsed = parseThingId(value);
   if (parsed?.kind === 'server') {
     const hosts = hostsFor(services);
     if (!(await hosts.serves(viewer.burrowId).catch(() => false))) throw notFound('Thing');
+    if (opts.known) {
+      const fleet = await hosts.fleetRaw().catch(() => null);
+      if (fleet && !arr(fleet.servers).some((s) => obj(s).id === parsed.id)) throw notFound('Thing');
+    }
     return {
       id: thingId('server', parsed.id),
       kind: 'server',
@@ -100,10 +111,12 @@ export async function keepThingQuiet(
   opts: { agentId?: string } = {},
 ): Promise<KeepQuietResponse> {
   if (viewer.principal.kind !== 'person') throw notAllowed('Only you can keep things quiet.');
-  const thing = await windowThing(services, viewer, value, timeZone);
+  const thing = await windowThing(services, viewer, value, timeZone, { known: true });
   const now = services.clock();
   const until = body.until ? new Date(body.until) : new Date(now.getTime() + (body.minutes ?? 60) * 60_000);
-  if (until.getTime() <= now.getTime() + 60_000) throw badRequest('Pick a time that is still to come.');
+  // The same shortest time for a time picked as for a number of minutes.
+  if (until.getTime() < now.getTime() + KEEP_QUIET_MIN_MINUTES * 60_000)
+    throw badRequest(`Pick a time at least ${KEEP_QUIET_MIN_MINUTES} minutes ahead.`);
   if (until.getTime() - now.getTime() > KEEP_MAX_MS) throw badRequest('Pick a time within the next month.');
   const note = body.note?.trim() || null;
   const maintenanceId =
@@ -136,7 +149,10 @@ export async function keepThingQuiet(
   return { keptQuiet: w ? await wireWindow(services, w, timeZone, true) : null };
 }
 
-/** `things.endQuiet`: End now, as the person. */
+/**
+ * `things.endQuiet`: End now, as the person: every window holding the thing ends (Whombat's for its own work too).
+ * `windowId` (Undo of keeping it quiet) ends that one only. The answer is what still holds, if anything.
+ */
 export async function endThingQuiet(
   services: Services,
   viewer: ConnectionViewer,
@@ -146,17 +162,30 @@ export async function endThingQuiet(
 ): Promise<KeepQuietResponse> {
   if (viewer.principal.kind !== 'person') throw notAllowed('Only you can end this.');
   const thing = await windowThing(services, viewer, value, timeZone);
-  const w = opts.windowId ? { id: opts.windowId } : await holdingWindow(services, thing.owner, thing.id);
-  if (!w) throw notFound('Quiet');
+  if (!opts.windowId && !(await holdingWindow(services, thing.owner, thing.id))) throw notFound('Quiet');
   const result = await services.pipeline.commit(
     endQuiet,
-    { thing, windowId: w.id, ...(opts.agentId ? { agentId: opts.agentId } : {}) },
+    {
+      thing,
+      ...(opts.windowId ? { windowId: opts.windowId } : {}),
+      ...(opts.agentId ? { agentId: opts.agentId } : {}),
+    },
     { burrowId: viewer.burrowId, actorId: viewer.principal.id },
   );
   if (result.status !== 'ok') throw notAllowed('This can’t be ended now.');
-  if (result.result.maintenanceId && (await removeMaintenance(services, result.result.maintenanceId)))
-    await services.db.update(quietWindows).set({ maintenanceId: null }).where(eq(quietWindows.id, w.id));
-  return { keptQuiet: null };
+  // The hub's maintenance windows go back after the commit; a window whose maintenance stays is retried by the sweep.
+  const given: string[] = [];
+  for (const w of result.result.ended)
+    if (w.maintenanceId && (await removeMaintenance(services, w.maintenanceId))) given.push(w.id);
+  if (given.length)
+    await services.pipeline.transact(viewer.burrowId, async (session) => {
+      await session.tx
+        .update(quietWindows)
+        .set({ maintenanceId: null })
+        .where(inArray(quietWindows.id, given));
+    });
+  const still = await holdingWindow(services, thing.owner, thing.id);
+  return { keptQuiet: still ? await wireWindow(services, still, timeZone, true) : null };
 }
 
 /** The window a thing is kept quiet by now, as its page carries it; null when none holds. */

@@ -7,15 +7,17 @@ import { toHostAlert, toHostHint, toHostServer } from './map';
 import {
   alertLine,
   alertQuiet,
+  heldAlertQuiet,
   hintEpisode,
   hintLine,
   hubBy,
   keepVerdict,
+  markAlertQuiet,
   markHints,
   serverNotice,
   serverVerdict,
 } from './quiet-lines';
-import { serverThing } from './sources';
+import { alertWatch, serverThing } from './sources';
 
 const NOW = new Date('2026-10-22T10:00:00Z');
 
@@ -163,6 +165,31 @@ describe('what is quiet (QN-14, QN-23)', () => {
       'ignored',
     );
     expect(alertQuiet(alert(), { now: NOW, names, untilWords })).toBeUndefined();
+  });
+
+  it('holds every open alert of a server kept quiet with its window, muted by the hub or not', () => {
+    const window = { startsAt: NOW, endsAt: new Date('2026-10-22T21:00:00Z'), byId: 'prn_mara' };
+    const ctx = { now: NOW, names, untilWords: () => 'until 23:00' };
+    for (const a of [alert(), alert({ attention: false, muted: true })]) {
+      markAlertQuiet(a, window, ctx);
+      expect(a.quiet).toMatchObject({
+        state: 'snoozed',
+        words: 'until 23:00',
+        until: window.endsAt.toISOString(),
+        by: { id: 'prn_mara', name: 'Mara' },
+        held: 'window',
+      });
+      expect(a.attention).toBe(false);
+    }
+    // Its own Ignore stays its own; the hub's checks aren't the server's.
+    const acked = alert({
+      attention: false,
+      acknowledged: { at: NOW.toISOString(), by: 'Mara (prn_mara)', note: '', until: null },
+    });
+    markAlertQuiet(acked, window, ctx);
+    expect(acked.quiet?.held).toBeUndefined();
+    expect(heldAlertQuiet(alert({ rule: 'check.down' }), window, ctx)).toBeUndefined();
+    expect(heldAlertQuiet(alert(), null, ctx)).toBeUndefined();
   });
 
   it('marks quiet hints and leaves out those nobody watches', () => {
@@ -373,6 +400,23 @@ describe('what a server comes to (QN-02, QN-23, QN-S51)', () => {
     );
     expect(serverNotice(row)).toBeUndefined();
     expect(serverThing(row)).toMatchObject({ status: 'ok', line: 'No heartbeat' });
+    expect(serverThing(row).quietUntil).toBeUndefined();
+    // Kept quiet until a time: Home's thing says until when, and Watch has its alert snoozed until then.
+    keepVerdict(row, {
+      ...serverVerdict({ card: { id: 'pve-01', status: 'offline' }, pending: false, alerts: [], now: NOW }),
+      quietUntil: '2026-10-22T21:00:00.000Z',
+    });
+    expect(serverThing(row).quietUntil).toBe('2026-10-22T21:00:00.000Z');
+    const held = { ...beat };
+    markAlertQuiet(
+      held,
+      { startsAt: NOW, endsAt: new Date('2026-10-22T21:00:00Z'), byId: null },
+      { now: NOW, names: new Map(), untilWords: () => 'until 23:00' },
+    );
+    expect(alertWatch(held, NOW)).toMatchObject({
+      state: 'snoozed',
+      snoozedUntil: '2026-10-22T21:00:00.000Z',
+    });
   });
 
   it('maps the hub’s entity, key, hint id and the banner’s alert', () => {
