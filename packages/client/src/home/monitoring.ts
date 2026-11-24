@@ -48,6 +48,9 @@ export const KEEP_QUIET_WORDS = {
   pickPast: 'Pick a time that is still ahead.',
   pickFar: 'Pick a time within a month.',
   pickEmpty: 'Pick a day and a time.',
+  /** Worth a look's lines quiet with the whole thing, folded under one row. */
+  showHeld: (n: number) => `Show ${n} kept quiet`,
+  hideHeld: 'Hide what’s kept quiet',
 } as const;
 
 export type KeepQuietChoice = 'hour' | 'tonight' | 'morning' | 'pick';
