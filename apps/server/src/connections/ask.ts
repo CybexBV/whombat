@@ -16,7 +16,9 @@
  */
 import {
   type CatalogEntry,
+  CONNECT_HERE_DECLINE,
   CONNECT_HERE_FIELDS,
+  CONNECT_HERE_FORM,
   CONNECT_HERE_TEXT,
   CONNECTIONS_MAX,
   type ConnectionAccessLevel,
@@ -35,8 +37,12 @@ import {
   connectsByTalking,
   type GuideAction,
   type GuideCard,
-  type GuideConnectAsk,
+  GuideConnectAsk,
   suggestedAccess,
+  UPTIME_HUB_RUNNER,
+  UPTIME_ID,
+  UPTIME_KINDS,
+  UptimeFields,
 } from '@whombat/core';
 import type { z } from 'zod';
 import { postAskCard } from '../guides/ask';
@@ -47,6 +53,7 @@ import { ApiError } from '../lib/errors';
 import type { ToolContext } from '../mcp/tools';
 import { shortName } from '../read/principals';
 import type { Services } from '../services';
+import { plural } from '../things/words';
 import { ownTurn } from '../vault/self-serve';
 import { probeMcp } from './checks';
 import { createConnection, requireDestination, viewerFor } from './connect';
@@ -56,6 +63,7 @@ import { knownServers } from './found-servers';
 import { orderFound } from './found-view';
 import { discoverProtectedResource } from './oauth';
 import { connectionCount, visibleConnections } from './store';
+import { uptimeRunners } from './uptime';
 
 type Input = z.output<typeof ConnectionAddInput>;
 
@@ -187,6 +195,7 @@ export async function connectionAddTool(ctx: ToolContext, input: Input): Promise
   const byHand = input.signIn !== undefined || input.keyName !== undefined || input.notes !== undefined;
   const entry = known ?? (byHand ? catalogEntry('custom_api') : null);
   if (!entry) return fail('unknown_service', CONNECTION_ADD_TEXT.unknown(input.service));
+  if (entry.id === UPTIME_ID) return askToWatch(ctx, entry, input);
   if (connectsByTalking(entry))
     return connectByTalking(
       ctx,
@@ -228,6 +237,64 @@ export async function connectionAddTool(ctx: ToolContext, input: Input): Promise
     access,
     server: entry.asServer,
   };
+}
+
+/** Build the person's confirmation card with the exact check that Connect will save. */
+async function askToWatch(ctx: ToolContext, entry: CatalogEntry, input: Input): Promise<ConnectionAddOutput> {
+  const settings = UptimeFields.safeParse(input.uptime ?? { kind: 'http', address: input.address });
+  if (!settings.success)
+    return fail('invalid_address', settings.error.issues[0]?.message ?? 'Give the check an address.');
+  const { services, burrowId } = ctx;
+  if ((await connectionCount(services.db, burrowId)) >= CONNECTIONS_MAX)
+    return fail('full', CONNECTION_ADD_TEXT.full);
+  const heartbeat = settings.data.kind === 'heartbeat';
+  const uptime = heartbeat
+    ? { ...settings.data, address: undefined, keyword: undefined, runner: UPTIME_HUB_RUNNER }
+    : settings.data;
+  let runners: Awaited<ReturnType<typeof uptimeRunners>>;
+  try {
+    runners = await uptimeRunners(services, burrowId);
+  } catch (err) {
+    if (err instanceof ApiError) return fail('unavailable', err.message);
+    throw err;
+  }
+  const from = runners.find((choice) => choice.id === uptime.runner);
+  if (!from) return fail('not_allowed', 'Pick this Whombat or a server it watches.');
+  const label = input.name ?? (uptime.address ?? 'Check-in').slice(0, 80);
+  const ask = GuideConnectAsk.parse({
+    catalogId: entry.id,
+    label,
+    signIn: 'none',
+    url: uptime.address ?? entry.baseUrl,
+    uptime,
+    access: 'read',
+  });
+  const type = UPTIME_KINDS.find((kind) => kind.value === uptime.kind)?.label;
+  const cadence = `every ${plural(Number(uptime.every), 'minute')}`;
+  const where = heartbeat
+    ? `Your script should check in ${cadence}. ${uptime.late === '0' ? 'There’s no extra time.' : `It has ${plural(Number(uptime.late), 'extra minute')} to check in.`}`
+    : `${type} at ${uptime.address}. Whombat checks from ${from.name} ${cadence}.`;
+  const card = makeCard({
+    guide: 'add_connection',
+    node: 'here',
+    title: `Watch ${label}`.slice(0, 120),
+    body: [
+      where,
+      ...(uptime.kind === 'http' && uptime.keyword ? [`The page must contain “${uptime.keyword}”.`] : []),
+    ].join(' '),
+    blocks: [
+      {
+        type: 'actions',
+        actions: [
+          { id: CONNECT_HERE_FORM, label: 'Start watching', style: 'primary', href: null },
+          { id: CONNECT_HERE_DECLINE, label: 'Not now', style: 'quiet', href: null },
+        ],
+      },
+    ],
+    connectAsk: ask,
+  });
+  const messageId = await postAskCard(ctx, card);
+  return byHandOk(messageId, entry, uptime.address ?? null, 'read', 'none', true);
 }
 
 /* An MCP server or API set up by talking (connect-by-talking.md) ---------------------------------------------------- */
@@ -329,7 +396,7 @@ async function connectByTalking(
 function byHandOk(
   messageId: string,
   entry: CatalogEntry,
-  url: string,
+  url: string | null,
   access: ConnectionAccessLevel,
   signIn: NonNullable<Extract<ConnectionAddOutput, { status: 'ok' }>['signIn']>,
   connectsHere: boolean,
@@ -374,7 +441,12 @@ export async function answerConnectHere(
   const username = ask.username ?? (values[CONNECT_HERE_FIELDS.username]?.trim() || null);
   if (basic && !username) throw refusedOnCard(CONNECT_HERE_FIELDS.username, CONNECT_HERE_TEXT.empty.username);
   if (kind && !secret.trim()) throw refusedOnCard(CONNECT_HERE_FIELDS.secret, CONNECT_HERE_TEXT.empty[kind]);
-  const fields: Record<string, string> = { url: ask.url };
+  const fields: Record<string, string> =
+    entry.id === UPTIME_ID && ask.uptime
+      ? Object.fromEntries(
+          Object.entries(ask.uptime).filter((pair): pair is [string, string] => typeof pair[1] === 'string'),
+        )
+      : { url: ask.url };
   if (basic && username) fields.username = username;
   if (ask.notes && entry.fields.some((f) => f.id === 'description')) fields.description = ask.notes;
   const body = CreateConnectionBody.safeParse({

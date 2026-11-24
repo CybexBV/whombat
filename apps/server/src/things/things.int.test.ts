@@ -8,7 +8,7 @@
  */
 import { api, type ThingPage, thingId, thingPanelPlace, WidgetsResponse } from '@whombat/core';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type Stub, startStub } from '../connections/provision/testing-home';
 import { syncTools } from '../connections/sync';
 import {
@@ -16,14 +16,17 @@ import {
   changes,
   connectionPoints,
   events,
+  noticeStates,
   principals,
   vaultNetworks,
   watchOns,
   widgets,
 } from '../db/schema/index';
-import { checkConnectionHealth } from '../home/health';
+import { checkConnectionHealth, pollConnectionHealth } from '../home/health';
 import { homeOverview } from '../home/overview';
 import { pinWidget } from '../home/widgets';
+import { hostsFor } from '../hosts/service';
+import { hostsNeedsYou, hostsWatch } from '../hosts/sources';
 import { FakeHostsService } from '../hosts/testing/fake';
 import { IDS } from '../seed/test-world';
 import { insertConnection, setConnectionKeys } from '../test/connections';
@@ -31,6 +34,7 @@ import { useTestServer } from '../test/harness';
 import { addPersonalAgent } from '../test/personal';
 import { sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
+import { kindOf } from './kinds/index';
 import { forgetKindReads } from './kinds/read';
 import { DB_MB_KEY, LOG_ERR_KEY, LOG_ERR_TOP_KEY, RTT_KEY, rollUpPoints } from './points';
 import { fakeHaState, fakeHomeAssistant } from './testing/fake-ha';
@@ -535,5 +539,181 @@ describe('the range and the points (DS-03, DS-11)', () => {
       [at(24, 5).toISOString(), 3],
       [at(24, 10).toISOString(), 4],
     ]);
+  });
+});
+
+describe('Website or address connections', () => {
+  it('edits, repairs and removes its check, reads its result and leaves hub alerts to standalone checks', async () => {
+    const fields = { kind: 'http', address: 'https://example.com/ready', keyword: 'Welcome', every: '15' };
+    const input = { catalogId: 'uptime', signIn: 'none', fields };
+    const needsRunner = await call(mara, 'POST', '/connections', input);
+    expect(needsRunner.body).toMatchObject({
+      error: {
+        details: {
+          code: 'field_choice_needed',
+          field: 'runner',
+          options: expect.arrayContaining([
+            { value: 'hub', label: 'This Whombat' },
+            expect.objectContaining({ value: 'shale' }),
+          ]),
+        },
+      },
+    });
+    const added = await call(mara, 'POST', '/connections', {
+      ...input,
+      fields: { ...fields, runner: 'shale' },
+    });
+    expect(added.status, JSON.stringify(added.body)).toBe(201);
+    const { connection } = api.connections.create.response.parse(added.body);
+    const load = async () => {
+      const [row] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, connection.id));
+      if (!row) throw new Error('Connection is missing');
+      return row;
+    };
+    const first = await load();
+    const hubCheck = fake.checks.find((check) => check.id === first.hubCheckId);
+    if (!hubCheck) throw new Error('Check is missing');
+    expect(fake.calls('POST', '/api/v1/checks').at(-1)?.body).toMatchObject({
+      owner: `whombat:connection:${connection.id}`,
+      target: fields.address,
+      runner: 'shale',
+      interval_s: 900,
+      options: { keyword: 'Welcome' },
+    });
+
+    // Older hubs only serve the check through the list.
+    fake.on('GET', '/api/v1/checks/*', () => ({ status: 404 }));
+    const at = t.services.clock();
+    Object.assign(hubCheck, {
+      status: 'up',
+      since: at.toISOString(),
+      last: { at: at.toISOString(), ok: true, latency_ms: 82 },
+    });
+    await checkConnectionHealth(t.services, first, at);
+    const saved = await t.services.db
+      .select()
+      .from(connectionPoints)
+      .where(eq(connectionPoints.connectionId, connection.id));
+    expect(saved).toContainEqual(expect.objectContaining({ key: RTT_KEY, value: 82 }));
+    const p = await page(mara, thingId('connection', connection.id));
+    expect(JSON.stringify(p)).toContain('Answering');
+    expect(JSON.stringify(p)).toContain('example.com/ready');
+
+    Object.assign(hubCheck, { status: 'down', last: { at: at.toISOString(), ok: false }, stale: true });
+    const stale = await checkConnectionHealth(t.services, await load(), new Date(at.getTime() + 300_000));
+    expect(stale).toMatchObject({ status: 'unknown', line: 'Not checked' });
+    hubCheck.stale = false;
+    const down = await checkConnectionHealth(t.services, await load(), new Date(at.getTime() + 600_000));
+    expect(down).toMatchObject({ status: 'offline', lines: [{ check: 'uptime.down' }] });
+
+    const addAlert = (id: string, checkId: unknown) =>
+      fake.openAlert({
+        id,
+        rule: 'check.down',
+        entity: `check:${checkId}`,
+        severity: 'critical',
+        server: null,
+        title: id,
+      });
+    addAlert('owned-hub-check', first.hubCheckId);
+    addAlert('standalone-hub-check', 'ck_standalone');
+    hostsFor(t.services).forget();
+    const ctx = {
+      services: t.services,
+      db: t.services.db,
+      personId: IDS.mara,
+      burrowId: t.burrowId,
+      now: at,
+    };
+    for (const items of [await hostsNeedsYou(ctx), await hostsWatch(ctx)]) {
+      expect(items.map((item) => item.title)).toContain('standalone-hub-check');
+      expect(items.map((item) => item.title)).not.toContain('owned-hub-check');
+    }
+    fake.resolveAlert('owned-hub-check');
+    fake.resolveAlert('standalone-hub-check');
+
+    fake.on('PATCH', `/api/v1/checks/${first.hubCheckId}`, (r) => {
+      expect(r.body).not.toHaveProperty('owner');
+      Object.assign(hubCheck, r.body);
+      return { status: 200, body: hubCheck };
+    });
+    const edited = await call(mara, 'PATCH', `/connections/${connection.id}`, {
+      label: 'Example website',
+      fields: { keyword: '', every: '5' },
+    });
+    expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+    expect(hubCheck).toMatchObject({ name: 'Example website', interval_s: 300, options: {} });
+    expect((await load()).hubCheckId).toBe(first.hubCheckId);
+
+    fake.checks.splice(fake.checks.indexOf(hubCheck), 1);
+    const beforeRepair = await load();
+    await Promise.all([
+      checkConnectionHealth(t.services, beforeRepair),
+      checkConnectionHealth(t.services, beforeRepair),
+    ]);
+    const repaired = await load();
+    expect(repaired.hubCheckId).not.toBe(first.hubCheckId);
+    expect(fake.checks).toHaveLength(1);
+    const removed = await call(mara, 'DELETE', `/connections/${connection.id}`);
+    expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+    expect(fake.checks).toHaveLength(0);
+  });
+
+  it('keeps a failed detail read from its first failure until a read works', async () => {
+    const kind = kindOf('homeassistant');
+    if (!kind?.seen) throw new Error('Home Assistant has no reader');
+    const [row] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, haId));
+    if (!row) throw new Error('Connection is missing');
+    const at = t.services.clock();
+    const failing = vi.spyOn(kind, 'seen').mockRejectedValue(new Error('Reader failed'));
+    try {
+      const first = await checkConnectionHealth(t.services, row, at);
+      expect(first?.readFailedSince).toBe(at.toISOString());
+      await checkConnectionHealth(t.services, { ...row, glance: first }, new Date(at.getTime() + 3_600_000));
+      expect(
+        await t.services.db.select().from(noticeStates).where(eq(noticeStates.checkId, 'conn.read_failed')),
+      ).toHaveLength(1);
+    } finally {
+      failing.mockRestore();
+    }
+    const recovered = await checkConnectionHealth(t.services, row, new Date(at.getTime() + 3_900_000));
+    expect(recovered?.readFailedSince).toBeUndefined();
+    expect(
+      await t.services.db.select().from(noticeStates).where(eq(noticeStates.checkId, 'conn.read_failed')),
+    ).toHaveLength(0);
+  });
+
+  it('filters out unscheduled connections before taking the poll batch', async () => {
+    const now = t.services.clock();
+    const old = new Date(now.getTime() - 3_600_000);
+    await t.services.db.insert(catalogConnections).values(
+      Array.from({ length: 51 }, (_, i) => ({
+        id: `con_unscheduled_${i}`,
+        catalogId: 'onepassword',
+        burrowId: t.burrowId,
+        label: `Unscheduled ${i}`,
+        handle: `unscheduled-${i}`,
+        transport: 'rest' as const,
+        signIn: 'token' as const,
+        baseUrl: 'onepassword:',
+        glanceAt: old,
+      })),
+    );
+    await t.services.db
+      .update(catalogConnections)
+      .set({ glanceAt: null })
+      .where(eq(catalogConnections.id, haId));
+    expect(await pollConnectionHealth(t.services, now)).toBeGreaterThan(0);
+    const [looked] = await t.services.db
+      .select()
+      .from(catalogConnections)
+      .where(eq(catalogConnections.id, haId));
+    expect(looked?.glanceAt).toEqual(now);
   });
 });

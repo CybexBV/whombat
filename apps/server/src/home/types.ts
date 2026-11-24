@@ -51,6 +51,8 @@ export interface ConnectionGlance {
   reason?: string;
   /** The machine's own name as the service reports it (Unraid's hostname): what it is part of (SB-09, CP-10). */
   hostname?: string;
+  /** First health pass whose check answered and whose details could not be read. */
+  readFailedSince?: string;
   /**
    * How the last check went when it didn't answer properly (quiet-notices.md QN-S06): no answer, or an error. `status`
    * and `reason` are what the lines came to, so they say “fine” for an outage someone ignored; this stays true.

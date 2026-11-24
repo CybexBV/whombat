@@ -1455,6 +1455,14 @@ Setup and operation: `docs/github.md`.
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
   ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
   [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
+- **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
+  port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
+  from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it. The health
+  pass reads that result and repairs a missing check. Disconnect removes it. Its hub id is kept on the connection
+  and the hub knows its owner, so only the connection's own lines reach Inbox and Watch. The assistant can ask the
+  person to start one on a chat card (`connection_add`) and read the latest result (`uptime_status`). The page's
+  Summary has its status and answer time. The person's check-in page also shows the command for the LAN listener,
+  using the listener's pinned public key.
 - **A care plan when a server is added** (`apps/server/src/care/`, [care-plan.md](docs/decisions/care-plan.md)): every
   minute a home job reads the servers; one that first reports and isn't known yet (`server_cares`) is read (its
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
@@ -1503,6 +1511,9 @@ Setup and operation: `docs/github.md`.
   heads-ups said once ([plain-words.md](docs/decisions/plain-words.md)). The web draws what is wrong now first, the worst
   first, and the heads-ups after it under SOON, each line's way forward only “Ask {assistant}” or “Show”
   ([ui-refresh-chat.md](docs/decisions/ui-refresh-chat.md)).
+  The health pass filters to eligible connections before it takes a batch. A check that answers while its kind's
+  details stay unreadable for an hour gets a heads-up until a read works. A known machine's card says when it was
+  last backed up or that no job covers it, and the connection gets a line when a scheduled backup is overdue.
 - **What Whombat watches** starts calm: every check of a kind, a device, a mail account or a server says whether it
   starts on (`startsOn`), and only the very important ones Whombat can act on do. A check that starts off is left out
   everywhere, as one switched off, until the person turns it on (`watch_ons`); `things/quiet/defaults.ts` keeps the

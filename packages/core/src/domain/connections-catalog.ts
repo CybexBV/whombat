@@ -139,6 +139,15 @@ export {
   TokenAuth,
 } from './connections-catalog/shared.js';
 export { TASKS_TOOLS } from './connections-catalog/todoist.js';
+export {
+  UPTIME_HUB_NAME,
+  UPTIME_HUB_RUNNER,
+  UPTIME_ID,
+  UPTIME_KINDS,
+  UptimeFields,
+  UptimeHubCheck,
+  uptimeFields,
+} from './connections-catalog/uptime.js';
 export { SERVERS_SENSITIVE, SERVERS_TOOLS } from './connections-catalog/whombat_servers.js';
 
 import { entry as adguardEntry } from './connections-catalog/adguard.js';
@@ -201,6 +210,13 @@ import { entry as unifiAccessEntry } from './connections-catalog/unifi_access.js
 import { entry as unifiNetworkEntry } from './connections-catalog/unifi_network.js';
 import { entry as unifiProtectEntry } from './connections-catalog/unifi_protect.js';
 import { entry as unraidEntry } from './connections-catalog/unraid.js';
+import {
+  UPTIME_ID,
+  UptimeFields,
+  entry as uptimeEntry,
+  uptimeFields,
+  uptimeWebsiteHost,
+} from './connections-catalog/uptime.js';
 import { entry as whombatServersEntry } from './connections-catalog/whombat_servers.js';
 
 const ENTRIES = [
@@ -243,6 +259,7 @@ const ENTRIES = [
   piholeEntry,
   opnsenseEntry,
   nginxProxyManagerEntry,
+  uptimeEntry,
   tailscaleEntry,
   cloudflareEntry,
   portainerEntry,
@@ -327,6 +344,7 @@ export const CATALOG_IDS = [
   'pihole',
   'opnsense',
   'nginx_proxy_manager',
+  'uptime',
   'tailscale',
   'cloudflare',
   'portainer',
@@ -668,6 +686,12 @@ export function resolveTokenUrl(
 
 /** The host a connection is on (“home.lan”, “home.lan:8123”), for its label and row; null for fixed services. */
 export function connectionHost(entry: CatalogEntry, fields: Readonly<Record<string, string>>): string | null {
+  if (entry.id === UPTIME_ID) {
+    const parsed = UptimeFields.safeParse(fields);
+    if (!parsed.success) return null;
+    const { address } = uptimeFields(parsed.data);
+    return address && parsed.data.kind === 'http' ? uptimeWebsiteHost(address) : (address ?? null);
+  }
   if (!entry.baseUrl || !templateFields(entry.baseUrl).includes('url')) return null;
   const url = fieldValue(entry, 'url', fields);
   if (url === null) return null;
@@ -754,6 +778,17 @@ export function fieldsProblems(
   for (const f of fieldsFor(entry, kind)) {
     const problem = fieldProblem(f, fields[f.id]);
     if (problem) out[f.id] = problem;
+  }
+  if (entry.id === UPTIME_ID) {
+    const result = UptimeFields.safeParse(fields);
+    if (!result.success)
+      for (const issue of result.error.issues) {
+        const id = String(issue.path[0]);
+        out[id] ??=
+          issue.code === 'custom'
+            ? issue.message
+            : `Check the value for ${entry.fields.find((f) => f.id === id)?.label.toLowerCase() ?? id}.`;
+      }
   }
   for (const id of Object.keys(fields))
     if (!entry.fields.some((f) => f.id === id)) out[id] = 'This connection has no such field.';

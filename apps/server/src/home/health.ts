@@ -23,6 +23,7 @@
  * quiet rows of that moment. A failed check reads none of the kind's checks (`skipped`): nothing ends for them.
  */
 import {
+  CATALOG,
   type CatalogEntry,
   catalogEntry,
   isAgentConnection,
@@ -30,8 +31,9 @@ import {
   resolveMcpUrl,
   type SignInKind,
   thingId,
+  UPTIME_ID,
 } from '@whombat/core';
-import { and, eq, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 import { outsideCommandScope } from '../commit/scope';
 import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
@@ -41,9 +43,10 @@ import { burrows, catalogConnections } from '../db/schema/index';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
+import { uptimeSeen } from '../things/kinds/infra/uptime';
 import type { KindSeen } from '../things/kinds/registry';
-import { diskNotice, diskNow, type MachineNow } from '../things/machine';
-import { answerCheckOf, genericNotices, signinNotice } from '../things/panels';
+import { backupNotice, diskNotice, diskNow, type MachineNow } from '../things/machine';
+import { answerCheckOf, genericNotices, readFailedNotice, signinNotice } from '../things/panels';
 import { within } from '../things/part-of';
 import {
   DISK_GB_KEY,
@@ -80,6 +83,10 @@ function watched(entry: CatalogEntry): boolean {
   return isAgentConnection(entry) || isGatewayConnection(entry) || entry.id === TRACKER_CATALOG_ID;
 }
 
+const WATCHED_IDS = CATALOG.filter((entry) => entry.transport !== 'builtin' && watched(entry)).map(
+  (entry) => entry.id,
+);
+
 /** Connections looked at in one pass (the rest wait for the next). */
 const PASS_MAX = 50;
 /** How many connections a pass looks at side by side (PS-04). */
@@ -110,11 +117,11 @@ async function machineDisk(
   row: CatalogConnectionRow,
   now: Date,
   seen?: KindSeen['machine'],
-): Promise<{ points: Record<string, number>; line: LooseNotice | null; read: boolean }> {
+): Promise<{ points: Record<string, number>; lines: LooseNotice[]; read: boolean }> {
   const at = row.burrowId ? await within(resolveRunsOn(services, row.burrowId, row), 5_000, null) : null;
   const figures = at ? await within(readMachine(services, at, null), 5_000, null) : null;
   const m = seen ? seen(figures) : figures;
-  if (!m) return { points: {}, line: null, read: false };
+  if (!m) return { points: {}, lines: [], read: false };
   const pct =
     (await readPoints(services.db, row.id, [DISK_PCT_KEY], now, POINTS_KEEP_MS)).get(DISK_PCT_KEY) ?? [];
   const name = figures?.name ?? null;
@@ -126,7 +133,8 @@ async function machineDisk(
       ? `The disk of ${name} is filling up. What takes the space, and what can go?`
       : `The disk ${row.label} runs on is filling up. What takes the space, and what can go?`,
   });
-  return { points: diskPoints(m), line, read: true };
+  const backup = backupNotice(figures, now);
+  return { points: diskPoints(m), lines: [line, backup].filter((item) => item !== null), read: true };
 }
 
 /**
@@ -286,8 +294,15 @@ export async function checkConnectionHealth(
       mcpUrl: resolveMcpUrl(entry, row.fields, row.signIn as SignInKind),
       fields: row.fields,
       credential,
+      connectionId: row.id,
     });
-    if (outcome.refused) {
+    if (outcome.uptime !== undefined) {
+      const seen = uptimeSeen(outcome.uptime, row, now, await zoneOf(services, row));
+      points = seen.points;
+      glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
+      lines = seen.notices ?? [];
+      skipped = seen.skipped ?? [];
+    } else if (outcome.refused) {
       await outsideCommandScope(() => confirmRefusedCredential(services, row.id));
       glance = failed('bad', 'Needs you to sign in again', previous);
       lines = [signinNotice(row.label)];
@@ -316,8 +331,16 @@ export async function checkConnectionHealth(
           status: 'ok',
           ...(previous?.line ? { line: previous.line } : {}),
           facts: previous?.facts ?? [],
+          readFailedSince: previous?.readFailedSince ?? now.toISOString(),
           ...(previous?.hostname ? { hostname: previous.hostname } : {}),
         };
+        const readFailed = readFailedNotice(
+          row.label,
+          glance.readFailedSince,
+          now,
+          await zoneOf(services, row),
+        );
+        if (readFailed) lines.push(readFailed);
         skipped = (check) => !check.startsWith('conn.');
       } else {
         Object.assign(points, seen?.points ?? {});
@@ -342,7 +365,7 @@ export async function checkConnectionHealth(
       Object.assign(points, disk?.points ?? {});
       // A kind that draws its machine says its disk itself (Home Assistant's Supervisor); one line per check.
       const own = new Set(lines.map((l) => l.check).filter(Boolean));
-      if (disk?.line && !own.has(disk.line.check)) lines.push(disk.line);
+      for (const line of disk?.lines ?? []) if (!own.has(line.check)) lines.push(line);
       if (!disk?.read) {
         const before = skipped;
         skipped = (check) => check.startsWith('machine.') || isSkipped(before, check);
@@ -377,7 +400,13 @@ export async function checkConnectionHealth(
     l.check ? seenPasses.get(lineKey(l.check, l.subject?.id)) : undefined;
   glance = {
     ...glance,
-    status: result.worst ? (result.worst.offline ? 'offline' : result.status) : 'ok',
+    status: result.worst
+      ? result.worst.offline
+        ? 'offline'
+        : result.status
+      : glance.status === 'unknown'
+        ? 'unknown'
+        : 'ok',
     ...(result.reason ? { reason: result.reason } : {}),
     lines: [...result.active, ...result.quiet.map((q) => q.line)]
       .filter(colours)
@@ -385,14 +414,22 @@ export async function checkConnectionHealth(
       .map((l) => glanceLine(l, passesOf(l))),
   };
   if (!result.reason) delete glance.reason;
+  if (glance.status === 'unknown') delete glance.lines;
   const changed = shownText(previous) !== shownText(glance);
   // Read before the transaction: it doesn't wait on another connection while it holds one.
   const audience = changed && pass ? await pass.audience(row.burrowId) : null;
   await services.pipeline.transact(row.burrowId, async (session) => {
-    await session.tx
+    const [updated] = await session.tx
       .update(catalogConnections)
       .set({ glance, glanceAt: now, checkedAt: now })
-      .where(eq(catalogConnections.id, row.id));
+      .where(
+        and(
+          eq(catalogConnections.id, row.id),
+          row.catalogId === UPTIME_ID ? eq(catalogConnections.updatedAt, row.updatedAt) : undefined,
+        ),
+      )
+      .returning({ id: catalogConnections.id });
+    if (!updated) return;
     await recordPoints(session.tx, row.id, now, points);
     await writePass(session.tx, burrowId, thing, result);
     if (!changed) return;
@@ -436,12 +473,13 @@ export async function pollConnectionHealth(services: Services, now = services.cl
       services.log.warn({ err: String(err) }, 'connection health: sweeping quiet rows failed'),
     );
   }
-  const rows = await services.db
+  const due = await services.db
     .select()
     .from(catalogConnections)
     .where(
       and(
         eq(catalogConnections.status, 'active'),
+        inArray(catalogConnections.catalogId, WATCHED_IDS),
         or(
           isNull(catalogConnections.glanceAt),
           lt(catalogConnections.glanceAt, new Date(now.getTime() - FRESH_MS)),
@@ -450,10 +488,6 @@ export async function pollConnectionHealth(services: Services, now = services.cl
     )
     .orderBy(catalogConnections.glanceAt)
     .limit(PASS_MAX);
-  const due = rows.filter((row) => {
-    const entry = catalogEntry(row.catalogId);
-    return !!entry && entry.transport !== 'builtin' && watched(entry);
-  });
   // The quiet rows, line states and people once for the pass, not four reads and a person per connection.
   const pass = due.length ? await healthPass(services, due) : null;
   // Side by side (page-speed.md PS-04): one slow service doesn't hold up the others' tiles.

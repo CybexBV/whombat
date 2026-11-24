@@ -16,10 +16,11 @@ import { catalogEntry, type HostGuest, type HostServer, type ThingRunsOn, thingH
 import type { CatalogConnectionRow } from '../connections/types';
 import type { StoredRunsOn } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
-import { arr, obj, toHostGuest, toHostServer } from '../hosts/map';
+import { arr, obj, toHostBackupJob, toHostGuest, toHostServer } from '../hosts/map';
 import { type HostsService, hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import type { Services } from '../services';
 import { resolveHost } from '../vault/net';
+import { backupRhythm } from './backup-rhythm';
 import { PAGE_WAIT_MS } from './kinds/read';
 import type { PageRange } from './series';
 import { list, num, rec, str } from './words';
@@ -355,6 +356,8 @@ export interface MachineFigures {
   lastBackup: { at: string; result: string } | null;
   /** A Proxmox backup job covers it (null: unknown). */
   backupJob: boolean | null;
+  /** Longest normal gap of its most frequent known backup job. */
+  backupRhythmMs?: number | null;
   /** CPU (%) and memory (GB) over the page's range, oldest first, on the metrics' timestamps. */
   series: { timestamps: string[]; cpu: (number | null)[]; memoryGb: (number | null)[] } | null;
 }
@@ -497,15 +500,24 @@ async function loadMachine(
       if (!raw) return null;
       const guest = toHostGuest(raw, at.serverId);
       const G = `${S}/guests/${seg(at.guestId)}`;
-      const [config, metrics] = await Promise.all([
+      const [config, metrics, jobs] = await Promise.all([
         guest.platform === 'pve'
           ? hosts
               .call<unknown>({ path: `${G}/config`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
               .catch(() => null)
           : Promise.resolve(null),
         metricsOf(`${G}/metrics`, 'cpu_pct,mem_mb'),
+        guest.platform === 'pve' && guest.backupJob
+          ? hosts
+              .call<unknown>({ path: `${S}/backup-jobs`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+              .catch(() => null)
+          : null,
       ]);
-      return { ...guestFigures(guest, at.serverId, config, metrics), name: at.runsOn.name };
+      return {
+        ...guestFigures(guest, at.serverId, config, metrics),
+        name: at.runsOn.name,
+        backupRhythmMs: backupRhythm(arr(obj(jobs).items).map(toHostBackupJob), guest),
+      };
     }
     const fleet = await hosts.fleetRaw();
     const card = arr(fleet.servers).find((s) => obj(s).id === at.serverId);

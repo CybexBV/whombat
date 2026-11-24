@@ -8,6 +8,8 @@ import { PORTAINER_KIND } from './portainer';
 import { PTERODACTYL_KIND } from './pterodactyl';
 import { TAILSCALE_KIND } from './tailscale';
 
+import { UPTIME_KIND } from './uptime';
+
 export const INFRA_KINDS: Record<string, KindModule> = {
   cloudflare: CLOUDFLARE_KIND,
   grafana: GRAFANA_KIND,
@@ -16,4 +18,5 @@ export const INFRA_KINDS: Record<string, KindModule> = {
   portainer: PORTAINER_KIND,
   pterodactyl: PTERODACTYL_KIND,
   tailscale: TAILSCALE_KIND,
+  uptime: UPTIME_KIND,
 };

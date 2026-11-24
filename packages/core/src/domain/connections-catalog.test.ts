@@ -126,7 +126,7 @@ describe('catalog integrity (CX-01, CX-50…CX-62)', () => {
       expect(e.check, e.id).not.toBeNull();
       expect(e.guide.length, e.id).toBeGreaterThan(50);
       // A connection through a Mac (Find My) has no address of its own: the Servers connection's base, never requested.
-      if (e.check?.kind === 'mac') {
+      if (e.check?.kind === 'mac' || e.check?.kind === 'uptime') {
         expect(e.baseUrl, e.id).toBe('whombat-hosts:');
         expect(e.request, e.id).toBeNull();
         expect(

@@ -7,6 +7,7 @@ import { PS5_ADAPTER } from './ps5';
 import { PS5_CALL_WORDS } from './ps5-words';
 import { TODOIST_TASKS } from './tasks-todoist';
 import type { Adapter } from './types';
+import { UPTIME_ADAPTER } from './uptime';
 
 const ADAPTERS: Readonly<Record<string, Adapter>> = {
   dropbox: DROPBOX_FILES,
@@ -89,6 +90,7 @@ export function callReaches(
  */
 const LATER_ADAPTERS: Readonly<Record<string, () => Adapter>> = {
   findmy: () => FINDMY_ADAPTER,
+  uptime: () => UPTIME_ADAPTER,
 };
 
 /** The adapter of an entry, or null (its typed tools aren't served here). */
