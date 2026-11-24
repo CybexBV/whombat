@@ -33,6 +33,7 @@ export * from './github';
 export * from './guides';
 export * from './hermes';
 export * from './home';
+export * from './incidents';
 export * from './kept-sites';
 export * from './mail-triggers';
 export * from './managed';
