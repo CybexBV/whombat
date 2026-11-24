@@ -733,6 +733,8 @@ const handlers: Handlers = {
       void ctx.qc.invalidateQueries({ queryKey: queryKeys.scope('things.page') });
       // A server's page reads its research on its own (handle-it.md).
       void ctx.qc.invalidateQueries({ queryKey: queryKeys.scope('looks.get') });
+      // An outage opened or ended: an open “What happened” stops saying “still going”.
+      void ctx.qc.invalidateQueries({ queryKey: queryKeys.scope('things.history') });
     }
     if (e.parts.includes('widgets'))
       void ctx.qc.invalidateQueries({ queryKey: queryKeys.scope('widgets.list') });
