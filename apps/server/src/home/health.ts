@@ -39,6 +39,7 @@ import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
 import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
+import { sweepUptimeChecks, uptimePoint } from '../connections/uptime';
 import { burrows, catalogConnections } from '../db/schema/index';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
@@ -305,11 +306,13 @@ export async function checkConnectionHealth(
       fields: row.fields,
       credential,
       connectionId: row.id,
+      ...(row.catalogId === UPTIME_ID ? { uptimePassAt: now } : {}),
     });
     up = outcome.unseen ? undefined : outcome.ok || outcome.refused ? 1 : 0;
     // A check Whombat couldn't run says nothing of how it answers: no response time either.
     if (outcome.unseen) points = {};
     if (outcome.uptime !== undefined) {
+      up = uptimePoint(outcome.uptime);
       const seen = uptimeSeen(outcome.uptime, row, now, await zoneOf(services, row));
       if (!outcome.unseen) points = seen.points;
       glance = { ...seen.glance, status: outcome.unseen ? 'unknown' : 'ok' };
@@ -485,6 +488,9 @@ const pruned = new WeakMap<Services, number>();
 
 /** One pass of the poller (`home.connection-health`): connections not looked at for a while. Returns how many. */
 export async function pollConnectionHealth(services: Services, now = services.clock()): Promise<number> {
+  await sweepUptimeChecks(services, now).catch((err) =>
+    services.log.warn({ err: String(err) }, 'connection health: sweeping old hub checks failed'),
+  );
   if (now.getTime() - (pruned.get(services) ?? 0) >= PRUNE_EVERY_MS) {
     pruned.set(services, now.getTime());
     await pruneGoneThings(services.db).catch((err) =>

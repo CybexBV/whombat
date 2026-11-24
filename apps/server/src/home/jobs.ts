@@ -24,14 +24,14 @@ import { LookWatcher, WATCH_MS } from '../looks/watch';
 import { WAY_OUT_CHECK_MS, WayOutWatch } from '../managed/way-out';
 import type { Services } from '../services';
 import { CAUSES_MS, passCauses } from '../things/causes';
-import { rollUpPoints } from '../things/points';
+import { HEALTH_POINT_MS, rollUpPoints } from '../things/points';
 import { pollConnectionHealth } from './health';
 import { pollMailGlances } from './mail-glance';
 import { refreshDueWidgets } from './widgets';
 
 const APPROVE_LATER_MS = 30_000;
 const WIDGETS_MS = 30_000;
-export const HEALTH_MS = 5 * 60_000;
+export const HEALTH_MS = HEALTH_POINT_MS;
 const POINTS_PRUNE_MS = 60 * 60_000;
 
 /** Runs the approved requests whose time has come (Approve later). Returns how many burrows it re-evaluated. */

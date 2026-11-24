@@ -142,4 +142,19 @@ describe('the catalog for an older app (onepassword-sync.md)', () => {
     expect(thingAnswerFor('connections.catalog', catalog, ONEPASSWORD_SYNC_MINOR)).toBe(catalog);
     expect(thingAnswerFor('connections.catalog', catalog, undefined)).toBe(catalog);
   });
+
+  it('offers Website or address only to sessions that can draw its conditional fields', () => {
+    const withUptime = {
+      ...catalog,
+      entries: [...catalog.entries, { catalogId: 'uptime', available: true }],
+    };
+    expect(thingAnswerFor('connections.catalog', withUptime, 7)).toMatchObject({
+      entries: [{ catalogId: 'plex' }],
+    });
+    expect(thingAnswerFor('connections.catalog', withUptime, 8)).toMatchObject({
+      entries: [{ catalogId: 'plex' }, { catalogId: 'onepassword' }],
+    });
+    expect(thingAnswerFor('connections.catalog', withUptime, 9)).toBe(withUptime);
+    expect(thingAnswerFor('connections.catalog', withUptime, undefined)).toBe(withUptime);
+  });
 });

@@ -39,6 +39,19 @@ Everything here keeps “What Whombat watches starts calm” (`watch-defaults.md
 | MON-23 | A known rhythm uses the longest normal gap in the most frequent job Whombat can match to the machine. Its backup is overdue after more than two gaps, or after eight days when the rhythm is unknown. There must be a backup date and a known job covering the machine. | A missed run can be retried without an immediate warning. An unknown schedule gets at least a week before the warning. |
 | MON-24 | A connection keeps the time its detail reader first failed while the connection still answered. After an hour the check shows a heads-up, and a successful read clears it. The uptime page always shows when its check cannot run. The optional `uptime.unseen` line starts off. | The status stays honest without adding a problem or a push for a blind spot. |
 
+### Website or address and history fixes
+
+| ID | Decision | Reason |
+|---|---|---|
+| MON-25 | The health pass asks for the hub's stored probe results between passes. Any failed result makes that pass down in history. The current result still drives the page and alerts. A hub without the period read uses its current result. This extends MON-21. | A check can fail and recover between two health passes. |
+| MON-26 | Check again reports the saved hub check's current result as working, down or not checked. The connection stays active and continues to be watched. | A failed or unseen probe is a result of a working connection to the check. |
+| MON-27 | Disconnect saves the removal first and tries to delete the hub check. The health pass sweeps checks with a connection owner that no longer exists. This replaces the removal order in MON-20. | Disconnect works while the hosts service is unreachable. |
+| MON-28 | The connections catalog leaves Website or address out below session minor 9. | Those apps cannot draw the form's conditional fields. |
+| MON-30 | A live uptime point weighs at most seven and a half minutes. A rolled-up point weighs at most an hour. A last point weighs up to its usual interval. This replaces the weighting in MON-48. | Time without readings contributes neither up nor down. |
+| MON-31 | Server uptime starts at the first retained report when it falls inside the period. When there is no report date or the offline alerts could not be read, Whombat shows only known outages. This refines MON-49. | A server first seen today has no week of uptime yet. |
+| MON-32 | All-things `watch_history` includes the saved router, name lookup and internet outages. This Whombat has no history page for itself, so its outage history is available by asking. This extends MON-52. | The box's connection to the internet is separate from any watched server's history. |
+| MON-33 | A failed backup attempt remains the machine's latest backup fact. For a covered machine, overdue uses the newest usable backup that is still listed on its storage. A known failed attempt with no successful backup on record raises the line. This extends MON-23. | A fresh failure cannot make the machine look recently backed up. |
+
 ## Incidents, uptime and history (MON-40…MON-59)
 
 | ID | Decision | Reason |

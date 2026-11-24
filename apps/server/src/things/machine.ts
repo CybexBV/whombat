@@ -230,17 +230,20 @@ export function diskNotice(
   };
 }
 
-type MachineBackup = Pick<MachineFigures, 'lastBackup' | 'backupJob' | 'backupRhythmMs' | 'name'>;
+type MachineBackup = Pick<
+  MachineFigures,
+  'lastBackup' | 'lastSuccessfulBackupAt' | 'backupJob' | 'backupRhythmMs' | 'name'
+>;
 
-function backupAge(backup: MachineBackup | null, now: Date): number | null {
-  const age = now.getTime() - Date.parse(backup?.lastBackup?.at ?? '');
+function backupAge(at: string | null | undefined, now: Date): number | null {
+  const age = now.getTime() - Date.parse(at ?? '');
   return Number.isFinite(age) && age >= 0 ? age : null;
 }
 
 const ageWords = (age: number) => (age < 60_000 ? 'just now' : `${span(age)} ago`);
 
 function backupWords(backup: MachineBackup | null, now: Date): string | null {
-  const age = backupAge(backup, now);
+  const age = backupAge(backup?.lastBackup?.at, now);
   if (age !== null)
     return backup?.lastBackup?.result === 'error'
       ? `Backup failed ${ageWords(age)}`
@@ -249,12 +252,13 @@ function backupWords(backup: MachineBackup | null, now: Date): string | null {
   return backup?.backupJob ? 'No backup seen yet' : null;
 }
 
-/** A machine covered by a job whose last backup is more than two runs old (eight days when its schedule is unknown). */
+/** A machine covered by a job with an old backup or a failure and no known successful backup. */
 export function backupNotice(backup: MachineBackup | null, now: Date): KindNotice | null {
   if (!backup?.backupJob) return null;
-  const age = backupAge(backup, now);
+  const failed = backup.lastBackup?.result === 'error';
+  const age = backupAge(failed ? backup.lastSuccessfulBackupAt : backup.lastBackup?.at, now);
   const limit = backup.backupRhythmMs ? 2 * backup.backupRhythmMs : 8 * DAY_MS;
-  if (age === null || age <= limit) return null;
+  if (age === null ? !failed : age <= limit) return null;
   const words = backupWords(backup, now);
   return {
     id: 'backup-old',

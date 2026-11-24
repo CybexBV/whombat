@@ -222,7 +222,7 @@ export const ONE_MCP_TOOLS = {
     name: 'watch_history',
     title: 'What went wrong',
     description:
-      'What went wrong over a period, for one thing or all: each time something was down or had a problem (when, how long, why), how much of the time it answered, and the alerts the servers had. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle; leave out for everything. days: how far back, 1 to 90 (7 when left out). Use it for “What broke while I was away?”.',
+      'What went wrong over a period, for one thing or all: each time something was down or had a problem (when, how long, why), how much of the time it answered, and the alerts the servers had. The history for everything includes Whombat’s router, internet and name lookup outages. thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle; leave out for everything. days: how far back, 1 to 90 (7 when left out). Use it for “What broke while I was away?”.',
     input: z.object({
       thing: z.string().trim().min(1).max(220).optional(),
       days: z.number().int().min(1).max(90).optional(),
@@ -241,6 +241,9 @@ export const ONE_MCP_TOOLS = {
           resolved: z.string().optional(),
         }),
       ),
+      wayOutOutages: z
+        .array(z.object({ words: z.string(), started: z.string(), ended: z.string().optional() }))
+        .optional(),
       note: z.string().optional(),
     }),
     requiredKey: null,

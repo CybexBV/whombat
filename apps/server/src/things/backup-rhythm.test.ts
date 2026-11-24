@@ -60,6 +60,22 @@ describe('backup coverage and age', () => {
     expect(backupNotice(machine, new Date(now.getTime() + 5 * DAY_MS))).toBeNull();
     expect(backupNotice(machine, new Date(now.getTime() + 5 * DAY_MS + 1))?.check).toBe('machine.backup_old');
   });
+
+  it('uses the last successful backup for age and shows when the latest attempt failed', () => {
+    const failed = {
+      ...machine,
+      backupRhythmMs: DAY_MS,
+      lastBackup: { at: new Date(now.getTime() - 5 * 3_600_000).toISOString(), result: 'error' },
+    };
+    expect(machineCard(failed, failed, null, now, [], failed)?.items).toMatchObject([
+      { id: 'backup', label: expect.stringContaining('failed 5 h ago') },
+    ]);
+    expect(backupNotice(failed, now)?.check).toBe('machine.backup_old');
+    expect(backupNotice({ ...failed, lastSuccessfulBackupAt: machine.lastBackup.at }, now)?.check).toBe(
+      'machine.backup_old',
+    );
+    expect(backupNotice({ ...failed, lastSuccessfulBackupAt: failed.lastBackup.at }, now)).toBeNull();
+  });
 });
 
 it('shows prolonged read failure only after a full hour, in the person’s time zone', () => {

@@ -1,4 +1,11 @@
-import { UPTIME_HUB_NAME, UPTIME_HUB_RUNNER, UPTIME_ID, UptimeFields, UptimeHubCheck } from '@whombat/core';
+import {
+  ConnectionId,
+  UPTIME_HUB_NAME,
+  UPTIME_HUB_RUNNER,
+  UPTIME_ID,
+  UptimeFields,
+  UptimeHubCheck,
+} from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { externalEffect } from '../commit/scope';
 import { catalogConnections } from '../db/schema/index';
@@ -7,6 +14,7 @@ import { arr, obj, toHostCheck } from '../hosts/map';
 import { serverLabel } from '../hosts/self';
 import { type HostsService, hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import type { Services } from '../services';
+import { HEALTH_POINT_MS } from '../things/points';
 import { connectionError } from './errors';
 import { connectionRow } from './store';
 import type { CatalogConnectionRow } from './types';
@@ -14,7 +22,12 @@ import type { CatalogConnectionRow } from './types';
 const CHECKS = `${HOSTS_API}/checks`;
 const ADMIN = { ...WHOMBAT_ACTOR, role: 'admin' } as const;
 const UNAVAILABLE = 'Whombat couldn’t reach its checks. Try again in a moment.';
-const ownerOf = (id: string) => `whombat:connection:${id}`;
+const OWNER_PREFIX = 'whombat:connection:';
+const ownerOf = (id: string) => `${OWNER_PREFIX}${id}`;
+const REMOVAL_TIMEOUT_MS = 1_500;
+const SWEEP_MS = 60 * 60_000;
+
+const swept = new WeakMap<Services, number>();
 
 type UptimeRow = Pick<CatalogConnectionRow, 'id' | 'label' | 'fields' | 'hubCheckId' | 'hubCheckChangedAt'>;
 
@@ -75,27 +88,49 @@ export function uptimeSpec(row: Pick<UptimeRow, 'label' | 'fields'>) {
 }
 
 function hubCheck(raw: unknown): UptimeHubCheck {
-  const { stale, owner } = obj(raw);
-  return UptimeHubCheck.parse({ ...toHostCheck(raw), stale, owner: owner || undefined });
+  const { stale, owner, period_status } = obj(raw);
+  return UptimeHubCheck.parse({
+    ...toHostCheck(raw),
+    stale,
+    owner: owner || undefined,
+    periodStatus: period_status,
+  });
 }
 
 const missing = (err: unknown) => err instanceof HostsError && err.status === 404;
 
-async function checksList(hosts: HostsService, actor: HostsActor) {
-  return arr(await hosts.call<unknown>({ path: CHECKS, actor })).map(hubCheck);
+async function checksList(hosts: HostsService, actor: HostsActor, timeoutMs?: number) {
+  return arr(await hosts.call<unknown>({ path: CHECKS, actor, ...(timeoutMs ? { timeoutMs } : {}) })).map(
+    hubCheck,
+  );
 }
 
-async function findCheck(hosts: HostsService, row: UptimeRow, actor: HostsActor) {
+type Period = { since: string; until: string };
+
+async function findCheck(
+  hosts: HostsService,
+  row: UptimeRow,
+  actor: HostsActor,
+  period?: Period,
+  timeoutMs?: number,
+) {
   if (row.hubCheckId) {
     try {
-      const check = hubCheck(await hosts.call<unknown>({ path: `${CHECKS}/${seg(row.hubCheckId)}`, actor }));
+      const check = hubCheck(
+        await hosts.call<unknown>({
+          path: `${CHECKS}/${seg(row.hubCheckId)}`,
+          actor,
+          ...(period ? { query: period } : {}),
+          ...(timeoutMs ? { timeoutMs } : {}),
+        }),
+      );
       if (!check.owner || check.owner === ownerOf(row.id)) return check;
     } catch (err) {
       // Older hubs only offer the list; it also finds a repaired check if its id changed.
       if (!missing(err) && !(err instanceof HostsError && err.status === 405)) throw err;
     }
   }
-  const checks = await checksList(hosts, actor);
+  const checks = await checksList(hosts, actor, timeoutMs);
   return (
     checks.find((c) => c.owner === ownerOf(row.id)) ??
     checks.find((c) => c.id === row.hubCheckId && !c.owner) ??
@@ -136,8 +171,9 @@ async function deleteUptimeCheck(services: Services, id: string, actor: HostsAct
           method: 'DELETE',
           path: `${CHECKS}/${seg(id)}`,
           actor,
+          timeoutMs: REMOVAL_TIMEOUT_MS,
         }),
-      { refused: effectOptions },
+      { idempotent: true, refused: effectOptions },
     );
   } catch (err) {
     if (!missing(err)) throw err;
@@ -145,8 +181,31 @@ async function deleteUptimeCheck(services: Services, id: string, actor: HostsAct
 }
 
 export async function removeUptimeCheck(services: Services, row: UptimeRow, actor: HostsActor) {
-  const check = await findCheck(hostsFor(services), row, actor);
-  if (check) await deleteUptimeCheck(services, check.id, actor);
+  try {
+    const check = await findCheck(hostsFor(services), row, actor, undefined, REMOVAL_TIMEOUT_MS);
+    if (check) await deleteUptimeCheck(services, check.id, actor);
+  } catch {
+    // The connection is gone. Retry its hub cleanup on the next health pass.
+    swept.delete(services);
+  }
+}
+
+export async function sweepUptimeChecks(services: Services, now: Date): Promise<void> {
+  const hosts = hostsFor(services);
+  const last = swept.get(services);
+  if (!hosts.present || (last !== undefined && now.getTime() - last < SWEEP_MS)) return;
+  const checks = await checksList(hosts, WHOMBAT_ACTOR, REMOVAL_TIMEOUT_MS).catch(() => null);
+  if (!checks) return;
+  swept.set(services, now.getTime());
+  for (const check of checks) {
+    if (!check.owner?.startsWith(OWNER_PREFIX)) continue;
+    const id = ConnectionId.safeParse(check.owner.slice(OWNER_PREFIX.length));
+    if (!id.success) continue;
+    await withUptimeCheck(services, id.data, async () => {
+      if (await connectionRow(services.db, id.data)) return;
+      await deleteUptimeCheck(services, check.id, ADMIN).catch(() => swept.delete(services));
+    });
+  }
 }
 
 const sampledSpecChanged = (check: UptimeHubCheck, spec: ReturnType<typeof uptimeSpec>) =>
@@ -173,9 +232,14 @@ export function currentUptimeReading(check: UptimeHubCheck, configuredAt: Date |
 }
 
 /** Match the hub to the saved connection, repairing a missing check. Call while holding the check's queue. */
-export async function syncUptimeCheck(services: Services, row: UptimeRow, actor = ADMIN as HostsActor) {
+export async function syncUptimeCheck(
+  services: Services,
+  row: UptimeRow,
+  actor = ADMIN as HostsActor,
+  period?: Period,
+) {
   const hosts = hostsFor(services);
-  let check = await findCheck(hosts, row, actor);
+  let check = await findCheck(hosts, row, actor, period);
   const spec = uptimeSpec(row);
   let configuredAt = row.hubCheckChangedAt;
   let storedAt = configuredAt;
@@ -190,6 +254,7 @@ export async function syncUptimeCheck(services: Services, row: UptimeRow, actor 
       check.intervalS !== spec.interval_s ||
       check.graceS !== spec.grace_s
     ) {
+      const periodStatus = changed ? undefined : check.periodStatus;
       if (changed) {
         const started = services.clock();
         // Keep the boundary even if the PATCH took effect but its answer never arrived.
@@ -217,6 +282,7 @@ export async function syncUptimeCheck(services: Services, row: UptimeRow, actor 
             ),
           { idempotent: true, refused: effectOptions },
         );
+        check = { ...check, ...(periodStatus ? { periodStatus } : {}) };
       } catch (err) {
         if (!missing(err)) throw err;
         check = await createUptimeCheck(services, row, actor);
@@ -234,11 +300,27 @@ export async function syncUptimeCheck(services: Services, row: UptimeRow, actor 
   return currentUptimeReading(check, configuredAt);
 }
 
-/** The health pass is the only reader that repairs a missing hub check. */
-export async function pollUptimeCheck(services: Services, id: string): Promise<UptimeHubCheck | null> {
+/** Match the saved check before reading it. The health pass also asks what the hub saw between passes. */
+export async function pollUptimeCheck(
+  services: Services,
+  id: string,
+  at?: Date,
+): Promise<UptimeHubCheck | null> {
   return withUptimeCheck(services, id, async () => {
     const row = await connectionRow(services.db, id);
-    return row?.catalogId === UPTIME_ID ? syncUptimeCheck(services, row) : null;
+    if (row?.catalogId !== UPTIME_ID) return null;
+    // A restarted or freshly edited probe cannot say how the former probe answered.
+    const since =
+      at &&
+      Math.max(
+        row.glanceAt?.getTime() ?? at.getTime() - HEALTH_POINT_MS,
+        row.hubCheckChangedAt ? row.hubCheckChangedAt.getTime() - 1000 : -Infinity,
+      );
+    const period =
+      at && since !== undefined && since < at.getTime()
+        ? { since: new Date(since).toISOString(), until: at.toISOString() }
+        : undefined;
+    return syncUptimeCheck(services, row, ADMIN, period);
   }).catch(() => null);
 }
 
@@ -254,6 +336,14 @@ export async function readUptimeCheck(services: Services, row: UptimeRow, withPi
 
 export function uptimeUnseen(check: UptimeHubCheck | null): boolean {
   return !check || check.stale === true || check.status === 'pending' || check.status === 'disabled';
+}
+
+/** For history, include a failure the hub saw even if the probe has since recovered. */
+export function uptimePoint(check: UptimeHubCheck | null): 0 | 1 | undefined {
+  if (!check || check.status === 'disabled') return undefined;
+  if (check.periodStatus === 'down') return 0;
+  if (check.periodStatus === 'up') return 1;
+  return uptimeUnseen(check) ? undefined : check.status === 'up' ? 1 : 0;
 }
 
 export function uptimeState(check: UptimeHubCheck | null, heartbeat: boolean): string {

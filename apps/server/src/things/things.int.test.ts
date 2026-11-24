@@ -36,7 +36,7 @@ import { sessionFor } from '../test/tokens';
 import { useVaultNetForTests } from '../vault/net';
 import { kindOf } from './kinds/index';
 import { forgetKindReads } from './kinds/read';
-import { DB_MB_KEY, LOG_ERR_KEY, LOG_ERR_TOP_KEY, RTT_KEY, rollUpPoints } from './points';
+import { DB_MB_KEY, LOG_ERR_KEY, LOG_ERR_TOP_KEY, RTT_KEY, rollUpPoints, UP_KEY } from './points';
 import { fakeHaState, fakeHomeAssistant } from './testing/fake-ha';
 
 const fake = new FakeHostsService();
@@ -499,8 +499,8 @@ describe('the range and the points (DS-03, DS-11)', () => {
           'answer-time',
           'last-used',
         ]);
-        // Eight checks unanswered, each standing for an hour at most: how long it didn't answer.
-        expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toMatch(/\b8 h$/);
+        // Eight live checks unanswered, each standing for 7.5 minutes across a gap.
+        expect(answers?.kind === 'list' && answers.items[0]?.figure?.note).toMatch(/\b1 h$/);
         const trend = panels.find((x) => x.id === 'week');
         expect(trend?.kind === 'chart' && trend.labels).toHaveLength(7);
         expect(trend?.kind === 'chart' && trend.figure?.value).toMatch(/^1\d\d ms$/);
@@ -552,6 +552,28 @@ describe('the range and the points (DS-03, DS-11)', () => {
 });
 
 describe('Website or address connections', () => {
+  async function addWebsite(label: string) {
+    const added = await call(mara, 'POST', '/connections', {
+      catalogId: 'uptime',
+      signIn: 'none',
+      label,
+      fields: { kind: 'http', address: 'https://example.com/health', every: '1', runner: 'hub' },
+    });
+    expect(added.status, JSON.stringify(added.body)).toBe(201);
+    const { connection } = api.connections.create.response.parse(added.body);
+    const load = async () => {
+      const [row] = await t.services.db
+        .select()
+        .from(catalogConnections)
+        .where(eq(catalogConnections.id, connection.id));
+      if (!row) throw new Error('Missing connection.');
+      return row;
+    };
+    const check = fake.checks.find((c) => c.owner === `whombat:connection:${connection.id}`);
+    if (!check) throw new Error('Missing hub check.');
+    return { id: connection.id, check, path: `/api/v1/checks/${check.id}`, load };
+  }
+
   it('edits, repairs and removes its check, reads its result and leaves hub alerts to standalone checks', async () => {
     const fields = { kind: 'http', address: 'https://example.com/ready', keyword: 'Welcome', every: '15' };
     const input = { catalogId: 'uptime', signIn: 'none', fields };
@@ -674,6 +696,79 @@ describe('Website or address connections', () => {
     expect(fake.checks).toHaveLength(0);
   });
 
+  it('records a failure between passes while showing the current recovered status', async () => {
+    const site = await addWebsite('Health history');
+    const first = t.services.clock();
+    const second = new Date(first.getTime() + 5 * 60_000);
+    Object.assign(site.check, { status: 'up', last: { at: first.toISOString(), ok: true, latency_ms: 20 } });
+    fake.on('GET', site.path, (r) => ({
+      status: 200,
+      body: {
+        ...site.check,
+        period_status:
+          r.query.get('since') === first.toISOString() && r.query.get('until') === second.toISOString()
+            ? 'down'
+            : 'up',
+      },
+    }));
+    await checkConnectionHealth(t.services, await site.load(), first);
+    Object.assign(site.check, { last: { at: second.toISOString(), ok: true, latency_ms: 20 } });
+    expect(await checkConnectionHealth(t.services, await site.load(), second)).toMatchObject({
+      status: 'ok',
+      line: 'Answering',
+    });
+    const points = await t.services.db
+      .select()
+      .from(connectionPoints)
+      .where(and(eq(connectionPoints.connectionId, site.id), eq(connectionPoints.key, UP_KEY)))
+      .orderBy(asc(connectionPoints.at));
+    expect(points.map((p) => p.value)).toEqual([1, 0]);
+    expect((await call(mara, 'DELETE', `/connections/${site.id}`)).status).toBe(200);
+  });
+
+  it('reports down and not checked separately in Check again and keeps monitoring', async () => {
+    const site = await addWebsite('Manual check');
+    const at = t.services.clock().toISOString();
+    Object.assign(site.check, { status: 'down', last: { at, ok: false } });
+    fake.on('GET', site.path, () => ({ status: 200, body: site.check }));
+    const recheck = () => call(mara, 'POST', `/connections/${site.id}/check`);
+    const down = await recheck();
+    expect(down.status).toBe(200);
+    expect(down.body).toMatchObject({
+      connection: { status: 'active' },
+      checks: [{ id: 'destination', state: 'error', message: expect.stringContaining('answering') }],
+    });
+    expect(JSON.stringify(await page(mara, thingId('connection', site.id)))).not.toContain(
+      'address isn’t allowed',
+    );
+    Object.assign(site.check, { stale: true, status: 'pending' });
+    expect((await recheck()).body).toMatchObject({
+      connection: { status: 'active' },
+      checks: [{ id: 'destination', state: 'warning', message: expect.stringContaining('checked') }],
+    });
+    expect((await call(mara, 'DELETE', `/connections/${site.id}`)).status).toBe(200);
+  });
+
+  it('disconnects while the hosts service is unavailable and later sweeps only the orphan', async () => {
+    const gone = await addWebsite('Orphan');
+    const kept = await addWebsite('Kept');
+    const standalone = { ...kept.check, id: 'ck_standalone', owner: undefined };
+    fake.checks.push(standalone);
+    fake.refuseToken = true;
+    try {
+      expect((await call(mara, 'DELETE', `/connections/${gone.id}`)).status).toBe(200);
+      await expect(gone.load()).rejects.toThrow('Missing connection');
+      expect(fake.checks).toContain(gone.check);
+    } finally {
+      fake.refuseToken = false;
+    }
+    await pollConnectionHealth(t.services);
+    expect(fake.checks).not.toContain(gone.check);
+    expect(fake.checks).toEqual(expect.arrayContaining([kept.check, standalone]));
+    expect((await call(mara, 'DELETE', `/connections/${kept.id}`)).status).toBe(200);
+    fake.checks.splice(fake.checks.indexOf(standalone), 1);
+  });
+
   it('keeps a failed detail read from its first failure until a read works', async () => {
     const kind = kindOf('homeassistant');
     if (!kind?.seen) throw new Error('Home Assistant has no reader');
@@ -728,4 +823,34 @@ describe('Website or address connections', () => {
       .where(eq(catalogConnections.id, haId));
     expect(looked?.glanceAt).toEqual(now);
   });
+});
+
+it('starts server uptime at its first report on the page and in history', async () => {
+  const server = fake.detailOf('shale')?.server as Record<string, unknown>;
+  const now = t.services.clock().getTime();
+  const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
+  const started = hoursAgo(5);
+  const alert = fake.openAlert({
+    id: 'history-offline',
+    server: 'shale',
+    rule: 'agent.heartbeat_missing',
+    severity: 'critical',
+    title: 'Didn’t check in',
+    state: 'resolved',
+    opened_at: hoursAgo(6),
+    resolved_at: hoursAgo(4),
+  });
+  server.first_report_at = started;
+  try {
+    const uptime = { from: started, upPct: 80, downMinutes: 60, text: expect.stringContaining('since') };
+    const detail = await call(mara, 'GET', '/hosts/servers/shale');
+    expect(detail.status).toBe(200);
+    expect(detail.body.uptime).toMatchObject(uptime);
+    const history = await call(mara, 'GET', '/things/server%3Ashale/history?days=30');
+    expect(history.status).toBe(200);
+    expect(history.body.uptime).toMatchObject(uptime);
+  } finally {
+    fake.alerts.splice(fake.alerts.indexOf(alert), 1);
+    delete server.first_report_at;
+  }
 });

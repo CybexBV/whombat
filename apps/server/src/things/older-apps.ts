@@ -11,6 +11,7 @@
  * - An app below minor 8 can't draw a 1Password connection's part or answer its Inbox card: the catalog it is offered
  *   leaves 1Password out, and a 1Password connection made from a newer app opens on its Summary without the 1Password
  *   tab, which it would show empty (docs/decisions/onepassword-sync.md).
+ * - An app below minor 9 leaves Website or address out of the catalog because it can't draw the conditional fields.
  *
  * A newer app, and anything outside a session, gets the answer as it is.
  */
@@ -23,6 +24,7 @@ import {
   type ThingPage,
   type ThingPageTab,
   type ThingSummary,
+  UPTIME_ID,
 } from '@whombat/core';
 import {
   ACCOUNT_PAGES_MINOR,
@@ -86,17 +88,21 @@ export function thingsFor(things: readonly ThingSummary[], minor: number | undef
 export const readsOnePassword = (minor: number | undefined) =>
   minor === undefined || minor >= ONEPASSWORD_SYNC_MINOR;
 
+const UPTIME_CATALOG_MINOR = 9;
+
 /**
  * An op's answer as an app at `minor` reads it: `things.page`'s without the tabs it can't draw, `home.overview`'s things as
- * it opens them, `connections.catalog`'s without 1Password below minor 8, every other op's as it is.
+ * it opens them, and `connections.catalog` without entries whose forms it can't draw.
  */
 export function thingAnswerFor(op: string, body: unknown, minor: number | undefined): unknown {
   if (!body || typeof body !== 'object') return body;
-  if (op === 'connections.catalog' && !readsOnePassword(minor)) {
+  if (op === 'connections.catalog' && minor !== undefined && minor < UPTIME_CATALOG_MINOR) {
     const status = body as ConnectionsCatalogStatus;
-    return Array.isArray(status.entries)
-      ? { ...status, entries: status.entries.filter((e) => e.catalogId !== 'onepassword') }
-      : body;
+    if (!Array.isArray(status.entries)) return body;
+    const entries = status.entries.filter(
+      (e) => e.catalogId !== UPTIME_ID && (readsOnePassword(minor) || e.catalogId !== 'onepassword'),
+    );
+    return entries.length === status.entries.length ? body : { ...status, entries };
   }
   if (op === 'home.overview' && !readsAccountPages(minor)) {
     const overview = body as HomeOverview;

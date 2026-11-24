@@ -165,6 +165,34 @@ func (s *Store) SeriesNames(ctx context.Context, server string) (map[string]int6
 	return out, rows.Err()
 }
 
+// FirstMetricAt returns the earliest retained observation, using the finest
+// available time when one observation lies in the same bucket as another.
+func (s *Store) FirstMetricAt(ctx context.Context, server, name string) (time.Time, error) {
+	var raw, minute, quarter sql.NullInt64
+	err := s.r.QueryRowContext(ctx, `
+		SELECT (SELECT MIN(ts) FROM metrics_raw WHERE series_id = id),
+			(SELECT MIN(ts) FROM metrics_1m WHERE series_id = id),
+			(SELECT MIN(ts) FROM metrics_15m WHERE series_id = id)
+		FROM series WHERE server_id = ? AND name = ?`, server, name).Scan(&raw, &minute, &quarter)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	first := raw
+	if minute.Valid && (!first.Valid || minute.Int64 < first.Int64-first.Int64%60) {
+		first = minute
+	}
+	if quarter.Valid && (!first.Valid || quarter.Int64 < first.Int64-first.Int64%900) {
+		first = quarter
+	}
+	if !first.Valid {
+		return time.Time{}, nil
+	}
+	return time.Unix(first.Int64, 0).UTC(), nil
+}
+
 // SeriesByName returns the ids of a series name for many servers.
 func (s *Store) SeriesByName(ctx context.Context, name string) (map[string]int64, error) {
 	rows, err := s.r.QueryContext(ctx, `SELECT server_id, id FROM series WHERE name = ?`, name)

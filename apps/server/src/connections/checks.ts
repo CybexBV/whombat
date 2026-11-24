@@ -42,7 +42,7 @@ import {
 import { socketLogin } from './socket/call';
 import { socketCheck, socketCheckOf } from './socket/check';
 import type { CatalogConnectionRow } from './types';
-import { pollUptimeCheck, uptimeRunners, uptimeUnseen } from './uptime';
+import { pollUptimeCheck, uptimeRunners, uptimeState, uptimeUnseen } from './uptime';
 
 /** How one request proves who it is (`tokenCredential`, or an OAuth access token as bearer). */
 export interface CheckCredential {
@@ -238,6 +238,7 @@ export interface RunCheckInput {
   credential: CheckCredential;
   burrowId?: string;
   connectionId?: string;
+  uptimePassAt?: Date;
 }
 
 /** Runs the entry's check once with this credential. Never throws for the service's answers. */
@@ -347,17 +348,24 @@ async function runUptimeConnectionCheck(services: Services, input: RunCheckInput
     const json = await uptimeRunners(services, input.burrowId ?? '');
     return { ok: true, refused: false, status: null, message: null, json, checks: [] };
   }
-  const check = await pollUptimeCheck(services, input.connectionId);
+  const check = await pollUptimeCheck(services, input.connectionId, input.uptimePassAt);
   const unseen = uptimeUnseen(check);
+  const ok = !unseen && check?.status === 'up';
   return {
-    ok: !unseen && check?.status === 'up',
+    ok,
     ...(unseen ? { unseen: true } : {}),
     uptime: check,
     refused: false,
     status: null,
     message: null,
     json: null,
-    checks: [],
+    checks: [
+      {
+        id: 'destination',
+        state: unseen ? 'warning' : ok ? 'ok' : 'error',
+        message: uptimeState(check, input.fields.kind === 'heartbeat'),
+      },
+    ],
   };
 }
 

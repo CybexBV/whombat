@@ -55,6 +55,7 @@ export type UptimeFields = z.output<typeof UptimeFields>;
 export const UptimeHubCheck = HostCheck.extend({
   owner: z.string().optional(),
   stale: z.boolean().optional(),
+  periodStatus: z.enum(['up', 'down', 'unseen']).optional(),
 });
 export type UptimeHubCheck = z.output<typeof UptimeHubCheck>;
 

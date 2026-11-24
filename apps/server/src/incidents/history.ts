@@ -12,12 +12,14 @@ import {
   type ThingPage,
   type ThingTextPart,
   type ThingUptime,
+  Timestamp,
 } from '@whombat/core';
 import type { ConnectionViewer } from '../connections/store';
 import type { IncidentRow } from '../db/schema/index';
-import { HOSTS_API, type HostsActor } from '../hosts/client';
-import { arr, toHostAlert } from '../hosts/map';
+import { HOSTS_API, type HostsActor, seg } from '../hosts/client';
+import { arr, obj, toHostAlert } from '../hosts/map';
 import { HEARTBEAT_RULE } from '../hosts/quiet-lines';
+import { WHOMBAT_ACTOR } from '../hosts/service';
 import { notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
@@ -83,6 +85,13 @@ export interface PeriodInput {
   alerts?: readonly HostAlert[] | null;
   /** Who reads a server's alerts, when they aren't given. */
   actor?: HostsActor;
+  /** The first report a server has on record, when its detail is already loaded. */
+  firstReportAt?: Date | null;
+}
+
+export function serverFirstReportAt(raw: unknown): Date | null {
+  const at = Timestamp.safeParse(obj(obj(raw).server).first_report_at);
+  return at.success ? new Date(at.data) : null;
 }
 
 /**
@@ -101,23 +110,37 @@ export async function periodUptime(
   const rows = input.rows ?? (await incidentsSince(services.db, burrowId, from, thing));
   const parsed = parseThingId(thing);
   if (parsed?.kind === 'server') {
-    const alerts =
+    const actor = input.actor ?? WHOMBAT_ACTOR;
+    const [alerts, firstReportAt] = await Promise.all([
       input.alerts !== undefined
         ? input.alerts
-        : input.actor
-          ? await hostsAlertsSince(services, burrowId, input.actor, {
-              server: parsed.id,
-              rule: HEARTBEAT_RULE,
-              since: from,
+        : hostsAlertsSince(services, burrowId, actor, {
+            server: parsed.id,
+            rule: HEARTBEAT_RULE,
+            since: from,
+          }),
+      input.firstReportAt !== undefined
+        ? input.firstReportAt
+        : hostsServing(services, burrowId)
+            .then(async (hosts) => {
+              if (!hosts) return null;
+              const raw = await hosts.call<unknown>({
+                path: `${HOSTS_API}/servers/${seg(parsed.id)}`,
+                actor,
+              });
+              return serverFirstReportAt(raw);
             })
-          : null;
-    if (alerts === null && !rows.length) return null;
-    const downs = downTime([...downStretches(rows), ...offlineStretches(alerts ?? [])], from, now);
+            .catch(() => null),
+    ]);
+    const hasStart = firstReportAt !== null && firstReportAt < now;
+    const start = hasStart && firstReportAt > from ? firstReportAt : from;
+    const downs = downTime([...downStretches(rows), ...offlineStretches(alerts ?? [])], start, now);
     return thingUptime({
-      share: Math.max(0, 1 - downs.ms / (now.getTime() - from.getTime())),
+      share:
+        alerts !== null && hasStart ? Math.max(0, 1 - downs.ms / (now.getTime() - start.getTime())) : null,
       downs: downs.count,
       downMinutes: downs.minutes,
-      from,
+      from: start,
       now,
       timeZone,
       days,
@@ -164,10 +187,17 @@ export function serverUptime(
   burrowId: string,
   serverId: string,
   alerts: readonly HostAlert[] | null,
+  firstReportAt: Date | null,
   now: Date,
   timeZone: string,
 ): Promise<{ uptime: ThingUptime; parts: ThingTextPart[] } | null> {
-  return periodUptime(services, burrowId, `server:${serverId}`, { now, days: 7, timeZone, alerts });
+  return periodUptime(services, burrowId, `server:${serverId}`, {
+    now,
+    days: 7,
+    timeZone,
+    alerts,
+    firstReportAt,
+  });
 }
 
 /**
