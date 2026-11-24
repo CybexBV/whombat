@@ -29,11 +29,13 @@ import {
   type ThingSummary,
   thingHref,
   thingId,
+  UPTIME_ID,
   type WatchItem,
 } from '@whombat/core';
-import { eq } from 'drizzle-orm';
-import { principals } from '../db/schema/index';
+import { and, eq, isNotNull } from 'drizzle-orm';
+import { catalogConnections, principals } from '../db/schema/index';
 import {
+  readOnce,
   registerNeedsYouSource,
   registerSubjectResolver,
   registerThingsSource,
@@ -376,6 +378,26 @@ export async function hostsAddressChange(services: Services, now: Date): Promise
   return addressChangeOf(hub, arr(fleet.servers), now, { addresses: agentAddresses(agents) });
 }
 
+/** The connection's own lines cover these hub checks in both Inbox and Watch. */
+async function connectionCheckAlerts(ctx: SourceCtx, alerts: readonly HostAlert[]) {
+  const isCheck = (a: HostAlert) => a.rule.startsWith('check.') && a.entity?.startsWith('check:') === true;
+  if (!alerts.some(isCheck)) return alerts;
+  const ids = await readOnce(
+    ctx,
+    'connection-owned hub checks',
+    async () =>
+      new Set(
+        (
+          await ctx.db
+            .select({ id: catalogConnections.hubCheckId })
+            .from(catalogConnections)
+            .where(and(eq(catalogConnections.catalogId, UPTIME_ID), isNotNull(catalogConnections.hubCheckId)))
+        ).map((row) => row.id),
+      ),
+  );
+  return alerts.filter((a) => !isCheck(a) || !ids.has(a.entity?.slice('check:'.length) ?? null));
+}
+
 export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
   const services = await homeServices(ctx);
   if (!services) return [];
@@ -388,7 +410,7 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
   const held = new Set(
     shaped.servers.filter((s) => s.status === 'offline' && verdictOf(s)?.dot === false).map((s) => s.id),
   );
-  const items = shaped.alerts
+  const items = (await connectionCheckAlerts(ctx, shaped.alerts))
     .filter((a) => a.state === 'open' && a.attention && a.severity === 'critical')
     .filter((a) => alertLine(a).nature !== 'fyi')
     .filter((a) => !(a.rule === HEARTBEAT_RULE && a.serverId && held.has(a.serverId)))
@@ -441,7 +463,9 @@ export async function hostsWatch(ctx: SourceCtx): Promise<WatchItem[]> {
   // check nobody watches left out. Heads-ups come marked: only the Needs you list shows them, folded (NYL-03).
   const [raw, fleet] = await Promise.all([hosts.fleetRaw(), fleetFor(hosts, ctx.burrowId, ctx.reads)]);
   const at = ts(raw.as_of) ?? ctx.now.toISOString();
-  const alerts = fleet.alerts.filter((a) => a.state === 'open').map((a) => alertWatch(a, ctx.now));
+  const alerts = (await connectionCheckAlerts(ctx, fleet.alerts))
+    .filter((a) => a.state === 'open')
+    .map((a) => alertWatch(a, ctx.now));
   const hints = fleet.hints;
   const kinds = new Map(
     arr(raw.servers).map((c) => [String(obj(c).id), String(obj(c).detail_view ?? 'standard')] as const),

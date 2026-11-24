@@ -38,7 +38,11 @@ import {
   type TokenAuth,
   tokenAuthProblem,
   tokenCredential,
+  UPTIME_HUB_RUNNER,
+  UPTIME_ID,
   type UpdateConnectionBody,
+  UptimeFields,
+  uptimeFields,
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -53,6 +57,8 @@ import {
 import { gatewayConnectionOf, gatewayName, isGatewayCatalogId } from '../gateway/store';
 import { FIND_MY_CONNECTION_TEXT, findMyConnections } from '../hosts/findmy-connection';
 import { serverLabel } from '../hosts/self';
+import { actorOf } from '../hosts/service';
+import { forbidden } from '../lib/errors';
 import { OutboundError } from '../lib/outbound';
 import { ok } from '../routes/define';
 import type { Services } from '../services';
@@ -117,6 +123,7 @@ import {
 import { type ConnectionViewer, connectionRow, requireRoom, visibleConnection } from './store';
 import { syncTools } from './sync';
 import { type CatalogConnectionRow, ConnectionAuthError } from './types';
+import { removeUptimeCheck, syncUptimeCheck, withUptimeCheck } from './uptime';
 
 /* Who --------------------------------------------------------------------------------------------- */
 
@@ -206,7 +213,7 @@ const HOSTS_BASE = 'whombat-hosts:';
  * entry's own base (the Servers connection's), which is never requested.
  */
 export function requireBaseUrl(entry: CatalogEntry, fields: Record<string, string>): string {
-  if (throughMac(entry)) return entry.baseUrl ?? HOSTS_BASE;
+  if (throughMac(entry) || entry.id === UPTIME_ID) return HOSTS_BASE;
   if (isVaultSyncConnection(entry)) return ONEPASSWORD_BASE_URL;
   const base = resolveBaseUrl(entry, fields);
   if (base) return base;
@@ -329,11 +336,15 @@ export function chooseServiceFields(
   const field = fieldsFor(entry, kind).find((f) => f.fromService);
   if (!field) return fields;
   const options = serviceChoices(outcome.json);
+  if (entry.id === UPTIME_ID && fields.kind === 'heartbeat') return { ...fields, runner: UPTIME_HUB_RUNNER };
   const given = fields[field.id];
   if (given) {
     if (options.some((o) => o.value === given)) return fields;
     throw fieldProblemsError({
-      [field.id]: `That ${field.label.toLowerCase()} isn’t one this token can use.`,
+      [field.id]:
+        entry.id === UPTIME_ID
+          ? 'Pick a server Whombat watches.'
+          : `That ${field.label.toLowerCase()} isn’t one this token can use.`,
     });
   }
   if (options.length === 1) return { ...fields, [field.id]: (options[0] as { value: string }).value };
@@ -449,7 +460,15 @@ export async function saveNewConnection(
       { burrowId: viewer.burrowId, actorId: viewer.principal.id },
     ),
   );
-  const synced = await syncAndRecord(services, row, input.checks);
+  const ready =
+    row.catalogId === UPTIME_ID
+      ? await withUptimeCheck(services, id, async () => {
+          const fresh = await connectionRow(services.db, id);
+          if (!fresh) return row;
+          return syncSavedUptime(services, viewer, fresh);
+        })
+      : row;
+  const synced = await syncAndRecord(services, ready, input.checks);
   // A Custom connection looks for its service's own logo in the background (connection-looks.md).
   findLogoLater(services, synced, viewer.principal.id);
   return { row: synced, eventId };
@@ -621,11 +640,17 @@ export async function createTokenConnection(
     mcpUrl,
     fields,
     credential,
+    burrowId: viewer.burrowId,
   });
   requireCheckPassed(outcome);
-  const chosen = chooseServiceFields(entry, kind, fields, outcome);
+  const selected = chooseServiceFields(entry, kind, fields, outcome);
+  const chosen = entry.id === UPTIME_ID ? uptimeFields(UptimeFields.parse(selected)) : selected;
   await requireFreeMac(services, viewer.burrowId, entry, chosen);
-  const labelGiven = body.label ?? (await macLabel(services, viewer.burrowId, entry, chosen));
+  const labelGiven =
+    body.label ??
+    (entry.id === UPTIME_ID
+      ? (chosen.address ?? 'Check-in').slice(0, 80)
+      : await macLabel(services, viewer.burrowId, entry, chosen));
   // A field picked from the service may be in the base (none in v1, but the template decides).
   const base = resolveBaseUrl(entry, chosen) ?? baseUrl;
   // A Fusebox: Whombat's own client key, made with the management key that just passed (ai-gateway.md AIG-02).
@@ -1271,6 +1296,33 @@ export async function updateConnection(
   body: z.output<typeof UpdateConnectionBody>,
 ): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const row = await visibleConnection(services.db, viewer, id);
+  if (row.catalogId !== UPTIME_ID) return updateConnectionRow(services, viewer, row, body);
+  return withUptimeCheck(services, id, async () => {
+    const fresh = await visibleConnection(services.db, viewer, id);
+    const res = await updateConnectionRow(services, viewer, fresh, body);
+    if (res.row.label !== fresh.label || !sameFields(res.row.fields, fresh.fields))
+      return { ...res, row: await syncSavedUptime(services, viewer, res.row) };
+    return res;
+  });
+}
+
+/** The saved settings win: the health pass will retry a hub that couldn't take them now. */
+async function syncSavedUptime(services: Services, viewer: ConnectionViewer, row: CatalogConnectionRow) {
+  try {
+    await syncUptimeCheck(services, row, actorOf(viewer.principal, 'admin'));
+    return (await connectionRow(services.db, row.id)) ?? row;
+  } catch {
+    services.log.warn({ connectionId: row.id }, 'uptime: saved settings await the next health pass');
+    return row;
+  }
+}
+
+async function updateConnectionRow(
+  services: Services,
+  viewer: ConnectionViewer,
+  row: CatalogConnectionRow,
+  body: z.output<typeof UpdateConnectionBody>,
+): Promise<{ row: CatalogConnectionRow; eventId: string | null }> {
   const entry = connectableEntry(row.catalogId);
   const kind = row.signIn as SignInKind;
   const set: ConnectionChanges = {};
@@ -1333,12 +1385,14 @@ export async function updateConnection(
         mcpUrl,
         fields: next,
         credential,
+        burrowId: viewer.burrowId,
       });
       // A new address can't take a code: the password is replaced with one (SG-09).
       if (session && outcome.twoStep)
         throw connectionError('check_failed', {}, sessionTwoStepAgainText(entry, session));
       requireCheckPassed(outcome);
-      const chosen = { ...chooseServiceFields(entry, kind, next, outcome), ...(outcome.fromCheck ?? {}) };
+      const selected = { ...chooseServiceFields(entry, kind, next, outcome), ...(outcome.fromCheck ?? {}) };
+      const chosen = entry.id === UPTIME_ID ? uptimeFields(UptimeFields.parse(selected)) : selected;
       await requireFreeMac(services, viewer.burrowId, entry, chosen, row.id);
       Object.assign(set, {
         fields:
@@ -1376,6 +1430,7 @@ export async function updateConnection(
     }
   }
   if (!what.length) return { row, eventId: null };
+  if (entry.id === UPTIME_ID && (set.label !== undefined || fieldsChanged)) set.glanceAt = null;
   const res = await applyChanges(services, viewer, row, set, what);
   if (!fieldsChanged) {
     if (set.access !== undefined)
@@ -1626,6 +1681,7 @@ export async function recheckConnection(
       mcpUrl: resolveMcpUrl(entry, row.fields, kind),
       fields: row.fields,
       credential,
+      burrowId: viewer.burrowId,
     });
   } catch (err) {
     if (!(err instanceof ConnectionAuthError)) throw err;
@@ -1695,6 +1751,23 @@ export async function disconnectConnection(
       { connectionId: row.id, ...(vaultEntries ? { vaultEntries } : {}) },
       { burrowId: viewer.burrowId, actorId: viewer.principal.id },
     );
+  if (row.catalogId === UPTIME_ID) {
+    if (viewer.principal.kind !== 'person') throw forbidden('Only you can change connections.');
+    const { eventId } = await withUptimeCheck(services, id, async () => {
+      const fresh = await visibleConnection(services.db, viewer, id);
+      await removeUptimeCheck(services, fresh, actorOf(viewer.principal, 'admin')).catch((err) => {
+        if (err instanceof CommandStopped) throw err;
+        throw connectionError(
+          'check_failed',
+          {},
+          'Whombat couldn’t remove the check. Try again in a moment.',
+        );
+      });
+      return ok(await remove());
+    });
+    await emitConnectionLifecycle(services, { type: 'removed', connectionId: id });
+    return { eventId, notice: null };
+  }
   // The Vault's sync: a write to 1Password going on ends first, and none starts after the connection is gone.
   const { eventId } = ok(
     isVaultSyncConnection(row.catalogId)

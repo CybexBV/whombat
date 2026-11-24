@@ -153,6 +153,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "How the Overview is arranged (docs/decisions/overview-arranged.md): one nullable jsonb column on burrows. The release before it never reads or writes it, and a row it wrote reads as before there."
+    },
+    "0024_uptime_checks": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The hub check id and when the hub last took new probe settings, in two nullable columns on catalog_connections."
     }
   }
 }

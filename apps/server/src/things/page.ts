@@ -33,6 +33,7 @@ import {
   type ThingPageTab,
   type ThingStatus,
   thingId,
+  UPTIME_ID,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import { logoOf } from '../connections/look';
@@ -52,7 +53,15 @@ import { kindFor } from './kinds/index';
 import { SERVICE_SETTINGS_TAB_KEY } from './kinds/settings';
 import { slotProblems } from './kinds/slots';
 import type { KindCtx, KindView } from './kinds/types';
-import { diskNotice, itselfCard, type MachineNow, machineCard, machineCharts, machineKpis } from './machine';
+import {
+  backupNotice,
+  diskNotice,
+  itselfCard,
+  type MachineNow,
+  machineCard,
+  machineCharts,
+  machineKpis,
+} from './machine';
 import {
   accessItems,
   BADGE,
@@ -296,14 +305,17 @@ export async function connectionPage(
   // Worth a look with what is quiet now, and the head from its active lines (quiet-notices.md QN-14, QN-S13).
   const newTools = tools.filter((t) => t.isNew);
   const kindChecks = new Set((view?.notices ?? []).map((n) => n.check).filter(Boolean));
+  const backup = backupNotice(figures, now);
   const lines: LooseNotice[] = [
     ...(view?.notices ?? []),
+    ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
     ...genericNotices(
       row,
       newTools.length,
       problem,
       newTools.map((t) => t.name),
+      { now, timeZone },
     ),
   ];
   linesSink?.(lines);
@@ -334,7 +346,7 @@ export async function connectionPage(
   const card = slotted?.slots
     ? slotCard(
         slotted.slots,
-        machine && resolved ? { figures: machine, at: resolved.runsOn } : null,
+        machine && resolved ? { figures: machine, at: resolved.runsOn, backup: figures } : null,
         full,
         now,
         displayName(row),
@@ -377,7 +389,7 @@ export async function connectionPage(
 
   const facts: ThingLine[] = [...(view?.facts ?? [])];
   if (connected) facts.push(connected);
-  const checked = row.glanceAt ?? row.checkedAt;
+  const checked = row.catalogId === UPTIME_ID ? view?.readAt : (row.glanceAt ?? row.checkedAt);
   if (!view?.facts.length && checked)
     facts.push(line(`Checked **${span(now.getTime() - checked.getTime())}** ago`));
   if (!gateway) facts.push(accessLine(row));
@@ -386,7 +398,7 @@ export async function connectionPage(
   const address = isVaultSyncConnection(entry)
     ? undefined
     : (connectionHost(entry, row.fields) ?? row.externalName ?? undefined);
-  const readAt = view?.readAt ?? row.glanceAt ?? null;
+  const readAt = view?.readAt ?? (row.catalogId === UPTIME_ID ? null : row.glanceAt);
   return {
     id,
     kind: 'connection',
@@ -429,7 +441,7 @@ export function bareView(view: Pick<KindView, 'kpis' | 'panels' | 'charts' | 'sl
  */
 export function slotCard(
   slots: NonNullable<KindView['slots']>,
-  known: { figures: MachineNow; at: { name: string; href?: string } } | null,
+  known: { figures: MachineNow; at: { name: string; href?: string }; backup?: MachineFigures | null } | null,
   full: Date | null,
   now: Date,
   name: string,
@@ -441,6 +453,7 @@ export function slotCard(
       full,
       now,
       slots.machine,
+      known.backup,
     );
     if (card) return card;
   } else if (slots.own) {
@@ -495,7 +508,7 @@ export function headStatus(
   const older = view?.status && view.status.status !== 'ok' && !view.notices.some((n) => n.check);
   if (older && view?.status) return view.status;
   if (marked.status !== 'ok') return { status: marked.status, badge: marked.badge ?? BADGE[marked.status] };
-  if (view?.status?.status === 'ok') return view.status;
+  if (view?.status?.status === 'ok' || view?.status?.status === 'unknown') return view.status;
   if (row.glance || view?.readAt) return { status: 'ok', badge: BADGE.ok };
   return connectionStatus(row);
 }

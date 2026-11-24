@@ -736,6 +736,7 @@ export const CatalogCheck = z.discriminatedUnion('kind', [
    * entry has no address of its own: nothing is ever sent to its base URL, and it has no `request`.
    */
   z.object({ kind: z.literal('mac') }),
+  z.object({ kind: z.literal('uptime') }),
   /**
    * A 1Password connection's check (Whombat onepassword-sync.md): the service account token signs in through 1Password's
    * own SDK, in a process of its own, and lists the vaults it can see. Nothing is ever sent to the entry's base URL, and

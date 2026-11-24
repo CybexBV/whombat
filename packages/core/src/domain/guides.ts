@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { ConnectionId, VaultEntryId, VaultSshServerId } from '../ids.js';
 import { Timestamp, Tone } from './common.js';
 import { CONNECTION_LABEL_MAX, ConnectionAccessLevel, TokenAuth } from './connections-catalog/shared.js';
+import { UptimeFields } from './connections-catalog/uptime.js';
 import { ConnectorProvider, ConnectorService, ReturnPath } from './connectors.js';
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -518,6 +519,8 @@ export const GuideConnectAsk = z.object({
   auth: TokenAuth.optional(),
   username: z.string().max(200).nullable().default(null),
   notes: z.string().max(1500).default(''),
+  /** A Website or address card keeps the settings the person is asked to approve. */
+  uptime: UptimeFields.optional(),
   access: ConnectionAccessLevel,
 });
 export type GuideConnectAsk = z.infer<typeof GuideConnectAsk>;

@@ -127,6 +127,10 @@ export const catalogConnections = pgTable(
      */
     glance: jsonb('glance').$type<ConnectionGlance>(),
     glanceAt: ts('glance_at'),
+    /** The hosts service's check for a Website or address connection. */
+    hubCheckId: text('hub_check_id'),
+    /** A reading before these probe settings were applied describes a different check. */
+    hubCheckChangedAt: ts('hub_check_changed_at'),
     /**
      * What a person said it runs on (connection-pages.md CP-08, migration 0110): `{mode: 'none'}` or a chosen server or
      * guest. Null: Whombat finds it by the connection's address (`things/runs-on.ts`).

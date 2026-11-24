@@ -15,12 +15,13 @@ import {
   CONNECT_HERE_FORM,
   DispatchContext,
   type GuideCard,
+  thingId,
   VAULT_ASK_TEXT,
   vaultAskLockedLabel,
   vaultAskTitle,
 } from '@whombat/core';
 import { and, desc, eq } from 'drizzle-orm';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sendMessage } from '../commands/messages';
 import {
   catalogConnections,
@@ -30,6 +31,7 @@ import {
   messages,
   vaultEntries,
 } from '../db/schema/index';
+import { FakeHostsService } from '../hosts/testing/fake';
 import type { BusFrame } from '../realtime/bus';
 import { buildDispatchContext } from '../runtime/context';
 import { IDS } from '../seed/test-world';
@@ -49,10 +51,15 @@ const stream = new Writable({
   },
 });
 
+const hosts = new FakeHostsService();
 const t = useTestServer({
   seed: true,
   listen: true,
-  env: { WHOMBAT_LOCAL_NETWORK: 'off' },
+  env: {
+    WHOMBAT_LOCAL_NETWORK: 'off',
+    WHOMBAT_HOSTS_SOCKET: hosts.socket,
+    WHOMBAT_HOSTS_TOKEN_FILE: hosts.tokenFile,
+  },
   logger: { level: 'trace', stream },
 });
 const w = useVaultWorld(t);
@@ -65,6 +72,7 @@ let mara = '';
 const SECRET = 'Grafana-Admin-Passw0rd-73551';
 
 beforeAll(async () => {
+  await hosts.start();
   t.services.bus.onFrame((f) => frames.push(f));
   for (const level of ['debug', 'info', 'warn', 'error'] as const) {
     const log = t.services.log as unknown as Record<string, (...args: unknown[]) => void>;
@@ -78,6 +86,8 @@ beforeAll(async () => {
   mara = await accountOf(t.services, IDS.mara);
   await w.listHomeNetwork();
 });
+
+afterAll(() => hosts.stop());
 
 /** A turn for Mara in a thread of her Chat: the thread's first message is hers. */
 async function turnInThread(text = 'Connect my things please') {
@@ -170,6 +180,61 @@ describe('connection_add', () => {
     expect(actions.map((a) => a.id)).toEqual(['server', 'connect']);
     expect(actions[0]?.href).toContain('add=1');
     expect(actions[0]?.href).toContain('address=192.168.77.22');
+  });
+
+  it('waits for the person to start a check-in from its card', async () => {
+    const turn = await turnInThread('Tell me if my backup script doesn’t check in');
+    const asked = await call(turn.token, 'connection_add', {
+      service: 'uptime',
+      name: 'Backup script',
+      uptime: { kind: 'heartbeat', every: '15', late: '5' },
+    });
+    expect(asked.body, asked.raw).toMatchObject({
+      status: 'ok',
+      connectsHere: true,
+      signIn: 'none',
+      address: null,
+    });
+    const messageId = asked.body.messageId as string;
+    const before = await cardOf(messageId);
+    expect(before.row.threadRootId).toBe(turn.root);
+    expect(before.card.blocks).toMatchObject([
+      { type: 'actions', actions: [{ id: CONNECT_HERE_FORM }, { id: CONNECT_HERE_DECLINE }] },
+    ]);
+    expect(hosts.checks).toHaveLength(0);
+
+    const started = await act(messageId, { actionId: CONNECT_HERE_FORM });
+    expect(started.status, started.raw).toBe(200);
+    const saved = (await cardOf(messageId)).card.answer?.connectionId;
+    expect(saved).toMatch(/^con_/);
+    expect(hosts.calls('POST', '/api/v1/checks').at(-1)?.body).toMatchObject({
+      kind: 'heartbeat',
+      target: '',
+      owner: `whombat:connection:${saved}`,
+      interval_s: 900,
+      grace_s: 300,
+    });
+    const [check] = hosts.checks;
+    if (!check || !saved) throw new Error('The check was not created.');
+    const pingUrl = 'https://10.100.0.2:8443/ping/example-check-in';
+    const pin = `sha256//${'A'.repeat(43)}=`;
+    check.ping_url = pingUrl;
+    hosts.on('GET', '/api/v1/hub', () => ({ status: 200, body: { tls_pin: pin } }));
+    const path = buildPath(api.things.page.path, {
+      burrow: 'burrow-hq',
+      thing: thingId('connection', saved),
+    });
+    const response = await t.api.inject({
+      method: 'GET',
+      url: `${api.things.page.base}${path}`,
+      headers: { cookie: w.cookies.mara },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('--pinnedpubkey');
+    expect(response.body).toContain(pin);
+    expect(response.body).toContain(pingUrl);
+    expect(response.body).toContain('Works from your home network.');
+    expect(JSON.stringify(await cardOf(messageId))).not.toContain(pingUrl);
   });
 
   it('says plainly what it doesn’t know', async () => {
