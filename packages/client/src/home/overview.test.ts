@@ -86,6 +86,31 @@ describe('a connection’s tile (OVP-09)', () => {
     expect(second?.line.tone).toBe('plain');
   });
 
+  it('says a thing is down because of something else, or kept quiet, whatever else it could show', () => {
+    const rows = [
+      row({ id: 'plex', figures: [{ label: 'Streams', value: '2', note: null }] }),
+      row({ id: 'nas', figures: [{ label: 'Disks', value: '4', note: null }] }),
+      row({ id: 'ha' }),
+    ];
+    const cause = { thing: 'server:pve-02', name: 'pve-02', words: 'Not answering while pve-02 is down' };
+    const out = overviewTiles(
+      rows,
+      [
+        { id: 'plex', causedBy: cause },
+        { id: 'nas', quietUntil: '2026-10-19T21:00:00.000Z' },
+        { id: 'ha', quietUntil: '2026-10-19T09:00:00.000Z' },
+      ],
+      NOW,
+      TZ,
+      'Dusty',
+    );
+    const by = new Map(out.map((t) => [t.row.id, t]));
+    expect(by.get('plex')).toMatchObject({ held: 'cause', line: { text: cause.words, tone: 'mut' } });
+    expect(by.get('nas')).toMatchObject({ held: 'quiet', line: { text: 'Quiet until 23:00', tone: 'mut' } });
+    // A quiet time that is over says nothing of it.
+    expect(by.get('ha')?.held).toBeNull();
+  });
+
   it('falls back to words the person can act on when nobody said why', () => {
     const [t] = tiles([row({ level: 'notWorking', tone: 'mut', status: 'offline' })]);
     expect(t?.line.tone).toBe('mut');
