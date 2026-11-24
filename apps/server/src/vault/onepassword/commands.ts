@@ -46,7 +46,7 @@ import {
 } from '../commands';
 import { entryCount, type VaultEntryRow, vaultSecretAad, vaultTotpAad } from '../store';
 import { replaceTotp } from '../totp';
-import { onePasswordDigests } from './digests';
+import { onePasswordDigests, onePasswordEntryValues, sameOnePasswordDigests, storedBase } from './digests';
 import { entryEligible, type OnePasswordLinkRow, onePasswordConnectionOf, onePasswordVaultId } from './store';
 import { onePasswordSyncFor } from './sync';
 import { ONEPASSWORD_VAULT_FIXED } from './words';
@@ -98,12 +98,12 @@ const Problem = z.string().min(1).max(300).nullable();
 
 /**
  * One decision of a pass:
- * - `pull`: 1Password's fields into the entry, all of them, and the link's new base; only into the pair the
- *   pass read (still kept in step, with the same item);
+ * - `pull`: 1Password's fields into the entry, all of them, and the link's new base (what was pulled, unless the pass
+ *   names another); only into the pair the pass read (still kept in step, with the same item);
  * - `add`: a new entry from an item, switched on for the assistant, with its link;
  * - `relink`: an existing entry without a link paired with an item that is already its own (it names the entry, holds
- *   what it holds, or signs in as it does), with the item as just read as its base: the pass decides the pair at once,
- *   and where the two differ Whombat's values go to 1Password, which keeps the old ones in the item's history;
+ *   what it holds, or signs in as it does), with the item as just read as its base (none after a whole-box restore):
+ *   the pass decides the pair at once;
  * - `mark`: the link's bookkeeping only (the base renewed, an item's new version, a problem or none);
  * - `creating`: a link written before an item is made for the entry, so a retry finds the item by its marker;
  * - `created`: that link with its item;
@@ -123,6 +123,8 @@ export const OnePasswordOp = z.discriminatedUnion('op', [
     item: ItemMark,
     nameShortened: z.boolean(),
     totpFieldId: TotpFieldId,
+    /** The pair's base afterwards (absent: the digests of what was pulled). */
+    base: Digests.optional(),
   }),
   z.object({
     op: z.literal('add'),
@@ -139,8 +141,11 @@ export const OnePasswordOp = z.discriminatedUnion('op', [
     entryId: VaultEntryId,
     vaultId: z.string().min(1).max(64),
     item: ItemMark,
-    /** The item's digests as the pass read it (the entry's when the item doesn't fit as it is). */
-    base: Digests,
+    /**
+     * The item's digests as the pass read it (the entry's when the item doesn't fit as it is); null after a whole-box
+     * restore, so 1Password's values win.
+     */
+    base: Digests.nullable(),
     nameShortened: z.boolean(),
     totpFieldId: TotpFieldId,
   }),
@@ -167,7 +172,8 @@ export const OnePasswordOp = z.discriminatedUnion('op', [
     op: z.literal('created'),
     linkId: LinkId,
     item: ItemMark,
-    base: Digests,
+    /** What was sent; null after a whole-box restore, so 1Password's values win. */
+    base: Digests.nullable(),
     totpFieldId: TotpFieldId,
   }),
   z.object({ op: z.literal('local'), linkId: LinkId, readAt: ReadAt.nullable(), problem: Problem }),
@@ -326,7 +332,7 @@ async function applyOp(
           state: 'synced',
           itemVersion: op.item.version,
           itemUpdatedAt: op.item.updatedAt,
-          base: onePasswordDigests(custody, row.id, op.projection),
+          base: op.base ?? onePasswordDigests(custody, row.id, op.projection),
           nameShortened: op.nameShortened,
           ...(op.totpFieldId !== undefined ? { totpFieldId: op.totpFieldId } : {}),
           refused: null,
@@ -580,6 +586,8 @@ export const recordOnePasswordPass = defineCommand({
       // Every item kept out, not only the 200 the page shows: an item remembered isn't read again until it changes.
       notInVault: z.array(NotInVaultRow).max(ONEPASSWORD_REMEMBERED_MAX).optional(),
       removals: OnePasswordRemovals.nullable().optional(),
+      /** False: a complete pass ended the whole-box restore's “1Password first” (absent: as it was). */
+      pullFirst: z.literal(false).optional(),
       limitHits: z.number().int().nonnegative(),
       nextTryAt: z.string().nullable(),
     }),
@@ -606,9 +614,17 @@ export const recordOnePasswordPass = defineCommand({
     // A pause with nothing held (answered while the pass ran) isn't one.
     const outcome =
       s.outcome === 'paused' && (removals === undefined ? !before?.removals : !removals) ? 'ok' : s.outcome;
+    // The pass's set isn't kept (the person answered meanwhile, or an entry of it was kept here or removed): what it
+    // found gone may still be gone, so the next pass reads the vault in full instead of trusting its version.
+    const dropped = s.removals != null && !removals;
     const set = {
       ...(s.vaultTitle !== undefined ? { vaultTitle: s.vaultTitle } : {}),
-      ...(s.contentVersion !== undefined ? { contentVersion: s.contentVersion } : {}),
+      ...(dropped
+        ? { contentVersion: null }
+        : s.contentVersion !== undefined
+          ? { contentVersion: s.contentVersion }
+          : {}),
+      ...(s.pullFirst !== undefined ? { pullFirst: s.pullFirst } : {}),
       ...(s.readOnly !== undefined ? { readOnly: s.readOnly } : {}),
       ...(s.notInVault !== undefined ? { notInVault: s.notInVault } : {}),
       ...(removals !== undefined ? { removals } : {}),
@@ -835,8 +851,9 @@ export async function keepEntriesLocal(
 
 /**
  * Disconnecting with “Remove them too”: the entries kept in step with it go, through the Vault's own removal. Those kept
- * only in Whombat stay, and so does an entry whose item 1Password hasn't been given yet: it is in no other place. 1Password
- * is never changed by it.
+ * only in Whombat stay, and so does an entry that holds what 1Password hasn't got: one whose item it hasn't been given
+ * yet, one changed here since the pair last agreed (or never agreed, after a restore), one whose change 1Password
+ * refused. Those are in no other place. 1Password is never changed by it.
  */
 export async function removeSyncedEntries(ctx: ApplyContext, connectionId: string): Promise<number> {
   const links = await ctx.tx
@@ -846,11 +863,16 @@ export async function removeSyncedEntries(ctx: ApplyContext, connectionId: strin
       and(eq(vaultOnePasswordLinks.connectionId, connectionId), eq(vaultOnePasswordLinks.state, 'synced')),
     );
   const sourced = fromOnePassword(ctx);
+  const custody = ctx.services.custody;
   let removed = 0;
   for (const link of links) {
     if (!link.entryId) continue;
     const row = await lockedEntry(ctx, link.entryId);
     if (!row) continue;
+    const values = onePasswordEntryValues(custody, row);
+    const digests = values ? onePasswordDigests(custody, row.id, values) : null;
+    if (storedBase(link.refused) !== null || !sameOnePasswordDigests(storedBase(link.base), digests))
+      continue;
     await removeEntry(sourced, row);
     removed++;
   }

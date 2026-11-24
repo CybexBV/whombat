@@ -104,5 +104,10 @@ export const vaultOnePasswordState = pgTable('vault_onepassword_state', {
   nextTryAt: ts('next_try_at'),
   /** Passes in a row that couldn't finish: the red card waits for the second. */
   failures: integer('failures').notNull().default(0),
+  /**
+   * After a whole-box restore, until a pass reads everything and finishes: every pair a pass makes or finds again has no
+   * base, so 1Password's values win over the restored, older Vault.
+   */
+  pullFirst: boolean('pull_first').notNull().default(false),
   updatedAt: ts('updated_at').notNull(),
 });

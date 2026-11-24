@@ -44,9 +44,10 @@ export function onePasswordItems(
   const thing = thingId('connection', connection.id);
   const subject = { kind: 'connection' as const, id: connection.id, name: clip(connection.label, 120) };
   const at = (state.checkedAt ?? state.updatedAt).toISOString();
+  // It opens the connection's page in Whombat, not 1Password, as the other connections' cards say.
   const open = {
     id: 'open',
-    label: 'Open 1Password',
+    label: 'Open it',
     style: 'primary' as const,
     kind: 'open' as const,
     href,
@@ -87,7 +88,7 @@ export function onePasswordItems(
     });
   }
   // A single pass that couldn't finish is usually a blip: the card waits for the second in a row. Only the person can
-  // mend it (a token, a vault, the network), so it opens 1Password and asks the assistant nothing.
+  // mend it (a token, a vault, the network), so it opens the connection and asks the assistant nothing.
   if (state.outcome === 'failing' && state.failures >= ONEPASSWORD_FAILING_AFTER)
     items.push({
       id: `onepassword:${connection.id}:failing`,

@@ -14,6 +14,7 @@ export const ONEPASSWORD_PASS_WORDS = {
   noVault: 'This connection names no vault. Remove 1Password here and link it again with the vault you want.',
   answer: 'An answer from 1Password didn’t read. Whombat tries again soon.',
   partial: 'Whombat couldn’t read everything in 1Password. It tries again at the next check.',
+  archiveRefused: '1Password didn’t archive an item you removed here. Whombat tries again at the next check.',
   stopsFitting: 'No longer kept in step: 1Password has no place for this sign-in.',
   unreachableAddress: 'Whombat may not reach this address',
   writeFailed: '1Password didn’t take this change. Whombat tries again when it changes here or in 1Password.',
@@ -28,6 +29,7 @@ export type OnePasswordFailingKind =
   | 'readVault'
   | 'noVault'
   | 'partial'
+  | 'archive'
   | 'answer'
   | 'stopped';
 
@@ -39,6 +41,7 @@ export const ONEPASSWORD_FAILING_TITLES: Record<OnePasswordFailingKind, string> 
   readVault: 'The 1Password token can’t read the vault',
   noVault: '1Password has no vault to keep in step',
   partial: 'Whombat couldn’t read everything in 1Password',
+  archive: '1Password didn’t archive an item',
   answer: 'Whombat couldn’t read 1Password’s answer',
   stopped: '1Password sync stopped unexpectedly',
 };
@@ -56,6 +59,8 @@ export function onePasswordFailingKind(problem: string | null): OnePasswordFaili
       return 'noVault';
     case ONEPASSWORD_PASS_WORDS.partial:
       return 'partial';
+    case ONEPASSWORD_PASS_WORDS.archiveRefused:
+      return 'archive';
     case ONEPASSWORD_PASS_WORDS.answer:
       return 'answer';
     case ONEPASSWORD_WORDS.stopped:

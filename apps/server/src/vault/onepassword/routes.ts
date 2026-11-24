@@ -2,14 +2,14 @@
  * The 1Password connection's sync over sessions (docs/decisions/onepassword-sync.md): its page part, Sync now
  * and the answer to the guard. Only the box's person; reading never calls 1Password.
  */
-import { api } from '@whombat/core';
+import { api, onePasswordWaitingLine } from '@whombat/core';
 import { visibleConnection } from '../../connections/store';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { ApiError, forbidden } from '../../lib/errors';
 import { commitAs } from '../../routes/burrows';
 import { type HandlerContext, type RouteDef, route } from '../../routes/define';
 import { answerOnePasswordRemovals } from './commands';
-import { ONEPASSWORD_CATALOG_ID, onePasswordSyncView } from './store';
+import { ONEPASSWORD_CATALOG_ID, onePasswordState, onePasswordSyncView } from './store';
 import { onePasswordSyncFor } from './sync';
 
 type Ctx = HandlerContext<(typeof api.connections)[keyof typeof api.connections]>;
@@ -47,6 +47,13 @@ export const onePasswordRoutes: RouteDef[] = [
       throw new ApiError('conflict', ONEPASSWORD_SYNC_LATER.readOnly);
     if (services.maintenance.paused || services.maintenance.held)
       throw new ApiError('conflict', ONEPASSWORD_SYNC_LATER.paused);
+    // During 1Password's limit no pass runs before the time kept with the state: said, not swallowed.
+    const state = await onePasswordState(services.db, row.id);
+    if (state?.nextTryAt && state.nextTryAt.getTime() > services.clock().getTime())
+      throw new ApiError(
+        'conflict',
+        onePasswordWaitingLine(state.nextTryAt.toISOString(), ctx.access.burrow.timeZone || 'UTC'),
+      );
     // Sync now reads the vault in full, whatever its version says.
     onePasswordSyncFor(services).request(0, 'now');
     return onePasswordSyncView(services.db, row, true);
@@ -54,11 +61,15 @@ export const onePasswordRoutes: RouteDef[] = [
 
   route(api.connections.onePasswordRemovals, async (ctx) => {
     const row = await onePasswordGuard(ctx, ctx.params.connectionId);
-    await commitAs(ctx, answerOnePasswordRemovals, {
-      connectionId: row.id,
-      answer: ctx.body.answer,
-      token: ctx.body.token,
-    });
+    // A write to 1Password going on ends first and none starts while the answer commits: a put sent for an entry the
+    // person keeps only here, or removes, never reaches 1Password after the answer.
+    await onePasswordSyncFor(ctx.services).withoutWrites(() =>
+      commitAs(ctx, answerOnePasswordRemovals, {
+        connectionId: row.id,
+        answer: ctx.body.answer,
+        token: ctx.body.token,
+      }),
+    );
     return onePasswordSyncView(ctx.services.db, row, onePasswordSyncFor(ctx.services).syncing);
   }),
 ];

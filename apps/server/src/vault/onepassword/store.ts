@@ -89,13 +89,10 @@ export async function onePasswordLinks(db: Db | Tx, connectionId: string): Promi
   return db.select().from(vaultOnePasswordLinks).where(eq(vaultOnePasswordLinks.connectionId, connectionId));
 }
 
-/** The entry a link pairs now: null for none, undefined when the link is gone. */
-export async function onePasswordLinkEntry(db: Db | Tx, linkId: string): Promise<string | null | undefined> {
-  const [row] = await db
-    .select({ entryId: vaultOnePasswordLinks.entryId })
-    .from(vaultOnePasswordLinks)
-    .where(eq(vaultOnePasswordLinks.id, linkId));
-  return row ? row.entryId : undefined;
+/** A link as it is now, or null when it is gone. */
+export async function onePasswordLink(db: Db | Tx, linkId: string): Promise<OnePasswordLinkRow | null> {
+  const [row] = await db.select().from(vaultOnePasswordLinks).where(eq(vaultOnePasswordLinks.id, linkId));
+  return row ?? null;
 }
 
 /** Whether an entry row syncs by its kind and sign-in (a website login, an API token with bearer or basic). */

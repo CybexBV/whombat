@@ -16,7 +16,6 @@ import {
   newOnePasswordItem,
   ONEPASSWORD_GET_BATCH,
   ONEPASSWORD_WORDS,
-  type OnePasswordDigests,
   type OnePasswordItem,
   type OnePasswordItemOverview,
   type OnePasswordProjection,
@@ -26,7 +25,6 @@ import {
   onePasswordCanonicalUrl,
   onePasswordCategorySkip,
   onePasswordEntryName,
-  onePasswordEntryProjection,
   onePasswordItemMarker,
   onePasswordItemProjection,
   onePasswordLimitWaitMs,
@@ -34,7 +32,6 @@ import {
   onePasswordSkipText,
   onePasswordTotpFieldId,
   VAULT_ENTRIES_MAX,
-  type VaultAuth,
   writeOnePasswordItem,
 } from '@whombat/core';
 import { connectionRow } from '../../connections/store';
@@ -44,7 +41,7 @@ import { thePerson } from '../../domain/the-person';
 import type { PrincipalRow } from '../../read/principals';
 import type { Services } from '../../services';
 import { destinationProblem } from '../net';
-import { entriesOf, type VaultEntryRow, vaultSecretAad, vaultTotpAad } from '../store';
+import { entriesOf, type VaultEntryRow } from '../store';
 import {
   applyOnePasswordOps,
   type ItemMark,
@@ -55,14 +52,13 @@ import {
   type OnePasswordOpResult,
   recordOnePasswordPass,
 } from './commands';
-import { onePasswordDigests, storedBase } from './digests';
+import { onePasswordDigests, onePasswordEntryValues, sameOnePasswordDigests, storedBase } from './digests';
 import { type OnePasswordApi, OnePasswordError, type OnePasswordFailure } from './pool';
 import {
-  entryEligible,
   ONEPASSWORD_CATALOG_ID,
   type OnePasswordLinkRow,
   type OnePasswordStateRow,
-  onePasswordLinkEntry,
+  onePasswordLink,
   onePasswordLinks,
   onePasswordState,
   onePasswordToken,
@@ -163,27 +159,6 @@ function stopFor(err: unknown): PassStop {
 /** Answers 1Password gives a write it won't take, however often it is sent: the pair waits for a change. */
 const REFUSED = new Set<OnePasswordFailure>(['invalid', 'not_found', 'failed']);
 
-/** The entry's values as both sides compare them, unsealed for this pass only; null when it doesn't sync. */
-function entryProjection(
-  services: Pick<Services, 'custody'>,
-  row: VaultEntryRow,
-): OnePasswordProjection | null {
-  if (!entryEligible(row)) return null;
-  const secret = row.sealed ? services.custody.open(vaultSecretAad(row.id), row.sealed) : null;
-  const totp =
-    row.kind === 'login' && row.totpSealed
-      ? services.custody.open(vaultTotpAad(row.id), row.totpSealed)
-      : null;
-  return onePasswordEntryProjection({
-    kind: row.kind,
-    name: row.name,
-    url: row.url,
-    auth: row.auth as VaultAuth | null,
-    secret,
-    totp,
-  });
-}
-
 /** What an entry or item holds, compared by meaning, for pairing an unpaired entry with an unpaired item. */
 const sameKey = (p: OnePasswordProjection) => JSON.stringify([p.kind, onePasswordCanonical(p)]);
 
@@ -191,9 +166,20 @@ const sameKey = (p: OnePasswordProjection) => JSON.stringify([p.kind, onePasswor
 const identityKey = (p: OnePasswordProjection) =>
   JSON.stringify([p.kind, onePasswordCanonicalUrl(p.url), p.username ?? '']);
 
-const sameDigests = (a: OnePasswordDigests | null, b: OnePasswordDigests) =>
-  a !== null &&
-  Object.keys(b).every((k) => a[k as keyof OnePasswordDigests] === b[k as keyof OnePasswordDigests]);
+const sameDigests = sameOnePasswordDigests;
+
+/**
+ * Whombat's side of a pair being linked, with what only the item has filled in (a username or a one-time password key
+ * the entry has none of): linking never deletes anything in 1Password.
+ */
+const filledFrom = (ours: OnePasswordProjection, theirs: OnePasswordProjection): OnePasswordProjection => ({
+  ...ours,
+  username: ours.username === null || ours.username === '' ? theirs.username : ours.username,
+  totp: ours.totp ?? theirs.totp,
+});
+
+/** The same UTC day: a token that can only read is tried again once a day. */
+const sameDay = (a: Date, b: Date) => a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
 
 /** The token naming a set of held removals: the same set keeps its token, so an answer to it still applies. */
 function removalsToken(entryIds: readonly string[]): string {
@@ -225,8 +211,13 @@ class Pass {
   readonly #state: OnePasswordStateRow | null;
   readonly #reasons: ReadonlySet<OnePasswordPassReason>;
   readonly #gate: OnePasswordWriteGate;
-  /** A read-only token is tried once a pass. */
+  /** A read-only token is tried once a pass, and only in a pass that may try it (`#readOnlyTry`). */
   #triedReadOnly = false;
+  #readOnlyTry = false;
+  /** A write skipped because its pair changed since the pass read it: the next pass reads in full. */
+  #moved = false;
+  /** 1Password refused to archive an item: the pass ends failing, so it doesn't go on silently. */
+  #archiveRefused = false;
   readOnly: boolean;
 
   constructor(
@@ -342,10 +333,13 @@ class Pass {
   }
 
   /**
-   * One write to 1Password, only while it may: not while a disconnect or a drain waits for the writes to end, and only
-   * when the connection is still there with the token and vault this pass started with.
+   * One write to 1Password, only while it may: not while a disconnect, a drain, a restore's batch or the guard's answer
+   * waits for the writes to end, and only when the connection is still there with the token and vault this pass started
+   * with. `ours` says, inside the gate and right before the call, whether the link is still the one the pass read (the
+   * person may have kept it here, removed or brought back its entry meanwhile); when it isn't, nothing is written (null)
+   * and the next pass looks again.
    */
-  async #write<T>(call: () => Promise<T>): Promise<T> {
+  async #write<T>(call: () => Promise<T>, ours: () => Promise<boolean>): Promise<T | null> {
     if (!this.#gate.enter()) throw new PassStop('gone');
     try {
       const row = await connectionRow(this.#services.db, this.#connection.id);
@@ -356,6 +350,12 @@ class Pass {
         onePasswordToken(this.#services, row) !== this.#token
       )
         throw new PassStop('gone');
+      if (!(await ours())) {
+        this.#moved = true;
+        return null;
+      }
+      // A token that can only read is tried once a pass: this is that try.
+      if (this.readOnly) this.#triedReadOnly = true;
       return await call();
     } finally {
       this.#gate.leave();
@@ -376,7 +376,7 @@ class Pass {
     const entryById = new Map(entries.map((e) => [e.id, e]));
     const projections = new Map<string, OnePasswordProjection | null>();
     const projectionOf = (row: VaultEntryRow) => {
-      if (!projections.has(row.id)) projections.set(row.id, entryProjection(services, row));
+      if (!projections.has(row.id)) projections.set(row.id, onePasswordEntryValues(services.custody, row));
       return projections.get(row.id) ?? null;
     };
     const whombatDigests = (row: VaultEntryRow) => {
@@ -422,6 +422,13 @@ class Pass {
     if (lazy && !((reasons.has('change') && waiting) || (reasons.has('network') && heldUnreachable)))
       return { ran: false, why: 'nothing' };
     const force = reasons.has('now') || (reasons.has('network') && heldUnreachable);
+    // After a whole-box restore Whombat's side is the older one: every pair this pass makes or finds again has no base,
+    // so 1Password's values win, until a pass reads everything and finishes.
+    const pullFirst = state?.pullFirst ?? false;
+    // A token that can only read is tried again on Sync now and once a day (and when the vault changed, below).
+    const tryReadOnly =
+      this.readOnly &&
+      (reasons.has('now') || !state?.checkedAt || !sameDay(state.checkedAt, services.clock()));
 
     let overview: Awaited<ReturnType<OnePasswordApi['overview']>>;
     try {
@@ -429,7 +436,8 @@ class Pass {
     } catch (err) {
       return this.fail(stopFor(err));
     }
-    if (!force && !pushesWait && !roomNow && state?.contentVersion === overview.contentVersion) {
+    this.#readOnlyTry = tryReadOnly || state?.contentVersion !== overview.contentVersion;
+    if (!force && !waiting && !tryReadOnly && state?.contentVersion === overview.contentVersion) {
       await this.record({
         vaultTitle: overview.title,
         outcome: state.removals ? 'paused' : 'ok',
@@ -443,7 +451,8 @@ class Pass {
 
     let listed: OnePasswordItemOverview[];
     try {
-      listed = await api.list(token, vaultId);
+      // Only active items are in the vault: an archived one is gone, whatever else the list says of it.
+      listed = (await api.list(token, vaultId)).filter((o) => o.state === 'active');
     } catch (err) {
       return this.fail(stopFor(err));
     }
@@ -535,6 +544,11 @@ class Pass {
     // 1Password this pass and nothing is removed, and the page says not everything was read.
     const partial = unread.size > 0 || missing.size > 0 || [...failed].some((id) => !unreadable(id));
     if (partial) listingFailed = true;
+    // An item no pair has that is held as unreadable may be one an earlier try made for an entry (its marker unread):
+    // while one is, unfinished creates aren't sent again and their links aren't dropped.
+    const heldUnreadable =
+      [...known.values()].some((h) => h.reason === 'unreadable' && !linkByItem.has(h.itemId)) ||
+      [...failedReads].some(([id, count]) => count >= 2 && !linkByItem.has(id));
     const present = (itemId: string) => listedById.has(itemId);
 
     const ops: OnePasswordOp[] = [];
@@ -583,9 +597,16 @@ class Pass {
         .map((l) => l.markerEntryId as string),
     );
 
-    /** Decides a pair kept in step whose entry is there. */
-    const decidePair = async (link: OnePasswordLinkRow, entry: VaultEntryRow): Promise<void> => {
-      const projection = projectionOf(entry);
+    /**
+     * Decides a pair kept in step whose entry is there. `own`: Whombat's side to decide with when it isn't the entry as
+     * read (a pair being linked, with what only the item has filled in).
+     */
+    const decidePair = async (
+      link: OnePasswordLinkRow,
+      entry: VaultEntryRow,
+      own?: OnePasswordProjection,
+    ): Promise<void> => {
+      const projection = own ?? projectionOf(entry);
       if (!projection) {
         // The entry stopped fitting (a header sign-in, say): it stops following; the item stays as it was.
         ops.push({
@@ -598,8 +619,12 @@ class Pass {
       }
       if (!link.itemId) return;
       if (!present(link.itemId)) {
-        // A pair restored from a backup whose item isn't in the vault any more: a Whombat entry like any other.
-        if (storedBase(link.base) === null) ops.push({ op: 'drop', linkId: link.id });
+        // Gone from the vault. A pair restored from a backup (no base), or one whose entry holds what 1Password never
+        // got (changed here since the pair last agreed, or a change 1Password refused), becomes a Whombat entry like any
+        // other and goes back as a new item; only an entry 1Password had as it is now is removed with its item.
+        const base = storedBase(link.base);
+        if (base === null || storedBase(link.refused) !== null || !sameDigests(base, whombatDigests(entry)))
+          ops.push({ op: 'drop', linkId: link.id, entryId: entry.id });
         else removalCandidates.push({ link, entry });
         return;
       }
@@ -692,19 +717,21 @@ class Pass {
           if (found && !claimed.has(found.id)) {
             claimed.add(found.id);
             pushes.push({ kind: 'archive', link, itemId: found.id });
-          } else if (!partial) ops.push({ op: 'drop', linkId: link.id, entryId: null });
+          } else if (!partial && !heldUnreadable) ops.push({ op: 'drop', linkId: link.id, entryId: null });
           continue;
         }
         const found = byMarker.get(entry.id);
         if (found && !claimed.has(found.id)) {
           // The create went through before the pass was cut short: that item is this entry's, not a second one. Its
-          // base is Whombat's side as it was sent, so what changed in 1Password since counts as 1Password's change.
+          // base is Whombat's side as it was sent, so what changed in 1Password since counts as 1Password's change
+          // (after a whole-box restore none at all: 1Password's values win).
           const reading = onePasswordItemProjection(found);
-          const sent =
-            storedBase(link.base) ??
-            whombatDigests(entry) ??
-            (reading.ok ? onePasswordDigests(services.custody, entry.id, reading.projection) : null);
-          if (!sent) {
+          const sent = pullFirst
+            ? null
+            : (storedBase(link.base) ??
+              whombatDigests(entry) ??
+              (reading.ok ? onePasswordDigests(services.custody, entry.id, reading.projection) : null));
+          if (!pullFirst && !sent) {
             ops.push({ op: 'drop', linkId: link.id });
             continue;
           }
@@ -729,7 +756,8 @@ class Pass {
         }
         const projection = projectionOf(entry);
         if (!projection) ops.push({ op: 'drop', linkId: link.id });
-        else if (!refusedStill(link)) pushes.push({ kind: 'create', entry, projection, link });
+        else if (!refusedStill(link) && !heldUnreadable)
+          pushes.push({ kind: 'create', entry, projection, link });
         continue;
       }
       if (link.state === 'local_only') {
@@ -749,16 +777,23 @@ class Pass {
     // Entries that sync and have no link are paired with an item that is already theirs: one naming the entry first,
     // then one holding exactly what it holds, then the only item signing in as the entry does (kind, address,
     // username) when the entry is the only one signing in that way too. The item as just read is the new pair's base,
-    // and the pair is decided at once: where the two differ, Whombat's values go to 1Password, which keeps the old ones
-    // in the item's history. Otherwise an item is made.
+    // and the pair is decided at once: what only the item has (a one-time password key the entry has none of, say)
+    // comes into the entry, and where both have a value and they differ Whombat's goes to 1Password, which keeps the old
+    // one in the item's history; linking never deletes anything there. After a whole-box restore the pair has no base
+    // and 1Password's values win. Otherwise an item is made.
+    /** Pairs being linked whose entry takes what only the item has: their put waits for that pull. */
+    const filling = new Set<string>();
     const relink = async (entry: VaultEntryRow, found: OnePasswordItem): Promise<void> => {
       claimed.add(found.id);
       const reading = onePasswordItemProjection(found);
-      const base = reading.ok
-        ? onePasswordDigests(services.custody, entry.id, reading.projection)
-        : whombatDigests(entry);
-      if (!base) return;
+      const base = pullFirst
+        ? null
+        : reading.ok
+          ? onePasswordDigests(services.custody, entry.id, reading.projection)
+          : whombatDigests(entry);
+      if (!pullFirst && !base) return;
       const totpFieldId = onePasswordTotpFieldId(found, null);
+      const nameShortened = onePasswordEntryName(found.title).shortened;
       const linkId = newLinkId();
       ops.push({
         op: 'relink',
@@ -767,9 +802,30 @@ class Pass {
         vaultId,
         item: markOf(found),
         base,
-        nameShortened: onePasswordEntryName(found.title).shortened,
+        nameShortened,
         totpFieldId,
       });
+      let own = projectionOf(entry) ?? undefined;
+      if (own && base && reading.ok) {
+        const filled = filledFrom(own, reading.projection);
+        if (sameKey(filled) !== sameKey(own)) {
+          // The entry takes what only the item has; the pair keeps the item as read as its base, so a put that
+          // doesn't get through is sent again.
+          filling.add(linkId);
+          ops.push({
+            op: 'pull',
+            linkId,
+            entryId: entry.id,
+            readAt: readAt(entry),
+            projection: filled,
+            item: markOf(found),
+            nameShortened,
+            totpFieldId,
+            base,
+          });
+          own = filled;
+        }
+      }
       const now = services.clock();
       await decidePair(
         {
@@ -793,6 +849,7 @@ class Pass {
           updatedAt: now,
         },
         entry,
+        own,
       );
     };
     // Markers first: an item naming an entry is that entry's, and no other entry takes it.
@@ -847,6 +904,19 @@ class Pass {
         else pushes.push({ kind: 'create', entry, projection, link: null });
       }
     }
+    // An item that would pair with an unpaired entry by what it holds or who it signs in as waits for a complete read
+    // (which pairs them) instead of coming in as a second entry; one holding exactly what an entry kept only in Whombat
+    // holds is that entry's copy and stays in 1Password.
+    const keys = (row: VaultEntryRow | undefined) => {
+      const p = row ? projectionOf(row) : null;
+      return p ? [sameKey(p), identityKey(p)] : [];
+    };
+    const pairLater = new Set(partial ? unpaired.flatMap(keys) : []);
+    const keptHere = new Set(
+      links
+        .filter((l) => l.state === 'local_only' && l.entryId)
+        .flatMap((l) => keys(entryById.get(l.entryId as string)).slice(0, 1)),
+    );
 
     // New items: an entry each when it fits, else a line under “Not in your Vault” with why.
     let room = VAULT_ENTRIES_MAX - entries.length;
@@ -865,6 +935,9 @@ class Pass {
         out(reading.reason);
         continue;
       }
+      const same = sameKey(reading.projection);
+      if (pairLater.has(same) || pairLater.has(identityKey(reading.projection)) || keptHere.has(same))
+        continue;
       if (room <= 0) {
         out('vault_full');
         continue;
@@ -912,10 +985,13 @@ class Pass {
     }
     // A change that found its entry or pair moved since the pass read it is taken by the next pass, which reads again.
     if (results.some((r) => r.status === 'moved')) unsettled = true;
-    // A pair that couldn't be made (made meanwhile) isn't written into.
+    // A pair that couldn't be made or found again (made meanwhile), or whose entry didn't take what only the item had,
+    // isn't written into.
     const lost = new Set<string>();
     ops.forEach((op, i) => {
-      if (op.op === 'relink' && results[i]?.status !== 'done') lost.add(op.linkId);
+      const done = results[i]?.status === 'done';
+      if ((op.op === 'relink' || op.op === 'created') && !done) lost.add(op.linkId);
+      if (op.op === 'pull' && filling.has(op.linkId) && !done) lost.add(op.linkId);
       if (op.op === 'add' && results[i]?.status === 'full')
         notInVault.push({
           itemId: op.item.itemId,
@@ -945,25 +1021,38 @@ class Pass {
           s.failure === 'limit' ||
           s.failure === 'auth' ||
           s.failure === 'stopped' ||
-          s.failure === 'network'
+          s.failure === 'network' ||
+          // A new item 1Password says has nowhere to go: the vault is gone.
+          (push.kind === 'create' && s.failure === 'not_found')
         )
           stop = s;
-        else
+        else {
+          // An item removed here that 1Password won't archive: the pass says so instead of trying for ever unseen.
+          if (push.kind === 'archive') this.#archiveRefused = true;
           services.log.warn(
             { connectionId: this.#connection.id, kind: s.failure },
             'a 1Password write failed',
           );
+        }
       }
     }
     if (stop) return this.fail(stop);
 
     notInVault.sort((a, b) => a.title.localeCompare(b.title));
-    const outcome = removals ? 'paused' : partial ? 'failing' : 'ok';
-    const problem = outcome === 'failing' ? ONEPASSWORD_PASS_WORDS.partial : null;
+    const outcome = removals ? 'paused' : partial || this.#archiveRefused ? 'failing' : 'ok';
+    const problem =
+      outcome !== 'failing'
+        ? null
+        : partial
+          ? ONEPASSWORD_PASS_WORDS.partial
+          : ONEPASSWORD_PASS_WORDS.archiveRefused;
+    const settled = !partial && !listingFailed && !unsettled && !this.#moved;
     await this.record({
       vaultTitle: overview.title,
       // Kept only when everything seen was settled: otherwise the next pass reads in full again.
-      contentVersion: partial || listingFailed || unsettled ? null : overview.contentVersion,
+      contentVersion: settled ? overview.contentVersion : null,
+      // A pass that read everything and finished ends the restore's “1Password first”.
+      ...(pullFirst && settled && outcome !== 'failing' ? { pullFirst: false } : {}),
       outcome,
       problem,
       readOnly: this.readOnly,
@@ -979,19 +1068,25 @@ class Pass {
   async push(push: Push): Promise<void> {
     const api = this.#api;
     const token = this.#token;
-    // A read-only token is tried once a pass: when it can write again, the pushes go on by themselves.
-    if (this.readOnly && push.kind !== 'archive' && this.#triedReadOnly) return;
-    this.#triedReadOnly = this.readOnly;
+    const db = this.#services.db;
+    // A token that can only read is tried with one write, in a pass that may try it (the vault changed, Sync now, once
+    // a day): when it can write again, the pushes go on by themselves.
+    if (this.readOnly && (this.#triedReadOnly || !this.#readOnlyTry)) return;
     if (push.kind === 'archive') {
-      // An entry brought back from a backup meanwhile has taken this pair again: its item stays.
-      if ((await onePasswordLinkEntry(this.#services.db, push.link.id)) !== null) return;
+      let archived: boolean | null;
       try {
-        await this.#write(() => api.archive(token, this.#vaultId, push.itemId));
-        this.readOnly = false;
+        // Only while the link still has no entry: one brought back from a backup meanwhile takes the pair again and
+        // its item stays. A restore takes the same gate, so this holds until the call is answered.
+        archived = await this.#write(
+          () => api.archive(token, this.#vaultId, push.itemId).then(() => true),
+          async () => (await onePasswordLink(db, push.link.id))?.entryId === null,
+        );
+        if (archived) this.readOnly = false;
       } catch (err) {
         if (!(err instanceof OnePasswordError && err.kind === 'not_found')) throw err;
+        archived = true;
       }
-      await this.apply([{ op: 'drop', linkId: push.link.id, entryId: null }]);
+      if (archived) await this.apply([{ op: 'drop', linkId: push.link.id, entryId: null }]);
       return;
     }
     const digests = onePasswordDigests(this.#services.custody, push.entry.id, push.projection);
@@ -1019,24 +1114,32 @@ class Pass {
           },
         ]);
       }
-      let item: OnePasswordItem;
+      const creating = linkId;
+      let item: OnePasswordItem | null;
       try {
-        item = await this.#write(() =>
-          api.create(
-            token,
-            newOnePasswordItem({
-              vaultId: this.#vaultId,
-              entryId: push.entry.id,
-              projection: push.projection,
-            }),
-          ),
+        item = await this.#write(
+          () =>
+            api.create(
+              token,
+              newOnePasswordItem({
+                vaultId: this.#vaultId,
+                entryId: push.entry.id,
+                projection: push.projection,
+              }),
+            ),
+          // Still this entry's item to make: not removed meanwhile, nor its item found.
+          async () => {
+            const link = await onePasswordLink(db, creating);
+            return link?.state === 'creating' && link.entryId === push.entry.id;
+          },
         );
       } catch (err) {
         // Refused outright (a token that can only read): nothing was made, so nothing is waiting to be found.
         if (err instanceof OnePasswordError && err.kind === 'forbidden')
           await this.apply([{ op: 'drop', linkId }]);
         // Refused for what it holds: not sent again until the entry changes (a marker found meanwhile still pairs).
-        else if (err instanceof OnePasswordError && REFUSED.has(err.kind))
+        // The vault gone (`not_found`) stops the pass instead: the entry isn't at fault.
+        else if (err instanceof OnePasswordError && REFUSED.has(err.kind) && err.kind !== 'not_found')
           await this.apply([
             {
               op: 'mark',
@@ -1049,6 +1152,7 @@ class Pass {
           ]);
         throw err;
       }
+      if (!item) return;
       this.readOnly = false;
       await this.apply([
         {
@@ -1062,10 +1166,16 @@ class Pass {
       return;
     }
     let item = push.item;
+    // Still the pair the pass read: the entry follows the same item (not kept only here, nor paired anew meanwhile).
+    const ours = async () => {
+      const link = await onePasswordLink(db, push.link.id);
+      return link?.state === 'synced' && link.itemId === push.link.itemId && link.entryId === push.entry.id;
+    };
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const writing = writeOnePasswordItem(item, push.projection, push.link.totpFieldId);
-        const written = await this.#write(() => api.put(token, writing.item));
+        const written = await this.#write(() => api.put(token, writing.item), ours);
+        if (!written) return;
         this.readOnly = false;
         await this.apply([
           {

@@ -68,6 +68,8 @@ export class FakeOnePassword implements OnePasswordApi {
   readonly unreadable = new Set<string>();
   /** Items the list still shows but a `get` answers as not found (gone between the two reads). */
   readonly readMissing = new Set<string>();
+  /** The list shows archived items too, with their `state` (as the SDK does when it isn't asked for active ones). */
+  listArchived = false;
   /** Every item id a `get` asked for, in order. */
   gets: string[] = [];
   readonly #pauses = new Map<string, { reached: () => void; gate: Promise<void> }>();
@@ -192,6 +194,14 @@ export class FakeOnePassword implements OnePasswordApi {
     vault.contentVersion++;
   }
 
+  /** The person archives an item in 1Password's app. */
+  archiveItem(itemId: string): void {
+    const { vault, item } = this.#find(itemId);
+    vault.items.delete(itemId);
+    vault.archived.set(itemId, item);
+    vault.contentVersion++;
+  }
+
   item(itemId: string): OnePasswordItem | undefined {
     for (const v of this.vaults.values()) {
       const found = v.items.get(itemId) ?? v.archived.get(itemId);
@@ -273,7 +283,12 @@ export class FakeOnePassword implements OnePasswordApi {
   async list(token: string, vaultId: string): Promise<OnePasswordItemOverview[]> {
     await this.#held('list');
     this.#enter('list', token, vaultId);
-    return [...this.vault(vaultId).items.values()].map((i) => ({
+    const v = this.vault(vaultId);
+    const listed = [
+      ...[...v.items.values()].map((i) => ({ item: i, state: 'active' })),
+      ...(this.listArchived ? [...v.archived.values()].map((i) => ({ item: i, state: 'archived' })) : []),
+    ];
+    return listed.map(({ item: i, state }) => ({
       id: i.id,
       title: i.title,
       category: i.category,
@@ -282,7 +297,7 @@ export class FakeOnePassword implements OnePasswordApi {
       tags: [...i.tags],
       createdAt: i.createdAt,
       updatedAt: i.updatedAt,
-      state: 'active',
+      state,
     }));
   }
 

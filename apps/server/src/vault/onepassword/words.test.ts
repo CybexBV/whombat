@@ -15,6 +15,7 @@ describe('a failing pass’s title', () => {
     expect(onePasswordFailingKind(ONEPASSWORD_PASS_WORDS.vault)).toBe('vault');
     expect(onePasswordFailingKind(ONEPASSWORD_PASS_WORDS.readVault)).toBe('readVault');
     expect(onePasswordFailingKind(ONEPASSWORD_PASS_WORDS.noVault)).toBe('noVault');
+    expect(onePasswordFailingKind(ONEPASSWORD_PASS_WORDS.archiveRefused)).toBe('archive');
     expect(onePasswordFailingTitle(ONEPASSWORD_PASS_WORDS.answer)).not.toContain('reach');
     expect(onePasswordFailingTitle(ONEPASSWORD_WORDS.stopped)).not.toContain('reach');
     expect(onePasswordFailingTitle(ONEPASSWORD_PASS_WORDS.readVault)).not.toContain('find');

@@ -10,6 +10,17 @@ import type { Db, Tx } from '../../db/client';
 import { vaultOnePasswordLinks, vaultOnePasswordState } from '../../db/schema/index';
 import type { Services } from '../../services';
 import { onePasswordConnectionOf, onePasswordVaultId } from './store';
+import { onePasswordSyncFor } from './sync';
+
+/**
+ * Commits a restore's batch of Vault records with no write to 1Password going on and none starting until it is in. An
+ * entry it brings back may take back a pair whose item a pass is about to archive; the archive looks at the pair inside
+ * the same gate, right before its call, so it either sees the entry back or is answered before the entry comes back.
+ * Waits outside the write lock.
+ */
+export function restoringVault<T>(services: Services, commit: () => Promise<T>): Promise<T> {
+  return onePasswordSyncFor(services).withoutWrites(commit);
+}
 
 /**
  * Pairs a restored entry with the item the backup names, with no base, in the restore's own transaction. Nothing when
@@ -106,8 +117,9 @@ export async function forgetOnePasswordBase(tx: Db | Tx, entryId: string): Promi
  * version, so the next pass reads every item and 1Password's version wins. The backup's unfinished work goes too: an
  * item waiting to be archived for an entry removed before the backup was taken stays in 1Password, an item being made
  * is looked for by its marker again (its entry is unpaired now), and removals the guard held then are no question now
- * (the next pass asks again if they still hold). Run while the box is still quarantined, so no pass runs before it;
- * doing it again changes nothing.
+ * (the next pass asks again if they still hold). Until a pass reads everything and finishes, every pair a pass makes
+ * or finds again has no base either (“1Password first”), so an item found by its marker keeps what changed in it since
+ * the backup. Run while the box is still quarantined, so no pass runs before it; doing it again changes nothing.
  */
 export async function forgetOnePasswordBases(services: Pick<Services, 'pipeline'>): Promise<void> {
   await services.pipeline.transactAccount(async (tx) => {
@@ -117,7 +129,7 @@ export async function forgetOnePasswordBases(services: Pick<Services, 'pipeline'
     await tx
       .update(vaultOnePasswordLinks)
       .set({ base: null, itemVersion: null, itemUpdatedAt: null, refused: null });
-    await tx.update(vaultOnePasswordState).set({ contentVersion: null, removals: null });
+    await tx.update(vaultOnePasswordState).set({ contentVersion: null, removals: null, pullFirst: true });
     await tx
       .update(vaultOnePasswordState)
       .set({ outcome: null })

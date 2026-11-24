@@ -141,6 +141,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The 1Password sync's pairs remember more (docs/decisions/onepassword-sync.md): on vault_onepassword_links the id of the one-time password field a pair follows, the entry id a lost create's marker carries (kept when the entry is removed, so its item is archived), and the HMACs of a change 1Password kept refusing (never a value), all nullable; on vault_onepassword_state the passes in a row that couldn't finish (default 0). The release before it never reads either table."
+    },
+    "0022_onepassword_pull_first": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "After a whole-box restore 1Password's values win until a complete pass (docs/decisions/onepassword-sync.md): one boolean on vault_onepassword_state (default false). The release before it never reads the table."
     }
   }
 }

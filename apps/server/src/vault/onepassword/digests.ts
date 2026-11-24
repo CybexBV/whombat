@@ -9,8 +9,12 @@ import {
   type OnePasswordProjection,
   type OnePasswordSyncField,
   onePasswordCanonical,
+  onePasswordEntryProjection,
+  type VaultAuth,
 } from '@whombat/core';
 import type { KeyCustody } from '../../keys/custody';
+import { type VaultEntryRow, vaultSecretAad, vaultTotpAad } from '../store';
+import { entryEligible } from './store';
 
 /** The key custody's purpose for these digests: a sub-key of its own, used for nothing else. */
 const PURPOSE = 'vault/onepassword/base';
@@ -43,4 +47,28 @@ export function storedBase(base: unknown): OnePasswordDigests | null {
   if (!base || typeof base !== 'object') return null;
   const b = base as Record<string, unknown>;
   return ONEPASSWORD_SYNC_FIELDS.every((f) => typeof b[f] === 'string') ? (b as OnePasswordDigests) : null;
+}
+
+/** Whether two digests agree on every field (a missing one never does). */
+export function sameOnePasswordDigests(a: OnePasswordDigests | null, b: OnePasswordDigests | null): boolean {
+  return a !== null && b !== null && ONEPASSWORD_SYNC_FIELDS.every((f) => a[f] === b[f]);
+}
+
+/** An entry's values as both sides compare them, unsealed for this use only; null when it doesn't sync. */
+export function onePasswordEntryValues(
+  custody: Pick<KeyCustody, 'open'>,
+  row: VaultEntryRow,
+): OnePasswordProjection | null {
+  if (!entryEligible(row)) return null;
+  const secret = row.sealed ? custody.open(vaultSecretAad(row.id), row.sealed) : null;
+  const totp =
+    row.kind === 'login' && row.totpSealed ? custody.open(vaultTotpAad(row.id), row.totpSealed) : null;
+  return onePasswordEntryProjection({
+    kind: row.kind,
+    name: row.name,
+    url: row.url,
+    auth: row.auth as VaultAuth | null,
+    secret,
+    totp,
+  });
 }
