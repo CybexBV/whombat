@@ -11,9 +11,9 @@
  * level or tools but CLAUDE CODE AND CODEX: which tools go through it and a switch per tool (Fusebox's asks first, with
  * the terms). WHAT WHOMBAT WATCHES (Whombat quiet-notices.md
  * QN-15; quiet-notices-mobile.md AP-4865) lists its checks with their switches and what is excepted, each with Undo;
- * read only for Look only. 1Password (Whombat onepassword-sync.md) has no level, tools or guide either, but KEPT IN STEP
- * and NOT IN YOUR VAULT (`connect/OnePassword.tsx`), and Remove asks whether the entries stay in the Vault. The Vault
- * entry screen's language.
+ * read only for Look only. 1Password (Whombat onepassword-sync.md) has no level, tools or guide either, and Remove asks
+ * whether the entries stay in the Vault; KEPT IN STEP and NOT IN YOUR VAULT are its page's own 1Password tab
+ * (`connect/OnePassword.tsx`), not here. The Vault entry screen's language.
  */
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -47,7 +47,6 @@ import { CardNote, ErrorState, Section, SkeletonRows, StatusDot, toneColor } fro
 import { StatusPill } from '../ui/StatusPill';
 import { useBottomRoom } from '../ui/screenBottom';
 import { CheckRow, ChoiceBlocks, LevelBlock, NameBlock, SignInBlock } from './connect/ConnectionChanges';
-import { OnePasswordSections } from './connect/OnePassword';
 import { errorText, outcomeText, showNotice } from './feedback';
 import { WhatWhombatWatches } from './thing/WhatWhombatWatches';
 
@@ -232,9 +231,6 @@ export function ConnectionScreen({ route, navigation }: Props) {
                 />
               ) : null}
               {conn && entry ? <ChoiceBlocks slug={slug} entry={entry} conn={conn} /> : null}
-
-              {/* The Vault kept in step with 1Password: the sync's state, Sync now and the guard's answers. */}
-              {model.vaultSync ? <OnePasswordSections slug={slug} connectionId={connectionId} /> : null}
 
               {gateway ? (
                 <Section title={GATEWAY_TEXT.section}>

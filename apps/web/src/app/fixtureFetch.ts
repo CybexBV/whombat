@@ -957,11 +957,16 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
     };
   }
   if (onePasswordFixtures) {
-    // The 1Password guard's card (app onepassword-sync.md): over the one-Whombat layer, which answers Home.
+    // The 1Password guard's card and the connection's page (app onepassword-sync.md): over the one-Whombat layer, which
+    // answers Home and the connections' own pages.
     const inner = out;
     const fixtures = onePasswordFixtures;
     out = async (input, init) => {
       const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const page = fixtures.page(req);
+        if (page) return page;
+      }
       return fixtures.decorateInbox(req, await inner(req.clone()));
     };
   }

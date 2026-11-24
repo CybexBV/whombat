@@ -13,15 +13,20 @@
  * It answers the connection's page and part, Sync now (a pass for a moment), the guard's answer (refused when the set
  * changed), Check again and Remove (keeping or removing the entries), and adds its row to the connections and the
  * entries' `source` to the Vault (inside the connections' own pages, which find it there), and the card to the Inbox
- * (outside the one-Whombat layer, which answers Home). State lives in the closure, built to the contracts' schemas. The
+ * (outside the one-Whombat layer, which answers Home). Its page (`things.page`, outside the connections' own pages) has
+ * the server's tabs: its own 1Password tab first, which the apps draw from the part, then the Summary with Worth a look. State lives in the closure, built to the contracts' schemas. The
  * mock world's moment is 09:22 UTC (11:22 in Amsterdam).
  */
+import type { ThingPage, ThingPageNotice } from '@whombat/core';
 import { API_ENDPOINTS, api, buildPath, matchPath } from '@whombat/core/contracts';
 import type { ConnectionView, HomeOverview, NeedsYouItem } from '@whombat/core/domain';
 import {
+  ONEPASSWORD_TAB,
   ONEPASSWORD_WORDS,
   type OnePasswordSyncView,
   onePasswordGoneTitle,
+  onePasswordKeptLine,
+  onePasswordWaitingLine,
   type VaultEntry,
   type VaultEntryDetail,
   type VaultEntrySource,
@@ -30,6 +35,7 @@ import { burrow, mara, vaultGrafana, vaultPrinter, vaultShopLogin } from '@whomb
 
 const API_BASE = '/api/v1';
 export const ONEPASSWORD_CONNECTION_ID = 'con_fixture_1password';
+const ONEPASSWORD_THING = `connection:${ONEPASSWORD_CONNECTION_ID}`;
 
 export const ONEPASSWORD_FIXTURE_KINDS = ['synced', 'waiting', 'failing', 'paused'] as const;
 export type OnePasswordFixtureKind = (typeof ONEPASSWORD_FIXTURE_KINDS)[number];
@@ -169,14 +175,14 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
     const token = removals.token;
     const href = `/things/connection%3A${connection.id}`;
     return {
-      id: `connection:${connection.id}`,
+      id: `onepassword:${connection.id}:removals`,
       ref: { kind: 'connection', id: connection.id },
       kind: 'connection',
       severity: 'warn',
       nature: 'you',
       group: 'you',
       title: onePasswordGoneTitle(removals.entries.length),
-      body: removals.entries.map((e) => e.name).join(', '),
+      body: 'Whombat kept them in your Vault for now. Remove them here too, or keep them only in Whombat.',
       at: removals.since,
       href,
       subject: { kind: 'connection', id: connection.id, name: connection.label },
@@ -184,18 +190,115 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
         {
           id: 'remove',
           label: ONEPASSWORD_WORDS.removeHere,
-          style: 'secondary',
+          // As the server sends it: removing follows 1Password, the guard only asked first.
+          style: 'primary',
           kind: 'onepassword_removals',
           removals: { answer: 'remove', token },
         },
         {
           id: 'keep',
           label: ONEPASSWORD_WORDS.keepHere,
-          style: 'primary',
+          style: 'secondary',
           kind: 'onepassword_removals',
           removals: { answer: 'keep', token },
         },
       ],
+    };
+  };
+
+  /**
+   * Its page as the server sends it (Whombat onepassword-sync.md OPW-S14): its own 1Password tab first, without panels
+   * (the apps draw it from the part), then the Summary with Worth a look's lines; the head names the vault and the count,
+   * and its state follows the last pass.
+   */
+  const page = (): ThingPage | null => {
+    if (!connection) return null;
+    const v = view();
+    const zone = 'Europe/Amsterdam';
+    const head: Pick<ThingPage, 'status' | 'badge' | 'problem'> =
+      v.outcome === 'failing'
+        ? {
+            status: 'bad',
+            badge: 'Can’t reach 1Password',
+            problem: v.problem ?? ONEPASSWORD_WORDS.unreachable,
+          }
+        : v.outcome === 'paused' && v.removals
+          ? { status: 'warn', badge: onePasswordGoneTitle(v.removals.entries.length) }
+          : v.readOnly
+            ? { status: 'warn', badge: 'This token can only read' }
+            : v.outcome === 'waiting' && v.nextTryAt
+              ? { status: 'ok', badge: onePasswordWaitingLine(v.nextTryAt, zone).slice(0, 60) }
+              : { status: 'ok', badge: 'Kept in step' };
+    const notices: ThingPageNotice[] = [
+      ...(v.outcome === 'paused' && v.removals
+        ? [
+            {
+              id: 'onepassword-paused',
+              tone: 'warn' as const,
+              icon: 'key' as const,
+              title: onePasswordGoneTitle(v.removals.entries.length),
+              detail: `${ONEPASSWORD_WORDS.removeHere} or ${ONEPASSWORD_WORDS.keepHere.toLowerCase()}: open 1Password to choose.`,
+              nature: 'you' as const,
+              check: 'onepassword.paused',
+            },
+          ]
+        : []),
+      ...(v.outcome === 'failing'
+        ? [
+            {
+              id: 'onepassword-failing',
+              tone: 'bad' as const,
+              icon: 'network' as const,
+              title: v.problem ?? ONEPASSWORD_WORDS.unreachable,
+              nature: 'problem' as const,
+              check: 'onepassword.unreachable',
+            },
+          ]
+        : []),
+      ...(v.readOnly
+        ? [
+            {
+              id: 'onepassword-read-only',
+              tone: 'warn' as const,
+              icon: 'key' as const,
+              title: 'This token can only read',
+              detail: ONEPASSWORD_WORDS.readOnly,
+              nature: 'you' as const,
+              check: 'onepassword.paused',
+            },
+          ]
+        : []),
+    ];
+    return {
+      id: ONEPASSWORD_THING,
+      kind: 'connection',
+      connectionId: ONEPASSWORD_CONNECTION_ID as ThingPage['connectionId'],
+      catalogId: 'onepassword',
+      name: connection.label,
+      icon: 'onepassword',
+      ...head,
+      facts: [
+        ...(v.vaultTitle ? [[{ text: 'Vault ' }, { text: v.vaultTitle, strong: true }]] : []),
+        [{ text: onePasswordKeptLine(v.kept) }],
+        [{ text: 'Connected by ' }, { text: 'Mara', strong: true }, { text: ' on 21 Sep' }],
+      ],
+      runsOn: null,
+      settings: true,
+      tabs: [
+        { key: ONEPASSWORD_TAB, label: '1Password', panels: [] },
+        {
+          key: 'overview',
+          label: 'Summary',
+          panels: notices.length
+            ? [{ kind: 'notices', id: 'notices', place: 'top', title: 'Worth a look', items: notices }]
+            : [],
+        },
+      ],
+      actions: [],
+      readAt: v.checkedAt,
+      range: '24h',
+      ranges: ['24h'],
+      refreshS: 60,
     };
   };
 
@@ -300,6 +403,17 @@ export function createOnePasswordFixtures({ kind }: { kind: OnePasswordFixtureKi
         default:
           return response;
       }
+    },
+
+    /** Its page, over the connections' own pages (which would draw it as any connection's). */
+    page(req: Request): Response | null {
+      const m = match(req);
+      if (m?.id !== 'things.page' || decodeURIComponent(m.params.thing ?? '') !== ONEPASSWORD_THING)
+        return null;
+      const p = page();
+      return p
+        ? json(p)
+        : json({ error: { code: 'not_found', message: 'There’s nothing here by that name.' } }, 404);
     },
 
     /** The guard's card in the Inbox, over the one-Whombat layer that answers Home. */

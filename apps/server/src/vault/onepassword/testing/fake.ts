@@ -63,7 +63,12 @@ export class FakeOnePassword implements OnePasswordApi {
   readonly failNext = new Map<string, OnePasswordFailure[]>();
   /** The next `create`s are made in the vault, but their answers are lost (the worker died after sending them). */
   loseCreates = 0;
-  #clock = Date.parse('2026-11-24T08:00:00.000Z');
+  #clock: number;
+
+  /** `clockStart`: when its times start (development's stand-in starts at now, so they stay later than kept ones). */
+  constructor(options: { clockStart?: number } = {}) {
+    this.#clock = options.clockStart ?? Date.parse('2026-11-24T08:00:00.000Z');
+  }
 
   /** A time 1Password would write: always later than the last. */
   now(): string {

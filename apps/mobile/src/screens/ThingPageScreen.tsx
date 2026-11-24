@@ -15,7 +15,8 @@
  * page on screen while the next one is read. Until the page answers the first time, its glyph, name and status are
  * the Connections tab's row, the rest skeletons (page-speed.md AP-2650). A tab about a server (`ThingPageTab.server`) is
  * the app's own: Find My's, drawn from its Mac's Find My (`findmy/FindMyPart.tsx`), and its Timeline, from the
- * connection's timeline (`findmy/FindMyTimelinePart.tsx`).
+ * connection's timeline (`findmy/FindMyTimelinePart.tsx`); so is a 1Password connection's own tab, which it opens on:
+ * the sync's part (`connect/OnePassword.tsx`).
  * A service's page (Whombat service-dashboards.md SD-01…SD-11; service-dashboards.md AP-4630…): its own buttons in the
  * head beside Restart, and one runner for every button on it (`useThingButtons`) — a question opens the question sheet
  * (Restart's), the toast says the server's words, the page is read again at once; switches and steppers show what the
@@ -52,7 +53,8 @@ import {
   useThingPage,
 } from '@whombat/client/react';
 import { type HostSeriesRange, parseThingId, type ThingPage, type ThingPageAction } from '@whombat/core';
-import { FIND_MY_TIMELINE_TAB, placeKindOfCatalog } from '@whombat/core/domain';
+import { FIND_MY_TIMELINE_TAB, isVaultSyncConnection, placeKindOfCatalog } from '@whombat/core/domain';
+import { ONEPASSWORD_TAB } from '@whombat/core/vault';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
@@ -101,6 +103,7 @@ import { useBottomRoom } from '../ui/screenBottom';
 import { LevelPill } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
 import { hitSlopFor } from '../ui/touchTarget';
+import { OnePasswordSections } from './connect/OnePassword';
 import { errorText, outcomeText, showFailure, showNotice } from './feedback';
 import { FindMyPart } from './findmy/FindMyPart';
 import { FindMyTimelinePart } from './findmy/FindMyTimelinePart';
@@ -416,6 +419,12 @@ export function ThingPageScreen({
                   <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
                 ) : null}
               </>
+            ) : shown === ONEPASSWORD_TAB &&
+              page.connectionId &&
+              isVaultSyncConnection(page.catalogId ?? '') ? (
+              // A 1Password connection opens on its own tab (Whombat onepassword-sync.md): the sync's part, from its
+              // read; nothing to ask the assistant, which never uses it.
+              <OnePasswordSections slug={slug} connectionId={page.connectionId} />
             ) : shown === FIND_MY_TIMELINE_TAB && about && page.connectionId ? (
               // The timeline names its Mac too (findmy-timeline.md §1); only a box that has it sends the tab.
               <FindMyTimelinePart connectionId={page.connectionId} serverId={about} />

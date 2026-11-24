@@ -76,6 +76,27 @@ describe('tabs', () => {
   });
 });
 
+describe('a 1Password connection’s page (Whombat onepassword-sync.md)', () => {
+  const page = {
+    id: 'connection:con_1p',
+    kind: 'connection',
+    connectionId: 'con_1p',
+    catalogId: 'onepassword',
+    settings: true,
+    tabs: [
+      { key: 'onepassword', label: '1Password', panels: [] },
+      { key: 'overview', label: 'Summary', panels: [] },
+    ],
+  } as unknown as ThingPage;
+
+  it('opens on its own 1Password tab, the Summary after it and Connection last', () => {
+    const tabs = phoneThingTabs(page);
+    expect(tabs.map((t) => t.key)).toEqual(['onepassword', 'overview', 'activity', 'settings']);
+    expect(shownTab(tabs, undefined)).toBe('onepassword');
+    expect(shownTab(tabs, 'overview')).toBe('overview');
+  });
+});
+
 describe('an account’s Connection', () => {
   it('stays on GitHub’s and Website feedback’s pages, which have no connection id', () => {
     for (const id of ['connection:github', 'connection:feedback', 'connection:con_mara']) {

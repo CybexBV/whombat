@@ -5,12 +5,16 @@
  * quarantine: the next reason after it ends runs one. Home's health and the connection page read the stored state and
  * never wait for a pass.
  */
+import { join } from 'node:path';
+import { defaultWhombatHome } from '@whombat/agent-runtime/host';
 import { ONEPASSWORD_CHANGE_DELAY_MS, ONEPASSWORD_PASS_EVERY_MS } from '@whombat/core';
+import { outsideCommandScope } from '../../commit/scope';
 import { onConnectionLifecycle } from '../../connections/lifecycle';
 import type { Services } from '../../services';
 import { runOnePasswordPass } from './pass';
 import { type OnePasswordApi, OnePasswordPool } from './pool';
 import { onePasswordConnections } from './store';
+import { onePasswordStandInOn, StandInOnePassword } from './testing/standin';
 
 const overrides = new WeakMap<Services, OnePasswordApi>();
 
@@ -23,6 +27,7 @@ export function useOnePasswordForTests(services: Services, api: OnePasswordApi):
 export class OnePasswordSync {
   readonly #services: Services;
   #pool: OnePasswordPool | null = null;
+  #standIn: StandInOnePassword | null = null;
   #timer: NodeJS.Timeout | null = null;
   #dueAt: number | null = null;
   #running: Promise<void> | null = null;
@@ -38,10 +43,27 @@ export class OnePasswordSync {
     this.#services = services;
   }
 
-  /** What the pass and the check talk to: the worker, or a test's stand-in. */
+  /**
+   * What the pass and the check talk to: the worker, a test's stand-in, or on a development box the stand-in 1Password
+   * for `ops_dev_` tokens in front of the worker (`testing/standin.ts`; never in production).
+   */
   get api(): OnePasswordApi {
     const override = overrides.get(this.#services);
     if (override) return override;
+    return this.standIn ?? this.#worker();
+  }
+
+  /** Development's stand-in 1Password, or null where it isn't on (always in production). */
+  get standIn(): StandInOnePassword | null {
+    if (!onePasswordStandInOn(this.#services.config)) return null;
+    const home = defaultWhombatHome({ WHOMBAT_HOME: this.#services.config.WHOMBAT_HOME });
+    this.#standIn ??= new StandInOnePassword(() => this.#worker(), {
+      file: join(home, 'onepassword-standin.json'),
+    });
+    return this.#standIn;
+  }
+
+  #worker(): OnePasswordPool {
     this.#pool ??= new OnePasswordPool({ log: this.#services.log });
     return this.#pool;
   }
@@ -93,7 +115,9 @@ export class OnePasswordSync {
     if (this.#timer && this.#dueAt !== null && this.#dueAt <= due) return;
     if (this.#timer) clearTimeout(this.#timer);
     this.#dueAt = due;
-    this.#timer = setTimeout(() => this.#fire(), Math.max(0, delayMs));
+    // Asked for by a command (adding the connection, Sync now, a change to an entry): the pass commits as itself, never
+    // as part of that command, whose receipt may be settled by then.
+    this.#timer = outsideCommandScope(() => setTimeout(() => this.#fire(), Math.max(0, delayMs)));
     this.#timer.unref();
   }
 

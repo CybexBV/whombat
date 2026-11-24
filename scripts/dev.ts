@@ -5,7 +5,8 @@
  * it): the scripted Hermes as the engine (`WHOMBAT_HERMES_BIN`; `pnpm hermes:install` and `WHOMBAT_HERMES_BIN` for the
  * real one) and `WHOMBAT_ALLOW_SCRIPTED=1`, so its turns run without anyone's sign-in. The rest stands in by itself
  * outside production: no licence, the box's identity made at the first start and a stand-in manager under
- * `WHOMBAT_HOME`, no relay, FakeGitHub, the agent's commands in the same wrapper as on the appliance (the host's tools
+ * `WHOMBAT_HOME`, no relay, FakeGitHub, a stand-in 1Password for `ops_dev_…` tokens (`pnpm --filter @whombat/server
+ * onepassword:dev` changes its items), the agent's commands in the same wrapper as on the appliance (the host's tools
  * without `WHOMBAT_AGENT_TOOLS`, Docker only with `WHOMBAT_CONTAINERS_SOCKET`), the boot migrating the database.
  *
  * `WHOMBAT_EDITION=community pnpm dev` runs it as a community box (hermes-engine.md HE-S221): claimed on its own page,
