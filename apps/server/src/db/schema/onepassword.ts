@@ -22,7 +22,9 @@ export type OnePasswordLinkState = 'creating' | 'synced' | 'local_only';
 /**
  * One pair. `entry_id` is set null when the entry is removed in Whombat: the link stays as the marker that its item is
  * to be archived, then goes. `item_id` is null while `creating` and for an entry kept only in Whombat that never had
- * an item. One link per entry and one per item of a connection.
+ * an item. One link per entry and one per item of a connection. A `creating` link remembers its entry's id in
+ * `marker_entry_id` too (the id the new item's marker carries), so an entry removed before the answer came still finds
+ * the item to archive.
  */
 export const vaultOnePasswordLinks = pgTable(
   'vault_onepassword_links',
@@ -47,6 +49,18 @@ export const vaultOnePasswordLinks = pgTable(
     nameShortened: boolean('name_shortened').notNull().default(false),
     /** Why the pair isn't kept in step now, in the person's words; null: nothing wrong. */
     problem: text('problem'),
+    /**
+     * The id of the item's one-time password field the pair follows; null: none yet (the first one with a value is
+     * taken). A field removed in 1Password is never replaced by another one-time password field of the item.
+     */
+    totpFieldId: text('totp_field_id'),
+    /** The entry id a `creating` link's new item carries in its marker (kept when the entry is removed meanwhile). */
+    markerEntryId: text('marker_entry_id'),
+    /**
+     * The HMACs of Whombat's side that 1Password refused to take (a write that kept failing); null: none. The pair
+     * isn't written again until either side changes.
+     */
+    refused: jsonb('refused').$type<OnePasswordDigests>(),
     syncedAt: ts('synced_at'),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
@@ -85,5 +99,7 @@ export const vaultOnePasswordState = pgTable('vault_onepassword_state', {
   /** 1Password's limit (OPW-26): the times in a row it was hit, and when the next pass may try. */
   limitHits: integer('limit_hits').notNull().default(0),
   nextTryAt: ts('next_try_at'),
+  /** Passes in a row that couldn't finish: the red card waits for the second. */
+  failures: integer('failures').notNull().default(0),
   updatedAt: ts('updated_at').notNull(),
 });

@@ -148,6 +148,13 @@
       "when": 1795511236749,
       "tag": "0020_onepassword_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795519512681,
+      "tag": "0021_onepassword_pair_fields",
+      "breakpoints": true
     }
   ]
 }

@@ -135,6 +135,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "A 1Password vault kept in step with the Vault (docs/decisions/onepassword-sync.md): two new tables, vault_onepassword_links (one row per pair of a Vault entry and a 1Password item: its state, the item's version and time, the base as an HMAC per field, never a value; the entry set null when it is removed, so the item is archived next) and vault_onepassword_state (one row per 1Password connection: what the last pass saw and how it ended), both cascading with the connection. The release before it never reads either table, and offers no 1Password connection."
+    },
+    "0021_onepassword_pair_fields": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "The 1Password sync's pairs remember more (docs/decisions/onepassword-sync.md): on vault_onepassword_links the id of the one-time password field a pair follows, the entry id a lost create's marker carries (kept when the entry is removed, so its item is archived), and the HMACs of a change 1Password kept refusing (never a value), all nullable; on vault_onepassword_state the passes in a row that couldn't finish (default 0). The release before it never reads either table."
     }
   }
 }
