@@ -43,7 +43,18 @@ export function thingWatchMatches(
 
 type WatchSubject = Pick<ThingWatchView, 'name' | 'event'>;
 
-export function thingWatchStartText(watch: WatchSubject): string {
+/** “The NAS” inside a sentence: “the NAS”; “Plex” stays. */
+function inSentence(name: string): string {
+  return /^The [A-Z]/.test(name) ? `t${name.slice(1)}` : name;
+}
+
+/**
+ * The watch's first words. Waiting for a thing that is down because of something else (`cause`, what it runs on), it
+ * says so: “Plex is down while pve-02 is down. I’ll tell you when Plex answers again.”
+ */
+export function thingWatchStartText(watch: WatchSubject, cause?: { name: string } | null): string {
+  if (watch.event === 'back' && cause)
+    return `${watch.name} is down while ${inSentence(cause.name)} is down. I’ll tell you when ${inSentence(watch.name)} answers again.`;
   return `I’ll tell you ${watch.event === 'down' ? 'if' : 'when'} ${watch.name} ${watch.event === 'down' ? 'goes down' : 'is back'}.`;
 }
 
