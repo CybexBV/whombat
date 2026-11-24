@@ -36,6 +36,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import {
   headFacts,
+  holdView,
   OVERVIEW_WORDS,
   type ThingHeadPreview,
   thingButtonKey,
@@ -47,18 +48,29 @@ import {
   type ThingButtons,
   useCachedThingHead,
   useControlGuesses,
+  useKeepQuiet,
   useQuietActions,
+  useSessionProtocol,
   useThingAction,
   useThingButtons,
   useThingPage,
+  useThingWatch,
 } from '@whombat/client/react';
 import { type HostSeriesRange, parseThingId, type ThingPage, type ThingPageAction } from '@whombat/core';
 import { FIND_MY_TIMELINE_TAB, isVaultSyncConnection, placeKindOfCatalog } from '@whombat/core/domain';
 import { ONEPASSWORD_TAB } from '@whombat/core/vault';
+import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { DEFAULT_RANGE, rangeOptions } from '../data/dashboard';
+import {
+  factsWithoutUptime,
+  MONITORING_COPY,
+  parseMonitoringPick,
+  thingMoreMenu,
+  withoutHoldLines,
+} from '../data/monitoring';
 import { quietNote } from '../data/quiet';
 import { pressNote } from '../data/servicePanels';
 import { putBackAction } from '../data/serviceSettings';
@@ -97,6 +109,7 @@ import {
   type LucideIcon,
   MessageCircle,
 } from '../ui/icons';
+import { hasNativeMenu, MenuSheet, NativeMenu } from '../ui/nativeMenu';
 import { OneSheet } from '../ui/oneSheet';
 import { Button, ErrorState } from '../ui/primitives';
 import { useBottomRoom } from '../ui/screenBottom';
@@ -113,6 +126,7 @@ import { ThingActivity } from './thing/Changes';
 import type { ControlActions } from './thing/Controls';
 import { BackupsKeptHere } from './thing/KeptHere';
 import { LookCard } from './thing/LookCard';
+import { CauseLink, KeepQuietSheet, KeptQuietLine, WhatHappenedCard } from './thing/Monitoring';
 import { type PanelContext, SummaryPanels, TabPanels } from './thing/Panels';
 import { FactLine, useWidePage } from './thing/parts';
 import { usePutBack } from './thing/Settings';
@@ -158,7 +172,8 @@ export function ThingPageScreen({
       placeholderData: keepPreviousData,
     },
   );
-  const page = query.data ?? null;
+  // The hold's heads-up line is for an app that doesn't draw the hold under the head; this one does.
+  const page = useMemo(() => (query.data ? withoutHoldLines(query.data) : null), [query.data]);
   // A live page shown again (back from another screen) reads at once when its copy is older than its interval.
   const shownAgain = useRef(focused);
   useEffect(() => {
@@ -182,6 +197,19 @@ export function ThingPageScreen({
   // Ignore, Remind me tomorrow, Stop watching and Undo on its lines (quiet-notices-mobile.md AP-4861): on a Whombat
   // with `things.quiet`; the toast says how it went, with Undo.
   const quiet = useQuietActions(slug, thingId, { timeZone, note: quietNote(showToast) });
+  // Keep quiet for a while and End now (Whombat monitoring.md MON-04): on a Whombat at session minor 9, for who may
+  // manage the thing (What Whombat watches says so).
+  const keepsQuiet = protocolAtLeast(useSessionProtocol(), KEEP_QUIET_MINOR);
+  const watch = useThingWatch(keepsQuiet ? { params: { burrow: slug, thing: thingId } } : null, {
+    retry: false,
+    staleTime: 60_000,
+  });
+  const keep = useKeepQuiet(slug, thingId, {
+    name: query.data?.name ?? title ?? '',
+    timeZone,
+    note: quietNote(showToast),
+  });
+  const [keeping, setKeeping] = useState(false);
   const { guesses, guess, done } = useControlGuesses(query.dataUpdatedAt);
   const act = useMemo<ControlActions>(
     () => ({ buttons, guesses, guess, done }),
@@ -274,6 +302,7 @@ export function ThingPageScreen({
         research: page.research ?? null,
         onHandle: handOver,
         putBack,
+        endQuiet: page.keptQuiet?.canEnd ? { run: () => void keep.end(), busy: keep.busy } : null,
       }
     : null;
   const notFound = !!query.error && 'status' in query.error && query.error.status === 404;
@@ -284,13 +313,18 @@ export function ThingPageScreen({
   const service = !!page?.open;
   const more = page && service && (page.actions.length || page.buttons?.length);
   const [menu, setMenu] = useState(false);
+  // Keep quiet… in the ⋯ (MON-04): for who may manage it; a page kept quiet already offers End now under its head.
+  const canKeepQuiet = !!page && keepsQuiet && (!!watch.data?.mayChange || !!page.keptQuiet?.canEnd);
+  const hold = page && keepsQuiet ? holdView(page) : null;
   return (
     <Screen>
       <BackBar
         label={back}
         onPress={onBack}
         right={
-          page && more ? (
+          page && !more && canKeepQuiet ? (
+            <KeepQuietMore name={page.name} onKeepQuiet={() => setKeeping(true)} />
+          ) : page && more ? (
             <Touchable
               onPress={() => setMenu(true)}
               feedback="wash"
@@ -385,6 +419,25 @@ export function ThingPageScreen({
                 <Actions page={page} onConfirm={setConfirm} buttons={buttons} />
               </>
             )}
+            {hold?.kind === 'window' ? (
+              <KeptQuietLine
+                words={hold.words}
+                who={hold.who}
+                endNow={hold.endNow}
+                busy={keep.busy}
+                onEnd={() => void keep.end()}
+              />
+            ) : hold ? (
+              <View style={{ gap: 4 }}>
+                {/* Down because of something else says so as its state; quiet with its server says so here. */}
+                {page.badge !== hold.words ? (
+                  <KeptQuietLine words={hold.words} who={null} endNow={false} busy={false} onEnd={() => {}} />
+                ) : null}
+                {hold.link ? (
+                  <CauseLink label={hold.link.label} onPress={() => void openHref(hold.link?.href ?? '')} />
+                ) : null}
+              </View>
+            ) : null}
             {query.error ? (
               // A failed refresh keeps the saved page, Needs a look and its problems with it; its controls may have changed.
               <ReadNote
@@ -452,6 +505,8 @@ export function ThingPageScreen({
                 {shown === tabs[0]?.key && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                   <BackupsKeptHere thing={page.id} />
                 ) : null}
+                {/* The last 30 days (MON-09): outages and problems with when, how long and why. */}
+                {shown === tabs[0]?.key ? <WhatHappenedCard thing={page.id} /> : null}
                 {shown === tabs[0]?.key && subject && !service ? (
                   <BigButton label={THING_PAGE_COPY.ask(page.name)} variant="secondary" onPress={askAbout} />
                 ) : null}
@@ -476,7 +531,7 @@ export function ThingPageScreen({
             { id: 'close', label: THING_PAGE_COPY.close, variant: 'quiet', onPress: () => setMenu(false) },
           ]}
         >
-          <View style={{ marginTop: 16 }}>
+          <View style={{ marginTop: 16, gap: 10 }}>
             <Actions
               page={page}
               onConfirm={(a) => {
@@ -487,8 +542,21 @@ export function ThingPageScreen({
               onPressed={() => setMenu(false)}
               withOpen={false}
             />
+            {canKeepQuiet ? (
+              <Button
+                label={MONITORING_COPY.keepQuiet}
+                variant="secondary"
+                onPress={() => {
+                  setMenu(false);
+                  setKeeping(true);
+                }}
+              />
+            ) : null}
           </View>
         </OneSheet>
+      ) : null}
+      {page ? (
+        <KeepQuietSheet visible={keeping} name={page.name} actions={keep} onClose={() => setKeeping(false)} />
       ) : null}
       {page && confirm ? (
         <ConfirmSheet page={page} thingId={thingId} action={confirm} onClose={() => setConfirm(null)} />
@@ -595,7 +663,9 @@ function ServiceHead({
   const verdict = page.verdict?.trim() || null;
   const runsOn = page.runsOn;
   const level = thingStatusLevel(page.status);
-  const { checked, detail } = headFacts(page.facts);
+  // The week's line (MON-09) sits by when it was checked; the server also sends it among the facts for older apps.
+  const { checked, detail } = headFacts(factsWithoutUptime(page.facts, page.uptime));
+  const week = page.uptime?.text ?? null;
   const openRunsOn = () => {
     if (!runsOn) return;
     const to = runsOnTarget(runsOn);
@@ -628,7 +698,7 @@ function ServiceHead({
         ) : null}
       </View>
     ) : null;
-  const where = runsOn || page.address || checked;
+  const where = runsOn || page.address || checked || week;
   const info = (
     <View style={{ gap: 12 }}>
       <View
@@ -695,6 +765,7 @@ function ServiceHead({
           ) : null}
           {page.address ? <CopyAddress address={page.address} /> : null}
           {checked ? <FactLine line={checked} /> : null}
+          {week ? <FactLine line={[{ text: week }]} /> : null}
         </View>
       ) : null}
       {detail.length ? (
@@ -997,5 +1068,53 @@ function QuestionSheet({
       ]}
       note={note}
     />
+  );
+}
+
+/** A page's ⋯ when Keep quiet… is all it holds (44pt): iOS's own menu on iPhone, a sheet elsewhere. */
+function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () => void }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const spec = thingMoreMenu();
+  const onPick = (id: string) => {
+    if (parseMonitoringPick(id) === 'keep_quiet') onKeepQuiet();
+  };
+  const box = {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: theme.colors.line,
+    backgroundColor: theme.colors.sf,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as const;
+  const face = <Ellipsis size={18} color={theme.colors.ink} strokeWidth={1.8} />;
+  if (hasNativeMenu)
+    return (
+      <NativeMenu spec={spec} onPick={onPick} trigger="tap" label={MONITORING_COPY.more(name)} style={box}>
+        <View style={box}>{face}</View>
+      </NativeMenu>
+    );
+  return (
+    <>
+      <Touchable
+        onPress={() => setOpen(true)}
+        feedback="wash"
+        ringRadius={22}
+        accessibilityRole="button"
+        accessibilityLabel={MONITORING_COPY.more(name)}
+        style={box}
+      >
+        {face}
+      </Touchable>
+      <MenuSheet
+        spec={open ? spec : null}
+        visible={open}
+        label={MONITORING_COPY.more(name)}
+        onClose={() => setOpen(false)}
+        onPick={onPick}
+      />
+    </>
   );
 }

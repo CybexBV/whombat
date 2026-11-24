@@ -5,7 +5,7 @@
  * the facts, and the words a screen reader hears. Pure; the screens are `screens/thing/Monitoring.tsx`,
  * `ThingPageScreen` and `ServerScreen`.
  */
-import { KEEP_QUIET_WORDS, LIMIT_WORDS } from '@whombat/client';
+import { KEEP_QUIET_WORDS, LIMIT_WORDS, type LimitView, limitText, withoutHoldLine } from '@whombat/client';
 import type { ThingPage } from '@whombat/core';
 import { zonedParts } from '@whombat/core/text';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
@@ -57,7 +57,8 @@ export function pickDays(now: Date | number, timeZone: string, count = 7): PickD
     const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(d);
     out.push({
       value,
-      label: i === 0 ? MONITORING_COPY.today : i === 1 ? MONITORING_COPY.tomorrow : `${weekday} ${d.getUTCDate()}`,
+      label:
+        i === 0 ? MONITORING_COPY.today : i === 1 ? MONITORING_COPY.tomorrow : `${weekday} ${d.getUTCDate()}`,
     });
   }
   return out;
@@ -86,6 +87,23 @@ export function factsWithoutUptime(
   return facts.filter((f) => text(f) !== uptime.text);
 }
 
+/**
+ * The page without the hold's heads-up line in Worth a look (“Quiet until 23:00”, “Not answering while pve-02 is
+ * down”): the server sends it first for an app that doesn't draw the hold, and the phone draws it under the head.
+ */
+export function withoutHoldLines(page: ThingPage): ThingPage {
+  if (!page.keptQuiet && !page.causedBy) return page;
+  return {
+    ...page,
+    tabs: page.tabs.map((t) => ({
+      ...t,
+      panels: t.panels.map((p) =>
+        p.kind === 'notices' ? { ...p, items: [...withoutHoldLine(p.items, page)] } : p,
+      ),
+    })),
+  };
+}
+
 export type MonitoringPick = 'keep_quiet';
 
 /** A page's ⋯ when nothing else is in it: Keep quiet…. */
@@ -103,4 +121,9 @@ export function serverMoreMenu(keepQuiet: boolean): NativeMenuSpec {
 
 export function parseMonitoringPick(id: string): MonitoringPick | null {
   return id === 'keep_quiet' ? id : null;
+}
+
+/** “Warns above 90 %” for a check's row and its ⋯: its own limit, else what applies; null when each sensor has its own. */
+export function limitLine(view: Pick<LimitView, 'value' | 'unit'>): string | null {
+  return view.value === null ? null : MONITORING_COPY.warnsAbove(limitText(view.value, view.unit));
 }

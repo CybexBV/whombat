@@ -238,10 +238,11 @@ export function ConnectionTile({
   const toneColor = useToneColor();
   const { line } = tile;
   const edgeColor = line.tone === 'bad' ? theme.colors.bad : line.tone === 'warn' ? theme.colors.warn : null;
-  // What isn't fine says so on its line; otherwise the line of what it shows, else Home's.
+  // What isn't fine says so on its line, and so does a thing kept quiet or down because of something else; otherwise
+  // the line of what it shows, else Home's.
   const notFine = line.tone === 'bad' || line.tone === 'warn';
   const shownLine =
-    notFine || !face
+    notFine || tile.held || !face
       ? { text: line.text, tone: line.tone }
       : { text: face.line ?? line.text, tone: face.tone === 'ok' ? null : face.tone };
   const large = size === 'l';

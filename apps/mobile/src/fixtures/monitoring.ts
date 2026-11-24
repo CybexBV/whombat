@@ -1,7 +1,7 @@
 /**
  * The demo world's monitoring (Whombat monitoring.md MON-04, MON-07, MON-09, MON-15): a thing kept quiet for a while
  * (`things.keepQuiet`, `things.endQuiet`: UniFi until 23:00 while its access points move, the-falcon while its backup
- * disk moves), a connection down because of something else (SABnzbd while its machine `downloads` is stopped), the
+ * disk moves), a connection down because of something else (Seerr while its machine `media` is stopped), the
  * week's line and “What happened” (`things.history`) for every thing, and a server check's limit
  * (`things.setWatchLimit`, Undo through `changes.undo`). It changes the pages, Home's things and a server's page the way
  * the server does: the page carries `keptQuiet` or `causedBy`, its Worth a look starts with the hold's heads-up for an
@@ -35,13 +35,13 @@ const DAY = 24 * HOUR;
 /** The things the demo world keeps quiet when it starts, and why. */
 export const MONITORING_THINGS = {
   unifi: 'connection:con_unifi',
-  sabnzbd: 'connection:con_sabnzbd',
+  seerr: 'connection:con_seerr',
   falcon: 'server:the-falcon',
   pve02: 'server:pve-02',
 } as const;
 
-/** SABnzbd runs on this machine of pve-02, stopped: it doesn't answer while it is (MON-07). */
-export const SABNZBD_MACHINE = { serverId: 'pve-02', guestId: 'pve:126', name: 'downloads' } as const;
+/** Seerr runs on this machine of pve-02, stopped: it doesn't answer while it is (MON-07). */
+export const CAUSE_MACHINE = { serverId: 'pve-02', guestId: 'pve:126', name: 'media' } as const;
 
 interface Window {
   id: string;
@@ -132,8 +132,8 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
 
   /** What a thing is down because of, when anything. */
   function causeOf(thing: string): ThingCause | null {
-    if (thing !== MONITORING_THINGS.sabnzbd) return null;
-    const { serverId, guestId, name } = SABNZBD_MACHINE;
+    if (thing !== MONITORING_THINGS.seerr) return null;
+    const { serverId, guestId, name } = CAUSE_MACHINE;
     return {
       thing: `server:${serverId}/guest/${encodeURIComponent(guestId)}`,
       name,
@@ -176,7 +176,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
       ['down', 'Not answering', 2, '06:31', 9],
       ['down', 'Not answering', 9, '22:15', 5],
     ],
-    'connection:con_sabnzbd': [['down', 'Not answering', 0, '13:47', 18]],
+    'connection:con_seerr': [['down', 'Not answering', 0, '13:47', 18]],
   };
 
   /** A server's own alerts in the period: [title, severity, rule, days ago at hh:mm, minutes]. */
@@ -192,8 +192,8 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     return (INCIDENTS[thing] ?? []).flatMap(([nature, words, days, hhmm, minutes], i) => {
       const started = local(hhmm, -days);
       if (started < from) return [];
-      // SABnzbd's is still going: its machine is stopped now.
-      const open = thing === MONITORING_THINGS.sabnzbd;
+      // Seerr's is still going: its machine is stopped now.
+      const open = thing === MONITORING_THINGS.seerr;
       const lasted = open ? Math.max(1, Math.round((now().getTime() - started) / MINUTE)) : minutes;
       const cause = causeOf(thing);
       return [
@@ -240,7 +240,15 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
           const openedAt = local(hhmm, -ago);
           return openedAt < from
             ? []
-            : [{ title, severity, rule, openedAt: at(openedAt), resolvedAt: at(openedAt + minutes * MINUTE) }];
+            : [
+                {
+                  title,
+                  severity,
+                  rule,
+                  openedAt: at(openedAt),
+                  resolvedAt: at(openedAt + minutes * MINUTE),
+                },
+              ];
         })
       : undefined;
     return {
@@ -298,7 +306,9 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     if (w && quiet) {
       const kept = keptOf(w);
       out = mapPanels(out, (p) =>
-        p.kind === 'notices' ? heldNotices(p, quiet, { id: 'quiet-window', title: kept.words, icon: 'clock' }) : p,
+        p.kind === 'notices'
+          ? heldNotices(p, quiet, { id: 'quiet-window', title: kept.words, icon: 'clock' })
+          : p,
       );
       return { ...out, keptQuiet: kept, status: 'ok', badge: kept.words.split(' · ')[0] as string };
     }
@@ -320,9 +330,9 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
         status: 'unknown',
         badge: cause.words.slice(0, 60),
         runsOn: {
-          serverId: SABNZBD_MACHINE.serverId,
-          guestId: SABNZBD_MACHINE.guestId,
-          name: `${SABNZBD_MACHINE.name} (${SABNZBD_MACHINE.serverId})`,
+          serverId: CAUSE_MACHINE.serverId,
+          guestId: CAUSE_MACHINE.guestId,
+          name: `${CAUSE_MACHINE.name} (${CAUSE_MACHINE.serverId})`,
           href: cause.href ?? '/things/server%3Apve-02',
           how: 'address',
         },
@@ -390,7 +400,10 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
   /** `server|rule` → its own limit; `server|rule|subject` → an item's. */
   const limits = new Map<string, number>([['pve-02|disk.space_high|fs:/mnt/backup', 95]]);
   /** What each change replaced, for Undo: its key and the limit before (null: none of its own). */
-  const limitChanges = new Map<string, { key: string; before: number | null; title: string; thing: string }>();
+  const limitChanges = new Map<
+    string,
+    { key: string; before: number | null; title: string; thing: string }
+  >();
   const SUBJECT_NAMES: Record<string, string> = { 'fs:/mnt/backup': '/mnt/backup' };
 
   /** What Whombat watches on a server, with the limits of the checks that have one (MON-15). */
@@ -441,7 +454,11 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
       : null;
     if (!range) return refusal(400, 'validation_failed', 'This check has no limit to change.');
     if (body.limit !== null && (body.limit < range.min || body.limit > range.max))
-      return refusal(400, 'validation_failed', `Choose a limit from ${range.min} to ${range.max} ${range.unit}.`);
+      return refusal(
+        400,
+        'validation_failed',
+        `Choose a limit from ${range.min} to ${range.max} ${range.unit}.`,
+      );
     const key = `${server}|${rule}${body.subject ? `|${body.subject.id}` : ''}`;
     if (body.subject) SUBJECT_NAMES[body.subject.id] = body.subject.name;
     const before = limits.get(key) ?? null;
@@ -452,7 +469,8 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
       key,
       before,
       thing,
-      title: body.limit === null ? 'Used the default limit again' : `Set the limit to ${body.limit} ${range.unit}`,
+      title:
+        body.limit === null ? 'Used the default limit again' : `Set the limit to ${body.limit} ${range.unit}`,
     });
     const watch = watchOf();
     return { status: 200, body: { watch: watch ? withLimits(thing, watch) : null, changeId } };

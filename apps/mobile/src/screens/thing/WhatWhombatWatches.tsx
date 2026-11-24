@@ -5,12 +5,22 @@
  * until it’s back”, who and when under it) with Undo. The shared `thingWatchView`; the switches and Undo run through
  * the thing's `useQuietActions` (the toast says so). Look only and guests read the same rows with “On” or “Off” instead
  * of a switch and no Undo. Only the rows: the caller puts them in its card (a connection's settings, a server's Summary).
+ * A server's check with a limit (Whombat monitoring.md MON-15) says when it warns (“Warns above 90 %”, and each item
+ * with its own) with Change, which opens Change the limit.
  */
-import { thingWatchView, type WatchCheckView, type WatchExceptionView } from '@whombat/client';
+import {
+  type LimitView,
+  limitText,
+  limitView,
+  thingWatchView,
+  type WatchCheckView,
+  type WatchExceptionView,
+} from '@whombat/client';
 import type { QuietActions } from '@whombat/client/react';
 import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
+import { limitLine, MONITORING_COPY } from '../../data/monitoring';
 import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -32,6 +42,7 @@ export function WhatWhombatWatches({
   first = null,
   divider,
   inset,
+  onLimit = null,
 }: {
   watch: ThingWatch | undefined;
   pending: boolean;
@@ -45,9 +56,12 @@ export function WhatWhombatWatches({
   divider: Divider;
   /** The rows' side padding: the card's. */
   inset: number;
+  /** Opens Change the limit for a check's limit, or one item's (a server's); none: limits aren't shown. */
+  onLimit?: ((view: LimitView) => void) | null;
 }) {
   const theme = useTheme();
   const view = useMemo(() => (watch ? thingWatchView(watch, timeZone, now) : null), [watch, timeZone, now]);
+  const checks = useMemo(() => new Map((watch?.checks ?? []).map((c) => [c.check as string, c])), [watch]);
   const [open, setOpen] = useState(false);
   if (!view)
     return failed ? (
@@ -78,6 +92,10 @@ export function WhatWhombatWatches({
           actions={actions}
           border={border}
           inset={inset}
+          limit={(() => {
+            const c = onLimit && view.mayChange ? checks.get(row.check) : undefined;
+            return c && onLimit ? { check: c, open: onLimit } : null;
+          })()}
         />
       ))}
       {more || open ? (
@@ -110,12 +128,15 @@ function CheckRow({
   actions,
   border,
   inset,
+  limit,
 }: {
   row: WatchCheckView;
   mayChange: boolean;
   actions: QuietActions;
   border: object;
   inset: number;
+  /** Its limit and what opens Change the limit, for who may change it. */
+  limit: { check: ThingWatch['checks'][number]; open: (view: LimitView) => void } | null;
 }) {
   const theme = useTheme();
   const busy = actions.busy({ check: row.check });
@@ -153,6 +174,7 @@ function CheckRow({
           </Text>
         )}
       </View>
+      {limit && row.on ? <LimitLines check={limit.check} open={limit.open} /> : null}
       {row.exceptions.length ? (
         <View style={{ paddingBottom: 4 }}>
           <Text size={12} mono color={theme.colors.mut} style={{ paddingTop: 2 }}>
@@ -220,6 +242,63 @@ function ExceptionLine({
           </Text>
         </Touchable>
       ) : null}
+    </View>
+  );
+}
+
+/** A check's limit: “Warns above 90 %” (or what applies without one) and each item with its own, each with Change. */
+function LimitLines({
+  check,
+  open,
+}: {
+  check: ThingWatch['checks'][number];
+  open: (view: LimitView) => void;
+}) {
+  const whole = limitView(check);
+  if (!whole || !check.limit) return null;
+  return (
+    <View style={{ paddingBottom: 4 }}>
+      <LimitLine
+        text={limitLine(whole) ?? whole.defaultWords}
+        spoken={MONITORING_COPY.changeLimitHint(check.name)}
+        onPress={() => open(whole)}
+      />
+      {check.limit.items.map((item) => {
+        const own = limitView(check, item.subject);
+        return own ? (
+          <LimitLine
+            key={item.subject.id}
+            text={`${item.subject.name}: ${limitText(item.value, check.limit?.unit ?? '')}`}
+            spoken={MONITORING_COPY.changeLimitHint(`${check.name} · ${item.subject.name}`)}
+            onPress={() => open(own)}
+          />
+        ) : null;
+      })}
+    </View>
+  );
+}
+
+/** One limit's words in mono and Change on the right (44pt). */
+function LimitLine({ text, spoken, onPress }: { text: string; spoken: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
+      <Text size={12.5} mono color={theme.colors.ink2} style={{ flex: 1, minWidth: 0 }}>
+        {text}
+      </Text>
+      <Touchable
+        onPress={onPress}
+        feedback="fade"
+        ringRadius={10}
+        accessibilityRole="button"
+        accessibilityLabel={MONITORING_COPY.changeLimit}
+        accessibilityHint={spoken}
+        style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, justifyContent: 'center' }}
+      >
+        <Text size={13} weight={600} color={theme.colors.brand}>
+          {QUIET_COPY.change}
+        </Text>
+      </Touchable>
     </View>
   );
 }

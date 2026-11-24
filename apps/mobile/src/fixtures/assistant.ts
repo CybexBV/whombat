@@ -109,7 +109,7 @@ import { createSiFixtures } from './hostsSi';
 import { createUpdatesFixtures } from './hostsUpdates';
 import { createLocalModelFixtures } from './localModel';
 import { createLookFixtures, lookThreads } from './looks';
-import { createMonitoringFixtures, SABNZBD_MACHINE } from './monitoring';
+import { CAUSE_MACHINE, createMonitoringFixtures } from './monitoring';
 import {
   createServerAsksFixtures,
   DOCKER_CHAT_ID,
@@ -383,8 +383,8 @@ const PVE02_GUESTS: GuestSeed[] = [
   { vmid: 122, name: 'pihole', kind: 'container', state: 'running', cpu: 0.6, mem: [180, 512] },
   { vmid: 125, name: 'jellyfin', kind: 'vm', state: 'running', cpu: 18.9, mem: [6200, 8192] },
   { vmid: 130, name: 'win11-test', kind: 'vm', state: 'stopped', cpu: 0, mem: [0, 8192] },
-  // SABnzbd's machine, stopped: SABnzbd doesn't answer while it is (monitoring.md MON-07).
-  { vmid: 126, name: SABNZBD_MACHINE.name, kind: 'container', state: 'stopped', cpu: 0, mem: [0, 2048] },
+  // Seerr's machine, stopped: Seerr doesn't answer while it is (monitoring.md MON-07).
+  { vmid: 126, name: CAUSE_MACHINE.name, kind: 'container', state: 'stopped', cpu: 0, mem: [0, 2048] },
   { vmid: 131, name: 'build-runner', kind: 'container', state: 'paused', cpu: 0, mem: [900, 4096] },
   // Home Assistant's container (its page runs on it: connection-pages-mobile.md AP-1966).
   { vmid: 132, name: 'homeassistant', kind: 'container', state: 'running', cpu: 5.0, mem: [3000, 8192] },
@@ -1548,7 +1548,8 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
         const ref = parseThingId(thing);
         const watchOf = () =>
           ref?.kind === 'server'
-            ? (hostQuiet.things({ method: 'GET', serverId: ref.id, what: 'watch', body: {} }).body as ThingWatch)
+            ? (hostQuiet.things({ method: 'GET', serverId: ref.id, what: 'watch', body: {} })
+                .body as ThingWatch)
             : null;
         const answer = monitoring.setWatchLimit(thing, await bodyOf<SetThingWatchLimitBody>(init), watchOf);
         return json(answer.body, answer.status);
