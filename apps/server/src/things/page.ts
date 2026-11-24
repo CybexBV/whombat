@@ -42,6 +42,7 @@ import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
 import { listChanges } from '../home/changes';
+import { withUptime } from '../incidents/history';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
 import type { Services } from '../services';
@@ -69,7 +70,7 @@ import {
   SUMMARY_TAB,
 } from './panels';
 import { displayName, PART_OF, partOfServer, within } from './part-of';
-import { DISK_GB_KEY, DISK_PCT_KEY, POINTS_KEEP_MS, RTT_KEY, readPoints } from './points';
+import { DISK_GB_KEY, DISK_PCT_KEY, POINTS_KEEP_MS, RTT_KEY, readPoints, UP_KEY } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
 import type { LooseNotice } from './quiet/types';
 import { type MarkedLines, markLines } from './quiet/wire';
@@ -212,7 +213,7 @@ export async function connectionPage(
   const [resolved, points, quiet] = await Promise.all([
     within(resolveRunsOn(services, viewer.burrowId, row), 5_000, null as ResolvedMachine | null),
     // The response time over the range (at least a day, for Problems) and the disk over 30 days (its forecast).
-    readPoints(services.db, row.id, [RTT_KEY, DISK_PCT_KEY, DISK_GB_KEY], now, POINTS_KEEP_MS),
+    readPoints(services.db, row.id, [RTT_KEY, UP_KEY, DISK_PCT_KEY, DISK_GB_KEY], now, POINTS_KEEP_MS),
     thingQuiet(services.db, row.burrowId, id),
   ]);
   const figures: MachineFigures | null = resolved
@@ -253,7 +254,7 @@ export async function connectionPage(
     : lead
       ? { panels: view?.panels ?? [] }
       : !view || bareView(view)
-        ? genericSlots(row, rtt, now, timeZone)
+        ? genericSlots(row, rtt, now, timeZone, points.get(UP_KEY) ?? [])
         : null;
   const problem = view?.problem ?? null;
 
@@ -518,16 +519,26 @@ export async function thingPage(
   range: PageRange = DEFAULT_RANGE,
 ): Promise<ThingPage> {
   const target = await findThing(services, viewer, value);
+  // Every page but a device still being learned says its week in one line (monitoring.md MON-09).
+  const told = (page: ThingPage) => withUptime(services, viewer.burrowId, page, timeZone);
   if (target.kind === 'connection')
     return withPageResearch(
       services,
       viewer,
-      await connectionPage(services, viewer, target.row, timeZone, range),
+      await told(await connectionPage(services, viewer, target.row, timeZone, range)),
     );
   if (target.kind === 'device')
-    return withPageResearch(services, viewer, await devicePage(services, viewer, target, timeZone, range));
+    return withPageResearch(
+      services,
+      viewer,
+      await told(await devicePage(services, viewer, target, timeZone, range)),
+    );
   if (target.kind === 'account')
-    return withPageResearch(services, viewer, await accountPage(services, viewer, target.account, timeZone));
+    return withPageResearch(
+      services,
+      viewer,
+      await told(await accountPage(services, viewer, target.account, timeZone)),
+    );
   return learningPage(services, target, timeZone);
 }
 
