@@ -148,7 +148,7 @@ export const SERVERS_TOOL_ARGS: Readonly<Record<string, readonly string[]>> = {
   ],
   guest_snapshot: ['server', 'guest', 'action', 'name', 'description'],
   guest_migrate: ['server', 'guest', 'target', 'storage'],
-  alerts_list: ['server'],
+  alerts_list: ['server', 'state', 'since'],
   alert_snooze: ['alert', 'minutes', 'note'],
   server_diagnose: ['server', 'check', 'args'],
   server_disk_usage: ['server', 'mount'],
@@ -738,6 +738,37 @@ const TOOLS: Adapter = {
   async alerts_list(ctx, args) {
     const s = await scope(ctx);
     const server = opt(args, 'server');
+    const state = opt(args, 'state') ?? 'open';
+    if (!['open', 'resolved', 'all'].includes(state))
+      throw new ConnectionArgumentError('state: open, resolved or all.');
+    const sinceText = opt(args, 'since');
+    const since = sinceText ? new Date(sinceText) : null;
+    if (since && Number.isNaN(since.getTime()))
+      throw new ConnectionArgumentError('since: a time like 2026-11-20T00:00:00Z.');
+    if (state !== 'open') {
+      // Past alerts too (monitoring.md MON-10): newest first, with when each opened and resolved.
+      const out = await run(server ? { server } : {}, async () => {
+        const id = server ? (await resolveServer(s, server)).id : undefined;
+        const raw = await s.hosts.call<unknown>({
+          path: `${HOSTS_API}/alerts`,
+          query: { state, server: id, since: since?.toISOString(), limit: 100 },
+          actor: s.actor('viewer'),
+        });
+        return output({
+          alerts: arr(raw)
+            .map(toHostAlert)
+            .map((a) => ({
+              id: a.id,
+              server: a.serverId,
+              severity: a.severity,
+              title: a.title,
+              since: a.openedAt,
+              ...(a.resolvedAt ? { resolved: a.resolvedAt } : { open: true }),
+            })),
+        });
+      });
+      return out as CallOutput;
+    }
     const out = await run(server ? { server } : {}, async () => {
       const id = server ? (await resolveServer(s, server)).id : null;
       // The fleet with what is quiet (QN-24): marked, and hints nobody watches left out.
