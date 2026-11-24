@@ -187,7 +187,7 @@ export function classifyError(err: unknown, sdk: Partial<Sdk> | null): OnePasswo
   const text = err instanceof Error ? err.message : String(err);
   if (/rate.?limit|too many requests/i.test(`${name} ${text}`)) return 'limit';
   if (err instanceof TypeError && /fetch|reaches only 1Password|network/i.test(text)) return 'network';
-  if (/ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket|network/i.test(text)) return 'network';
+  if (/ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket|network|time[d ]?\s?out/i.test(text)) return 'network';
   if (
     /permission|forbidden|not allowed|access denied|read.?only|not authori[sz]ed to (write|update|create)/i.test(
       text,
@@ -272,7 +272,8 @@ export function createWorker(options: WorkerOptions) {
         const result: OnePasswordGetResult = { items: [], missing: [], failed: [] };
         answer.individualResponses.forEach((r, i) => {
           const id = ids[i] ?? '';
-          if (r.content !== undefined) result.items.push(toJson(r.content));
+          // An answer with no item (`content: null` beside its error) is no item.
+          if (r.content != null) result.items.push(toJson(r.content));
           else if (r.error?.type === 'itemNotFound') result.missing.push(id);
           else result.failed.push(id);
         });

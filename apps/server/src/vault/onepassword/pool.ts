@@ -81,6 +81,26 @@ const GetAnswer = z.object({
   failed: z.array(z.string()),
 });
 
+/**
+ * A `get`'s answer, each item read on its own: one that doesn't read is `failed` (by its id, when it has one), so one
+ * odd item never fails the other 49.
+ */
+export function readGetAnswer(raw: unknown): OnePasswordGetAnswer {
+  const answer = GetAnswer.parse(raw);
+  const items: OnePasswordItem[] = [];
+  const failed = [...answer.failed];
+  for (const raw of answer.items) {
+    const item = OnePasswordItem.safeParse(raw);
+    if (item.success) items.push(item.data);
+    else {
+      const id = (raw as { id?: unknown } | null)?.id;
+      if (typeof id === 'string' && id !== '') failed.push(id.slice(0, 64));
+      else failed.push('');
+    }
+  }
+  return { items, missing: answer.missing, failed };
+}
+
 /** The worker's module for code at `from`: the source file, or the release's own bundle next to `app/server.mjs`. */
 export function onePasswordWorkerUrl(from: string = import.meta.url): URL {
   return /\.m?js$/.test(new URL(from).pathname)
@@ -150,10 +170,7 @@ export class OnePasswordPool implements OnePasswordApi {
   }
 
   async get(token: string, vaultId: string, itemIds: readonly string[]) {
-    const answer = GetAnswer.parse(
-      await this.#call({ call: 'get', token, vaultId, itemIds: itemIds.slice(0, 50) }),
-    );
-    return { ...answer, items: answer.items.map((i) => OnePasswordItem.parse(i)) };
+    return readGetAnswer(await this.#call({ call: 'get', token, vaultId, itemIds: itemIds.slice(0, 50) }));
   }
 
   async create(token: string, item: OnePasswordNewItem) {

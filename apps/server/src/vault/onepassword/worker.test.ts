@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ONEPASSWORD_WORDS } from '@whombat/core';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../../services';
-import { OnePasswordError, OnePasswordPool } from './pool';
+import { OnePasswordError, OnePasswordPool, readGetAnswer } from './pool';
 import {
   classifyError,
   createWorker,
@@ -35,9 +35,11 @@ function fakeSdk(behaviour: { fail?: Error } = {}) {
           individualResponses: ids.map((id) =>
             id === 'missing'
               ? { error: { type: 'itemNotFound' } }
-              : id === 'broken'
-                ? { error: { type: 'internal' } }
-                : { content: { id, files: [{ content: new Uint8Array([1, 2]) }] } },
+              : id === 'nulled'
+                ? { content: null, error: { type: 'itemNotFound' } }
+                : id === 'broken'
+                  ? { error: { type: 'internal' } }
+                  : { content: { id, files: [{ content: new Uint8Array([1, 2]) }] } },
           ),
         }),
         create: async () => {
@@ -79,11 +81,12 @@ describe('the worker’s protocol (OPW-30)', () => {
       call: 'get',
       token: TOKEN,
       vaultId: 'v1',
-      itemIds: ['a1', 'missing', 'broken'],
+      itemIds: ['a1', 'missing', 'nulled', 'broken'],
     });
     expect(got.result).toEqual({
       items: [{ id: 'a1', files: [{ content: [1, 2] }] }],
-      missing: ['missing'],
+      // An answer that has no item beside its error is no item, never an item that is null.
+      missing: ['missing', 'nulled'],
       failed: ['broken'],
     });
     expect(createClient).toHaveBeenCalledTimes(1);
@@ -131,6 +134,8 @@ describe('the worker’s protocol (OPW-30)', () => {
       'forbidden',
     );
     expect(classifyError(new TypeError('fetch failed'), null)).toBe('network');
+    expect(classifyError(new Error('The request timed out'), null)).toBe('network');
+    expect(classifyError(new Error('timeout while waiting for the server'), null)).toBe('network');
     expect(classifyError(new Error('invalid service account token'), null)).toBe('auth');
   });
 
@@ -139,6 +144,33 @@ describe('the worker’s protocol (OPW-30)', () => {
     expect(scrubText('x'.repeat(400), []).length).toBe(300);
     // Values too short to be secrets stay, so the words still read.
     expect(scrubText('a field is empty', ['a'])).toBe('a field is empty');
+  });
+});
+
+describe('reading a get’s answer', () => {
+  it('reads each item on its own: one that doesn’t read is failed, the others come through', () => {
+    const item = (id: string) => ({
+      id,
+      title: 'Mail',
+      category: 'Login',
+      vaultId: 'v1',
+      fields: [],
+      sections: [],
+      notes: '',
+      tags: [],
+      websites: [],
+      version: 1,
+      createdAt: '2026-11-24T08:00:00.000Z',
+      updatedAt: '2026-11-24T08:00:00.000Z',
+    });
+    const answer = readGetAnswer({
+      items: [item('a1'), { ...item('b2'), fields: 'not a list' }, item('c3')],
+      missing: ['gone'],
+      failed: ['busy'],
+    });
+    expect(answer.items.map((i) => i.id)).toEqual(['a1', 'c3']);
+    expect(answer.missing).toEqual(['gone']);
+    expect(answer.failed).toEqual(['busy', 'b2']);
   });
 });
 
