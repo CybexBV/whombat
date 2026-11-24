@@ -5,7 +5,7 @@
  * with their constraints (one link per entry and per item, cascades), and the connection, Home's Inbox and backups read
  * them back.
  */
-import { api, ONEPASSWORD_WORDS } from '@whombat/core';
+import { api, ONEPASSWORD_TAB, ONEPASSWORD_WORDS } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -589,6 +589,11 @@ describe('when things go wrong', () => {
     const head = await w.call(api.things.page, { thing: `connection:${connectionId}` });
     expect(head.status, head.raw).toBe(200);
     expect(head.body).toMatchObject({ status: 'bad', problem: ONEPASSWORD_WORDS.unreachable });
+    // It opens on its own tab, which the apps draw; the vault is in the facts, never an address to run on.
+    const shown = head.body as { tabs: { key: string; panels: unknown[] }[]; address?: string };
+    expect(shown.tabs.map((t) => t.key).slice(0, 2)).toEqual([ONEPASSWORD_TAB, 'overview']);
+    expect(shown.tabs[0]?.panels).toEqual([]);
+    expect(shown.address).toBeUndefined();
     const items = await onePasswordNeedsYou({
       db: t.services.db,
       burrowId: BURROW,

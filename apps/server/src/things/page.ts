@@ -381,7 +381,11 @@ export async function connectionPage(
   if (!view?.facts.length && checked)
     facts.push(line(`Checked **${span(now.getTime() - checked.getTime())}** ago`));
   if (!gateway) facts.push(accessLine(row));
-  const address = connectionHost(entry, row.fields) ?? row.externalName ?? undefined;
+  // The Vault's sync has no address of its own: its row's detail is the vault, which the head's facts name already, and
+  // as an address it would ask what the connection runs on.
+  const address = isVaultSyncConnection(entry)
+    ? undefined
+    : (connectionHost(entry, row.fields) ?? row.externalName ?? undefined);
   const readAt = view?.readAt ?? row.glanceAt ?? null;
   return {
     id,
