@@ -19,6 +19,7 @@ import {
   onePasswordStatusLines,
   type VaultEntry,
 } from '@whombat/core/vault';
+import { ApiError } from './http/errors';
 
 /** The words the spec leaves to the apps. */
 export const ONEPASSWORD_APP_TEXT = {
@@ -40,7 +41,14 @@ export const ONEPASSWORD_APP_TEXT = {
   kept: 'Kept them in your Vault.',
   /** The set changed since the person saw it (`conflict`): the new one is shown, nothing was changed. */
   changed: 'The list changed since you saw it. Look again before you choose.',
+  /** The page part didn't load. */
+  failed: 'Couldn’t read how 1Password is kept in step. Try again in a moment.',
 } as const;
+
+/** The guard's answer was refused because the set changed since it was shown (`conflict`): nothing was removed. */
+export function onePasswordSetChanged(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'conflict';
+}
 
 /* The Vault ------------------------------------------------------------------------------------------------------ */
 
