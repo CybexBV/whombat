@@ -18,18 +18,12 @@ import {
   Conversation,
   ThreadPlace,
 } from '../domain/conversation.js';
-import {
-  DESK_SCREEN_VIEWS_MAX,
-  DeskCatalog,
-  DeskWidgetRef,
-  DeskWidgetSpec,
-  DeskWidgetView,
-} from '../domain/desk-screens.js';
+import { DESK_SCREEN_VIEWS_MAX, DeskCatalog, DeskWidgetRef, DeskWidgetView } from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
 import { LookResearch } from '../domain/look-research.js';
 import { Message, MessageTextInput } from '../domain/message.js';
-import { ArrangeOverviewBody, OverviewLayout } from '../domain/overview-layout.js';
+import { ArrangeOverviewBody, OverviewLayout, OverviewViewsQuery } from '../domain/overview-layout.js';
 import { NoticeCheck, NoticeQuiet, NoticeRef, NoticeSubject, ThingWatch } from '../domain/quiet.js';
 import {
   ThingButtonValue,
@@ -308,7 +302,6 @@ export const widgetEndpoints = {
 /* Arranging the Overview (Whombat overview-arranged.md) --------------------------------------------------------- */
 
 export const ArrangeOverviewResponse = z.object({ arranged: OverviewLayout });
-export const OverviewViewsBody = z.object({ widgets: z.array(DeskWidgetSpec).max(DESK_SCREEN_VIEWS_MAX) });
 export const OverviewViewsResponse = z.object({ views: z.array(DeskWidgetView).max(DESK_SCREEN_VIEWS_MAX) });
 
 export const overviewEndpoints = {
@@ -324,12 +317,12 @@ export const overviewEndpoints = {
   }),
   views: endpoint({
     id: 'overview.views',
-    method: 'POST',
+    method: 'GET',
     path: '/burrows/:burrow/overview/views',
     summary:
-      'What the Overview’s tiles and figures show now: the views of desk-screen widgets of type `figures` or `panel` (a connection’s, a device’s or an account’s), as a screen would draw them.',
+      'What the Overview’s tiles and figures show now (`show`: `thing~panel~range`, comma separated): the views of desk-screen widgets of type `figures` or `panel` of a connection, a device or an account, as a screen would draw them; each view’s id is `overviewShowId`.',
     params: B,
-    body: OverviewViewsBody,
+    query: OverviewViewsQuery,
     response: OverviewViewsResponse,
   }),
   figures: endpoint({

@@ -5,14 +5,15 @@
  * answer. Works in React DOM and React Native.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  DeskCatalog,
-  DeskWidgetSpec,
-  DeskWidgetView,
-  HomeOverview,
-  OverviewLayout,
+import {
+  type DeskCatalog,
+  type DeskWidgetView,
+  type HomeOverview,
+  OVERVIEW_SHOWS_MAX,
+  type OverviewLayout,
+  type OverviewShow,
+  overviewShowParam,
 } from '@whombat/core';
-import { DESK_SCREEN_VIEWS_MAX } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useMemo } from 'react';
 import { patchEndpoint } from '../query/cache';
@@ -23,27 +24,30 @@ import { useWhombat } from './context';
 export const OVERVIEW_VIEWS_EVERY_MS = 60_000;
 
 /**
- * The views of the tiles' and figures' widgets, by widget id. More than one answer holds (`DESK_SCREEN_VIEWS_MAX`) are
- * asked in parts. Null: none asked (an older Whombat, or nothing to read).
+ * The views of the tiles' and figures' widgets, by widget id (`showId`). More than one answer holds
+ * (`OVERVIEW_SHOWS_MAX`) are asked in parts. Disabled with nothing to read (an older Whombat).
  */
-export function useOverviewViews(burrow: string, specs: readonly DeskWidgetSpec[] | null) {
+export function useOverviewViews(
+  burrow: string,
+  shows: readonly (OverviewShow & { thing: string })[] | null,
+) {
   const { client } = useWhombat();
-  const ids = useMemo(() => (specs ? specs.map((s) => s.id).join(',') : ''), [specs]);
+  const param = useMemo(() => (shows ? overviewShowParam(shows) : ''), [shows]);
   return useQuery({
-    queryKey: [QUERY_ROOT, 'overview.views', { burrow }, { ids }],
-    enabled: !!specs?.length,
+    queryKey: [QUERY_ROOT, 'overview.views', { burrow }, { show: param }],
+    enabled: !!param,
     placeholderData: keepPreviousData,
     refetchInterval: OVERVIEW_VIEWS_EVERY_MS,
     queryFn: async ({ signal }) => {
-      const all = specs ?? [];
-      const parts: DeskWidgetSpec[][] = [];
-      for (let i = 0; i < all.length; i += DESK_SCREEN_VIEWS_MAX)
-        parts.push(all.slice(i, i + DESK_SCREEN_VIEWS_MAX));
+      const all = shows ?? [];
+      const parts: string[] = [];
+      for (let i = 0; i < all.length; i += OVERVIEW_SHOWS_MAX)
+        parts.push(overviewShowParam(all.slice(i, i + OVERVIEW_SHOWS_MAX)));
       const answers = await Promise.all(
-        parts.map(async (widgets) => {
+        parts.map(async (show) => {
           const result = await client.request(api.overview.views, {
             params: { burrow },
-            body: { widgets },
+            query: { show },
             signal,
           });
           if (result.status !== 'ok') throw new Error(`Unexpected ${result.status} from overview.views`);

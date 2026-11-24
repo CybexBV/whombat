@@ -4,7 +4,6 @@
  * desk-screen widgets `overview.views` reads for them, and the words. Pure; the web and the phone arrange the same.
  */
 import {
-  type DeskWidgetSpec,
   type DeskWidgetView,
   type HomeOverview,
   OVERVIEW_THING_RE,
@@ -16,7 +15,7 @@ import {
   type OverviewRange,
   type OverviewShow,
   type OverviewTileSize,
-  overviewWidgetSpec,
+  overviewShowId,
 } from '@whombat/core';
 import type { HostServer } from '@whombat/core/domain';
 import type { HomeThingRow } from './sections';
@@ -236,30 +235,23 @@ export function arrangePins<T extends { id: string }>(
 
 /* The widgets `overview.views` reads ------------------------------------------------------------------------------ */
 
-/** FNV-1a, base 36: a short stable name for what a tile shows, so its view is kept while tiles move. */
-function shortHash(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(36);
-}
-
 /** The widget id of what a tile or figure shows: the same thing, panel and span read once for both. */
-export function showId(show: OverviewShow & { thing: string }): string {
-  return `w_${shortHash(`${show.thing}|${show.panel ?? ''}|${show.range ?? ''}`)}`;
-}
+export const showId = overviewShowId;
 
-/** The widgets to read for the tiles shown and the thing figures at the top, each once. */
-export function overviewSpecs(
+/** What to read for the tiles shown and the thing figures at the top, each once (`overview.views`' `show`). */
+export function overviewShows(
   tiles: readonly OverviewLayoutTile[],
   top: readonly OverviewLayoutTop[],
-): DeskWidgetSpec[] {
-  const out = new Map<string, DeskWidgetSpec>();
-  const add = (show: OverviewShow & { thing: string }) => {
-    const id = showId(show);
-    if (!out.has(id) && isTileThing(show.thing)) out.set(id, overviewWidgetSpec(id, show as never));
+): (OverviewShow & { thing: string })[] {
+  const out = new Map<string, OverviewShow & { thing: string }>();
+  const add = (x: OverviewShow & { thing: string }) => {
+    const id = showId(x);
+    if (!out.has(id) && isTileThing(x.thing))
+      out.set(id, {
+        thing: x.thing,
+        ...(x.panel ? { panel: x.panel } : {}),
+        ...(x.range ? { range: x.range } : {}),
+      });
   };
   for (const t of tiles) if (!t.hidden) add(t);
   for (const f of top) if ('thing' in f) add(f);
@@ -294,7 +286,7 @@ const face = (f: Partial<FigureFace> & Pick<FigureFace, 'value' | 'label'>): Fig
 
 /** The figure a view leads with: its first figure, a chart's figure, a list's count, a server's processor. */
 export function viewFace(view: DeskWidgetView): FigureFace | null {
-  if (view.problem) return face({ value: '—', label: view.title, line: view.problem.text, tone: 'warn' });
+  if (view.problem) return face({ value: '', label: view.title, line: view.problem.text, tone: 'warn' });
   switch (view.kind) {
     case 'figures': {
       const [first] = view.items;

@@ -116,6 +116,52 @@ export function overviewWidgetSpec(
   return { id, type: show.panel ? 'panel' : 'figures', ref: show.thing, opts };
 }
 
+/** FNV-1a, base 36: a short stable name for what a tile shows, so its view is kept while tiles move. */
+function shortHash(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/** The widget id of what a tile or figure shows: the same thing, panel and span read once for both. */
+export function overviewShowId(show: OverviewShow & { thing: string }): string {
+  return `w_${shortHash(`${show.thing}|${show.panel ?? ''}|${show.range ?? ''}`)}`;
+}
+
+/**
+ * `overview.views`' query: what the tiles and figures show, `thing~panel~range` each (empty parts left empty), comma
+ * separated. A read every minute, so a GET (a change would leave a receipt each time).
+ */
+export const OVERVIEW_SHOWS_MAX = 64;
+export const OverviewViewsQuery = z.object({
+  show: z
+    .string()
+    .max(OVERVIEW_SHOWS_MAX * 260)
+    .regex(/^[A-Za-z0-9._:~,-]*$/),
+});
+
+export function overviewShowParam(shows: readonly (OverviewShow & { thing: string })[]): string {
+  return shows.map((x) => `${x.thing}~${x.panel ?? ''}~${x.range ?? ''}`).join(',');
+}
+
+/** The shows a query names; one that isn't sound is left out. */
+export function parseOverviewShowParam(param: string): (OverviewShow & { thing: OverviewThing })[] {
+  const out: (OverviewShow & { thing: OverviewThing })[] = [];
+  for (const part of param.split(',').slice(0, OVERVIEW_SHOWS_MAX)) {
+    const [thing = '', panel = '', range = ''] = part.split('~');
+    const parsed = OverviewShow.extend({ thing: OverviewThing }).safeParse({
+      thing,
+      ...(panel ? { panel } : {}),
+      ...(range ? { range } : {}),
+    });
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
+
 /** `overview.arrange`'s body: the whole layout. */
 export const ArrangeOverviewBody = z.object({ layout: OverviewLayout });
 export type ArrangeOverviewBody = z.infer<typeof ArrangeOverviewBody>;

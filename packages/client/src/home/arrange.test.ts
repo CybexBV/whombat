@@ -8,7 +8,7 @@ import {
   moveTileBy,
   moveTileTo,
   OVERVIEW_STARTING_TOP,
-  overviewSpecs,
+  overviewShows,
   ownFace,
   removeTile,
   setPin,
@@ -111,14 +111,9 @@ describe('edits', () => {
 describe('what is read', () => {
   it('reads the same thing, panel and span once for a tile and a figure', () => {
     const l = setTopFigure(layoutNow(null, things), 0, { thing: 'connection:con_ha' });
-    const specs = overviewSpecs(l.tiles, l.top);
-    expect(specs).toHaveLength(3);
-    expect(specs[0]).toEqual({
-      id: showId({ thing: 'connection:con_ha' }),
-      type: 'figures',
-      ref: 'connection:con_ha',
-      opts: {},
-    });
+    const shows = overviewShows(l.tiles, l.top);
+    expect(shows).toHaveLength(3);
+    expect(shows[0]).toEqual({ thing: 'connection:con_ha' });
     expect(showId({ thing: 'connection:con_ha', panel: 'power' })).toMatch(/^w_[a-z0-9]+$/);
   });
 

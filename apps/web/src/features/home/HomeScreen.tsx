@@ -24,7 +24,7 @@ import {
   overviewSectionAnchor,
   overviewSectionForTab,
   overviewSections,
-  overviewSpecs,
+  overviewShows,
   overviewTiles,
   ownFace,
   rangeOfTile,
@@ -191,7 +191,7 @@ export function HomeScreen({ burrow }: HomeScreenProps) {
     () =>
       arranged === undefined
         ? null
-        : overviewSpecs(
+        : overviewShows(
             tileSet.shown.map((x) => x.tile),
             top,
           ),

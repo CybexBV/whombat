@@ -78,10 +78,9 @@ describe('arranging the Overview', () => {
   it('reads no view for what isn’t a tile', async () => {
     const { cookie } = await sessionFor(t.services, IDS.mara);
     const res = await t.api.inject({
-      method: 'POST',
-      url: `${BASE}/overview/views`,
+      method: 'GET',
+      url: `${BASE}/overview/views?show=${encodeURIComponent('server:pve-01~~,nothing~~')}`,
       headers: { cookie },
-      payload: { widgets: [{ id: 'w_clock', type: 'clock', opts: {} }] },
     });
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json().views).toEqual([]);

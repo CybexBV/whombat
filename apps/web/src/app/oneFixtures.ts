@@ -24,7 +24,6 @@ import {
   type ConversationDetail,
   type ConversationSummary,
   chatTitleFrom,
-  type DeskWidgetSpec,
   type DeviceActionChoice,
   type DeviceSkillCard,
   type Grant,
@@ -1110,8 +1109,8 @@ export function createOneFixtures(
           return json(overview());
         case 'PUT /overview/layout':
           return json(arranging.arrange((await body<{ layout: OverviewLayout }>(req)).layout));
-        case 'POST /overview/views':
-          return json(arranging.views((await body<{ widgets: DeskWidgetSpec[] }>(req)).widgets));
+        case 'GET /overview/views':
+          return json(arranging.views(url.searchParams.get('show') ?? ''));
         case 'GET /overview/figures':
           return json(arranging.figures(url.searchParams.get('thing') ?? undefined));
         case 'GET /watch': {

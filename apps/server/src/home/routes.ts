@@ -197,7 +197,7 @@ export const oneWhombatRoutes: RouteDef[] = [
     return commitAs(ctx, arrangeOverview, ctx.body);
   }),
   route(api.overview.views, async (ctx) =>
-    overviewViews(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone, ctx.body.widgets),
+    overviewViews(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone, ctx.query.show),
   ),
   route(api.overview.figures, async (ctx) =>
     overviewFigures(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone, ctx.query.thing),

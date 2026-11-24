@@ -73,7 +73,8 @@ export interface TileCardProps {
 export function TileCard({ entry, view, editing, preview = false, linkProps, onGear, drag }: TileCardProps) {
   const { tile, item } = entry;
   const r = item.row;
-  const face = view ? viewFace(view) : null;
+  // A view that only says it has nothing to show leaves the tile its own line.
+  const face = view && !(view.kind === 'text' && !view.problem) ? viewFace(view) : null;
   const shown = face && (face.value || face.line) ? face : null;
   // What isn't fine is said in its colour wherever the tile sits; otherwise the view's own line.
   const notFine = item.line.tone === 'warn' || item.line.tone === 'bad';

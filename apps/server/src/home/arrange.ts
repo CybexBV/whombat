@@ -12,6 +12,9 @@ import {
   type DeskWidgetView,
   OverviewLayout,
   overviewLayoutProblem,
+  overviewShowId,
+  overviewWidgetSpec,
+  parseOverviewShowParam,
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -101,9 +104,18 @@ export async function overviewViews(
   services: Services,
   viewer: ConnectionViewer,
   timeZone: string,
-  widgets: readonly DeskWidgetSpec[],
+  show: string,
 ): Promise<{ views: DeskWidgetView[] }> {
-  const specs = widgets.filter(isTileSpec).slice(0, DESK_SCREEN_VIEWS_MAX);
+  const seen = new Set<string>();
+  const specs: DeskWidgetSpec[] = [];
+  for (const x of parseOverviewShowParam(show)) {
+    const id = overviewShowId(x);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const spec = overviewWidgetSpec(id, x);
+    if (isTileSpec(spec)) specs.push(spec);
+  }
+  specs.splice(DESK_SCREEN_VIEWS_MAX);
   if (!specs.length) return { views: [] };
   const { resolver } = readsOf(services);
   const resolved = await resolver.resolve(

@@ -4,13 +4,14 @@
  * figures and, for a few, panels of its page) and what it shows now (`overview.views`), made from the fixture world's
  * things so the page reads like a real Whombat's. Pure apart from the layout it keeps.
  */
-import type {
-  DeskCatalog,
-  DeskCatalogItem,
-  DeskWidgetSpec,
-  DeskWidgetView,
-  OverviewLayout,
-  ThingSummary,
+import {
+  type DeskCatalog,
+  type DeskCatalogItem,
+  type DeskWidgetView,
+  type OverviewLayout,
+  overviewShowId,
+  parseOverviewShowParam,
+  type ThingSummary,
 } from '@whombat/core';
 
 interface FixturePanel {
@@ -144,14 +145,15 @@ export function createOverviewFixtures(things: () => readonly ThingSummary[]) {
       arranged = layout;
       return { arranged };
     },
-    views(widgets: readonly DeskWidgetSpec[]): { views: DeskWidgetView[] } {
+    views(show: string): { views: DeskWidgetView[] } {
       const views: DeskWidgetView[] = [];
-      for (const w of widgets) {
-        const t = thingOf(w.ref);
+      for (const x of parseOverviewShowParam(show)) {
+        const t = thingOf(x.thing);
         if (!t) continue;
-        const range = w.opts?.range ?? '24h';
-        const panel = w.type === 'panel' ? panelsOf(t).find((p) => p.id === w.opts?.panel) : null;
-        const view = panel ? panel.view(w.id, range) : figuresView(w.id, t, range);
+        const id = overviewShowId(x);
+        const range = x.range ?? '24h';
+        const panel = x.panel ? panelsOf(t).find((p) => p.id === x.panel) : null;
+        const view = panel ? panel.view(id, range) : figuresView(id, t, range);
         if (view) views.push(view);
       }
       return { views };

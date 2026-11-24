@@ -345,6 +345,8 @@ function expectedParts(person: string) {
     widgets: [],
     doneRecently: [],
     doneToday: [],
+    // Never arranged (overview-arranged.md OVA-01).
+    arranged: null,
     generatedAt: TEST_NOW,
   };
 }
