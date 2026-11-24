@@ -680,7 +680,7 @@ export function deskLooks(
   max = DESK_LOOKS_MAX,
 ): DeskLook[] {
   const looks: DeskLook[] = [];
-  // What a server that is down takes with it, from the things down because of it (monitoring.md MON-07).
+  // What a server that is down takes with it, from the things down because of it.
   const taken = takenFrom(thingList);
   for (const s of servers) {
     const state = SERVER_LOOK[s.state];

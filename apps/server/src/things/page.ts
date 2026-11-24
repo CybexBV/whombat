@@ -327,7 +327,7 @@ export async function connectionPage(
     timeZone,
     mayEnd: viewer.principal.kind === 'person',
   });
-  // Kept quiet, or down because of something else (monitoring.md MON-04, MON-07).
+  // Kept quiet, or down because of something else.
   const held = heldPage(marked, headStatus(row, view, marked));
   const status = held.head;
   // Worth a look is a strip on top, there only while it has a line (quiet ones too, so Undo stays in reach).
@@ -541,7 +541,7 @@ export async function thingPage(
   range: PageRange = DEFAULT_RANGE,
 ): Promise<ThingPage> {
   const target = await findThing(services, viewer, value);
-  // Every page but a device still being learned says its week in one line (monitoring.md MON-09).
+  // Every page but a device still being learned says its week in one line.
   const told = (page: ThingPage) => withUptime(services, viewer.burrowId, page, timeZone);
   if (target.kind === 'connection')
     return withPageResearch(

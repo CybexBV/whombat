@@ -1,5 +1,5 @@
 /**
- * Incidents (docs/decisions/monitoring.md MON-06, MON-09): one row per stretch a server, connection or device was down
+ * Incidents: one row per stretch a server, connection or device was down
  * or had a bad dot, opened after two passes in a row and ended after two passes without, kept 90 days. The push it made
  * (if any) is named so it can be withdrawn when the incident ends.
  */

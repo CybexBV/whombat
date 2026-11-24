@@ -948,16 +948,16 @@ export const ThingPage = z.object({
    */
   research: LookResearch.optional(),
   /**
-   * Its week in one line (Whombat monitoring.md MON-09; session minor 9): “Up 99.6 % this week · down 3 times, 41 min”.
+   * Its week in one line (session minor 9): “Up 99.6 % this week · down 3 times, 41 min”.
    * The same words are one of `facts`, so an older app shows them too. Absent: Whombat has nothing to tell yet.
    */
   uptime: ThingUptime.optional(),
   /**
-   * Kept quiet until a time (Whombat monitoring.md MON-04, MON-05): the page draws its words under the head with End
+   * Kept quiet until a time: the page draws its words under the head with End
    * now when `canEnd`. Worth a look also carries the words as a heads-up for an app that doesn't draw this.
    */
   keptQuiet: KeptQuiet.optional(),
-  /** Down because of something else (MON-07, MON-08): the badge says it (“Not answering while pve-02 is down”). */
+  /** Down because of something else: the badge says it (“Not answering while pve-02 is down”). */
   causedBy: ThingCause.optional(),
 });
 export type ThingPage = z.infer<typeof ThingPage>;

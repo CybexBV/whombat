@@ -28,9 +28,9 @@ export interface ThingQuiet {
   quiets: NoticeQuietRow[];
   offs: WatchOffRow[];
   ons: WatchOnRow[];
-  /** Its quiet windows not ended early (monitoring.md MON-04): `applyQuiet` asks which holds at its time. */
+  /** Its quiet windows not ended early: `applyQuiet` asks which holds at its time. */
   windows?: QuietWindowRow[];
-  /** What it is down because of (MON-07), as the causes job last found it. */
+  /** What it is down because of, as the causes job last found it. */
   cause?: ThingCauseRow | null;
 }
 

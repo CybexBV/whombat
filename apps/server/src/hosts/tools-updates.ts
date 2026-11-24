@@ -196,7 +196,7 @@ export const UPDATE_TOOLS: Adapter = {
         // The report gains the running package task.
         s.hosts.forget('fleet');
         // Installing updates is Whombat's planned work: the server is kept quiet until 15 minutes after its task ends
-        // (monitoring.md MON-05; the task's end moves it, `workEnded`).
+        // (the task's end moves it, `workEnded`).
         if (action === 'install' && r.task?.id)
           await keepQuietForWork(s.call.services, {
             burrowId: s.call.burrowId,

@@ -1,5 +1,5 @@
 /**
- * A thing held quiet as a whole (docs/decisions/monitoring.md MON-04, MON-05, MON-07, MON-08): kept quiet until a time
+ * A thing held quiet as a whole: kept quiet until a time
  * (a window, by a person or by Whombat for its own planned work), or down because of something else (a cause: its
  * server is down, its machine stopped or is kept quiet, the internet is down). While either holds, every line of the
  * thing is quiet — no dot, look, Inbox item, incident or push — and the health pass forgets how long each line was
@@ -28,7 +28,7 @@ export type CauseLike = Pick<
  */
 export const CAUSE_FRESH_MS = 5 * 60_000;
 
-/** How long after Whombat's own work ends its window still holds (MON-05). */
+/** How long after Whombat's own work ends its window still holds. */
 export const AFTER_WORK_MS = 15 * 60_000;
 
 /** Whombat's words for a window it keeps for its own work. */

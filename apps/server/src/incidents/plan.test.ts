@@ -1,5 +1,5 @@
 /**
- * Incidents and their push (monitoring.md MON-06): opened after two passes in a row, ended after two without, amber never;
+ * Incidents and their push: opened after two passes in a row, ended after two without, amber never;
  * one push after 10 minutes for what opened together, never for what something else took down, nor past the caps.
  */
 import { describe, expect, it } from 'vitest';

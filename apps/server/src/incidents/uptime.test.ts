@@ -1,5 +1,5 @@
 /**
- * True uptime (monitoring.md MON-09): an hour rolled up weighs as an hour against 5-minute points, older points fall back
+ * True uptime: an hour rolled up weighs as an hour against 5-minute points, older points fall back
  * to the response time, overlapping outages count once, and the page's line in plain words.
  */
 import { describe, expect, it } from 'vitest';

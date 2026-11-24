@@ -1,6 +1,6 @@
 /**
- * Whombat's own planned work kept quiet (docs/decisions/monitoring.md MON-05), and the hosts service's maintenance
- * windows behind servers kept quiet (MON-04). When Whombat updates or restarts a server or one of its machines, that
+ * Whombat's own planned work kept quiet, and the hosts service's maintenance
+ * windows behind servers kept quiet. When Whombat updates or restarts a server or one of its machines, that
  * server or machine is kept quiet for the work and 15 minutes after (“Whombat is updating it”): a restart for about as
  * long as one takes, an update until 15 minutes after its task ends (`workEnded`). The minute's sweep gives back the
  * maintenance windows of windows that are over and forgets windows ended long ago. Kept apart from the person's side
@@ -78,7 +78,7 @@ export async function removeMaintenance(services: Services, maintenanceId: strin
   }
 }
 
-/* Whombat's own planned work (MON-05) ----------------------------------------------------------------------------- */
+/* Whombat's own planned work ----------------------------------------------------------------------------- */
 
 /** How long Whombat's work may take before its window ends by itself, when nothing says it ended. */
 export const WORK_MAX_MS = 2 * 3600_000;

@@ -70,7 +70,7 @@ export interface ConnectionGlance {
    */
   activity?: ConnectionActivity;
   /**
-   * The server or machine it runs on, as the last check that found it said (monitoring.md MON-07): kept while it doesn't
+   * The server or machine it runs on, as the last check that found it said: kept while it doesn't
    * answer, since a stopped machine is no longer found by its address. What the causes job reads.
    */
   machine?: { serverId: string; guestId: string | null; name: string };

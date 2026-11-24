@@ -76,7 +76,7 @@ export interface Verdict {
   worst: GlanceLine | null;
   /** Every line behind it, worst first: what the assistant looks into when it looks into the thing. */
   asking?: GlanceLine[];
-  /** What holds the whole thing quiet now (a window or a cause, monitoring.md MON-04, MON-07). */
+  /** What holds the whole thing quiet now (a window or a cause). */
   held?: Hold;
 }
 

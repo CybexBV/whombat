@@ -93,7 +93,7 @@ export interface ApplyInput<L extends ApplyLine> {
    */
   unwatched?: (check: string) => boolean;
   /**
-   * The thing's quiet windows and its cause (monitoring.md MON-04, MON-07): while one holds at `now`, every watched line
+   * The thing's quiet windows and its cause: while one holds at `now`, every watched line
    * is quiet with it, and a pass keeps no line's count, so what is still wrong when it ends counts from the start.
    */
   windows?: readonly WindowLike[];

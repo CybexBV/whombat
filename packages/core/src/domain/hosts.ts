@@ -1338,12 +1338,12 @@ export const HostServerDetail = z.object({
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
   /**
-   * Its week in one line (Whombat monitoring.md MON-09; session minor 9), from its offline alerts and Whombat's
+   * Its week in one line (session minor 9), from its offline alerts and Whombat's
    * incidents: “Up 99.6 % this week · down 3 times, 41 min”. Absent: Whombat has nothing to tell.
    */
   uptime: ThingUptime.optional(),
   /**
-   * Kept quiet until a time (Whombat monitoring.md MON-04, MON-05): the page draws its words with End now when
+   * Kept quiet until a time: the page draws its words with End now when
    * `canEnd`; its alerts are muted by a maintenance window meanwhile.
    */
   keptQuiet: KeptQuiet.optional(),

@@ -1076,7 +1076,7 @@ export const hostsRoutes: RouteDef[] = [
       ),
       g.hosts.openAlertsRaw().catch(() => []),
       g.hosts.agentOf(serverId),
-      // Its offline stretches this week, for its week in one line (monitoring.md MON-09).
+      // Its offline stretches this week, for its week in one line.
       hostsAlertsSince(ctx.services, ctx.access.burrow.id, g.actor, {
         server: serverId,
         rule: HEARTBEAT_RULE,

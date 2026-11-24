@@ -340,7 +340,7 @@ export const ConfigSchema = z
      */
     WHOMBAT_LINK_PREVIEWS: z.enum(['on', 'off']).optional(),
     /**
-     * Whombat checks its own way out every minute (docs/decisions/monitoring.md MON-08): its router, name lookups and the
+     * Whombat checks its own way out every minute: its router, name lookups and the
      * internet. `on` in production; a development box and tests never probe the internet unless it is `on`.
      */
     WHOMBAT_WAY_OUT: z.enum(['on', 'off']).optional(),

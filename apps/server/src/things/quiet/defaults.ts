@@ -56,7 +56,7 @@ export function unwatchedIn(quiet: Pick<ThingQuiet, 'ons'>): (check: string) => 
 
 /**
  * What `applyQuiet` leaves out of a thing — the checks and items switched off, and the checks that start off — and what
- * may hold the whole thing quiet (its windows and its cause, monitoring.md MON-04, MON-07).
+ * may hold the whole thing quiet (its windows and its cause).
  */
 export function notWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons' | 'windows' | 'cause'>) {
   return {
@@ -81,7 +81,7 @@ export function checkWatched(quiet: Pick<ThingQuiet, 'offs' | 'ons'>, check: str
  */
 export function quietNow(quiet: ThingQuiet, check: string, subject: string, now: Date): boolean {
   if (unwatchedIn(quiet)(check)) return true;
-  // Kept quiet, or down because of something else: every line of it (monitoring.md MON-04, MON-07).
+  // Kept quiet, or down because of something else: every line of it.
   if (holdOf(quiet, now)) return true;
   if (quiet.offs.some((o) => o.checkId === check && (o.subject === '' || o.subject === subject))) return true;
   return quiet.quiets.some(

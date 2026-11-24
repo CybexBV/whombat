@@ -10,8 +10,8 @@
  * - **Looks**, every minute: the assistant looks into what needs a look by itself (look-research.md LR-01…LR-03,
  *   `looks/watch.ts`).
  * - **Incidents**, every minute: outages kept from the same looks, and one push when something important went wrong
- *   (monitoring.md MON-06, `incidents/watch.ts`).
- * - **Causes** and **the way out**, every minute (monitoring.md MON-07, MON-08): what each thing is down because of
+ *   (`incidents/watch.ts`).
+ * - **Causes** and **the way out**, every minute: what each thing is down because of
  *   (`things/causes.ts`), and whether Whombat reaches its router, name lookups and the internet (`managed/way-out.ts`).
  *
  * Kept out of the `Services` interface (`homeJobsFor`), like the connection pool.
@@ -94,7 +94,7 @@ class HomeJobs {
       // A care plan for a server that was just added (care-plan.md).
       job('home.care', WATCH_MS, () => this.#care.pass()),
       job('home.incidents', INCIDENTS_WATCH_MS, () => this.#incidents.pass()),
-      // The box's own way out, then what each thing is down because of (monitoring.md MON-07, MON-08).
+      // The box's own way out, then what each thing is down because of.
       job('home.way-out', WAY_OUT_CHECK_MS, () => this.#wayOut.pass()),
       job('home.causes', CAUSES_MS, () => passCauses(this.services)),
     );

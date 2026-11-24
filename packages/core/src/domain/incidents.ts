@@ -1,5 +1,5 @@
 /**
- * Outages and their history (Whombat docs/decisions/monitoring.md MON-06, MON-09): an incident is kept for a server,
+ * Outages and their history (Whombat): an incident is kept for a server,
  * connection or device while its dot is bad (`problem`) or it doesn't answer (`down`), confirmed over two passes; it
  * ends after two passes without. Kept 90 days. A thing's page says its week in one line (`ThingUptime`), and
  * `things.history` lists its incidents over 30 or 90 days. Opening and ending each sign a neutral event that automations
@@ -56,7 +56,7 @@ export const ThingHistoryAlert = z.object({
 export type ThingHistoryAlert = z.infer<typeof ThingHistoryAlert>;
 
 /**
- * A thing's week in one line (MON-09): “Up 99.6 % this week · down 3 times, 41 min”, “Up all week”. `upPct` is the share
+ * A thing's week in one line: “Up 99.6 % this week · down 3 times, 41 min”, “Up all week”. `upPct` is the share
  * of the period it answered (rolled-up hours weighed as hours), null when Whombat has no checks of it to tell; `downs`
  * and `downMinutes` count its `down` incidents in the period (a server's offline alerts too). `from` is where the period
  * starts: a week ago, or when Whombat started watching it when that is later.

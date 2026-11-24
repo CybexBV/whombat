@@ -1,5 +1,5 @@
 /**
- * Whombat's own way out (monitoring.md MON-08): the default gateway from the kernel's route table, which step fails
+ * Whombat's own way out: the default gateway from the kernel's route table, which step fails
  * (the router only when nothing outside answers), two minutes before an outage opens, its words, and the targets it
  * reaches the internet at.
  */

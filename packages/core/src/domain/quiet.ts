@@ -95,7 +95,7 @@ export const NoticeQuiet = z.object({
   by: QuietBy.optional(),
   at: Timestamp,
   /**
-   * Quiet as part of the whole thing rather than this line (Whombat monitoring.md MON-04, MON-07): `window` while the
+   * Quiet as part of the whole thing rather than this line: `window` while the
    * thing is kept quiet (its page's `keptQuiet`, ended with End now, not Undo), `cause` while it is down because of
    * something else (its page's `causedBy`). Absent: the line's own Ignore or snooze. An app before session minor 9
    * leaves it out and reads the line as snoozed (a window) or ignored (a cause).
@@ -104,16 +104,16 @@ export const NoticeQuiet = z.object({
 });
 export type NoticeQuiet = z.infer<typeof NoticeQuiet>;
 
-/* Keep quiet for a while, and one cause (Whombat monitoring.md MON-04, MON-05, MON-07) ----------------------------- */
+/* Keep quiet for a while, and one cause ----------------------------- */
 
 /** The shortest and longest a thing can be kept quiet. */
 export const KEEP_QUIET_MIN_MINUTES = 5;
 export const KEEP_QUIET_MAX_MINUTES = 31 * 24 * 60;
 
 /**
- * A server, connection or device kept quiet until a time (MON-04): while it holds, its lines colour nothing and make no
+ * A server, connection or device kept quiet until a time: while it holds, its lines colour nothing and make no
  * look, Inbox item, incident or push. `words` is the page's line as drawn (“Quiet until 23:00 · Moving the NAS”);
- * `whombat` when Whombat keeps it quiet for its own planned work (MON-05, “Whombat is updating it”); `canEnd` when the
+ * `whombat` when Whombat keeps it quiet for its own planned work (“Whombat is updating it”); `canEnd` when the
  * caller may end it now (`things.endQuiet`, End now). `by` absent: Whombat.
  */
 export const KeptQuiet = z.object({
@@ -129,8 +129,8 @@ export const KeptQuiet = z.object({
 export type KeptQuiet = z.infer<typeof KeptQuiet>;
 
 /**
- * What a thing is down because of (MON-07, MON-08): the server it runs on that is down, its machine that stopped, or the
- * internet (`box:network`); or, with `kind: 'quiet'`, the server or machine it runs on that is kept quiet (MON-04), which
+ * What a thing is down because of: the server it runs on that is down, its machine that stopped, or the
+ * internet (`box:network`); or, with `kind: 'quiet'`, the server or machine it runs on that is kept quiet, which
  * quiets it whatever it answers. `thing` is the cause's id (`server:pve-02`); `words` the page's line (“Not answering
  * while pve-02 is down”, “Quiet while pve-02 is kept quiet”); `href` the cause's page when it has one.
  */
@@ -187,7 +187,7 @@ export const QUIET_WORDS = {
   always: 'always',
   watchEmpty: 'Nothing to watch here yet.',
   natures: { problem: 'Problem', you: 'Only you', fyi: 'Heads-up' } satisfies Record<NoticeNature, string>,
-  /** Keep quiet for a while (MON-04): the ⋯ item, its choices, the page's line and its button. */
+  /** Keep quiet for a while: the ⋯ item, its choices, the page's line and its button. */
   keepQuiet: 'Keep quiet for a while',
   keepQuietHour: 'For an hour',
   keepQuietTonight: 'Until tonight',
@@ -198,7 +198,7 @@ export const QUIET_WORDS = {
   endNow: 'End now',
   toastKept: 'Quiet until {time}.',
   toastEnded: 'Whombat watches {name} again.',
-  /** A thing down because of something else (MON-07): “Not answering while pve-02 is down”. */
+  /** A thing down because of something else: “Not answering while pve-02 is down”. */
   notAnswering: 'Not answering {words}',
 } as const;
 

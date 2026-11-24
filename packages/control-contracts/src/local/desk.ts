@@ -724,7 +724,7 @@ export const DeskLook = z.object({
    */
   research: LookResearch.optional(),
   /**
-   * What it is down because of (Whombat monitoring.md MON-07): its server or machine (`server:pve-02`) or the internet
+   * What it is down because of: its server or machine (`server:pve-02`) or the internet
    * (`box:network`), with its name. Such a thing makes no look of its own; one that still shows carries this.
    */
   causedBy: z.object({ thing: text(120), name: text(40) }).optional(),

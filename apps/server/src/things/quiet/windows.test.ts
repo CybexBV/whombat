@@ -1,5 +1,5 @@
 /**
- * A thing held quiet as a whole (monitoring.md MON-04, MON-07): which window holds when, a cause the job stopped
+ * A thing held quiet as a whole: which window holds when, a cause the job stopped
  * keeping current, and `applyQuiet` with either — every line quiet, nothing counted, the counts forgotten — and the
  * words a page and a cause's item say.
  */

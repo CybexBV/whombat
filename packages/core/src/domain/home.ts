@@ -355,11 +355,11 @@ export const ThingSummary = z.object({
    */
   usedAt: Timestamp.optional(),
   /**
-   * Down because of something else (Whombat monitoring.md MON-07, MON-08): its server is down, its machine stopped or
+   * Down because of something else: its server is down, its machine stopped or
    * is kept quiet, or the internet is down. Its dot is grey (`unknown`) and `line` says why.
    */
   causedBy: ThingCause.optional(),
-  /** Kept quiet until this time (MON-04, MON-05): its lines colour nothing until then. */
+  /** Kept quiet until this time: its lines colour nothing until then. */
   quietUntil: Timestamp.optional(),
 });
 export type ThingSummary = z.infer<typeof ThingSummary>;

@@ -1,7 +1,7 @@
 /**
- * One cause, one message (docs/decisions/monitoring.md MON-07, MON-08). A connection whose machine is down is down
+ * One cause, one message. A connection whose machine is down is down
  * because of it: its server offline in the hosts service's fleet, or its machine (a guest) stopped. So is one on a
- * server or machine kept quiet (MON-04, MON-05), and one on an internet address that fails while Whombat's own way out
+ * server or machine kept quiet, and one on an internet address that fails while Whombat's own way out
  * is down. Every minute a job finds each such connection's cause and keeps it in `thing_causes` (operational, like the
  * glance); the quiet reads bring it with a thing's quiet rows, so its lines are quiet with the cause's words (“while
  * pve-02 is down”) everywhere — no dot colour, look, Inbox item or incident of its own — and the cause's Inbox item and

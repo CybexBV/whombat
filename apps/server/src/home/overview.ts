@@ -431,7 +431,7 @@ export function connectionThing(
     );
   }
   if (glance) {
-    // Down because of something else (monitoring.md MON-07): grey, its line saying why, no reason of its own; quiet
+    // Down because of something else: grey, its line saying why, no reason of its own; quiet
     // with a server kept quiet keeps its dot and line.
     const cause =
       v?.held?.kind === 'cause' && v.held.cause

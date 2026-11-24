@@ -377,7 +377,7 @@ export function dbTaskStore(services: Services): TaskStore {
         },
         { burrowId: task.burrowId, actorId: task.agentId },
       );
-      // An update Whombat installed is over: its server stays quiet 15 minutes more (monitoring.md MON-05).
+      // An update Whombat installed is over: its server stays quiet 15 minutes more.
       await workEnded(services, updateWork(task.serverId, task.taskId), new Date(end.endedAt));
       return res.status === 'ok' && res.result !== null;
     },

@@ -79,7 +79,7 @@ export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 9 };
 
 /**
  * Session protocol minor (major 5) that reads a thing's history (`things.history`) and its week in one line (a page's
- * `uptime`, Whombat monitoring.md MON-09); an app checks it before it asks.
+ * `uptime`); an app checks it before it asks.
  */
 export const THING_HISTORY_MINOR = 9;
 
@@ -112,7 +112,7 @@ export const FIND_MY_MINOR = 4;
 
 /**
  * Session protocol minor (major 5) that keeps things quiet for a while (`things.keepQuiet`, `things.endQuiet`, a page's
- * `keptQuiet` and `causedBy`, a quiet line's `held`; Whombat monitoring.md MON-04, MON-07). An older app gets the same
+ * `keptQuiet` and `causedBy`, a quiet line's `held`). An older app gets the same
  * words as a heads-up line and reads quiet lines as snoozed or ignored.
  */
 export const KEEP_QUIET_MINOR = 9;

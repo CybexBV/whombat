@@ -1,5 +1,5 @@
 /**
- * Keep quiet for a while (docs/decisions/monitoring.md MON-04, MON-05): `things.keepQuiet` and `things.endQuiet` for a
+ * Keep quiet for a while: `things.keepQuiet` and `things.endQuiet` for a
  * server, connection or device, the assistant's `quiet_until`, Undo, and Whombat keeping a server or one of its
  * machines quiet for its own planned work.
  *

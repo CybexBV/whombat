@@ -29,7 +29,7 @@ export const pointRollupBefore = (now: Date) =>
 /** The response time key (ms; null: the check failed). */
 export const RTT_KEY = 'rtt_ms';
 /**
- * Whether the check answered (docs/decisions/monitoring.md MON-09): 1 or 0 each pass, none when Whombat couldn't run
+ * Whether the check answered: 1 or 0 each pass, none when Whombat couldn't run
  * it. An hour rolled up keeps the share it answered, so short outages stay in the uptime.
  */
 export const UP_KEY = 'up';

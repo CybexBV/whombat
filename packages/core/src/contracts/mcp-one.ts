@@ -9,10 +9,9 @@
  * - `propose_device_skill`: the device's profile, tested, as a `device_skill` card for the owner to switch on.
  * - `watch_checks`: what Whombat watches on a connection, server or device, and switching a check off or on when the
  *   person said so (Whombat docs/decisions/on-purpose.md).
- * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period (Whombat
- *   docs/decisions/monitoring.md MON-10), read-only.
+ * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period, read-only.
  * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
- *   (Whombat docs/decisions/monitoring.md MON-04).
+ *   (Whombat).
  */
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';

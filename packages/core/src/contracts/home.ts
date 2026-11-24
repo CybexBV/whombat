@@ -459,7 +459,7 @@ export const SetThingWatchLimitResponse = z.object({
 });
 export type SetThingWatchLimitResponse = z.infer<typeof SetThingWatchLimitResponse>;
 /**
- * Keep a server, connection or device quiet (`things.keepQuiet`; Whombat monitoring.md MON-04): until `until`, or for
+ * Keep a server, connection or device quiet (`things.keepQuiet`): until `until`, or for
  * `minutes`, with an optional `note` (“Moving the NAS”). A thing kept quiet already gets the new end and note. Session
  * minor 9.
  */

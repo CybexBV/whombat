@@ -1,5 +1,5 @@
 /**
- * Keep quiet for a while and one cause, end to end (monitoring.md MON-04, MON-07, MON-08). It needs Postgres because
+ * Keep quiet for a while and one cause, end to end. It needs Postgres because
  * the commands, the health pass, the quiet reads, the causes job and Home's reads meet only there. A connection to a
  * stub that answers with an error: kept quiet over `things.keepQuiet` (its page says so, its dot and Needs you are
  * quiet, the pass counts nothing), ended with End now (what is still wrong counts again from the start), Undo, the
@@ -136,7 +136,7 @@ async function failing() {
   expect(await watched()).toBe(true);
 }
 
-describe('Keep quiet for a while (MON-04)', () => {
+describe('Keep quiet for a while', () => {
   it('keeps every line quiet until its time, with the note, and the pass counts nothing', async () => {
     await failing();
     const res = await call(person, 'POST', path('/keep-quiet'), { minutes: 60, note: 'Moving the NAS' });
@@ -237,7 +237,7 @@ describe('Keep quiet for a while (MON-04)', () => {
   });
 });
 
-describe('One cause, one message (MON-07, MON-08)', () => {
+describe('One cause, one message', () => {
   it('a thing down because of its server is grey, says why, and is in no list of its own', async () => {
     await failing();
     const now = t.services.clock();

@@ -56,7 +56,7 @@ export function quietOf(
     ...(row.until ? { until: row.until.toISOString() } : {}),
     ...(row.byId && name ? { by: { id: row.byId, name } } : {}),
     at: row.at.toISOString(),
-    // Quiet with the whole thing (monitoring.md MON-04, MON-07): End now on the page, not Undo on the line.
+    // Quiet with the whole thing: End now on the page, not Undo on the line.
     ...(isHeldRow(row) ? { held: row.held } : {}),
   };
 }
@@ -98,9 +98,9 @@ export interface MarkedLines {
   status: 'ok' | 'warn' | 'bad' | 'offline';
   /** The worst line's badge or title; absent when fine. */
   badge?: string;
-  /** Kept quiet until a time (monitoring.md MON-04): the page's `keptQuiet`. */
+  /** Kept quiet until a time: the page's `keptQuiet`. */
   keptQuiet?: KeptQuiet;
-  /** Down because of something else (MON-07): the page's `causedBy`, its words the badge. */
+  /** Down because of something else: the page's `causedBy`, its words the badge. */
   causedBy?: ThingCause;
 }
 
@@ -182,7 +182,7 @@ function causeLine(cause: ThingCause): WireNotice {
 }
 
 /**
- * A page's head and fields while the thing is held quiet (monitoring.md MON-04, MON-07): down because of something else
+ * A page's head and fields while the thing is held quiet: down because of something else
  * is grey with the cause's words as its badge; kept quiet, or quiet with its server, keeps its status. `keptQuiet` and `causedBy` for the page.
  */
 export function heldPage(

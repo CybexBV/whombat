@@ -1,5 +1,5 @@
 /**
- * What a pass of the incident watcher decides (docs/decisions/monitoring.md MON-06), pure, with the clock given:
+ * What a pass of the incident watcher decides, pure, with the clock given:
  *
  * - **Incidents.** A thing whose look is bad or down on two passes in a row opens one (amber never does); one not seen on
  *   two passes in a row ends, at the first of them. While it lasts, going from a problem to down makes it a `down` one.

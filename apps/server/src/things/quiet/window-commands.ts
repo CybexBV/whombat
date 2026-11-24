@@ -1,5 +1,5 @@
 /**
- * Keeping a thing quiet for a while in the commit pipeline (docs/decisions/monitoring.md MON-04): `keep_quiet` keeps a
+ * Keeping a thing quiet for a while in the commit pipeline: `keep_quiet` keeps a
  * server, connection or device quiet until a time (a thing kept quiet already gets the new end and note), `end_quiet`
  * ends it now. Both are the person's, signed, and recorded as a change of the thing: keeping quiet with Undo (which ends
  * it), ending it in the thing's Activity. The assistant does it only on the person's word (`quiet_until`), recorded as

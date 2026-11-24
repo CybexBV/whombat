@@ -433,7 +433,7 @@ export const HOST_TOOLS: Adapter = {
           }),
         );
         s.hosts.forget('fleet');
-        // Whombat's own restart is planned work: the server is kept quiet for it (monitoring.md MON-05).
+        // Whombat's own restart is planned work: the server is kept quiet for it.
         if (action === 'reboot')
           await keepQuietForWork(s.call.services, {
             burrowId: s.call.burrowId,

@@ -26,7 +26,7 @@ registerDirectUndoer(CONNECTION_UNDO_KIND, undoConnectionChange);
 // What the assistant switched in what Whombat watches, on the person's word (on-purpose.md).
 registerDirectUndoer(AGENT_WATCH_CHANGE_KIND, undoAgentWatch);
 registerDirectUndoer(WATCH_LIMIT_CHANGE, undoServerWatchLimit);
-// Keeping a thing quiet for a while: Undo ends it now (monitoring.md MON-04).
+// Keeping a thing quiet for a while: Undo ends it now.
 registerDirectUndoer(KEEP_QUIET_CHANGE_KIND, undoKeepQuiet);
 // Put it back on a service's setting (service-settings.md SST-03).
 registerDirectUndoer(THING_ACTION_UNDO_KIND, undoThingAction);
@@ -44,7 +44,7 @@ export const ONE_WHOMBAT_COMMANDS: CommandDef[] = [
   ...(THING_COMMANDS as CommandDef[]),
   // Ignore, Remind me tomorrow and Stop watching on a thing's lines (quiet-notices.md QN-10…QN-17).
   ...(QUIET_COMMANDS as CommandDef[]),
-  // Keep quiet for a while, and End now (monitoring.md MON-04).
+  // Keep quiet for a while, and End now.
   ...(QUIET_WINDOW_COMMANDS as CommandDef[]),
   // What the assistant found out about a look, and the step the person lets it take (look-research.md LR-01…LR-08).
   ...(LOOK_COMMANDS as CommandDef[]),

@@ -1,5 +1,5 @@
 /**
- * Incidents end to end on a real database (monitoring.md MON-06, MON-09, MON-10): a connection that stops answering
+ * Incidents end to end on a real database: a connection that stops answering
  * opens an incident on the watcher's second pass and signs `thing.down`; ten minutes on it is pushed once, as the
  * person's “Needs you” row; when it answers again for two passes it ends, signs `thing.back` and its push is withdrawn
  * (the row read). Its page says its week, `things.history` lists it, and the assistant reads it with `watch_status` and

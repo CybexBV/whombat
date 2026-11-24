@@ -1,5 +1,5 @@
 /**
- * Uptime that is true (docs/decisions/monitoring.md MON-09): how much of a period a thing answered, from the health
+ * Uptime that is true: how much of a period a thing answered, from the health
  * pass's `up` points (1 answered, 0 didn't; an hour rolled up keeps its share), and the line a page says it in: “Up
  * 99.6 % this week · down 3 times, 41 min”, “Up all week”. Pure.
  */

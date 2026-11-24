@@ -1,5 +1,5 @@
 /**
- * The incident watcher (docs/decisions/monitoring.md MON-06): beside the look watcher, about every minute it reads the
+ * The incident watcher: beside the look watcher, about every minute it reads the
  * looks as the desk does (`deskLooks` over Home's things and the servers' cards) for each burrow's person, opens and
  * ends incidents from them (`plan.ts`) and pushes once for what has been down a while. A look's line is one that counts
  * already (watched, not quiet, confirmed): what the person quieted makes no look. A look something else took down with it

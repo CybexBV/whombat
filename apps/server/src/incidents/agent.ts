@@ -1,5 +1,5 @@
 /**
- * The assistant reads status and history (docs/decisions/monitoring.md MON-10), read-only, for the person:
+ * The assistant reads status and history, read-only, for the person:
  *
  * - `watch_status`: what needs the person now: what waits for them in the Inbox, the things that aren't fine and why,
  *   what is down or broken right now and since when, and what is kept quiet for a while.

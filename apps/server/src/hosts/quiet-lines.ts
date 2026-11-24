@@ -356,7 +356,7 @@ export function serverVerdict(input: {
       input.guestsOf,
     ).hints)
       if (!h.row) lines.push(h.line);
-  // Kept quiet (monitoring.md MON-04): its alerts are muted in the hosts service too, but count for nothing here
+  // Kept quiet: its alerts are muted in the hosts service too, but count for nothing here
   // even before the hub has the maintenance window.
   const windows = input.quiet?.windows ?? [];
   const r = applyQuiet({ lines, quiets: [], offs: [], states: [], now: input.now, pass: false, windows });

@@ -1,6 +1,5 @@
 /**
- * Keeping things quiet for a while, causes, and the box's own way out (docs/decisions/monitoring.md MON-04, MON-05,
- * MON-07, MON-08; detail MON-60…MON-79).
+ * Keeping things quiet for a while, causes, and the box's own way out (`docs/decisions/monitoring.md`).
  *
  * - `quiet_windows`: a server, connection or device kept quiet until a time, by a person (with an optional note) or by
  *   Whombat for its own planned work (`work`). `thing_id` is the thing's id as `things.page` takes it; `guest_id` narrows
@@ -16,7 +15,7 @@
 import { index, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { ts } from './common';
 
-/** A thing kept quiet until a time (MON-04, MON-05). */
+/** A thing kept quiet until a time. */
 export const quietWindows = pgTable(
   'quiet_windows',
   {
@@ -46,7 +45,7 @@ export const quietWindows = pgTable(
   ],
 );
 
-/** A thing down because of something else (MON-07, MON-08). */
+/** A thing down because of something else. */
 export const thingCauses = pgTable(
   'thing_causes',
   {
@@ -73,7 +72,7 @@ export const thingCauses = pgTable(
   ],
 );
 
-/** The box's way out failing at one step (MON-08). */
+/** The box's way out failing at one step. */
 export const wayOutOutages = pgTable(
   'way_out_outages',
   {

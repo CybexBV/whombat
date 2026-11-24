@@ -1,5 +1,5 @@
 /**
- * History on every page (docs/decisions/monitoring.md MON-09): a thing's week in one line, from its `up` points and its
+ * History on every page: a thing's week in one line, from its `up` points and its
  * incidents (a server's from its offline alerts in the hosts service and its incidents), and `things.history`: its
  * incidents over 30 or 90 days, its uptime over them and, for a server, the alerts the hosts service had.
  */

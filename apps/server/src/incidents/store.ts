@@ -1,5 +1,5 @@
 /**
- * Incidents kept (docs/decisions/monitoring.md MON-06, MON-09) and the signed commands that move them, both as the
+ * Incidents kept and the signed commands that move them, both as the
  * burrow's Servers signer (“Whombat”: what its monitoring does by itself):
  *
  * - **`incidents.pass`** (the watcher, `watch.ts`): opens, worsens and ends incidents as a pass planned (`plan.ts`).

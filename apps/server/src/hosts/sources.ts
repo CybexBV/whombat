@@ -423,7 +423,7 @@ export async function hostsNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]> {
     .filter((a) => alertLine(a).nature !== 'fyi')
     .filter((a) => !(a.rule === HEARTBEAT_RULE && a.serverId && held.has(a.serverId)))
     .map(alertNeedsYou);
-  // A server that is down names what it takes with it (monitoring.md MON-07).
+  // A server that is down names what it takes with it.
   await addTaken(ctx.db, ctx.burrowId, items, shaped.alerts).catch(() => undefined);
   const manages = await managesServers(ctx);
   // Servers that haven't found a new address (BF-16): the person points them here.

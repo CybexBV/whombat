@@ -499,7 +499,7 @@ const TOOLS: Adapter = {
       });
       const r = obj(raw);
       s.hosts.forget('fleet');
-      // Whombat's own restart is planned work: the machine is kept quiet for it (monitoring.md MON-05).
+      // Whombat's own restart is planned work: the machine is kept quiet for it.
       if (r.noop !== true && (hubAction === 'reboot' || hubAction === 'restart'))
         await keepQuietForWork(s.call.services, {
           burrowId: s.call.burrowId,
@@ -757,7 +757,7 @@ const TOOLS: Adapter = {
     if (since && Number.isNaN(since.getTime()))
       throw new ConnectionArgumentError('since: a time like 2026-11-20T00:00:00Z.');
     if (state !== 'open') {
-      // Past alerts too (monitoring.md MON-10): newest first, with when each opened and resolved.
+      // Past alerts too: newest first, with when each opened and resolved.
       const out = await run(server ? { server } : {}, async () => {
         const id = server ? (await resolveServer(s, server)).id : undefined;
         const raw = await s.hosts.call<unknown>({

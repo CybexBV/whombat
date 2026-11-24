@@ -72,7 +72,7 @@ export const thingRoutes: RouteDef[] = [
       ctx.access.burrow.timeZone,
     );
   }),
-  // What went wrong over 30 or 90 days (monitoring.md MON-09).
+  // What went wrong over 30 or 90 days.
   route(api.things.history, async (ctx) => {
     if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can see pages here.');
     return thingHistory(
@@ -107,7 +107,7 @@ export const thingRoutes: RouteDef[] = [
       ctx.body,
     );
   }),
-  // Keep quiet for a while, and End now (monitoring.md MON-04).
+  // Keep quiet for a while, and End now.
   route(api.things.keepQuiet, async (ctx) =>
     keepThingQuiet(
       ctx.services,

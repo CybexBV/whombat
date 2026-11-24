@@ -217,7 +217,7 @@ function failed(
     facts: previous?.facts ?? [],
     reason: words,
     ...(previous?.hostname ? { hostname: previous.hostname } : {}),
-    // Where it ran stays: a machine that stopped isn't found by its address any more (monitoring.md MON-07).
+    // Where it ran stays: a machine that stopped isn't found by its address any more.
     ...(previous?.machine ? { machine: previous.machine } : {}),
   };
 }
@@ -278,7 +278,7 @@ export async function checkConnectionHealth(
     : Promise.all([thingQuiet(services.db, burrowId, thing), thingStates(services.db, thing)]);
   let glance: ConnectionGlance;
   let points: Record<string, number | null> = { [RTT_KEY]: null };
-  // Whether it answered (monitoring.md MON-09): 1 or 0, none when the check couldn't run or Whombat couldn't ask.
+  // Whether it answered: 1 or 0, none when the check couldn't run or Whombat couldn't ask.
   let up: 0 | 1 | undefined;
   // Its lines as its page would show them (QN-S03), and the checks this pass didn't read (QN-S04).
   let lines: LooseNotice[] = [];

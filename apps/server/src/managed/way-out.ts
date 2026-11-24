@@ -1,5 +1,5 @@
 /**
- * Whombat checks its own way out (docs/decisions/monitoring.md MON-08). Every minute the server process checks, without
+ * Whombat checks its own way out. Every minute the server process checks, without
  * root:
  *
  * - **the router**: the default gateway from the process's own route table (`/proc/self/net/route`: the server's

@@ -1,5 +1,5 @@
 /**
- * One cause, one message (monitoring.md MON-07, MON-08): what each connection is down because of — its server down,
+ * One cause, one message: what each connection is down because of — its server down,
  * its machine stopped, its server or machine kept quiet, the internet — in that order, and which connections talk to
  * the internet.
  */
