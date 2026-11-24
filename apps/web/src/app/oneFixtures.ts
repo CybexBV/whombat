@@ -9,7 +9,7 @@
  * Times keep the mock's clock positions on the day the world is made (“10:12”, “13:41”, “3 d ago”), so a run at any
  * date reads like the mock; the visual checks freeze the clock at 14:05.
  */
-import { localAt, tomorrowMorning } from '@whombat/client';
+import { createOverviewFixtures, localAt, tomorrowMorning } from '@whombat/client';
 import { findMyConnectionThing, macFixtureListed } from '@whombat/client/hosts/fixtures';
 import {
   type Agent,
@@ -63,7 +63,6 @@ import {
   firstDayBackupItem,
   firstDayWelcome,
 } from './firstDayFixtures';
-import { createOverviewFixtures } from './overviewFixtures';
 
 const API = '/api/v1';
 const B = `${API}/burrows/${burrow.slug}`;

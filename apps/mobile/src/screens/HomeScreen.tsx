@@ -28,7 +28,7 @@ import {
   overviewHeadline,
   overviewSectionForTab,
   overviewSections,
-  overviewSpecs,
+  overviewShows,
   overviewTiles,
   rangeOfTile,
   readingsMoment,
@@ -127,7 +127,7 @@ export function HomeScreen() {
   const specs = useMemo(
     () =>
       canArrange
-        ? overviewSpecs(
+        ? overviewShows(
             tiles.shown.map((s) => s.tile),
             top,
           )

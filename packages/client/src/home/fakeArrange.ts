@@ -1,5 +1,5 @@
 /**
- * Fixture mode's Overview arranging (docs/decisions/overview-arranged.md): the layout as the runtime keeps it
+ * The demo worlds' Overview arranging (the web's fixture mode, the phone's demo) (docs/decisions/overview-arranged.md): the layout as the runtime keeps it
  * (`overview.arrange`, sent with `home.overview`), what each connection's tile can show (`overview.figures`: its
  * figures and, for a few, panels of its page) and what it shows now (`overview.views`), made from the fixture world's
  * things so the page reads like a real Whombat's. Pure apart from the layout it keeps.

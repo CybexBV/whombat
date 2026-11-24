@@ -5,7 +5,7 @@
  * sheet. The arranged order, the edits and what a figure says are the shared `home/arrange.ts`. Pure; the screen is
  * `screens/HomeScreen.tsx` and `screens/home/`.
  */
-import { ARRANGE_WORDS, isTileThing, topKey } from '@whombat/client';
+import { ARRANGE_WORDS, isTileThing, OVERVIEW_PAGE_WORDS, topKey } from '@whombat/client';
 import type {
   DeskCatalog,
   DeskCatalogItem,
@@ -23,8 +23,8 @@ import { dayKey, formatClock } from '@whombat/core/text';
  * all-fine heading, and Today's heading, count and fold.
  */
 export const ARRANGED_PHONE_WORDS = {
-  live: 'Live',
-  fine: 'Everything’s fine',
+  live: OVERVIEW_PAGE_WORDS.live,
+  fine: OVERVIEW_PAGE_WORDS.fine,
   /** “read 2 s ago”, after the greeting and the date. */
   readAgo: (seconds: number) =>
     seconds < 60
@@ -32,15 +32,12 @@ export const ARRANGED_PHONE_WORDS = {
       : seconds < 3600
         ? `read ${Math.floor(seconds / 60)} min ago`
         : `read ${Math.floor(seconds / 3600)} h ago`,
-  today: 'Today',
-  todayCount: (done: number, planned: number) =>
-    planned
-      ? `${done} ${done === 1 ? 'thing' : 'things'} so far · ${planned} planned`
-      : `${done} ${done === 1 ? 'thing' : 'things'} so far`,
-  allActivity: 'All activity',
+  today: OVERVIEW_PAGE_WORDS.today,
+  todayCount: OVERVIEW_PAGE_WORDS.todayLine,
+  allActivity: OVERVIEW_PAGE_WORDS.allActivity,
   showAll: 'Show all',
   showLess: 'Show less',
-  automation: 'Automation',
+  automation: OVERVIEW_PAGE_WORDS.automation,
   planned: 'Planned',
   failed: 'Failed',
 } as const;
