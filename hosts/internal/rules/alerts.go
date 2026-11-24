@@ -120,8 +120,8 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 		}
 		s := s
 		limit := SensorLimit(s)
-		thr, customHigh := limits.threshold(RuleTempHigh, s.ID, TempWarnThreshold(limit))
 		critical, customCritical := limits.threshold(RuleTempCritical, s.ID, limit)
+		thr, customHigh := warningThreshold(limits, RuleTempHigh, s.ID, TempWarnThreshold(limit), critical)
 		high := (customHigh || limit > 0) && s.TempC >= thr-eps
 		serious := (customCritical || limit > 0) && s.TempC >= critical-eps
 		if !high && !serious {
@@ -171,8 +171,8 @@ func HostConditionsWithLimits(r *proto.Report, limits LimitLookup) []Condition {
 		if !ok {
 			continue
 		}
-		warning, customWarning := limits.threshold(RuleWearHigh, d.Device, WearWarnPct)
 		critical, customCritical := limits.threshold(RuleWearCritical, d.Device, WearSeriousPct)
+		warning, customWarning := warningThreshold(limits, RuleWearHigh, d.Device, WearWarnPct, critical)
 		if w < warning-eps && w < critical-eps {
 			continue
 		}

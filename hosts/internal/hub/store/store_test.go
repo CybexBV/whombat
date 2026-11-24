@@ -433,6 +433,34 @@ func TestMigrationKeepsSnapshot(t *testing.T) {
 	}
 }
 
+func TestCheckProbeTimeMigration(t *testing.T) {
+	original := migrations
+	t.Cleanup(func() { migrations = original })
+	migrations = original[:15]
+	path := filepath.Join(t.TempDir(), "hub.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 21, 9, 30, 0, 0, time.UTC)
+	if _, err := s.w.ExecContext(ctx, `INSERT INTO checks(id, name, kind, created_by, created_at, probe_rev)
+		VALUES ('ck_1', 'Website', 'http', 'john', ?, 'abc')`, ms(at)); err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	s.Close()
+	migrations = original
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	checks, err := s.ListChecks(ctx)
+	if err != nil || len(checks) != 1 || !checks[0].ProbeChangedAt.Equal(at) || checks[0].ProbeRev != "abc" {
+		t.Fatalf("migrated checks: %+v, %v", checks, err)
+	}
+}
+
 // TestManageSwitchMigration upgrades a database of the previous schema:
 // existing servers get the Manage switch off, and it can be turned on.
 func TestManageSwitchMigration(t *testing.T) {

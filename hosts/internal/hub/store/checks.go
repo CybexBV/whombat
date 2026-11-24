@@ -13,21 +13,22 @@ const CheckHeartbeat = "heartbeat" // a cron job or script pings the hub
 
 // Check is a configured availability check.
 type Check struct {
-	ID        string
-	Name      string
-	Kind      string // http | tcp | ping | dns | heartbeat
-	Target    string
-	Runner    string // "hub" or a server id (the agent runs it from its network)
-	IntervalS int    // probes: how often; heartbeat: the expected period
-	TimeoutS  int
-	Options   CheckOptions
-	Token     string // heartbeat: the secret in the ping URL
-	GraceS    int    // heartbeat: tolerated lateness
-	Enabled   bool
-	ProbeRev  string // changes when a probe needs new results
-	Owner     string // optional owner assigned when the check is created
-	CreatedBy string
-	CreatedAt time.Time
+	ID             string
+	Name           string
+	Kind           string // http | tcp | ping | dns | heartbeat
+	Target         string
+	Runner         string // "hub" or a server id (the agent runs it from its network)
+	IntervalS      int    // probes: how often; heartbeat: the expected period
+	TimeoutS       int
+	Options        CheckOptions
+	Token          string // heartbeat: the secret in the ping URL
+	GraceS         int    // heartbeat: tolerated lateness
+	Enabled        bool
+	ProbeRev       string // changes when a probe needs new results
+	ProbeChangedAt time.Time
+	Owner          string // optional owner assigned when the check is created
+	CreatedBy      string
+	CreatedAt      time.Time
 }
 
 // CheckOptions are the kind-specific settings.
@@ -42,14 +43,14 @@ type CheckOptions struct {
 	CertWarnDays int    `json:"cert_warn_days,omitempty"` // default 14
 }
 
-const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at, owner, probe_rev`
+const checkCols = `id, name, kind, target, runner, interval_s, timeout_s, options, token, grace_s, enabled, created_by, created_at, owner, probe_rev, probe_changed_at`
 
 func scanCheck(row interface{ Scan(...any) error }) (Check, error) {
 	var c Check
 	var opts string
-	var ca int64
+	var ca, probeChangedAt int64
 	err := row.Scan(&c.ID, &c.Name, &c.Kind, &c.Target, &c.Runner, &c.IntervalS, &c.TimeoutS, &opts, &c.Token, &c.GraceS,
-		&c.Enabled, &c.CreatedBy, &ca, &c.Owner, &c.ProbeRev)
+		&c.Enabled, &c.CreatedBy, &ca, &c.Owner, &c.ProbeRev, &probeChangedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -57,6 +58,7 @@ func scanCheck(row interface{ Scan(...any) error }) (Check, error) {
 		_ = json.Unmarshal([]byte(opts), &c.Options)
 	}
 	c.CreatedAt = fromMS(ca)
+	c.ProbeChangedAt = fromMS(probeChangedAt)
 	return c, err
 }
 
@@ -80,13 +82,17 @@ func (s *Store) ListChecks(ctx context.Context) ([]Check, error) {
 
 // PutCheck inserts or replaces a check.
 func (s *Store) PutCheck(ctx context.Context, c Check) error {
+	if c.ProbeChangedAt.IsZero() {
+		c.ProbeChangedAt = c.CreatedAt
+	}
 	opts, _ := json.Marshal(c.Options)
-	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := s.w.ExecContext(ctx, `INSERT INTO checks(`+checkCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, target = excluded.target,
 		runner = excluded.runner, interval_s = excluded.interval_s, timeout_s = excluded.timeout_s, options = excluded.options,
-		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled, probe_rev = excluded.probe_rev`,
+		token = excluded.token, grace_s = excluded.grace_s, enabled = excluded.enabled, probe_rev = excluded.probe_rev,
+		probe_changed_at = excluded.probe_changed_at`,
 		c.ID, c.Name, c.Kind, c.Target, c.Runner, c.IntervalS, c.TimeoutS, string(opts), c.Token, c.GraceS, b2i(c.Enabled),
-		c.CreatedBy, ms(c.CreatedAt), c.Owner, c.ProbeRev)
+		c.CreatedBy, ms(c.CreatedAt), c.Owner, c.ProbeRev, ms(c.ProbeChangedAt))
 	return err
 }
 

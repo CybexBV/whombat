@@ -418,4 +418,10 @@ CREATE TABLE watch_limits (
 	PRIMARY KEY (server_id, rule, entity)
 ) WITHOUT ROWID
 `,
+	// 16: when the current probe settings took effect.
+	`
+ALTER TABLE checks ADD COLUMN probe_changed_at INTEGER NOT NULL DEFAULT 0
+--;
+UPDATE checks SET probe_changed_at = created_at
+`,
 }

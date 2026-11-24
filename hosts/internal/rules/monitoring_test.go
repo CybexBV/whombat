@@ -60,3 +60,20 @@ func TestCustomAlertLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestAlertWarningsStayBelowCriticalAfterHardwareLimitChanges(t *testing.T) {
+	wear := 89.0
+	report := &proto.Report{
+		Sensors: []proto.Sensor{{ID: proto.SensorCPU, TempC: 80, LimitC: 90}},
+		Disks:   []proto.Disk{{Device: "nvme0n1", Type: "nvme", WearPct: &wear}},
+	}
+	limits := func(rule, entity string) (float64, bool) {
+		return 95, rule == RuleTempHigh || rule == RuleWearHigh
+	}
+	conditions := HostConditionsWithLimits(report, limits)
+	for _, rule := range []string{RuleTempHigh, RuleWearHigh} {
+		if !slices.ContainsFunc(conditions, func(c Condition) bool { return c.Rule == rule && c.Severity == SevWarning }) {
+			t.Fatalf("missing %s warning: %+v", rule, conditions)
+		}
+	}
+}
