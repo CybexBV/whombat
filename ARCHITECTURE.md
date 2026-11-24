@@ -1482,12 +1482,13 @@ Setup and operation: `docs/github.md`.
   key, Password, Website login, Server key) and keep fingerprints, the `authorized_keys` line, sign-in types and
   variable names under Advanced or Technical details. A linked 1Password vault (a 1Password connection, at most one,
   which no agent uses) is kept in step with it both ways (`vault/onepassword/`): website logins and API tokens with
-  bearer or basic sign-in, by one pass at a time (at start, every 10 minutes, 10 s after a change, on Sync now) that
-  reads 1Password first through the SDK in a worker process of its own (`onepassword-worker`, JSON lines, only
-  1Password's hosts), decides each pair in core against a base of per-field HMACs (`vault_onepassword_links`), and
-  applies the result as the person through one Vault command in commits of at most ten entries, then writes Whombat's
-  changes into 1Password; a clash keeps Whombat's version, a pair without a base (restored) takes 1Password's, and
-  removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
+  bearer or basic sign-in, by one pass at a time (at start, every 10 minutes, 10 s after a change when something waits
+  in Whombat, on Sync now) that reads 1Password first through the SDK in a worker process of its own
+  (`onepassword-worker`, JSON lines, only 1Password's hosts), decides each pair in core against a base of per-field
+  HMACs (`vault_onepassword_links`), and applies the result as the person through one Vault command in commits of at
+  most ten entries, then writes Whombat's changes into 1Password, each write only while the connection, its token and
+  vault are as the pass found them and no disconnect or drain waits; a clash keeps Whombat's version, a pair without a
+  base (restored) takes 1Password's, and removals past a guard wait for the person's answer in the Inbox. The page and Home read the stored state
   (`vault_onepassword_state`); no call or DNS lookup runs under the write lock. A development box answers `ops_dev_`
   tokens with a stand-in 1Password of made-up vaults (`testing/standin.ts`, kept in `$WHOMBAT_HOME`), changed while it
   runs through `/internal/dev/onepassword`; never in production.
