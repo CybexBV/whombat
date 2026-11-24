@@ -1548,24 +1548,32 @@ Setup and operation: `docs/github.md`.
   change of the person's whose Undo ends it (`quiet_windows`). While a window holds, `applyQuiet` keeps every line of the
   thing quiet with it, so pages, dots, the desk's looks and the Inbox follow, and the health pass forgets the lines'
   counts: what is still wrong when it ends counts again from the start. The page carries `keptQuiet` and a heads-up
-  first line (“Quiet until 23:00 · Moving the NAS”). A server's window is also a maintenance window in the hosts
-  service, made before the commit and given back when it ends (End now, or the minute's sweep). Whombat's own restarts
-  (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends) keep the
-  server or machine quiet the same way, noted “Whombat is updating it”.
+  first line (“Quiet until 23:00 · Moving the NAS”); Home's thing carries `quietUntil` (servers and devices too). A
+  server's window is also a maintenance window in the hosts service, made before the commit and given back when it ends
+  (End now, or the minute's sweep); whether or not the hub muted them, the server's open alerts are held with the window
+  (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
+  restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
+  keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
+  updating it”; End now ends every window holding the thing. Every window write goes through the commit pipeline, and
+  Home hears when a work's end moves or a window runs out (the minute's sweep).
   [monitoring.md](docs/decisions/monitoring.md)
 - **One cause, one message** (`things/causes.ts`): every minute a job finds what each connection is down because of —
   its server offline, its machine stopped, its server or machine kept quiet, or the box's way out failing for one on an
   internet address — from the machine its last health pass found it on (`ConnectionGlance.machine`, kept while it
-  doesn't answer), and keeps it in `thing_causes`. The quiet reads bring it with the thing's quiet rows: its lines are
+  doesn't answer; a “Website or address” check by its own address field), and keeps it in `thing_causes`. A fleet or a
+  server's machines that can't be read leave the kept causes as they are until they age out. The quiet reads bring it
+  with the thing's quiet rows: its lines are
   quiet with the cause's words, its dot is grey and its page and Home's thing say “Not answering while pve-02 is down”
   (`causedBy`), and the cause's Inbox item and desk look name what it takes with it (“Plex and 4 more are down with
   it”). Servers held by a parent stay grouped by the hosts service.
 - **Whombat's own way out** (`managed/way-out.ts`): every minute the server process checks its router (the default
-  gateway from `/proc/net/route`, a TCP connect where a refusal counts), the internet (TCP connects to Whombat's own
-  service and an anycast address, by their last address) and name lookups (the system resolver). A step failing for
-  two minutes is an outage (`way_out_outages`, included in all-things `watch_history`) and one Inbox item that starts
-  on (“The internet is down since 14:02”), listing the connections down with it. A development box and tests never probe unless
-  `WHOMBAT_WAY_OUT=on`.
+  gateway from its own `/proc/self/net/route`, which the unit's `ProcSubset=pid` keeps; a TCP connect where a refusal
+  counts) and the internet (TCP connects to Whombat's own service and an anycast address, by their last address) at the
+  same time, and name lookups (the system resolver, always with one fixed name). The internet is down when nothing
+  outside answers, the router's fault only when a known gateway doesn't answer either; without a gateway the router
+  isn't judged. A step failing for two minutes is an outage (`way_out_outages`, included in all-things `watch_history`) and one Inbox item
+  that starts on (“The internet is down since 14:02”), listing the connections down with it. A development box and
+  tests never probe unless `WHOMBAT_WAY_OUT=on`.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); link previews and the Vault add their own
   destination rules. A single UDP datagram and its answer (a console's discovery) go through `outboundDatagram` under

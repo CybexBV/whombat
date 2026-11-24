@@ -132,7 +132,7 @@ describe('a quiet line (QN-14; AP-4802)', () => {
     expect(quietLineText({ quiet: { ...window, held: 'window' } })).toBe('Kept quiet by Mara until 23:00');
     expect(
       quietLineText({ quiet: { state: 'ignored', words: 'while pve-02 is down', at: AT, held: 'cause' } }),
-    ).toBe('Quiet while pve-02 is down');
+    ).toBe('On hold while pve-02 is down');
   });
 
   it('is expected at once: ignored in Ignore’s words, snoozed until 09:00 tomorrow', () => {

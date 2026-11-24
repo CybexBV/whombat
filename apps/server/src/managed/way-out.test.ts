@@ -1,13 +1,16 @@
 /**
  * Whombat's own way out (monitoring.md MON-08): the default gateway from the kernel's route table, which step fails
- * first, two minutes before an outage opens, its words, and the targets it reaches the internet at.
+ * (the router only when nothing outside answers), two minutes before an outage opens, its words, and the targets it
+ * reaches the internet at.
  */
 import { describe, expect, it } from 'vitest';
 import {
   defaultGateway,
   nextWayOut,
   probeWayOut,
+  readGateway,
   WAY_OUT_CONFIRM_MS,
+  WAY_OUT_NAME,
   type WayOutProbes,
   wayOutBody,
   wayOutHistoryWords,
@@ -37,6 +40,17 @@ describe('defaultGateway', () => {
   });
 });
 
+describe('readGateway', () => {
+  it('reads the process’s own route table, which the server’s sandbox keeps while it hides /proc/net', async () => {
+    const sandboxed = async (file: string) => {
+      if (file === '/proc/self/net/route') return ROUTES;
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    };
+    expect(await readGateway(sandboxed)).toBe('10.100.0.1');
+    expect(await readGateway(async () => Promise.reject(new Error('missing')))).toBeNull();
+  });
+});
+
 /** A network where each part answers or not. */
 function network(parts: { router?: boolean; internet?: boolean; names?: boolean; gateway?: string | null }) {
   const probes: WayOutProbes = {
@@ -52,12 +66,45 @@ const targets = [
 ];
 
 describe('probeWayOut', () => {
-  it('says the first step that fails: router, then internet, then name lookups', async () => {
+  it('says which step fails: the router only when nothing outside answers either', async () => {
     expect(await probeWayOut(network({}), targets, new Map())).toBeNull();
     expect(await probeWayOut(network({ router: false, internet: false }), targets, new Map())).toBe('router');
-    expect(await probeWayOut(network({ gateway: null }), targets, new Map())).toBe('router');
     expect(await probeWayOut(network({ internet: false }), targets, new Map())).toBe('internet');
     expect(await probeWayOut(network({ names: false }), targets, new Map())).toBe('names');
+  });
+
+  it('doesn’t blame a router that ignores its ports while the internet answers', async () => {
+    expect(await probeWayOut(network({ router: false }), targets, new Map())).toBeNull();
+  });
+
+  it('leaves the router out without a gateway (an IPv6-only or point-to-point route)', async () => {
+    expect(await probeWayOut(network({ gateway: null }), targets, new Map())).toBeNull();
+    expect(await probeWayOut(network({ gateway: null, internet: false }), targets, new Map())).toBe(
+      'internet',
+    );
+  });
+
+  it('always looks up a fixed name, also when the targets are bare addresses', async () => {
+    const bare = [
+      { host: '1.1.1.1', port: 443 },
+      { host: '9.9.9.9', port: 443 },
+    ];
+    const asked: string[] = [];
+    const probes = network({ names: false });
+    const seen = await probeWayOut(
+      {
+        ...probes,
+        lookup: async (name) => {
+          asked.push(name);
+          return probes.lookup(name);
+        },
+      },
+      bare,
+      new Map(),
+    );
+    expect(asked).toEqual([WAY_OUT_NAME]);
+    expect(seen).toBe('names');
+    expect(await probeWayOut(network({}), bare, new Map())).toBeNull();
   });
 
   it('reaches a named target at the address it last found when lookups stop', async () => {

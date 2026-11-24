@@ -7,7 +7,7 @@
  * it (`window-service.ts`); here only its id is kept.
  */
 import { thingHref } from '@whombat/core';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ApplyContext } from '../../commit/types';
 import { defineCommand } from '../../commit/types';
@@ -130,30 +130,44 @@ export const keepQuiet = defineCommand({
   },
 });
 
-/** End now: the thing is watched again at once (and what is still wrong counts from the start). */
+/**
+ * End now: the thing is watched again at once (and what is still wrong counts from the start). Every window that holds
+ * the whole thing ends, the person's and Whombat's for its own work alike, so “watched again” is true; Undo of keeping
+ * it quiet names its own window (`windowId`) and ends only that one.
+ */
 export const endQuiet = defineCommand({
   name: 'end_quiet',
   schema: z.object({
     thing: QuietThingInput,
-    windowId: z.string().min(1).max(64),
+    /** One window only (Undo); without it, every window holding the thing. */
+    windowId: z.string().min(1).max(64).optional(),
     agentId: z.string().min(1).max(64).optional(),
   }),
   async apply(tx, ctx, input) {
     if (ctx.actor.kind !== 'person') throw forbidden('Only you can end this.');
     const { thing } = input;
-    const [ended] = await tx
-      .update(quietWindows)
-      .set({ endedAt: ctx.now, endedById: ctx.actor.id })
-      .where(
-        and(
-          eq(quietWindows.id, input.windowId),
-          eq(quietWindows.ownerId, thing.owner),
-          eq(quietWindows.thingId, thing.id),
-          isNull(quietWindows.endedAt),
-        ),
-      )
-      .returning();
-    if (!ended) throw notFound('Quiet');
+    const mine = and(
+      eq(quietWindows.ownerId, thing.owner),
+      eq(quietWindows.thingId, thing.id),
+      isNull(quietWindows.endedAt),
+    );
+    let ids: string[];
+    if (input.windowId) ids = [input.windowId];
+    else {
+      const open = await tx
+        .select()
+        .from(quietWindows)
+        .where(and(mine, isNull(quietWindows.guestId)));
+      ids = open.filter((w) => windowHolds(w, ctx.now)).map((w) => w.id);
+    }
+    const ended = ids.length
+      ? await tx
+          .update(quietWindows)
+          .set({ endedAt: ctx.now, endedById: ctx.actor.id })
+          .where(and(mine, inArray(quietWindows.id, ids)))
+          .returning()
+      : [];
+    if (!ended.length) throw notFound('Quiet');
     await tell(ctx, thing, { kind: 'quiet.end' });
     const changeId = await recordChange(ctx, {
       burrowId: ctx.burrow.id,
@@ -167,7 +181,7 @@ export const endQuiet = defineCommand({
       link: thingHref(thing.kind, thing.ref),
       at: ctx.now,
     });
-    return { maintenanceId: ended.maintenanceId, changeId };
+    return { ended: ended.map((w) => ({ id: w.id, maintenanceId: w.maintenanceId })), changeId };
   },
 });
 

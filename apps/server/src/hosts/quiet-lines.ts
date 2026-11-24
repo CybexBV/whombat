@@ -27,6 +27,7 @@ import type { GlanceNotice } from '../things/quiet/glance';
 import { shortHash } from '../things/quiet/items';
 import { NO_QUIET, type ThingQuiet } from '../things/quiet/store';
 import type { NoticeIgnore, NoticeNature } from '../things/quiet/types';
+import type { WindowLike as QuietWindowLike } from '../things/quiet/windows';
 
 /** The rule of the alert that says a server stopped reporting. */
 export const HEARTBEAT_RULE = 'agent.heartbeat_missing';
@@ -218,6 +219,48 @@ export function alertQuiet(
   return undefined;
 }
 
+/**
+ * An open alert of a server kept quiet, as the server's other lines are: quiet with the window
+ * (`held`, its words the window's: “until 23:00”, with who kept it quiet), whether or not the hosts service muted it (a
+ * maintenance window it refused shouldn't make the alert loud). Its own Ignore or Remind me tomorrow stays its own; the
+ * hub's checks aren't the server's. None without a window.
+ */
+export function heldAlertQuiet(
+  a: HostAlert,
+  window: Pick<QuietWindowLike, 'startsAt' | 'endsAt' | 'byId'> | null | undefined,
+  ctx: { names: ReadonlyMap<string, string>; untilWords: (until: Date) => string },
+): NoticeQuiet | undefined {
+  if (!window || a.state !== 'open' || a.acknowledged || HUB_LEVEL(a.rule)) return undefined;
+  const name = window.byId ? ctx.names.get(window.byId) : undefined;
+  return {
+    state: 'snoozed',
+    words: ctx.untilWords(window.endsAt).slice(0, 60),
+    until: window.endsAt.toISOString(),
+    ...(window.byId && name ? { by: { id: window.byId, name } } : {}),
+    at: window.startsAt.toISOString(),
+    held: 'window',
+  };
+}
+
+/**
+ * Marks an alert with what keeps it quiet: the server's window first (it no longer asks for attention, as when the hub
+ * mutes it), else the hub's own reading (`alertQuiet`).
+ */
+export function markAlertQuiet(
+  a: HostAlert,
+  window: Pick<QuietWindowLike, 'startsAt' | 'endsAt' | 'byId'> | null | undefined,
+  ctx: { now: Date; names: ReadonlyMap<string, string>; untilWords: (until: Date) => string },
+): void {
+  const held = heldAlertQuiet(a, window, ctx);
+  if (held) {
+    a.quiet = held;
+    a.attention = false;
+    return;
+  }
+  const quiet = alertQuiet(a, ctx);
+  if (quiet) a.quiet = quiet;
+}
+
 /** The person ids an alert's acknowledgement names (for their names). */
 export function ackPeople(alerts: readonly HostAlert[]): string[] {
   return alerts.flatMap((a) => {
@@ -279,6 +322,8 @@ export interface ServerVerdict {
   worst: ServerLine | null;
   /** Every line behind it, worst first: what the assistant looks into when it looks into the server. */
   asking: ServerLine[];
+  /** Kept quiet until this time: Home's `quietUntil`. */
+  quietUntil?: string;
 }
 
 /**

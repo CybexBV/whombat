@@ -63,6 +63,11 @@ export interface CauseWorld {
   windows: readonly { serverId: string; guestId: string | null; work: boolean }[];
   /** The step of the way out that is down now. */
   wayOut: WayOutStep | null;
+  /**
+   * Whether the servers and machines were read. When the fleet or a server's machines couldn't be read, a cause not
+   * found again may only be unseen: kept causes stay as they are and age out by themselves.
+   */
+  complete?: boolean;
 }
 
 /** A cause as kept. */
@@ -195,9 +200,11 @@ async function worldOf(
 ): Promise<CauseWorld> {
   const servers = new Map<string, { name: string; down: boolean }>();
   const guests = new Map<string, { name: string; stopped: boolean }>();
+  let complete = true;
   const hosts = await hostsServing(services, burrowId);
   if (hosts) {
     const fleet = await hosts.fleetRaw().catch(() => null);
+    if (!fleet) complete = false;
     for (const raw of arr(fleet?.servers)) {
       const id = str(obj(raw).id);
       if (!id) continue;
@@ -213,6 +220,7 @@ async function worldOf(
     ];
     for (const serverId of wanted) {
       const list = await hosts.guestsRaw(serverId).catch(() => null);
+      if (!list) complete = false;
       for (const raw of arr(list)) {
         const g = obj(raw);
         const id = str(g.id);
@@ -232,7 +240,7 @@ async function worldOf(
       }
     }
   }
-  return { servers, guests, windows, wayOut };
+  return { servers, guests, windows, wayOut, complete };
 }
 
 /** One pass: finds every connection's cause and keeps them; returns how many things are down because of something. */
@@ -277,29 +285,36 @@ export async function passCauses(services: Services, now = services.clock()): Pr
     );
     const found = causesFor(conns, world);
     total += found.size;
-    await keepCauses(services, burrowId, found, now);
+    await keepCauses(services, burrowId, found, now, world.complete !== false);
   }
   return total;
 }
 
-/** Writes a burrow's causes: new ones from now, the same ones checked again, gone ones removed; Home hears of a change. */
-async function keepCauses(
+/**
+ * Writes a burrow's causes: new ones from now, the same ones checked again, gone ones removed; Home hears of a change.
+ * `complete` false (the fleet or a server's machines couldn't be read): kept causes are left as they are, neither
+ * removed nor replaced, and stop counting once nobody confirmed them for a while (`CAUSE_FRESH_MS`); only things without
+ * one get theirs.
+ */
+export async function keepCauses(
   services: Services,
   burrowId: string,
   found: ReadonlyMap<string, FoundCause>,
   now: Date,
+  complete = true,
 ): Promise<void> {
   await services.pipeline.transact(burrowId, async (session) => {
     const tx = session.tx;
     const kept = await tx.select().from(thingCauses).where(eq(thingCauses.ownerId, burrowId));
     const keptBy = new Map(kept.map((k) => [k.thingId, k]));
-    const gone = kept.filter((k) => !found.has(k.thingId)).map((k) => k.thingId);
+    const gone = complete ? kept.filter((k) => !found.has(k.thingId)).map((k) => k.thingId) : [];
     let changed = gone.length > 0;
     if (gone.length)
       await tx
         .delete(thingCauses)
         .where(and(eq(thingCauses.ownerId, burrowId), inArray(thingCauses.thingId, gone)));
     for (const [thing, cause] of found) {
+      if (!complete && keptBy.has(thing)) continue;
       const was = keptBy.get(thing);
       const same =
         was && was.causeThing === cause.causeThing && was.kind === cause.kind && was.words === cause.words;

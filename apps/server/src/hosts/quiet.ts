@@ -40,6 +40,7 @@ import { applyQuiet } from '../things/quiet/apply';
 import { quietNotice, setWatch } from '../things/quiet/commands';
 import { notWatched } from '../things/quiet/defaults';
 import { type QuietBook, quietBook, thingQuiet, writePass } from '../things/quiet/store';
+import { activeWindow } from '../things/quiet/windows';
 import { quietNames, quietOf } from '../things/quiet/wire';
 import { lowerWords, quietTitle, snoozeUntil, untilWords, watchTitle } from '../things/quiet/words';
 import { fleetHints } from './agent-updates';
@@ -248,9 +249,20 @@ export async function quietServerNotice(
     const l = alertLine(a);
     return l.check === check && sameItem(l.subject, subject);
   });
-  if (alerts.length) return quietAlerts(services, w, alerts, ctx.how, ctx.until);
-  if (!check.startsWith('host.hint.')) throw notFound(ctx.how === 'undo' ? 'Quiet' : 'Notice');
-  return quietHint(services, w, ctx.serverId, fleet.hints, ctx.notice, ctx.how, ctx.until);
+  try {
+    if (alerts.length) return await quietAlerts(services, w, alerts, ctx.how, ctx.until);
+    if (!check.startsWith('host.hint.')) throw notFound(ctx.how === 'undo' ? 'Quiet' : 'Notice');
+    return await quietHint(services, w, ctx.serverId, fleet.hints, ctx.notice, ctx.how, ctx.until);
+  } catch (err) {
+    // A line quiet with the whole server kept quiet: Undo there (an app that has no End now) ends the window.
+    if (ctx.how !== 'undo' || !(err instanceof ApiError) || err.code !== 'not_found') throw err;
+    const quiet = await thingQuiet(services.db, w.burrowId, serverThingId(ctx.serverId));
+    if (!activeWindow(quiet.windows, services.clock())) throw err;
+    const { endThingQuiet } = await import('../things/quiet/window-service');
+    const viewer = { accountId: w.person.accountId ?? '', burrowId: w.burrowId, principal: w.person };
+    await endThingQuiet(services, viewer, serverThingId(ctx.serverId), w.timeZone);
+    return null;
+  }
 }
 
 /** The thing a server's hint rows belong to (the store's `QuietThing`). */

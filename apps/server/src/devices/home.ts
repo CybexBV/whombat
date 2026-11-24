@@ -44,6 +44,7 @@ import {
   writePass,
 } from '../things/quiet/store';
 import type { KindCheck, KindNotice } from '../things/quiet/types';
+import { activeWindow } from '../things/quiet/windows';
 import { DeviceCallError, type ReadingResult, readDevice } from './driver';
 import { deviceNoun } from './profile';
 import { keepLastRead } from './run';
@@ -171,11 +172,14 @@ function thingOf(
   const fresh = row.lastReadAt !== null && now.getTime() - row.lastReadAt.getTime() <= DEVICE_FRESH_MS;
   const failed = row.lastReadError !== null;
   // Not answering and ignored: no dot, but not “fine” either (QN-S15).
+  const quiet = book?.of(base.id) ?? NO_QUIET;
   const v = verdict(
     deviceLines(row).map((l) => glanceLine(l)),
-    book?.of(base.id) ?? NO_QUIET,
+    quiet,
     now,
   );
+  // Kept quiet until a time, as Home's connections and servers say it.
+  const window = activeWindow(quiet.windows, now);
   const status = v.status !== 'ok' ? v.status : failed ? 'unknown' : fresh ? 'ok' : 'unknown';
   const usedAt = deviceUsedAt(row.lastReadAt, lastWorkedAt);
   const line = failed
@@ -191,6 +195,7 @@ function thingOf(
       ...(line ? { line } : {}),
       ...(v.reason ? { reason: v.reason } : {}),
       ...(usedAt ? { usedAt: usedAt.toISOString() } : {}),
+      ...(window ? { quietUntil: window.endsAt.toISOString() } : {}),
       facts: readings.slice(0, FACTS_MAX).map((r) => ({
         ...factOf(r),
         ...(row.lastReadAt && !fresh ? { note: `read ${iso(row.lastReadAt).slice(11, 16)}` } : {}),

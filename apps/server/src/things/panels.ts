@@ -320,7 +320,8 @@ export function genericNotices(
   reading?: { now: Date; timeZone: string },
 ): KindNotice[] {
   const out: KindNotice[] = [];
-  const answer = answerOf(row.glance as ConnectionGlance | null);
+  // A “Website or address” check says it doesn't answer with its own line (`uptime.down`), not a second one here.
+  const answer = row.catalogId === UPTIME_ID ? null : answerOf(row.glance as ConnectionGlance | null);
   const homebrewNotReady =
     row.catalogId === 'ps5' &&
     (answer || row.checks.some((c) => c.id === 'credential' && c.state === 'error'));

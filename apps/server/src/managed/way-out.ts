@@ -2,14 +2,19 @@
  * Whombat checks its own way out (docs/decisions/monitoring.md MON-08). Every minute the server process checks, without
  * root:
  *
- * - **the router**: the default gateway from `/proc/net/route`, reached with a TCP connect on a few common ports (a
- *   refused connection still proves it answers);
+ * - **the router**: the default gateway from the process's own route table (`/proc/self/net/route`: the server's
+ *   sandbox shows only its own process under `/proc`, so `/proc/net` isn't there), reached with a TCP connect on a few
+ *   common ports (a refused connection still proves it answers);
  * - **the internet**: TCP connects to two independent addresses, Whombat's own service (the hosted app's host) and a
- *   well-known anycast address, by their addresses so name lookups don't decide it;
- * - **name lookups**: the system resolver finding those names.
+ *   well-known anycast address, by their addresses so name lookups don't decide it, at the same time as the router;
+ * - **name lookups**: the system resolver finding those names, and always one fixed name, so a box whose targets are
+ *   bare addresses still checks its lookups.
  *
- * A step that fails for two minutes in a row is an outage (`way_out_outages`), the first failing step in that order:
- * “The router doesn't answer”, else “The internet is down since 14:02”, else “Name lookups don't work”. It is one Inbox
+ * A step that fails for two minutes in a row is an outage (`way_out_outages`). The internet is down when nothing outside
+ * answers; it is the router's fault only when a gateway is known and doesn't answer either (a router that drops these
+ * ports while the internet works, an IPv6-only or point-to-point route, says nothing about the router). Without a
+ * gateway the router isn't judged. When the internet answers, name lookups that all fail are the step said: “The router
+ * doesn't answer”, “The internet is down since 14:02”, “Name lookups don't work”. It is one Inbox
  * item that starts on (Whombat can't reach things any more), and while it lasts the connections on internet addresses
  * that fail are down because of it (the causes job, `things/causes.ts`) and listed under that item instead of each
  * having their own. It ends at the first pass that finds every step working; the outage stays for history (“The
@@ -43,6 +48,10 @@ export const PROBE_TIMEOUT_MS = 3_000;
 const ROUTER_PORTS = [53, 80, 443];
 /** Two anycast addresses of different operators, when the box has no Whombat service to reach. */
 const ANYCAST = ['1.1.1.1:443', '9.9.9.9:443'];
+/** A name every resolver finds, looked up on every pass whatever the targets are. */
+export const WAY_OUT_NAME = 'one.one.one.one';
+/** The route tables read for the default gateway: the process's own first (the server's sandbox hides `/proc/net`). */
+const ROUTE_TABLES = ['/proc/self/net/route', '/proc/net/route'];
 
 /** The check behind the item: Whombat can't reach things any more, so it starts on (watch-defaults.md). */
 export const WAY_OUT_CHECKS = [{ check: 'box.way_out', startsOn: true }] as const;
@@ -75,13 +84,22 @@ export function defaultGateway(routes: string): string | null {
   return null;
 }
 
+/**
+ * The default gateway from the first route table that can be read: the process's own, which the server's sandbox
+ * (`ProcSubset=pid`) keeps, else the system's.
+ */
+export async function readGateway(read: (file: string) => Promise<string>): Promise<string | null> {
+  for (const file of ROUTE_TABLES) {
+    const text = await read(file).catch(() => null);
+    if (text !== null) return defaultGateway(text);
+  }
+  return null;
+}
+
 /** The probes of the real network. */
 export function systemProbes(timeoutMs = PROBE_TIMEOUT_MS): WayOutProbes {
   return {
-    async gateway() {
-      const text = await readFile('/proc/net/route', 'utf8').catch(() => '');
-      return defaultGateway(text);
-    },
+    gateway: () => readGateway((file) => readFile(file, 'utf8')),
     answers(host, port) {
       return new Promise((resolve) => {
         const socket = connect({ host, port });
@@ -139,33 +157,38 @@ export function wayOutTargets(config: { targets?: string; appUrl?: string | unde
 }
 
 /**
- * Which step of the way out fails now, the first in order (router, internet, name lookups); null when all work. A
- * name target's address is the one it resolved to now, else the last one it did (`known`), so a failing lookup doesn't
- * make the internet look down.
+ * Which step of the way out fails now; null when all work. The router and the internet are tried at the same time: the
+ * internet is down when no target answers, and that is the router's fault only when a gateway is known and doesn't
+ * answer either (no gateway: the router isn't judged). With the internet answering, name lookups fail when none of the
+ * names resolves (the targets' and `WAY_OUT_NAME`). A name target's address is the one it resolved to now, else the
+ * last one it did (`known`), so a failing lookup doesn't make the internet look down.
  */
 export async function probeWayOut(
   probes: WayOutProbes,
   targets: readonly WayOutTarget[],
   known: Map<string, string>,
 ): Promise<WayOutStep | null> {
-  const gateway = await probes.gateway().catch(() => null);
-  const names = targets.filter((t) => !isIP(t.host));
-  const [routerOk, resolved] = await Promise.all([
+  const names = [...new Set([...targets.filter((t) => !isIP(t.host)).map((t) => t.host), WAY_OUT_NAME])];
+  const [gateway, resolved] = await Promise.all([
+    probes.gateway().catch(() => null),
+    Promise.all(names.map(async (name) => [name, await probes.lookup(name).catch(() => [])] as const)),
+  ]);
+  for (const [name, addresses] of resolved) if (addresses[0]) known.set(name, addresses[0]);
+  const addresses = targets
+    .map((t) => ({ host: isIP(t.host) ? t.host : known.get(t.host), port: t.port }))
+    .filter((t): t is WayOutTarget => !!t.host);
+  const [routerOk, reached] = await Promise.all([
     gateway
       ? Promise.all(ROUTER_PORTS.map((p) => probes.answers(gateway, p).catch(() => false))).then((r) =>
           r.some(Boolean),
         )
-      : Promise.resolve(false),
-    Promise.all(names.map(async (t) => [t.host, await probes.lookup(t.host).catch(() => [])] as const)),
+      : Promise.resolve(null),
+    Promise.all(addresses.map((t) => probes.answers(t.host, t.port).catch(() => false))).then((r) =>
+      r.some(Boolean),
+    ),
   ]);
-  for (const [name, addresses] of resolved) if (addresses[0]) known.set(name, addresses[0]);
-  if (!routerOk) return 'router';
-  const addresses = targets
-    .map((t) => ({ host: isIP(t.host) ? t.host : known.get(t.host), port: t.port }))
-    .filter((t): t is WayOutTarget => !!t.host);
-  const reached = await Promise.all(addresses.map((t) => probes.answers(t.host, t.port).catch(() => false)));
-  if (!reached.some(Boolean)) return 'internet';
-  if (names.length && !resolved.some(([, a]) => a.length > 0)) return 'names';
+  if (!reached) return routerOk === false ? 'router' : 'internet';
+  if (!resolved.some(([, a]) => a.length > 0)) return 'names';
   return null;
 }
 
